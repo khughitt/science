@@ -3279,7 +3279,7 @@ git diff --staged --quiet || git commit -m "commons: lint fixes from Phase G swe
 
 - [ ] **Step 1: Write the runbook**
 
-Mirror the shape of `docs/plans/2026-05-16-commons-promote-topics-themes-pilot.md` (Phase F's runbook). Sections:
+Mirror the shape of the completed Phase F promote pilot runbook. Sections:
 
 1. **Goal** — exercise the full Phase G surface end-to-end on `dataset:ccle-proteomics-nusinow-2020` in `multiple-myeloma`.
 2. **Preconditions** — repeat the 5 preconditions from the design spec §7 (commons clean, project registered, working tree clean, pre-migration prep frontmatter committed, override map has no conflicting entry for this slug).

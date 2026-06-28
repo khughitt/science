@@ -3,7 +3,7 @@
 **Predecessors:**
 - `2026-06-03-entity-organization-and-naming-design.md` — established the v3 principle ("location tracks what a thing is"; markdown entity owners live under `entities/<kind>/`; `doc/` becomes prose-only) but left the dataset/workflow family and the post-v3 overlay home unresolved.
 - `2026-04-19-dataset-entity-lifecycle-design.md` — explicitly **deferred** "should dataset/workflow/workflow-run become first-class `entities/` kinds" to a dedicated follow-up. **This is that follow-up** (the layout half only).
-- `2026-05-13-multiproject-schema-and-shared-store-design.md` §5.1 — placed commons overlays at `<project>/doc/<type>/<slug>.md` on a co-location rationale that no longer holds once `doc/` is prose-only.
+- `historical/2026-05-13-multiproject-schema-and-shared-store-design.md` §5.1 — placed commons overlays at `<project>/doc/<type>/<slug>.md` on a co-location rationale that no longer holds once `doc/` is prose-only.
 - `2026-06-05-local-kind-layout-migration-design.md` — the local-kind layout migration the framework already shipped.
 
 **Status:** Draft

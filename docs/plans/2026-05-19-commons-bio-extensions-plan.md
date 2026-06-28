@@ -10,7 +10,7 @@
 
 **Design spec:** `docs/plans/2026-05-19-commons-bio-extensions-design.md` (commit `bca04e04`).
 
-**Parent design:** `docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md` §9 Phase H + §3.6 Domain extensions.
+**Parent design:** `docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md` §9 Phase H + §3.6 Domain extensions.
 
 ---
 

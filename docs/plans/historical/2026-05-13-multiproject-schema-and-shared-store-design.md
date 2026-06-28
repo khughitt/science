@@ -22,7 +22,7 @@ Make Science **multi-project at its core** by introducing a shared store for hig
 This spec builds **on top of**, not parallel to, two recent designs:
 
 - [`2026-05-12-science-entity-inventory-and-identity-design.md`](./2026-05-12-science-entity-inventory-and-identity-design.md) — makes Science the single authority for project entity discovery, validation, and identity. Introduces the `science_model.contracts.inventory_v1` payload as a versioned export contract.
-- [`2026-05-12-science-entity-inventory-and-dashboard-consumption.md`](./2026-05-12-science-entity-inventory-and-dashboard-consumption.md) — implementation plan that ports dashboard scanning over to consume `inventory_v1`.
+- 2026-05-12 science entity inventory/dashboard consumption implementation plan (retired; superseded by inventory_v2/dashboard pivot) — implementation plan that ports dashboard scanning over to consume `inventory_v1`.
 
 This spec adds a **shared-entity tier** above the per-project entity system those designs formalize. Concretely:
 

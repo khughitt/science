@@ -8,8 +8,8 @@ Public surface (built up across P3.3 tasks 6–9):
 - compute_stats(sidecars)    — Task 9
 - git_changed_markdown(...)  — Task 8
 
-See spec docs/plans/2026-05-11-annotation-system-p3.3-spec.md
-§"Read concerns: query.py".
+See docs/plans/historical/2026-05-10-annotation-system-spec.md for the
+underlying annotation-system model.
 """
 
 from __future__ import annotations

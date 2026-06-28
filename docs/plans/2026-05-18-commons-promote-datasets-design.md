@@ -6,7 +6,7 @@ papers shape and Phase F's topic/theme generalization. Pilots end-to-end on
 one carefully-chosen public dataset (`dataset:ccle-proteomics-nusinow-2020`
 in `multiple-myeloma`).
 
-Parent design: `~/d/science/docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md`
+Parent design: `~/d/science/docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md`
 (§3.2 dataset mixin, §4 bulk data resolution, §8.4 data migration policy,
 §9 Phase G).
 

@@ -1,10 +1,10 @@
 {
-  "file_count": 279,
-  "generated_at": "2026-06-28T15:58:15+00:00",
+  "file_count": 257,
+  "generated_at": "2026-06-28T16:23:55+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 180,
+  "thread_count": 168,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -68,33 +68,6 @@
         "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "design"
       },
       "thread_id": "adapter-entity-layout-and-overlay-root"
-    },
-    {
-      "earliest_file_date": "2026-05-11",
-      "files": [
-        "docs/plans/2026-05-11-annotation-system-p3.3-spec.md",
-        "docs/plans/2026-05-11-annotation-system-p3.3.md"
-      ],
-      "latest_file_date": "2026-05-11",
-      "normalized_slug": "annotation-system-p3.3",
-      "raw_slugs": {
-        "docs/plans/2026-05-11-annotation-system-p3.3-spec.md": "annotation-system-p3.3-spec",
-        "docs/plans/2026-05-11-annotation-system-p3.3.md": "annotation-system-p3.3"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-11-annotation-system-p3.3.md"
-        ],
-        "spec": [
-          "docs/plans/2026-05-11-annotation-system-p3.3-spec.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-11-annotation-system-p3.3-spec.md": "spec",
-        "docs/plans/2026-05-11-annotation-system-p3.3.md": null
-      },
-      "thread_id": "annotation-system-p3.3"
     },
     {
       "earliest_file_date": "2026-06-16",
@@ -820,87 +793,6 @@
       "thread_id": "commons-bio-extensions"
     },
     {
-      "earliest_file_date": "2026-05-14",
-      "files": [
-        "docs/plans/2026-05-14-commons-data-resolver-design.md",
-        "docs/plans/2026-05-14-commons-data-resolver-plan.md"
-      ],
-      "latest_file_date": "2026-05-14",
-      "normalized_slug": "commons-data-resolver",
-      "raw_slugs": {
-        "docs/plans/2026-05-14-commons-data-resolver-design.md": "commons-data-resolver-design",
-        "docs/plans/2026-05-14-commons-data-resolver-plan.md": "commons-data-resolver-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-14-commons-data-resolver-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-14-commons-data-resolver-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-14-commons-data-resolver-design.md": "design",
-        "docs/plans/2026-05-14-commons-data-resolver-plan.md": "plan"
-      },
-      "thread_id": "commons-data-resolver"
-    },
-    {
-      "earliest_file_date": "2026-05-14",
-      "files": [
-        "docs/plans/2026-05-14-commons-inventory-v2-design.md",
-        "docs/plans/2026-05-14-commons-inventory-v2-plan.md"
-      ],
-      "latest_file_date": "2026-05-14",
-      "normalized_slug": "commons-inventory-v2",
-      "raw_slugs": {
-        "docs/plans/2026-05-14-commons-inventory-v2-design.md": "commons-inventory-v2-design",
-        "docs/plans/2026-05-14-commons-inventory-v2-plan.md": "commons-inventory-v2-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-14-commons-inventory-v2-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-14-commons-inventory-v2-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-14-commons-inventory-v2-design.md": "design",
-        "docs/plans/2026-05-14-commons-inventory-v2-plan.md": "plan"
-      },
-      "thread_id": "commons-inventory-v2"
-    },
-    {
-      "earliest_file_date": "2026-05-14",
-      "files": [
-        "docs/plans/2026-05-14-commons-overlay-merge-design.md",
-        "docs/plans/2026-05-14-commons-overlay-merge-plan.md"
-      ],
-      "latest_file_date": "2026-05-14",
-      "normalized_slug": "commons-overlay-merge",
-      "raw_slugs": {
-        "docs/plans/2026-05-14-commons-overlay-merge-design.md": "commons-overlay-merge-design",
-        "docs/plans/2026-05-14-commons-overlay-merge-plan.md": "commons-overlay-merge-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-14-commons-overlay-merge-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-14-commons-overlay-merge-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-14-commons-overlay-merge-design.md": "design",
-        "docs/plans/2026-05-14-commons-overlay-merge-plan.md": "plan"
-      },
-      "thread_id": "commons-overlay-merge"
-    },
-    {
       "earliest_file_date": "2026-05-18",
       "files": [
         "docs/plans/2026-05-18-commons-promote-datasets-design.md",
@@ -932,72 +824,6 @@
         "docs/plans/2026-05-18-commons-promote-datasets-plan.md": "plan"
       },
       "thread_id": "commons-promote-datasets"
-    },
-    {
-      "earliest_file_date": "2026-05-15",
-      "files": [
-        "docs/plans/2026-05-15-commons-promote-papers-design.md",
-        "docs/plans/2026-05-15-commons-promote-papers-pilot.md",
-        "docs/plans/2026-05-15-commons-promote-papers-plan.md"
-      ],
-      "latest_file_date": "2026-05-15",
-      "normalized_slug": "commons-promote-papers",
-      "raw_slugs": {
-        "docs/plans/2026-05-15-commons-promote-papers-design.md": "commons-promote-papers-design",
-        "docs/plans/2026-05-15-commons-promote-papers-pilot.md": "commons-promote-papers-pilot",
-        "docs/plans/2026-05-15-commons-promote-papers-plan.md": "commons-promote-papers-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-15-commons-promote-papers-design.md"
-        ],
-        "pilot": [
-          "docs/plans/2026-05-15-commons-promote-papers-pilot.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-15-commons-promote-papers-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-15-commons-promote-papers-design.md": "design",
-        "docs/plans/2026-05-15-commons-promote-papers-pilot.md": "pilot",
-        "docs/plans/2026-05-15-commons-promote-papers-plan.md": "plan"
-      },
-      "thread_id": "commons-promote-papers"
-    },
-    {
-      "earliest_file_date": "2026-05-16",
-      "files": [
-        "docs/plans/2026-05-16-commons-promote-topics-themes-design.md",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-pilot.md",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-plan.md"
-      ],
-      "latest_file_date": "2026-05-16",
-      "normalized_slug": "commons-promote-topics-themes",
-      "raw_slugs": {
-        "docs/plans/2026-05-16-commons-promote-topics-themes-design.md": "commons-promote-topics-themes-design",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-pilot.md": "commons-promote-topics-themes-pilot",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-plan.md": "commons-promote-topics-themes-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-16-commons-promote-topics-themes-design.md"
-        ],
-        "pilot": [
-          "docs/plans/2026-05-16-commons-promote-topics-themes-pilot.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-16-commons-promote-topics-themes-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-16-commons-promote-topics-themes-design.md": "design",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-pilot.md": "pilot",
-        "docs/plans/2026-05-16-commons-promote-topics-themes-plan.md": "plan"
-      },
-      "thread_id": "commons-promote-topics-themes"
     },
     {
       "earliest_file_date": "2026-06-19",
@@ -2473,75 +2299,6 @@
       "thread_id": "multi-project-sync"
     },
     {
-      "earliest_file_date": "2026-05-13",
-      "files": [
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-design.md",
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-plan.md"
-      ],
-      "latest_file_date": "2026-05-13",
-      "normalized_slug": "multiproject-commons-scaffolding",
-      "raw_slugs": {
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-design.md": "multiproject-commons-scaffolding-design",
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-plan.md": "multiproject-commons-scaffolding-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-13-multiproject-commons-scaffolding-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-13-multiproject-commons-scaffolding-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-design.md": "design",
-        "docs/plans/2026-05-13-multiproject-commons-scaffolding-plan.md": "plan"
-      },
-      "thread_id": "multiproject-commons-scaffolding"
-    },
-    {
-      "earliest_file_date": "2026-05-13",
-      "files": [
-        "docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md"
-      ],
-      "latest_file_date": "2026-05-13",
-      "normalized_slug": "multiproject-schema-and-shared-store",
-      "raw_slugs": {
-        "docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md": "multiproject-schema-and-shared-store-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md": "design"
-      },
-      "thread_id": "multiproject-schema-and-shared-store"
-    },
-    {
-      "earliest_file_date": "2026-05-13",
-      "files": [
-        "docs/plans/2026-05-13-multiproject-schema-layer-plan.md"
-      ],
-      "latest_file_date": "2026-05-13",
-      "normalized_slug": "multiproject-schema-layer",
-      "raw_slugs": {
-        "docs/plans/2026-05-13-multiproject-schema-layer-plan.md": "multiproject-schema-layer-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-13-multiproject-schema-layer-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-13-multiproject-schema-layer-plan.md": "plan"
-      },
-      "thread_id": "multiproject-schema-layer"
-    },
-    {
       "earliest_file_date": "2026-06-19",
       "files": [
         "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md",
@@ -3319,33 +3076,6 @@
       "thread_id": "reactome-commons-ingestion"
     },
     {
-      "earliest_file_date": "2026-05-13",
-      "files": [
-        "docs/plans/2026-05-13-reason-coded-attention-design.md",
-        "docs/plans/2026-05-13-reason-coded-attention-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-05-13",
-      "normalized_slug": "reason-coded-attention",
-      "raw_slugs": {
-        "docs/plans/2026-05-13-reason-coded-attention-design.md": "reason-coded-attention-design",
-        "docs/plans/2026-05-13-reason-coded-attention-implementation-plan.md": "reason-coded-attention-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-13-reason-coded-attention-design.md"
-        ],
-        "implementation-plan": [
-          "docs/plans/2026-05-13-reason-coded-attention-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-13-reason-coded-attention-design.md": "design",
-        "docs/plans/2026-05-13-reason-coded-attention-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "reason-coded-attention"
-    },
-    {
       "earliest_file_date": "2026-05-26",
       "files": [
         "docs/plans/2026-05-26-reference-collection-member-promotion-design.md"
@@ -3536,48 +3266,6 @@
         "docs/plans/2026-06-23-science-citations-and-references-plan.md": "plan"
       },
       "thread_id": "science-citations-and-references"
-    },
-    {
-      "earliest_file_date": "2026-05-12",
-      "files": [
-        "docs/plans/2026-05-12-science-entity-inventory-and-dashboard-consumption.md"
-      ],
-      "latest_file_date": "2026-05-12",
-      "normalized_slug": "science-entity-inventory-and-dashboard-consumption",
-      "raw_slugs": {
-        "docs/plans/2026-05-12-science-entity-inventory-and-dashboard-consumption.md": "science-entity-inventory-and-dashboard-consumption"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-12-science-entity-inventory-and-dashboard-consumption.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-12-science-entity-inventory-and-dashboard-consumption.md": null
-      },
-      "thread_id": "science-entity-inventory-and-dashboard-consumption"
-    },
-    {
-      "earliest_file_date": "2026-05-12",
-      "files": [
-        "docs/plans/2026-05-12-science-entity-inventory-and-identity-design.md"
-      ],
-      "latest_file_date": "2026-05-12",
-      "normalized_slug": "science-entity-inventory-and-identity",
-      "raw_slugs": {
-        "docs/plans/2026-05-12-science-entity-inventory-and-identity-design.md": "science-entity-inventory-and-identity-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-12-science-entity-inventory-and-identity-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-12-science-entity-inventory-and-identity-design.md": "design"
-      },
-      "thread_id": "science-entity-inventory-and-identity"
     },
     {
       "earliest_file_date": "2026-06-15",

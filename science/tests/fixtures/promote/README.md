@@ -12,4 +12,5 @@ own corpus under `tmp_path`.
 | Huh2024      | Multi-instance, no conflicts (auto-union)   | both            |
 | Dang2023     | Multi-instance, real `year` conflict        | both            |
 
-See docs/plans/2026-05-15-commons-promote-papers-design.md §8.
+See `science/src/science_tool/commons/promote.py` and the promote tests for
+current behavior.

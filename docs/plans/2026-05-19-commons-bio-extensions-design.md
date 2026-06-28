@@ -2,7 +2,7 @@
 
 **Status:** design
 **Date:** 2026-05-19
-**Parent design:** [`2026-05-13-multiproject-schema-and-shared-store-design.md`](2026-05-13-multiproject-schema-and-shared-store-design.md) §3.6 (Domain extensions) and §9 Phase H
+**Parent design:** [`2026-05-13-multiproject-schema-and-shared-store-design.md`](historical/2026-05-13-multiproject-schema-and-shared-store-design.md) §3.6 (Domain extensions) and §9 Phase H
 **Predecessor:** Phase G — `science commons promote dataset` ([`2026-05-18-commons-promote-datasets-design.md`](2026-05-18-commons-promote-datasets-design.md))
 
 ---

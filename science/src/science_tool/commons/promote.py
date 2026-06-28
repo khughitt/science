@@ -1,7 +1,7 @@
 """Promote paper entities from per-project files into the commons store.
 
-Pipeline: discover → plan → apply. Atomic-batch transaction semantics
-per docs/plans/2026-05-15-commons-promote-papers-design.md §6.3.
+Pipeline: discover, plan, apply. Atomic-batch transaction semantics are
+implemented by `apply_promote`.
 
 This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).

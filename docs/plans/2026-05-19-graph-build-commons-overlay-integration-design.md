@@ -1,10 +1,10 @@
 # Graph build × commons overlay integration — design
 
-**Parent design:** `docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md` (§2.1 SharedEntityAdapter / OverlayAdapter; §5 Project overlays)
+**Parent design:** `docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md` (§2.1 SharedEntityAdapter / OverlayAdapter; §5 Project overlays)
 **Predecessors (merged):**
-- `docs/plans/2026-05-14-commons-overlay-merge-design.md` (D1 — overlay merge layer)
-- `docs/plans/2026-05-14-commons-inventory-v2-design.md` (D2 — inventory_v2 overlay integration)
-- `docs/plans/2026-05-16-commons-promote-topics-themes-design.md` (Phase F — topic/theme promote)
+- D1 overlay merge layer, implemented in `science/src/science_tool/commons/overlay.py`
+- D2 inventory_v2 overlay integration, implemented in `science/model/src/science_model/contracts/inventory_v2.py`
+- Phase F topic/theme promote, implemented in `science/src/science_tool/commons/promote.py`
 **Status:** approved 2026-05-19
 
 ---
@@ -351,7 +351,7 @@ Two cases worth being explicit about:
 
 - **Canonical fields the overlay also writes (e.g. `tags:`, `related:`)** — the merged value depends on the canonical schema's policy. APPEND merges the two lists with dedup; PROJECT_ONLY replaces with the overlay value. Either way, the merged Entity emits triples for whatever ends up in the merged list. Most mm30 topic overlays touch `tags:` rather than `related:`, so the canonical's `related:` typically passes through unchanged.
 
-- **Overlay-only fields** (`relevance`, `hypothesis_links`, `task_links`, `project_tags` per `2026-05-13-multiproject-schema-and-shared-store-design.md` §5.1) — these don't map to any current Entity field. **Dropped in this phase.** They're surfaced by inventory_v2 already; the graph doesn't need them. If a future task needs them queryable in trig, it's a one-line addition to `_add_entity`.
+- **Overlay-only fields** (`relevance`, `hypothesis_links`, `task_links`, `project_tags` per `docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md` §5.1) — these don't map to any current Entity field. **Dropped in this phase.** They're surfaced by inventory_v2 already; the graph doesn't need them. If a future task needs them queryable in trig, it's a one-line addition to `_add_entity`.
 
 ### 5.5 Provenance
 
@@ -409,7 +409,7 @@ Strict semantics throughout. See §2 in-scope: `commons_sources` matches today's
 
 | Condition | Why warn-only |
 |---|---|
-| Overlay sets `pin_version` and commons HEAD `version` differs | `2026-05-14-commons-overlay-merge-design.md` D1 explicitly defers pin enforcement to a later phase. Match that. |
+| Overlay sets `pin_version` and commons HEAD `version` differs | The D1 overlay merge implementation explicitly defers pin enforcement to a later phase. Match that. |
 | Overlay sets `pin_effective_version` | Same — escape-hatch field, also deferred. |
 | Project has no overlays, no commons refs, AND commons root missing | DEBUG log only; not even a warning. True no-op. |
 
