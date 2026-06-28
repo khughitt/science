@@ -1,10 +1,10 @@
 {
-  "file_count": 206,
-  "generated_at": "2026-06-28T17:47:22+00:00",
+  "file_count": 205,
+  "generated_at": "2026-06-28T17:56:10+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 131,
+  "thread_count": 130,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1355,27 +1355,6 @@
         "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-plan.md": "plan"
       },
       "thread_id": "inquiry-patch-profile-subsumption"
-    },
-    {
-      "earliest_file_date": "2026-03-06",
-      "files": [
-        "docs/plans/2026-03-06-inquiry-workflow-design.md"
-      ],
-      "latest_file_date": "2026-03-06",
-      "normalized_slug": "inquiry-workflow",
-      "raw_slugs": {
-        "docs/plans/2026-03-06-inquiry-workflow-design.md": "inquiry-workflow-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-06-inquiry-workflow-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-06-inquiry-workflow-design.md": "design"
-      },
-      "thread_id": "inquiry-workflow"
     },
     {
       "earliest_file_date": "2026-06-14",

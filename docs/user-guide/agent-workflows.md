@@ -21,7 +21,7 @@ project state.
 | Create propositions | workflow-guided | workflow-guided | `science propositions create` |
 | Add evidence lines | workflow-guided | workflow-guided | `science entity create evidence-line ...` |
 | Sketch a model | `/science:sketch-model` | `science-sketch-model` | `science inquiry init` |
-| Specify a model | `/science:specify-model` | `science-specify-model` | `science inquiry add-node`, `science inquiry add-edge` |
+| Specify a model | `/science:specify-model` | `science-specify-model` | edit `entities/patches/<slug>.md`, then `science graph build` and `science inquiry validate` |
 | Critique approach | `/science:critique-approach` | `science-critique-approach` | `science inquiry validate` |
 | Plan analysis | `/science:plan-analysis` | `science-plan-analysis` | source-authored plans |
 | Plan pipeline | `/science:plan-pipeline` | `science-plan-pipeline` | source-authored plans |

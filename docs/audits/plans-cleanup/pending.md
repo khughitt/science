@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `29`
+- Pending thread count: `28`
 
 ## b-migration-paper-datasets
 
@@ -180,20 +180,6 @@
 - remaining_gaps:
   - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
   - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
-
-## inquiry-workflow
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-03-06-inquiry-workflow-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until current inquiry architecture is checkpointed
-    - `docs/plans/2026-03-06-inquiry-workflow-design.md`
-- remaining_gaps:
-  - Current architecture diverges from the March plan: docs use entities/inquiries-style authored profiles and compiled views; the old plan's doc/inquiries graph-canonical rendering model is stale.
-  - No single durable architecture note records the current inquiry model, old interactive RDF path, authored profile compiler, and validation boundaries.
 
 ## knowledge-gaps
 

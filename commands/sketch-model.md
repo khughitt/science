@@ -29,9 +29,9 @@ Switch to causal mode when any of the following are true:
 3. Existing causal inquiries already exist in the project
 
 When causal mode is active:
-- create the inquiry with `--type causal`
+- create the inquiry with `--profile causal`
 - use `scic:causes` and `scic:confounds` as tentative causal structure
-- set the estimand with `inquiry set-estimand`
+- set the estimand in the source file with `--treatment` and `--outcome`
 - treat each causal edge as a candidate proposition, not an established fact
 - ask what evidence would support or dispute each proposed causal edge
 
@@ -51,8 +51,8 @@ uv run science <command>
 ## Rules
 
 - **MUST** initialize the graph if it does not exist (`science graph init`)
-- **MUST** create the inquiry before adding nodes or edges (`science inquiry init`)
-- **MUST** add entities to the knowledge graph and to the inquiry
+- **MUST** create the inquiry source file before adding boundary roles or flow edges (`science inquiry init`)
+- **MUST** add reusable variables, questions, hypotheses, datasets, and propositions as source entities before referencing them from the inquiry block
 - **SHOULD** name candidate propositions explicitly in notes or prose when the user proposes a real scientific relationship
 - **MUST NOT** treat sketch edges as validated
 - **MUST NOT** require provenance or confidence at this stage
@@ -67,6 +67,7 @@ Read these project files if they exist:
 - `entities/hypotheses/`
 - `entities/questions/`
 - `knowledge/graph.trig`
+- `entities/patches/`
 - `entities/inquiries/`
 
 If no graph exists:
@@ -77,17 +78,18 @@ science graph init
 
 ### Existing Inquiry Upgrade
 
-If `$ARGUMENTS` names an existing Markdown inquiry at `entities/inquiries/<slug>.md`,
-upgrade that document instead of creating a duplicate inquiry identity.
+If `$ARGUMENTS` names an existing graph-backed inquiry source at
+`entities/patches/<slug>.md`, edit that source file instead of creating a
+duplicate inquiry identity. If a legacy prose inquiry exists at
+`entities/inquiries/<slug>.md`, treat it as context and migrate the graph-backed
+parts into `entities/patches/<slug>.md` when a queryable inquiry graph is needed.
 
-- Read `entities/inquiries/<slug>.md` and preserve its existing slug and frontmatter.
-- If the file already has an `id:` or `type:`/`kind:` value, keep it unless it
-  conflicts with the graph command you are about to run.
-- Register the existing inquiry before adding graph nodes or edges. Use the
-  existing slug in `science inquiry init` or the nearest available registration
-  command, then continue with node and edge additions.
-- In the final summary, state that this was an upgrade of an existing inquiry,
-  not a new inquiry.
+- Read the existing file and preserve its slug, focal target, and status.
+- If migrating from a legacy prose inquiry, do not delete the prose note unless
+  the user explicitly asks; create the graph-backed source as the durable
+  compiled-inquiry surface.
+- In the final summary, state whether this was an edit of an existing inquiry
+  source or a migration from legacy prose.
 
 ### Step 2: Interactive Conversation
 
@@ -124,14 +126,15 @@ If causal mode is active, also ask:
 
 If the sketch is mostly formal or architectural rather than empirical, say so explicitly and treat the key propositions as likely `structural_claim`s rather than as causal or mechanistic claims.
 
-### Step 3: Build the Inquiry Subgraph
+### Step 3: Author The Inquiry Source
 
 1. **Create the inquiry**
 
 ```bash
 science inquiry init "<slug>" \
   --label "<descriptive label>" \
-  --target "<hypothesis:hNN or question:qNN>"
+  --target "<hypothesis:hNN or question:qNN>" \
+  --profile investigation
 ```
 
 If causal mode:
@@ -140,44 +143,54 @@ If causal mode:
 science inquiry init "<slug>" \
   --label "<descriptive label>" \
   --target "<hypothesis:hNN or question:qNN>" \
-  --type causal
+  --profile causal \
+  --treatment "concept:<treatment>" \
+  --outcome "concept:<outcome>"
 ```
 
 2. **Add entities to the knowledge graph**
+
+Create or update the source entities that the inquiry will reference. Prefer
+normal entity files under `entities/` when they are durable project concepts.
+Use CLI helpers where available, then rebuild the graph.
 
 ```bash
 science graph add concept "<variable name>" --type sci:Variable
 science graph add concept "<unknown factor>" --type sci:Unknown
 ```
 
-3. **Add nodes to the inquiry**
+3. **Edit the `inquiry:` block**
 
-```bash
-science inquiry add-node "<slug>" "concept:<entity>" --role BoundaryIn
-science inquiry add-node "<slug>" "concept:<entity>" --role BoundaryOut
+Open `entities/patches/<slug>.md` and add boundary roles and flow edges:
+
+```yaml
+inquiry:
+  profile: investigation
+  status: sketch
+  boundary_roles:
+    - ref: "concept:<input>"
+      role: BoundaryIn
+    - ref: "concept:<output>"
+      role: BoundaryOut
+  flow_edges:
+    - subject: "concept:<from>"
+      predicate: feedsInto
+      object: "concept:<to>"
+      claim_refs: []
+  assumptions: []
+  transformations: []
+  unknowns:
+    - "concept:<unknown>"
 ```
 
-4. **Add tentative edges**
+Use `predicate: causes` for causal edges in a causal inquiry. Do not imply that
+the edge is proven; record in the source prose which candidate propositions need
+formalization next.
 
-For flow or processing structure:
-
-```bash
-science inquiry add-edge "<slug>" "concept:<from>" "sci:feedsInto" "concept:<to>"
-```
-
-For candidate causal structure:
+4. **Build the compiled view**
 
 ```bash
-science inquiry add-edge "<slug>" "concept:<from>" "scic:causes" "concept:<to>"
-```
-
-Do not imply that this edge is proven.
-Instead, record in the inquiry summary which candidate propositions likely need to be formalized next.
-
-5. **Set the estimand when relevant**
-
-```bash
-science inquiry set-estimand "<slug>" --treatment "concept/<treatment>" --outcome "concept/<outcome>"
+science graph build
 ```
 
 ### Step 4: Visualize And Summarize
@@ -187,7 +200,9 @@ science inquiry show "<slug>" --format table
 science inquiry validate "<slug>" --format json
 ```
 
-Save the inquiry document to `entities/inquiries/<slug>.md`.
+The source file is `entities/patches/<slug>.md`. If the project also keeps a
+prose inquiry note in `entities/inquiries/<slug>.md`, keep it consistent with
+the patch source but do not treat it as the compiled graph source.
 
 The summary should explicitly note:
 - tentative propositions

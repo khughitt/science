@@ -17,6 +17,12 @@ bibliography records, structured sources, and project configuration.
 Do not edit `knowledge/graph.trig` as the durable fix. Correct the source and
 rebuild.
 
+Inquiry graphs are also derived views. The graph-backed inquiry source is a
+`patch-definition` file with `patch_type: inquiry` under `entities/patches/`;
+`science graph build` compiles it into a dedicated `sci:Inquiry` named graph and
+patch-membership layer. Use `science inquiry show` and `science inquiry
+validate` to read the compiled view.
+
 For local cleanup in a project that declares peers, use:
 
 ```bash

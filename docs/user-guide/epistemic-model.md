@@ -17,6 +17,80 @@ fragility, and missing evidence visible.
 | `mechanism` | Named explanatory structure linking multiple typed entities and propositions. |
 | `patch-definition` | Authored profile for a local epistemic neighborhood. |
 
+## Inquiries
+
+An `inquiry` is a scoped work program: it names what the project is trying to
+understand, which variables or data sources are treated as givens, which outputs
+or decisions it is trying to produce, and which assumptions or transformations
+connect those parts.
+
+Science has two inquiry-related source surfaces:
+
+| Surface | Role |
+|---|---|
+| `entities/inquiries/<slug>.md` | A normal inquiry entity for prose-first records, legacy projects, and human-readable scoped work notes. |
+| `entities/patches/<slug>.md` with `type: patch-definition` and `patch_type: inquiry` | The source-first graph inquiry profile compiled by `science graph build`. |
+
+The queryable inquiry graph is derived state. Do not hand-edit
+`knowledge/graph.trig` to change an inquiry. Edit the source file, then run
+`science graph build`.
+
+### Inquiry Patch Profiles
+
+The graph-backed inquiry path uses `patch-definition` because an inquiry is also
+a local epistemic neighborhood: it has a focal hypothesis or question and a
+derived member set around that focal target. `science inquiry init` scaffolds
+this source file:
+
+```bash
+science inquiry init <slug> \
+  --label "<title>" \
+  --target hypothesis:<id> \
+  --profile investigation
+```
+
+For causal inquiries, include the estimand when the file is created:
+
+```bash
+science inquiry init <slug> \
+  --label "<title>" \
+  --target hypothesis:<id> \
+  --profile causal \
+  --treatment concept:<treatment> \
+  --outcome concept:<outcome>
+```
+
+The authored `inquiry:` block carries:
+
+| Field | Purpose |
+|---|---|
+| `profile` | `investigation` or `causal`. Causal profiles require `treatment` and `outcome`. |
+| `status` | `sketch`, `specified`, `planned`, `in-progress`, or `complete`. |
+| `boundary_roles` | Existing entity refs marked as `BoundaryIn` or `BoundaryOut`. |
+| `flow_edges` | Directed inquiry edges using `feedsInto`, `produces`, or `causes`, optionally backed by `proposition:` refs in `claim_refs`. |
+| `assumptions` | Inquiry-local assumption nodes minted during graph build, with optional provenance. |
+| `transformations` | Inquiry-local transformation nodes, tools, parameters, and validation refs. |
+| `unknowns` | Existing refs marked as `sci:Unknown` until resolved or justified. |
+
+The graph build compiles inquiry patch profiles into dedicated `sci:Inquiry`
+named graphs and then derives patch-membership records. Boundary nodes and edge
+endpoints must resolve to existing entities; assumption and transformation nodes
+are minted by the compiler.
+
+### Inquiry CLI
+
+The current `science inquiry` CLI is source-first:
+
+- `science inquiry init` scaffolds the source file and does not write the graph.
+- `science inquiry import` is a bridge from an existing graph inquiry into a
+  patch-definition source file.
+- `science inquiry list`, `science inquiry show`, `science inquiry validate`,
+  `science inquiry export-pgmpy`, and `science inquiry export-chirho` read the
+  materialized graph.
+- The old graph-mutating commands (`add-node`, `add-edge`, `add-assumption`,
+  `add-transformation`, and `set-estimand`) are retired. Edit the source file
+  and rebuild instead.
+
 ## Proposition-Centered Belief
 
 Propositions are the main units whose belief can be summarized. A proposition
