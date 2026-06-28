@@ -651,7 +651,6 @@ Add near the constants:
 
 ```python
 FACET_HINT_TERMS: dict[str, str] = {
-    "intervention": "perturbation",
     "drug": "perturbation",
     "compound": "perturbation",
     "knockout": "perturbation",
@@ -678,7 +677,6 @@ FACET_HINT_TERMS: dict[str, str] = {
     "multi-omic": "multi-omic",
     "proteogenomic": "multimodal",
     "proteogenomics": "multimodal",
-    "single-cell": "single-cell-rna-seq",
     "singlecell": "single-cell-rna-seq",
     "scrna": "single-cell-rna-seq",
     "scrna-seq": "single-cell-rna-seq",
@@ -1458,7 +1456,7 @@ def gaps_report(
 ) -> BenchmarkGapReport:
 ```
 
-Change the `_opportunity_analysis()` call to include prose tokens when gap calibration is requested:
+Change the `_opportunity_analysis()` call to keep benchmark prose tokens disabled for gaps. Gap calibration surfaces entity evidence, controlled benchmark facets, and candidate score components; it does not expose benchmark prose tokens.
 
 ```python
 analysis = _opportunity_analysis(
@@ -1466,7 +1464,7 @@ analysis = _opportunity_analysis(
     include_commons=include_commons,
     entity_id=entity_id,
     domain=domain,
-    include_prose_tokens=calibration_report,
+    include_prose_tokens=False,
 )
 ```
 

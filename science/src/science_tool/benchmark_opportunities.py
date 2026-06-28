@@ -46,7 +46,29 @@ HIGH_VALUE_MODALITIES = frozenset(HIGH_VALUE_MODALITY_POINTS)
 GAP_MODALITIES = ("proteomics", "spatial", "multimodal")
 GAP_SIGNAL_TYPES = ("perturbation", "time-series", "cross-context-generalization")
 GAP_FACETS = frozenset((*GAP_MODALITIES, *GAP_SIGNAL_TYPES))
-BROAD_NON_SCOREABLE_FACETS = frozenset({"biology"})
+BENCHMARK_GAP_HINT_FACETS = (
+    "proteomics",
+    "spatial",
+    "multimodal",
+    "perturbation",
+    "time-series",
+    "cross-context-generalization",
+    "longitudinal",
+    "multi-omic",
+    "single-cell-rna-seq",
+)
+BENCHMARK_GAP_HINT_FACET_SET = frozenset(BENCHMARK_GAP_HINT_FACETS)
+BROAD_NON_SCOREABLE_FACETS = frozenset({"biology", "cancer", "varies"})
+ENTITY_SUPPRESSED_TOKENS = frozenset(
+    {
+        "claim",
+        "statement",
+        "summary",
+        "question",
+        "hypothesis",
+        "proposition",
+    }
+)
 KIND_SIGNAL_RULES = {
     "perturbation": ("perturbation-response", 10),
     "dynamic": ("time-series", 8),
@@ -141,6 +163,7 @@ class DatasetOpportunityContext:
 class TokenEvidence:
     kept: frozenset[str]
     stop: frozenset[str]
+    broad: frozenset[str]
     short: frozenset[str]
 
 
@@ -187,6 +210,8 @@ class UnmappedProjectEntityRow(TypedDict):
 
 class DroppedTokenPayload(TypedDict):
     stop: dict[str, list[str]]
+    broad_entity: dict[str, list[str]]
+    broad_dataset_facet: dict[str, list[str]]
     short: dict[str, list[str]]
 
 
@@ -414,13 +439,21 @@ def baseline_score(dataset: OpportunityDataset, *, readiness: tuple[float, list[
     return Score(total=min(sum(components.values()), 100), components=components, notes=notes)
 
 
-def _token_evidence_from_text(*values: str, include_stop_tokens: bool = False) -> TokenEvidence:
+def _token_evidence_from_text(
+    *values: str,
+    include_stop_tokens: bool = False,
+    broad_tokens: frozenset[str] = frozenset(),
+) -> TokenEvidence:
     kept: set[str] = set()
     stop: set[str] = set()
+    broad: set[str] = set()
     short: set[str] = set()
     for value in values:
         for raw in _TOKEN_RE.findall(value):
             token = _normalize_token(raw)
+            if token in broad_tokens:
+                broad.add(token)
+                continue
             if not include_stop_tokens and token in _STOP_TOKENS:
                 stop.add(token)
                 continue
@@ -428,11 +461,24 @@ def _token_evidence_from_text(*values: str, include_stop_tokens: bool = False) -
                 short.add(token)
                 continue
             kept.add(token)
-    return TokenEvidence(kept=frozenset(kept), stop=frozenset(stop), short=frozenset(short))
+    return TokenEvidence(
+        kept=frozenset(kept),
+        stop=frozenset(stop),
+        broad=frozenset(broad),
+        short=frozenset(short),
+    )
 
 
-def _tokens_from_text(*values: str, include_stop_tokens: bool = False) -> frozenset[str]:
-    return _token_evidence_from_text(*values, include_stop_tokens=include_stop_tokens).kept
+def _tokens_from_text(
+    *values: str,
+    include_stop_tokens: bool = False,
+    broad_tokens: frozenset[str] = frozenset(),
+) -> frozenset[str]:
+    return _token_evidence_from_text(
+        *values,
+        include_stop_tokens=include_stop_tokens,
+        broad_tokens=broad_tokens,
+    ).kept
 
 
 def _as_string_list(value: object) -> list[str]:
@@ -475,7 +521,12 @@ def load_project_entities(project_root: Path) -> list[ProjectBenchmarkEntity]:
             title = str(fm.get("title") or "")
             _frontmatter, body = parse_markdown_entity_file(row["path"])
             content_preview = str(fm.get("content_preview") or body[:200])
-            tokens = _tokens_from_text(entity_id, title, content_preview)
+            tokens = _tokens_from_text(
+                entity_id,
+                title,
+                content_preview,
+                broad_tokens=ENTITY_SUPPRESSED_TOKENS,
+            )
             entities.append(
                 ProjectBenchmarkEntity(
                     id=entity_id,
@@ -707,7 +758,7 @@ def _normalized_gap_facet(facet: str | None) -> str | None:
     normalized = _normalize_token(facet)
     if not normalized:
         raise ValueError("facet must not be blank")
-    if normalized not in GAP_FACETS:
+    if normalized not in BENCHMARK_GAP_HINT_FACET_SET:
         raise ValueError(f"unknown benchmark gap facet: {facet}")
     return normalized
 
@@ -853,14 +904,38 @@ def _calibration_payload(
     if not enabled:
         return {"enabled": False}
     entity_token_evidence = {
-        entity.id: _token_evidence_from_text(entity.id, entity.title, entity.content_preview) for entity in entities
+        entity.id: _token_evidence_from_text(
+            entity.id,
+            entity.title,
+            entity.content_preview,
+            broad_tokens=ENTITY_SUPPRESSED_TOKENS,
+        )
+        for entity in entities
     }
     benchmark_token_evidence = {
-        context.dataset.id: _token_evidence_from_text(*_dataset_evidence_values(context.dataset)) for context in contexts
+        context.dataset.id: _token_evidence_from_text(*_dataset_evidence_values(context.dataset))
+        for context in contexts
+    }
+    benchmark_facet_evidence = {
+        context.dataset.id: _token_evidence_from_text(
+            *context.dataset.domains,
+            *context.dataset.modalities,
+            *context.dataset.signal_types,
+            *context.dataset.benchmark_kinds,
+            broad_tokens=BROAD_NON_SCOREABLE_FACETS,
+        )
+        for context in contexts
     }
     entity_tokens = {entity.id: sorted(entity.tokens) for entity in entities}
-    benchmark_tokens = {context.dataset.id: sorted(_calibration_benchmark_tokens(context)) for context in contexts}
+    benchmark_tokens = {
+        context.dataset.id: sorted(_calibration_benchmark_tokens(context)) for context in contexts
+    }
     matched_evidence = _calibration_match_evidence(entities, contexts, matched_rows)
+    benchmark_broad_facets = {
+        stable_id: sorted(evidence.broad)
+        for stable_id, evidence in benchmark_facet_evidence.items()
+        if evidence.broad
+    }
     return {
         "enabled": True,
         "stop_tokens": sorted(_STOP_TOKENS),
@@ -875,6 +950,12 @@ def _calibration_payload(
                 }.items()
                 if evidence.stop
             },
+            "broad_entity": {
+                stable_id: sorted(evidence.broad)
+                for stable_id, evidence in entity_token_evidence.items()
+                if evidence.broad
+            },
+            "broad_dataset_facet": benchmark_broad_facets,
             "short": {
                 stable_id: sorted(evidence.short)
                 for stable_id, evidence in {

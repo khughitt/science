@@ -942,6 +942,71 @@ def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> N
     assert "hypothesis:nope" in result.output
 
 
+def test_gap_hint_facets_are_the_facet_filter_valid_set(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import BENCHMARK_GAP_HINT_FACETS, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0011-single-cell",
+        """
+id: hypothesis:0011-single-cell
+type: hypothesis
+title: Single-cell longitudinal benchmark gap
+""",
+        body="Single-cell longitudinal data would test the model.",
+    )
+
+    for facet in BENCHMARK_GAP_HINT_FACETS:
+        payload = gaps_report(tmp_path, facet=facet)
+        assert payload["summary"]["entities_total"] == 1
+
+
+def test_broad_dataset_and_entity_tokens_do_not_create_opportunity_matches(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0012-broad",
+        """
+id: hypothesis:0012-broad
+type: hypothesis
+title: Cancer hypothesis summary
+status: active
+""",
+        body="Summary statement about cancer biology varies by cohort.",
+    )
+    _write_dataset(
+        tmp_path,
+        "broad",
+        """
+id: dataset:broad
+type: dataset
+title: Broad Dataset
+benchmark:
+  domains: [biology, cancer]
+  modalities: [varies]
+  signal_types: [static]
+  benchmark_kinds: [association]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False, calibration_report=True)
+
+    assert payload["matched_opportunities"] == []
+    assert payload["unmapped_project_entities"][0]["entity_id"] == "hypothesis:0012-broad"
+    dropped = payload["calibration"].get("dropped_tokens")
+    assert dropped is not None
+    assert "summary" in dropped["broad_entity"]["hypothesis:0012-broad"]
+    assert dropped["broad_dataset_facet"]["dataset:broad"] == ["biology", "cancer", "varies"]
+    benchmark_controlled_facet_tokens = payload["calibration"].get("benchmark_controlled_facet_tokens")
+    assert benchmark_controlled_facet_tokens is not None
+    benchmark_tokens = benchmark_controlled_facet_tokens["dataset:broad"]
+    assert "cancer" in benchmark_tokens
+    assert "varies" in benchmark_tokens
+
+
 def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 

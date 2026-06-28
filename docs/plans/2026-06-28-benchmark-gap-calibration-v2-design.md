@@ -168,8 +168,8 @@ kinds and therefore can create `facet_overlap` unless excluded:
 - `varies`
 
 Entity-token suppressions extend the entity text token gate used before hint
-inference and `facet_overlap`. These are project document/kind words or generic
-workflow terms; they should be retained in calibration evidence but not in
+inference and `facet_overlap`. These are project document/kind words; they
+should be retained in calibration evidence under `broad_entity` but not in
 `ProjectBenchmarkEntity.tokens`:
 
 - `claim`
@@ -178,6 +178,10 @@ workflow terms; they should be retained in calibration evidence but not in
 - `question`
 - `hypothesis`
 - `proposition`
+
+Existing workflow stop words remain in `_STOP_TOKENS` and continue to land in
+the `stop` evidence bucket:
+
 - `analysis`
 - `cell`
 - `data`
