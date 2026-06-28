@@ -304,6 +304,24 @@ class EntityLocation:
     body: str
 
 
+@dataclass(frozen=True)
+class EntityReferenceHit:
+    path: Path
+    rel_path: str
+    line: int
+    kind: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class EntityRemovalPlan:
+    entity_id: str
+    path: Path
+    rel_path: str
+    safe_hits: list[EntityReferenceHit]
+    manual_hits: list[EntityReferenceHit]
+
+
 def resolve_path_policy(kind: str, *, project_root: Path | None = None) -> EntityPathPolicy:
     try:
         return entity_policies(project_root)[kind]
@@ -876,6 +894,233 @@ def append_entity_note(
     )
     _atomic_replace_text(location.path, text)
     return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+
+
+_REMOVABLE_FRONTMATTER_REF_KEYS: frozenset[str] = frozenset(
+    {
+        "related",
+        "source_refs",
+        "supersedes",
+        "superseded_by",
+        "consolidates",
+        "consolidated_into",
+        "members",
+        "member_refs",
+        "depends_on",
+        "blockers",
+    }
+)
+
+_REFERENCE_SCAN_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        ".worktrees",
+        "__pycache__",
+        "node_modules",
+    }
+)
+
+
+def plan_entity_removal(project_root: Path, target: str) -> EntityRemovalPlan:
+    project_root = project_root.resolve()
+    location = _resolve_removal_location(project_root, target)
+    terms = _removal_search_terms(location)
+    safe_hits: list[EntityReferenceHit] = []
+    manual_hits: list[EntityReferenceHit] = []
+    for path in _iter_reference_scan_files(project_root):
+        if path == location.path:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if not any(term in text for term in terms):
+            continue
+        frontmatter, body = _parse_markdown_file(path) if path.suffix == ".md" else ({}, text)
+        rel_path = path.relative_to(project_root).as_posix()
+        removable = _removable_frontmatter_refs(frontmatter, terms)
+        safe_hits.extend(
+            EntityReferenceHit(
+                path=path,
+                rel_path=rel_path,
+                line=_line_for_frontmatter_key(text, key),
+                kind="safe structured reference",
+                detail=f"{key}: {value}",
+            )
+            for key, value in removable
+        )
+        if path.suffix == ".md" and frontmatter:
+            manual_hits.extend(_manual_frontmatter_reference_hits(path, rel_path, text, frontmatter, terms))
+        manual_text = body if path.suffix == ".md" and frontmatter else text
+        manual_hits.extend(_manual_reference_hits(path, rel_path, manual_text, terms))
+    return EntityRemovalPlan(
+        entity_id=location.entity_id,
+        path=location.path,
+        rel_path=location.rel_path,
+        safe_hits=safe_hits,
+        manual_hits=manual_hits,
+    )
+
+
+def remove_entity(project_root: Path, target: str) -> EntityRemovalPlan:
+    project_root = project_root.resolve()
+    plan = plan_entity_removal(project_root, target)
+    for hit in sorted(plan.safe_hits, key=lambda item: (item.rel_path, item.line, item.detail)):
+        _remove_frontmatter_ref(hit.path, set(_removal_search_terms_from_plan(plan)))
+    plan.path.unlink()
+    return plan
+
+
+def _resolve_removal_location(project_root: Path, target: str) -> EntityLocation:
+    candidate = Path(target).expanduser()
+    if candidate.suffix == ".md" or "/" in target:
+        resolved = candidate.resolve() if candidate.is_absolute() else (project_root / candidate).resolve()
+        if not resolved.is_relative_to(project_root):
+            raise EntityCommandError("entity path must be inside the project root")
+        if not resolved.is_file():
+            raise EntityCommandError(f"Entity file not found: {target}")
+        frontmatter, body = _parse_markdown_file(resolved)
+        entity_id = frontmatter.get("id")
+        if not isinstance(entity_id, str) or not entity_id:
+            raise EntityCommandError(f"Entity file has no frontmatter id: {target}")
+        kind = str(frontmatter.get("type") or frontmatter.get("kind") or entity_id.split(":", 1)[0])
+        return EntityLocation(
+            entity_id=entity_id,
+            kind=kind,
+            title=str(frontmatter.get("title") or ""),
+            status=str(frontmatter.get("status") or ""),
+            path=resolved,
+            rel_path=resolved.relative_to(project_root).as_posix(),
+            frontmatter=dict(frontmatter),
+            body=body,
+        )
+    return find_entity(project_root, target)
+
+
+def _removal_search_terms(location: EntityLocation) -> tuple[str, ...]:
+    local_part = location.entity_id.split(":", 1)[1] if ":" in location.entity_id else location.path.stem
+    terms = {
+        location.entity_id,
+        local_part,
+        location.rel_path,
+        Path(location.rel_path).stem,
+    }
+    return tuple(sorted(term for term in terms if term))
+
+
+def _removal_search_terms_from_plan(plan: EntityRemovalPlan) -> tuple[str, ...]:
+    local_part = plan.entity_id.split(":", 1)[1] if ":" in plan.entity_id else Path(plan.rel_path).stem
+    terms = {plan.entity_id, local_part, plan.rel_path, Path(plan.rel_path).stem}
+    return tuple(sorted(term for term in terms if term))
+
+
+def _iter_reference_scan_files(project_root: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in project_root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in path.relative_to(project_root).parts):
+            continue
+        files.append(path)
+    return files
+
+
+def _removable_frontmatter_refs(frontmatter: dict[str, Any], terms: tuple[str, ...]) -> list[tuple[str, str]]:
+    removable: list[tuple[str, str]] = []
+    term_set = set(terms)
+    for key in _REMOVABLE_FRONTMATTER_REF_KEYS:
+        value = frontmatter.get(key)
+        if isinstance(value, list):
+            removable.extend((key, item) for item in value if isinstance(item, str) and item in term_set)
+        elif isinstance(value, str) and value in term_set:
+            removable.append((key, value))
+    return removable
+
+
+def _line_for_frontmatter_key(text: str, key: str) -> int:
+    for index, line in enumerate(text.splitlines(), start=1):
+        if line.startswith(f"{key}:"):
+            return index
+    return 1
+
+
+def _manual_reference_hits(path: Path, rel_path: str, text: str, terms: tuple[str, ...]) -> list[EntityReferenceHit]:
+    hits: list[EntityReferenceHit] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        matched = next((term for term in terms if term in line), None)
+        if matched is None:
+            continue
+        hits.append(
+            EntityReferenceHit(
+                path=path,
+                rel_path=rel_path,
+                line=line_number,
+                kind="manual reference",
+                detail=matched,
+            )
+        )
+    return hits
+
+
+def _manual_frontmatter_reference_hits(
+    path: Path,
+    rel_path: str,
+    text: str,
+    frontmatter: dict[str, Any],
+    terms: tuple[str, ...],
+) -> list[EntityReferenceHit]:
+    hits: list[EntityReferenceHit] = []
+    term_set = set(terms)
+    for key, value in frontmatter.items():
+        if key in _REMOVABLE_FRONTMATTER_REF_KEYS:
+            continue
+        if not _frontmatter_value_contains_term(value, term_set):
+            continue
+        hits.append(
+            EntityReferenceHit(
+                path=path,
+                rel_path=rel_path,
+                line=_line_for_frontmatter_key(text, str(key)),
+                kind="manual reference",
+                detail=str(key),
+            )
+        )
+    return hits
+
+
+def _frontmatter_value_contains_term(value: object, terms: set[str]) -> bool:
+    if isinstance(value, str):
+        return value in terms
+    if isinstance(value, list):
+        return any(_frontmatter_value_contains_term(item, terms) for item in value)
+    if isinstance(value, dict):
+        return any(_frontmatter_value_contains_term(item, terms) for item in value.values())
+    return False
+
+
+def _remove_frontmatter_ref(path: Path, terms: set[str]) -> None:
+    frontmatter, body = _parse_markdown_file(path)
+    changed = False
+    for key in _REMOVABLE_FRONTMATTER_REF_KEYS:
+        value = frontmatter.get(key)
+        if isinstance(value, list):
+            retained = [item for item in value if not (isinstance(item, str) and item in terms)]
+            if retained != value:
+                changed = True
+                if retained:
+                    frontmatter[key] = retained
+                else:
+                    frontmatter.pop(key, None)
+        elif isinstance(value, str) and value in terms:
+            changed = True
+            frontmatter.pop(key, None)
+    if changed:
+        _atomic_replace_text(path, _render_markdown(frontmatter, body))
 
 
 def list_entities(

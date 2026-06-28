@@ -68,6 +68,16 @@ def test_task_command_docs_allow_task_scoped_aspects_without_project_declaration
     assert "project-wide aspect behavior" in text
 
 
+def test_create_project_gitignore_excludes_transient_agent_artifacts() -> None:
+    text = _read("commands/create-project.md")
+
+    assert "entities/meta/*next-steps*.md" in text
+    assert "doc/meta/next-steps-*.md" in text
+    assert "doc/plans/*-plan-review.md" in text
+    assert "docs/plans/*-plan-review.md" in text
+    assert "unless explicitly promoted" in text
+
+
 def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> None:
     text = _read("commands/plan-analysis.md")
 

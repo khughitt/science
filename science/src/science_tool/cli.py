@@ -27,12 +27,15 @@ from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
 from science_tool.entities import (
     EntityCommandError,
+    EntityRemovalPlan,
     append_entity_note,
     create_entity,
     edit_entity,
     find_entity,
     graph_is_stale,
     list_entities,
+    plan_entity_removal,
+    remove_entity,
 )
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
@@ -850,6 +853,19 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
     _emit_entity_warnings(result.warnings)
 
 
+@entity_group.command("remove")
+@click.argument("target")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Delete the entity and safe references.")
+def entity_remove(target: str, apply_changes: bool) -> None:
+    """Preview or remove an entity file and safely removable references."""
+
+    try:
+        plan = remove_entity(Path.cwd(), target) if apply_changes else plan_entity_removal(Path.cwd(), target)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_entity_removal_plan(plan, applied=apply_changes)
+
+
 @entity_group.command("list")
 @click.argument("kind_arg", required=False)
 @click.option("--kind")
@@ -1485,6 +1501,26 @@ def _emit_entity_show(location: Any, output_format: str) -> None:
     if location.body:
         click.echo()
         console.print(Text(location.body.rstrip("\n")))
+
+
+def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:
+    action = "Removed" if applied else "DRY RUN"
+    click.echo(f"{action} {plan.entity_id}")
+    click.echo(f"- delete {plan.rel_path}")
+    if plan.safe_hits:
+        click.echo("- safe structured reference cleanup:")
+        for hit in sorted(plan.safe_hits, key=lambda item: (item.rel_path, item.line, item.detail)):
+            click.echo(f"  - {hit.rel_path}:{hit.line}: {hit.detail}")
+    else:
+        click.echo("- safe structured reference cleanup: none")
+    if plan.manual_hits:
+        click.echo("- manual references:")
+        for hit in sorted(plan.manual_hits, key=lambda item: (item.rel_path, item.line, item.detail)):
+            click.echo(f"  - {hit.rel_path}:{hit.line}: {hit.detail}")
+    else:
+        click.echo("- manual references: none")
+    if not applied:
+        click.echo("Run with --apply to delete the entity and rewrite safe structured references.")
 
 
 def _print_entity_field(console: Any, label: str, value: Text) -> None:

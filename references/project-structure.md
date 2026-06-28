@@ -46,8 +46,8 @@ The canonical root for Science-managed written output.
 - `interpretations/YYYY-MM-DD-<slug>.md` — result interpretation documents
 - `meta/skill-feedback.md` — process reflection log
 - `reports/` — audits and structured reports
-- `plans/` — project plans and design docs
-- `meta/next-steps-*.md` — gap analysis and prioritization output (written by `/science:next-steps`)
+- `plans/` — project plans and design docs; generated `*-plan-review.md` scratch files are gitignored unless promoted
+- `meta/next-steps-*.md` — gap analysis and prioritization scratch output (written by `/science:next-steps`; gitignored unless promoted)
 
 ### `papers/` — Reference Management
 
