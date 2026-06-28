@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Draft (replacement spec)
-**Replaces:** `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` rev 1.1
+**Replaces:** earlier Spec Y rev 1.1
 **Builds on:** `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` rev 2.2
 **Forward:** implementation plan and migration sequencing to follow in a separate planning doc
 
@@ -824,7 +824,7 @@ Regression fixtures and golden snapshots remain valuable and should be preserved
 
 ## Deferred from the 2026-04-20 unified-entity-model implementation
 
-The plan at `docs/specs/plans/2026-04-20-unified-entity-model.md` landed
+The plan at `docs/plans/historical/2026-04-20-unified-entity-model.md` landed
 the architectural cutover (merge `78a5339` on `main`, 2026-04-20). Two
 spec-aligned tasks were intentionally scoped out of that implementation and
 remain as follow-ups:

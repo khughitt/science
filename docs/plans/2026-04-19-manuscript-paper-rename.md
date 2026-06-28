@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, click (existing CLI), pytest, difflib, pathlib, `re`. No new runtime dependencies.
 
-**Spec:** `docs/specs/2026-04-19-manuscript-paper-rename-design.md`
+**Spec:** `docs/plans/2026-04-19-manuscript-paper-rename-design.md`
 
 ---
 
@@ -94,7 +94,7 @@ Create `science/src/science_tool/refs_migrate.py`:
 ```python
 """Pure-function core for migrating legacy ``article:`` IDs to ``paper:``.
 
-See docs/specs/2026-04-19-manuscript-paper-rename-design.md for the
+See docs/plans/2026-04-19-manuscript-paper-rename-design.md for the
 canonical rewrite rules.
 """
 
@@ -1042,7 +1042,7 @@ This helper is the single place that encodes that rule.
 
 Removal: this module is deleted (one-line change per consumer) once all
 tracked projects confirm migration. See
-docs/specs/2026-04-19-manuscript-paper-rename-design.md §Transition-Window.
+docs/plans/2026-04-19-manuscript-paper-rename-design.md §Transition-Window.
 """
 
 from __future__ import annotations
@@ -1402,6 +1402,6 @@ File an issue in the Science repo describing the failure. Do NOT attempt to hack
 
 ## Self-Review
 
-- [ ] **Spec coverage check**: every section of `docs/specs/2026-04-19-manuscript-paper-rename-design.md` maps to a task (template renames → Tasks 12–13; migration tool → Tasks 1–10; transition-window helper → Task 11; docs updates → Tasks 16–17; CLI cosmetic → Task 14; test audit → Task 15; sequencing/smoke → Tasks 19–20).
+- [ ] **Spec coverage check**: every section of `docs/plans/2026-04-19-manuscript-paper-rename-design.md` maps to a task (template renames → Tasks 12–13; migration tool → Tasks 1–10; transition-window helper → Task 11; docs updates → Tasks 16–17; CLI cosmetic → Task 14; test audit → Task 15; sequencing/smoke → Tasks 19–20).
 - [ ] **No placeholders**: every step has concrete code or an exact command.
 - [ ] **Type consistency**: `FileRewrite`, `scan_project`, `apply_rewrites`, `rewrite_text`, `render_diff`, `check_git_clean`, `canonical_paper_id`, `is_external_paper_id` referenced consistently across tasks.

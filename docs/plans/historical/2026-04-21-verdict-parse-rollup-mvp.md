@@ -2585,11 +2585,11 @@ and finish Task 11 first.
 
 - [ ] **Step 12.1: Bump the revision history and acceptance criteria**
 
-Open `docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`. Find the "Revision history" section near the top and add a new entry after the v1.1 entry:
+Open `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`. Find the "Revision history" section near the top and add a new entry after the v1.1 entry:
 
 ```markdown
 - **v1.2 (2026-04-21):** MVP implementation lands in `science`
-  (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`).
+  (plan: `docs/plans/historical/2026-04-21-verdict-parse-rollup-mvp.md`).
   Four touch-ups from dogfooding + implementation experience:
   - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical
     claims across 4 anchor types: hypothesis, DAG-edge, task,

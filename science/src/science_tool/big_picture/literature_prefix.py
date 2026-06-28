@@ -7,7 +7,7 @@ This helper is the single place that encodes that rule.
 
 Removal: this module is deleted (one-line change per consumer) once all
 tracked projects confirm migration. See
-docs/specs/2026-04-19-manuscript-paper-rename-design.md §Transition-Window.
+docs/plans/2026-04-19-manuscript-paper-rename-design.md §Transition-Window.
 """
 
 from __future__ import annotations

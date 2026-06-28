@@ -3,7 +3,7 @@
 This module computes coverage gaps over explicitly authored ``topic`` entities
 (``entities/topics/``) against the demand expressed by questions referencing
 them. It does not imply that unresolved semantic refs should be migrated into
-new ``topic`` entities. See docs/specs/2026-04-19-knowledge-gaps-design.md.
+new ``topic`` entities. See docs/plans/2026-04-19-knowledge-gaps-design.md.
 """
 
 from __future__ import annotations

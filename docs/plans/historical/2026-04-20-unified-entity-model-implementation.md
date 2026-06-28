@@ -17,7 +17,7 @@
 - Modify: `science-model/tests/test_dataset_models.py`
 - Modify: `science-model/tests/test_tasks.py`
 - Reference: `science-model/src/science_model/entities.py`
-- Reference: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`
+- Reference: `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
 
 **Step 1: Write the failing tests**
 
@@ -632,8 +632,8 @@ git commit -m "refactor: move model and parameter concepts out of core entity lo
 ### Task 9: Run Full Verification and Update Docs
 
 **Files:**
-- Modify: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`
-- Modify: `docs/plans/2026-04-20-unified-entity-model-implementation.md`
+- Modify: `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
+- Modify: `docs/plans/historical/2026-04-20-unified-entity-model-implementation.md`
 - Modify: any touched module docstrings if they became inaccurate
 
 **Step 1: Write the failing test or doc check**
@@ -671,7 +671,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add docs/specs/2026-04-20-multi-backend-entity-resolver-design.md docs/plans/2026-04-20-unified-entity-model-implementation.md
+git add docs/plans/2026-04-20-multi-backend-entity-resolver-design.md docs/plans/historical/2026-04-20-unified-entity-model-implementation.md
 git commit -m "docs: finalize unified entity model migration notes"
 ```
 

@@ -1,6 +1,6 @@
 """Source-contract models (ModelSource, ParameterSource, BindingSource).
 
-Per the unified-entity-model spec (docs/specs/2026-04-20-multi-backend-entity-resolver-design.md
+Per the unified-entity-model spec (docs/plans/2026-04-20-multi-backend-entity-resolver-design.md
 §Implication for current model / parameter): these are NOT core Science
 typed entities in the unified model family. They remain here as
 extension-layer helpers for the legacy model/parameter load path in

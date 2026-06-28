@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, click, pytest, ruff, pyright, existing `science` graph/task/health helpers, Markdown command and skill docs.
 
-**Spec:** `docs/specs/2026-04-21-project-curation-design.md`
+**Spec:** `docs/plans/historical/2026-04-21-project-curation-design.md`
 
 ---
 
@@ -284,8 +284,8 @@ git commit -m "feat(curate): add Codex curation skill"
 ## Task 5: Verification and polish
 
 **Files:**
-- Review: `docs/specs/2026-04-21-project-curation-design.md`
-- Review: `docs/plans/2026-04-21-project-curation.md`
+- Review: `docs/plans/historical/2026-04-21-project-curation-design.md`
+- Review: `docs/plans/historical/2026-04-21-project-curation.md`
 - Review: `commands/curate.md`
 - Review: `codex-skills/science-curate/SKILL.md`
 - Review: `science/src/science_tool/curate/*`
@@ -322,7 +322,7 @@ From a real Science project, invoke `/science:curate --dry-run` or follow `comma
 - [ ] **Step 5: Final commit**
 
 ```bash
-git add docs/specs/2026-04-21-project-curation-design.md docs/plans/2026-04-21-project-curation.md
+git add docs/plans/historical/2026-04-21-project-curation-design.md docs/plans/historical/2026-04-21-project-curation.md
 git commit -m "docs(curate): design project curation sweep"
 ```
 

@@ -9,7 +9,7 @@
 **Tech Stack:** Python 3.11+, uv, Pydantic, pytest, ruff, pyright. Code lives entirely in `science/`. No `science-model` changes (the unchanged-shape `Entity` continues to populate the markdown provider's records).
 
 **Reference paths used throughout:**
-- Spec: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` (rev 1.1)
+- Spec: `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
 - Existing entity-loading code: `science/src/science_tool/graph/sources.py`
 - Health module (touched in step 11): `science/src/science_tool/graph/health.py`
 - `Entity` model (read-only — used by MarkdownProvider): `science-model/src/science_model/entities.py`

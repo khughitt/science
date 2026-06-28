@@ -16,7 +16,7 @@
   - **Gap 4:** add `members:` claim subfield for grouping similar atomic sub-claims (relevant to `bimodal` rule with many homogeneous atoms)
   - **Gap 5:** strengthen claim-id registry from "advisory" to **required-but-permissive** (must exist; if it does, IDs must resolve; bootstrap helper command)
   - **Gap 6:** add a non-binding `strength:` calibration table to reduce per-author drift
-- **v1.2 (2026-04-21):** MVP implementation lands in `science` (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`). Four touch-ups from dogfooding + implementation experience:
+- **v1.2 (2026-04-21):** MVP implementation lands in `science` (plan: `docs/plans/historical/2026-04-21-verdict-parse-rollup-mvp.md`). Four touch-ups from dogfooding + implementation experience:
   - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical claims across 4 anchor types: hypothesis, DAG-edge, task, article) as the first concrete registry implementation.
   - Mark the confidence column in backfill audit TSVs as **advisory-only**, per mm30 t246 finding: overall inter-LLM agreement on backfill labels is 97.2%, but per-tier calibration is uninformative at realistic sample sizes; the per-claim `strength` field (v1.1) carries the same semantic at the right resolution.
   - Bump acceptance criterion 6 from "6 reference docs" to "9" (mm30 added t099, t240, t258 under the new schema on 2026-04-21).

@@ -1,10 +1,10 @@
 {
-  "file_count": 348,
-  "generated_at": "2026-06-28T13:52:26+00:00",
+  "file_count": 338,
+  "generated_at": "2026-06-28T14:08:17+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 231,
+  "thread_count": 225,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -1337,33 +1337,6 @@
         "docs/plans/2026-05-28-d1-geneset-collection-plan.md": "plan"
       },
       "thread_id": "d1-geneset-collection"
-    },
-    {
-      "earliest_file_date": "2026-04-20",
-      "files": [
-        "docs/plans/2026-04-20-dag-validate-strict-design.md",
-        "docs/plans/2026-04-20-dag-validate-strict.md"
-      ],
-      "latest_file_date": "2026-04-20",
-      "normalized_slug": "dag-validate-strict",
-      "raw_slugs": {
-        "docs/plans/2026-04-20-dag-validate-strict-design.md": "dag-validate-strict-design",
-        "docs/plans/2026-04-20-dag-validate-strict.md": "dag-validate-strict"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-20-dag-validate-strict-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-20-dag-validate-strict.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-20-dag-validate-strict-design.md": "design",
-        "docs/plans/2026-04-20-dag-validate-strict.md": null
-      },
-      "thread_id": "dag-validate-strict"
     },
     {
       "earliest_file_date": "2026-06-10",
@@ -2818,27 +2791,6 @@
       "thread_id": "mav-audit"
     },
     {
-      "earliest_file_date": "2026-04-22",
-      "files": [
-        "docs/plans/2026-04-22-mechanism-entity-and-topic-deprecation-implementation.md"
-      ],
-      "latest_file_date": "2026-04-22",
-      "normalized_slug": "mechanism-entity-and-topic-deprecation",
-      "raw_slugs": {
-        "docs/plans/2026-04-22-mechanism-entity-and-topic-deprecation-implementation.md": "mechanism-entity-and-topic-deprecation-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-04-22-mechanism-entity-and-topic-deprecation-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-22-mechanism-entity-and-topic-deprecation-implementation.md": "implementation"
-      },
-      "thread_id": "mechanism-entity-and-topic-deprecation"
-    },
-    {
       "earliest_file_date": "2026-06-19",
       "files": [
         "docs/plans/2026-06-19-membership-roles-implementation-plan.md"
@@ -3451,33 +3403,6 @@
       "thread_id": "pipeline-audit-and-refactor"
     },
     {
-      "earliest_file_date": "2026-04-22",
-      "files": [
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-design.md",
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-implementation.md"
-      ],
-      "latest_file_date": "2026-04-22",
-      "normalized_slug": "plan-pipeline-runpod-advisory",
-      "raw_slugs": {
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-design.md": "plan-pipeline-runpod-advisory-design",
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-implementation.md": "plan-pipeline-runpod-advisory-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-design.md": "design",
-        "docs/plans/2026-04-22-plan-pipeline-runpod-advisory-implementation.md": "implementation"
-      },
-      "thread_id": "plan-pipeline-runpod-advisory"
-    },
-    {
       "earliest_file_date": "2026-04-25",
       "files": [
         "docs/plans/2026-04-25-pre-registration-canonical-type.md"
@@ -3545,33 +3470,6 @@
         "docs/plans/2026-04-18-project-big-picture.md": null
       },
       "thread_id": "project-big-picture"
-    },
-    {
-      "earliest_file_date": "2026-04-21",
-      "files": [
-        "docs/plans/2026-04-21-project-curation-design.md",
-        "docs/plans/2026-04-21-project-curation.md"
-      ],
-      "latest_file_date": "2026-04-21",
-      "normalized_slug": "project-curation",
-      "raw_slugs": {
-        "docs/plans/2026-04-21-project-curation-design.md": "project-curation-design",
-        "docs/plans/2026-04-21-project-curation.md": "project-curation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-21-project-curation-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-21-project-curation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-21-project-curation-design.md": "design",
-        "docs/plans/2026-04-21-project-curation.md": null
-      },
-      "thread_id": "project-curation"
     },
     {
       "earliest_file_date": "2026-04-05",
@@ -5362,33 +5260,6 @@
       "thread_id": "typed-synthesis-nodes"
     },
     {
-      "earliest_file_date": "2026-04-20",
-      "files": [
-        "docs/plans/2026-04-20-unified-entity-model-implementation.md",
-        "docs/plans/2026-04-20-unified-entity-model.md"
-      ],
-      "latest_file_date": "2026-04-20",
-      "normalized_slug": "unified-entity-model",
-      "raw_slugs": {
-        "docs/plans/2026-04-20-unified-entity-model-implementation.md": "unified-entity-model-implementation",
-        "docs/plans/2026-04-20-unified-entity-model.md": "unified-entity-model"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-04-20-unified-entity-model-implementation.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-20-unified-entity-model.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-20-unified-entity-model-implementation.md": "implementation",
-        "docs/plans/2026-04-20-unified-entity-model.md": null
-      },
-      "thread_id": "unified-entity-model"
-    },
-    {
       "earliest_file_date": "2026-04-21",
       "files": [
         "docs/plans/2026-04-21-unified-entity-references-design.md"
@@ -5489,27 +5360,6 @@
         "docs/plans/2026-04-27-validate-hook-points.md": null
       },
       "thread_id": "validate-hook-points"
-    },
-    {
-      "earliest_file_date": "2026-04-21",
-      "files": [
-        "docs/plans/2026-04-21-verdict-parse-rollup-mvp.md"
-      ],
-      "latest_file_date": "2026-04-21",
-      "normalized_slug": "verdict-parse-rollup-mvp",
-      "raw_slugs": {
-        "docs/plans/2026-04-21-verdict-parse-rollup-mvp.md": "verdict-parse-rollup-mvp"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-21-verdict-parse-rollup-mvp.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-21-verdict-parse-rollup-mvp.md": null
-      },
-      "thread_id": "verdict-parse-rollup-mvp"
     },
     {
       "earliest_file_date": "2026-04-19",

@@ -7,7 +7,7 @@
 - rev 2 — unified `dataset` entity covering external + derived (`origin:` discriminator); science-pkg schema family; `data-package` → `research-package` rename.
 - rev 2.1 — design-review fixes: ship `data-package migrate` in v1; per-output runtime datapackages; entity-vs-runtime ownership table (entity drops `resources[]`); plan gate vs runtime stageability split (Dim 3 escalates); `outputs[].resource_names` (renamed); symmetric research-package backlinks (invariant #11).
 - rev 2.2 (this rev) — plan-review clarifications: parallel derived datasets per `(workflow, run, output)` tuple coexist; per-output runtime datapackages are *views* into the run-aggregate (resources stay in place, `basepath: ".."`); model-level invariant enforcement at Pydantic construction (not only JSON Schema); single canonical loader (`parse_entity_file` extended, not parallel function); recursion-safe transitive gate walk; comment-preserving frontmatter edits.
-**Related (forward):** Spec Y — multi-backend entity resolver. See `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`.
+**Related (forward):** Spec Y — multi-backend entity resolver. See `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`.
 
 ## Motivation
 

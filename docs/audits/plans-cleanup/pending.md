@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `13`
+- Pending thread count: `19`
 
 ## dataset-adapter-expansion
 
@@ -77,6 +77,51 @@
   - Current architecture diverges from the March plan: docs use entities/inquiries-style authored profiles and compiled views; the old plan's doc/inquiries graph-canonical rendering model is stale.
   - No single durable architecture note records the current inquiry model, old interactive RDF path, authored profile compiler, and validation boundaries.
 
+## knowledge-gaps
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-19-knowledge-gaps-design.md`
+  - `docs/plans/2026-04-19-knowledge-gaps.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until legacy topic-gap semantics move to durable big-picture docs
+    - `docs/plans/2026-04-19-knowledge-gaps-design.md`
+    - `docs/plans/2026-04-19-knowledge-gaps.md`
+- remaining_gaps:
+  - Migrate the stable user-facing contract for legacy topic-coverage gaps and aspect integration into big-picture user or command docs before deleting.
+
+## manuscript-paper-rename
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-19-manuscript-paper-rename-design.md`
+  - `docs/plans/2026-04-19-manuscript-paper-rename.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; transition-window removal guidance and canonical bibkey rules still need durable docs
+    - `docs/plans/2026-04-19-manuscript-paper-rename-design.md`
+    - `docs/plans/2026-04-19-manuscript-paper-rename.md`
+- remaining_gaps:
+  - Migrate transition-window removal criteria and the canonical bibkey rule into durable user or convention docs before deleting.
+
+## multi-backend-entity-resolver
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
+  - `docs/plans/2026-04-20-multi-backend-entity-resolver.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until model/adapter contract is durable outside active plans
+    - `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
+    - `docs/plans/2026-04-20-multi-backend-entity-resolver.md`
+- remaining_gaps:
+  - Migrate the stable model/adapter contract into durable documentation before deleting the design from active plans.
+
 ## multi-project-sync
 
 - status: `implemented_needs_durable_docs`
@@ -104,6 +149,20 @@
 - remaining_gaps:
   - Active durable process docs still point at a nonexistent docs/specs path for this design example.
   - The implementation grew beyond biolink into multiple catalogs and a broader domain-adding process; a short durable migration note should explain the current ontology/catalog contract before deleting the original design.
+
+## open-ended-kinds-and-catalog-registration
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until open-ended kind semantics and catalog registration are durable docs
+    - `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
+- remaining_gaps:
+  - The open-ended kind contract and catalog registration semantics are not yet summarized in durable user/convention docs.
+  - Later topic-deprecation and unified-reference docs still depend on this design for rationale.
 
 ## paper-model
 
@@ -196,4 +255,31 @@
 - remaining_gaps:
   - Reconcile project-model and paper-model together before moving or deleting either thread.
   - Confirm which parts of the broad entity taxonomy are now durable user-guide contract versus superseded by later epistemic-data-model and dataset lifecycle work.
+
+## unified-entity-references
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-21-unified-entity-references-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; reconcile partial implementation with mechanism/theme/topic follow-ons before cleanup
+    - `docs/plans/2026-04-21-unified-entity-references-design.md`
+- remaining_gaps:
+  - Verify which of the five proposed changes fully landed: cross-kind slug fallback, ontology catalog resolvable instances, terms.yaml convention, tag: classification token, and topic deprecation.
+  - Reconcile with mechanism/theme/topic follow-ons before moving or deleting.
+
+## verdict-tokens-and-atomic-decomposition
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; verdict token and claim-decomposition contract still needs durable user/convention docs
+    - `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
+- remaining_gaps:
+  - The verdict subsystem still lacks a compact durable user-guide or convention page; code and templates cite the old spec-level concepts directly.
 

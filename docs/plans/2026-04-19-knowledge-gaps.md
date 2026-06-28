@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, pydantic v2 (existing), click (existing), pytest, PyYAML. No new runtime dependencies.
 
-**Spec:** `docs/specs/2026-04-19-knowledge-gaps-design.md`
+**Spec:** `docs/plans/2026-04-19-knowledge-gaps-design.md`
 
 **Prerequisite:** `docs/plans/2026-04-19-manuscript-paper-rename.md` — Tasks 11 (literature_prefix helper) and 1–13 must land first or in the same PR.
 
@@ -89,7 +89,7 @@ Create `science/src/science_tool/big_picture/knowledge_gaps.py`:
 """Knowledge-gap computation for `/science:big-picture` synthesis.
 
 Identifies topics where the project's question demand exceeds its reading
-coverage. See docs/specs/2026-04-19-knowledge-gaps-design.md.
+coverage. See docs/plans/2026-04-19-knowledge-gaps-design.md.
 """
 
 from __future__ import annotations
@@ -1264,7 +1264,7 @@ In one of the two projects, run the full big-picture synthesis. Verify:
 
 ## Self-Review
 
-- [ ] **Spec coverage**: every section of `docs/specs/2026-04-19-knowledge-gaps-design.md` maps to a task — `TopicGap` (Task 1); loaders + dup detection (Task 3); coverage (Task 4); demand (Task 5); `compute_topic_gaps` + sort (Task 6); warning behavior (Task 7); CLI (Task 8); validator (Task 9); `commands/big-picture.md` integration (Tasks 10–11); fixture (Task 2); smoke (Task 12); transition-window alias (Tasks 2, 3, 4, 6 — exercised via `p02-legacy-article` + `t04-legacy-covered`).
+- [ ] **Spec coverage**: every section of `docs/plans/2026-04-19-knowledge-gaps-design.md` maps to a task — `TopicGap` (Task 1); loaders + dup detection (Task 3); coverage (Task 4); demand (Task 5); `compute_topic_gaps` + sort (Task 6); warning behavior (Task 7); CLI (Task 8); validator (Task 9); `commands/big-picture.md` integration (Tasks 10–11); fixture (Task 2); smoke (Task 12); transition-window alias (Tasks 2, 3, 4, 6 — exercised via `p02-legacy-article` + `t04-legacy-covered`).
 - [ ] **No placeholders**: every step has concrete code or an exact command.
 - [ ] **Type consistency**: `TopicGap`, `compute_topic_gaps`, `_load_topics`, `_load_papers`, `_compute_coverage`, `_compute_demand`, `_bibkey_of`, `_hypotheses_for`, `canonical_paper_id`, `is_external_paper_id` — names reused consistently.
 - [ ] **Prerequisite clear**: Tasks depend on `science_tool.big_picture.literature_prefix` (Task 11 of the rename plan) and on the fixture containing both `paper:` and `article:` paper files (Task 2 here).

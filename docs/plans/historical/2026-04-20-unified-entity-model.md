@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the provider-first entity-loading architecture (Spec Y, merged 2026-04-20) with the model-first unified architecture from `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`: one canonical `Entity` model family, explicit kind registry, narrow storage-adapter contract.
+**Goal:** Replace the provider-first entity-loading architecture (Spec Y, merged 2026-04-20) with the model-first unified architecture from `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`: one canonical `Entity` model family, explicit kind registry, narrow storage-adapter contract.
 
 **Architecture:** Decompose the current flat `Entity` / `SourceEntity` into `Entity` (base) → `ProjectEntity` / `DomainEntity` (subfamilies) → `TaskEntity`, `DatasetEntity`, `WorkflowRunEntity`, `ResearchPackageEntity` (typed). Adapters discover files and return raw dicts keyed on `kind`; an `EntityRegistry` dispatches to the right schema; `schema.model_validate(raw)` produces the final typed instance. Identity collisions are detected through a global table keyed on `canonical_id`. Spec Y's `EntityProvider` / `EntityRecord` / `_normalize_record` / `SourceEntity` artifacts are removed; the `MarkdownProvider` / `AggregateProvider` / `DatapackageDirectoryProvider` logic is relocated into the new adapter layer.
 
 **Tech Stack:** Python 3.11+, Pydantic, pytest, uv, ruff, pyright.
 
-**Supersedes:** `docs/plans/2026-04-20-unified-entity-model-implementation.md` (earlier draft that predates the replacement spec).
+**Supersedes:** `docs/plans/historical/2026-04-20-unified-entity-model-implementation.md` (earlier draft that predates the replacement spec).
 
 **Key reference paths:**
-- Spec: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` (replacement)
+- Spec: `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md` (replacement)
 - Existing `Entity`: `science-model/src/science_model/entities.py`
 - Existing `Task`: `science-model/src/science_model/tasks.py`
 - Existing `SourceEntity` + resolver (to delete): `science/src/science_tool/graph/source_types.py`, `science/src/science_tool/graph/entity_providers/`
@@ -2315,7 +2315,7 @@ Expected: PASS. The snapshot was regenerated in Task 10 and has been stable thro
 
 Verify `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` forward-reference still resolves to the replacement spec (`docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`). No commit needed if already correct.
 
-Optionally update the replacement spec with an "Implementation" section pointing at this plan (`docs/plans/2026-04-20-unified-entity-model.md`).
+Optionally update the replacement spec with an "Implementation" section pointing at this plan (`docs/plans/historical/2026-04-20-unified-entity-model.md`).
 
 - [ ] **Step 6: Commit any doc updates**
 
@@ -2332,7 +2332,7 @@ Invoke `superpowers:finishing-a-development-branch` to merge / PR the work.
 
 ## Self-review (run mentally before declaring done)
 
-**Spec coverage (from `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`):**
+**Spec coverage (from `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`):**
 
 - §Canonical Base Model — `Entity` with cross-cutting fields → Task 1.
 - §Entity Subfamilies — `ProjectEntity` / `DomainEntity` → Task 1.
@@ -2373,7 +2373,7 @@ Invoke `superpowers:finishing-a-development-branch` to merge / PR the work.
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/specs/plans/2026-04-20-unified-entity-model.md`.
+Plan complete and archived to `docs/plans/historical/2026-04-20-unified-entity-model.md`.
 
 Two execution options:
 
