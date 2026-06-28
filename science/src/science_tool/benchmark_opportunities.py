@@ -440,6 +440,9 @@ class GapCalibrationAggregate(TypedDict):
     top_suggested_facets: list[FacetCountRow]
     top_matched_hint_facets: list[FacetCountRow]
     top_fallback_benchmarks: list[BenchmarkCountRow]
+    top_fallback_reasons: list[ReasonCountRow]
+    top_fallback_benchmark_shares: list[BenchmarkShareRow]
+    fallback_concentration_warning: bool
 
 
 class GapCalibrationCommonsNotice(TypedDict):
@@ -1283,6 +1286,15 @@ def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[B
     return _top_benchmark_counts(fallback, top=top)
 
 
+def _fallback_candidates_from_rows(rows: list[BenchmarkGapRow]) -> list[GapCandidateBenchmarkRow]:
+    return [
+        candidate
+        for row in rows
+        for candidate in row["candidate_benchmarks"]
+        if _is_fallback_candidate(candidate)
+    ]
+
+
 def benchmark_gap_calibration_batch(
     projects: list[tuple[str, Path]],
     *,
@@ -1321,6 +1333,9 @@ def benchmark_gap_calibration_batch(
     entity_specific = sum(row["calibration_summary"]["entity_specific_candidate_rows"] for row in project_rows)
     fallback = sum(row["calibration_summary"]["fallback_candidate_rows"] for row in project_rows)
     top_suggested, top_matched = _merged_top_facets(all_gap_rows, top=top)
+    fallback_candidates = _fallback_candidates_from_rows(all_gap_rows)
+    fallback_benchmarks = Counter(candidate["benchmark_id"] for candidate in fallback_candidates)
+    fallback_reasons = Counter(reason for candidate in fallback_candidates for reason in candidate["reason_notes"])
     return {
         "projects": project_rows,
         "aggregate": {
@@ -1333,6 +1348,16 @@ def benchmark_gap_calibration_batch(
             "top_suggested_facets": top_suggested,
             "top_matched_hint_facets": top_matched,
             "top_fallback_benchmarks": _top_fallback_benchmarks(all_gap_rows, top=top),
+            "top_fallback_reasons": _top_reason_counts(fallback_reasons, top=top),
+            "top_fallback_benchmark_shares": _top_benchmark_shares(
+                fallback_benchmarks,
+                total=len(fallback_candidates),
+                top=top,
+            ),
+            "fallback_concentration_warning": _has_fallback_concentration(
+                fallback_benchmarks,
+                total=len(fallback_candidates),
+            ),
         },
         "commons_notices": notices,
     }
