@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from science_tool.benchmark_catalog import benchmark_sources
 from science_tool.dataset_prioritize import readiness_weight
@@ -45,6 +45,7 @@ HIGH_VALUE_SIGNALS = frozenset(HIGH_VALUE_SIGNAL_POINTS)
 HIGH_VALUE_MODALITIES = frozenset(HIGH_VALUE_MODALITY_POINTS)
 GAP_MODALITIES = ("proteomics", "spatial", "multimodal")
 GAP_SIGNAL_TYPES = ("perturbation", "time-series", "cross-context-generalization")
+GAP_FACETS = frozenset((*GAP_MODALITIES, *GAP_SIGNAL_TYPES))
 BROAD_NON_SCOREABLE_FACETS = frozenset({"biology"})
 KIND_SIGNAL_RULES = {
     "perturbation": ("perturbation-response", 10),
@@ -224,6 +225,7 @@ class OpportunityReport(TypedDict):
 
 
 WEAK_RELATIVE_SCORE_THRESHOLD = 15
+GapLevel = Literal["uncovered", "weak", "missing-facet"]
 
 
 class GapCurrentMatchRow(TypedDict):
@@ -243,7 +245,7 @@ class GapCandidateBenchmarkRow(TypedDict):
 class BenchmarkGapRow(TypedDict):
     entity_id: str
     entity_title: str
-    gap_level: str
+    gap_level: GapLevel
     missing_modalities: list[str]
     missing_signal_types: list[str]
     current_matches: list[GapCurrentMatchRow]
@@ -694,9 +696,20 @@ def _coverage_gaps(
     )
 
 
-def _gap_level_sort_key(level: str) -> int:
+def _gap_level_sort_key(level: GapLevel) -> int:
     order = {"uncovered": 0, "weak": 1, "missing-facet": 2}
     return order[level]
+
+
+def _normalized_gap_facet(facet: str | None) -> str | None:
+    if facet is None:
+        return None
+    normalized = _normalize_token(facet)
+    if not normalized:
+        raise ValueError("facet must not be blank")
+    if normalized not in GAP_FACETS:
+        raise ValueError(f"unknown benchmark gap facet: {facet}")
+    return normalized
 
 
 def _matched_by_entity(rows: list[OpportunityRow]) -> dict[str, list[OpportunityRow]]:
@@ -937,6 +950,7 @@ def gaps_report(
     domain: str | None = None,
     facet: str | None = None,
 ) -> BenchmarkGapReport:
+    normalized_facet = _normalized_gap_facet(facet)
     opportunity = opportunity_report(
         project_root,
         include_commons=include_commons,
@@ -950,7 +964,6 @@ def gaps_report(
     entity_ids = sorted(set(matched) | set(coverage) | unmapped_ids)
 
     rows: list[BenchmarkGapRow] = []
-    normalized_facet = _normalize_token(facet) if facet is not None else None
     for current_entity_id in entity_ids:
         current_matches = matched.get(current_entity_id, [])
         gap = coverage.get(current_entity_id)

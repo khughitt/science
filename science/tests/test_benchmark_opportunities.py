@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main as science_cli
@@ -964,3 +965,60 @@ benchmark:
     assert row["gap_level"] == "weak"
     assert row["missing_modalities"] == ["proteomics"]
     assert row["current_matches"][0]["relative_score"] < 15
+
+
+def test_gaps_report_rejects_blank_or_unknown_facet(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    for facet in ("", "   ", "unknown-facet"):
+        with pytest.raises(ValueError, match="facet"):
+            gaps_report(tmp_path, facet=facet)
+
+
+def test_candidate_rows_sort_by_matched_facets_score_then_id() -> None:
+    from science_tool.benchmark_opportunities import _candidate_rows
+
+    rows = _candidate_rows(
+        [
+            {
+                "benchmark_id": "dataset:z-unmatched-high-score",
+                "benchmark_title": "Unmatched High Score",
+                "baseline_score": 99,
+                "unmapped_facets": ["spatial"],
+            },
+            {
+                "benchmark_id": "dataset:beta",
+                "benchmark_title": "Beta",
+                "baseline_score": 20,
+                "unmapped_facets": ["proteomics"],
+            },
+            {
+                "benchmark_id": "dataset:alpha",
+                "benchmark_title": "Alpha",
+                "baseline_score": 20,
+                "unmapped_facets": ["proteomics"],
+            },
+            {
+                "benchmark_id": "dataset:score",
+                "benchmark_title": "Score",
+                "baseline_score": 30,
+                "unmapped_facets": ["proteomics"],
+            },
+            {
+                "benchmark_id": "dataset:two-match",
+                "benchmark_title": "Two Match",
+                "baseline_score": 1,
+                "unmapped_facets": ["perturbation", "proteomics"],
+            },
+        ],
+        {"perturbation", "proteomics"},
+    )
+
+    assert [row["benchmark_id"] for row in rows] == [
+        "dataset:two-match",
+        "dataset:score",
+        "dataset:alpha",
+        "dataset:beta",
+        "dataset:z-unmatched-high-score",
+    ]
+    assert rows[0]["matched_missing_facets"] == ["perturbation", "proteomics"]
