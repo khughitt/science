@@ -45,6 +45,162 @@ computed from the graph, evidence, provenance, or health machinery. Belief
 state, support summaries, dispute summaries, freshness, and health status should
 be recomputed rather than manually patched.
 
+## Dataset Lifecycle
+
+`dataset` is the single entity kind for data that a project consumes, whether
+the data comes from an external source or from a workflow run. Dataset owners
+live under `entities/datasets/` in layout v3 projects. The entity frontmatter is
+the authority for project-level metadata; a runtime `datapackage.yaml` or
+`datapackage.json` is the authority for resource-level file metadata.
+
+The split is intentional:
+
+| Surface | Owns |
+|---|---|
+| Dataset entity | `id`, `type`, `title`, `status`, `origin`, `dataset_class`, `tier`, `license`, `update_cadence`, `ontology_terms`, `access`, `derivation`, lineage, `consumed_by`, and human prose. |
+| Runtime datapackage | Resource names, paths, hashes, byte counts, formats, schemas, and other file-level package details. |
+
+Dataset entities use `profiles: ["science-pkg-entity-1.0"]`. Do not put
+`resources:` on the entity; consumers that need resource details read the file
+named by `datapackage:`.
+
+### Origin
+
+Every dataset has an `origin`:
+
+- `external` means the dataset comes from a paper, public repository, portal,
+  controlled-access archive, commercial source, or another source outside the
+  local workflow run.
+- `derived` means the dataset is a logical output of a recorded workflow run.
+
+External datasets carry an `access:` block. Derived datasets carry a
+`derivation:` block. Do not mix the two on one entity.
+
+### Dataset Class
+
+`dataset_class` describes how the record can be used:
+
+| Class | Meaning |
+|---|---|
+| `deposit` | Obtainable data that can be staged as a local runtime artifact. |
+| `reference` | A portal, registry, atlas, leaderboard, or other lookup source that should be tracked but normally has no local runtime artifact. |
+| `pointer` | A record worth tracking for planning or discovery, but not directly usable as staged data yet. |
+
+`dataset_class` is independent from `source_class`. A reference genome can be a
+downloadable `deposit`; a web portal can be a `reference`.
+
+### External Datasets
+
+Create new external candidates with:
+
+```bash
+science dataset add <slug> --title "<title>"
+```
+
+`science dataset add` writes a local `entities/datasets/<slug>.md` candidate
+with `origin: external`, `dataset_class: deposit` by default, `license:
+unknown`, and an unverified `access:` block. Use `--class reference` or
+`--class pointer` when the record is not a staged-data deposit. Reference and
+pointer records need an `access.source_url`.
+
+When access has been checked, record the whole coupled edit with:
+
+```bash
+science dataset verify-access <slug> --license <spdx-or-sentinel> --method <method>
+```
+
+For deposits, valid verification methods are `retrieved` and
+`credential-confirmed`. For reference records, use `credential-confirmed`,
+`landing-confirmed`, or `metadata-confirmed`. For pointer records, use
+`landing-confirmed` or `metadata-confirmed`.
+
+If an external dataset cannot be used as originally scoped, record a structured
+exception instead of leaving `access.verified: false` unexplained:
+
+```bash
+science dataset verify-access <slug> --license <spdx-or-sentinel> \
+  --exception scope-reduced --rationale "<why>"
+```
+
+Exception modes are `scope-reduced`, `expanded-to-acquire`, and `substituted`.
+The command updates the frontmatter and appends a dated entry under
+`## Access verification log`.
+
+### Derived Datasets
+
+Derived dataset entities are machine-authored from workflow runs. A workflow
+declares logical outputs in `entities/workflows/<slug>.md`:
+
+```yaml
+outputs:
+  - slug: "<output-slug>"
+    title: "<Output title>"
+    resource_names: ["<frictionless-resource-name>"]
+    ontology_terms: []
+```
+
+A completed workflow run lives under `entities/workflow-runs/` and lists its
+upstream dataset inputs. After the run writes its aggregate runtime
+datapackage, register the derived outputs with:
+
+```bash
+science dataset register-run workflow-run:<slug>
+```
+
+Registration writes one per-output `datapackage.yaml` under the run results
+tree, creates one `origin: derived` dataset entity per declared workflow output,
+and updates symmetric edges:
+
+- the workflow run's `produces:` lists each derived dataset;
+- each upstream dataset's `consumed_by:` includes the workflow run.
+
+Per-output datapackages are views into the run output, not relocated copies of
+the resources.
+
+### Runtime State And Inspection
+
+Use the singular `science dataset` command group for the catalog lifecycle:
+
+```bash
+science dataset list
+science dataset list --origin external --unverified
+science dataset list --include-gated
+science dataset show <slug>
+science dataset consumers <slug>
+science dataset prioritize --explain
+science dataset reconcile <slug>
+```
+
+`science dataset list` hides gated external deposits by default; pass
+`--include-gated` or a specific `--level` to inspect them. `science dataset
+prioritize` ranks records by accessibility, runtime state, and graph reach. It
+excludes gated deposits, references, and pointers by default so the first view is
+actionable.
+
+Runtime state is derived from the entity:
+
+| State | Meaning |
+|---|---|
+| `runnable` | A `datapackage` or `local_path` is present. |
+| `unstaged-deposit` | Access is verified but a deposit has not been staged yet. |
+| `blocked-access` | Access is gated, unverified, or exception-gated. |
+| `reference-only` | The record is a reference-class dataset. |
+| `pointer-only` | The record is a pointer-class dataset. |
+
+`science dataset reconcile` checks the narrow duplication channel between the
+entity and runtime package: `license`, `update_cadence`, and
+`ontology_terms`. Per-resource fields are not reconciled because they belong to
+the runtime package only.
+
+### Validation Expectations
+
+Validation checks dataset metadata without assuming perfect input. The current
+checks warn on missing or unrecognized licenses, tiers, cadence values, dataset
+classes, incompatible verification methods, and reference/pointer records that
+claim runtime artifacts. Lineage validation checks `parent_dataset` references
+and cycles. Promotion checks enforce the extra requirements needed before a
+dataset can move into the commons.
+
 ## Entity Classes
 
 Science groups core entity kinds into three classes.

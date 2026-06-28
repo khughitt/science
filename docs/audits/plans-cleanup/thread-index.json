@@ -1,10 +1,10 @@
 {
-  "file_count": 208,
-  "generated_at": "2026-06-28T17:38:20+00:00",
+  "file_count": 206,
+  "generated_at": "2026-06-28T17:47:22+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 132,
+  "thread_count": 131,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -686,33 +686,6 @@
         "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md": "design"
       },
       "thread_id": "dataset-catalog-triage-pack"
-    },
-    {
-      "earliest_file_date": "2026-04-19",
-      "files": [
-        "docs/plans/2026-04-19-dataset-entity-lifecycle-design.md",
-        "docs/plans/2026-04-19-dataset-entity-lifecycle.md"
-      ],
-      "latest_file_date": "2026-04-19",
-      "normalized_slug": "dataset-entity-lifecycle",
-      "raw_slugs": {
-        "docs/plans/2026-04-19-dataset-entity-lifecycle-design.md": "dataset-entity-lifecycle-design",
-        "docs/plans/2026-04-19-dataset-entity-lifecycle.md": "dataset-entity-lifecycle"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-19-dataset-entity-lifecycle-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-19-dataset-entity-lifecycle.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-19-dataset-entity-lifecycle-design.md": "design",
-        "docs/plans/2026-04-19-dataset-entity-lifecycle.md": null
-      },
-      "thread_id": "dataset-entity-lifecycle"
     },
     {
       "earliest_file_date": "2026-06-08",

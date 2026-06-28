@@ -12,7 +12,7 @@ Related (builds on):
 - `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — independence-aware aggregation
 - `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md` — numeric belief scalar
 - `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` — `produced_by` / `bears_on`
-- `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin
+- `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin
 - `science/src/science_tool/graph/store/` — commons store
 - consumer context: `health/meta:doc/topics/large-scale-biological-datasets-landscape.md`,
   `health/meta:doc/plans/2026-05-25-reactome-commons-ingestion-design.md` (`~/d/health/meta`)
@@ -52,7 +52,7 @@ The framework has, in the last weeks, built most of the epistemic substrate this
 | Numeric belief scalar | built (Phase 2) | `2026-05-24-evidence-aggregation-phase2-design.md` | `(support_band, dispute_band)` pair + additive-log-odds net; suppressed when not robust |
 | Provenance propagation | designed (Contract C) | `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` | `produced_by` (data→code), `prov:wasDerivedFrom` (data→finding), `bears_on` transitive closure + freshness; `consumed_by` dataset backlink (author-populated) |
 | Two-axis DAG model | locked | `references/dag-two-axis-evidence-model.md` | `edge_status` (replication) × `identification` (causal id); `identification: structural` for definitional/proxy claims; conservative defaults (`unknown`+`none`) |
-| Dataset mixin | built | `2026-04-19-dataset-entity-lifecycle-design.md` | `origin: external\|derived`, `tier`, `accessions`, `access`, `derivation{inputs,workflow,workflow_run}`, `parent_dataset`, `siblings`, `consumed_by`, `produced_by`; emergent logical role (input/intermediate/result) |
+| Dataset mixin | built | `docs/user-guide/entities.md#dataset-lifecycle` | `origin: external\|derived`, `tier`, `accessions`, `access`, `derivation{inputs,workflow,workflow_run}`, `parent_dataset`, `siblings`, `consumed_by`, `produced_by`; emergent logical role (input/intermediate/result) |
 | Bio domain extensions | built | `science/model/src/science_model/schemas/extension-bio-*.json` | `bio.rnaseq`, `bio.scrna`, `bio.cna` (carry free-text `reference_genome`), `bio.matrix`, `bio.table` (`n_records`, typed `columns`) |
 
 **The load-bearing observation.** Double-counting avoidance is *already* a first-class mechanism — but

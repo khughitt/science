@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `30`
+- Pending thread count: `29`
 
 ## b-migration-paper-datasets
 
@@ -150,22 +150,6 @@
 - remaining_gaps:
   - Decide whether the remaining adapter backlog should be refiled as current tasks or retired as demand-gated ideas.
   - If retained, summarize adapter source priorities in durable dataset discovery docs instead of leaving an active plan as the only list.
-
-## dataset-entity-lifecycle
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`
-  - `docs/plans/2026-04-19-dataset-entity-lifecycle.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset lifecycle contract is migrated to durable docs
-    - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`
-    - `docs/plans/2026-04-19-dataset-entity-lifecycle.md`
-- remaining_gaps:
-  - Migrate the useful dataset lifecycle contract into durable user-guide/reference docs before removing the active plan.
-  - Normalize stale docs/specs references while this remains a pending architectural source.
 
 ## downstream-conventions-migration
 

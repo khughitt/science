@@ -8,7 +8,6 @@ updated: "2026-06-24"
 related:
   - "plan:2026-06-21-catalog-datasets-design"
   - "plan:2026-06-21-dataset-catalog-cli-design"
-  - "plan:2026-04-19-dataset-entity-lifecycle-design"
   - "plan:2026-06-24-dataset-verify-access-implementation-plan"
 ---
 

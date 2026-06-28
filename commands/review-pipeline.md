@@ -98,8 +98,9 @@ in the plan):
   - At least one of `entity.datapackage` or `entity.local_path` is populated AND
     the referenced runtime file exists on disk.
 - `consumed_by` includes `plan:<this-plan-file-stem>`.
-- All eleven state invariants hold (see the spec at
-  `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`).
+- The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
+  external records use `access:`, derived records use `derivation:`, and
+  resource-level metadata lives in the runtime datapackage.
 
 **Scoring:**
 

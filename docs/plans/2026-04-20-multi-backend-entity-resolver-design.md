@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Status:** Draft (replacement spec)
 **Replaces:** earlier Spec Y rev 1.1
-**Builds on:** `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` rev 2.2
+**Builds on:** the dataset lifecycle contract in `docs/user-guide/entities.md#dataset-lifecycle`
 **Forward:** implementation plan and migration sequencing to follow in a separate planning doc
 
 ## Motivation

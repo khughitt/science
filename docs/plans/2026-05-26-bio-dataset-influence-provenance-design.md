@@ -10,7 +10,7 @@ Related (builds on):
 - `docs/plans/2026-05-26-bio-geneset-type-design.md` — Pillar D; D1 realizes row-level gene-set provenance
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; dataset identity the refs resolve through
 - `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` — `consumed_by`, `bears_on`, the provenance closure
-- `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin (`derivation.inputs`)
+- `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin (`derivation.inputs`)
 - `science/model/src/science_model/schemas/mixin-dataset-1.0.json` — shipped `dataset_usage` vocabulary
 - `science/model/src/science_model/schemas/mixin-paper-2.0.json` — existing `paper.datasets` transition field
 - `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — independence collapse, `suspect-circular`

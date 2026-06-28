@@ -2517,7 +2517,7 @@ Expected: behavior may already pass if the existing drift check already returns 
 grep -n "dataset_cached_field_drift\|provider" src/science_tool/graph/health.py | head -10
 ```
 
-The existing `dataset_cached_field_drift` check (from dataset-entity-lifecycle Phase 6) reads the entity's frontmatter and compares fields against the runtime datapackage. For promoted entities, the entity IS the runtime file — there's no second surface to drift against. The check should explicitly skip when `provider == "datapackage-directory"`.
+The existing `dataset_cached_field_drift` check (from the dataset lifecycle contract in `docs/user-guide/entities.md#dataset-lifecycle`) reads the entity's frontmatter and compares fields against the runtime datapackage. For promoted entities, the entity IS the runtime file — there's no second surface to drift against. The check should explicitly skip when `provider == "datapackage-directory"`.
 
 In `science/src/science_tool/graph/health.py`, find the `dataset_cached_field_drift` block in `check_dataset_anomalies`. The current check loads `parse_frontmatter` directly — it doesn't have access to `provider` info from there. Add a guard: skip the drift check for any dataset whose source_path is a `datapackage.yaml` file (heuristic — these are the promoted entities).
 
@@ -2712,20 +2712,23 @@ Expected: PASS — the canary stays green from Task 1.2 through Task 7.2.
 
 ---
 
-### Task 7.3: Update spec cross-references + handoff for Spec Z
+### Task 7.3: Update durable cross-references + handoff for Spec Z
 
 **Files:**
-- Modify: `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` (already points at Spec Y design doc; verify still correct)
+- Modify durable docs only if the shipped adapter-backed entity contract changes
+  the dataset lifecycle surface recorded in `docs/user-guide/entities.md`.
 
-- [ ] **Step 1: Verify forward-reference is correct**
+- [ ] **Step 1: Verify durable docs are current**
 
 ```bash
-grep -n "multi-backend-entity-resolver" docs/plans/2026-04-19-dataset-entity-lifecycle-design.md
+grep -n "Dataset Lifecycle" docs/user-guide/entities.md
 ```
 
-Expected: one match pointing at `2026-04-20-multi-backend-entity-resolver-design.md`. If a stale handoff reference remains, update to the design.
+Expected: the durable user guide describes the current dataset entity/runtime
+ownership split. If the Spec Y implementation changes that split, update the
+user guide rather than reviving the old dataset lifecycle plan.
 
-- [ ] **Step 2: No commit needed if reference is already correct**
+- [ ] **Step 2: No commit needed if the durable docs are already correct**
 
 This task is verification-only; the dataset-lifecycle spec was updated when Spec Y was committed.
 

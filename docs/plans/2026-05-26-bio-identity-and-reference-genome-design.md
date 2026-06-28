@@ -7,7 +7,7 @@ Status: approved; implementation underway — C1/C2/C3/C4a/C4b merged locally, C
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry is an instance
-- `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin, `origin`, `access`
+- `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin, `origin`, `access`
 - `science/model/src/science_model/schemas/extension-bio-*.json` — `bio.rnaseq`/`bio.scrna`/`bio.cna` carry free-text `reference_genome`
 - `science/src/science_tool/graph/store/` — commons store (where pinned snapshots live)
 - consumer context: `health/meta:doc/topics/large-scale-biological-datasets-landscape.md` shortlist #1 (`~/d/health/meta`)
