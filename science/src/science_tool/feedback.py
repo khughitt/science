@@ -12,10 +12,26 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 VALID_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 VALID_STATUSES = ("open", "addressed", "deferred", "wontfix")
+VALID_CONCERNS = (
+    "tooling",
+    "methodology:statistics",
+    "methodology:qa",
+    "methodology:design",
+    "methodology:data-fitness",
+    "methodology:reasoning",
+)
+
+
+def _validate_concern_value(value: str) -> str:
+    if value not in VALID_CONCERNS:
+        allowed = ", ".join(VALID_CONCERNS)
+        msg = f"Invalid concern {value!r}; must be one of: {allowed}"
+        raise ValueError(msg)
+    return value
 
 _ID_RE = re.compile(r"^fb-(\d{4}-\d{2}-\d{2})-(\d{3})$")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -46,6 +62,12 @@ class FeedbackEntry(BaseModel):
     resolution: str | None = None
     recurrence: int = 1
     related: list[str] = Field(default_factory=list)
+    concern: str = "tooling"
+
+    @field_validator("concern")
+    @classmethod
+    def _check_concern(cls, value: str) -> str:
+        return _validate_concern_value(value)
 
 
 @dataclass

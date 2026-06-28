@@ -6,9 +6,11 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from science_tool.feedback import (
     VALID_CATEGORIES,
+    VALID_CONCERNS,
     VALID_STATUSES,
     FeedbackEntry,
     cluster_for_triage,
@@ -441,3 +443,39 @@ def test_detect_project_no_science_yaml_uses_cwd_name(tmp_path: Path):
     leaf.mkdir()
     result = detect_project(leaf)
     assert result == "some-dir"
+
+
+def test_concern_defaults_to_tooling():
+    entry = FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="s")
+    assert entry.concern == "tooling"
+
+
+def test_concern_accepts_methodology_value():
+    entry = FeedbackEntry(
+        id="fb-2026-06-28-001",
+        target="skill:statistics",
+        summary="s",
+        concern="methodology:statistics",
+    )
+    assert entry.concern == "methodology:statistics"
+
+
+def test_concern_rejects_unknown_value():
+    with pytest.raises(ValidationError):
+        FeedbackEntry(id="fb-2026-06-28-001", target="x", summary="s", concern="bogus")
+
+
+def test_legacy_yaml_without_concern_loads_as_tooling(tmp_path):
+    path = tmp_path / "fb-2026-01-01-001.yaml"
+    path.write_text(
+        "id: fb-2026-01-01-001\ncreated: '2026-01-01'\n"
+        "target: command:x\nsummary: s\n",
+        encoding="utf-8",
+    )
+    entry = load_entry(path)
+    assert entry.concern == "tooling"
+
+
+def test_valid_concerns_membership():
+    assert "tooling" in VALID_CONCERNS
+    assert "methodology:statistics" in VALID_CONCERNS
