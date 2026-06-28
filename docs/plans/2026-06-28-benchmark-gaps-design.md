@@ -230,8 +230,8 @@ remaining gap row mentions `time-series`.
 - Commons failures are not fatal. `commons_notice` passes through from
   `opportunity_report()` and the CLI prints
   `notice: commons benchmarks unavailable (<notice>)` to stderr.
-- Invalid `--facet` values fail at the Click boundary before `gaps_report()`
-  runs.
+- Invalid `--facet` values are normalized and validated by `gaps_report()`; the
+  CLI translates the resulting `ValueError` into a `click.ClickException`.
 
 ## Testing strategy
 
