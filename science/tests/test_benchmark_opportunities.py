@@ -1583,6 +1583,69 @@ benchmark:
     assert proteomics_candidates[0]["candidate_score"] > 0
 
 
+def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0023-compat",
+        """
+id: hypothesis:0023-compat
+type: hypothesis
+title: Protein abundance compatibility gap
+""",
+        body="Phosphoproteomic protein abundance is needed.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac",
+        """
+id: dataset:cptac
+type: dataset
+title: CPTAC
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+    candidate = payload["benchmark_gaps"][0]["candidate_benchmarks"][0]
+
+    assert set(candidate) >= {
+        "benchmark_id",
+        "benchmark_title",
+        "baseline_score",
+        "matched_missing_facets",
+        "candidate_score",
+        "matched_hint_facets",
+        "reason_notes",
+    }
+
+
+def test_benchmark_gaps_cli_calibration_table(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0024-table",
+        """
+id: hypothesis:0024-table
+type: hypothesis
+title: Perturbation table gap
+""",
+        body="Perturbation evidence is needed.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-report")
+
+    assert result.exit_code == 0
+    assert "Benchmark Gaps" in result.output
+    assert "Gap Calibration" in result.output
+
+
 def test_candidate_score_does_not_double_count_task_readiness_in_baseline_quality(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import _candidate_score, _dataset_context, load_opportunity_datasets
 
