@@ -5530,6 +5530,15 @@ def telemetry_prune_cmd(before_date: datetime, output_format: str) -> None:
 
 _FB_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 _FB_STATUSES = ("open", "addressed", "deferred", "wontfix")
+# Keep in sync with science_tool.feedback.VALID_CONCERNS.
+_FB_CONCERNS = (
+    "tooling",
+    "methodology:statistics",
+    "methodology:qa",
+    "methodology:design",
+    "methodology:data-fitness",
+    "methodology:reasoning",
+)
 
 
 @main.group()
@@ -5550,6 +5559,7 @@ def _get_feedback_dir() -> Path:
 @click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
 @click.option("--summary", required=True, help="One-line description")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens")
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -5560,6 +5570,7 @@ def feedback_add(
     target: str,
     summary: str,
     category: str | None,
+    concern: str | None,
     detail: str | None,
     project: str | None,
     related: tuple[str, ...],
@@ -5591,12 +5602,13 @@ def feedback_add(
     if target is None:
         raise click.UsageError("--target is required unless --from-recent is used")
     category = category or "suggestion"
+    concern = concern or "tooling"
 
     if project is None:
         project = detect_project(Path.cwd())
 
     # Check for duplicates
-    dup = find_duplicate(fb_dir, target=target, summary=summary)
+    dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
     if dup is not None:
         dup.recurrence += 1
         save_entry(fb_dir, dup)
@@ -5615,6 +5627,7 @@ def feedback_add(
         summary=summary,
         detail=detail,
         related=list(related),
+        concern=concern,
     )
     save_entry(fb_dir, entry)
     click.echo(f"Created {entry.id}: {entry.summary}")
@@ -5643,12 +5656,14 @@ def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int
 @click.option("--target", default=None, help="Filter by target (supports fnmatch globs)")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
 @click.option("--project", default=None, help="Filter by project")
+@click.option("--concern", default=None, help="Filter by concern (supports fnmatch globs, e.g. 'methodology:*')")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_list(
     status: str | None,
     target: str | None,
     category: str | None,
     project: str | None,
+    concern: str | None,
     output_format: str,
 ) -> None:
     """List feedback entries (default: open only)."""
@@ -5658,13 +5673,14 @@ def feedback_list(
         status = None
 
     fb_dir = _get_feedback_dir()
-    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project)
+    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project, concern=concern)
 
     columns = [
         ("id", "ID"),
         ("created", "Date"),
         ("project", "Project"),
         ("target", "Target"),
+        ("concern", "Concern"),
         ("category", "Category"),
         ("summary", "Summary"),
         ("recurrence", "Recur"),
@@ -5675,6 +5691,7 @@ def feedback_list(
             "created": e.created,
             "project": e.project,
             "target": e.target,
+            "concern": e.concern,
             "category": e.category,
             "summary": e.summary,
             "recurrence": e.recurrence,
@@ -5689,6 +5706,7 @@ def feedback_list(
 @click.option("--status", default=None, type=click.Choice(_FB_STATUSES))
 @click.option("--resolution", default=None, help="Required when setting terminal status")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS))
 @click.option("--summary", default=None)
 @click.option("--detail", default=None)
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -5697,6 +5715,7 @@ def feedback_update(
     status: str | None,
     resolution: str | None,
     category: str | None,
+    concern: str | None,
     summary: str | None,
     detail: str | None,
     related: tuple[str, ...],
@@ -5712,6 +5731,7 @@ def feedback_update(
             status=status,
             resolution=resolution,
             category=category,
+            concern=concern,
             summary=summary,
             detail=detail,
             related=list(related) if related else None,
@@ -5723,6 +5743,7 @@ def feedback_update(
 
 @feedback.command("triage")
 @click.option("--target", default=None, help="Filter by target (fnmatch glob)")
+@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
 @click.option(
     "--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category"
 )
@@ -5733,6 +5754,7 @@ def feedback_update(
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_triage(
     target: str | None,
+    concern: str | None,
     cluster_mode: bool,
     since_days: int | None,
     with_telemetry: bool,
@@ -5743,7 +5765,7 @@ def feedback_triage(
 
     fb_dir = _get_feedback_dir()
     if cluster_mode or output_format == "json":
-        rows = cluster_for_triage(fb_dir, target=target, since_days=since_days)
+        rows = cluster_for_triage(fb_dir, target=target, concern=concern, since_days=since_days)
         if with_telemetry:
             from science_tool.telemetry import format_feedback_telemetry, get_telemetry_dir, read_events
 
@@ -5766,6 +5788,7 @@ def feedback_triage(
             return
         columns = [
             ("target", "Target"),
+            ("concern", "Concern"),
             ("category", "Category"),
             ("count", "Count"),
             ("total_recurrence", "Recur"),
@@ -5786,7 +5809,7 @@ def feedback_triage(
         )
         return
 
-    groups = group_for_triage(fb_dir, target=target)
+    groups = group_for_triage(fb_dir, target=target, concern=concern)
 
     if not groups:
         click.echo("No open feedback entries.")
@@ -5798,20 +5821,21 @@ def feedback_triage(
 
         telemetry_events = read_events(get_telemetry_dir())
 
-    for target_key, group in groups.items():
+    for (concern_key, target_key), group in groups.items():
         n_projects = len(group["projects"])
         n_entries = len(group["entries"])
         total_recur = group["total_recurrence"]
         projects_str = ", ".join(sorted(group["projects"])) if group["projects"] else "unknown"
         click.echo(
-            f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
+            f"\n## [{concern_key}] {target_key}  "
+            f"({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
         )
         if with_telemetry:
             from science_tool.telemetry import format_feedback_telemetry, summarize_recent_for_feedback_target
 
             summary = summarize_recent_for_feedback_target(
                 telemetry_events,
-                target=target_key,
+                target=group["target"],
                 since_days=since_days if since_days is not None else 14,
             )
             click.echo(f"Telemetry: {format_feedback_telemetry(summary)}")
@@ -5895,12 +5919,13 @@ def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, 
 @feedback.command("report")
 @click.option("--status", default=None, help="Filter by status")
 @click.option("--project", default=None, help="Filter by project")
-def feedback_report(status: str | None, project: str | None) -> None:
+@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
+def feedback_report(status: str | None, project: str | None, concern: str | None) -> None:
     """Generate a markdown report of feedback entries."""
     from science_tool.feedback import render_report
 
     fb_dir = _get_feedback_dir()
-    report = render_report(fb_dir, status=status, project=project)
+    report = render_report(fb_dir, status=status, project=project, concern=concern)
     click.echo(report)
 
 
