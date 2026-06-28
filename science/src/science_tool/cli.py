@@ -6054,6 +6054,92 @@ def benchmark_opportunities(
         Console(width=200).print(calibration_table)
 
 
+@benchmark_group.command("gaps")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
+@click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_gaps(
+    domain: str | None,
+    entity_ref: str | None,
+    facet: str | None,
+    include_commons: bool,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report benchmark coverage gaps for project entities."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import GAP_MODALITIES, GAP_SIGNAL_TYPES, gaps_report
+    from science_tool.entities import EntityCommandError, resolve_entity_ref
+
+    valid_facets = sorted(set(GAP_MODALITIES + GAP_SIGNAL_TYPES))
+    if facet is not None and facet not in valid_facets:
+        raise click.ClickException(f"Invalid facet {facet!r}. Choose one of: {', '.join(valid_facets)}")
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    entity_id: str | None = None
+    if entity_ref is not None:
+        try:
+            entity_id = resolve_entity_ref(root, entity_ref)
+        except EntityCommandError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    try:
+        payload = gaps_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            facet=facet,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = payload["benchmark_gaps"]
+    if not rows:
+        click.echo("No benchmark gaps.")
+        return
+
+    table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
+    for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
+        candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
+        table.add_row(
+            row["entity_id"],
+            row["gap_level"],
+            missing,
+            str(len(row["current_matches"])),
+            candidates,
+            row["reason"],
+        )
+    Console(width=200).print(table)
+
+
 @main.group("dataset")
 def dataset_group() -> None:
     """Dataset entity lifecycle commands (list, register-run, reconcile)."""

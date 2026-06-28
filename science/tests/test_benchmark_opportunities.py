@@ -30,6 +30,15 @@ def _invoke(tmp_path: Path, *args: str):
     )
 
 
+def _invoke_gaps(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "gaps", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+
 def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
     return CliRunner().invoke(
         science_cli,
@@ -783,6 +792,112 @@ benchmark:
     assert "frontmatter_json must decode to an object" in payload["commons_notice"]
     assert "notice: commons benchmarks unavailable" in result.stderr
     assert "frontmatter_json must decode to an object" in result.stderr
+
+
+def test_benchmark_gaps_cli_json_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0006-proteomics",
+        """
+id: hypothesis:0006-proteomics
+type: hypothesis
+title: Proteomics gap
+""",
+        body="Proteomics coverage is missing.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["benchmark_gaps"][0]["gap_level"] == "uncovered"
+    assert payload["benchmark_gaps"][0]["missing_modalities"] == ["proteomics"]
+    assert payload["summary"]["entities_with_gaps"] == 1
+
+
+def test_benchmark_gaps_cli_table_empty_state(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0007-covered",
+        """
+id: hypothesis:0007-covered
+type: hypothesis
+title: Spatial covered
+""",
+        body="Spatial transfer is covered.",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial-covered",
+        """
+id: dataset:spatial-covered
+type: dataset
+title: Spatial Covered
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  related_beliefs:
+    - hypothesis:0007-covered
+  tasks:
+    - id: transfer
+      prediction_target: region label
+      held_out_unit: tissue
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: curated region
+""",
+    )
+
+    result = _invoke_gaps(tmp_path)
+
+    assert result.exit_code == 0
+    assert "No benchmark gaps." in result.output
+
+
+def test_benchmark_gaps_cli_facet_filter(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0008-proteomics",
+        """
+id: hypothesis:0008-proteomics
+type: hypothesis
+title: Proteomics gap
+""",
+        body="Proteomics coverage is missing.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0009-temporal",
+        """
+id: hypothesis:0009-temporal
+type: hypothesis
+title: Time-series gap
+""",
+        body="Time-series coverage is missing.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--facet", "time-series", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0009-temporal"]
+
+
+def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> None:
+    result = _invoke_gaps(tmp_path, "--entity", "hypothesis:nope")
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "hypothesis:nope" in result.output
 
 
 def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_path: Path) -> None:
