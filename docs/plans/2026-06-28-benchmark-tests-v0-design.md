@@ -65,11 +65,12 @@ Each row has a `test_plan_state`:
   to identify the prediction target, held-out unit, metric, baseline, and ground
   truth surface.
 - `draft-needed`: the benchmark is relevant by facets, gap candidates, or
-  opportunity matching, but task metadata is absent or incomplete. The row is a
-  useful benchmark need, not a runnable test plan.
+  opportunity matching, but task metadata is absent or incomplete. This includes
+  benchmarks with no `tasks[]` and task rows that have a `task_id` but are
+  missing one or more evaluable fields. The row is a useful benchmark need, not
+  a runnable test plan.
 
-Concrete rows may still carry `needs` if the task is partially specified. A row
-is `concrete` only when a task exists; it is not a promise that local files are
+A `concrete` row has no `needs`. It is not a promise that local files are
 already staged or that the benchmark has been run.
 
 ## JSON Contract
@@ -102,14 +103,25 @@ Concrete row example:
   "benchmark_title": "Sci-Plex perturbation response atlas",
   "task_id": "dataset:sciplex3#drug-response",
   "test_plan_state": "concrete",
-  "test_plan_kind": "perturbation-response",
-  "readiness": "runnable",
+  "task_type": "perturbation response",
+  "readiness_label": "runnable",
   "priority_score": 78,
+  "priority_source": "opportunity-relative",
   "score_components": {
-    "relevance": 42,
-    "baseline_quality": 18,
-    "task_completeness": 12,
-    "readiness": 6
+    "source": {
+      "related_belief_id": 40,
+      "facet_overlap": 16,
+      "kind_signal_fit": 10,
+      "diversity_added": 15,
+      "readiness_penalty": -3
+    },
+    "baseline": {
+      "task_completeness": 30,
+      "signal_value": 10,
+      "modality_value": 4,
+      "readiness": 15,
+      "limitations": 10
+    }
   },
   "matched_facets": ["perturbation", "single-cell-rna-seq"],
   "reason_notes": ["entity-hint:perturbation", "task-ready", "signal:perturbation"],
@@ -135,14 +147,25 @@ Draft-needed row example:
   "benchmark_title": "Human Cell Atlas spatial reference",
   "task_id": null,
   "test_plan_state": "draft-needed",
-  "test_plan_kind": "spatial-validation",
-  "readiness": "metadata-only",
+  "task_type": "",
+  "benchmark_kinds": ["static-association"],
+  "readiness_label": "metadata-only",
   "priority_score": 47,
+  "priority_source": "gap-candidate",
   "score_components": {
-    "relevance": 28,
-    "baseline_quality": 14,
-    "task_completeness": 0,
-    "readiness": 5
+    "source": {
+      "missing_facet_overlap": 0,
+      "hint_facet_overlap": 20,
+      "task_readiness": 12,
+      "baseline_quality": 15
+    },
+    "baseline": {
+      "task_completeness": 0,
+      "signal_value": 0,
+      "modality_value": 6,
+      "readiness": 15,
+      "limitations": 10
+    }
   },
   "matched_facets": ["spatial"],
   "reason_notes": ["entity-hint:spatial", "draft-needed"],
@@ -170,16 +193,25 @@ contract changes.
    `--entity`, `--domain`, `--facet`, and `--commons`.
 2. Collect candidate sources:
    - matched opportunities from `opportunity_report`;
-   - weak current matches from `gaps_report`;
    - entity-specific gap candidates from `gaps_report`;
    - fallback gap candidates only when no entity-specific candidate exists, and
      label their reason notes explicitly.
+   Gap `current_matches` are not a second row source because they are derived
+   from the same opportunity rows; they can annotate weak coverage, but must not
+   duplicate `(entity, benchmark, task)` rows.
 3. For each relevant dataset:
    - emit task rows for each available `tasks[]` entry;
+   - label a task row `concrete` only when prediction target, held-out unit,
+     metric, baseline, and ground truth are present;
+   - label incomplete task rows `draft-needed` and populate `needs`;
    - emit one `draft-needed` row if the dataset has no tasks;
-   - for incomplete task rows, populate `needs` for missing target/unit/metric/
-     baseline/ground-truth fields.
-4. Sort rows by `priority_score desc`, then `test_plan_state` with `concrete`
+   - for every draft-needed row, populate `needs` for missing target/unit/
+     metric/baseline/ground-truth fields.
+4. Deduplicate rows by `(entity_id, benchmark_id, task_id)`. If the same row is
+   seen through multiple projections, keep one row and merge `reason_notes`;
+   prefer the more specific source in this order: matched opportunity,
+   entity-specific gap candidate, fallback gap candidate.
+5. Sort rows by `priority_score desc`, then `test_plan_state` with `concrete`
    before `draft-needed`, then entity id, benchmark id, and task id.
 
 This keeps the command aligned with calibrated matching and avoids a second
@@ -190,35 +222,63 @@ matching implementation.
 `priority_score` is intentionally transparent. It is not a learned score and
 does not imply scientific truth.
 
-Use bounded additive components:
+Do not recombine existing score components into a new additive score. The
+existing source scores are already calibrated 0-100 signals and already include
+task/readiness terms where they belong:
 
-- `relevance`: gap candidate `candidate_score` when present, otherwise matched
-  opportunity `relative_score`, capped at 55.
-- `baseline_quality`: scaled from existing benchmark `baseline_score`, capped at
-  20.
-- `task_completeness`: points for known prediction target, held-out unit, metric,
-  baseline, and ground truth, capped at 15.
-- `readiness`: points from the existing readiness/baseline substrate, capped at
-  10.
+- opportunity-derived rows use the opportunity `relative_score` as
+  `priority_score` and set `priority_source: "opportunity-relative"`;
+- gap-candidate rows use the candidate `candidate_score` as `priority_score` and
+  set `priority_source: "gap-candidate"`;
+- fallback rows use the fallback candidate `candidate_score` as
+  `priority_score` and set `priority_source: "gap-fallback"`.
 
-Clamp the sum to 100. Emit `score_components` so every score is reconstructable
-from JSON. Prefer existing component values from benchmark opportunity contexts
-instead of re-validating dataset frontmatter per row.
+This means `priority_score` is a sort key within a planning report, not a single
+scientific quantity with identical semantics across origins. Expose
+`priority_source` and pass through the applicable existing component dict under
+`score_components.source`. Include the existing benchmark baseline components
+under `score_components.baseline` for explanation and tie-breaking context, but
+do not add them to `priority_score` again.
+
+## Facets
+
+There is no existing `matched_facets` field. The command should compute it as a
+presentation projection:
+
+- for opportunity rows, use normalized benchmark `modalities` and
+  `signal_types`;
+- for gap-candidate rows, use `matched_missing_facets`,
+  `matched_hint_facets`, and normalized benchmark `modalities` /
+  `signal_types`;
+- for rows with entity facet hints, include hint facets only when the benchmark
+  declares the same normalized facet.
+
+Filter `--facet` against this projected `matched_facets` set. The valid filter
+vocabulary should stay the same as `benchmark gaps`
+(`BENCHMARK_GAP_HINT_FACETS`), but rows may expose additional normalized dataset
+facets for display. A facet outside the valid filter set is display-only until
+the gap hint vocabulary intentionally grows.
 
 ## Readiness Labels
 
 The command should expose a compact readiness label for planning:
 
-- `runnable`: dataset has task metadata and readiness is good enough for use-now
-  style planning.
-- `stage-needed`: dataset looks obtainable but local runtime materialization is
-  not yet complete.
-- `metadata-only`: benchmark metadata is useful for planning, but no runnable
-  task should be assumed.
-- `blocked`: access or licensing state blocks immediate use.
+- `runnable`: `runtime_state_for(frontmatter) == "runnable"` and the row has a
+  task.
+- `stage-needed`: runtime state is `unstaged-deposit`, or readiness state is one
+  of `derived-via-code`, `derived-via-member-of`,
+  `derived-via-workflow-recipe`, `consumable-via-scope-reduced`,
+  `consumable-via-substituted`, or `acquiring`.
+- `metadata-only`: runtime state is `reference-only` or `pointer-only`, or the
+  row has no task metadata.
+- `blocked`: runtime state is `blocked-access`, or readiness state is
+  `embargoed`, `withdrawn`, `unknown`, or an unverified access level that is not
+  already covered by a more specific runtime state.
 
 The label is a presentation projection over existing dataset readiness and
 benchmark metadata. It must not create a new independent access vocabulary.
+Use `readiness_label` for the row field so it does not collide with the numeric
+`baseline.readiness` score component.
 
 ## Table Output
 
@@ -240,8 +300,8 @@ No benchmark test plans.
 - `--state concrete|draft-needed` filters by `test_plan_state`.
 - `--benchmark <dataset-ref>` filters exact benchmark ids. Accept canonical ids
   such as `dataset:sciplex3` and bare dataset slugs when unambiguous.
-- `--facet <facet>` filters by matched or suggested benchmark facets, using the
-  same normalized valid set as `benchmark gaps`.
+- `--facet <facet>` filters by projected `matched_facets`, using the same
+  normalized valid set as `benchmark gaps`.
 - `--entity`, `--domain`, and `--commons` behave like the existing benchmark
   commands.
 
