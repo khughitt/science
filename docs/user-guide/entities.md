@@ -224,6 +224,53 @@ does not perform ontology hierarchy reasoning, runtime ontology fetching, or
 external assertion import. Add new domains through the documented catalog
 process in [Adding a Domain](../process/adding-a-domain.md).
 
+## Reference Semantics
+
+References should name the most specific stable semantic object available.
+Science resolves exact ids and aliases first, then may use cross-kind slug
+fallback only for migration paths such as an old `topic:PHF19` mention that now
+has a single unambiguous `gene:PHF19` owner. Ambiguous slug matches remain
+health or materialization findings; do not rely on fallback as the authored
+canonical form.
+
+Use these destinations instead of new semantic `topic:*` refs:
+
+| Intent | Preferred reference |
+|---|---|
+| Catalog-backed thing | Domain kind such as `gene`, `protein`, `disease`, `pathway`, or another declared catalog kind. |
+| Analytical procedure | `method`. |
+| Stable project-local concept | `concept`, often as a lightweight row in `knowledge/sources/<profile>/terms.yaml`. |
+| Cross-cutting organizing lens | `theme`. |
+| Conjecture under investigation | `hypothesis`. |
+| Analysis-session narrative | `interpretation`. |
+| Communication-layer synthesis | `story`. |
+| Named explanatory bundle with participants and claims | `mechanism`. |
+| Temporary classification marker | Field-scoped `tag:*`, only where free-form labels are accepted. |
+| Operational marker | `meta:*`, or prose when it should not enter the graph. |
+
+`terms.yaml` is for lightweight semantic rows that are more durable than a
+one-off prose label but do not yet deserve a full Markdown owner:
+
+```yaml
+terms:
+  - id: "concept:treatment-response"
+    title: "Treatment response"
+  - id: "method:cox-regression"
+    title: "Cox proportional-hazards regression"
+    ontology_terms: ["biolink:StatisticalMethod"]
+```
+
+Keep entries minimal: `id` and `title` are required; `aliases`, `same_as`,
+`ontology_terms`, and short descriptions are optional. Promote the row to a
+Markdown entity owner when it accumulates body prose, structured relations, or
+lifecycle work.
+
+`topic` remains registered for legacy projects and migration surfaces, but it is
+not the default semantic destination for new work. Do not create topic stubs to
+silence unresolved-reference checks. Triage each legacy `topic:*` mention into a
+catalog-backed entity, method, concept, theme, hypothesis, interpretation,
+story, mechanism, metadata, or prose-only note.
+
 ## Papers And Manuscripts
 
 Science uses separate references for external literature and user-authored
@@ -504,7 +551,7 @@ other stable objects that the project points at.
 - `construct` - A theoretical construct operationalized by the project.
 - `decision` - A recorded project decision with rationale.
 - `outcome` - A measured or targeted outcome variable.
-- `topic` - A research topic synthesized from the literature.
+- `topic` - Legacy research-topic synthesis note; prefer typed semantic entities for new work.
 - `unknown` - Built-in sentinel kind for unrecognized entities.
 - `variable` - A modeled variable in an analysis or causal model.
 <!-- entity-kinds:reference:end -->

@@ -808,6 +808,16 @@ def test_entity_creation_cookbook_covers_positive_and_negative_examples() -> Non
         assert expected in text
 
 
+def test_health_command_uses_semantic_triage_for_legacy_topic_refs() -> None:
+    text = _read("commands/health.md")
+
+    assert "**looks_like=semantic-triage**" in text
+    assert "Do not create `topic:*` stubs as" in text
+    assert "Create stub topic entity files" not in text
+    assert "Creating topic stubs" not in text
+    assert "field-scoped `tag:` ref" in text
+
+
 def test_tasks_command_documents_flat_ids_parent_and_namespace_refs() -> None:
     text = _read("commands/tasks.md")
 

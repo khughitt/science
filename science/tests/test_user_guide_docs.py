@@ -98,3 +98,15 @@ def test_entities_chapter_documents_compositional_outputs_and_paper_split() -> N
     assert "`story`" in text
     assert "The current loadable `paper` kind is an external literature note" in normalized
     assert "do not use `paper:<id>` for the project's own publication draft" in normalized
+
+
+def test_entities_chapter_documents_reference_semantics_and_topic_deprecation() -> None:
+    text = _read(GUIDE_ROOT / "entities.md")
+    normalized = " ".join(text.split())
+
+    assert "## Reference Semantics" in text
+    assert "cross-kind slug fallback" in normalized
+    assert "`terms.yaml` is for lightweight semantic rows" in normalized
+    assert "Field-scoped `tag:*`" in text
+    assert "`topic` remains registered for legacy projects and migration surfaces" in normalized
+    assert "Do not create topic stubs to silence unresolved-reference checks." in normalized

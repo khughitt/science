@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `12`
+- Pending thread count: `10`
 
 ## b-migration-paper-datasets
 
@@ -150,33 +150,4 @@
 - remaining_gaps:
   - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
   - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
-
-## topic-deprecation-and-mechanism
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; topic deprecation remains partially implemented and needs reconciliation with unified references/theme follow-ons
-    - `docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md`
-- remaining_gaps:
-  - Replace remaining topic-stub remediation guidance in health command docs and skills with semantic triage.
-  - Reconcile topic registration and legacy migration-only handling with unified references, theme, and mechanism follow-ons.
-  - Decide whether the stable topic-deprecation policy should move into durable docs before this design leaves active plans.
-
-## unified-entity-references
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-21-unified-entity-references-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; reconcile partial implementation with mechanism/theme/topic follow-ons before cleanup
-    - `docs/plans/2026-04-21-unified-entity-references-design.md`
-- remaining_gaps:
-  - Verify which of the five proposed changes fully landed: cross-kind slug fallback, ontology catalog resolvable instances, terms.yaml convention, tag: classification token, and topic deprecation.
-  - Reconcile with mechanism/theme/topic follow-ons before moving or deleting.
 

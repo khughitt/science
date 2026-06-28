@@ -368,6 +368,15 @@ def test_science_health_mentions_identity_policy_triage() -> None:
     assert "prose-only fallback" in text
 
 
+def test_science_health_generated_skill_uses_semantic_triage_for_topic_refs() -> None:
+    text = _read_skill("science-health")
+
+    assert "**looks_like=semantic-triage**" in text
+    assert "Do not create `topic:*` stubs as" in text
+    assert "Create stub topic entity files" not in text
+    assert "Creating topic stubs" not in text
+
+
 def test_create_graph_points_to_cookbook_for_new_entities() -> None:
     text = _read_skill("science-create-graph")
 

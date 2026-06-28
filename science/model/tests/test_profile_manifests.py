@@ -231,6 +231,13 @@ def test_core_profile_paper_kind_is_external_literature_note() -> None:
     assert "External literature note" in kind.description
 
 
+def test_core_profile_topic_kind_is_legacy_guidance() -> None:
+    kind = next(k for k in CORE_PROFILE.entity_kinds if k.name == "topic")
+
+    assert "Legacy research-topic synthesis note" in kind.description
+    assert "prefer typed semantic entities for new work" in kind.description
+
+
 def test_supports_uses_observation_and_proposition() -> None:
     supports = next(r for r in CORE_PROFILE.relation_kinds if r.name == "supports")
     assert {"observation", "proposition"} <= set(supports.source_kinds)
