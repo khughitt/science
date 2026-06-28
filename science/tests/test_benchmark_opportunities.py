@@ -286,6 +286,47 @@ benchmark:
     assert not any("measured" in reason for reason in rows[0]["match_reasons"])
 
 
+def test_opportunity_report_matches_prefixed_shorthand_related_belief(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-perturbation",
+        """
+id: hypothesis:0001-perturbation
+type: hypothesis
+title: Response shift model
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [dose-response]
+  benchmark_kinds: [expression-response]
+  related_beliefs:
+    - hypothesis:h1 predicts response shifts.
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    rows = payload["matched_opportunities"]
+    assert len(rows) == 1
+    assert rows[0]["entity_id"] == "hypothesis:0001-perturbation"
+    assert rows[0]["benchmark_id"] == "dataset:sciplex3"
+    assert "related-belief-id:hypothesis:h1" in rows[0]["match_reasons"]
+
+
 def test_stoplist_blocks_generic_token_only_match(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 
@@ -495,6 +536,7 @@ type: hypothesis
 title: Perturbation response
 status: active
 """,
+        body="Perturbation response uses an x condition.",
     )
     _write_dataset(
         tmp_path,
@@ -510,6 +552,7 @@ benchmark:
   benchmark_kinds: [perturbation-response]
   notes:
     - Measured expression prose is displayed for calibration only.
+    - The q marker is too small for matching.
 """,
     )
 
@@ -520,6 +563,30 @@ benchmark:
     assert payload["matched_opportunities"][0]["entity_id"] == "hypothesis:0001-perturbation"
     assert payload["calibration"]["enabled"] is True
     assert "stop_tokens" in payload["calibration"]
+    entity_tokens = payload["calibration"]["entity_tokens"]["hypothesis:0001-perturbation"]
+    assert "hypothesis:0001-perturbation" in entity_tokens
+    assert "perturbation" in entity_tokens
+    benchmark_tokens = payload["calibration"]["benchmark_controlled_facet_tokens"]["dataset:sciplex3"]
+    assert "dataset:sciplex3" in benchmark_tokens
+    assert "perturbation" in benchmark_tokens
+    dropped = payload["calibration"]["dropped_tokens"]
+    assert "response" in dropped["stop"]["hypothesis:0001-perturbation"]
+    assert "x" in dropped["short"]["hypothesis:0001-perturbation"]
+    assert "q" in dropped["short"]["dataset:sciplex3"]
+    evidence = payload["calibration"]["matched_token_evidence"]
+    assert evidence
+    matched = next(
+        item
+        for item in evidence
+        if item["entity_id"] == "hypothesis:0001-perturbation" and item["benchmark_id"] == "dataset:sciplex3"
+    )
+    assert "perturbation" in matched["facet_overlap"]
+    assert matched["score_components"] == payload["matched_opportunities"][0]["score_components"]
+    unmatched = payload["calibration"]["unmatched_tokens"]
+    assert "entities" in unmatched
+    assert "benchmarks" in unmatched
+    assert "hypothesis:0001-perturbation" in unmatched["entities"]
+    assert "dataset:sciplex3" in unmatched["benchmarks"]
     excluded = payload["calibration"]["excluded_benchmark_prose_tokens"]["dataset:sciplex3"]
     assert "measured" in excluded
     assert not any("measured" in reason for reason in payload["matched_opportunities"][0]["match_reasons"])

@@ -134,6 +134,13 @@ class DatasetOpportunityContext:
     related_belief_tokens: frozenset[str]
 
 
+@dataclass(frozen=True)
+class TokenEvidence:
+    kept: frozenset[str]
+    stop: frozenset[str]
+    short: frozenset[str]
+
+
 class OpportunityScoreComponents(TypedDict):
     baseline: dict[str, int]
     relative: dict[str, int]
@@ -175,10 +182,34 @@ class UnmappedProjectEntityRow(TypedDict):
     observed_tokens: list[str]
 
 
+class DroppedTokenPayload(TypedDict):
+    stop: dict[str, list[str]]
+    short: dict[str, list[str]]
+
+
+class UnmatchedTokenPayload(TypedDict):
+    entities: dict[str, list[str]]
+    benchmarks: dict[str, list[str]]
+
+
+class CalibrationMatchEvidence(TypedDict):
+    entity_id: str
+    benchmark_id: str
+    task_id: str | None
+    id_overlap: list[str]
+    facet_overlap: list[str]
+    score_components: OpportunityScoreComponents
+
+
 class CalibrationPayload(TypedDict):
     enabled: bool
     stop_tokens: NotRequired[list[str]]
     excluded_benchmark_prose_tokens: NotRequired[dict[str, list[str]]]
+    entity_tokens: NotRequired[dict[str, list[str]]]
+    benchmark_controlled_facet_tokens: NotRequired[dict[str, list[str]]]
+    dropped_tokens: NotRequired[DroppedTokenPayload]
+    matched_token_evidence: NotRequired[list[CalibrationMatchEvidence]]
+    unmatched_tokens: NotRequired[UnmatchedTokenPayload]
 
 
 class OpportunityReport(TypedDict):
@@ -336,17 +367,25 @@ def baseline_score(dataset: OpportunityDataset, *, readiness: tuple[float, list[
     return Score(total=min(sum(components.values()), 100), components=components, notes=notes)
 
 
-def _tokens_from_text(*values: str, include_stop_tokens: bool = False) -> frozenset[str]:
-    tokens: set[str] = set()
+def _token_evidence_from_text(*values: str, include_stop_tokens: bool = False) -> TokenEvidence:
+    kept: set[str] = set()
+    stop: set[str] = set()
+    short: set[str] = set()
     for value in values:
         for raw in _TOKEN_RE.findall(value):
             token = _normalize_token(raw)
             if not include_stop_tokens and token in _STOP_TOKENS:
+                stop.add(token)
                 continue
             if len(token) < 3 and not re.fullmatch(r"[hq]\d+", token):
+                short.add(token)
                 continue
-            tokens.add(token)
-    return frozenset(tokens)
+            kept.add(token)
+    return TokenEvidence(kept=frozenset(kept), stop=frozenset(stop), short=frozenset(short))
+
+
+def _tokens_from_text(*values: str, include_stop_tokens: bool = False) -> frozenset[str]:
+    return _token_evidence_from_text(*values, include_stop_tokens=include_stop_tokens).kept
 
 
 def _as_string_list(value: object) -> list[str]:
@@ -360,14 +399,19 @@ def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset
     local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
     tokens.add(local.lower())
     tokens.update(value.lower() for value in numeric_variants(local))
+    numeric_prefix = re.match(r"^0*(\d+)(.*)$", local)
+    if numeric_prefix is not None:
+        number, suffix = numeric_prefix.groups()
+        tokens.add(f"{number}{suffix}".lower())
+        tokens.add(f"{kind}:{number}{suffix}".lower())
     shortform = shortform_for_kind(kind)
-    if shortform is not None:
-        numeric_prefix = re.match(r"^0*(\d+)(.*)$", local)
-        if numeric_prefix is not None:
-            number, suffix = numeric_prefix.groups()
-            tokens.add(f"{shortform}{number}".lower())
-            if suffix:
-                tokens.add(f"{shortform}{number}{suffix}".lower())
+    if shortform is not None and numeric_prefix is not None:
+        number, suffix = numeric_prefix.groups()
+        tokens.add(f"{shortform}{number}".lower())
+        tokens.add(f"{kind}:{shortform}{number}".lower())
+        if suffix:
+            tokens.add(f"{shortform}{number}{suffix}".lower())
+            tokens.add(f"{kind}:{shortform}{number}{suffix}".lower())
     for field in ("same_as", "source_refs"):
         tokens.update(value.lower() for value in _as_string_list(fm.get(field)))
     return frozenset(tokens)
@@ -414,6 +458,24 @@ def _benchmark_prose_tokens(dataset: OpportunityDataset) -> frozenset[str]:
     for task in dataset.tasks:
         task_prose.extend(task.prose)
     return _tokens_from_text(*dataset.notes, *dataset.limitations, *task_prose)
+
+
+def _dataset_evidence_values(dataset: OpportunityDataset) -> list[str]:
+    values = [
+        dataset.id,
+        dataset.title,
+        *dataset.domains,
+        *dataset.modalities,
+        *dataset.signal_types,
+        *dataset.benchmark_kinds,
+        *dataset.source_datasets,
+        *dataset.related_beliefs,
+        *dataset.notes,
+        *dataset.limitations,
+    ]
+    for task in dataset.tasks:
+        values.extend(task.prose)
+    return values
 
 
 def _related_belief_tokens(dataset: OpportunityDataset) -> frozenset[str]:
@@ -579,12 +641,108 @@ def _coverage_gaps(
     )
 
 
-def _calibration_payload(contexts: list[DatasetOpportunityContext], *, enabled: bool) -> CalibrationPayload:
+def _calibration_benchmark_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
+    return frozenset({context.dataset.id.lower(), *context.controlled_facet_tokens})
+
+
+def _score_components_copy(row: OpportunityRow) -> OpportunityScoreComponents:
+    components = row["score_components"]
+    return {"baseline": dict(components["baseline"]), "relative": dict(components["relative"])}
+
+
+def _calibration_match_evidence(
+    entities: list[ProjectBenchmarkEntity],
+    contexts: list[DatasetOpportunityContext],
+    matched_rows: list[OpportunityRow],
+) -> list[CalibrationMatchEvidence]:
+    entity_by_id = {entity.id: entity for entity in entities}
+    context_by_id = {context.dataset.id: context for context in contexts}
+    evidence: list[CalibrationMatchEvidence] = []
+    for row in matched_rows:
+        entity = entity_by_id.get(row["entity_id"])
+        context = context_by_id.get(row["benchmark_id"])
+        if entity is None or context is None:
+            continue
+        evidence.append(
+            {
+                "entity_id": row["entity_id"],
+                "benchmark_id": row["benchmark_id"],
+                "task_id": row["task_id"],
+                "id_overlap": sorted(entity.id_tokens & context.related_belief_tokens),
+                "facet_overlap": sorted(entity.tokens & context.controlled_facet_tokens),
+                "score_components": _score_components_copy(row),
+            }
+        )
+    return evidence
+
+
+def _unmatched_tokens(
+    entity_tokens: dict[str, list[str]],
+    benchmark_tokens: dict[str, list[str]],
+    evidence: list[CalibrationMatchEvidence],
+) -> UnmatchedTokenPayload:
+    matched_by_entity: dict[str, set[str]] = {entity_id: set() for entity_id in entity_tokens}
+    matched_by_benchmark: dict[str, set[str]] = {benchmark_id: set() for benchmark_id in benchmark_tokens}
+    for item in evidence:
+        entity_matches = matched_by_entity.setdefault(item["entity_id"], set())
+        entity_matches.update(item["id_overlap"])
+        entity_matches.update(item["facet_overlap"])
+        matched_by_benchmark.setdefault(item["benchmark_id"], set()).update(item["facet_overlap"])
+    return {
+        "entities": {
+            entity_id: sorted(set(tokens) - matched_by_entity.get(entity_id, set()))
+            for entity_id, tokens in entity_tokens.items()
+        },
+        "benchmarks": {
+            benchmark_id: sorted(set(tokens) - matched_by_benchmark.get(benchmark_id, set()))
+            for benchmark_id, tokens in benchmark_tokens.items()
+        },
+    }
+
+
+def _calibration_payload(
+    entities: list[ProjectBenchmarkEntity],
+    contexts: list[DatasetOpportunityContext],
+    matched_rows: list[OpportunityRow],
+    *,
+    enabled: bool,
+) -> CalibrationPayload:
     if not enabled:
         return {"enabled": False}
+    entity_token_evidence = {
+        entity.id: _token_evidence_from_text(entity.id, entity.title, entity.content_preview) for entity in entities
+    }
+    benchmark_token_evidence = {
+        context.dataset.id: _token_evidence_from_text(*_dataset_evidence_values(context.dataset)) for context in contexts
+    }
+    entity_tokens = {entity.id: sorted(entity.tokens) for entity in entities}
+    benchmark_tokens = {context.dataset.id: sorted(_calibration_benchmark_tokens(context)) for context in contexts}
+    matched_evidence = _calibration_match_evidence(entities, contexts, matched_rows)
     return {
         "enabled": True,
         "stop_tokens": sorted(_STOP_TOKENS),
+        "entity_tokens": entity_tokens,
+        "benchmark_controlled_facet_tokens": benchmark_tokens,
+        "dropped_tokens": {
+            "stop": {
+                stable_id: sorted(evidence.stop)
+                for stable_id, evidence in {
+                    **entity_token_evidence,
+                    **benchmark_token_evidence,
+                }.items()
+                if evidence.stop
+            },
+            "short": {
+                stable_id: sorted(evidence.short)
+                for stable_id, evidence in {
+                    **entity_token_evidence,
+                    **benchmark_token_evidence,
+                }.items()
+                if evidence.short
+            },
+        },
+        "matched_token_evidence": matched_evidence,
+        "unmatched_tokens": _unmatched_tokens(entity_tokens, benchmark_tokens, matched_evidence),
         "excluded_benchmark_prose_tokens": {
             context.dataset.id: sorted(context.prose_tokens) for context in contexts if context.prose_tokens
         },
@@ -636,6 +794,6 @@ def opportunity_report(
             for entity in entities
             if entity.id not in matched_entity_ids
         ],
-        "calibration": _calibration_payload(contexts, enabled=calibration_report),
+        "calibration": _calibration_payload(entities, contexts, matched, enabled=calibration_report),
         "commons_notice": notice,
     }
