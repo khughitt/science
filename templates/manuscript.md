@@ -38,4 +38,4 @@ Status: {{draft | developing | mature}}
 
 ## Bibliography
 
-<!-- Populated from article references across all stories. -->
+<!-- Populated from cite:<bibkey> bibliography refs and paper:<bibkey> literature notes across all stories. -->

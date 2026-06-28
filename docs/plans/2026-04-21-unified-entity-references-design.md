@@ -3,7 +3,7 @@
 **Date:** 2026-04-21
 **Status:** Draft
 **Builds on:**
-- `2026-04-05-project-model-design.md` — core entity taxonomy
+- `historical/2026-04-05-project-model-design.md` — core entity taxonomy
 - `docs/user-guide/entities.md#entity-loading-and-storage-adapters` — unified entity model + storage adapters
 - `historical/2026-03-01-knowledge-graph-design.md` — three-tier ontology (core / causal / domain plugins)
 

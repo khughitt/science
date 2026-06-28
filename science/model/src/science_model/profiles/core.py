@@ -253,7 +253,7 @@ CORE_PROFILE = ProfileManifest(
             name="paper",
             canonical_prefix="paper",
             layer="layer/core",
-            description="Ordered composition of stories structured for communication.",
+            description="External literature note for a read, searched, or summarized paper.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
             template_ready=True,
@@ -726,7 +726,7 @@ CORE_PROFILE = ProfileManifest(
             source_kinds=["paper"],
             target_kinds=["story"],
             layer="layer/core",
-            description="A paper comprises one or more stories.",
+            description="Legacy graph-only paper composition relation.",
         ),
         RelationKind(
             name="grounds",

@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `14`
+- Pending thread count: `12`
 
 ## b-migration-paper-datasets
 
@@ -150,38 +150,6 @@
 - remaining_gaps:
   - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
   - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
-
-## paper-model
-
-- status: `unclear`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-05-paper-model-design.md`
-  - `docs/plans/2026-04-05-paper-model.md`
-- pending_actions:
-  - `deferred`: review status unclear; reconcile with active companion project-model thread before cleanup
-    - `docs/plans/2026-04-05-paper-model-design.md`
-    - `docs/plans/2026-04-05-paper-model.md`
-- remaining_gaps:
-  - Reconcile this thread together with docs/plans/2026-04-05-project-model-design.md before deciding whether to delete, move both to historical, or migrate a durable paper/manuscript model note.
-  - Confirm whether the originally planned graph store operations and CLI commands still exist or were replaced by entity source files and interpret-results workflow.
-
-## project-model
-
-- status: `unclear`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-05-project-model-design.md`
-  - `docs/plans/2026-04-05-project-model.md`
-- pending_actions:
-  - `deferred`: review status unclear; reconcile with companion paper-model and later entity/epistemic model docs before cleanup
-    - `docs/plans/2026-04-05-project-model-design.md`
-    - `docs/plans/2026-04-05-project-model.md`
-- remaining_gaps:
-  - Reconcile project-model and paper-model together before moving or deleting either thread.
-  - Confirm which parts of the broad entity taxonomy are now durable user-guide contract versus superseded by later epistemic-data-model and dataset lifecycle work.
 
 ## topic-deprecation-and-mechanism
 

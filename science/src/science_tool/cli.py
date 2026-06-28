@@ -2801,6 +2801,11 @@ def add_story_cmd(
     """Add a story — a narrative arc around a question or hypothesis."""
     uri = add_story(graph_path, title, summary, about, list(interpretations), status, story_id)
     click.echo(f"Added story: {uri}")
+    click.echo(
+        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
+        "`science graph build`, which rematerialises the graph from markdown sources. "
+        "Use a source-authored story entity for durable project work."
+    )
 
 
 @graph_add.command("mechanism")
@@ -2847,6 +2852,11 @@ def add_paper_cmd(
     """Add a paper — a composition of stories for communication."""
     uri = add_paper_entity(graph_path, title, list(stories), status, abstract, paper_id)
     click.echo(f"Added paper: {uri}")
+    click.echo(
+        "WARNING: this legacy composition command writes directly to graph.trig and will be wiped "
+        "on the next `science graph build`. The current source-authored `paper:<bibkey>` kind is "
+        "an external literature note, not the project's own publication draft."
+    )
 
 
 @main.group("belief")
