@@ -1,10 +1,10 @@
 {
-  "file_count": 314,
-  "generated_at": "2026-06-28T14:51:29+00:00",
+  "file_count": 311,
+  "generated_at": "2026-06-28T14:59:43+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 206,
+  "thread_count": 204,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -68,33 +68,6 @@
         "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "design"
       },
       "thread_id": "adapter-entity-layout-and-overlay-root"
-    },
-    {
-      "earliest_file_date": "2026-04-30",
-      "files": [
-        "docs/plans/2026-04-30-agents-md-decoupling-design.md",
-        "docs/plans/2026-04-30-agents-md-decoupling-plan.md"
-      ],
-      "latest_file_date": "2026-04-30",
-      "normalized_slug": "agents-md-decoupling",
-      "raw_slugs": {
-        "docs/plans/2026-04-30-agents-md-decoupling-design.md": "agents-md-decoupling-design",
-        "docs/plans/2026-04-30-agents-md-decoupling-plan.md": "agents-md-decoupling-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-30-agents-md-decoupling-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-04-30-agents-md-decoupling-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-30-agents-md-decoupling-design.md": "design",
-        "docs/plans/2026-04-30-agents-md-decoupling-plan.md": "plan"
-      },
-      "thread_id": "agents-md-decoupling"
     },
     {
       "earliest_file_date": "2026-05-10",
@@ -4628,27 +4601,6 @@
         "docs/plans/2026-05-05-task-ids-and-cross-project-references.md": null
       },
       "thread_id": "task-ids-and-cross-project-references"
-    },
-    {
-      "earliest_file_date": "2026-04-28",
-      "files": [
-        "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md"
-      ],
-      "latest_file_date": "2026-04-28",
-      "normalized_slug": "tasks-archive-aware-show-and-notes",
-      "raw_slugs": {
-        "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md": "tasks-archive-aware-show-and-notes-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md": "design"
-      },
-      "thread_id": "tasks-archive-aware-show-and-notes"
     },
     {
       "earliest_file_date": "2026-06-27",
