@@ -1,10 +1,10 @@
 {
-  "file_count": 187,
-  "generated_at": "2026-06-28T19:54:42+00:00",
+  "file_count": 186,
+  "generated_at": "2026-06-28T20:00:35+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 118,
+  "thread_count": 117,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -542,27 +542,6 @@
         "docs/plans/2026-06-10-data-driven-discovery-improvements.md": null
       },
       "thread_id": "data-driven-discovery-improvements"
-    },
-    {
-      "earliest_file_date": "2026-04-17",
-      "files": [
-        "docs/plans/2026-04-17-dataset-adapter-expansion-design.md"
-      ],
-      "latest_file_date": "2026-04-17",
-      "normalized_slug": "dataset-adapter-expansion",
-      "raw_slugs": {
-        "docs/plans/2026-04-17-dataset-adapter-expansion-design.md": "dataset-adapter-expansion-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-17-dataset-adapter-expansion-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-17-dataset-adapter-expansion-design.md": "design"
-      },
-      "thread_id": "dataset-adapter-expansion"
     },
     {
       "earliest_file_date": "2026-06-14",

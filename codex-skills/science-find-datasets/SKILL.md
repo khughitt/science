@@ -140,6 +140,20 @@ science datasets search "<query>" --source cbioportal --format json
 Adapters cover Zenodo, NCBI GEO, Dryad, Semantic Scholar, the public cBioPortal
 study catalog, figshare, ArrayExpress (EBI BioStudies), PhysioNet, and NCBI SRA.
 
+**Demand-gated source priorities:** Do not promise adapter coverage for sources
+that are not listed above. If a project genuinely needs one of these sources,
+file or implement a focused adapter instead of broadening the adapter surface
+speculatively:
+
+| Source | Use when | Current handling |
+|---|---|---|
+| Open Targets Platform | target-disease, drug-target, genetic-evidence, or disease-gene lookup is load-bearing | Verify manually through the platform downloads/API and record as a reference or dataset entity. |
+| DepMap | CCLE, Achilles/Chronos, dependency, or drug-response matrices are needed | Verify manually through the DepMap downloads portal. |
+| PDC / CPTAC | Proteomics or multi-omics CPTAC files are needed beyond cBioPortal study metadata | Verify manually through the PDC portal/manifest. |
+| clue.io / LINCS | L1000 perturbation signatures or connectivity-map data are needed | Prefer public release indexes first; only use key-gated API paths when credentials exist. |
+| IHEC / BLUEPRINT | Hematopoietic or immune epigenomic reference data are needed | Verify public EpiRR records and mark EGA-controlled children as controlled. |
+| Generic HTTP manifest | A niche source has stable URLs and checksums but no repository adapter | Create project-local dataset entities from the curated manifest; implement an adapter only after repeated use. |
+
 **Search quality:** Results are ranked by lexical relevance to the query (title
 weighted over keywords over description) and deduped across sources by DOI,
 keeping the most relevant / metadata-complete copy. The result table shows

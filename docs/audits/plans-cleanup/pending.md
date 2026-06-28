@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `16`
+- Pending thread count: `15`
 
 ## b-migration-paper-datasets
 
@@ -136,20 +136,6 @@
 - remaining_gaps:
   - Confirm which downstream migration follow-ons have since landed, then update or close the remaining checklist items.
   - Schedule or replace the Bucket C design-session tracking with current durable backlog entries before removing this tracker.
-
-## dataset-adapter-expansion
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-17-dataset-adapter-expansion-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; adapter list is partially implemented and explicitly demand-gated
-    - `docs/plans/2026-04-17-dataset-adapter-expansion-design.md`
-- remaining_gaps:
-  - Decide whether the remaining adapter backlog should be refiled as current tasks or retired as demand-gated ideas.
-  - If retained, summarize adapter source priorities in durable dataset discovery docs instead of leaving an active plan as the only list.
 
 ## downstream-conventions-migration
 
