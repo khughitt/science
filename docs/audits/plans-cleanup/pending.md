@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `21`
+- Pending thread count: `20`
 
 ## b-migration-paper-datasets
 
@@ -180,20 +180,6 @@
 - remaining_gaps:
   - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
   - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
-
-## multi-project-sync
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-03-23-multi-project-sync-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until sync registry/federation architecture is checkpointed
-    - `docs/plans/2026-03-23-multi-project-sync-design.md`
-- remaining_gaps:
-  - No compact durable architecture note was found that explains the registry/config/state file contract and how it relates to newer peers/federation and commons/shared-store concepts.
-  - The March design's cross-project profile vocabulary evolved from cross-project to shared/peers/commons surfaces, so deleting now would leave design rationale scattered across command docs and code.
 
 ## paper-model
 
