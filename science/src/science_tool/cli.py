@@ -6054,6 +6054,68 @@ def benchmark_opportunities(
         Console(width=200).print(calibration_table)
 
 
+def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path]]:
+    if not project_specs:
+        raise click.ClickException("at least one --project label=path is required")
+    parsed: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    for spec in project_specs:
+        if "=" not in spec:
+            raise click.ClickException("--project must use label=path")
+        label, raw_path = spec.split("=", 1)
+        label = label.strip()
+        if not label:
+            raise click.ClickException("--project label must be non-empty")
+        if label in seen:
+            raise click.ClickException(f"duplicate --project label: {label}")
+        path = Path(raw_path).expanduser().resolve()
+        if not path.is_dir():
+            raise click.ClickException(f"--project {label} path does not exist: {path}")
+        seen.add(label)
+        parsed.append((label, path))
+    return parsed
+
+
+@benchmark_group.command("gap-calibration")
+@click.option("--project", "project_specs", multiple=True, help="Project as label=path. Repeat for each project.")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+def benchmark_gap_calibration(
+    project_specs: tuple[str, ...],
+    domain: str | None,
+    facet: str | None,
+    include_commons: bool,
+    output_format: str,
+) -> None:
+    """Summarize benchmark gap calibration across projects."""
+    from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
+
+    projects = _parse_project_specs(project_specs)
+    try:
+        payload = benchmark_gap_calibration_batch(
+            projects,
+            include_commons=include_commons,
+            domain=domain,
+            facet=facet,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
