@@ -1017,7 +1017,7 @@ def _reason_note_sort_key(note: str) -> tuple[int, str]:
         "entity-hint": 1,
         "task-ready": 2,
         "high-baseline": 3,
-        "high-baseline-fallback": 4,
+        "fallback": 4,
     }
     family = note.split(":", 1)[0]
     return (family_order.get(family, 99), note)
@@ -1074,6 +1074,21 @@ def _has_entity_specific_candidate_evidence(score: CandidateScore) -> bool:
     return bool(score.matched_missing_facets or score.matched_hint_facets)
 
 
+def _fallback_reason_notes(score: CandidateScore) -> list[str]:
+    notes: list[str] = []
+    if score.components.get("task_readiness", 0) > 0:
+        notes.append("fallback:task-ready")
+    if score.components.get("baseline_quality", 0) > 0:
+        notes.append("fallback:baseline-quality")
+    if not notes:
+        notes.append("fallback:positive-score" if score.total > 0 else "fallback:available-benchmark")
+    return notes
+
+
+def _is_fallback_candidate(candidate: GapCandidateBenchmarkRow) -> bool:
+    return any(note.startswith("fallback:") for note in candidate["reason_notes"])
+
+
 def _candidate_rows(
     entity_id: str,
     contexts: list[DatasetOpportunityContext],
@@ -1108,7 +1123,7 @@ def _candidate_rows(
             fallback.append(
                 {
                     **row,
-                    "reason_notes": ["high-baseline-fallback"],
+                    "reason_notes": _fallback_reason_notes(score),
                 }
             )
     if scored:
@@ -1173,9 +1188,7 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
         for candidate in candidates
         if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
     ]
-    fallback_candidates = [
-        candidate for candidate in candidates if candidate["reason_notes"] == ["high-baseline-fallback"]
-    ]
+    fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
     scores = [candidate["candidate_score"] for candidate in candidates]
     suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
     matched_hint_facets = Counter(facet for candidate in candidates for facet in candidate["matched_hint_facets"])
@@ -1220,7 +1233,7 @@ def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[B
         candidate["benchmark_id"]
         for row in rows
         for candidate in row["candidate_benchmarks"]
-        if candidate["reason_notes"] == ["high-baseline-fallback"]
+        if _is_fallback_candidate(candidate)
     )
     return _top_benchmark_counts(fallback, top=top)
 

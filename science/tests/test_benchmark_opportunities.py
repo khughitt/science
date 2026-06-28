@@ -1755,7 +1755,7 @@ benchmark:
     candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
     assert len(candidates) == 3
     assert all(candidate["candidate_score"] > 0 for candidate in candidates)
-    assert all(candidate["reason_notes"] == ["high-baseline-fallback"] for candidate in candidates)
+    assert all(candidate["reason_notes"] == ["fallback:task-ready"] for candidate in candidates)
     assert all(candidate["matched_hint_facets"] == [] for candidate in candidates)
     assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
 
