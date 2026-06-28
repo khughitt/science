@@ -1069,6 +1069,7 @@ title: Drug screen CLI summary table gap
     assert "Benchmark Gaps" in result.output
     assert "Gap Calibration Summary" in result.output
     assert "top_fallback_reasons" in result.output
+    assert "top_fallback_selection_reasons" in result.output
     assert "top_fallback_benchmark_shares" in result.output
     assert "fallback_concentration_warning" in result.output
     assert "gap_rows" in result.output

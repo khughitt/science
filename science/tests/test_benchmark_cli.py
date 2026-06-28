@@ -418,6 +418,7 @@ title: Drug screen benchmark gap
     assert "Benchmark Gap Calibration" in result.output
     assert "Aggregate Benchmark Gap Calibration" in result.output
     assert "top_fallback_reasons" in result.output
+    assert "top_fallback_selection_reasons" in result.output
     assert "top_fallback_benchmark_shares" in result.output
     assert "fallback_concentration_warning" in result.output
     assert "demo" in result.output

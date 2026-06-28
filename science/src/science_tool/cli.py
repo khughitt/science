@@ -6221,6 +6221,10 @@ def benchmark_gap_calibration(
         _format_count_rows(aggregate["top_fallback_reasons"], key="reason"),
     )
     aggregate_table.add_row(
+        "top_fallback_selection_reasons",
+        _format_count_rows(aggregate["top_fallback_selection_reasons"], key="reason"),
+    )
+    aggregate_table.add_row(
         "top_fallback_benchmark_shares",
         _format_share_rows(aggregate["top_fallback_benchmark_shares"], key="benchmark_id"),
     )
@@ -6337,13 +6341,14 @@ def benchmark_gaps(
             "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
             "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
             "top_fallback_reasons": summary_payload["top_fallback_reasons"],
+            "top_fallback_selection_reasons": summary_payload["top_fallback_selection_reasons"],
             "top_fallback_benchmark_shares": summary_payload["top_fallback_benchmark_shares"],
             "fallback_concentration_warning": summary_payload["fallback_concentration_warning"],
         }
         for field, value in scalar_rows.items():
             if field == "top_fallback_benchmark_shares":
                 rendered = _format_share_rows(value, key="benchmark_id")
-            elif field == "top_fallback_reasons":
+            elif field in {"top_fallback_reasons", "top_fallback_selection_reasons"}:
                 rendered = _format_count_rows(value, key="reason")
             else:
                 rendered = json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value)
