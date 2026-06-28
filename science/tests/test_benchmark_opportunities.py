@@ -967,6 +967,72 @@ benchmark:
     assert row["current_matches"][0]["relative_score"] < 15
 
 
+def test_gaps_report_prefers_taskless_weak_over_missing_facet(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0003-taskless-spatial-proteomics",
+        """
+id: hypothesis:0003-taskless-spatial-proteomics
+type: hypothesis
+title: Spatial proteomics taskless coverage
+""",
+        body="Spatial proteomics transfer remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial-facets",
+        """
+id: dataset:spatial-facets
+type: dataset
+title: Spatial Facets
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  limitations:
+    - Facets only.
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "unrelated-task",
+        """
+id: dataset:unrelated-task
+type: dataset
+title: Unrelated Task
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    row = payload["benchmark_gaps"][0]
+    assert row["gap_level"] == "weak"
+    assert row["missing_modalities"] == ["proteomics"]
+    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["current_matches"][0]["task_id"] is None
+    assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated-task"
+
+
 def test_gaps_report_rejects_blank_or_unknown_facet(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
