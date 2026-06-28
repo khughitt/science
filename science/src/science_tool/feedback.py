@@ -492,30 +492,36 @@ def render_report(
     *,
     status: str | None = None,
     project: str | None = None,
+    concern: str | None = None,
 ) -> str:
-    """Render a human-readable markdown report of feedback entries."""
-    entries = list_entries(feedback_dir, status=status, project=project)
+    """Render a human-readable markdown report grouped by concern then target."""
+    entries = list_entries(feedback_dir, status=status, project=project, concern=concern)
 
     if not entries:
         return "No feedback entries found.\n"
 
-    # Group by target
-    by_target: dict[str, list[FeedbackEntry]] = {}
+    by_concern: dict[str, dict[str, list[FeedbackEntry]]] = {}
     for entry in entries:
-        by_target.setdefault(entry.target, []).append(entry)
+        by_concern.setdefault(entry.concern, {}).setdefault(entry.target, []).append(entry)
 
     lines = ["# Feedback Report", ""]
-    for target, group in sorted(by_target.items()):
-        lines.append(f"## {target}")
+    # Alphabetical order is intentional: methodology:* groups sort before
+    # tooling, giving the methodology lens top billing. A future reorder must
+    # not break the Task-5 test that relies on this.
+    for concern_value, by_target in sorted(by_concern.items()):
+        lines.append(f"## {concern_value}")
         lines.append("")
-        for entry in group:
-            status_badge = f"[{entry.status}]"
-            lines.append(f"- **{entry.id}** {status_badge} ({entry.category}) — {entry.summary}")
-            if entry.recurrence > 1:
-                lines.append(f"  - Recurrence: {entry.recurrence}")
-            if entry.resolution:
-                lines.append(f"  - Resolution: {entry.resolution}")
-        lines.append("")
+        for target, group in sorted(by_target.items()):
+            lines.append(f"### {target}")
+            lines.append("")
+            for entry in group:
+                status_badge = f"[{entry.status}]"
+                lines.append(f"- **{entry.id}** {status_badge} ({entry.category}) — {entry.summary}")
+                if entry.recurrence > 1:
+                    lines.append(f"  - Recurrence: {entry.recurrence}")
+                if entry.resolution:
+                    lines.append(f"  - Resolution: {entry.resolution}")
+            lines.append("")
 
     return "\n".join(lines)
 

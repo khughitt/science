@@ -553,3 +553,19 @@ def test_cluster_for_triage_includes_concern(tmp_path):
     assert concerns == {"methodology:statistics", "tooling"}
     # Same target + similar summary but different concern must not merge.
     assert all(row["count"] == 1 for row in rows)
+
+
+def test_render_report_groups_by_concern_then_target(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="tool issue", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="assumption gap", concern="methodology:statistics"))
+
+    report = render_report(tmp_path)
+    assert "## methodology:statistics" in report
+    assert "### skill:statistics" in report
+    assert "## tooling" in report
+    # concern heading precedes its target subheading
+    assert report.index("## methodology:statistics") < report.index("### skill:statistics")
+
+    filtered = render_report(tmp_path, concern="methodology:*")
+    assert "skill:statistics" in filtered
+    assert "command:x" not in filtered
