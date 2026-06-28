@@ -23,7 +23,8 @@ All four lints respect the same scope rules as `science markers scan`:
 - Skips YAML frontmatter.
 - Skips fenced code blocks (triple-backtick).
 - Skips inline code (single-backtick wrapped).
-- Skips lines starting with `#` (markdown headers), `-`/`*` (lists), or `1.` (ordered list) for the numeric-anchor check.
+- Skips lines starting with `#` (markdown headers), Markdown list items including wrapped continuation lines, or `|` (markdown tables) for the numeric-anchor check.
+- Skips numeric fragments embedded in alphanumeric identifiers (for example, `t070` is not treated as the standalone numeric claim `070`).
 - Skips task-list headers of the shape `## [t088] Title` for the short-form-ids check.
 
 ## Project config

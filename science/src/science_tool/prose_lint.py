@@ -310,14 +310,15 @@ def detect_frontmatter_inline_gaps(
 # Numeric claim: float, integer with %, ratio. Excludes bare integers <100
 # (too noisy) and bare 4-digit years (handled separately below).
 _NUMERIC_CLAIM_RE = re.compile(
-    r"(?<![0-9.])"
+    r"(?<![A-Za-z0-9_.])"
     r"(?:[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
-    r"(?![0-9.])"
+    r"(?![A-Za-z0-9_.])"
 )
 # Standalone 4-digit years (1900-2099) — never claims, always exclude.
 _BARE_YEAR_RE = re.compile(r"^(?:19\d{2}|20\d{2})$")
 # Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
 _HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
+_LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
 
 
 def detect_numeric_anchor(
@@ -346,6 +347,7 @@ def detect_numeric_anchor(
     lines = text.splitlines()
     issues: list[LintIssue] = []
     in_fence = False
+    in_list_item = False
     # Pre-compute paragraph boundaries (1-based line index → paragraph index).
     paragraph_id_per_line: list[int] = [0] * (len(lines) + 1)
     para_id = 0
@@ -367,7 +369,16 @@ def detect_numeric_anchor(
             continue
         if in_fence:
             continue
+        if not raw_line.strip():
+            in_list_item = False
+            continue
         if _HEADER_OR_LIST_RE.match(raw_line):
+            in_list_item = bool(_LIST_RE.match(raw_line))
+            continue
+        if in_list_item and raw_line.startswith((" ", "\t")):
+            continue
+        in_list_item = False
+        if raw_line.lstrip().startswith("|"):
             continue
         line = strip_inline_code(raw_line)
         for match in _NUMERIC_CLAIM_RE.finditer(line):

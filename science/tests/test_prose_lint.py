@@ -316,6 +316,39 @@ class TestNumericAnchor:
         path = _write(tmp_path, "## 3.2 Methods\n\nText.\n")
         assert detect_numeric_anchor(path) == []
 
+    def test_no_flag_in_markdown_table_row(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "| panel_id | n | median_tmb_post |\n"
+            "|---|---:|---:|\n"
+            "| MSK-IMPACT-341 | 2,809 | 3.371 |\n",
+        )
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_numeric_fragment_inside_alphanumeric_id(self, tmp_path):
+        path = _write(tmp_path, "The t070 fix changed the t077 pooled output surface.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_in_wrapped_markdown_list_continuation(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "- Lawrence MS, et al. 2014. Discovery across 21 tumour\n"
+            "  types. Nature 505:495-501. PMID 24390350.\n"
+            "\n"
+            "Improvement of 47% was observed.\n",
+        )
+        issues = detect_numeric_anchor(path)
+        assert len(issues) == 1
+        assert issues[0].match == "47%"
+
+    def test_no_flag_in_wrapped_ordered_list_continuation(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "1. Dimensionality reduction: Jaccard-distanced t-SNE to\n"
+            "   2D coordinates before clustering.\n",
+        )
+        assert detect_numeric_anchor(path) == []
+
     def test_no_flag_on_year_alone(self, tmp_path):
         # Years are too noisy to flag as bare numerics.
         path = _write(tmp_path, "In 2022, the model was published.\n")
