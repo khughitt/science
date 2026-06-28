@@ -4,7 +4,7 @@ type: "pre-registration"
 title: "{{title}}"
 status: "committed"
 committed: "{{YYYY-MM-DD}}"
-spec: ""  # optional path to design/spec doc, e.g. doc/specs/2026-04-25-<slug>-design.md
+spec: ""  # optional path to design/spec doc, e.g. entities/design/<NNNN>-<slug>-design.md
 related: []  # hypothesis IDs, inquiry slugs, or task IDs this pre-reg covers
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
