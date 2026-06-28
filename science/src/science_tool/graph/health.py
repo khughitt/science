@@ -313,6 +313,10 @@ class ValidationFinding(TypedDict):
     task: str | None
 
 
+class AcceptedValidationFinding(ValidationFinding):
+    accepted_reason: str
+
+
 class SchemaInvalidFinding(TypedDict):
     """A source entity dropped from the health sweep because it failed schema validation.
 
@@ -344,6 +348,7 @@ class HealthReport(TypedDict):
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     validation: list[ValidationFinding]
+    accepted_validation: list[AcceptedValidationFinding]
     prose_epistemics: dict[str, object]
     total_issues: int
     _meta: NotRequired["HealthMeta"]
@@ -449,6 +454,69 @@ def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
         for result in run_result.results
         if result.severity is not Severity.INFO
     ]
+
+
+def _text_matches(value: str | None, needles: object) -> bool:
+    if needles is None:
+        return True
+    if isinstance(needles, str):
+        return needles in (value or "")
+    if isinstance(needles, list):
+        return all(isinstance(needle, str) and needle in (value or "") for needle in needles)
+    return False
+
+
+def _accepted_validation_entries(project_root: Path) -> list[dict[str, object]]:
+    manifest_path = project_root / "science.yaml"
+    try:
+        manifest = _yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return []
+    health = manifest.get("health") if isinstance(manifest, dict) else None
+    if not isinstance(health, dict):
+        return []
+    entries = health.get("accepted_validation")
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _accepts_validation_finding(entry: dict[str, object], finding: ValidationFinding) -> bool:
+    rule = entry.get("rule")
+    if not isinstance(rule, str) or finding.get("rule") != rule:
+        return False
+    severity = entry.get("severity")
+    if isinstance(severity, str) and finding.get("severity") != severity:
+        return False
+    path = entry.get("path")
+    if isinstance(path, str) and finding.get("path") != path:
+        return False
+    task = entry.get("task")
+    if isinstance(task, str) and finding.get("task") != task:
+        return False
+    return _text_matches(finding.get("message"), entry.get("message_contains"))
+
+
+def _partition_accepted_validation_findings(
+    project_root: Path,
+    findings: list[ValidationFinding],
+) -> tuple[list[ValidationFinding], list[AcceptedValidationFinding]]:
+    entries = _accepted_validation_entries(project_root)
+    if not entries:
+        return findings, []
+    remaining: list[ValidationFinding] = []
+    accepted: list[AcceptedValidationFinding] = []
+    for finding in findings:
+        match = next((entry for entry in entries if _accepts_validation_finding(entry, finding)), None)
+        if match is None:
+            remaining.append(finding)
+            continue
+        reason = match.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            remaining.append(finding)
+            continue
+        accepted.append({**finding, "accepted_reason": reason.strip()})
+    return remaining, accepted
 
 
 def _validation_health_severity(severity: object) -> str:
@@ -655,7 +723,10 @@ def build_health_report(
     ]
     legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
     invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
-    validation = cast("list[ValidationFinding]", check_results["validate"])
+    validation, accepted_validation = _partition_accepted_validation_findings(
+        project_root,
+        cast("list[ValidationFinding]", check_results["validate"]),
+    )
     prose_epistemics = cast("dict[str, object]", check_results["prose_epistemics"])
     prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
     prose_epistemics_issue_count = (
@@ -723,6 +794,7 @@ def build_health_report(
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
         "validation": validation,
+        "accepted_validation": accepted_validation,
         "prose_epistemics": prose_epistemics,
         "total_issues": total_issues,
     }

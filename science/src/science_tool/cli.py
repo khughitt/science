@@ -4624,6 +4624,7 @@ def health_command(
     entity_identity = report.get("entity_identity") or []
     schema_invalid = report.get("schema_invalid") or []
     validation = report.get("validation") or []
+    accepted_validation = report.get("accepted_validation") or []
     prose_epistemics = report.get("prose_epistemics") or {}
     raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
     prose_epistemics_findings: list[dict[str, object]] = (
@@ -4652,6 +4653,8 @@ def health_command(
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
+        if accepted_validation:
+            click.echo(f"Accepted validation warnings: {len(accepted_validation)}")
         return
 
     console = get_console()
@@ -5386,8 +5389,6 @@ def sync_rebuild(config_path: str | None) -> None:
     )
     click.echo(f"Rebuild complete. {report.entities_total} entities, {report.relations_total} relations.")
 
-
-# ── feedback ────────────────────────────────────────────────────────────────
 
 @main.group()
 def telemetry() -> None:

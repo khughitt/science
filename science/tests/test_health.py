@@ -481,7 +481,76 @@ class TestBuildHealthReport:
                 "task": None,
             },
         ]
+        assert report["accepted_validation"] == []
         assert report["total_issues"] == 2
+
+    def test_build_health_report_accepts_configured_validation_warnings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import science_tool.validate.runner as validate_runner
+        from science_tool.graph.health import build_health_report
+        from science_tool.validate.result import Result, Severity
+        from science_tool.validate.runner import RunResult
+
+        (tmp_path / "science.yaml").write_text(
+            """
+name: test
+health:
+  accepted_validation:
+    - rule: belief.fragile-single-line
+      severity: warning
+      message_contains:
+        - proposition:p
+        - evidence-line:e1
+      reason: Reviewed single-line sensitivity; this proposition intentionally remains fragile.
+""".lstrip(),
+            encoding="utf-8",
+        )
+
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool, enable_python_sidecar: bool) -> RunResult:
+            return RunResult(
+                results=[
+                    Result(
+                        Severity.WARN,
+                        None,
+                        None,
+                        "proposition:p flips when dropping evidence-line:e1",
+                        "belief.fragile-single-line",
+                        None,
+                    ),
+                    Result(Severity.WARN, None, None, "other warning", "document_structure", None),
+                ],
+                errors=0,
+                warnings=2,
+                infos=0,
+            )
+
+        monkeypatch.setattr(validate_runner, "run", fake_run)
+
+        report = build_health_report(tmp_path, checks={"validate"})
+
+        assert report["validation"] == [
+            {
+                "severity": "warning",
+                "path": None,
+                "line": None,
+                "message": "other warning",
+                "rule": "document_structure",
+                "task": None,
+            }
+        ]
+        assert report["accepted_validation"] == [
+            {
+                "severity": "warning",
+                "path": None,
+                "line": None,
+                "message": "proposition:p flips when dropping evidence-line:e1",
+                "rule": "belief.fragile-single-line",
+                "task": None,
+                "accepted_reason": "Reviewed single-line sensitivity; this proposition intentionally remains fragile.",
+            }
+        ]
+        assert report["total_issues"] == 1
 
     def test_build_health_report_validate_check_disables_legacy_sidecar_subprocess(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
