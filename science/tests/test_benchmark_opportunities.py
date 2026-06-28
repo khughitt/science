@@ -2049,3 +2049,29 @@ title: Temporal benchmark gap
     assert payload["aggregate"]["fallback_candidate_ratio"] == 0.0
     assert payload["aggregate"]["top_suggested_facets"][0] == {"facet": "perturbation", "count": 1}
     assert payload["aggregate"]["top_matched_hint_facets"] == [{"facet": "perturbation", "count": 1}]
+
+
+def test_gap_calibration_batch_preserves_commons_notices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
+
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_entity(
+        project,
+        "hypotheses",
+        "0001-drug",
+        """
+id: hypothesis:0001-drug
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+
+    payload = benchmark_gap_calibration_batch([("demo", project)], include_commons=True)
+
+    assert payload["projects"][0]["commons_notice"] is not None
+    assert payload["commons_notices"] == [{"label": "demo", "notice": payload["projects"][0]["commons_notice"]}]
