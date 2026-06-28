@@ -138,6 +138,7 @@ def list_entries(
     target: str | None = None,
     category: str | None = None,
     project: str | None = None,
+    concern: str | None = None,
 ) -> list[FeedbackEntry]:
     """Filter feedback entries. Default: open entries only. Pass status=None for all."""
     entries = load_all_entries(feedback_dir)
@@ -150,6 +151,8 @@ def list_entries(
         entries = [e for e in entries if e.category == category]
     if project is not None:
         entries = [e for e in entries if e.project == project]
+    if concern is not None:
+        entries = [e for e in entries if fnmatch(e.concern, concern)]
 
     # Sort by recurrence descending, then date descending (most recent first)
     entries.sort(key=lambda e: (e.recurrence, e.created), reverse=True)
@@ -167,6 +170,7 @@ def update_entry(
     summary: str | None = None,
     detail: str | None = None,
     related: list[str] | None = None,
+    concern: str | None = None,
 ) -> FeedbackEntry:
     """Update fields on an existing entry. Raises FileNotFoundError if not found."""
     path = feedback_dir / f"{entry_id}.yaml"
@@ -191,6 +195,8 @@ def update_entry(
         entry.detail = detail
     if related is not None:
         entry.related = related
+    if concern is not None:
+        entry.concern = _validate_concern_value(concern)
 
     save_entry(feedback_dir, entry)
     return entry

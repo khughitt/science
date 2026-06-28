@@ -503,3 +503,28 @@ def test_legacy_yaml_without_concern_loads_as_tooling(tmp_path):
 def test_valid_concerns_membership():
     assert "tooling" in VALID_CONCERNS
     assert "methodology:statistics" in VALID_CONCERNS
+
+
+def test_list_entries_filters_concern_glob(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="a", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="b", concern="methodology:statistics"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-003", target="skill:qa", summary="c", concern="methodology:qa"))
+
+    methodology = list_entries(tmp_path, status="open", concern="methodology:*")
+    assert {e.id for e in methodology} == {"fb-2026-06-28-002", "fb-2026-06-28-003"}
+
+    tooling = list_entries(tmp_path, status="open", concern="tooling")
+    assert {e.id for e in tooling} == {"fb-2026-06-28-001"}
+
+
+def test_update_entry_sets_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
+    updated = update_entry(tmp_path, "fb-2026-06-28-001", concern="methodology:statistics")
+    assert updated.concern == "methodology:statistics"
+    assert load_entry(tmp_path / "fb-2026-06-28-001.yaml").concern == "methodology:statistics"
+
+
+def test_update_entry_rejects_unknown_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="x", summary="a"))
+    with pytest.raises(ValueError):
+        update_entry(tmp_path, "fb-2026-06-28-001", concern="bogus")
