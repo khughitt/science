@@ -6059,6 +6059,7 @@ def benchmark_opportunities(
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--calibration-report", is_flag=True, help="Include gap token/candidate calibration details.")
 @click.option(
     "--format",
     "output_format",
@@ -6077,6 +6078,7 @@ def benchmark_gaps(
     entity_ref: str | None,
     facet: str | None,
     include_commons: bool,
+    calibration_report: bool,
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6102,6 +6104,7 @@ def benchmark_gaps(
             entity_id=entity_id,
             domain=domain,
             facet=facet,
+            calibration_report=calibration_report,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -6117,23 +6120,30 @@ def benchmark_gaps(
     rows = payload["benchmark_gaps"]
     if not rows:
         click.echo("No benchmark gaps.")
-        return
+    else:
+        table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
+        for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
+            candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
+            table.add_row(
+                row["entity_id"],
+                row["gap_level"],
+                missing,
+                str(len(row["current_matches"])),
+                candidates,
+                row["reason"],
+            )
+        Console(width=200).print(table)
 
-    table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
-    for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for row in rows:
-        missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
-        candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
-        table.add_row(
-            row["entity_id"],
-            row["gap_level"],
-            missing,
-            str(len(row["current_matches"])),
-            candidates,
-            row["reason"],
-        )
-    Console(width=200).print(table)
+    if calibration_report:
+        calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
+        calibration_table.add_column("field", overflow="fold", no_wrap=False)
+        calibration_table.add_column("value", overflow="fold", no_wrap=False)
+        for field, value in payload["calibration"].items():
+            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+        Console(width=200).print(calibration_table)
 
 
 @main.group("dataset")

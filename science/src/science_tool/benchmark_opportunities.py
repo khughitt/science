@@ -328,6 +328,34 @@ class CandidateScore:
 CandidateScoreIndex = dict[tuple[str, str], CandidateScore]
 
 
+class GapEntityDroppedTokens(TypedDict):
+    stop: list[str]
+    broad_entity: list[str]
+    short: list[str]
+
+
+class GapEntityEvidence(TypedDict):
+    entity_tokens: list[str]
+    dropped_tokens: GapEntityDroppedTokens
+    facet_hints: list[str]
+    gap_level_reason: str
+
+
+class GapCandidateEvidence(TypedDict):
+    entity_id: str
+    benchmark_id: str
+    candidate_score: int
+    dropped_dataset_facets: list[str]
+    components: dict[str, int]
+    reason_notes: list[str]
+
+
+class GapCalibrationPayload(TypedDict):
+    enabled: bool
+    gap_entity_evidence: NotRequired[dict[str, GapEntityEvidence]]
+    candidate_evidence: NotRequired[list[GapCandidateEvidence]]
+
+
 class BenchmarkGapRow(TypedDict):
     entity_id: str
     entity_title: str
@@ -351,6 +379,7 @@ class BenchmarkGapSummary(TypedDict):
 class BenchmarkGapReport(TypedDict):
     benchmark_gaps: list[BenchmarkGapRow]
     summary: BenchmarkGapSummary
+    calibration: GapCalibrationPayload
     commons_notice: str | None
 
 
@@ -1190,6 +1219,72 @@ def _calibration_payload(
     }
 
 
+def _dataset_broad_facets(context: DatasetOpportunityContext) -> list[str]:
+    evidence = _token_evidence_from_text(
+        *context.dataset.domains,
+        *context.dataset.modalities,
+        *context.dataset.signal_types,
+        *context.dataset.benchmark_kinds,
+        broad_tokens=BROAD_NON_SCOREABLE_FACETS,
+    )
+    return sorted(evidence.broad)
+
+
+def _gap_calibration_payload(
+    rows: list[BenchmarkGapRow],
+    *,
+    entities: list[ProjectBenchmarkEntity],
+    contexts: list[DatasetOpportunityContext],
+    candidate_scores: CandidateScoreIndex,
+    enabled: bool,
+) -> GapCalibrationPayload:
+    if not enabled:
+        return {"enabled": False}
+    entity_by_id = {entity.id: entity for entity in entities}
+    context_by_id = {context.dataset.id: context for context in contexts}
+    gap_entity_evidence: dict[str, GapEntityEvidence] = {}
+    candidate_evidence: list[GapCandidateEvidence] = []
+    for row in rows:
+        entity = entity_by_id.get(row["entity_id"])
+        if entity is not None:
+            evidence = _token_evidence_from_text(
+                entity.id,
+                entity.title,
+                entity.content_preview,
+                broad_tokens=ENTITY_SUPPRESSED_TOKENS,
+            )
+            gap_entity_evidence[row["entity_id"]] = {
+                "entity_tokens": sorted(entity.tokens),
+                "dropped_tokens": {
+                    "stop": sorted(evidence.stop),
+                    "broad_entity": sorted(evidence.broad),
+                    "short": sorted(evidence.short),
+                },
+                "facet_hints": list(row["suggested_search_facets"]),
+                "gap_level_reason": row["reason"],
+            }
+        for candidate in row["candidate_benchmarks"]:
+            context = context_by_id.get(candidate["benchmark_id"])
+            if context is None:
+                continue
+            score = candidate_scores[(row["entity_id"], candidate["benchmark_id"])]
+            candidate_evidence.append(
+                {
+                    "entity_id": row["entity_id"],
+                    "benchmark_id": candidate["benchmark_id"],
+                    "candidate_score": score.total,
+                    "dropped_dataset_facets": _dataset_broad_facets(context),
+                    "components": dict(score.components),
+                    "reason_notes": list(candidate["reason_notes"]),
+                }
+            )
+    return {
+        "enabled": True,
+        "gap_entity_evidence": gap_entity_evidence,
+        "candidate_evidence": candidate_evidence,
+    }
+
+
 def _build_opportunity_report(
     entities: list[ProjectBenchmarkEntity],
     contexts: list[DatasetOpportunityContext],
@@ -1281,6 +1376,7 @@ def gaps_report(
     entity_id: str | None = None,
     domain: str | None = None,
     facet: str | None = None,
+    calibration_report: bool = False,
 ) -> BenchmarkGapReport:
     normalized_facet = _normalized_gap_facet(facet)
     analysis = _opportunity_analysis(
@@ -1288,6 +1384,7 @@ def gaps_report(
         include_commons=include_commons,
         entity_id=entity_id,
         domain=domain,
+        include_prose_tokens=False,
     )
     opportunity = analysis.report
     matched = _matched_by_entity(opportunity["matched_opportunities"])
@@ -1352,8 +1449,16 @@ def gaps_report(
         )
 
     rows.sort(key=lambda row: (_gap_level_sort_key(row["gap_level"]), row["entity_id"]))
+    calibration = _gap_calibration_payload(
+        rows,
+        entities=analysis.entities,
+        contexts=analysis.contexts,
+        candidate_scores=candidate_score_index,
+        enabled=calibration_report,
+    )
     return {
         "benchmark_gaps": rows,
         "summary": _gap_summary(rows, entities_total=len(entity_ids)),
+        "calibration": calibration,
         "commons_notice": opportunity["commons_notice"],
     }

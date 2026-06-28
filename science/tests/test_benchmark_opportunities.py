@@ -934,6 +934,84 @@ title: Perturbation gap
     assert payload["benchmark_gaps"][0]["missing_signal_types"] == ["perturbation"]
 
 
+def test_gaps_report_calibration_payload_explains_gap_and_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0021-calibration",
+        """
+id: hypothesis:0021-calibration
+type: hypothesis
+title: Drug screen summary gap
+""",
+        body="Summary response needs drug compound screening evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology, cancer]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+
+    payload = gaps_report(tmp_path, calibration_report=True)
+
+    assert payload["calibration"]["enabled"] is True
+    gap_entity_evidence = payload["calibration"].get("gap_entity_evidence")
+    assert gap_entity_evidence is not None
+    evidence = gap_entity_evidence["hypothesis:0021-calibration"]
+    assert "perturbation" in evidence["facet_hints"]
+    assert "response" in evidence["dropped_tokens"]["stop"]
+    assert "summary" in evidence["dropped_tokens"]["broad_entity"]
+    candidate_evidence = payload["calibration"].get("candidate_evidence")
+    assert candidate_evidence is not None
+    candidate = candidate_evidence[0]
+    assert candidate["entity_id"] == "hypothesis:0021-calibration"
+    assert candidate["benchmark_id"] == "dataset:sciplex"
+    assert candidate["candidate_score"] == sum(candidate["components"].values())
+    assert candidate["components"]["hint_facet_overlap"] > 0
+    assert "cancer" in candidate["dropped_dataset_facets"]
+
+
+def test_benchmark_gaps_cli_calibration_report_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0022-cli-calibration",
+        """
+id: hypothesis:0022-cli-calibration
+type: hypothesis
+title: Perturbation CLI gap
+""",
+        body="Perturbation evidence is needed.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-report", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["calibration"]["enabled"] is True
+    assert "gap_entity_evidence" in payload["calibration"]
+
+
 def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> None:
     result = _invoke_gaps(tmp_path, "--entity", "hypothesis:nope")
 
