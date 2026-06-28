@@ -52,6 +52,79 @@ computed from the graph, evidence, provenance, or health machinery. Belief
 state, support summaries, dispute summaries, freshness, and health status should
 be recomputed rather than manually patched.
 
+## Source Entity CLI
+
+Use `science entity` for routine source-authored entity work. These commands
+write Markdown owners and then validate the prospective source load. They do not
+mutate `knowledge/graph.trig`; rebuild the graph after durable source edits:
+
+```bash
+science entity create question "What explains the observed signal?"
+science entity edit question:0001-what-explains-the-observed-signal --status answered
+science entity note question:0001-what-explains-the-observed-signal "Resolved by interpretation:0001-model-check."
+science entity list question
+science graph build
+```
+
+The generic command surface is:
+
+| Command | Purpose |
+|---|---|
+| `science entity create <kind> <title>` | Create a new Markdown owner under the kind's path policy. |
+| `science entity show <ref>` | Show the loaded source record. |
+| `science entity edit <ref>` | Update frontmatter metadata such as `title`, `status`, `related`, and `source_refs`. Relation and source-ref edits are additive. |
+| `science entity note <ref> <note>` | Append a dated note under `## Notes` and advance `updated`. |
+| `science entity list [kind]` | List source-authored entities, with `--kind`, `--status`, `--related`, `--include-hidden`, and `--include-archived` filters. |
+| `science entity sections <kind>` | Inspect template section keys for kinds backed by packaged templates. |
+| `science entity neighbors <ref>` | Query graph neighbors from the materialized graph. This may warn when source files are newer than `knowledge/graph.trig`. |
+
+Typed wrappers call the same writer and validation path as `science entity`.
+Use them when they add kind-specific ergonomics:
+
+| Wrapper | Notes |
+|---|---|
+| `science questions create` | Source-authored questions. |
+| `science hypotheses create` | Supports `--phase candidate` to include promotion criteria. |
+| `science discussions create` | `--focus <ref>` is stored as a related reference. |
+| `science interpretations create` | `--input <ref-or-path>` is stored as a source reference. |
+| `science propositions create` | Durable proposition sources; prefer this over throwaway `graph add proposition` for project work. |
+| `science evidence-lines create` | Durable support/dispute evidence line sources. |
+
+### CLI Path And Identity Policy
+
+The source entity CLI creates only kinds that have a built-in Markdown path
+policy. Current owners live under `entities/` according to the core profile, for
+example `entities/questions/`, `entities/hypotheses/`,
+`entities/propositions/`, `entities/evidence-lines/`, and
+`entities/interpretations/`. The `doc/` tree is prose-only in layout v3, and
+`knowledge/` is generated state.
+
+By default, filenames follow the entity id local part. Numeric kinds generate a
+four-digit local part plus slug, such as `question:0001-observed-signal`.
+Slug and id-local kinds use a deterministic kebab-case slug. Citekey and
+verbatim kinds require an explicit `--id`, and singleton kinds are not created
+through this path. Use `--slug` to override only the generated slug component,
+or `--id` to set the complete canonical id; do not pass both.
+
+`--path` is intentionally narrow: it must be a project-relative `.md` path under
+`entities/`, must not be absolute, and must not contain `..`. It is for unusual
+source placement inside the owner tree, not for writing entity owners into
+`doc/`, `specs/`, overlays, or generated graph files.
+
+References accepted by `show`, `edit`, `note`, and `neighbors` are exact
+canonical ids or unambiguous local shorthands. Registered shortforms such as
+`q1`, `h1`, `p1`, `i1`, `d1`, and `t1` resolve to the corresponding core kind
+when they identify exactly one loaded source record.
+
+### Source Write Boundary
+
+`science graph add ...` remains available for graph-level experiments and
+legacy workflows, but it is not the durable source-authoring surface. For
+project knowledge that should survive `science graph build`, create or edit the
+source entity file. The graph build step materializes those source records into
+`knowledge/graph.trig`; direct graph mutations are overwritten by the next
+materialization.
+
 ## Entity Loading And Storage Adapters
 
 Science loads authored entities through one model family, not through separate

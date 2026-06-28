@@ -1,10 +1,10 @@
 {
-  "file_count": 197,
-  "generated_at": "2026-06-28T18:37:28+00:00",
+  "file_count": 195,
+  "generated_at": "2026-06-28T18:50:09+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 125,
+  "thread_count": 124,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -2396,33 +2396,6 @@
         "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "plan"
       },
       "thread_id": "source-compiler-snapshot-freshness"
-    },
-    {
-      "earliest_file_date": "2026-04-28",
-      "files": [
-        "docs/plans/2026-04-28-source-entity-cli-design.md",
-        "docs/plans/2026-04-28-source-entity-cli-implementation.md"
-      ],
-      "latest_file_date": "2026-04-28",
-      "normalized_slug": "source-entity-cli",
-      "raw_slugs": {
-        "docs/plans/2026-04-28-source-entity-cli-design.md": "source-entity-cli-design",
-        "docs/plans/2026-04-28-source-entity-cli-implementation.md": "source-entity-cli-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-28-source-entity-cli-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-04-28-source-entity-cli-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-28-source-entity-cli-design.md": "design",
-        "docs/plans/2026-04-28-source-entity-cli-implementation.md": "implementation"
-      },
-      "thread_id": "source-entity-cli"
     },
     {
       "earliest_file_date": "2026-06-16",
