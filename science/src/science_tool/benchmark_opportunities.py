@@ -45,6 +45,7 @@ HIGH_VALUE_SIGNALS = frozenset(HIGH_VALUE_SIGNAL_POINTS)
 HIGH_VALUE_MODALITIES = frozenset(HIGH_VALUE_MODALITY_POINTS)
 GAP_MODALITIES = ("proteomics", "spatial", "multimodal")
 GAP_SIGNAL_TYPES = ("perturbation", "time-series", "cross-context-generalization")
+BROAD_NON_SCOREABLE_FACETS = frozenset({"biology"})
 KIND_SIGNAL_RULES = {
     "perturbation": ("perturbation-response", 10),
     "dynamic": ("time-series", 8),
@@ -130,6 +131,7 @@ class DatasetOpportunityContext:
     baseline: Score
     readiness_penalty: int
     controlled_facet_tokens: frozenset[str]
+    scoreable_facet_tokens: frozenset[str]
     prose_tokens: frozenset[str]
     related_belief_tokens: frozenset[str]
 
@@ -453,6 +455,10 @@ def _controlled_facet_tokens(dataset: OpportunityDataset) -> frozenset[str]:
     )
 
 
+def _scoreable_facet_tokens(controlled_facet_tokens: frozenset[str]) -> frozenset[str]:
+    return frozenset(token for token in controlled_facet_tokens if token not in BROAD_NON_SCOREABLE_FACETS)
+
+
 def _benchmark_prose_tokens(dataset: OpportunityDataset) -> frozenset[str]:
     task_prose: list[str] = []
     for task in dataset.tasks:
@@ -485,11 +491,13 @@ def _related_belief_tokens(dataset: OpportunityDataset) -> frozenset[str]:
 def _dataset_context(dataset: OpportunityDataset, *, include_prose_tokens: bool) -> DatasetOpportunityContext:
     dataset_readiness = readiness_weight(dict(dataset.frontmatter))
     readiness_float, _readiness_flags = dataset_readiness
+    controlled_facet_tokens = _controlled_facet_tokens(dataset)
     return DatasetOpportunityContext(
         dataset=dataset,
         baseline=baseline_score(dataset, readiness=dataset_readiness),
         readiness_penalty=0 if readiness_float >= 0.5 else -10,
-        controlled_facet_tokens=_controlled_facet_tokens(dataset),
+        controlled_facet_tokens=controlled_facet_tokens,
+        scoreable_facet_tokens=_scoreable_facet_tokens(controlled_facet_tokens),
         prose_tokens=_benchmark_prose_tokens(dataset) if include_prose_tokens else frozenset(),
         related_belief_tokens=_related_belief_tokens(dataset),
     )
@@ -513,23 +521,25 @@ def _relative_score(
 ) -> Score | None:
     dataset = context.dataset
     id_hits = sorted(entity.id_tokens & context.related_belief_tokens)
-    facet_hits = sorted(entity.tokens & context.controlled_facet_tokens)
+    facet_hits = sorted(entity.tokens & context.scoreable_facet_tokens)
     if not id_hits and not facet_hits:
         return None
 
     related_points = 40 if id_hits else 0
     facet_points = min(len(facet_hits) * 8, 25)
     kind_points, kind_notes = _kind_signal_points(entity.tokens, dataset)
+    has_specific_match = bool(id_hits or facet_hits or kind_notes)
 
     diversity_points = 0
     diversity_notes: list[str] = []
-    for value in (*_normalized_values(dataset.modalities), *_normalized_values(dataset.signal_types)):
-        key = (entity.id, value)
-        if key not in seen_facets:
-            seen_facets.add(key)
-            if value in HIGH_VALUE_MODALITIES or value in HIGH_VALUE_SIGNALS:
-                diversity_points += 5
-                diversity_notes.append(f"diversity:{value}")
+    if has_specific_match:
+        for value in (*_normalized_values(dataset.modalities), *_normalized_values(dataset.signal_types)):
+            key = (entity.id, value)
+            if key not in seen_facets:
+                seen_facets.add(key)
+                if value in HIGH_VALUE_MODALITIES or value in HIGH_VALUE_SIGNALS:
+                    diversity_points += 5
+                    diversity_notes.append(f"diversity:{value}")
     diversity_points = min(diversity_points, 15)
 
     components = {
@@ -669,7 +679,7 @@ def _calibration_match_evidence(
                 "benchmark_id": row["benchmark_id"],
                 "task_id": row["task_id"],
                 "id_overlap": sorted(entity.id_tokens & context.related_belief_tokens),
-                "facet_overlap": sorted(entity.tokens & context.controlled_facet_tokens),
+                "facet_overlap": sorted(entity.tokens & context.scoreable_facet_tokens),
                 "score_components": _score_components_copy(row),
             }
         )

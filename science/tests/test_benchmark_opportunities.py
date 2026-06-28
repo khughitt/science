@@ -364,6 +364,80 @@ benchmark:
     assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:generic"
 
 
+def test_broad_domain_facet_is_not_scored_as_opportunity_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-biology",
+        """
+id: hypothesis:0001-biology
+type: hypothesis
+title: Biology framing
+status: active
+""",
+        body="This project asks whether biology is the right explanatory level.",
+    )
+    _write_dataset(
+        tmp_path,
+        "proteogenomics",
+        """
+id: dataset:proteogenomics
+type: dataset
+title: Proteogenomics benchmark
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [multi-omic]
+  benchmark_kinds: [cross-context-generalization]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False, calibration_report=True)
+
+    assert payload["matched_opportunities"] == []
+    assert payload["unmapped_project_entities"][0]["entity_id"] == "hypothesis:0001-biology"
+    assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:proteogenomics"
+    benchmark_tokens = payload["calibration"].get("benchmark_controlled_facet_tokens")
+    assert benchmark_tokens is not None
+    assert "biology" in benchmark_tokens["dataset:proteogenomics"]
+
+
+def test_diversity_credit_requires_specific_match_signal(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-biology",
+        """
+id: hypothesis:0001-biology
+type: hypothesis
+title: Biology framing
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial",
+        """
+id: dataset:spatial
+type: dataset
+title: Spatial benchmark
+benchmark:
+  domains: [biology]
+  modalities: [spatial, single-cell-rna-seq]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    assert payload["matched_opportunities"] == []
+
+
 def test_facets_only_rows_use_null_task_and_diversity_is_per_entity(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 
@@ -642,7 +716,7 @@ def test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows(tmp_
         """
 id: hypothesis:0001-static
 type: hypothesis
-title: Static biology association
+title: Static spatial association
 status: active
 """,
     )
@@ -655,7 +729,7 @@ type: dataset
 title: Local
 benchmark:
   domains: [biology]
-  modalities: [biology]
+  modalities: [spatial]
   benchmark_kinds: [static-association]
 """,
     )
@@ -680,7 +754,7 @@ def test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows
         """
 id: hypothesis:0001-static
 type: hypothesis
-title: Static biology association
+title: Static spatial association
 status: active
 """,
     )
@@ -693,7 +767,7 @@ type: dataset
 title: Local
 benchmark:
   domains: [biology]
-  modalities: [biology]
+  modalities: [spatial]
   benchmark_kinds: [static-association]
 """,
     )
