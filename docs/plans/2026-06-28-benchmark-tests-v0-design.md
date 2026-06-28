@@ -87,7 +87,7 @@ Top-level shape:
     "draft_needed_rows": 12,
     "entities_with_test_plans": 6,
     "entities_without_test_plans": 6,
-    "top_facets": []
+    "top_facets": [{"facet": "perturbation", "count": 5}]
   },
   "commons_notice": null
 }
@@ -104,6 +104,7 @@ Concrete row example:
   "task_id": "dataset:sciplex3#drug-response",
   "test_plan_state": "concrete",
   "task_type": "perturbation response",
+  "benchmark_kinds": ["perturbation-response"],
   "readiness_label": "runnable",
   "priority_score": 78,
   "priority_source": "opportunity-relative",
@@ -211,8 +212,11 @@ contract changes.
    seen through multiple projections, keep one row and merge `reason_notes`;
    prefer the more specific source in this order: matched opportunity,
    entity-specific gap candidate, fallback gap candidate.
-5. Sort rows by `priority_score desc`, then `test_plan_state` with `concrete`
-   before `draft-needed`, then entity id, benchmark id, and task id.
+5. Sort rows by `test_plan_state` with `concrete` before `draft-needed`, then
+   `priority_score desc`, then entity id, benchmark id, and task id. This
+   favors immediately specifiable validation while still preserving the source
+   score as the within-state ranking signal. Consumers that prefer pure score
+   ranking can sort JSON rows themselves.
 
 This keeps the command aligned with calibrated matching and avoids a second
 matching implementation.
@@ -233,9 +237,9 @@ task/readiness terms where they belong:
 - fallback rows use the fallback candidate `candidate_score` as
   `priority_score` and set `priority_source: "gap-fallback"`.
 
-This means `priority_score` is a sort key within a planning report, not a single
-scientific quantity with identical semantics across origins. Expose
-`priority_source` and pass through the applicable existing component dict under
+This means `priority_score` is a within-state sort key, not a single scientific
+quantity with identical semantics across origins. Expose `priority_source` and
+pass through the applicable existing component dict under
 `score_components.source`. Include the existing benchmark baseline components
 under `score_components.baseline` for explanation and tie-breaking context, but
 do not add them to `priority_score` again.
@@ -261,7 +265,9 @@ the gap hint vocabulary intentionally grows.
 
 ## Readiness Labels
 
-The command should expose a compact readiness label for planning:
+The command should expose a compact readiness label for planning. Evaluate
+runtime state first, then use `readiness_for().state` only as a fallback or
+tie-breaker for states that runtime stageability does not distinguish:
 
 - `runnable`: `runtime_state_for(frontmatter) == "runnable"` and the row has a
   task.
@@ -279,6 +285,11 @@ The label is a presentation projection over existing dataset readiness and
 benchmark metadata. It must not create a new independent access vocabulary.
 Use `readiness_label` for the row field so it does not collide with the numeric
 `baseline.readiness` score component.
+
+`readiness_label` and `test_plan_state` are separate axes. A draft-needed row can
+still be `runnable` if the dataset is staged but the task metadata is incomplete;
+a concrete row can be `stage-needed` or `blocked` if the task is specified but
+access/runtime readiness is not.
 
 ## Table Output
 
@@ -341,7 +352,13 @@ Add focused tests for:
 - unknown facet/entity errors match existing benchmark command semantics;
 - JSON shape is stable;
 - table output renders entity, state, benchmark, task, score, facets, and needs;
-- commons notice behavior is preserved.
+- commons notice behavior is preserved;
+- duplicate opportunity/gap projections merge into one `(entity, benchmark,
+  task)` row with deterministic source precedence and merged reason notes;
+- `priority_source` matches the row origin and `priority_score` equals the
+  applicable source score without recomputing additive components;
+- `readiness_label` derivation covers `runnable`, `unstaged-deposit`,
+  `reference-only` / `pointer-only`, and `blocked-access` runtime states.
 
 ## Future Work
 
