@@ -34,6 +34,12 @@ class BenchmarkRow(TypedDict):
     task_ids: list[str]
 
 
+class BenchmarkSource(TypedDict):
+    frontmatter: Mapping[str, object]
+    fallback_id: str
+    scope: str
+
+
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -80,25 +86,38 @@ def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: 
     }
 
 
-def _local_rows(project_root: Path) -> list[BenchmarkRow]:
+def _source_from_frontmatter(
+    fm: Mapping[str, object],
+    *,
+    fallback_id: str,
+    scope: str,
+) -> BenchmarkSource | None:
+    if (fm.get("kind") or fm.get("type")) != "dataset":
+        return None
+    if not isinstance(fm.get("benchmark"), Mapping):
+        return None
+    return {"frontmatter": fm, "fallback_id": fallback_id, "scope": scope}
+
+
+def _local_sources(project_root: Path) -> list[BenchmarkSource]:
     datasets_dir = project_root / "entities" / "datasets"
     if not datasets_dir.is_dir():
         return []
 
-    rows: list[BenchmarkRow] = []
+    sources: list[BenchmarkSource] = []
     for md in sorted(datasets_dir.glob("*.md")):
         parsed = parse_frontmatter(md)
         if parsed is None:
             continue
         fm, _ = parsed
-        row = _row_from_frontmatter(fm, fallback_id=f"dataset:{md.stem}", scope="local")
-        if row is not None:
-            rows.append(row)
-    return rows
+        source = _source_from_frontmatter(fm, fallback_id=f"dataset:{md.stem}", scope="local")
+        if source is not None:
+            sources.append(source)
+    return sources
 
 
-def _commons_rows() -> list[BenchmarkRow]:
-    """Return benchmark rows from the commons registry.
+def _commons_sources() -> list[BenchmarkSource]:
+    """Return benchmark sources from the commons registry.
 
     Raises CommonsUnavailable so the CLI can report a single notice and still
     show local rows.
@@ -113,19 +132,53 @@ def _commons_rows() -> list[BenchmarkRow]:
     except (CommonsError, FileNotFoundError, ValueError) as exc:
         raise CommonsUnavailable(str(exc)) from exc
 
-    rows: list[BenchmarkRow] = []
+    sources: list[BenchmarkSource] = []
     for record in records:
         if not isinstance(record.frontmatter, Mapping):
             msg = f"{record.canonical_id}: frontmatter_json must decode to an object"
             raise CommonsUnavailable(msg)
+        source = _source_from_frontmatter(
+            record.frontmatter,
+            fallback_id=record.canonical_id,
+            scope="commons",
+        )
+        if source is not None:
+            sources.append(source)
+    return sources
+
+
+def benchmark_sources(project_root: Path, *, include_commons: bool = False) -> tuple[list[BenchmarkSource], str | None]:
+    sources = _local_sources(project_root)
+    notice: str | None = None
+    if include_commons:
         try:
-            row = _row_from_frontmatter(
-                record.frontmatter,
-                fallback_id=record.canonical_id,
-                scope="commons",
-            )
-        except ValueError as exc:
-            raise CommonsUnavailable(str(exc)) from exc
+            sources.extend(_commons_sources())
+        except CommonsUnavailable as exc:
+            notice = str(exc)
+    return sources, notice
+
+
+def _local_rows(project_root: Path) -> list[BenchmarkRow]:
+    rows: list[BenchmarkRow] = []
+    for source in _local_sources(project_root):
+        row = _row_from_frontmatter(
+            source["frontmatter"],
+            fallback_id=source["fallback_id"],
+            scope=source["scope"],
+        )
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def _commons_rows() -> list[BenchmarkRow]:
+    rows: list[BenchmarkRow] = []
+    for source in _commons_sources():
+        row = _row_from_frontmatter(
+            source["frontmatter"],
+            fallback_id=source["fallback_id"],
+            scope=source["scope"],
+        )
         if row is not None:
             rows.append(row)
     return rows
