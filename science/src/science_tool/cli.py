@@ -6725,6 +6725,13 @@ def dataset_add(
 @click.option("--superseded-by", "superseded_by", default=None)
 @click.option("--followup-task", "followup_task", default=None)
 @click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+@click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
@@ -6744,6 +6751,7 @@ def dataset_verify_access(
     rationale: str,
     superseded_by: str | None,
     followup_task: str | None,
+    show_preexisting: bool,
     project_root: Path | None,
 ) -> None:
     """Verify (or exception-gate) a dataset's accessibility.
@@ -6775,14 +6783,26 @@ def dataset_verify_access(
     except EntityCommandError as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for w in warnings:
-        click.echo(f"warning: {w}", err=True)
     from science_model.frontmatter import parse_frontmatter
     from science_tool.datasets.semantics import runtime_state_for
 
     parsed = parse_frontmatter(dest)
     runtime_state = runtime_state_for(parsed[0]) if parsed else "blocked-access"
+    # Print the actionable verify-access result FIRST so it is not buried under
+    # pre-existing, unrelated project audit warnings (fb-2026-06-28-015).
     click.echo(f"{entity_id} -> access={state} (weight {weight:g}), runtime={runtime_state}")
+
+    preexisting = [w for w in warnings if w.startswith("pre-existing audit failure:")]
+    for w in warnings:
+        if w in preexisting and not show_preexisting:
+            continue
+        click.echo(f"warning: {w}", err=True)
+    if preexisting and not show_preexisting:
+        click.echo(
+            f"note: {len(preexisting)} pre-existing project audit warning(s) unrelated to this "
+            "dataset (run `science validate`, or --show-preexisting to list here)",
+            err=True,
+        )
 
 
 def _resolve_dataset_or_exit(root: Path, ref: str):

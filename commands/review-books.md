@@ -42,17 +42,17 @@ the synthesis (synthesizer), then report back.
      hand: a list of `{n, title, start_page, end_page, level, part}`.
 4. **Printed numbering reconciliation.** Before fan-out, compare the split manifest against the book's printed table of contents and chapter headings. Front matter, Introduction, Bibliography, Appendix, and Index often appear in the PDF outline and can shift the manifest's sequential `n` away from printed chapter numbers. Add `printed_chapter` when it differs from `n`, show both values in the confirmation table, and tell chapter researchers which number to use in headings and citations. Use printed chapter numbers for prose references; keep manifest `n` only for stable filenames and dispatch bookkeeping.
 5. **Existing-target gate.** Before writing, check whether `entities/books/<citekey>.md` or
-   `entities/books/<citekey>/` already exists. If so, ask the user to **overwrite / skip /
+   `doc/books/<citekey>/` already exists. If so, ask the user to **overwrite / skip /
    supplement**, and honor that choice. Never clobber prior notes silently.
 6. **Confirmation gate.** Show the user the chapter count + titles (and detected Parts).
    Proceed only on confirmation — this guards against fanning out on a bad split.
-7. **Fan out.** Create `entities/books/<citekey>/`. Dispatch one `book-chapter-researcher` per
+7. **Fan out.** Create `doc/books/<citekey>/`. Dispatch one `book-chapter-researcher` per
    chapter **in parallel** (multiple Agent calls in one message), each given
    `{pdf_path, start_page, end_page, n, printed_chapter, title, citekey, out_path}` where
-   `out_path` is `entities/books/<citekey>/ch<NN>-<slug>.md`.
+   `out_path` is `doc/books/<citekey>/ch<NN>-<slug>.md`.
 8. **Synthesize.** When all chapter subagents return, dispatch ONE `book-synthesizer` with
    the citekey, metadata, the chapter-note paths, and the Part structure. It writes
-   `entities/books/<citekey>.md` and any `entities/books/<citekey>/part-N-*.md` rollups.
+   `entities/books/<citekey>.md` and any `doc/books/<citekey>/part-N-*.md` rollups.
 9. **Integrate (orchestrator, once per book).**
    - Add the BibTeX entry — **never** edit `references.bib` directly:
      ```bash

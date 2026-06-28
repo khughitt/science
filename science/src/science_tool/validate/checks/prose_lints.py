@@ -82,9 +82,13 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             bare_author_year_deny = config.prose_lint.bare_author_year_deny
 
     effective_checks = selected if selected is not None else list(CHECKS)
+    # The resolver doubles as the alias map for frontmatter-inline-gap (a body
+    # mention via a project shorthand satisfies a canonical `related:` entry),
+    # so build it when either check is active.
+    resolver_checks = {"short-form-ids", "frontmatter-inline-gap"}
     resolver = (
         build_short_form_resolver(ctx.project_root)
-        if "short-form-ids" in effective_checks
+        if resolver_checks & set(effective_checks)
         else None
     )
     bib_surnames = (

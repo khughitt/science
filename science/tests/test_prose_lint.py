@@ -4,6 +4,7 @@ from pathlib import Path
 
 from science_tool.prose_lint import (
     LintIssue,
+    _archived_task_aliases,
     detect_bare_author_year,
     detect_frontmatter_inline_gaps,
     detect_numeric_anchor,
@@ -294,6 +295,36 @@ class TestFrontmatterInlineGap:
         issues = detect_frontmatter_inline_gaps(path, strict=True)
         assert all(i.severity == "warn" for i in issues)
 
+    def test_resolves_project_shorthand_alias(self, tmp_path):
+        # Body uses the project shorthand `mm30`; frontmatter declares the
+        # canonical `multiple-myeloma`. With an alias map they are equivalent.
+        path = _write(
+            tmp_path,
+            "# Title\n\nWe build on the mm30 cohort results.\n",
+            frontmatter="related:\n  - multiple-myeloma",
+        )
+        alias_map = {"mm30": "multiple-myeloma", "multiple-myeloma": "multiple-myeloma"}
+        assert detect_frontmatter_inline_gaps(path, alias_map=alias_map) == []
+
+    def test_alias_map_does_not_mask_genuinely_absent_ref(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "# Title\n\nWe build on the mm30 cohort results.\n",
+            frontmatter="related:\n  - pan-disease",
+        )
+        alias_map = {"mm30": "multiple-myeloma", "multiple-myeloma": "multiple-myeloma"}
+        issues = detect_frontmatter_inline_gaps(path, alias_map=alias_map)
+        assert {i.match for i in issues} == {"pan-disease"}
+
+    def test_no_alias_map_preserves_flagging(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "# Title\n\nWe build on the mm30 cohort results.\n",
+            frontmatter="related:\n  - multiple-myeloma",
+        )
+        issues = detect_frontmatter_inline_gaps(path)
+        assert {i.match for i in issues} == {"multiple-myeloma"}
+
 
 class TestNumericAnchor:
     def test_flags_unanchored_numeric_claim(self, tmp_path):
@@ -389,6 +420,52 @@ class TestNumericAnchor:
         path = _write(tmp_path, "Result rho = 0.168 (see doc/notes/foo.md).\n")
         issues = detect_numeric_anchor(path, anchor_patterns=["task:", "doc/"])
         assert issues == []
+
+    def test_no_flag_on_figure_cross_reference(self, tmp_path):
+        # Internal cross-references are not numeric claims needing a data anchor.
+        path = _write(tmp_path, "As shown in Figure 3.2, the trend holds.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_on_section_cross_reference(self, tmp_path):
+        path = _write(tmp_path, "See Section 4.1 for the derivation.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_on_equation_cross_reference(self, tmp_path):
+        path = _write(tmp_path, "Equation 2.3 defines the estimator.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_on_table_cross_reference(self, tmp_path):
+        # A 3-digit table number would otherwise read as a numeric claim.
+        path = _write(tmp_path, "Cohort sizes appear in Table 100.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_on_section_sign_cross_reference(self, tmp_path):
+        path = _write(tmp_path, "The proof is in §4.2 of the appendix.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_flags_real_claim_beside_cross_reference(self, tmp_path):
+        # The figure ref (3.2) is excluded; the 47% claim still flags.
+        path = _write(tmp_path, "Figure 3.2 reports the 47% improvement.\n")
+        issues = detect_numeric_anchor(path)
+        assert [i.match for i in issues] == ["47%"]
+
+
+class TestArchivedTaskAliases:
+    def test_reads_archived_task_ids(self, tmp_path):
+        (tmp_path / "tasks").mkdir()
+        (tmp_path / "tasks" / "archive.md").write_text(
+            "# Archived\n\n## [t075] Retired pipeline\n\nNotes.\n"
+        )
+        aliases = _archived_task_aliases(tmp_path)
+        assert "t075" in aliases
+
+    def test_missing_archive_is_empty(self, tmp_path):
+        assert _archived_task_aliases(tmp_path) == {}
+
+    def test_short_form_skips_resolved_archived_task(self, tmp_path):
+        path = _write(tmp_path, "We retired t075 last cycle.\n")
+        resolver = {"t075": "task:t075"}
+        assert detect_short_form_ids(path, resolver=resolver) == []
 
 
 class TestScanRoot:

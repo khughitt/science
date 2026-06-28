@@ -120,6 +120,46 @@ def test_cli_verify_access_exception_path(tmp_path: Path) -> None:
     assert "consumable-via-scope-reduced" in res.output
 
 
+def _seed_preexisting_audit_failure(tmp_path: Path) -> None:
+    """Write an unrelated entity with a dangling reference -> baseline audit fail."""
+    broken = tmp_path / "entities" / "questions" / "q01-foo.md"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    fm = {
+        "id": "question:q01-foo",
+        "type": "question",
+        "title": "Foo",
+        "status": "active",
+        "created": "2026-01-01",
+        "updated": "2026-01-01",
+        "related": ["hypothesis:h99-does-not-exist"],
+    }
+    front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
+    broken.write_text(f"---\n{front}---\n\n# Foo\n\nbody.\n", encoding="utf-8")
+
+
+def test_cli_verify_access_collapses_preexisting_warnings(tmp_path: Path) -> None:
+    _legacy(tmp_path)
+    _seed_preexisting_audit_failure(tmp_path)
+    res = _run(tmp_path, "foo", "--level", "public", "--method", "retrieved", "--license", "CC0-1.0")
+    assert res.exit_code == 0, res.output
+    # The actionable result line is present and unrelated failures are summarized,
+    # not dumped one-per-line (fb-2026-06-28-015).
+    assert "access=available" in res.output
+    assert "pre-existing audit failure:" not in res.output
+    assert "pre-existing project audit warning" in res.output
+
+
+def test_cli_verify_access_show_preexisting_lists_them(tmp_path: Path) -> None:
+    _legacy(tmp_path)
+    _seed_preexisting_audit_failure(tmp_path)
+    res = _run(
+        tmp_path, "foo", "--level", "public", "--method", "retrieved",
+        "--license", "CC0-1.0", "--show-preexisting",
+    )
+    assert res.exit_code == 0, res.output
+    assert "pre-existing audit failure:" in res.output
+
+
 def test_cli_verify_access_refuses_derived(tmp_path: Path) -> None:
     _legacy(
         tmp_path, "der",
