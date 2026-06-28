@@ -120,6 +120,7 @@ _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
 # their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
 _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
 _CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
+_KNOWN_CELL_LINE_SHORT_FORMS: frozenset[str] = frozenset({"H929", "H1112", "H1634"})
 
 
 def _mask_wikilinks(line: str) -> str:
@@ -130,6 +131,13 @@ def _mask_wikilinks(line: str) -> str:
 def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
     window = line[max(0, match.start() - 40) : min(len(line), match.end() + 40)]
     return bool(_CELL_LINE_CONTEXT_RE.search(window))
+
+
+def _is_cell_line_short_form(line: str, match: re.Match[str]) -> bool:
+    short = match.group(0)
+    return short in _KNOWN_CELL_LINE_SHORT_FORMS or (
+        match.group(1).isupper() and _is_cell_line_context(line, match)
+    )
 
 
 def _utf8_byte_col(line: str, char_index: int) -> int:
@@ -251,7 +259,7 @@ def detect_short_form_ids(
             short = match.group(0)
             if deny and short in deny:
                 continue
-            if match.group(1).isupper() and _is_cell_line_context(line, match):
+            if _is_cell_line_short_form(line, match):
                 continue
             if resolver and (short in resolver or short.lower() in resolver):
                 continue
@@ -310,9 +318,9 @@ def detect_frontmatter_inline_gaps(
 # Numeric claim: float, integer with %, ratio. Excludes bare integers <100
 # (too noisy) and bare 4-digit years (handled separately below).
 _NUMERIC_CLAIM_RE = re.compile(
-    r"(?<![A-Za-z0-9_.])"
-    r"(?:[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
-    r"(?![A-Za-z0-9_.])"
+    r"(?<![A-Za-z0-9_.,])"
+    r"(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?%?|[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
+    r"(?![A-Za-z0-9_.,])"
 )
 # Standalone 4-digit years (1900-2099) — never claims, always exclude.
 _BARE_YEAR_RE = re.compile(r"^(?:19\d{2}|20\d{2})$")

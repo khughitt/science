@@ -185,6 +185,10 @@ class TestShortFormIds:
         path = _write(tmp_path, "H1975 and T47D cell lines were profiled.\n")
         assert detect_short_form_ids(path) == []
 
+    def test_no_flag_on_known_mm_cell_line_names(self, tmp_path):
+        path = _write(tmp_path, "H929, H1112, and H1634 were profiled with bortezomib.\n")
+        assert detect_short_form_ids(path) == []
+
     def test_reports_utf8_byte_column_for_automated_edits(self, tmp_path):
         path = _write(tmp_path, "αβ H123 should use the canonical form.\n")
         issues = detect_short_form_ids(path)
@@ -373,6 +377,12 @@ class TestNumericAnchor:
         path = _write(tmp_path, "Improvement of 47% was observed.\n")
         issues = detect_numeric_anchor(path)
         assert len(issues) == 1
+
+    def test_reports_comma_formatted_number_as_single_claim(self, tmp_path):
+        path = _write(tmp_path, "The cohort has n=5,424 samples.\n")
+        issues = detect_numeric_anchor(path, anchor_patterns=[])
+        assert [issue.match for issue in issues] == ["5,424"]
+        assert "numeric claim '5,424'" in issues[0].message
 
     def test_custom_anchor_patterns(self, tmp_path):
         # Caller passes in extended anchors; "doc/" should now count.
