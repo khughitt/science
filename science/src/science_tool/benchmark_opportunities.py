@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import Counter
 from collections.abc import Mapping
@@ -1035,6 +1036,7 @@ def _reason_note_sort_key(note: str) -> tuple[int, str]:
         "task-ready": 2,
         "high-baseline": 3,
         "fallback": 4,
+        "selected": 5,
     }
     family = note.split(":", 1)[0]
     return (family_order.get(family, 99), note)
@@ -1106,6 +1108,69 @@ def _is_fallback_candidate(candidate: GapCandidateBenchmarkRow) -> bool:
     return any(note.startswith("fallback:") for note in candidate["reason_notes"])
 
 
+def _selection_reason_note(row: GapCandidateBenchmarkRow, *, rotated: bool) -> str:
+    if rotated:
+        return "selected:diversity-rotation"
+    if "fallback:baseline-quality" in row["reason_notes"]:
+        return "selected:generic-baseline"
+    if "fallback:task-ready" in row["reason_notes"]:
+        return "selected:task-ready"
+    return "selected:available-benchmark"
+
+
+def _with_selection_reason(row: GapCandidateBenchmarkRow, *, rotated: bool) -> GapCandidateBenchmarkRow:
+    notes = {*row["reason_notes"], _selection_reason_note(row, rotated=rotated)}
+    return {**row, "reason_notes": sorted(notes, key=_reason_note_sort_key)}
+
+
+def _stable_rotation_offset(entity_id: str, size: int) -> int:
+    if size <= 1:
+        return 0
+    digest = hashlib.sha1(entity_id.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % size
+
+
+def _rotated(rows: list[GapCandidateBenchmarkRow], *, entity_id: str) -> tuple[list[GapCandidateBenchmarkRow], bool]:
+    if len(rows) <= 1:
+        return rows, False
+    offset = _stable_rotation_offset(entity_id, len(rows))
+    if offset == 0:
+        return rows, False
+    return [*rows[offset:], *rows[:offset]], True
+
+
+def _select_fallback_rows(
+    entity_id: str,
+    fallback: list[GapCandidateBenchmarkRow],
+    *,
+    limit: int,
+) -> list[GapCandidateBenchmarkRow]:
+    selected: list[GapCandidateBenchmarkRow] = []
+    remaining = min(3, limit)
+    ordered = sorted(
+        fallback,
+        key=lambda row: (-row["candidate_score"], -row["baseline_score"], row["benchmark_id"]),
+    )
+    while ordered and remaining > 0:
+        first = ordered[0]
+        tier_key = (first["candidate_score"], first["baseline_score"])
+        tier = [
+            row
+            for row in ordered
+            if (row["candidate_score"], row["baseline_score"]) == tier_key
+        ]
+        ordered = [
+            row
+            for row in ordered
+            if (row["candidate_score"], row["baseline_score"]) != tier_key
+        ]
+        rotated_tier, rotated = _rotated(tier, entity_id=entity_id)
+        for row in rotated_tier[:remaining]:
+            selected.append(_with_selection_reason(row, rotated=rotated and len(tier) > remaining))
+        remaining = min(3, limit) - len(selected)
+    return selected
+
+
 def _candidate_rows(
     entity_id: str,
     contexts: list[DatasetOpportunityContext],
@@ -1157,10 +1222,7 @@ def _candidate_rows(
             )
         ]
         return ordered[:limit]
-    return sorted(
-        fallback,
-        key=lambda row: (-row["baseline_score"], row["benchmark_id"]),
-    )[: min(3, limit)]
+    return _select_fallback_rows(entity_id, fallback, limit=limit)
 
 
 def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkGapSummary:

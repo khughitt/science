@@ -1763,6 +1763,60 @@ benchmark:
     assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
 
 
+def test_gaps_report_rotates_equal_quality_fallbacks_across_entities(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    for index in range(6):
+        _write_entity(
+            tmp_path,
+            "hypotheses",
+            f"10{index}-generic-gap",
+            f"""
+id: hypothesis:10{index}-generic-gap
+type: hypothesis
+title: Generic benchmark gap {index}
+""",
+            body="Homeostatic recovery remains under-tested.",
+        )
+    for slug in ("alpha", "beta", "gamma", "delta", "epsilon"):
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: Generic {slug.title()}
+benchmark:
+  domains: [biology]
+  modalities: [assay-{slug}]
+  signal_types: [unrelated-{slug}]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    payload = gaps_report(tmp_path)
+    candidate_sets = {
+        tuple(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"])
+        for row in payload["benchmark_gaps"]
+    }
+
+    assert len(candidate_sets) > 1
+    assert all(
+        any(note.startswith("selected:") for note in candidate["reason_notes"])
+        for row in payload["benchmark_gaps"]
+        for candidate in row["candidate_benchmarks"]
+    )
+
+
 def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
