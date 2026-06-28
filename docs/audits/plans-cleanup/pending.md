@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `20`
+- Pending thread count: `19`
 
 ## b-migration-paper-datasets
 
@@ -196,20 +196,6 @@
 - remaining_gaps:
   - Reconcile this thread together with docs/plans/2026-04-05-project-model-design.md before deciding whether to delete, move both to historical, or migrate a durable paper/manuscript model note.
   - Confirm whether the originally planned graph store operations and CLI commands still exist or were replaced by entity source files and interpret-results workflow.
-
-## phase3-completion
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-03-07-phase3-completion-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until phase-gate closure context is checkpointed
-    - `docs/plans/2026-03-07-phase3-completion-design.md`
-- remaining_gaps:
-  - The current tree no longer contains the Phase 3 evidence README, validation JSON/log bundle, biomedical starter profile, or docs/plan.md closure note.
-  - Without a migration checkpoint, deleting this plan would leave Phase 3 closure context mostly in git history plus the snapshot files.
 
 ## phase4b-causal-dag
 
