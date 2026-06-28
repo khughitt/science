@@ -408,6 +408,37 @@ class GapCalibrationSummary(TypedDict):
     top_fallback_benchmarks: list[BenchmarkCountRow]
 
 
+class GapCalibrationProjectRow(TypedDict):
+    label: str
+    project_root: str
+    summary: BenchmarkGapSummary
+    calibration_summary: GapCalibrationSummary
+    commons_notice: str | None
+
+
+class GapCalibrationAggregate(TypedDict):
+    project_count: int
+    gap_rows: int
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    fallback_candidate_ratio: float | None
+    top_suggested_facets: list[FacetCountRow]
+    top_matched_hint_facets: list[FacetCountRow]
+    top_fallback_benchmarks: list[BenchmarkCountRow]
+
+
+class GapCalibrationCommonsNotice(TypedDict):
+    label: str
+    notice: str
+
+
+class GapCalibrationBatchReport(TypedDict):
+    projects: list[GapCalibrationProjectRow]
+    aggregate: GapCalibrationAggregate
+    commons_notices: list[GapCalibrationCommonsNotice]
+
+
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -1161,6 +1192,91 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
         "top_suggested_facets": _top_facet_counts(suggested_facets, top=top),
         "top_matched_hint_facets": _top_facet_counts(matched_hint_facets, top=top),
         "top_fallback_benchmarks": _top_benchmark_counts(fallback_benchmarks, top=top),
+    }
+
+
+def _display_path(path: Path) -> str:
+    resolved = path.expanduser().resolve()
+    home_d = (Path.home() / "d").resolve()
+    try:
+        return f"~/d/{resolved.relative_to(home_d).as_posix()}"
+    except ValueError:
+        return str(resolved)
+
+
+def _merged_top_facets(rows: list[BenchmarkGapRow], *, top: int) -> tuple[list[FacetCountRow], list[FacetCountRow]]:
+    suggested = Counter(facet for row in rows for facet in row["suggested_search_facets"])
+    matched = Counter(
+        facet
+        for row in rows
+        for candidate in row["candidate_benchmarks"]
+        for facet in candidate["matched_hint_facets"]
+    )
+    return _top_facet_counts(suggested, top=top), _top_facet_counts(matched, top=top)
+
+
+def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[BenchmarkCountRow]:
+    fallback = Counter(
+        candidate["benchmark_id"]
+        for row in rows
+        for candidate in row["candidate_benchmarks"]
+        if candidate["reason_notes"] == ["high-baseline-fallback"]
+    )
+    return _top_benchmark_counts(fallback, top=top)
+
+
+def benchmark_gap_calibration_batch(
+    projects: list[tuple[str, Path]],
+    *,
+    include_commons: bool = False,
+    domain: str | None = None,
+    facet: str | None = None,
+    top: int = 10,
+) -> GapCalibrationBatchReport:
+    project_rows: list[GapCalibrationProjectRow] = []
+    notices: list[GapCalibrationCommonsNotice] = []
+    all_gap_rows: list[BenchmarkGapRow] = []
+    for label, project_root in projects:
+        report = gaps_report(
+            project_root,
+            include_commons=include_commons,
+            domain=domain,
+            facet=facet,
+        )
+        summary = gap_calibration_summary(report, top=top)
+        notice = report["commons_notice"]
+        if notice:
+            notices.append({"label": label, "notice": notice})
+        project_rows.append(
+            {
+                "label": label,
+                "project_root": _display_path(project_root),
+                "summary": report["summary"],
+                "calibration_summary": summary,
+                "commons_notice": notice,
+            }
+        )
+        all_gap_rows.extend(report["benchmark_gaps"])
+
+    gap_rows = sum(row["calibration_summary"]["gap_rows"] for row in project_rows)
+    candidate_rows = sum(row["calibration_summary"]["candidate_rows"] for row in project_rows)
+    entity_specific = sum(row["calibration_summary"]["entity_specific_candidate_rows"] for row in project_rows)
+    fallback = sum(row["calibration_summary"]["fallback_candidate_rows"] for row in project_rows)
+    top_suggested, top_matched = _merged_top_facets(all_gap_rows, top=top)
+    return {
+        "projects": project_rows,
+        "aggregate": {
+            "project_count": len(project_rows),
+            "gap_rows": gap_rows,
+            "candidate_rows": candidate_rows,
+            "entity_specific_candidate_rows": entity_specific,
+            "fallback_candidate_rows": fallback,
+            "fallback_candidate_ratio": round(fallback / candidate_rows, 3) if candidate_rows else None,
+            "top_suggested_facets": top_suggested,
+            "top_matched_hint_facets": top_matched,
+            "top_fallback_benchmarks": _top_fallback_benchmarks(all_gap_rows, top=top),
+        },
+        "commons_notices": notices,
     }
 
 

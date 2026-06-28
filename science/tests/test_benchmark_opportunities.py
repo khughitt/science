@@ -1988,3 +1988,64 @@ benchmark:
         {"benchmark_id": "dataset:generic", "count": 1},
         {"benchmark_id": "dataset:sciplex", "count": 1},
     ]
+
+
+def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
+
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    project_a.mkdir()
+    project_b.mkdir()
+    _write_entity(
+        project_a,
+        "hypotheses",
+        "0001-drug",
+        """
+id: hypothesis:0001-drug
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        project_a,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+    _write_entity(
+        project_b,
+        "hypotheses",
+        "0002-temporal",
+        """
+id: hypothesis:0002-temporal
+type: hypothesis
+title: Temporal benchmark gap
+""",
+        body="Temporal dynamic measurements should be tested.",
+    )
+
+    payload = benchmark_gap_calibration_batch(
+        [
+            ("a", project_a),
+            ("b", project_b),
+        ]
+    )
+
+    assert [row["label"] for row in payload["projects"]] == ["a", "b"]
+    assert payload["aggregate"]["project_count"] == 2
+    assert payload["aggregate"]["gap_rows"] == 2
+    assert payload["aggregate"]["entity_specific_candidate_rows"] == 1
+    assert payload["aggregate"]["fallback_candidate_rows"] == 0
+    assert payload["aggregate"]["fallback_candidate_ratio"] == 0.0
+    assert payload["aggregate"]["top_suggested_facets"][0] == {"facet": "perturbation", "count": 1}
+    assert payload["aggregate"]["top_matched_hint_facets"] == [{"facet": "perturbation", "count": 1}]
