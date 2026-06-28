@@ -48,6 +48,15 @@ def _invoke_gap_calibration(*args: str):
     )
 
 
+def _invoke_gaps(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "gaps", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+
 def _write_corrupt_commons_registry(root: Path, frontmatter_json: str = "{not-json") -> None:
     root.mkdir()
     conn = sqlite3.connect(root / "registry.sqlite")
@@ -422,3 +431,68 @@ title: Drug screen benchmark gap
     assert "top_fallback_benchmark_shares" in result.output
     assert "fallback_concentration_warning" in result.output
     assert "demo" in result.output
+
+
+def test_benchmark_gaps_cli_evidence_report_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-organoid",
+        """
+id: hypothesis:0001-organoid
+type: hypothesis
+title: Organoid therapy benchmark gap
+""",
+        body="Organoid therapy clone validation should be tested.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--evidence-report", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["evidence_report"]["enabled"] is True
+    assert "entities" in payload["evidence_report"]
+    assert "hypothesis:0001-organoid" in payload["evidence_report"]["entities"]
+
+
+def test_benchmark_gaps_cli_evidence_report_table(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-organoid",
+        """
+id: hypothesis:0002-organoid
+type: hypothesis
+title: Organoid therapy benchmark gap
+""",
+        body="Organoid therapy clone validation should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic benchmark
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: outcome
+      prediction_target: outcome
+      held_out_unit: patient
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: outcome
+""",
+    )
+
+    result = _invoke_gaps(tmp_path, "--evidence-report")
+
+    assert result.exit_code == 0
+    assert "Gap Evidence" in result.output
+    assert "fallback-only" in result.output

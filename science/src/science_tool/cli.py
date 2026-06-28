@@ -6239,6 +6239,7 @@ def benchmark_gap_calibration(
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
 @click.option("--calibration-report", is_flag=True, help="Include gap token/candidate calibration details.")
 @click.option("--calibration-summary", is_flag=True, help="Summarize benchmark gap calibration metrics.")
+@click.option("--evidence-report", is_flag=True, help="Include benchmark gap evidence extraction details.")
 @click.option(
     "--format",
     "output_format",
@@ -6259,6 +6260,7 @@ def benchmark_gaps(
     include_commons: bool,
     calibration_report: bool,
     calibration_summary: bool,
+    evidence_report: bool,
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6285,6 +6287,7 @@ def benchmark_gaps(
             domain=domain,
             facet=facet,
             calibration_report=calibration_report,
+            evidence_report=evidence_report,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -6362,6 +6365,23 @@ def benchmark_gaps(
         for field, value in payload["calibration"].items():
             calibration_table.add_row(field, json.dumps(value, sort_keys=True))
         Console(width=200).print(calibration_table)
+
+    if evidence_report:
+        evidence_payload = payload["evidence_report"]
+        evidence_rows = evidence_payload.get("entities", {}) if evidence_payload["enabled"] else {}
+        evidence_table = Table(title="Gap Evidence", show_header=True, header_style="bold")
+        for col in ("entity", "mode", "hints", "matched facets", "unmapped terms", "why"):
+            evidence_table.add_column(col, overflow="fold", no_wrap=False)
+        for entity_id, row in evidence_rows.items():
+            evidence_table.add_row(
+                entity_id,
+                row["candidate_mode"],
+                ", ".join(row["facet_hints"]) or "-",
+                ", ".join(row["matched_facets"]) or "-",
+                ", ".join(row["unmapped_high_value_terms"][:8]) or "-",
+                ", ".join(row["why_no_specific_candidate"]) or "-",
+            )
+        Console(width=200).print(evidence_table)
 
 
 @main.group("dataset")
