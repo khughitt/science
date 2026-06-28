@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, pydantic v2 (existing science-model pattern), click (existing CLI), pytest, PyYAML. No new runtime dependencies.
 
-**Spec:** `docs/specs/2026-04-19-entity-aspects-design.md`
+**Spec:** `docs/plans/historical/2026-04-19-entity-aspects-design.md`
 
 ---
 

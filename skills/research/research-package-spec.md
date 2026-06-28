@@ -5,7 +5,7 @@ description: Use when defining or reviewing research-package provenance, manifes
 
 # Research Package Specification
 
-> Note: See `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` for the v2.2 unified dataset model: `data-package` → `research-package` rename, dataset entities now carry `origin: external | derived` discriminator.
+> Note: See `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` for the v2.2 unified dataset model: `data-package` → `research-package` rename, dataset entities now carry `origin: external | derived` discriminator.
 
 Research packages bundle analysis results, narrative context, and execution provenance into a standardized format. Any science project can produce and validate these packages.
 

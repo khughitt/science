@@ -6,7 +6,7 @@
 
 ## Problem
 
-`docs/specs/2026-04-19-entity-aspects-design.md` decided that all primary-entity types (tasks included) drop `type:` in favor of `aspects:`. Project-side migrations executed this — all four reference projects (`mm30`, `cbioportal`, `natural-systems`, `protein-landscape`) carry tasks with `aspects:` and zero with `type:`.
+`docs/plans/historical/2026-04-19-entity-aspects-design.md` decided that all primary-entity types (tasks included) drop `type:` in favor of `aspects:`. Project-side migrations executed this — all four reference projects (`mm30`, `cbioportal`, `natural-systems`, `protein-landscape`) carry tasks with `aspects:` and zero with `type:`.
 
 The canonical `validate.sh`'s task-field check still requires `type:`. Result: every task in every project fails validation with `task ${tid} missing required field: type`. mm30 emitted 250+ such errors immediately after migrating to canonical v2026.04.26.2.
 
@@ -40,7 +40,7 @@ One word changed. No new logic; no legacy-`type:`-detection branch (the 2026-04-
 
 Canonical bump `2026.04.26.2 → 2026.04.26.3`. `byte_replace` migration. Existing previous_hashes preserved; the .2 hash slots in.
 
-Changelog: "Replace deprecated `type:` task-field check with `aspects:` per docs/specs/2026-04-19-entity-aspects-design.md."
+Changelog: "Replace deprecated `type:` task-field check with `aspects:` per docs/plans/historical/2026-04-19-entity-aspects-design.md."
 
 ## Cross-project propagation
 
@@ -68,4 +68,4 @@ This dogfoods the *update* workflow end-to-end across multiple projects — unti
 
 - Implementation plan: `docs/superpowers/plans/2026-04-27-task-aspects-canonical-update-implementation.md`
 - Surfaced by: `docs/migration/projects/{mm30,cbioportal,natural-systems}.md` smoke runs
-- Underlying convention: `docs/specs/2026-04-19-entity-aspects-design.md`
+- Underlying convention: `docs/plans/historical/2026-04-19-entity-aspects-design.md`

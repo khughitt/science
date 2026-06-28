@@ -8,12 +8,12 @@
 
 **Tech Stack:** Python 3.11+, pydantic v2 (existing `science` pattern), click (existing CLI), PyYAML, graphviz (`dot` CLI, already in test environments), pytest. No new runtime dependencies.
 
-**Spec:** `docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md`
+**Spec:** `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`
 
 **Depends on:**
 - `docs/specs/2026-03-07-phase4b-causal-dag-design.md` (approved — provides `inquiry` abstraction)
-- `docs/specs/2026-04-17-edge-status-dashboard-design.md` (proposed — this plan amends the enum to add `eliminated`)
-- `docs/specs/2026-04-17-inquiry-edge-posterior-annotations-design.md` (proposed — posterior block consumed as-is)
+- `docs/plans/historical/2026-04-17-edge-status-dashboard-design.md` (proposed — this plan amends the enum to add `eliminated`)
+- `docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md` (proposed — posterior block consumed as-is)
 
 **Prerequisite:** None (this plan stands alone; the two 2026-04-17 specs do not need to be landed first because this spec only amends their enum / annotation contract at the YAML layer; graph-layer storage for the amendments is deferred to Phase 2).
 
@@ -63,7 +63,7 @@
 ### Modified files
 
 - `science/src/science_tool/cli.py` — register `dag_group` under `main`; add `from science_tool.dag.cli import dag_group` and `main.add_command(dag_group)`.
-- `docs/specs/2026-04-17-edge-status-dashboard-design.md` — amend the enum table: add `eliminated`. Mark the amendment as "storage deferred to Phase 2 sync-dag."
+- `docs/plans/historical/2026-04-17-edge-status-dashboard-design.md` — amend the enum table: add `eliminated`. Mark the amendment as "storage deferred to Phase 2 sync-dag."
 - `commands/big-picture.md` — Phase 3 rollup adds a read-only call to `science dag staleness --json` so the synthesis report includes DAG freshness without mutating.
 
 ### Modified files in mm30 (migration PR, separate from upstream PR)
@@ -648,7 +648,7 @@ def run_audit(paths: DagPaths, *, fix: bool = False) -> AuditReport:
 ## Task 10: Amend 2026-04-17 edge-status dashboard spec
 
 **Files:**
-- Modify: `docs/specs/2026-04-17-edge-status-dashboard-design.md`
+- Modify: `docs/plans/historical/2026-04-17-edge-status-dashboard-design.md`
 
 - [ ] **Step 1: Edit the enum table** to add `eliminated` as a fifth value. Match the wording in the DAG rendering spec (§"Schema extensions").
 - [ ] **Step 2: Add a "Scope clarification (2026-04-19 amendment)"** paragraph noting that graph-layer storage for `eliminated` (and for the `identification` sibling axis introduced by the DAG rendering spec) is deferred to Phase 2 `sync-dag`. The edge-status dashboard's `--edge-status-distribution` command may show 0 for `eliminated` on projects that haven't yet run `sync-dag`; this is expected.
@@ -705,7 +705,7 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
 **Files:** all of Tasks 1–12.
 
 - [ ] **Step 1: Open PR in science repo** titled `feat: dag subcommand group + /science:dag-audit skill (Phase 1+3)`.
-- [ ] **Step 2: Body references** `docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md` + this plan.
+- [ ] **Step 2: Body references** `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md` + this plan.
 - [ ] **Step 3: CI green.**
 - [ ] **Step 4: Reviewer sign-off.**
 - [ ] **Step 5: Merge.**

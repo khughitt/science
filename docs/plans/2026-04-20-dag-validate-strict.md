@@ -11,7 +11,7 @@
 **Spec:** `docs/specs/2026-04-20-dag-validate-strict-design.md`
 
 **Depends on:**
-- `docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md` (landed 2026-04-20 — Phase 1+3 shipped the `dag` package, Pydantic models, and 86 existing green tests this plan builds on).
+- `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md` (landed 2026-04-20 — Phase 1+3 shipped the `dag` package, Pydantic models, and 86 existing green tests this plan builds on).
 
 **Prerequisite:** None. The Phase 1 surface is already deployed; all new code in this plan is additive or restricted to `audit.py` + `cli.py` + `__init__.py`.
 

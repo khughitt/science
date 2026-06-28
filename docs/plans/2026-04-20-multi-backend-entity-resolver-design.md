@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Status:** Draft (replacement spec)
 **Replaces:** `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` rev 1.1
-**Builds on:** `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` rev 2.2
+**Builds on:** `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` rev 2.2
 **Forward:** implementation plan and migration sequencing to follow in a separate planning doc
 
 ## Motivation

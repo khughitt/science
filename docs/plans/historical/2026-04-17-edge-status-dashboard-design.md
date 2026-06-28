@@ -4,7 +4,7 @@
 **Created:** 2026-04-17
 **Source:** feedback fb-2026-04-13-008 (mm30)
 **Amended:** 2026-04-19 — adds `eliminated` as a fifth enum value per
-`docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md`. Graph-layer
+`docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`. Graph-layer
 storage for `eliminated` (the `sci:eliminatedBy` predicate) and for the sibling
 `identification` axis introduced by the 2026-04-19 spec is **deferred to Phase 2
 `sync-dag`**. Until then, `--edge-status-distribution` and `--edge-status-trend`

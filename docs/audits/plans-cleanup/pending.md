@@ -1,7 +1,37 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `8`
+- Pending thread count: `13`
+
+## dataset-adapter-expansion
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-17-dataset-adapter-expansion-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; adapter list is partially implemented and explicitly demand-gated
+    - `docs/plans/2026-04-17-dataset-adapter-expansion-design.md`
+- remaining_gaps:
+  - Decide whether the remaining adapter backlog should be refiled as current tasks or retired as demand-gated ideas.
+  - If retained, summarize adapter source priorities in durable dataset discovery docs instead of leaving an active plan as the only list.
+
+## dataset-entity-lifecycle
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`
+  - `docs/plans/2026-04-19-dataset-entity-lifecycle.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset lifecycle contract is migrated to durable docs
+    - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`
+    - `docs/plans/2026-04-19-dataset-entity-lifecycle.md`
+- remaining_gaps:
+  - Migrate the useful dataset lifecycle contract into durable user-guide/reference docs before removing the active plan.
+  - Normalize stale docs/specs references while this remains a pending architectural source.
 
 ## distill-import
 
@@ -16,6 +46,22 @@
 - remaining_gaps:
   - No durable user-guide page or command-map entry documents when to use science distill or graph import.
   - The plan's examples and manifest contract should be migrated before deleting the plan.
+
+## general-graph-api-visualization
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-12-general-graph-api-visualization-design.md`
+  - `docs/plans/2026-04-12-general-graph-api-visualization.md`
+- pending_actions:
+  - `deferred`: review status incomplete; science-side graph export exists but cross-repo dashboard adoption was not verified
+    - `docs/plans/2026-04-12-general-graph-api-visualization-design.md`
+    - `docs/plans/2026-04-12-general-graph-api-visualization.md`
+- remaining_gaps:
+  - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
+  - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
 
 ## inquiry-workflow
 
@@ -118,4 +164,36 @@
   - CLI and command docs appear inconsistent: find-datasets instructs science datasets search, but current CLI exposes science dataset catalog/entity lifecycle commands.
   - The March plan's Frictionless dependency and datasets validate/check-coverage CLI shape were not found as originally designed.
   - The thread combines adapter search, dataset entity lifecycle, datapackage validation, and pipeline guidance, which now live in separate evolved systems.
+
+## project-big-picture
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-18-project-big-picture-design.md`
+  - `docs/plans/2026-04-18-project-big-picture.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until full big-picture semantics move to durable docs
+    - `docs/plans/2026-04-18-project-big-picture-design.md`
+    - `docs/plans/2026-04-18-project-big-picture.md`
+- remaining_gaps:
+  - Create or migrate a durable big-picture user-guide/contract note, or update the command to stop depending on an implementation plan for semantics.
+  - Fix stale docs/specs references while the thread remains pending.
+
+## project-model
+
+- status: `unclear`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-05-project-model-design.md`
+  - `docs/plans/2026-04-05-project-model.md`
+- pending_actions:
+  - `deferred`: review status unclear; reconcile with companion paper-model and later entity/epistemic model docs before cleanup
+    - `docs/plans/2026-04-05-project-model-design.md`
+    - `docs/plans/2026-04-05-project-model.md`
+- remaining_gaps:
+  - Reconcile project-model and paper-model together before moving or deleting either thread.
+  - Confirm which parts of the broad entity taxonomy are now durable user-guide contract versus superseded by later epistemic-data-model and dataset lifecycle work.
 

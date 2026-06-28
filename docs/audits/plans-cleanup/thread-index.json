@@ -1,10 +1,10 @@
 {
-  "file_count": 358,
-  "generated_at": "2026-06-28T13:20:23+00:00",
+  "file_count": 348,
+  "generated_at": "2026-06-28T13:52:26+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 238,
+  "thread_count": 231,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -1339,33 +1339,6 @@
       "thread_id": "d1-geneset-collection"
     },
     {
-      "earliest_file_date": "2026-04-19",
-      "files": [
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline-design.md",
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline.md"
-      ],
-      "latest_file_date": "2026-04-19",
-      "normalized_slug": "dag-rendering-and-audit-pipeline",
-      "raw_slugs": {
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline-design.md": "dag-rendering-and-audit-pipeline-design",
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline.md": "dag-rendering-and-audit-pipeline"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline-design.md": "design",
-        "docs/plans/2026-04-19-dag-rendering-and-audit-pipeline.md": null
-      },
-      "thread_id": "dag-rendering-and-audit-pipeline"
-    },
-    {
       "earliest_file_date": "2026-04-20",
       "files": [
         "docs/plans/2026-04-20-dag-validate-strict-design.md",
@@ -1837,33 +1810,6 @@
       "thread_id": "downstream-conventions-migration"
     },
     {
-      "earliest_file_date": "2026-04-11",
-      "files": [
-        "docs/plans/2026-04-11-downstream-feedback-fixes-design.md",
-        "docs/plans/2026-04-11-downstream-feedback-fixes.md"
-      ],
-      "latest_file_date": "2026-04-11",
-      "normalized_slug": "downstream-feedback-fixes",
-      "raw_slugs": {
-        "docs/plans/2026-04-11-downstream-feedback-fixes-design.md": "downstream-feedback-fixes-design",
-        "docs/plans/2026-04-11-downstream-feedback-fixes.md": "downstream-feedback-fixes"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-11-downstream-feedback-fixes-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-11-downstream-feedback-fixes.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-11-downstream-feedback-fixes-design.md": "design",
-        "docs/plans/2026-04-11-downstream-feedback-fixes.md": null
-      },
-      "thread_id": "downstream-feedback-fixes"
-    },
-    {
       "earliest_file_date": "2026-04-25",
       "files": [
         "docs/plans/2026-04-25-downstream-project-conventions-audit.md"
@@ -1883,54 +1829,6 @@
         "docs/plans/2026-04-25-downstream-project-conventions-audit.md": null
       },
       "thread_id": "downstream-project-conventions-audit"
-    },
-    {
-      "earliest_file_date": "2026-04-17",
-      "files": [
-        "docs/plans/2026-04-17-edge-status-dashboard-design.md"
-      ],
-      "latest_file_date": "2026-04-17",
-      "normalized_slug": "edge-status-dashboard",
-      "raw_slugs": {
-        "docs/plans/2026-04-17-edge-status-dashboard-design.md": "edge-status-dashboard-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-17-edge-status-dashboard-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-17-edge-status-dashboard-design.md": "design"
-      },
-      "thread_id": "edge-status-dashboard"
-    },
-    {
-      "earliest_file_date": "2026-04-19",
-      "files": [
-        "docs/plans/2026-04-19-entity-aspects-design.md",
-        "docs/plans/2026-04-19-entity-aspects.md"
-      ],
-      "latest_file_date": "2026-04-19",
-      "normalized_slug": "entity-aspects",
-      "raw_slugs": {
-        "docs/plans/2026-04-19-entity-aspects-design.md": "entity-aspects-design",
-        "docs/plans/2026-04-19-entity-aspects.md": "entity-aspects"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-19-entity-aspects-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-19-entity-aspects.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-19-entity-aspects-design.md": "design",
-        "docs/plans/2026-04-19-entity-aspects.md": null
-      },
-      "thread_id": "entity-aspects"
     },
     {
       "earliest_file_date": "2026-06-15",
@@ -2605,27 +2503,6 @@
       "thread_id": "infer-schema-scaffold"
     },
     {
-      "earliest_file_date": "2026-04-17",
-      "files": [
-        "docs/plans/2026-04-17-inquiry-edge-posterior-annotations-design.md"
-      ],
-      "latest_file_date": "2026-04-17",
-      "normalized_slug": "inquiry-edge-posterior-annotations",
-      "raw_slugs": {
-        "docs/plans/2026-04-17-inquiry-edge-posterior-annotations-design.md": "inquiry-edge-posterior-annotations-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-17-inquiry-edge-posterior-annotations-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-17-inquiry-edge-posterior-annotations-design.md": "design"
-      },
-      "thread_id": "inquiry-edge-posterior-annotations"
-    },
-    {
       "earliest_file_date": "2026-06-14",
       "files": [
         "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md",
@@ -2774,27 +2651,6 @@
         "docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md": "design"
       },
       "thread_id": "knowledge-meta-model-and-substrate"
-    },
-    {
-      "earliest_file_date": "2026-04-15",
-      "files": [
-        "docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md"
-      ],
-      "latest_file_date": "2026-04-15",
-      "normalized_slug": "layered-claims-and-causal-methodology",
-      "raw_slugs": {
-        "docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md": "layered-claims-and-causal-methodology-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md": "design"
-      },
-      "thread_id": "layered-claims-and-causal-methodology"
     },
     {
       "earliest_file_date": "2026-06-05",
@@ -5180,27 +5036,6 @@
         "docs/plans/2026-04-25-synthesis-rollup-frontmatter.md": null
       },
       "thread_id": "synthesis-rollup-frontmatter"
-    },
-    {
-      "earliest_file_date": "2026-04-11",
-      "files": [
-        "docs/plans/2026-04-11-tags-to-related-unification.md"
-      ],
-      "latest_file_date": "2026-04-11",
-      "normalized_slug": "tags-to-related-unification",
-      "raw_slugs": {
-        "docs/plans/2026-04-11-tags-to-related-unification.md": "tags-to-related-unification"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-11-tags-to-related-unification.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-11-tags-to-related-unification.md": null
-      },
-      "thread_id": "tags-to-related-unification"
     },
     {
       "earliest_file_date": "2026-04-27",

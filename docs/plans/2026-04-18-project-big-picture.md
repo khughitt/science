@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, click, PyYAML, pytest (for `science`). Markdown prompts for the command and sub-agents. Existing `science graph …` CLI surfaces are reused, not replaced.
 
-**Spec:** `docs/specs/2026-04-18-project-big-picture-design.md`
+**Spec:** `docs/plans/2026-04-18-project-big-picture-design.md`
 
 ---
 
@@ -1602,7 +1602,7 @@ description: Generate a multi-scale, hypothesis-organized synthesis report for t
 
 Generate `doc/reports/synthesis/<hyp>.md` files (one per hypothesis), `doc/reports/synthesis/_emergent-threads.md`, and `doc/reports/synthesis.md` (project rollup).
 
-See the design spec at `${CLAUDE_PLUGIN_ROOT}/docs/specs/2026-04-18-project-big-picture-design.md` for full semantics.
+See the design spec at `${CLAUDE_PLUGIN_ROOT}/docs/plans/2026-04-18-project-big-picture-design.md` for full semantics.
 
 ## Flags
 

@@ -166,7 +166,7 @@ in the plan):
     the referenced runtime file exists on disk.
 - `consumed_by` includes `plan:<this-plan-file-stem>`.
 - All eleven state invariants hold (see the spec at
-  `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md`).
+  `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`).
 
 **Scoring:**
 

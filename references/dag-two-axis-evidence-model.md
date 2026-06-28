@@ -114,7 +114,7 @@ edge-label footnotes.
 
 When an edge has been fit as a Bayesian edge (β, HDI, P(sign)), the
 posterior lives in a separate `posterior:` block (see
-`docs/specs/2026-04-17-inquiry-edge-posterior-annotations-design.md`).
+`docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md`).
 Posteriors are complementary to the two-axis labels:
 
 - `edge_status` says "how replicated is this conclusion."
@@ -127,13 +127,13 @@ non-eliminated edges. The precedence rules live in the render spec.
 
 ## Cross-references
 
-- **`docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md`** —
+- **`docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`** —
   introduces `eliminated` and `identification`; defines the render
   precedence matrix and the tagged-ref schema.
-- **`docs/specs/2026-04-17-edge-status-dashboard-design.md`** —
+- **`docs/plans/historical/2026-04-17-edge-status-dashboard-design.md`** —
   original `edge_status` enum spec; amended 2026-04-19 to include
   `eliminated`.
-- **`docs/specs/2026-04-17-inquiry-edge-posterior-annotations-design.md`** —
+- **`docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md`** —
   the posterior block schema.
 - **`docs/specs/2026-03-07-phase4b-causal-dag-design.md`** — the
   underlying inquiry / graph/causal layer that these annotations

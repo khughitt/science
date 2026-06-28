@@ -6,7 +6,7 @@ description: Generate a multi-scale, hypothesis-organized synthesis for the proj
 
 Generate `entities/reports/synthesis/<hyp>.md` files (one per hypothesis), `entities/reports/synthesis/_emergent-threads.md`, and `entities/reports/synthesis.md` (project rollup).
 
-See the design spec at `${CLAUDE_PLUGIN_ROOT}/docs/specs/2026-04-18-project-big-picture-design.md` for full semantics.
+See the design spec at `${CLAUDE_PLUGIN_ROOT}/docs/plans/2026-04-18-project-big-picture-design.md` for full semantics.
 
 ## Flags
 

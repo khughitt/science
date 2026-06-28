@@ -6,7 +6,7 @@
 
 **Architecture:** Two surface-specific JSON Schemas (`science-pkg-entity-1.0`, `science-pkg-runtime-1.0`) share a base. Entity surface (markdown frontmatter under `doc/datasets/`) carries project-level metadata; runtime surface (`datapackage.yaml` next to staged data) carries per-resource info. Single source of truth: entity drops `resources[]` entirely. Workflow registration (`science dataset register-run`) emits per-output runtime datapackages plus matching derived dataset entities with symmetric backlinks. Strict migration of legacy `data-package` entities via shipped `science data-package migrate`.
 
-**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science/src/science_tool/` (CLI, graph, health). Tests under `science/tests/` and `science-model/tests/`. Spec source of truth: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2).
+**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science/src/science_tool/` (CLI, graph, health). Tests under `science/tests/` and `science-model/tests/`. Spec source of truth: `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2).
 
 **Key cross-cutting invariants (read before any task):**
 
@@ -18,7 +18,7 @@
 - **Strict graph-build mode is the v1 default.** No warning period; `data-package migrate --dry-run` and `--all` give a smooth on-ramp without softening the failure posture.
 
 **Reference paths used throughout:**
-- Spec: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md`
+- Spec: `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`
 - Existing entity model: `science-model/src/science_model/entities.py`
 - Existing frontmatter parser: `science-model/src/science_model/frontmatter.py`
 - Existing data-package schema: `science-model/src/science_model/packages/schema.py`
@@ -4273,7 +4273,7 @@ in the plan):
     the referenced runtime file exists on disk.
 - `consumed_by` includes `plan:<this-plan-file-stem>`.
 - All eleven state invariants hold (see the spec at
-  `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md`).
+  `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`).
 
 **Scoring:**
 
@@ -4714,7 +4714,7 @@ In `skills/research/research-package-spec.md`, find references to `data-package`
 - "produced by a `workflow-run`" sections — clarify that the **derived dataset entities** are the `produced_by` targets; the `research-package` `displays` them.
 - The "Knowledge Graph Integration" section listing `data-package` — add a note that v2 (rev 2.1 of the dataset entity lifecycle spec) renames this to `research-package` and splits the data half into derived `dataset` entities.
 
-Add a one-line pointer at the top: "See `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` for the v2 unified dataset model."
+Add a one-line pointer at the top: "See `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` for the v2 unified dataset model."
 
 - [ ] **Step 2: Commit**
 
@@ -4732,7 +4732,7 @@ git commit -m "docs(skill): cross-reference rev 2.1 dataset-entity-lifecycle spe
 - [ ] **Step 1: Confirm spec references resolve**
 
 ```bash
-grep -n "docs/specs/2026-04-19-multi-backend-entity-resolver-design.md" docs/specs/2026-04-19-dataset-entity-lifecycle-design.md
+grep -n "docs/plans/2026-04-20-multi-backend-entity-resolver-design.md" docs/plans/2026-04-19-dataset-entity-lifecycle-design.md
 ```
 
 If Spec Y has not been written yet, the spec contains a forward-reference. This is intentional. No action needed; document in your handoff that Spec Y should be written next.
@@ -4789,4 +4789,3 @@ Two execution options:
 2. **Inline Execution** — Execute tasks in this session using `executing-plans`, batch execution with checkpoints.
 
 Which approach?
-

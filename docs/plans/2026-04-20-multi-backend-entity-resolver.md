@@ -2715,12 +2715,12 @@ Expected: PASS — the canary stays green from Task 1.2 through Task 7.2.
 ### Task 7.3: Update spec cross-references + handoff for Spec Z
 
 **Files:**
-- Modify: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (already points at Spec Y design doc; verify still correct)
+- Modify: `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` (already points at Spec Y design doc; verify still correct)
 
 - [ ] **Step 1: Verify forward-reference is correct**
 
 ```bash
-grep -n "multi-backend-entity-resolver" docs/specs/2026-04-19-dataset-entity-lifecycle-design.md
+grep -n "multi-backend-entity-resolver" docs/plans/2026-04-19-dataset-entity-lifecycle-design.md
 ```
 
 Expected: one match pointing at `2026-04-20-multi-backend-entity-resolver-design.md`. If a stale handoff reference remains, update to the design.

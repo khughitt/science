@@ -2264,7 +2264,7 @@ as an extension-layer helper but is no longer imported from graph/sources.py."
 ### Task 13: Final sweep — lint, type, test, docs
 
 **Files:**
-- No new code; touches: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (update forward reference), README-style touches if needed.
+- No new code; touches: `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` (update forward reference), README-style touches if needed.
 
 - [ ] **Step 1: Ruff**
 
@@ -2313,9 +2313,9 @@ Expected: PASS. The snapshot was regenerated in Task 10 and has been stable thro
 
 - [ ] **Step 5: Update spec cross-references**
 
-Verify `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` forward-reference still resolves to the replacement spec (`docs/specs/2026-04-20-multi-backend-entity-resolver-design.md`). No commit needed if already correct.
+Verify `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` forward-reference still resolves to the replacement spec (`docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`). No commit needed if already correct.
 
-Optionally update the replacement spec with an "Implementation" section pointing at this plan (`docs/specs/plans/2026-04-20-unified-entity-model.md`).
+Optionally update the replacement spec with an "Implementation" section pointing at this plan (`docs/plans/2026-04-20-unified-entity-model.md`).
 
 - [ ] **Step 6: Commit any doc updates**
 

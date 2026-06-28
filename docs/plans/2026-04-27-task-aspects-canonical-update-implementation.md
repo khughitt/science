@@ -145,7 +145,7 @@ git add science/src/science_tool/project_artifacts/data/validate.sh \
 git commit -m "feat(project-artifacts): version bump 2026.04.26.2 -> 2026.04.26.3 (task aspects)
 
 Replaces canonical task-field check 'type' with 'aspects' per
-docs/specs/2026-04-19-entity-aspects-design.md. All four reference
+docs/plans/historical/2026-04-19-entity-aspects-design.md. All four reference
 projects had migrated their tasks to 'aspects:' during the entity-
 aspects rollout, but the canonical validator was never updated to
 match — every task was failing with 'missing required field: type'.
@@ -219,5 +219,5 @@ T2's three project updates can run in any order; pick the simplest first as proo
 ## Cross-references
 
 - Spec: `docs/superpowers/specs/2026-04-27-task-aspects-canonical-update.md`
-- Underlying convention: `docs/specs/2026-04-19-entity-aspects-design.md`
+- Underlying convention: `docs/plans/historical/2026-04-19-entity-aspects-design.md`
 - Predecessor canonical bump: `docs/superpowers/plans/2026-04-27-validate-hook-points-implementation.md` (.1 → .2)
