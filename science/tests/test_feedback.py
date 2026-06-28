@@ -292,6 +292,30 @@ def test_find_duplicate_different_target_no_match(tmp_path: Path):
     assert dup is None
 
 
+def test_find_duplicate_distinguishes_concern(tmp_path):
+    base = dict(target="skill:statistics", summary="check independence assumption", status="open")
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", concern="tooling", **base))
+
+    # Same target + same summary but different concern → NOT a duplicate.
+    dup = find_duplicate(
+        tmp_path,
+        target="skill:statistics",
+        summary="check independence assumption",
+        concern="methodology:statistics",
+    )
+    assert dup is None
+
+    # Same target + summary + concern → IS a duplicate.
+    same = find_duplicate(
+        tmp_path,
+        target="skill:statistics",
+        summary="check independence assumption",
+        concern="tooling",
+    )
+    assert same is not None
+    assert same.id == "fb-2026-06-28-001"
+
+
 def test_group_for_triage(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss", project="proj-a")
     _make_entry(tmp_path, "fb-2026-03-25-002", target="command:discuss", project="proj-b")

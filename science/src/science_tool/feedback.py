@@ -201,15 +201,18 @@ def find_duplicate(
     *,
     target: str,
     summary: str,
+    concern: str = "tooling",
 ) -> FeedbackEntry | None:
-    """Find an existing open entry with the same target and similar summary.
+    """Find an existing open entry with the same target, concern, and similar summary.
 
-    Uses bidirectional substring matching: returns a match if either summary
-    is a substring of the other.
+    Uses bidirectional substring matching on summary. Entries differing in
+    concern are distinct even when target and summary match.
     """
     entries = list_entries(feedback_dir, status="open", target=target)
     summary_lower = summary.lower()
     for entry in entries:
+        if entry.concern != concern:
+            continue
         entry_summary_lower = entry.summary.lower()
         if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
             return entry
