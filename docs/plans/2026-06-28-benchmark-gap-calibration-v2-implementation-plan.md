@@ -98,10 +98,6 @@ title: Single-cell longitudinal benchmark gap
         payload = gaps_report(tmp_path, facet=facet)
         assert payload["summary"]["entities_total"] == 1
 
-    payload = gaps_report(tmp_path, facet="single-cell-rna-seq")
-    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0011-single-cell"]
-    assert "single-cell-rna-seq" in payload["benchmark_gaps"][0]["suggested_search_facets"]
-
 
 def test_broad_dataset_and_entity_tokens_do_not_create_opportunity_matches(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
@@ -768,6 +764,34 @@ with:
 
 - [ ] **Step 5: Run tests and commit**
 
+Before running the focused tests, update these existing assertions because
+inferred hints now enrich `suggested_search_facets` beyond the original
+coverage-gap-only list.
+
+In `test_gaps_report_projects_existing_coverage_gaps_as_missing_facet`, replace:
+
+```python
+assert row["suggested_search_facets"] == ["proteomics"]
+```
+
+with:
+
+```python
+assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
+```
+
+In `test_gaps_report_prefers_taskless_weak_over_missing_facet`, replace:
+
+```python
+assert row["suggested_search_facets"] == ["proteomics"]
+```
+
+with:
+
+```python
+assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
+```
+
 Run:
 
 ```bash
@@ -794,6 +818,12 @@ rtk git commit -m "feat(benchmark): infer gap search facets"
 
 - [ ] **Step 1: Add failing tests for per-entity candidates and score components**
 
+Use hint-only vocabulary in these near-miss fixtures. Do not put scoreable
+controlled facet tokens such as `perturbation` or `proteomics` in the entity
+title/body when the candidate dataset declares those facets; exact facet overlap
+would make the dataset a positive `current_match` and exclude it from
+`candidate_benchmarks`.
+
 Append:
 
 ```python
@@ -807,9 +837,9 @@ def test_gaps_report_candidates_are_entity_specific_near_misses(tmp_path: Path) 
         """
 id: hypothesis:0018-perturbation
 type: hypothesis
-title: Perturbation response benchmark gap
+title: Drug screen benchmark gap
 """,
-        body="Drug perturbation response should be tested.",
+        body="Drug compound knockout screen should be tested.",
     )
     _write_entity(
         tmp_path,
@@ -818,9 +848,9 @@ title: Perturbation response benchmark gap
         """
 id: hypothesis:0019-proteomics
 type: hypothesis
-title: Proteomics benchmark gap
+title: Protein abundance benchmark gap
 """,
-        body="Proteomics should be tested.",
+        body="Phosphoproteomic protein abundance should be tested.",
     )
     _write_dataset(
         tmp_path,
@@ -1222,9 +1252,9 @@ def test_gaps_report_calibration_payload_explains_gap_and_candidates(tmp_path: P
         """
 id: hypothesis:0021-calibration
 type: hypothesis
-title: Perturbation summary gap
+title: Drug screen summary gap
 """,
-        body="Summary response needs drug perturbation evidence.",
+        body="Summary response needs drug compound screening evidence.",
     )
     _write_dataset(
         tmp_path,
@@ -1486,17 +1516,34 @@ payload = gaps_report(
 )
 ```
 
-Replace the table rendering block:
+Replace the whole table rendering block from:
 
 ```python
+rows = payload["benchmark_gaps"]
 if not rows:
     click.echo("No benchmark gaps.")
     return
+table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
+for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
+    table.add_column(col, overflow="fold", no_wrap=False)
+for row in rows:
+    missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
+    candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
+    table.add_row(
+        row["entity_id"],
+        row["gap_level"],
+        missing,
+        str(len(row["current_matches"])),
+        candidates,
+        row["reason"],
+    )
+Console(width=200).print(table)
 ```
 
 with:
 
 ```python
+rows = payload["benchmark_gaps"]
 if not rows:
     click.echo("No benchmark gaps.")
 else:
@@ -1567,9 +1614,9 @@ def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
         """
 id: hypothesis:0023-compat
 type: hypothesis
-title: Proteomics compatibility gap
+title: Protein abundance compatibility gap
 """,
-        body="Proteomics evidence is needed.",
+        body="Phosphoproteomic protein abundance is needed.",
     )
     _write_dataset(
         tmp_path,

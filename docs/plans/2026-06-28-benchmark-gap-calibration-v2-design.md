@@ -213,6 +213,14 @@ represented in the entity's `current_matches`; they are not limited to
 over cached contexts. Do not recompute baseline score, readiness, or controlled
 facet tokens inside the per-row loop.
 
+Near-miss candidates depend on hint-only vocabulary. If an entity text contains
+the same normalized token that a benchmark declares as a scoreable controlled
+facet, the benchmark is a positive `matched_opportunity` and is excluded from
+near-miss candidates for that entity. For example, `perturbation` can match a
+benchmark that declares `signal_types: [perturbation]`, while `drug`,
+`compound`, or `knockout` can infer a perturbation hint without creating that
+positive exact-facet match.
+
 Each candidate row should include:
 
 ```json
@@ -263,6 +271,14 @@ with `reason_notes: ["high-baseline-fallback"]` so the report stays useful but
 does not pretend there was entity-specific evidence. Fallback rows are used only
 when there are zero scored candidates; they are never mixed with scored rows and
 still count against the JSON/table row limits.
+
+Because `task_readiness` contributes entity-agnostic points for benchmark
+records with complete tasks and usable readiness, `candidate_score == 0` will be
+uncommon in catalogs with task-rich benchmarks. In those cases the report may
+still show candidates without entity-specific hint overlap, bounded by the
+entity-agnostic ceiling described above. Calibration output should make that
+distinction visible through zero `missing_facet_overlap` /
+`hint_facet_overlap` components.
 
 Emit `high-baseline` on scored candidate rows when `baseline_quality >= 8`.
 Emit `task-ready` when `task_readiness >= 12`. These notes are deterministic
