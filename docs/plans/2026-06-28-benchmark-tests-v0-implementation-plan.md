@@ -96,7 +96,7 @@ benchmark:
     assert row["benchmark_kinds"] == ["perturbation-response"]
     assert row["readiness_label"] == "runnable"
     assert row["priority_source"] == "opportunity-relative"
-    assert row["priority_score"] == row["score_components"]["source"]["total"]
+    assert row["priority_score"] == sum(row["score_components"]["source"].values())
     assert row["score_components"]["baseline"]["task_completeness"] == 30
     assert row["matched_facets"] == ["perturbation", "single-cell-rna-seq"]
     assert row["prediction_target"] == "post-treatment expression"
@@ -215,16 +215,11 @@ def _test_plan_state(task: OpportunityTask | None) -> TestPlanState:
 def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> ReadinessLabel:
     fm = context.dataset.frontmatter
     runtime_state = runtime_state_for(fm)
+    readiness_state = readiness_for(dict(fm)).state
     if runtime_state == "runnable" and has_task:
         return "runnable"
-    if runtime_state == "unstaged-deposit":
-        return "stage-needed"
     if runtime_state in {"reference-only", "pointer-only"} or not has_task:
         return "metadata-only"
-    if runtime_state == "blocked-access":
-        return "blocked"
-
-    readiness_state = readiness_for(dict(fm)).state
     if readiness_state in {
         "derived-via-code",
         "derived-via-member-of",
@@ -236,11 +231,11 @@ def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> R
         return "stage-needed"
     if readiness_state in {"embargoed", "withdrawn", "unknown"} or readiness_state.endswith(", unverified"):
         return "blocked"
+    if runtime_state == "unstaged-deposit":
+        return "stage-needed"
+    if runtime_state == "blocked-access":
+        return "blocked"
     return "metadata-only"
-
-
-def _source_components_with_total(components: Mapping[str, int], total: int) -> dict[str, int]:
-    return {"total": total, **dict(components)}
 
 
 def _context_declared_hint_facets(context: DatasetOpportunityContext) -> set[str]:
@@ -291,7 +286,7 @@ def _benchmark_test_row(
         "priority_score": priority_score,
         "priority_source": priority_source,
         "score_components": {
-            "source": _source_components_with_total(source_components, priority_score),
+            "source": dict(source_components),
             "baseline": dict(context.baseline.components),
         },
         "matched_facets": matched_facets,
@@ -551,6 +546,7 @@ benchmark:
     assert row["readiness_label"] == "metadata-only"
     assert row["matched_facets"] == ["spatial", "cross-context-generalization"]
     assert "entity-hint:spatial" in row["reason_notes"]
+    assert row["priority_score"] == min(sum(row["score_components"]["source"].values()), 100)
     assert row["needs"] == ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]
 
 
@@ -619,7 +615,7 @@ benchmark:
     assert [row["benchmark_id"] for row in by_benchmark["benchmark_tests"]] == ["dataset:sciplex3"]
 
 
-def test_benchmark_tests_report_deduplicates_opportunity_and_gap_current_match(tmp_path: Path) -> None:
+def test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
     _write_entity(
@@ -655,6 +651,49 @@ benchmark:
     assert keys == [("hypothesis:0004-weak", "dataset:atlas", None)]
     row = payload["benchmark_tests"][0]
     assert row["priority_source"] == "opportunity-relative"
+
+
+def test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence() -> None:
+    from science_tool.benchmark_opportunities import _dedupe_benchmark_test_rows
+
+    base = {
+        "entity_id": "hypothesis:0005-merge",
+        "entity_title": "Merge",
+        "benchmark_id": "dataset:merge",
+        "benchmark_title": "Merge Benchmark",
+        "task_id": None,
+        "test_plan_state": "draft-needed",
+        "task_type": "",
+        "benchmark_kinds": ["static-association"],
+        "readiness_label": "metadata-only",
+        "priority_score": 10,
+        "priority_source": "gap-fallback",
+        "score_components": {"source": {"task_readiness": 10}, "baseline": {}},
+        "matched_facets": ["spatial"],
+        "reason_notes": ["fallback:task-ready"],
+        "prediction_target": "",
+        "held_out_unit": "",
+        "metric": "",
+        "baseline": "",
+        "ground_truth": {"type": "", "description": ""},
+        "needs": ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"],
+    }
+    stronger = {
+        **base,
+        "priority_score": 25,
+        "priority_source": "opportunity-relative",
+        "score_components": {"source": {"facet_overlap": 25}, "baseline": {}},
+        "matched_facets": ["perturbation"],
+        "reason_notes": ["facet-token:perturbation"],
+    }
+
+    rows = _dedupe_benchmark_test_rows([base, stronger])
+
+    assert len(rows) == 1
+    assert rows[0]["priority_source"] == "opportunity-relative"
+    assert rows[0]["priority_score"] == 25
+    assert rows[0]["matched_facets"] == ["perturbation", "spatial"]
+    assert rows[0]["reason_notes"] == ["facet-token:perturbation", "fallback:task-ready"]
 ```
 
 - [ ] **Step 2: Run tests to verify failures**
@@ -665,7 +704,8 @@ Run:
 rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_includes_draft_needed_gap_candidates \
   science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_filters_state_facet_and_benchmark \
-  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_deduplicates_opportunity_and_gap_current_match \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence \
   -q
 ```
 
@@ -788,7 +828,8 @@ Run:
 rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_includes_draft_needed_gap_candidates \
   science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_filters_state_facet_and_benchmark \
-  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_deduplicates_opportunity_and_gap_current_match \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence \
   -q
 ```
 
@@ -804,10 +845,27 @@ def test_benchmark_tests_report_readiness_labels_cover_runtime_states(tmp_path: 
 
     cases = [
         ("runnable", "dataset_class: deposit\nlocal_path: data/runnable", True, "runnable"),
-        ("unstaged", "dataset_class: deposit\naccess:\n  level: public\n  verified: true", True, "stage-needed"),
+        (
+            "unstaged",
+            "origin: external\ndataset_class: deposit\naccess:\n  level: public\n  availability: available\n  verified: true",
+            True,
+            "stage-needed",
+        ),
+        ("derived", "origin: derived\ndataset_class: deposit\nproduced_by: [code-file:builder]", True, "stage-needed"),
+        (
+            "embargoed",
+            "origin: external\ndataset_class: deposit\naccess:\n  level: public\n  availability: embargoed\n  verified: true",
+            True,
+            "blocked",
+        ),
         ("reference", "dataset_class: reference", False, "metadata-only"),
         ("pointer", "dataset_class: pointer", False, "metadata-only"),
-        ("blocked", "dataset_class: deposit\naccess:\n  level: controlled\n  verified: false", True, "blocked"),
+        (
+            "blocked",
+            "origin: external\ndataset_class: deposit\naccess:\n  level: controlled\n  availability: available\n  verified: false",
+            True,
+            "blocked",
+        ),
     ]
     for slug, access_block, has_task, expected in cases:
         tasks = """
@@ -846,6 +904,8 @@ benchmark:
 
     assert labels == {
         "dataset:blocked": "blocked",
+        "dataset:derived": "stage-needed",
+        "dataset:embargoed": "blocked",
         "dataset:pointer": "metadata-only",
         "dataset:reference": "metadata-only",
         "dataset:runnable": "runnable",
@@ -1027,7 +1087,7 @@ benchmark:
 def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> None:
     entity_result = _invoke_tests(tmp_path, "--entity", "hypothesis:missing")
     assert entity_result.exit_code != 0
-    assert "Could not resolve entity reference" in entity_result.output
+    assert "Entity not found" in entity_result.output
 
     facet_result = _invoke_tests(tmp_path, "--facet", "not-a-facet")
     assert facet_result.exit_code != 0
@@ -1272,6 +1332,8 @@ Expected:
 - exit code 0;
 - valid JSON;
 - top-level keys include `benchmark_tests`, `summary`, and `commons_notice`;
+- `benchmark_tests` may be empty if the project has no current benchmark-test
+  projections after filters; that is not a smoke-test failure;
 - no traceback.
 
 If output is large, rerun with a summarizing Python command instead of pasting the full JSON:
@@ -1337,5 +1399,5 @@ No placeholder markers are intentionally present. All test and implementation st
 - `test_plan_state` values are `concrete` and `draft-needed`.
 - `priority_source` values are `opportunity-relative`, `gap-candidate`, and `gap-fallback`.
 - Row field name is `readiness_label`, not `readiness`.
-- `score_components.source.total` is included so tests can assert score passthrough without knowing every component.
+- `score_components.source` contains only the source score's real component keys; tests assert passthrough by comparing `priority_score` to the applicable source score or component sum for fixtures where no clamp applies.
 - `benchmark_id` filter normalizes bare slugs to `dataset:<slug>`.

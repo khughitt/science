@@ -266,8 +266,12 @@ the gap hint vocabulary intentionally grows.
 ## Readiness Labels
 
 The command should expose a compact readiness label for planning. Evaluate
-runtime state first, then use `readiness_for().state` only as a fallback or
-tie-breaker for states that runtime stageability does not distinguish:
+`runtime_state_for(frontmatter)` and `readiness_for(frontmatter).state` together:
+runtime state identifies stageability, while readiness refines cases that
+runtime stageability collapses. For example, a derived dataset can be
+`runtime_state=blocked-access` but `readiness=derived-via-code`, and an
+embargoed dataset can be `runtime_state=unstaged-deposit` but
+`readiness=embargoed`.
 
 - `runnable`: `runtime_state_for(frontmatter) == "runnable"` and the row has a
   task.
