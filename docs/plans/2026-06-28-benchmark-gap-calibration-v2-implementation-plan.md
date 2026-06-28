@@ -187,17 +187,15 @@ ENTITY_SUPPRESSED_TOKENS = frozenset(
         "question",
         "hypothesis",
         "proposition",
-        "analysis",
-        "cell",
-        "data",
-        "dataset",
-        "evidence",
-        "model",
-        "result",
-        "response",
     }
 )
 ```
+
+Keep the existing `_STOP_TOKENS` set unchanged. Workflow words such as
+`analysis`, `cell`, `data`, `dataset`, `evidence`, `model`, `result`, and
+`response` should continue to land in the `stop` evidence bucket. The new
+`ENTITY_SUPPRESSED_TOKENS` set is only for entity/document boilerplate that
+should land in the `broad_entity` bucket.
 
 Update `TokenEvidence`:
 
@@ -738,7 +736,7 @@ if _is_weak_gap(current_matches):
     for match in current_matches:
         weak_match_facets.update(_normalize_token(value) for value in match["modalities"])
         weak_match_facets.update(_normalize_token(value) for value in match["signal_types"])
-        weak_match_facets &= BENCHMARK_GAP_HINT_FACET_SET
+    weak_match_facets &= BENCHMARK_GAP_HINT_FACET_SET
 suggested_facets = _sorted_facets(missing_facets | hint_facets | weak_match_facets)
 ```
 
@@ -961,6 +959,12 @@ class CandidateScore:
     matched_hint_facets: list[str]
 ```
 
+Add a score index type alias near `CandidateScore`:
+
+```python
+CandidateScoreIndex = dict[tuple[str, str], CandidateScore]
+```
+
 - [ ] **Step 4: Add candidate scoring helpers**
 
 Add near `_candidate_rows()`:
@@ -1035,16 +1039,23 @@ def _candidate_score(
     )
 ```
 
+This intentionally allows the same facet to contribute to both
+`missing_facet_overlap` and `hint_facet_overlap` when it is both an existing
+coverage gap and independently inferred from entity text. The duplicate signal
+is treated as stronger evidence, and both notes should be emitted.
+
 - [ ] **Step 5: Replace `_candidate_rows()` with per-entity context scoring**
 
 Replace `_candidate_rows()` with:
 
 ```python
 def _candidate_rows(
+    entity_id: str,
     contexts: list[DatasetOpportunityContext],
     current_matches: list[OpportunityRow],
     missing_facets: set[str],
     hint_facets: set[str],
+    score_index: CandidateScoreIndex,
     *,
     limit: int = 5,
 ) -> list[GapCandidateBenchmarkRow]:
@@ -1056,6 +1067,7 @@ def _candidate_rows(
         if dataset.id in matched_benchmark_ids:
             continue
         score = _candidate_score(context, missing_facets=missing_facets, hint_facets=hint_facets)
+        score_index[(entity_id, dataset.id)] = score
         row: GapCandidateBenchmarkRow = {
             "benchmark_id": dataset.id,
             "benchmark_title": dataset.title,
@@ -1106,11 +1118,19 @@ with:
 
 ```python
 "candidate_benchmarks": _candidate_rows(
+    current_entity_id,
     analysis.contexts,
     current_matches,
     missing_facets,
     hint_facets,
+    candidate_score_index,
 ),
+```
+
+Before the gap-row loop in `gaps_report()`, initialize the index:
+
+```python
+candidate_score_index: CandidateScoreIndex = {}
 ```
 
 - [ ] **Step 7: Run tests and update old candidate helper test**
@@ -1235,10 +1255,12 @@ benchmark:
     assert payload["calibration"]["enabled"] is True
     evidence = payload["calibration"]["gap_entity_evidence"]["hypothesis:0021-calibration"]
     assert "perturbation" in evidence["facet_hints"]
+    assert "response" in evidence["dropped_tokens"]["stop"]
     assert "summary" in evidence["dropped_tokens"]["broad_entity"]
     candidate = payload["calibration"]["candidate_evidence"][0]
     assert candidate["entity_id"] == "hypothesis:0021-calibration"
     assert candidate["benchmark_id"] == "dataset:sciplex"
+    assert candidate["candidate_score"] == sum(candidate["components"].values())
     assert candidate["components"]["hint_facet_overlap"] > 0
     assert "cancer" in candidate["dropped_dataset_facets"]
 
@@ -1340,6 +1362,7 @@ def _gap_calibration_payload(
     *,
     entities: list[ProjectBenchmarkEntity],
     contexts: list[DatasetOpportunityContext],
+    candidate_scores: CandidateScoreIndex,
     enabled: bool,
 ) -> GapCalibrationPayload:
     if not enabled:
@@ -1371,16 +1394,12 @@ def _gap_calibration_payload(
             context = context_by_id.get(candidate["benchmark_id"])
             if context is None:
                 continue
-            score = _candidate_score(
-                context,
-                missing_facets=set(row["missing_modalities"] + row["missing_signal_types"]),
-                hint_facets=set(row["suggested_search_facets"]),
-            )
+            score = candidate_scores[(row["entity_id"], candidate["benchmark_id"])]
             candidate_evidence.append(
                 {
                     "entity_id": row["entity_id"],
                     "benchmark_id": candidate["benchmark_id"],
-                    "candidate_score": candidate["candidate_score"],
+                    "candidate_score": score.total,
                     "dropped_dataset_facets": _dataset_broad_facets(context),
                     "components": dict(score.components),
                     "reason_notes": list(candidate["reason_notes"]),
@@ -1428,6 +1447,7 @@ calibration = _gap_calibration_payload(
     rows,
     entities=analysis.entities,
     contexts=analysis.contexts,
+    candidate_scores=candidate_score_index,
     enabled=calibration_report,
 )
 ```
@@ -1466,19 +1486,7 @@ payload = gaps_report(
 )
 ```
 
-After rendering the main table, append:
-
-```python
-    if calibration_report:
-        calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
-        calibration_table.add_column("field", overflow="fold", no_wrap=False)
-        calibration_table.add_column("value", overflow="fold", no_wrap=False)
-        for field, value in payload["calibration"].items():
-            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
-        Console(width=200).print(calibration_table)
-```
-
-If there are no gap rows, keep the existing `No benchmark gaps.` return only when `calibration_report` is false. Replace:
+Replace the table rendering block:
 
 ```python
 if not rows:
@@ -1491,8 +1499,6 @@ with:
 ```python
 if not rows:
     click.echo("No benchmark gaps.")
-    if not calibration_report:
-        return
 else:
     table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
     for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
@@ -1509,9 +1515,18 @@ else:
             row["reason"],
         )
     Console(width=200).print(table)
+
+if calibration_report:
+    calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
+    calibration_table.add_column("field", overflow="fold", no_wrap=False)
+    calibration_table.add_column("value", overflow="fold", no_wrap=False)
+    for field, value in payload["calibration"].items():
+        calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+    Console(width=200).print(calibration_table)
 ```
 
-Keep the existing table code inside the `else:` block.
+This keeps `No benchmark gaps.` as the empty-state message and still prints the
+calibration table afterward when `--calibration-report` is set.
 
 - [ ] **Step 7: Run focused tests and commit**
 
