@@ -239,7 +239,7 @@ Initial candidate scoring is additive and intentionally favors entity-specific
 evidence:
 
 - `missing_facet_overlap` (0-30): missing facets from `coverage_gaps` that the
-  candidate declares, `10` points per facet.
+  candidate declares, `10` points per facet, capped at `30`.
 - `hint_facet_overlap` (0-35): inferred entity facet hints that the candidate
   declares, `10` points per facet, capped at `35`.
 - `task_readiness` (0-20): scaled only from cached baseline
@@ -300,7 +300,7 @@ For JSON output, add a top-level `calibration` object:
       "entity_tokens": ["dynamic", "homeostasis", "perturbation"],
       "dropped_tokens": {
         "stop": ["response"],
-        "broad_entity": ["cancer"],
+        "broad_entity": ["summary"],
         "short": []
       },
       "facet_hints": ["perturbation", "time-series"],
@@ -319,7 +319,7 @@ For JSON output, add a top-level `calibration` object:
         "task_readiness": 12,
         "baseline_quality": 10
       },
-      "reason_notes": ["entity-hint:perturbation", "high-baseline"]
+      "reason_notes": ["entity-hint:perturbation", "task-ready", "high-baseline"]
     }
   ]
 }
