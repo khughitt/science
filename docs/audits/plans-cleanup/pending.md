@@ -1,7 +1,24 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `28`
+- Pending thread count: `30`
+
+## b-migration-paper-datasets
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`
+  - `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
+- pending_actions:
+  - `deferred`: review status incomplete; paper.datasets migration module and CLI are not implemented
+    - `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`
+    - `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
+- remaining_gaps:
+  - Implement paper_dataset_migration.py pure migration module.
+  - Expose the migrate-paper-datasets CLI command.
+  - Add migration tests and mark the design implemented.
 
 ## bio-data-architecture-umbrella
 
@@ -57,6 +74,20 @@
 - pending_actions:
   - `deferred`: review status incomplete; Pillar C still tracks full dbSNP artifact smoke and C4c transcript/protein projection
     - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
+- remaining_gaps:
+  - full dbSNP artifact build/operator smoke
+  - C4c transcript/protein projection
+
+## c4-variant-identity
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-05-28-c4-variant-identity-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; C4 still tracks full dbSNP artifact smoke and transcript/protein projection work
+    - `docs/plans/2026-05-28-c4-variant-identity-design.md`
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
   - C4c transcript/protein projection

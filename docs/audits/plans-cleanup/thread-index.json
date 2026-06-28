@@ -1,32 +1,11 @@
 {
-  "file_count": 228,
-  "generated_at": "2026-06-28T16:48:10+00:00",
+  "file_count": 215,
+  "generated_at": "2026-06-28T16:58:33+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 148,
+  "thread_count": 138,
   "threads": [
-    {
-      "earliest_file_date": "2026-05-27",
-      "files": [
-        "docs/plans/2026-05-27-a2-curation-downweight-plan.md"
-      ],
-      "latest_file_date": "2026-05-27",
-      "normalized_slug": "a2-curation-downweight",
-      "raw_slugs": {
-        "docs/plans/2026-05-27-a2-curation-downweight-plan.md": "a2-curation-downweight-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-27-a2-curation-downweight-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-27-a2-curation-downweight-plan.md": "plan"
-      },
-      "thread_id": "a2-curation-downweight"
-    },
     {
       "earliest_file_date": "2026-06-21",
       "files": [
@@ -101,54 +80,6 @@
         "docs/plans/2026-05-29-b-migration-paper-datasets-plan.md": "plan"
       },
       "thread_id": "b-migration-paper-datasets"
-    },
-    {
-      "earliest_file_date": "2026-05-29",
-      "files": [
-        "docs/plans/2026-05-29-b1-dataset-influence-provenance-plan.md"
-      ],
-      "latest_file_date": "2026-05-29",
-      "normalized_slug": "b1-dataset-influence-provenance",
-      "raw_slugs": {
-        "docs/plans/2026-05-29-b1-dataset-influence-provenance-plan.md": "b1-dataset-influence-provenance-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-29-b1-dataset-influence-provenance-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-29-b1-dataset-influence-provenance-plan.md": "plan"
-      },
-      "thread_id": "b1-dataset-influence-provenance"
-    },
-    {
-      "earliest_file_date": "2026-05-29",
-      "files": [
-        "docs/plans/2026-05-29-b2-dataset-independence-design.md",
-        "docs/plans/2026-05-29-b2-dataset-independence-plan.md"
-      ],
-      "latest_file_date": "2026-05-29",
-      "normalized_slug": "b2-dataset-independence",
-      "raw_slugs": {
-        "docs/plans/2026-05-29-b2-dataset-independence-design.md": "b2-dataset-independence-design",
-        "docs/plans/2026-05-29-b2-dataset-independence-plan.md": "b2-dataset-independence-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-29-b2-dataset-independence-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-29-b2-dataset-independence-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-29-b2-dataset-independence-design.md": "design",
-        "docs/plans/2026-05-29-b2-dataset-independence-plan.md": "plan"
-      },
-      "thread_id": "b2-dataset-independence"
     },
     {
       "earliest_file_date": "2026-06-22",
@@ -460,48 +391,6 @@
       "thread_id": "bundle-belief-rollup"
     },
     {
-      "earliest_file_date": "2026-05-27",
-      "files": [
-        "docs/plans/2026-05-27-c2-gene-crosswalk-plan.md"
-      ],
-      "latest_file_date": "2026-05-27",
-      "normalized_slug": "c2-gene-crosswalk",
-      "raw_slugs": {
-        "docs/plans/2026-05-27-c2-gene-crosswalk-plan.md": "c2-gene-crosswalk-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-27-c2-gene-crosswalk-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-27-c2-gene-crosswalk-plan.md": "plan"
-      },
-      "thread_id": "c2-gene-crosswalk"
-    },
-    {
-      "earliest_file_date": "2026-05-27",
-      "files": [
-        "docs/plans/2026-05-27-c3-protein-crosswalk-plan.md"
-      ],
-      "latest_file_date": "2026-05-27",
-      "normalized_slug": "c3-protein-crosswalk",
-      "raw_slugs": {
-        "docs/plans/2026-05-27-c3-protein-crosswalk-plan.md": "c3-protein-crosswalk-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-27-c3-protein-crosswalk-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-27-c3-protein-crosswalk-plan.md": "plan"
-      },
-      "thread_id": "c3-protein-crosswalk"
-    },
-    {
       "earliest_file_date": "2026-05-28",
       "files": [
         "docs/plans/2026-05-28-c4-variant-identity-design.md"
@@ -521,27 +410,6 @@
         "docs/plans/2026-05-28-c4-variant-identity-design.md": "design"
       },
       "thread_id": "c4-variant-identity"
-    },
-    {
-      "earliest_file_date": "2026-05-28",
-      "files": [
-        "docs/plans/2026-05-28-c4a-variant-identity-plan.md"
-      ],
-      "latest_file_date": "2026-05-28",
-      "normalized_slug": "c4a-variant-identity",
-      "raw_slugs": {
-        "docs/plans/2026-05-28-c4a-variant-identity-plan.md": "c4a-variant-identity-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-28-c4a-variant-identity-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-28-c4a-variant-identity-plan.md": "plan"
-      },
-      "thread_id": "c4a-variant-identity"
     },
     {
       "earliest_file_date": "2026-05-31",
@@ -680,27 +548,6 @@
         "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md": "plan"
       },
       "thread_id": "curate-canonical-entity-inventory"
-    },
-    {
-      "earliest_file_date": "2026-05-28",
-      "files": [
-        "docs/plans/2026-05-28-d1-geneset-collection-plan.md"
-      ],
-      "latest_file_date": "2026-05-28",
-      "normalized_slug": "d1-geneset-collection",
-      "raw_slugs": {
-        "docs/plans/2026-05-28-d1-geneset-collection-plan.md": "d1-geneset-collection-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-28-d1-geneset-collection-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-28-d1-geneset-collection-plan.md": "plan"
-      },
-      "thread_id": "d1-geneset-collection"
     },
     {
       "earliest_file_date": "2026-06-10",
@@ -1456,33 +1303,6 @@
       "thread_id": "epistemic-edges"
     },
     {
-      "earliest_file_date": "2026-05-29",
-      "files": [
-        "docs/plans/2026-05-29-external-datapackage-resources-design.md",
-        "docs/plans/2026-05-29-external-datapackage-resources-implementation.md"
-      ],
-      "latest_file_date": "2026-05-29",
-      "normalized_slug": "external-datapackage-resources",
-      "raw_slugs": {
-        "docs/plans/2026-05-29-external-datapackage-resources-design.md": "external-datapackage-resources-design",
-        "docs/plans/2026-05-29-external-datapackage-resources-implementation.md": "external-datapackage-resources-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-29-external-datapackage-resources-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-05-29-external-datapackage-resources-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-29-external-datapackage-resources-design.md": "design",
-        "docs/plans/2026-05-29-external-datapackage-resources-implementation.md": "implementation"
-      },
-      "thread_id": "external-datapackage-resources"
-    },
-    {
       "earliest_file_date": "2026-06-27",
       "files": [
         "docs/plans/2026-06-27-feedback-from-recent-design.md",
@@ -2017,27 +1837,6 @@
       "thread_id": "open-ended-kinds-and-catalog-registration"
     },
     {
-      "earliest_file_date": "2026-05-30",
-      "files": [
-        "docs/plans/2026-05-30-open-feedback-fixes.md"
-      ],
-      "latest_file_date": "2026-05-30",
-      "normalized_slug": "open-feedback-fixes",
-      "raw_slugs": {
-        "docs/plans/2026-05-30-open-feedback-fixes.md": "open-feedback-fixes"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-30-open-feedback-fixes.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-30-open-feedback-fixes.md": null
-      },
-      "thread_id": "open-feedback-fixes"
-    },
-    {
       "earliest_file_date": "2026-06-01",
       "files": [
         "docs/plans/2026-06-01-opentargets-associations-reference-graph-design.md",
@@ -2255,33 +2054,6 @@
         "docs/plans/2026-03-07-phase4c-operationalization-design.md": "design"
       },
       "thread_id": "phase4c-operationalization"
-    },
-    {
-      "earliest_file_date": "2026-05-28",
-      "files": [
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md",
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-plan.md"
-      ],
-      "latest_file_date": "2026-05-28",
-      "normalized_slug": "pipeline-audit-and-refactor",
-      "raw_slugs": {
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md": "pipeline-audit-and-refactor-design",
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-plan.md": "pipeline-audit-and-refactor-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-28-pipeline-audit-and-refactor-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md": "design",
-        "docs/plans/2026-05-28-pipeline-audit-and-refactor-plan.md": "plan"
-      },
-      "thread_id": "pipeline-audit-and-refactor"
     },
     {
       "earliest_file_date": "2026-04-18",

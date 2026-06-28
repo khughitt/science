@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ (`requires-python >=3.11`), the existing `science_tool.commons` promote / datapackage layer, frictionless-style datapackage descriptors, pytest. Tests run from `~/d/science/science` with `uv run --frozen pytest`.
 
-**Design doc:** `~/d/science/docs/plans/2026-05-29-external-datapackage-resources-design.md`
+**Design doc:** `~/d/science/docs/plans/historical/2026-05-29-external-datapackage-resources-design.md`
 
 ---
 

@@ -384,5 +384,3 @@ A machine-readable `inventory.json` mirrors the table: a list of objects with ke
 - [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
   — `plan-pipeline` / `review-pipeline` QA sections.
 - `science commons promote dataset` (`science/src/science_tool/commons/promote.py`) — the axis-3 endpoint.
-- [`../plans/2026-05-28-pipeline-audit-and-refactor-design.md`](../plans/2026-05-28-pipeline-audit-and-refactor-design.md)
-  — the design this playbook implements.
