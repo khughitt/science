@@ -1,10 +1,10 @@
 {
-  "file_count": 370,
-  "generated_at": "2026-06-27T00:00:00+00:00",
+  "file_count": 358,
+  "generated_at": "2026-06-28T13:20:23+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 247,
+  "thread_count": 238,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -275,27 +275,6 @@
         "docs/plans/2026-05-09-annotation-tokens-marker-scanner.md": null
       },
       "thread_id": "annotation-tokens-marker-scanner"
-    },
-    {
-      "earliest_file_date": "2026-03-10",
-      "files": [
-        "docs/plans/2026-03-10-aspect-based-framework-design.md"
-      ],
-      "latest_file_date": "2026-03-10",
-      "normalized_slug": "aspect-based-framework",
-      "raw_slugs": {
-        "docs/plans/2026-03-10-aspect-based-framework-design.md": "aspect-based-framework-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-10-aspect-based-framework-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-10-aspect-based-framework-design.md": "design"
-      },
-      "thread_id": "aspect-based-framework"
     },
     {
       "earliest_file_date": "2026-06-16",
@@ -950,27 +929,6 @@
         "docs/plans/2026-05-07-chain-audit-verdict-implementation.md": "implementation"
       },
       "thread_id": "chain-audit-verdict"
-    },
-    {
-      "earliest_file_date": "2026-03-16",
-      "files": [
-        "docs/plans/2026-03-16-claim-centric-uncertainty-design.md"
-      ],
-      "latest_file_date": "2026-03-16",
-      "normalized_slug": "claim-centric-uncertainty",
-      "raw_slugs": {
-        "docs/plans/2026-03-16-claim-centric-uncertainty-design.md": "claim-centric-uncertainty-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-16-claim-centric-uncertainty-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-16-claim-centric-uncertainty-design.md": "design"
-      },
-      "thread_id": "claim-centric-uncertainty"
     },
     {
       "earliest_file_date": "2026-05-23",
@@ -2476,33 +2434,6 @@
       "thread_id": "feedback-from-recent"
     },
     {
-      "earliest_file_date": "2026-03-25",
-      "files": [
-        "docs/plans/2026-03-25-feedback-system-design.md",
-        "docs/plans/2026-03-25-feedback-system.md"
-      ],
-      "latest_file_date": "2026-03-25",
-      "normalized_slug": "feedback-system",
-      "raw_slugs": {
-        "docs/plans/2026-03-25-feedback-system-design.md": "feedback-system-design",
-        "docs/plans/2026-03-25-feedback-system.md": "feedback-system"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-25-feedback-system-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-03-25-feedback-system.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-25-feedback-system-design.md": "design",
-        "docs/plans/2026-03-25-feedback-system.md": null
-      },
-      "thread_id": "feedback-system"
-    },
-    {
       "earliest_file_date": "2026-06-26",
       "files": [
         "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md"
@@ -2822,27 +2753,6 @@
         "docs/plans/2026-04-19-knowledge-gaps.md": null
       },
       "thread_id": "knowledge-gaps"
-    },
-    {
-      "earliest_file_date": "2026-03-12",
-      "files": [
-        "docs/plans/2026-03-12-knowledge-graph-layering-design.md"
-      ],
-      "latest_file_date": "2026-03-12",
-      "normalized_slug": "knowledge-graph-layering",
-      "raw_slugs": {
-        "docs/plans/2026-03-12-knowledge-graph-layering-design.md": "knowledge-graph-layering-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-12-knowledge-graph-layering-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-12-knowledge-graph-layering-design.md": "design"
-      },
-      "thread_id": "knowledge-graph-layering"
     },
     {
       "earliest_file_date": "2026-06-06",
@@ -3658,27 +3568,6 @@
       "thread_id": "phase4c-operationalization"
     },
     {
-      "earliest_file_date": "2026-03-26",
-      "files": [
-        "docs/plans/2026-03-26-physics-qudt-ontology-design.md"
-      ],
-      "latest_file_date": "2026-03-26",
-      "normalized_slug": "physics-qudt-ontology",
-      "raw_slugs": {
-        "docs/plans/2026-03-26-physics-qudt-ontology-design.md": "physics-qudt-ontology-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-26-physics-qudt-ontology-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-26-physics-qudt-ontology-design.md": "design"
-      },
-      "thread_id": "physics-qudt-ontology"
-    },
-    {
       "earliest_file_date": "2026-05-28",
       "files": [
         "docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md",
@@ -3854,27 +3743,6 @@
         "docs/plans/2026-04-05-project-model.md": null
       },
       "thread_id": "project-model"
-    },
-    {
-      "earliest_file_date": "2026-03-18",
-      "files": [
-        "docs/plans/2026-03-18-project-organization-design.md"
-      ],
-      "latest_file_date": "2026-03-18",
-      "normalized_slug": "project-organization",
-      "raw_slugs": {
-        "docs/plans/2026-03-18-project-organization-design.md": "project-organization-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-18-project-organization-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-18-project-organization-design.md": "design"
-      },
-      "thread_id": "project-organization"
     },
     {
       "earliest_file_date": "2026-05-05",
@@ -4339,27 +4207,6 @@
       "thread_id": "reason-coded-attention"
     },
     {
-      "earliest_file_date": "2026-03-10",
-      "files": [
-        "docs/plans/2026-03-10-reasoning-and-coherence-design.md"
-      ],
-      "latest_file_date": "2026-03-10",
-      "normalized_slug": "reasoning-and-coherence",
-      "raw_slugs": {
-        "docs/plans/2026-03-10-reasoning-and-coherence-design.md": "reasoning-and-coherence-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-10-reasoning-and-coherence-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-10-reasoning-and-coherence-design.md": "design"
-      },
-      "thread_id": "reasoning-and-coherence"
-    },
-    {
       "earliest_file_date": "2026-05-26",
       "files": [
         "docs/plans/2026-05-26-reference-collection-member-promotion-design.md"
@@ -4469,33 +4316,6 @@
         "docs/plans/2026-05-21-research-code-and-workflow-modeling-design.md": "design"
       },
       "thread_id": "research-code-and-workflow-modeling"
-    },
-    {
-      "earliest_file_date": "2026-03-30",
-      "files": [
-        "docs/plans/2026-03-30-research-provenance-upstream-design.md",
-        "docs/plans/2026-03-30-research-provenance-upstream.md"
-      ],
-      "latest_file_date": "2026-03-30",
-      "normalized_slug": "research-provenance-upstream",
-      "raw_slugs": {
-        "docs/plans/2026-03-30-research-provenance-upstream-design.md": "research-provenance-upstream-design",
-        "docs/plans/2026-03-30-research-provenance-upstream.md": "research-provenance-upstream"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-30-research-provenance-upstream-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-03-30-research-provenance-upstream.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-30-research-provenance-upstream-design.md": "design",
-        "docs/plans/2026-03-30-research-provenance-upstream.md": null
-      },
-      "thread_id": "research-provenance-upstream"
     },
     {
       "earliest_file_date": "2026-05-08",
@@ -4736,33 +4556,6 @@
         "docs/plans/2026-04-26-science-plan-analysis-command.md": null
       },
       "thread_id": "science-plan-analysis-command"
-    },
-    {
-      "earliest_file_date": "2026-03-25",
-      "files": [
-        "docs/plans/2026-03-25-skill-feedback-triage-design.md",
-        "docs/plans/2026-03-25-skill-feedback-triage.md"
-      ],
-      "latest_file_date": "2026-03-25",
-      "normalized_slug": "skill-feedback-triage",
-      "raw_slugs": {
-        "docs/plans/2026-03-25-skill-feedback-triage-design.md": "skill-feedback-triage-design",
-        "docs/plans/2026-03-25-skill-feedback-triage.md": "skill-feedback-triage"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-25-skill-feedback-triage-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-03-25-skill-feedback-triage.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-25-skill-feedback-triage-design.md": "design",
-        "docs/plans/2026-03-25-skill-feedback-triage.md": null
-      },
-      "thread_id": "skill-feedback-triage"
     },
     {
       "earliest_file_date": "2026-04-26",

@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `5`
+- Pending thread count: `8`
 
 ## distill-import
 
@@ -30,6 +30,50 @@
 - remaining_gaps:
   - Current architecture diverges from the March plan: docs use entities/inquiries-style authored profiles and compiled views; the old plan's doc/inquiries graph-canonical rendering model is stale.
   - No single durable architecture note records the current inquiry model, old interactive RDF path, authored profile compiler, and validation boundaries.
+
+## multi-project-sync
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-03-23-multi-project-sync-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until sync registry/federation architecture is checkpointed
+    - `docs/plans/2026-03-23-multi-project-sync-design.md`
+- remaining_gaps:
+  - No compact durable architecture note was found that explains the registry/config/state file contract and how it relates to newer peers/federation and commons/shared-store concepts.
+  - The March design's cross-project profile vocabulary evolved from cross-project to shared/peers/commons surfaces, so deleting now would leave design rationale scattered across command docs and code.
+
+## ontology-consumption
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-03-24-ontology-consumption-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until ontology catalog contract and stale docs/specs reference are migrated
+    - `docs/plans/2026-03-24-ontology-consumption-design.md`
+- remaining_gaps:
+  - Active durable process docs still point at a nonexistent docs/specs path for this design example.
+  - The implementation grew beyond biolink into multiple catalogs and a broader domain-adding process; a short durable migration note should explain the current ontology/catalog contract before deleting the original design.
+
+## paper-model
+
+- status: `unclear`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-05-paper-model-design.md`
+  - `docs/plans/2026-04-05-paper-model.md`
+- pending_actions:
+  - `deferred`: review status unclear; reconcile with active companion project-model thread before cleanup
+    - `docs/plans/2026-04-05-paper-model-design.md`
+    - `docs/plans/2026-04-05-paper-model.md`
+- remaining_gaps:
+  - Reconcile this thread together with docs/plans/2026-04-05-project-model-design.md before deciding whether to delete, move both to historical, or migrate a durable paper/manuscript model note.
+  - Confirm whether the originally planned graph store operations and CLI commands still exist or were replaced by entity source files and interpret-results workflow.
 
 ## phase3-completion
 

@@ -55,7 +55,7 @@ to a facet:
   (its Part-B/C substrate content stays with the substrate docs)
 - `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`
 - `docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md`
-- `docs/plans/2026-03-16-claim-centric-uncertainty-design.md`
+- `2026-03-16-claim-centric-uncertainty-design.md` (deleted during plans cleanup)
 
 ### 1.3 Predecessors folded as migration/rendering inputs (credited, not authorities)
 Their design intent feeds the facet migrations; they are superseded as standalone designs:
@@ -280,7 +280,7 @@ Full end-to-end (per approved scope):
 | `2026-06-06-knowledge-meta-model-and-substrate-design.md` (Part A only) | **superseded — folded** | epistemic-model consolidation → §2; Part B/C stays with substrate |
 | `2026-05-03-epistemic-dependency-graph-design.md` | **superseded — folded** | entity classes + `bears_on` → §2.1, §2.7 |
 | `2026-04-15-layered-claims-and-causal-methodology-design.md` | **superseded — folded** | claim_layer/identification axes → §2.2–2.3, §3 |
-| `2026-03-16-claim-centric-uncertainty-design.md` | **superseded — folded** | claim-centric stance → §2.2, §2.5 |
+| `2026-03-16-claim-centric-uncertainty-design.md` (deleted during plans cleanup) | **superseded — folded** | claim-centric stance → §2.2, §2.5 |
 | `2026-04-17-edge-status-dashboard-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
 | `2026-04-17-inquiry-edge-posterior-annotations-design.md` | **predecessor (rendering)** | posterior block → `epistemic-edges` |
 | `2026-04-19-dag-rendering-and-audit-pipeline-design.md` | **predecessor (rendering)** | → `epistemic-edges` |

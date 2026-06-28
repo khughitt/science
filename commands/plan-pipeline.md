@@ -5,7 +5,7 @@ description: Generate a computational implementation plan from an inquiry — pi
 # Plan Pipeline from Inquiry
 
 > **Prerequisites:**
-> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics
+> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics
 > - Load the `research-methodology` skill for evidence standards
 
 ## Overview

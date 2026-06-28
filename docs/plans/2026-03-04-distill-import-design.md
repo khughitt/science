@@ -2,7 +2,7 @@
 
 *Date: 2026-03-04*
 *Status: DONE*
-*Parent: [Knowledge Graph Design](2026-03-01-knowledge-graph-design.md) — Slice A completion*
+*Parent: [Knowledge Graph Design](historical/2026-03-01-knowledge-graph-design.md) — Slice A completion*
 
 ## Overview
 

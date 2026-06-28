@@ -1,6 +1,6 @@
 # Project Model Design
 
-> Supersedes aspects of: [`2026-03-16-claim-centric-uncertainty-design.md`](./2026-03-16-claim-centric-uncertainty-design.md) (claim/evidence entity model), [`2026-03-01-knowledge-graph-design.md`](./2026-03-01-knowledge-graph-design.md) (entity type definitions).
+> Supersedes aspects of: `2026-03-16-claim-centric-uncertainty-design.md` (claim/evidence entity model; deleted during plans cleanup), [`2026-03-01-knowledge-graph-design.md`](./historical/2026-03-01-knowledge-graph-design.md) (entity type definitions).
 > Companion spec: [`2026-04-05-paper-model-design.md`](./2026-04-05-paper-model-design.md) defines the compositional paper hierarchy built on this foundation.
 > Motivation: Upstream requirements from MM30 reorganization (`~/d/r/mm30/doc/reorg/upstream-science-requirements.md`) identified critical gaps in task-artifact linking, findings representation, and project organization.
 
