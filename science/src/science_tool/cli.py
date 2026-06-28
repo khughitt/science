@@ -6117,6 +6117,11 @@ def _format_count_rows(rows: list[dict[str, Any]], *, key: str) -> str:
     return ", ".join(values) if values else "-"
 
 
+def _format_share_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+    values = [f"{row[key]}:{row['count']} ({row['share']})" for row in rows]
+    return ", ".join(values) if values else "-"
+
+
 @benchmark_group.command("gap-calibration")
 @click.option("--project", "project_specs", multiple=True, help="Project as label=path. Repeat for each project.")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
@@ -6211,6 +6216,15 @@ def benchmark_gap_calibration(
         "top_fallback_benchmarks",
         _format_count_rows(aggregate["top_fallback_benchmarks"], key="benchmark_id"),
     )
+    aggregate_table.add_row(
+        "top_fallback_reasons",
+        _format_count_rows(aggregate["top_fallback_reasons"], key="reason"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_benchmark_shares",
+        _format_share_rows(aggregate["top_fallback_benchmark_shares"], key="benchmark_id"),
+    )
+    aggregate_table.add_row("fallback_concentration_warning", str(aggregate["fallback_concentration_warning"]))
     Console(width=200).print(aggregate_table)
 
 
@@ -6322,9 +6336,18 @@ def benchmark_gaps(
             "top_suggested_facets": summary_payload["top_suggested_facets"],
             "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
             "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
+            "top_fallback_reasons": summary_payload["top_fallback_reasons"],
+            "top_fallback_benchmark_shares": summary_payload["top_fallback_benchmark_shares"],
+            "fallback_concentration_warning": summary_payload["fallback_concentration_warning"],
         }
         for field, value in scalar_rows.items():
-            summary_table.add_row(field, json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value))
+            if field == "top_fallback_benchmark_shares":
+                rendered = _format_share_rows(value, key="benchmark_id")
+            elif field == "top_fallback_reasons":
+                rendered = _format_count_rows(value, key="reason")
+            else:
+                rendered = json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value)
+            summary_table.add_row(field, rendered)
         Console(width=200).print(summary_table)
 
     if calibration_report:

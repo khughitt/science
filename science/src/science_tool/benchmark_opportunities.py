@@ -394,6 +394,17 @@ class BenchmarkCountRow(TypedDict):
     count: int
 
 
+class ReasonCountRow(TypedDict):
+    reason: str
+    count: int
+
+
+class BenchmarkShareRow(TypedDict):
+    benchmark_id: str
+    count: int
+    share: float
+
+
 class GapCalibrationSummary(TypedDict):
     gap_rows: int
     rows_with_suggested_facets: int
@@ -406,6 +417,9 @@ class GapCalibrationSummary(TypedDict):
     top_suggested_facets: list[FacetCountRow]
     top_matched_hint_facets: list[FacetCountRow]
     top_fallback_benchmarks: list[BenchmarkCountRow]
+    top_fallback_reasons: list[ReasonCountRow]
+    top_fallback_benchmark_shares: list[BenchmarkShareRow]
+    fallback_concentration_warning: bool
 
 
 class GapCalibrationProjectRow(TypedDict):
@@ -426,6 +440,9 @@ class GapCalibrationAggregate(TypedDict):
     top_suggested_facets: list[FacetCountRow]
     top_matched_hint_facets: list[FacetCountRow]
     top_fallback_benchmarks: list[BenchmarkCountRow]
+    top_fallback_reasons: list[ReasonCountRow]
+    top_fallback_benchmark_shares: list[BenchmarkShareRow]
+    fallback_concentration_warning: bool
 
 
 class GapCalibrationCommonsNotice(TypedDict):
@@ -1017,7 +1034,7 @@ def _reason_note_sort_key(note: str) -> tuple[int, str]:
         "entity-hint": 1,
         "task-ready": 2,
         "high-baseline": 3,
-        "high-baseline-fallback": 4,
+        "fallback": 4,
     }
     family = note.split(":", 1)[0]
     return (family_order.get(family, 99), note)
@@ -1074,6 +1091,21 @@ def _has_entity_specific_candidate_evidence(score: CandidateScore) -> bool:
     return bool(score.matched_missing_facets or score.matched_hint_facets)
 
 
+def _fallback_reason_notes(score: CandidateScore) -> list[str]:
+    notes: list[str] = []
+    if score.components.get("task_readiness", 0) > 0:
+        notes.append("fallback:task-ready")
+    if score.components.get("baseline_quality", 0) > 0:
+        notes.append("fallback:baseline-quality")
+    if not notes:
+        notes.append("fallback:positive-score" if score.total > 0 else "fallback:available-benchmark")
+    return notes
+
+
+def _is_fallback_candidate(candidate: GapCandidateBenchmarkRow) -> bool:
+    return any(note.startswith("fallback:") for note in candidate["reason_notes"])
+
+
 def _candidate_rows(
     entity_id: str,
     contexts: list[DatasetOpportunityContext],
@@ -1108,7 +1140,7 @@ def _candidate_rows(
             fallback.append(
                 {
                     **row,
-                    "reason_notes": ["high-baseline-fallback"],
+                    "reason_notes": _fallback_reason_notes(score),
                 }
             )
     if scored:
@@ -1165,6 +1197,26 @@ def _top_benchmark_counts(counter: Counter[str], *, top: int) -> list[BenchmarkC
     ]
 
 
+def _top_reason_counts(counter: Counter[str], *, top: int) -> list[ReasonCountRow]:
+    return [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _top_benchmark_shares(counter: Counter[str], *, total: int, top: int) -> list[BenchmarkShareRow]:
+    if total <= 0:
+        return []
+    return [
+        {"benchmark_id": benchmark_id, "count": count, "share": round(count / total, 3)}
+        for benchmark_id, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _has_fallback_concentration(counter: Counter[str], *, total: int) -> bool:
+    return bool(total > 0 and counter and (max(counter.values()) / total) >= 0.5)
+
+
 def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> GapCalibrationSummary:
     rows = report["benchmark_gaps"]
     candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
@@ -1173,13 +1225,12 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
         for candidate in candidates
         if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
     ]
-    fallback_candidates = [
-        candidate for candidate in candidates if candidate["reason_notes"] == ["high-baseline-fallback"]
-    ]
+    fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
     scores = [candidate["candidate_score"] for candidate in candidates]
     suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
     matched_hint_facets = Counter(facet for candidate in candidates for facet in candidate["matched_hint_facets"])
     fallback_benchmarks = Counter(candidate["benchmark_id"] for candidate in fallback_candidates)
+    fallback_reasons = Counter(reason for candidate in fallback_candidates for reason in candidate["reason_notes"])
     return {
         "gap_rows": len(rows),
         "rows_with_suggested_facets": sum(1 for row in rows if row["suggested_search_facets"]),
@@ -1192,6 +1243,16 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
         "top_suggested_facets": _top_facet_counts(suggested_facets, top=top),
         "top_matched_hint_facets": _top_facet_counts(matched_hint_facets, top=top),
         "top_fallback_benchmarks": _top_benchmark_counts(fallback_benchmarks, top=top),
+        "top_fallback_reasons": _top_reason_counts(fallback_reasons, top=top),
+        "top_fallback_benchmark_shares": _top_benchmark_shares(
+            fallback_benchmarks,
+            total=len(fallback_candidates),
+            top=top,
+        ),
+        "fallback_concentration_warning": _has_fallback_concentration(
+            fallback_benchmarks,
+            total=len(fallback_candidates),
+        ),
     }
 
 
@@ -1220,9 +1281,18 @@ def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[B
         candidate["benchmark_id"]
         for row in rows
         for candidate in row["candidate_benchmarks"]
-        if candidate["reason_notes"] == ["high-baseline-fallback"]
+        if _is_fallback_candidate(candidate)
     )
     return _top_benchmark_counts(fallback, top=top)
+
+
+def _fallback_candidates_from_rows(rows: list[BenchmarkGapRow]) -> list[GapCandidateBenchmarkRow]:
+    return [
+        candidate
+        for row in rows
+        for candidate in row["candidate_benchmarks"]
+        if _is_fallback_candidate(candidate)
+    ]
 
 
 def benchmark_gap_calibration_batch(
@@ -1263,6 +1333,9 @@ def benchmark_gap_calibration_batch(
     entity_specific = sum(row["calibration_summary"]["entity_specific_candidate_rows"] for row in project_rows)
     fallback = sum(row["calibration_summary"]["fallback_candidate_rows"] for row in project_rows)
     top_suggested, top_matched = _merged_top_facets(all_gap_rows, top=top)
+    fallback_candidates = _fallback_candidates_from_rows(all_gap_rows)
+    fallback_benchmarks = Counter(candidate["benchmark_id"] for candidate in fallback_candidates)
+    fallback_reasons = Counter(reason for candidate in fallback_candidates for reason in candidate["reason_notes"])
     return {
         "projects": project_rows,
         "aggregate": {
@@ -1275,6 +1348,16 @@ def benchmark_gap_calibration_batch(
             "top_suggested_facets": top_suggested,
             "top_matched_hint_facets": top_matched,
             "top_fallback_benchmarks": _top_fallback_benchmarks(all_gap_rows, top=top),
+            "top_fallback_reasons": _top_reason_counts(fallback_reasons, top=top),
+            "top_fallback_benchmark_shares": _top_benchmark_shares(
+                fallback_benchmarks,
+                total=len(fallback_candidates),
+                top=top,
+            ),
+            "fallback_concentration_warning": _has_fallback_concentration(
+                fallback_benchmarks,
+                total=len(fallback_candidates),
+            ),
         },
         "commons_notices": notices,
     }

@@ -1068,6 +1068,9 @@ title: Drug screen CLI summary table gap
     assert result.exit_code == 0
     assert "Benchmark Gaps" in result.output
     assert "Gap Calibration Summary" in result.output
+    assert "top_fallback_reasons" in result.output
+    assert "top_fallback_benchmark_shares" in result.output
+    assert "fallback_concentration_warning" in result.output
     assert "gap_rows" in result.output
 
 
@@ -1755,7 +1758,7 @@ benchmark:
     candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
     assert len(candidates) == 3
     assert all(candidate["candidate_score"] > 0 for candidate in candidates)
-    assert all(candidate["reason_notes"] == ["high-baseline-fallback"] for candidate in candidates)
+    assert all(candidate["reason_notes"] == ["fallback:task-ready"] for candidate in candidates)
     assert all(candidate["matched_hint_facets"] == [] for candidate in candidates)
     assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
 
@@ -1988,6 +1991,15 @@ benchmark:
         {"benchmark_id": "dataset:generic", "count": 1},
         {"benchmark_id": "dataset:sciplex", "count": 1},
     ]
+    assert summary["top_fallback_reasons"] == [
+        {"reason": "fallback:task-ready", "count": 2},
+        {"reason": "fallback:baseline-quality", "count": 1},
+    ]
+    assert summary["top_fallback_benchmark_shares"] == [
+        {"benchmark_id": "dataset:generic", "count": 1, "share": 0.5},
+        {"benchmark_id": "dataset:sciplex", "count": 1, "share": 0.5},
+    ]
+    assert summary["fallback_concentration_warning"] is True
 
 
 def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> None:
@@ -2075,3 +2087,58 @@ title: Drug screen benchmark gap
 
     assert payload["projects"][0]["commons_notice"] is not None
     assert payload["commons_notices"] == [{"label": "demo", "notice": payload["projects"][0]["commons_notice"]}]
+
+
+def test_gap_calibration_batch_aggregates_fallback_diagnostics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
+
+    projects: list[tuple[str, Path]] = []
+    for label in ("a", "b"):
+        project = tmp_path / f"project-{label}"
+        project.mkdir()
+        projects.append((label, project))
+        _write_entity(
+            project,
+            "hypotheses",
+            f"0001-{label}",
+            f"""
+id: hypothesis:0001-{label}
+type: hypothesis
+title: Generic benchmark gap {label}
+""",
+            body="Homeostatic recovery remains under-tested.",
+        )
+        _write_dataset(
+            project,
+            "ready",
+            """
+id: dataset:ready
+type: dataset
+title: Ready Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    payload = benchmark_gap_calibration_batch(projects)
+
+    assert payload["aggregate"]["fallback_candidate_rows"] == 2
+    assert payload["aggregate"]["top_fallback_reasons"] == [
+        {"reason": "fallback:task-ready", "count": 2}
+    ]
+    assert payload["aggregate"]["top_fallback_benchmark_shares"] == [
+        {"benchmark_id": "dataset:ready", "count": 2, "share": 1.0}
+    ]
+    assert payload["aggregate"]["fallback_concentration_warning"] is True
