@@ -69,6 +69,45 @@ ENTITY_SUPPRESSED_TOKENS = frozenset(
         "proposition",
     }
 )
+FACET_HINT_TERMS: dict[str, str] = {
+    "drug": "perturbation",
+    "compound": "perturbation",
+    "knockout": "perturbation",
+    "perturb": "perturbation",
+    "perturbation": "perturbation",
+    "time-series": "time-series",
+    "timeseries": "time-series",
+    "temporal": "time-series",
+    "dynamic": "time-series",
+    "longitudinal": "longitudinal",
+    "trajectory": "time-series",
+    "proteomic": "proteomics",
+    "proteomics": "proteomics",
+    "protein": "proteomics",
+    "phosphoproteomic": "proteomics",
+    "phosphoproteomics": "proteomics",
+    "spatial": "spatial",
+    "region": "spatial",
+    "microenvironment": "spatial",
+    "neighborhood": "spatial",
+    "multimodal": "multimodal",
+    "multi-modal": "multimodal",
+    "multiomic": "multi-omic",
+    "multi-omic": "multi-omic",
+    "proteogenomic": "multimodal",
+    "proteogenomics": "multimodal",
+    "singlecell": "single-cell-rna-seq",
+    "scrna": "single-cell-rna-seq",
+    "scrna-seq": "single-cell-rna-seq",
+    "single-cell-rna-seq": "single-cell-rna-seq",
+    "transfer": "cross-context-generalization",
+    "generalization": "cross-context-generalization",
+    "cross-context": "cross-context-generalization",
+}
+FACET_HINT_PHRASES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("cross", "context"), "cross-context-generalization"),
+    (("external", "validation"), "cross-context-generalization"),
+)
 KIND_SIGNAL_RULES = {
     "perturbation": ("perturbation-response", 10),
     "dynamic": ("time-series", 8),
@@ -488,6 +527,25 @@ def _tokens_from_text(
     ).kept
 
 
+def _token_sequence_from_text(
+    *values: str,
+    include_stop_tokens: bool = False,
+    broad_tokens: frozenset[str] = frozenset(),
+) -> list[str]:
+    tokens: list[str] = []
+    for value in values:
+        for raw in _TOKEN_RE.findall(value):
+            token = _normalize_token(raw)
+            if token in broad_tokens:
+                continue
+            if not include_stop_tokens and token in _STOP_TOKENS:
+                continue
+            if len(token) < 3 and not re.fullmatch(r"[hq]\d+", token):
+                continue
+            tokens.append(token)
+    return tokens
+
+
 def _as_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -768,6 +826,39 @@ def _normalized_gap_facet(facet: str | None) -> str | None:
     if normalized not in BENCHMARK_GAP_HINT_FACET_SET:
         raise ValueError(f"unknown benchmark gap facet: {facet}")
     return normalized
+
+
+def _facet_sort_key(facet: str) -> tuple[int, str]:
+    try:
+        return (BENCHMARK_GAP_HINT_FACETS.index(facet), facet)
+    except ValueError:
+        return (len(BENCHMARK_GAP_HINT_FACETS), facet)
+
+
+def _sorted_facets(facets: set[str] | list[str]) -> list[str]:
+    return sorted({_normalize_token(facet) for facet in facets}, key=_facet_sort_key)
+
+
+def _entity_facet_hints(entity: ProjectBenchmarkEntity) -> list[str]:
+    hints: set[str] = set()
+    for token in entity.tokens:
+        hint = FACET_HINT_TERMS.get(token)
+        if hint is not None and hint in BENCHMARK_GAP_HINT_FACET_SET:
+            hints.add(hint)
+    sequence = _token_sequence_from_text(
+        entity.title,
+        entity.content_preview,
+        broad_tokens=ENTITY_SUPPRESSED_TOKENS,
+    )
+    for phrase, hint in FACET_HINT_PHRASES:
+        phrase_len = len(phrase)
+        has_phrase = any(
+            tuple(sequence[index : index + phrase_len]) == phrase
+            for index in range(len(sequence) - phrase_len + 1)
+        )
+        if has_phrase:
+            hints.add(hint)
+    return _sorted_facets(hints)
 
 
 def _matched_by_entity(rows: list[OpportunityRow]) -> dict[str, list[OpportunityRow]]:
@@ -1085,6 +1176,7 @@ def gaps_report(
     titles = _entity_title_map(opportunity)
     unmapped_ids = {row["entity_id"] for row in opportunity["unmapped_project_entities"]}
     entity_ids = sorted(set(matched) | set(coverage) | unmapped_ids)
+    entity_by_id = {entity.id: entity for entity in analysis.entities}
 
     rows: list[BenchmarkGapRow] = []
     for current_entity_id in entity_ids:
@@ -1093,6 +1185,15 @@ def gaps_report(
         missing_modalities = list(gap["missing_modalities"]) if gap is not None else []
         missing_signal_types = list(gap["missing_signal_types"]) if gap is not None else []
         missing_facets = {_normalize_token(value) for value in missing_modalities + missing_signal_types}
+        entity = entity_by_id.get(current_entity_id)
+        hint_facets = set(_entity_facet_hints(entity)) if entity is not None else set()
+        weak_match_facets: set[str] = set()
+        if _is_weak_gap(current_matches):
+            for match in current_matches:
+                weak_match_facets.update(_normalize_token(value) for value in match["modalities"])
+                weak_match_facets.update(_normalize_token(value) for value in match["signal_types"])
+            weak_match_facets &= BENCHMARK_GAP_HINT_FACET_SET
+        suggested_facets = _sorted_facets(missing_facets | hint_facets | weak_match_facets)
 
         if current_entity_id in unmapped_ids:
             gap_level = "uncovered"
@@ -1106,7 +1207,7 @@ def gaps_report(
         else:
             continue
 
-        if normalized_facet is not None and normalized_facet not in missing_facets:
+        if normalized_facet is not None and normalized_facet not in suggested_facets:
             continue
 
         rows.append(
@@ -1121,7 +1222,7 @@ def gaps_report(
                     opportunity["available_unmapped_benchmarks"],
                     missing_facets,
                 ),
-                "suggested_search_facets": sorted(missing_facets),
+                "suggested_search_facets": suggested_facets,
                 "reason": reason,
             }
         )

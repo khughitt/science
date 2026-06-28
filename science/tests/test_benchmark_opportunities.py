@@ -1099,6 +1099,96 @@ benchmark:
     assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
 
 
+def test_gaps_report_infers_suggested_facets_for_uncovered_entity(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0015-longitudinal",
+        """
+id: hypothesis:0015-longitudinal
+type: hypothesis
+title: Dynamic single-cell proteomics gap
+""",
+        body="Longitudinal perturbation trajectories require proteomics and single-cell data.",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    row = payload["benchmark_gaps"][0]
+    assert row["gap_level"] == "uncovered"
+    assert row["suggested_search_facets"] == [
+        "proteomics",
+        "perturbation",
+        "time-series",
+        "longitudinal",
+        "single-cell-rna-seq",
+    ]
+
+
+def test_gaps_report_facet_filter_uses_inferred_hints(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0016-single-cell",
+        """
+id: hypothesis:0016-single-cell
+type: hypothesis
+title: Single-cell benchmark gap
+""",
+        body="Single-cell assays are needed.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0017-proteomics",
+        """
+id: hypothesis:0017-proteomics
+type: hypothesis
+title: Proteomics benchmark gap
+""",
+        body="Proteomics assays are needed.",
+    )
+
+    payload = gaps_report(tmp_path, facet="single-cell-rna-seq")
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0016-single-cell"]
+
+
+def test_gaps_report_cross_context_hint_requires_phrase(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0020-cross-context",
+        """
+id: hypothesis:0020-cross-context
+type: hypothesis
+title: Cross context benchmark gap
+""",
+        body="Cross context evidence is needed.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0021-validation-only",
+        """
+id: hypothesis:0021-validation-only
+type: hypothesis
+title: Validation benchmark gap
+""",
+        body="Validation evidence is needed.",
+    )
+
+    payload = gaps_report(tmp_path, facet="cross-context-generalization")
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0020-cross-context"]
+
+
 def test_gaps_report_projects_existing_coverage_gaps_as_missing_facet(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
@@ -1171,7 +1261,7 @@ benchmark:
     assert row["missing_modalities"] == ["proteomics"]
     assert row["missing_signal_types"] == []
     assert row["current_matches"][0]["relative_score"] >= 15
-    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated"
     assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
 
@@ -1284,7 +1374,7 @@ benchmark:
     row = payload["benchmark_gaps"][0]
     assert row["gap_level"] == "weak"
     assert row["missing_modalities"] == ["proteomics"]
-    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
     assert row["current_matches"][0]["task_id"] is None
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated-task"
 
