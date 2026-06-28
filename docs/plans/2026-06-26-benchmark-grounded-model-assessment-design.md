@@ -429,8 +429,8 @@ not part of the descriptive-only v1. Report benchmark gaps by project, domain,
 mechanism, or hypothesis:
 
 ```bash
-science benchmark gaps --target hypothesis:0005
-science benchmark gaps --kind time-series
+science benchmark gaps --entity hypothesis:0005
+science benchmark gaps --facet time-series
 ```
 
 ### `science benchmark tests` (Phase 2)

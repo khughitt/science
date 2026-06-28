@@ -70,9 +70,10 @@ science benchmark gaps --format json
 `--facet` filters gap rows by a normalized high-value missing facet. It is not
 called `--kind`, because values like `time-series` are benchmark signal facets,
 not project entity kinds. Valid values are exactly the union of
-`GAP_MODALITIES` and `GAP_SIGNAL_TYPES`. CLI validation is intentionally strict
-and case-sensitive in v1, so users should pass the lowercase canonical spelling
-such as `time-series`, not `Time-Series`.
+`GAP_MODALITIES` and `GAP_SIGNAL_TYPES` after the same normalization used by
+the report API, including lowercase conversion and configured synonyms such as
+`intervention -> perturbation`. Invalid normalized values fail with a Click
+error.
 
 ## Architecture
 
