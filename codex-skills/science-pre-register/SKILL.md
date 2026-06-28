@@ -189,6 +189,9 @@ you *look*. For each arm of the planned comparison:
   than the raw *n*.
 - **Base rates.** What is the background/overlap rate the effect must beat? A high base rate can make
   a nominally-significant arm uninformative.
+- **Count ledger.** Re-derive every numeric count referenced anywhere in the pre-registration from
+  the loaded artifacts, not just the headline arm. This includes denominators, subgroup counts, exclusion counts, missingness counts, arm sizes, post-filter counts, and supporting counts in prose, tables, or caveats. Do not only verify the headline arm; if a count will appear in the
+  locked criteria or rationale, record where it was re-derived from the loaded artifact.
 
 If the numbers reveal an arm is underpowered or that the wrong arm was slated as confirmatory, **fix
 the design here** — re-scope, swap which arm is confirmatory/exploratory, or add a feasibility
