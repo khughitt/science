@@ -1,6 +1,6 @@
 version: 1
 project: "fixture"
-schema: "science-spec:2026-04-19-verdict-tokens-and-atomic-decomposition-design#v1.1"
+schema: "science-user-guide:epistemic-model#verdict-claims-v1"
 created: "2026-04-21"
 conventions:
   separator: "#"

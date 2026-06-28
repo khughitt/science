@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `18`
+- Pending thread count: `17`
 
 ## b-migration-paper-datasets
 
@@ -256,17 +256,4 @@
 - remaining_gaps:
   - Verify which of the five proposed changes fully landed: cross-kind slug fallback, ontology catalog resolvable instances, terms.yaml convention, tag: classification token, and topic deprecation.
   - Reconcile with mechanism/theme/topic follow-ons before moving or deleting.
-
-## verdict-tokens-and-atomic-decomposition
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; verdict token and claim-decomposition contract still needs durable user/convention docs
-    - `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
-- remaining_gaps:
-  - The verdict subsystem still lacks a compact durable user-guide or convention page; code and templates cite the old spec-level concepts directly.
 

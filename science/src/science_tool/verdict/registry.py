@@ -1,4 +1,4 @@
-"""Project-local claim registry (`specs/claim-registry.yaml`)."""
+"""Project-local claim registry (`entities/claim-registry.yaml`)."""
 
 from __future__ import annotations
 

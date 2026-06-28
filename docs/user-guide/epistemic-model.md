@@ -167,6 +167,100 @@ evidence.
 
 Use these as readings of the record, not as manually assigned labels to chase.
 
+## Verdict Tokens And Atomic Decomposition
+
+Interpretations use a compact verdict line for fast scanning:
+
+```markdown
+**Verdict:** [~] Bimodal result across contexts
+```
+
+The token is with respect to the predicted direction or hypothesis arm under
+test, not project valence. A `[-]` result can be valuable project progress when
+it closes a question honestly.
+
+| Token | Meaning |
+|---|---|
+| `[+]` | Evidence supports the predicted direction or hypothesis arm. |
+| `[-]` | Evidence refutes or contradicts the predicted direction. |
+| `[~]` | Mixed, null, bimodal, or context-dependent signal with structured content. |
+| `[?]` | Inconclusive because of protocol failure, data gaps, or insufficient power. |
+| `[⌀]` | Non-adjudicating terminal where the test discriminated, but the rollup is deliberately closed without resolving polarity. |
+
+When a verdict depends on multiple subclaims, add a `verdict:` frontmatter block
+so tooling can parse and roll it up:
+
+```yaml
+verdict:
+  composite: "[~]"
+  rule: "weighted-majority"
+  claims:
+    - id: "h1#edge5-ifn-arm"
+      polarity: "[+]"
+      strength: "strong"
+      weight: 3.0
+      evidence_summary: "NES positive in both contexts"
+      contexts:
+        - context: "RPMI-8226"
+          polarity: "[+]"
+          strength: "strong"
+    - id: "h1#edge5-e2f-arm"
+      polarity: "[-]"
+      strength: "moderate"
+```
+
+The block is optional for legacy interpretations. Once present, `composite` and
+`rule` are required, and every listed claim requires `id` and `polarity`.
+Supported rules are:
+
+| Rule | Derived composite |
+|---|---|
+| `and` | `[+]` when all claims are positive, `[-]` when any claim is negative, otherwise `[~]`. |
+| `or` | `[+]` when any claim is positive, `[-]` when all claims are negative, otherwise `[~]`. |
+| `majority` | Strict positive or negative majority over all claims; exact ties return `[~]`. |
+| `weighted-majority` | Strict positive or negative majority over adjudicating weight only; unresolved or non-adjudicating weight can keep the result `[~]`. |
+| `bimodal` | Always `[~]`; use when distribution shape is the finding. |
+| `non-adjudicating` | Always `[⌀]`; add `closure_terminal` to name the closure reason. |
+| `reframed` | Always `[~]`; add `reframing_target` and `reframing_reason` to preserve measurement lineage. |
+
+The body verdict remains authoritative. If the rule-derived composite differs
+from the body token, `science verdict parse` reports
+`rule_disagrees_with_body: true` so reviewers can see the human override or
+repair the rule choice.
+
+Claim-scoped rollups need stable project-local claim IDs. Put the registry at
+`entities/claim-registry.yaml`:
+
+```yaml
+version: 1
+project: example
+claims:
+  - id: "h1#edge5-ifn-arm"
+    source: "hypothesis:h1"
+    definition: "IFN arm of the edge-5 mechanism."
+    predicted_direction: "[+]"
+    synonyms:
+      - "h1-edge6-ifn-arm"
+```
+
+Canonical IDs and synonyms must be unique. `science verdict parse` can warn on
+unresolved IDs when a registry is available. `science verdict rollup --scope
+claim` and `science verdict rollup --by-claim` require a registry; `--strict`
+turns unresolved IDs and validation warnings into command failures.
+
+Use the implemented CLI surface to inspect verdict structure:
+
+```bash
+science verdict parse entities/interpretations/<slug>.md
+science verdict parse entities/interpretations/<slug>.md --registry entities/claim-registry.yaml
+science verdict rollup --scope all --root entities/interpretations --format json
+science verdict rollup --by-claim --root entities/interpretations --registry entities/claim-registry.yaml --format json
+```
+
+Verdict tokens summarize interpretations. They do not replace proposition
+belief state, evidence-line stance, causal identification, or quantitative
+effect estimates; those remain authored and derived on their own surfaces.
+
 ## Authored Versus Derived
 
 Authored fields record what a person, source, result, or project file says:

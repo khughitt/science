@@ -63,7 +63,7 @@ class ClaimRegistryEntry:
 
 @dataclass
 class ClaimRegistry:
-    """Project-local claim registry (`specs/claim-registry.yaml`)."""
+    """Project-local claim registry (`entities/claim-registry.yaml`)."""
 
     version: int
     project: str

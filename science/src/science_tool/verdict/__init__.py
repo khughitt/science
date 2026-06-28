@@ -1,8 +1,7 @@
 """Verdict-token parsing and rollup subsystem.
 
 Implements the 5-token verdict vocabulary plus atomic-claim
-decomposition per science-spec:2026-04-19-verdict-tokens-and-atomic-
-decomposition-design (v1.1+).
+decomposition documented in docs/user-guide/epistemic-model.md.
 """
 
 from __future__ import annotations

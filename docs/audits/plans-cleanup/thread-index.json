@@ -1,10 +1,10 @@
 {
-  "file_count": 190,
-  "generated_at": "2026-06-28T19:32:18+00:00",
+  "file_count": 189,
+  "generated_at": "2026-06-28T19:44:49+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 120,
+  "thread_count": 119,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -2924,27 +2924,6 @@
         "docs/plans/2026-06-20-user-guide-restructure-plan.md": "plan"
       },
       "thread_id": "user-guide-restructure"
-    },
-    {
-      "earliest_file_date": "2026-04-19",
-      "files": [
-        "docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md"
-      ],
-      "latest_file_date": "2026-04-19",
-      "normalized_slug": "verdict-tokens-and-atomic-decomposition",
-      "raw_slugs": {
-        "docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md": "verdict-tokens-and-atomic-decomposition-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md": "design"
-      },
-      "thread_id": "verdict-tokens-and-atomic-decomposition"
     }
   ]
 }
