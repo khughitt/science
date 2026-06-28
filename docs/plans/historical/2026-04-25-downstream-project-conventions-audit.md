@@ -29,8 +29,8 @@ Use these terms consistently across inventories, project reports, and the synthe
 
 This audit runs alongside two concurrent plans and must coordinate, not duplicate:
 
-- `docs/plans/2026-04-25-managed-artifact-versioning.md` — implements `science project artifacts check|diff|update` and ships before this audit completes. Section 8 ("Validation And Managed Artifacts") of each project report should *describe what managed artifact versioning would or would not solve* for that project; it must not propose an alternate validator-update mechanism. Audit findings tagged `mav-input` flow back as candidate additions to the MAV artifact list.
-- `docs/plans/2026-04-25-hypothesis-phase.md` — adds `phase: candidate | active` to hypothesis frontmatter. Treat hypothesis `phase` as an existing field during the audit; do not propose alternate naming.
+- `docs/plans/historical/2026-04-25-managed-artifact-versioning.md` — implements `science project artifacts check|diff|update` and ships before this audit completes. Section 8 ("Validation And Managed Artifacts") of each project report should *describe what managed artifact versioning would or would not solve* for that project; it must not propose an alternate validator-update mechanism. Audit findings tagged `mav-input` flow back as candidate additions to the MAV artifact list.
+- Hypothesis `phase: candidate | active` support — now implemented in `templates/hypothesis.md`, `commands/big-picture.md`, and the validator. Treat hypothesis `phase` as an existing field during the audit; do not propose alternate naming.
 
 The audit is read-only with respect to both plans: it informs follow-on design but does not block their merge.
 

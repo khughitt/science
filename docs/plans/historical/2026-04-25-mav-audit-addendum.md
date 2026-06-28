@@ -1,10 +1,10 @@
 # MAV Audit Addendum — `validate.sh` `mav-input` Set
 
-> **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
+> **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Depends on:** `docs/plans/2026-04-25-managed-artifact-versioning.md` (the MAV plan). Executes **after** the MAV plan merges. The MAV plan ships the artifact-versioning machinery at managed version `2026.04.25`; this addendum bumps it again with the audit-surfaced upstream fixes so downstream projects pull the corrections via `science project artifacts update`.
+**Depends on:** `docs/plans/historical/2026-04-25-managed-artifact-versioning.md` (the MAV plan). Executes **after** the MAV plan merges. The MAV plan ships the artifact-versioning machinery at managed version `2026.04.25`; this addendum bumps it again with the audit-surfaced upstream fixes so downstream projects pull the corrections via `science project artifacts update`.
 
 **Goal:** Fold the audit-surfaced `mav-input` fixes into canonical `meta/validate.sh` so 3-of-4 downstream projects' generic validator drift collapses on the next managed-artifact update.
 

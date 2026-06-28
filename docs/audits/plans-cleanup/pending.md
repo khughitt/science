@@ -1,7 +1,21 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `19`
+- Pending thread count: `23`
+
+## conventions-audit-p1-rollout
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`
+- pending_actions:
+  - `deferred`: review status incomplete; open downstream follow-ons and Bucket C design sessions remain tracked here
+    - `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`
+- remaining_gaps:
+  - Confirm which downstream migration follow-ons have since landed, then update or close the remaining checklist items.
+  - Schedule or replace the Bucket C design-session tracking with current durable backlog entries before removing this tracker.
 
 ## dataset-adapter-expansion
 
@@ -46,6 +60,34 @@
 - remaining_gaps:
   - No durable user-guide page or command-map entry documents when to use science distill or graph import.
   - The plan's examples and manifest contract should be migrated before deleting the plan.
+
+## downstream-conventions-migration
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-25-downstream-conventions-migration.md`
+- pending_actions:
+  - `deferred`: review status incomplete; tasks-archive, MAV update, and tracking/report tasks remain open
+    - `docs/plans/2026-04-25-downstream-conventions-migration.md`
+- remaining_gaps:
+  - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
+  - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
+
+## entity-naming-guidance-followup
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-23-entity-naming-guidance-followup.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; richer policy details should migrate to durable entity creation docs before deletion
+    - `docs/plans/2026-04-23-entity-naming-guidance-followup.md`
+- remaining_gaps:
+  - The durable cookbook is intentionally concise and does not preserve all stable policy details from this follow-up, such as authority preference order, orphan policy, governance/promotion criteria, and success metrics.
+  - Migrate any still-current policy detail needed for future maintainers into docs/process/entity-creation-cookbook.md or a companion conventions doc before deleting this plan.
 
 ## general-graph-api-visualization
 
@@ -255,6 +297,21 @@
 - remaining_gaps:
   - Reconcile project-model and paper-model together before moving or deleting either thread.
   - Confirm which parts of the broad entity taxonomy are now durable user-guide contract versus superseded by later epistemic-data-model and dataset lifecycle work.
+
+## topic-deprecation-and-mechanism
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; topic deprecation remains partially implemented and needs reconciliation with unified references/theme follow-ons
+    - `docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md`
+- remaining_gaps:
+  - Replace remaining topic-stub remediation guidance in health command docs and skills with semantic triage.
+  - Reconcile topic registration and legacy migration-only handling with unified references, theme, and mechanism follow-ons.
+  - Decide whether the stable topic-deprecation policy should move into durable docs before this design leaves active plans.
 
 ## unified-entity-references
 

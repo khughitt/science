@@ -11,7 +11,7 @@
 Read-only inventory of a downstream Science project. Emits a deterministic
 JSON artifact and a Markdown rendering. See:
 
-    docs/plans/2026-04-25-downstream-project-conventions-audit.md
+    docs/plans/historical/2026-04-25-downstream-project-conventions-audit.md
 
 Usage (the script declares its dependencies via PEP 723; use `uv run`):
     uv run scripts/audit_downstream_project_inventory.py <project_root>

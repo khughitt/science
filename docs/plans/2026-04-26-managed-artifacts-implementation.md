@@ -5284,7 +5284,7 @@ Per spec Phase 11 / Task 28."
 
 ### Task 29: Apply Plan #7 fixes as the first version bump
 
-Plan #7 (`docs/plans/2026-04-25-mav-audit-addendum.md`) lists six audit-surfaced validator fixes. This task applies them to `data/validate.sh`, bumps the version, moves the previous hash into `previous_hashes`, and adds the migration + changelog entries — exercising the version-bump workflow end-to-end.
+Plan #7 (`docs/plans/historical/2026-04-25-mav-audit-addendum.md`) lists six audit-surfaced validator fixes. This task applies them to `data/validate.sh`, bumps the version, moves the previous hash into `previous_hashes`, and adds the migration + changelog entries — exercising the version-bump workflow end-to-end.
 
 **Files:**
 - Modify: `science/src/science_tool/project_artifacts/data/validate.sh`
@@ -5352,7 +5352,7 @@ Expected: FAIL — registry only has version `2026.04.26`.
 
 - [ ] **Step 3: Apply Plan #7's six fixes to `data/validate.sh`**
 
-Per `docs/plans/2026-04-25-mav-audit-addendum.md`, apply each of the six audit-surfaced fixes to `science/src/science_tool/project_artifacts/data/validate.sh`. The implementing agent should read Plan #7's task descriptions and apply them. Each fix is a small, scoped edit (a few lines each in most cases). Fixes are described in Plan #7's Tasks 1-6.
+Per `docs/plans/historical/2026-04-25-mav-audit-addendum.md`, apply each of the six audit-surfaced fixes to `science/src/science_tool/project_artifacts/data/validate.sh`. The implementing agent should read Plan #7's task descriptions and apply them. Each fix is a small, scoped edit (a few lines each in most cases). Fixes are described in Plan #7's Tasks 1-6.
 
 After the edits, recompute the body hash:
 
@@ -5419,7 +5419,7 @@ git commit -m "feat(project-artifacts): version bump 2026.04.26 -> 2026.04.26.1 
 
 Applies Plan #7's six audit-surfaced validator fixes to canonical;
 moves previous hash into previous_hashes; adds byte_replace migration
-+ changelog entries. Subsumes docs/plans/2026-04-25-mav-audit-addendum.md.
++ changelog entries. Subsumes docs/plans/historical/2026-04-25-mav-audit-addendum.md.
 Per spec Phase 11 / Task 29."
 ```
 
@@ -6089,10 +6089,10 @@ Expected: all clean.
 
 Per the spec's "What this displaces" section and this plan's "What this displaces (cross-references)":
 
-- Edit `docs/plans/2026-04-25-managed-artifact-versioning.md`: append a status banner at the top:
-  > **Superseded:** Replaced by `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
-- Edit `docs/plans/2026-04-25-mav-audit-addendum.md`: append a status banner:
-  > **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
+- Edit `docs/plans/historical/2026-04-25-managed-artifact-versioning.md`: append a status banner at the top:
+  > **Superseded:** Replaced by `docs/plans/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/plans/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
+- Edit `docs/plans/historical/2026-04-25-mav-audit-addendum.md`: append a status banner:
+  > **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
 - Edit `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`: update Plan #7's status row to "subsumed by managed-artifacts implementation T29." Update the "Cross-plan rules" section to mark "validators in lockstep" as obsolete after Task 28 lands.
 - Edit `docs/plans/2026-04-25-rollout-and-migration-handoff.md`: append a one-line note to next-steps thread #1: "Addressed by `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`."
 
@@ -6100,8 +6100,8 @@ Per the spec's "What this displaces" section and this plan's "What this displace
 
 ```bash
 git add science/tests/test_acceptance_managed_artifacts.py \
-        docs/plans/2026-04-25-managed-artifact-versioning.md \
-        docs/plans/2026-04-25-mav-audit-addendum.md \
+        docs/plans/historical/2026-04-25-managed-artifact-versioning.md \
+        docs/plans/historical/2026-04-25-mav-audit-addendum.md \
         docs/plans/2026-04-25-conventions-audit-p1-rollout.md \
         docs/plans/2026-04-25-rollout-and-migration-handoff.md
 git commit -m "test(project-artifacts): end-to-end acceptance + supersede prior plans
@@ -6177,8 +6177,8 @@ Phases 1–9 build the system; phases 10–14 activate it.
 
 ## What this displaces (cross-references)
 
-- **`docs/plans/2026-04-25-managed-artifact-versioning.md` (MAV plan)** — superseded. Update its status section to point at this plan + the spec.
-- **`docs/plans/2026-04-25-mav-audit-addendum.md` (Plan #7)** — folds into T29 (first version bump). Update its status section to mark "subsumed by managed-artifacts implementation T29."
+- **`docs/plans/historical/2026-04-25-managed-artifact-versioning.md` (MAV plan)** — superseded. Update its status section to point at this plan + the spec.
+- **`docs/plans/historical/2026-04-25-mav-audit-addendum.md` (Plan #7)** — folds into T29 (first version bump). Update its status section to mark "subsumed by managed-artifacts implementation T29."
 - **`docs/plans/2026-04-25-conventions-audit-p1-rollout.md`** — update Plan #7's row to "subsumed by 2026-04-26-managed-artifacts-implementation T29." Update the cross-plan "validators in lockstep" rule to "obsolete after T28 lands (single canonical)."
 - **`docs/plans/2026-04-25-rollout-and-migration-handoff.md`** — note that next-steps thread #1 (MAV review/merge) is being addressed by this plan; thread #4 (tasks-archive adoption) is unrelated and continues independently.
 

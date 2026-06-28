@@ -4,7 +4,7 @@
 **Status:** Approved (brainstorm phase). Pending: implementation plan (`superpowers:writing-plans`).
 **Scope:** B (managed-artifact class). Validators are the first instance; the system generalizes to all Science-managed bytes downstreams consume verbatim.
 **Composes with (does not deliver):** Bucket C P1 design (entity model); `[t009]` entity-rename / declarative-migrations primitive.
-**Supersedes / redirects:** `docs/plans/2026-04-25-managed-artifact-versioning.md` (MAV plan as currently written); `docs/plans/2026-04-25-mav-audit-addendum.md` (Plan #7 — its six fixes become the first version bump under this system).
+**Supersedes / redirects:** `docs/plans/historical/2026-04-25-managed-artifact-versioning.md` (MAV plan as currently written); `docs/plans/historical/2026-04-25-mav-audit-addendum.md` (Plan #7 — its six fixes become the first version bump under this system).
 
 ---
 
@@ -481,7 +481,7 @@ unpin:      verify clean worktree (or --allow-dirty + path-conflict check on sci
 This design redirects in-flight work. The implementation plan must sequence carefully:
 
 1. **Bucket C design session** (P1 #1/#3/#5/#8) — independently planned, separate cycle. Does NOT block this design's implementation, but its decisions feed `[t009]`'s scoping.
-2. **MAV plan** (`docs/plans/2026-04-25-managed-artifact-versioning.md`) — should be **revised** rather than implemented as written. The revision incorporates:
+2. **MAV plan** (`docs/plans/historical/2026-04-25-managed-artifact-versioning.md`) — should be **revised** rather than implemented as written. The revision incorporates:
    - Capabilities-matrix registry shape (replaces hardcoded `ArtifactDefinition` per-artifact).
    - Per-artifact `header_protocol`, `consumer`, `extension_protocol`, `mutation_policy`.
    - Hook contract for `sourced_sidecar` (`SCIENCE_VALIDATE_HOOKS`, `register_validation_hook`, source-during-init timing).
@@ -491,7 +491,7 @@ This design redirects in-flight work. The implementation plan must sequence care
    - Replacement of `meta/validate.sh` and `scripts/validate.sh` with path-convenience shims (NOT deletion; NOT installs).
    - The `pin` / `unpin` / `exec` verbs.
    - The install matrix for the existing-file cases.
-3. **Plan #7** (`docs/plans/2026-04-25-mav-audit-addendum.md`) — its six audit-surfaced validator fixes become the **first version bump** under this system: `2026.04.25` → `<implementation date>`. The bump's migration entry is `kind: byte_replace` for most fixes; one or two of the six (id-prefix-table introduction; pre-registration row activation) may carry `project_action` migration steps that warn projects about new prefix-conformance warnings.
+3. **Plan #7** (`docs/plans/historical/2026-04-25-mav-audit-addendum.md`) — its six audit-surfaced validator fixes become the **first version bump** under this system: `2026.04.25` → `<implementation date>`. The bump's migration entry is `kind: byte_replace` for most fixes; one or two of the six (id-prefix-table introduction; pre-registration row activation) may carry `project_action` migration steps that warn projects about new prefix-conformance warnings.
 4. **Implementation of this design** unblocks: per-project `science project artifacts update validate.sh` (migration plan Task 4); plan-#7 bump landing.
 5. **`[t009]`** is downstream of this; consumes the same migration-step shape for entity rename and declarative entity migrations.
 
@@ -540,8 +540,8 @@ A reasonable implementation of this design satisfies all of:
 
 ## What this displaces
 
-- **The MAV plan as currently written** (`docs/plans/2026-04-25-managed-artifact-versioning.md`) — its core direction (managed header, package-bundled canonical, drift-check, diff, update CLI) is preserved. Its hardcoded per-artifact dataclass approach is replaced by a YAML registry with the capabilities matrix. Its silence on sidecar protocols, header-protocol per-artifact variation, declarative migrations, hook contracts, transaction safety, dirty-worktree rules, and `pin` is all filled in. Its assumption that `meta/validate.sh` and `scripts/validate.sh` stay alive as full bodies is replaced with one-line shims.
-- **Plan #7** (`docs/plans/2026-04-25-mav-audit-addendum.md`) — folds in as the first version bump. Its bookkeeping (single version bump, `previous_hashes` append) is exactly what this system formalizes; its six fixes become the bump's `byte_replace` migration (with any project-action steps surfaced explicitly).
+- **The MAV plan as currently written** (`docs/plans/historical/2026-04-25-managed-artifact-versioning.md`) — its core direction (managed header, package-bundled canonical, drift-check, diff, update CLI) is preserved. Its hardcoded per-artifact dataclass approach is replaced by a YAML registry with the capabilities matrix. Its silence on sidecar protocols, header-protocol per-artifact variation, declarative migrations, hook contracts, transaction safety, dirty-worktree rules, and `pin` is all filled in. Its assumption that `meta/validate.sh` and `scripts/validate.sh` stay alive as full bodies is replaced with one-line shims.
+- **Plan #7** (`docs/plans/historical/2026-04-25-mav-audit-addendum.md`) — folds in as the first version bump. Its bookkeeping (single version bump, `previous_hashes` append) is exactly what this system formalizes; its six fixes become the bump's `byte_replace` migration (with any project-action steps surfaced explicitly).
 - **The cross-plan "validators in lockstep" rule** — becomes obsolete because there is only one validate.sh body file.
 - **The hand-rolled `meta/validate.sh` ↔ `scripts/validate.sh` 9-line drift** — resolves by replacing both files with shims that always reach current canonical.
 
@@ -549,8 +549,8 @@ A reasonable implementation of this design satisfies all of:
 
 ## References
 
-- `docs/plans/2026-04-25-managed-artifact-versioning.md` — MAV plan (to be redirected per Sequencing § above).
-- `docs/plans/2026-04-25-mav-audit-addendum.md` — Plan #7 (folds in as first version bump).
+- `docs/plans/historical/2026-04-25-managed-artifact-versioning.md` — MAV plan (redirected per Sequencing § above).
+- `docs/plans/historical/2026-04-25-mav-audit-addendum.md` — Plan #7 (folds in as first version bump).
 - `docs/plans/2026-04-25-rollout-and-migration-handoff.md` — current state of the conventions audit + downstream migration cycle.
 - `docs/plans/2026-04-25-conventions-audit-p1-rollout.md` — master rollout plan; cross-plan rules section.
 - `docs/audits/downstream-project-conventions/synthesis.md` § 3.3 — synthesis-rollup convention evidence.

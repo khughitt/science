@@ -42,14 +42,14 @@ Status updated as each P1 progresses through the workflow.
 | P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | merged | merged (`d840e07`..`fc1cc80`) | APPROVE |
 | P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | merged | merged (`4dcd2ed`..`d1e4751`) | APPROVE |
 | P1 #6 | Auto-archive done tasks (`science tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
-| P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | merged | merged (`d5aa677`..`aee533f`) | APPROVE |
+| P1 #10 | Chained-prior `next-steps` ledger | implemented; current contract in `templates/next-steps.md` and `commands/next-steps.md` | merged | merged (`d5aa677`..`aee533f`) | APPROVE |
 
 ### Bucket B — small / additive (dispatched 2026-04-25)
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 |
-| P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | merged | merged (`2768fa2`..`4196b8f`) | APPROVE |
+| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/historical/2026-04-25-mav-audit-addendum.md` | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 |
+| P1 #9 | Code/notebook → task back-link convention | implemented; current contract in `docs/conventions/code-task-backlinks.md` | merged | merged (`2768fa2`..`4196b8f`) | APPROVE |
 
 ### Plan review pass 1 (2026-04-25)
 

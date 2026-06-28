@@ -3,7 +3,7 @@
 **Audit date:** 2026-04-25
 **Scope:** Cross-project synthesis across `natural-systems`, `mm30`, `protein-landscape`, `cbioportal`.
 **Inputs:** four inventory artifacts (`inventory/<project>.{json,md}`) + four manual project audits (`projects/<project>.md`).
-**Method:** convention-threshold rule applied per `docs/plans/2026-04-25-downstream-project-conventions-audit.md` Phase 3 — 3-of-4 with same shape eligible for P1; 2-of-4 eligible for P2 (upgraded with one-line justification only); 1-of-4 → P3 unless it is direct evidence of a known upstream gap.
+**Method:** convention-threshold rule applied per `docs/plans/historical/2026-04-25-downstream-project-conventions-audit.md` Phase 3 — 3-of-4 with same shape eligible for P1; 2-of-4 eligible for P2 (upgraded with one-line justification only); 1-of-4 → P3 unless it is direct evidence of a known upstream gap.
 
 Findings are tagged `[mav-input]` where managed-artifact-versioning would absorb them, `[hyp-phase]` where they touch the in-flight hypothesis-phase plan, and `[v1-tooling]` where they argue for a Phase-1 inventory/tool change.
 
@@ -334,7 +334,7 @@ mm30 carries plan files of 1.5k-3.2k lines (`t172`, `t202`, `hypothesis-pipeline
 
 ### 9.1 `validate.sh` MAV adoption — P1 `[mav-input]`
 
-The audit is a clean validation of the in-flight `docs/plans/2026-04-25-managed-artifact-versioning.md` plan. Evidence:
+The audit is a clean validation of the in-flight managed artifact versioning plan, now preserved at `docs/plans/historical/2026-04-25-managed-artifact-versioning.md`. Evidence:
 
 | Project | `validate.sh` status vs `meta/validate.sh` | MAV-relevant? |
 | --- | --- | --- |
