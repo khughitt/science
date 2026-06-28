@@ -1420,50 +1420,161 @@ title: Proteomics missing gap
     assert payload["summary"]["entities_with_gaps"] == 1
 
 
-def test_candidate_rows_sort_by_matched_facets_score_then_id() -> None:
-    from science_tool.benchmark_opportunities import _candidate_rows
+def test_gaps_report_candidates_are_entity_specific_near_misses(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
 
-    rows = _candidate_rows(
-        [
-            {
-                "benchmark_id": "dataset:z-unmatched-high-score",
-                "benchmark_title": "Unmatched High Score",
-                "baseline_score": 99,
-                "unmapped_facets": ["spatial"],
-            },
-            {
-                "benchmark_id": "dataset:beta",
-                "benchmark_title": "Beta",
-                "baseline_score": 20,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:alpha",
-                "benchmark_title": "Alpha",
-                "baseline_score": 20,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:score",
-                "benchmark_title": "Score",
-                "baseline_score": 30,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:two-match",
-                "benchmark_title": "Two Match",
-                "baseline_score": 1,
-                "unmapped_facets": ["perturbation", "proteomics"],
-            },
-        ],
-        {"perturbation", "proteomics"},
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0018-perturbation",
+        """
+id: hypothesis:0018-perturbation
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0019-proteomics",
+        """
+id: hypothesis:0019-proteomics
+type: hypothesis
+title: Protein abundance benchmark gap
+""",
+        body="Phosphoproteomic protein abundance should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac",
+        """
+id: dataset:cptac
+type: dataset
+title: CPTAC
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+  tasks:
+    - id: subtype
+      prediction_target: subtype
+      held_out_unit: cohort
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: curated subtype
+""",
     )
 
-    assert [row["benchmark_id"] for row in rows] == [
-        "dataset:two-match",
-        "dataset:score",
-        "dataset:alpha",
-        "dataset:beta",
-        "dataset:z-unmatched-high-score",
-    ]
-    assert rows[0]["matched_missing_facets"] == ["perturbation", "proteomics"]
+    payload = gaps_report(tmp_path)
+    by_entity = {row["entity_id"]: row for row in payload["benchmark_gaps"]}
+
+    perturbation_candidates = by_entity["hypothesis:0018-perturbation"]["candidate_benchmarks"]
+    proteomics_candidates = by_entity["hypothesis:0019-proteomics"]["candidate_benchmarks"]
+    assert perturbation_candidates[0]["benchmark_id"] == "dataset:sciplex"
+    assert "perturbation" in perturbation_candidates[0]["matched_hint_facets"]
+    assert proteomics_candidates[0]["benchmark_id"] == "dataset:cptac"
+    assert "proteomics" in proteomics_candidates[0]["matched_hint_facets"]
+    assert perturbation_candidates[0]["candidate_score"] > 0
+    assert proteomics_candidates[0]["candidate_score"] > 0
+
+
+def test_candidate_score_does_not_double_count_task_readiness_in_baseline_quality(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _candidate_score, _dataset_context, load_opportunity_datasets
+
+    _write_dataset(
+        tmp_path,
+        "task-ready-only",
+        """
+id: dataset:task-ready-only
+type: dataset
+title: Task Ready Only
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    context = _dataset_context(dataset, include_prose_tokens=False)
+    score = _candidate_score(context, missing_facets=set(), hint_facets=set())
+
+    assert score.components["hint_facet_overlap"] == 0
+    assert score.components["missing_facet_overlap"] == 0
+    assert score.components["task_readiness"] > 0
+    assert score.components["baseline_quality"] == 0
+    assert score.total == score.components["task_readiness"]
+
+
+def test_candidate_score_caps_missing_facet_overlap(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _candidate_score, _dataset_context, load_opportunity_datasets
+
+    _write_dataset(
+        tmp_path,
+        "broad-gap",
+        """
+id: dataset:broad-gap
+type: dataset
+title: Broad Gap
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, spatial, multimodal]
+  signal_types: [perturbation, time-series, cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    context = _dataset_context(dataset, include_prose_tokens=False)
+    score = _candidate_score(
+        context,
+        missing_facets={
+            "proteomics",
+            "spatial",
+            "multimodal",
+            "perturbation",
+            "time-series",
+            "cross-context-generalization",
+        },
+        hint_facets=set(),
+    )
+
+    assert score.components["missing_facet_overlap"] == 30
+    assert score.total <= 100

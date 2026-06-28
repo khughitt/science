@@ -310,7 +310,22 @@ class GapCandidateBenchmarkRow(TypedDict):
     benchmark_id: str
     benchmark_title: str
     baseline_score: int
+    candidate_score: int
     matched_missing_facets: list[str]
+    matched_hint_facets: list[str]
+    reason_notes: list[str]
+
+
+@dataclass(frozen=True)
+class CandidateScore:
+    total: int
+    components: dict[str, int]
+    reason_notes: list[str]
+    matched_missing_facets: list[str]
+    matched_hint_facets: list[str]
+
+
+CandidateScoreIndex = dict[tuple[str, str], CandidateScore]
 
 
 class BenchmarkGapRow(TypedDict):
@@ -901,26 +916,130 @@ def _is_weak_gap(rows: list[OpportunityRow]) -> bool:
     return all_low_score or all_taskless
 
 
-def _candidate_rows(
-    available: list[UnmappedBenchmarkRow],
-    missing_facets: set[str],
-) -> list[GapCandidateBenchmarkRow]:
-    candidates: list[GapCandidateBenchmarkRow] = []
-    for row in available:
-        candidate_facets = {_normalize_token(value) for value in row["unmapped_facets"]}
-        matched_facets = sorted(candidate_facets & missing_facets)
-        candidates.append(
-            {
-                "benchmark_id": row["benchmark_id"],
-                "benchmark_title": row["benchmark_title"],
-                "baseline_score": row["baseline_score"],
-                "matched_missing_facets": matched_facets,
-            }
+def _context_declared_facets(context: DatasetOpportunityContext) -> set[str]:
+    return {
+        _normalize_token(value)
+        for value in (
+            *context.dataset.modalities,
+            *context.dataset.signal_types,
         )
-    return sorted(
-        candidates,
-        key=lambda row: (-len(row["matched_missing_facets"]), -row["baseline_score"], row["benchmark_id"]),
+    } & BENCHMARK_GAP_HINT_FACET_SET
+
+
+def _reason_note_sort_key(note: str) -> tuple[int, str]:
+    family_order = {
+        "missing-facet": 0,
+        "entity-hint": 1,
+        "task-ready": 2,
+        "high-baseline": 3,
+        "high-baseline-fallback": 4,
+    }
+    family = note.split(":", 1)[0]
+    return (family_order.get(family, 99), note)
+
+
+def _candidate_score(
+    context: DatasetOpportunityContext,
+    *,
+    missing_facets: set[str],
+    hint_facets: set[str],
+) -> CandidateScore:
+    declared_facets = _context_declared_facets(context)
+    matched_missing = set(missing_facets) & declared_facets
+    matched_hints = set(hint_facets) & declared_facets
+    baseline_components = context.baseline.components
+    missing_points = min(len(matched_missing) * 10, 30)
+    hint_points = min(len(matched_hints) * 10, 35)
+    task_completeness = baseline_components.get("task_completeness", 0)
+    readiness = baseline_components.get("readiness", 0)
+    task_readiness = round(((task_completeness / 30) * 12) + ((readiness / 15) * 8))
+    baseline_quality = round(
+        (
+            (
+                baseline_components.get("signal_value", 0)
+                + baseline_components.get("modality_value", 0)
+                + baseline_components.get("limitations", 0)
+            )
+            / 55
+        )
+        * 15
     )
+    components = {
+        "missing_facet_overlap": missing_points,
+        "hint_facet_overlap": hint_points,
+        "task_readiness": task_readiness,
+        "baseline_quality": baseline_quality,
+    }
+    reason_notes = [f"missing-facet:{facet}" for facet in _sorted_facets(matched_missing)]
+    reason_notes.extend(f"entity-hint:{facet}" for facet in _sorted_facets(matched_hints))
+    if task_readiness >= 12:
+        reason_notes.append("task-ready")
+    if baseline_quality >= 8:
+        reason_notes.append("high-baseline")
+    return CandidateScore(
+        total=min(sum(components.values()), 100),
+        components=components,
+        reason_notes=sorted(set(reason_notes), key=_reason_note_sort_key),
+        matched_missing_facets=_sorted_facets(matched_missing),
+        matched_hint_facets=_sorted_facets(matched_hints),
+    )
+
+
+def _candidate_rows(
+    entity_id: str,
+    contexts: list[DatasetOpportunityContext],
+    current_matches: list[OpportunityRow],
+    missing_facets: set[str],
+    hint_facets: set[str],
+    score_index: CandidateScoreIndex,
+    *,
+    limit: int = 5,
+) -> list[GapCandidateBenchmarkRow]:
+    matched_benchmark_ids = {row["benchmark_id"] for row in current_matches}
+    scored: list[tuple[GapCandidateBenchmarkRow, CandidateScore]] = []
+    fallback: list[GapCandidateBenchmarkRow] = []
+    for context in contexts:
+        dataset = context.dataset
+        if dataset.id in matched_benchmark_ids:
+            continue
+        score = _candidate_score(context, missing_facets=missing_facets, hint_facets=hint_facets)
+        score_index[(entity_id, dataset.id)] = score
+        row: GapCandidateBenchmarkRow = {
+            "benchmark_id": dataset.id,
+            "benchmark_title": dataset.title,
+            "baseline_score": context.baseline.total,
+            "candidate_score": score.total,
+            "matched_missing_facets": score.matched_missing_facets,
+            "matched_hint_facets": score.matched_hint_facets,
+            "reason_notes": score.reason_notes,
+        }
+        if score.total > 0:
+            scored.append((row, score))
+        else:
+            fallback.append(
+                {
+                    **row,
+                    "reason_notes": ["high-baseline-fallback"],
+                }
+            )
+    if scored:
+        ordered = [
+            row
+            for row, _score in sorted(
+                scored,
+                key=lambda item: (
+                    -item[0]["candidate_score"],
+                    -len(item[0]["matched_hint_facets"]),
+                    -item[0]["baseline_score"],
+                    item[0]["benchmark_id"],
+                ),
+            )
+        ]
+        return ordered[:limit]
+    return sorted(
+        fallback,
+        key=lambda row: (-row["baseline_score"], row["benchmark_id"]),
+    )[: min(3, limit)]
 
 
 def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkGapSummary:
@@ -1177,6 +1296,7 @@ def gaps_report(
     unmapped_ids = {row["entity_id"] for row in opportunity["unmapped_project_entities"]}
     entity_ids = sorted(set(matched) | set(coverage) | unmapped_ids)
     entity_by_id = {entity.id: entity for entity in analysis.entities}
+    candidate_score_index: CandidateScoreIndex = {}
 
     rows: list[BenchmarkGapRow] = []
     for current_entity_id in entity_ids:
@@ -1219,8 +1339,12 @@ def gaps_report(
                 "missing_signal_types": missing_signal_types,
                 "current_matches": _current_match_rows(current_matches),
                 "candidate_benchmarks": _candidate_rows(
-                    opportunity["available_unmapped_benchmarks"],
+                    current_entity_id,
+                    analysis.contexts,
+                    current_matches,
                     missing_facets,
+                    hint_facets,
+                    candidate_score_index,
                 ),
                 "suggested_search_facets": suggested_facets,
                 "reason": reason,
