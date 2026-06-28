@@ -1746,6 +1746,78 @@ benchmark:
     assert "only-fallback-candidates" not in row["why_no_specific_candidate"]
 
 
+def test_gaps_report_evidence_report_filters_generic_unmapped_terms(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0037-generic",
+        """
+id: hypothesis:0037-generic
+type: hypothesis
+title: Does the therapy claim need evidence
+""",
+        body="Notes: the therapy and cohort question should not be tested across generic prose.",
+    )
+
+    payload = gaps_report(tmp_path, evidence_report=True)
+
+    row = payload["evidence_report"]["entities"]["hypothesis:0037-generic"]
+    assert "therapy" in row["unmapped_high_value_terms"]
+    for generic in ("across", "and", "does", "generic", "not", "notes", "prose", "the", "question", "should", "tested"):
+        assert generic not in row["unmapped_high_value_terms"]
+
+
+def test_gaps_report_maps_clinical_outcome_terms_to_entity_specific_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0038-survival",
+        """
+id: hypothesis:0038-survival
+type: hypothesis
+title: Survival and relapse benchmark gap
+""",
+        body="Prognostic survival relapse progression evidence should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "clinical",
+        """
+id: dataset:clinical
+type: dataset
+title: Clinical outcome benchmark
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: survival-risk
+      prediction_target: survival risk
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: survival outcome
+""",
+    )
+
+    payload = gaps_report(tmp_path, evidence_report=True)
+
+    row = payload["benchmark_gaps"][0]
+    assert "clinical-outcome" in row["suggested_search_facets"]
+    candidate = row["candidate_benchmarks"][0]
+    assert candidate["benchmark_id"] == "dataset:clinical"
+    assert candidate["matched_hint_facets"] == ["clinical-outcome"]
+    evidence = payload["evidence_report"]["entities"]["hypothesis:0038-survival"]
+    assert evidence["candidate_mode"] == "entity-specific"
+
+
 def test_gaps_report_omits_generic_candidates_when_entity_specific_candidates_exist(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
