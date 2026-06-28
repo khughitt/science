@@ -265,24 +265,24 @@ evidence:
 This avoids double-counting task completeness and readiness through both
 `task_readiness` and `baseline_quality`. A benchmark with no entity-specific
 facet evidence can earn at most `35` points from entity-agnostic quality
-signals, which keeps candidate variation driven primarily by the entity's
-missing facets and inferred hints.
+signals, but those points do not make it a normal candidate row.
 
-Clamp `candidate_score` to 100. Do not include candidates with
-`candidate_score == 0` unless an entity has no scored candidates at all. In
-that fallback case, include at most three high-baseline benchmark candidates
-with `reason_notes: ["high-baseline-fallback"]` so the report stays useful but
-does not pretend there was entity-specific evidence. Fallback rows are used only
-when there are zero scored candidates; they are never mixed with scored rows and
-still count against the JSON/table row limits.
+Clamp `candidate_score` to 100. Normal candidate rows require entity-specific
+evidence: at least one declared missing facet or inferred entity hint facet. If
+an entity has no candidates with that evidence, include at most three
+high-baseline benchmark candidates as fallback rows. Fallback rows keep their
+computed `candidate_score`, but their row-level
+`reason_notes: ["high-baseline-fallback"]` makes clear that the suggestion is a
+generic benchmark-quality fallback rather than a project-specific match.
+Fallback rows are used only when there are zero entity-specific candidates; they
+are never mixed with entity-specific rows and still count against the JSON/table
+row limits.
 
 Because `task_readiness` contributes entity-agnostic points for benchmark
-records with complete tasks and usable readiness, `candidate_score == 0` will be
-uncommon in catalogs with task-rich benchmarks. In those cases the report may
-still show candidates without entity-specific hint overlap, bounded by the
-entity-agnostic ceiling described above. Calibration output should make that
-distinction visible through zero `missing_facet_overlap` /
-`hint_facet_overlap` components.
+records with complete tasks and usable readiness, generic benchmark candidates
+often have positive scores. Calibration output should make the distinction
+visible through zero `missing_facet_overlap` / `hint_facet_overlap` components
+and the fallback reason note.
 
 Emit `high-baseline` on scored candidate rows when `baseline_quality >= 8`.
 Emit `task-ready` when `task_readiness >= 12`. These notes are deterministic

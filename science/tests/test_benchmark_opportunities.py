@@ -1583,6 +1583,124 @@ benchmark:
     assert proteomics_candidates[0]["candidate_score"] > 0
 
 
+def test_gaps_report_omits_generic_candidates_when_entity_specific_candidates_exist(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0025-drug-screen",
+        """
+id: hypothesis:0025-drug-screen
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic-proteomics",
+        """
+id: dataset:generic-proteomics
+type: dataset
+title: Generic Proteomics
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+  tasks:
+    - id: subtype
+      prediction_target: subtype
+      held_out_unit: cohort
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: curated subtype
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
+    assert [candidate["benchmark_id"] for candidate in candidates] == ["dataset:sciplex"]
+    assert candidates[0]["matched_hint_facets"] == ["perturbation"]
+    assert candidates[0]["reason_notes"] != ["high-baseline-fallback"]
+
+
+def test_gaps_report_uses_labeled_high_baseline_fallback_when_no_entity_specific_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0026-generic-gap",
+        """
+id: hypothesis:0026-generic-gap
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    for slug in ("alpha", "beta", "gamma", "delta"):
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: Generic {slug.title()}
+benchmark:
+  domains: [biology]
+  modalities: [assay-{slug}]
+  signal_types: [unrelated-{slug}]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    payload = gaps_report(tmp_path)
+
+    candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
+    assert len(candidates) == 3
+    assert all(candidate["candidate_score"] > 0 for candidate in candidates)
+    assert all(candidate["reason_notes"] == ["high-baseline-fallback"] for candidate in candidates)
+    assert all(candidate["matched_hint_facets"] == [] for candidate in candidates)
+    assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
+
+
 def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 

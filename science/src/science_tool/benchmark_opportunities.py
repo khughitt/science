@@ -1014,6 +1014,10 @@ def _candidate_score(
     )
 
 
+def _has_entity_specific_candidate_evidence(score: CandidateScore) -> bool:
+    return bool(score.matched_missing_facets or score.matched_hint_facets)
+
+
 def _candidate_rows(
     entity_id: str,
     contexts: list[DatasetOpportunityContext],
@@ -1042,7 +1046,7 @@ def _candidate_rows(
             "matched_hint_facets": score.matched_hint_facets,
             "reason_notes": score.reason_notes,
         }
-        if score.total > 0:
+        if _has_entity_specific_candidate_evidence(score):
             scored.append((row, score))
         else:
             fallback.append(
