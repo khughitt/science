@@ -68,6 +68,36 @@ already included by default — duplicates are de-duplicated automatically.
 - `science refs check --include-body` — also scans body prose for typed
   `<kind>:<slug>` refs against the configured truth source.
 
+## Literature References
+
+Use `paper:<bibkey>` for external literature notes and `cite:<bibkey>` for
+bibliography/source references. Use `manuscript:<slug>` for the project's own
+publication drafts.
+
+Bibkey extraction is deliberately simple and shared by literature consumers:
+the bibkey is the full substring after the first `:`. Comparisons are
+case-sensitive and byte-for-byte. There is no lowercasing, whitespace trimming,
+or suffix folding. `paper:Smith2024` and `cite:Smith2024` share the bibkey
+`Smith2024`; `paper:smith2024` does not.
+
+`article:<bibkey>` is a legacy spelling for external literature. Current graph
+and big-picture consumers canonicalize it to `paper:<bibkey>` at load or
+comparison boundaries so old project files can still be read. Treat this as a
+temporary reader compatibility path, not an authoring convention.
+
+The one-shot `science refs migrate-paper` command is no longer part of the live
+CLI. To clean up a project, edit remaining structured `article:` references to
+`paper:`, run `science refs check --include-body`, and inspect
+`science graph health` for `legacy_structured_literature_prefixes`.
+
+The legacy alias can be retired only after:
+
+- tracked projects no longer report structured `article:` findings;
+- intentional legacy-alias tests or fixtures are either removed or clearly
+  scoped to migration-history coverage; and
+- every consumer that calls `canonical_paper_id` has a direct `paper:`-only
+  path or no longer needs external-literature aliasing.
+
 ## Related
 
 - [`science prose lint`](prose-lints.md) — separate lint group for citation

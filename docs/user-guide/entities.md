@@ -45,6 +45,32 @@ computed from the graph, evidence, provenance, or health machinery. Belief
 state, support summaries, dispute summaries, freshness, and health status should
 be recomputed rather than manually patched.
 
+## Papers And Manuscripts
+
+Science uses separate references for external literature and user-authored
+publication drafts:
+
+| Surface | Meaning |
+|---|---|
+| `paper:<bibkey>` | External literature note for a paper the project has read, searched, or summarized. |
+| `cite:<bibkey>` | Bibliography/source reference, usually backed by `papers/references.bib`. |
+| `manuscript:<slug>` | The project's own publication-in-progress. |
+
+Use `entities/papers/<bibkey>.md` and `templates/paper.md` for external
+literature notes. Use `templates/manuscript.md` for publication drafts. Do not
+use `paper:` for the project's own manuscript.
+
+The canonical bibkey is the full substring after the first `:`. Comparisons are
+case-sensitive and byte-for-byte: `paper:Smith2024` and `cite:Smith2024` share
+the bibkey `Smith2024`, but `paper:smith2024` is a different key.
+
+Legacy `article:<bibkey>` references are accepted only as a transition-window
+alias for `paper:<bibkey>` at load and comparison boundaries. New authored
+files should use `paper:<bibkey>`. Health checks still surface legacy
+structured `article:` references so projects can remove them from source before
+the alias is retired. See [Refs Check](../conventions/refs-check.md) for the
+reference-checking and alias-retirement policy.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether
@@ -246,7 +272,7 @@ project machinery.
 - `dataset` - Tabular or file dataset tracked as a research artifact.
 - `experiment` - Experiment or analysis step that tests project questions.
 - `method` - Analytical method or computational approach.
-- `paper` - Ordered composition of stories structured for communication.
+- `paper` - External literature note for a read, searched, or summarized paper.
 - `plan` - An authored implementation or analysis plan.
 - `pre-registration` - Pre-registered analysis plan stating expectations before analysis.
 - `prose-source` - Authored internal Markdown prose used as an operational evidence source.

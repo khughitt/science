@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `27`
+- Pending thread count: `26`
 
 ## b-migration-paper-datasets
 
@@ -180,21 +180,6 @@
 - remaining_gaps:
   - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
   - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
-
-## manuscript-paper-rename
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-19-manuscript-paper-rename-design.md`
-  - `docs/plans/2026-04-19-manuscript-paper-rename.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; transition-window removal guidance and canonical bibkey rules still need durable docs
-    - `docs/plans/2026-04-19-manuscript-paper-rename-design.md`
-    - `docs/plans/2026-04-19-manuscript-paper-rename.md`
-- remaining_gaps:
-  - Migrate transition-window removal criteria and the canonical bibkey rule into durable user or convention docs before deleting.
 
 ## multi-backend-entity-resolver
 

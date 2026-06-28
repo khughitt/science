@@ -57,7 +57,8 @@ topic ID ascending.
 
 External literature IDs canonicalize to `paper:<bibkey>`. During the transition
 window, `article:<bibkey>` still counts as the same external paper for coverage
-deduplication.
+deduplication. The canonical bibkey and legacy-alias policy are documented in
+[Refs Check](../conventions/refs-check.md).
 
 Inspect the computed list directly with:
 
