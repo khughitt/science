@@ -1007,6 +1007,40 @@ benchmark:
     assert "varies" in benchmark_tokens
 
 
+def test_gap_report_uses_shared_opportunity_analysis_for_entity_filter(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report, opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0013-target",
+        """
+id: hypothesis:0013-target
+type: hypothesis
+title: Target perturbation benchmark gap
+""",
+        body="Perturbation benchmark coverage is missing.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0014-other",
+        """
+id: hypothesis:0014-other
+type: hypothesis
+title: Other spatial benchmark gap
+""",
+        body="Spatial benchmark coverage is missing.",
+    )
+
+    opportunity = opportunity_report(tmp_path, entity_id="hypothesis:0013-target")
+    gaps = gaps_report(tmp_path, entity_id="hypothesis:0013-target")
+
+    assert [row["entity_id"] for row in opportunity["unmapped_project_entities"]] == ["hypothesis:0013-target"]
+    assert [row["entity_id"] for row in gaps["benchmark_gaps"]] == ["hypothesis:0013-target"]
+    assert gaps["summary"]["entities_total"] == 1
+
+
 def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 

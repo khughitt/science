@@ -249,6 +249,13 @@ class OpportunityReport(TypedDict):
     commons_notice: str | None
 
 
+@dataclass(frozen=True)
+class OpportunityAnalysis:
+    entities: list[ProjectBenchmarkEntity]
+    contexts: list[DatasetOpportunityContext]
+    report: OpportunityReport
+
+
 WEAK_RELATIVE_SCORE_THRESHOLD = 15
 GapLevel = Literal["uncovered", "weak", "missing-facet"]
 
@@ -973,22 +980,13 @@ def _calibration_payload(
     }
 
 
-def opportunity_report(
-    project_root: Path,
+def _build_opportunity_report(
+    entities: list[ProjectBenchmarkEntity],
+    contexts: list[DatasetOpportunityContext],
+    notice: str | None,
     *,
-    include_commons: bool = False,
-    entity_id: str | None = None,
-    domain: str | None = None,
-    calibration_report: bool = False,
+    calibration_report: bool,
 ) -> OpportunityReport:
-    entities = load_project_entities(project_root)
-    if entity_id is not None:
-        entities = [entity for entity in entities if entity.id == entity_id]
-    datasets, notice = load_opportunity_datasets(project_root, include_commons=include_commons)
-    if domain is not None:
-        datasets = [dataset for dataset in datasets if domain in dataset.domains]
-    contexts = [_dataset_context(dataset, include_prose_tokens=calibration_report) for dataset in datasets]
-
     # Diversity credit is entity-relative across benchmarks. Because rows are
     # produced in dataset sort order, the first matched benchmark for an entity
     # claims each high-value facet; later rows with the same facet receive no
@@ -1023,6 +1021,49 @@ def opportunity_report(
     }
 
 
+def _opportunity_analysis(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    calibration_report: bool = False,
+    include_prose_tokens: bool | None = None,
+) -> OpportunityAnalysis:
+    entities = load_project_entities(project_root)
+    if entity_id is not None:
+        entities = [entity for entity in entities if entity.id == entity_id]
+    datasets, notice = load_opportunity_datasets(project_root, include_commons=include_commons)
+    if domain is not None:
+        datasets = [dataset for dataset in datasets if domain in dataset.domains]
+    should_include_prose = calibration_report if include_prose_tokens is None else include_prose_tokens
+    contexts = [_dataset_context(dataset, include_prose_tokens=should_include_prose) for dataset in datasets]
+    report = _build_opportunity_report(
+        entities,
+        contexts,
+        notice,
+        calibration_report=calibration_report,
+    )
+    return OpportunityAnalysis(entities=entities, contexts=contexts, report=report)
+
+
+def opportunity_report(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    calibration_report: bool = False,
+) -> OpportunityReport:
+    return _opportunity_analysis(
+        project_root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+        calibration_report=calibration_report,
+    ).report
+
+
 def gaps_report(
     project_root: Path,
     *,
@@ -1032,12 +1073,13 @@ def gaps_report(
     facet: str | None = None,
 ) -> BenchmarkGapReport:
     normalized_facet = _normalized_gap_facet(facet)
-    opportunity = opportunity_report(
+    analysis = _opportunity_analysis(
         project_root,
         include_commons=include_commons,
         entity_id=entity_id,
         domain=domain,
     )
+    opportunity = analysis.report
     matched = _matched_by_entity(opportunity["matched_opportunities"])
     coverage = _coverage_gap_by_entity(opportunity["coverage_gaps"])
     titles = _entity_title_map(opportunity)
