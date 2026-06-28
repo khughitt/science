@@ -90,7 +90,7 @@ def validate_cmd(
     if output_format == "json":
         click.echo(json.dumps(_json_payload(result), indent=2))
     else:
-        _emit_text(result)
+        _emit_text(result, verbose=verbose)
 
     if result.errors or result.gated:
         ctx.exit(1)
@@ -152,29 +152,48 @@ def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> R
     )
 
 
-def _emit_text(result: RunResult) -> None:
+def _emit_text(result: RunResult, *, verbose: bool = False) -> None:
     console = get_console(file=click.get_text_stream("stdout"))
     console.print(BANNER)
     console.print("Science Project Validation")
     console.print(BANNER)
+    console.print(_format_check_coverage(result), soft_wrap=True)
 
-    for section in _section_names(result):
-        console.print()
-        console.print(section_banner(section))
+    if verbose:
+        for section in _section_names(result):
+            console.print(section_banner(section))
 
-    for item in result.results:
-        console.print(_format_result(item))
+    for item in _text_results(result, verbose=verbose):
+        console.print(_format_result(item), soft_wrap=True)
 
     console.print()
     console.print(BANNER)
-    console.print(_format_summary(result))
+    console.print(_format_summary(result), soft_wrap=True)
+
+
+def _format_check_coverage(result: RunResult) -> str:
+    included_count = len(result.sections)
+    skipped_count = len(result.skipped_sections)
+    if skipped_count:
+        skipped = ", ".join(result.skipped_sections)
+        return f"Checks: {included_count} included, {skipped_count} skipped (profile: {result.profile}; skipped: {skipped})"
+    return f"Checks: {included_count} included, 0 skipped (profile: {result.profile})"
+
+
+def _text_results(result: RunResult, *, verbose: bool) -> list[Result]:
+    if verbose:
+        return list(result.results)
+    return [item for item in result.results if item.severity is not Severity.INFO]
 
 
 def _section_names(result: RunResult) -> list[str]:
-    return list(result.sections) or ["Science project"]
+    return list(result.sections)
 
 
 def _format_result(result: Result) -> Text:
+    if _is_checking_info(result):
+        return _format_checking_info_result(result)
+
     style = _severity_style(result.severity)
     text = Text(style=style)
     text.append(result.severity.name)
@@ -192,6 +211,21 @@ def _format_result(result: Result) -> Text:
     if result.task:
         text.append(f" ({result.task})")
     return text
+
+
+def _format_checking_info_result(result: Result) -> Text:
+    text = Text(style=_severity_style(result.severity))
+    text.append(result.severity.name)
+    if result.rule:
+        text.append(f" [{result.rule}]")
+    text.append(f" {result.message}")
+    if result.task:
+        text.append(f" ({result.task})")
+    return text
+
+
+def _is_checking_info(result: Result) -> bool:
+    return result.severity is Severity.INFO and result.path is not None and result.message.startswith("Checking ")
 
 
 def _location(result: Result) -> str | None:

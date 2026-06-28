@@ -405,7 +405,10 @@ def test_validate_text_uses_section_banners_and_color_policy(tmp_path: Path) -> 
             Result(Severity.WARN, None, None, "warning", "demo.warn", None),
         ]
 
-    result = CliRunner().invoke(main, ["--color", "always", "validate", "--project-root", str(_project(tmp_path))])
+    result = CliRunner().invoke(
+        main,
+        ["--color", "always", "validate", "--verbose", "--project-root", str(_project(tmp_path))],
+    )
 
     assert result.exit_code == 1, result.output
     assert f"{BANNER}\nScience Project Validation\n{BANNER}" in result.output
@@ -417,6 +420,75 @@ def test_validate_text_uses_section_banners_and_color_policy(tmp_path: Path) -> 
     assert ANSI_RE.search(result.output) is not None
 
 
+def test_validate_text_suppresses_info_without_verbose(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [
+            Result(Severity.INFO, Path("doc/demo.md"), None, "Checking doc/demo.md...", "demo.info", None),
+            Result(Severity.WARN, None, None, "warning", "demo.warn", None),
+        ]
+
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(_project(tmp_path))])
+
+    assert result.exit_code == 0, result.output
+    assert "Checks: 1 included, 0 skipped (profile: full)" in result.output
+    assert "Checking demo" not in result.output
+    assert "INFO" not in result.output
+    assert "Checking doc/demo.md" not in result.output
+    assert "WARN warning [demo.warn]" in result.output
+    assert "PASSED with 1 warning(s)" in result.output
+
+
+def test_validate_text_verbose_shows_info_without_duplicate_checking_location(tmp_path: Path) -> None:
+    @Check(section="discussions", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [
+            Result(
+                Severity.INFO,
+                Path("entities/discussions/0001-demo.md"),
+                None,
+                "Checking entities/discussions/0001-demo.md...",
+                "discussions",
+                None,
+            )
+        ]
+
+    result = CliRunner().invoke(main, ["validate", "--verbose", "--project-root", str(_project(tmp_path))])
+
+    assert result.exit_code == 0, result.output
+    assert "Checks: 1 included, 0 skipped (profile: full)" in result.output
+    assert "Checking discussions" in result.output
+    assert "INFO [discussions] Checking entities/discussions/0001-demo.md..." in result.output
+    assert "INFO entities/discussions/0001-demo.md [discussions] Checking" not in result.output
+    assert "\n\nChecking discussions" not in result.output
+
+
+def test_validate_text_profile_summary_lists_skipped_checks(tmp_path: Path) -> None:
+    @Check(section="knowledge graph...", order=10)
+    def check_graph(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "graph ran", "graph", None)]
+
+    @Check(section="task queue...", order=20)
+    def check_tasks(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "tasks ran", "tasks", None)]
+
+    @Check(section="evidence lines", order=30)
+    def check_belief_authoring(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "belief ran", "belief", None)]
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--profile", "commit", "--project-root", str(_project(tmp_path))],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Checks: 1 included, 2 skipped (profile: commit; skipped: knowledge graph..., evidence lines)" in result.output
+    assert "graph ran" not in result.output
+    assert "tasks ran" not in result.output
+    assert "belief ran" not in result.output
+    assert "PASSED: all checks clean" in result.output
+
+
 def test_validate_default_text_has_no_ansi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FORCE_COLOR", raising=False)
     monkeypatch.delenv("NO_COLOR", raising=False)
@@ -425,7 +497,7 @@ def test_validate_default_text_has_no_ansi(tmp_path: Path, monkeypatch: pytest.M
 
     assert result.exit_code == 0, result.output
     assert f"{BANNER}\nScience Project Validation\n{BANNER}" in result.output
-    assert "Checking Science project" in result.output
+    assert "Checks: 0 included, 0 skipped (profile: full)" in result.output
     assert result.output.rstrip().endswith("PASSED: all checks clean")
     assert ANSI_RE.search(result.output) is None
 

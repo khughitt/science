@@ -42,6 +42,8 @@ class RunResult:
     gate_tier: str = "report"
     gated: tuple[Result, ...] = ()
     sections: tuple[str, ...] = ()
+    skipped_sections: tuple[str, ...] = ()
+    profile: ValidationProfile = "full"
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,7 @@ def run(
     enable_python_sidecar: bool = True,
 ) -> RunResult:
     checks = _checks_for_profile(profile)
+    skipped_checks = _skipped_checks_for_profile(profile)
     ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
     results: list[Result] = []
     run_result: RunResult | None = None
@@ -129,7 +132,7 @@ def run(
                 )
         if sidecar_enabled:
             results.extend(_dispatch_hooks("extra_checks", ctx))
-        run_result = _tally(results, checks)
+        run_result = _tally(results, checks, skipped_checks, profile)
         try:
             tier = resolve_gate_tier(fail_on, ctx.manifest)
         except ValueError as exc:
@@ -162,17 +165,32 @@ def _checks_for_profile(profile: ValidationProfile) -> list[CheckEntry]:
     raise ValueError(f"unknown validation profile: {profile}")
 
 
+def _skipped_checks_for_profile(profile: ValidationProfile) -> list[CheckEntry]:
+    if profile == "full":
+        return []
+    if profile == "commit":
+        return [entry for entry in CANONICAL_CHECKS if _commit_profile_excludes(entry)]
+    raise ValueError(f"unknown validation profile: {profile}")
+
+
 def _commit_profile_excludes(entry: CheckEntry) -> bool:
     return entry.section in _COMMIT_EXCLUDED_SECTIONS or entry.fn.__name__ in _COMMIT_EXCLUDED_FUNCTIONS
 
 
-def _tally(results: list[Result], checks: list[CheckEntry]) -> RunResult:
+def _tally(
+    results: list[Result],
+    checks: list[CheckEntry],
+    skipped_checks: list[CheckEntry],
+    profile: ValidationProfile,
+) -> RunResult:
     return RunResult(
         results=results,
         errors=sum(1 for result in results if result.severity is Severity.ERROR),
         warnings=sum(1 for result in results if result.severity is Severity.WARN),
         infos=sum(1 for result in results if result.severity is Severity.INFO),
         sections=tuple(dict.fromkeys(entry.section for entry in checks)),
+        skipped_sections=tuple(dict.fromkeys(entry.section for entry in skipped_checks)),
+        profile=profile,
     )
 
 
