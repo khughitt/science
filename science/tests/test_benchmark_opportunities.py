@@ -975,6 +975,39 @@ def test_gaps_report_rejects_blank_or_unknown_facet(tmp_path: Path) -> None:
             gaps_report(tmp_path, facet=facet)
 
 
+def test_gaps_report_filters_by_high_value_facet(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-temporal",
+        """
+id: hypothesis:0004-temporal
+type: hypothesis
+title: Time-series missing gap
+""",
+        body="Time-series dynamics remain untested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-proteomics",
+        """
+id: hypothesis:0005-proteomics
+type: hypothesis
+title: Proteomics missing gap
+""",
+        body="Proteomics transfer remains untested.",
+    )
+
+    payload = gaps_report(tmp_path, facet="time-series")
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0004-temporal"]
+    assert payload["summary"]["entities_total"] == 2
+    assert payload["summary"]["entities_with_gaps"] == 1
+
+
 def test_candidate_rows_sort_by_matched_facets_score_then_id() -> None:
     from science_tool.benchmark_opportunities import _candidate_rows
 
