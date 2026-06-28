@@ -128,6 +128,21 @@ _STOP_TOKENS = {
     "result",
     "response",
 }
+_UNMAPPED_TERM_EXCLUSIONS = frozenset(
+    {
+        *_STOP_TOKENS,
+        *ENTITY_SUPPRESSED_TOKENS,
+        *_ENTITY_KINDS,
+        "benchmark",
+        "gap",
+        "tested",
+        "testing",
+        "validation",
+        "validate",
+        "needed",
+        "should",
+    }
+)
 
 
 def _normalize_token(token: str) -> str:
@@ -378,10 +393,44 @@ class BenchmarkGapSummary(TypedDict):
     missing_facet_entities: int
 
 
+CandidateMode = Literal["entity-specific", "fallback-only", "none"]
+
+
+class TermCountRow(TypedDict):
+    term: str
+    count: int
+    example_entities: list[str]
+
+
+class EvidenceEntityRow(TypedDict):
+    candidate_mode: CandidateMode
+    tokens: list[str]
+    facet_hints: list[str]
+    matched_facets: list[str]
+    suggested_search_facets: list[str]
+    unmapped_high_value_terms: list[str]
+    why_no_specific_candidate: list[str]
+
+
+class EvidenceSummary(TypedDict):
+    entities_total: int
+    entities_with_no_facet_hints: int
+    entities_with_fallback_only_candidates: int
+    top_unmapped_project_terms: list[TermCountRow]
+
+
+class EvidenceReport(TypedDict):
+    enabled: bool
+    summary: NotRequired[EvidenceSummary]
+    entities: NotRequired[dict[str, EvidenceEntityRow]]
+    lexicon_candidates: NotRequired[list[TermCountRow]]
+
+
 class BenchmarkGapReport(TypedDict):
     benchmark_gaps: list[BenchmarkGapRow]
     summary: BenchmarkGapSummary
     calibration: GapCalibrationPayload
+    evidence_report: EvidenceReport
     commons_notice: str | None
 
 
@@ -959,6 +1008,10 @@ def _sorted_facets(facets: set[str] | list[str]) -> list[str]:
     return sorted({_normalize_token(facet) for facet in facets}, key=_facet_sort_key)
 
 
+def _phrase_tokens() -> set[str]:
+    return {token for phrase, _hint in FACET_HINT_PHRASES for token in phrase}
+
+
 def _entity_facet_hints(entity: ProjectBenchmarkEntity) -> list[str]:
     hints: set[str] = set()
     for token in entity.tokens:
@@ -1011,6 +1064,119 @@ def _current_match_rows(rows: list[OpportunityRow]) -> list[GapCurrentMatchRow]:
         }
         for row in rows
     ]
+
+
+def _matched_facets_for_gap(row: BenchmarkGapRow, current_matches: list[OpportunityRow]) -> list[str]:
+    facets: set[str] = set()
+    for match in current_matches:
+        facets.update(_normalize_token(value) for value in match["modalities"])
+        facets.update(_normalize_token(value) for value in match["signal_types"])
+    for candidate in row["candidate_benchmarks"]:
+        facets.update(candidate["matched_missing_facets"])
+        facets.update(candidate["matched_hint_facets"])
+    return _sorted_facets(facets)
+
+
+def _candidate_mode(candidates: list[GapCandidateBenchmarkRow]) -> CandidateMode:
+    if any(candidate["matched_missing_facets"] or candidate["matched_hint_facets"] for candidate in candidates):
+        return "entity-specific"
+    if candidates:
+        return "fallback-only"
+    return "none"
+
+
+def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: list[str]) -> list[str]:
+    excluded = set(_UNMAPPED_TERM_EXCLUSIONS)
+    excluded.update(_phrase_tokens())
+    excluded.update(FACET_HINT_TERMS)
+    excluded.update(BENCHMARK_GAP_HINT_FACET_SET)
+    excluded.update(matched_facets)
+    excluded.update(entity.id_tokens)
+    return sorted(
+        token
+        for token in entity.tokens
+        if token not in excluded and ":" not in token and not re.fullmatch(r"\d+.*", token)
+    )
+
+
+def _why_no_specific_candidate(row: BenchmarkGapRow, mode: CandidateMode) -> list[str]:
+    reasons: list[str] = []
+    if row["gap_level"] == "weak":
+        reasons.append("current-match-too-weak")
+    if not row["suggested_search_facets"]:
+        reasons.append("no-facet-hints")
+    elif mode != "entity-specific":
+        reasons.append("hints-have-no-candidate-facet-overlap")
+    if mode == "fallback-only":
+        reasons.append("only-fallback-candidates")
+    if mode == "none":
+        reasons.append("no-candidates")
+    return reasons
+
+
+def _top_unmapped_terms(by_entity: dict[str, list[str]], *, top: int = 10) -> list[TermCountRow]:
+    counts = Counter(term for terms in by_entity.values() for term in terms)
+    examples: dict[str, list[str]] = {}
+    for entity_id, terms in by_entity.items():
+        for term in terms:
+            bucket = examples.setdefault(term, [])
+            if len(bucket) < 3:
+                bucket.append(entity_id)
+    return [
+        {"term": term, "count": count, "example_entities": examples.get(term, [])}
+        for term, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _gap_evidence_report(
+    rows: list[BenchmarkGapRow],
+    *,
+    entities: list[ProjectBenchmarkEntity],
+    matched: dict[str, list[OpportunityRow]],
+    enabled: bool,
+) -> EvidenceReport:
+    if not enabled:
+        return {"enabled": False}
+
+    entity_by_id = {entity.id: entity for entity in entities}
+    evidence_entities: dict[str, EvidenceEntityRow] = {}
+    unmapped_by_entity: dict[str, list[str]] = {}
+    no_hints = 0
+    fallback_only = 0
+    for row in rows:
+        entity = entity_by_id.get(row["entity_id"])
+        if entity is None:
+            continue
+        mode = _candidate_mode(row["candidate_benchmarks"])
+        if mode == "fallback-only":
+            fallback_only += 1
+        if not row["suggested_search_facets"]:
+            no_hints += 1
+        matched_facets = _matched_facets_for_gap(row, matched.get(row["entity_id"], []))
+        unmapped_terms = _unmapped_high_value_terms(entity, matched_facets)
+        unmapped_by_entity[row["entity_id"]] = unmapped_terms
+        evidence_entities[row["entity_id"]] = {
+            "candidate_mode": mode,
+            "tokens": sorted(entity.tokens),
+            "facet_hints": _entity_facet_hints(entity),
+            "matched_facets": matched_facets,
+            "suggested_search_facets": list(row["suggested_search_facets"]),
+            "unmapped_high_value_terms": unmapped_terms,
+            "why_no_specific_candidate": _why_no_specific_candidate(row, mode),
+        }
+
+    top_terms = _top_unmapped_terms(unmapped_by_entity)
+    return {
+        "enabled": True,
+        "summary": {
+            "entities_total": len(rows),
+            "entities_with_no_facet_hints": no_hints,
+            "entities_with_fallback_only_candidates": fallback_only,
+            "top_unmapped_project_terms": top_terms,
+        },
+        "entities": evidence_entities,
+        "lexicon_candidates": top_terms,
+    }
 
 
 def _is_weak_gap(rows: list[OpportunityRow]) -> bool:
@@ -1747,6 +1913,7 @@ def gaps_report(
     domain: str | None = None,
     facet: str | None = None,
     calibration_report: bool = False,
+    evidence_report: bool = False,
 ) -> BenchmarkGapReport:
     normalized_facet = _normalized_gap_facet(facet)
     analysis = _opportunity_analysis(
@@ -1830,5 +1997,11 @@ def gaps_report(
         "benchmark_gaps": rows,
         "summary": _gap_summary(rows, entities_total=len(entity_ids)),
         "calibration": calibration,
+        "evidence_report": _gap_evidence_report(
+            rows,
+            entities=analysis.entities,
+            matched=matched,
+            enabled=evidence_report,
+        ),
         "commons_notice": opportunity["commons_notice"],
     }

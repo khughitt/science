@@ -1646,6 +1646,106 @@ benchmark:
     assert proteomics_candidates[0]["candidate_score"] > 0
 
 
+def test_gaps_report_evidence_report_explains_fallback_only_unmapped_terms(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0035-organoid",
+        """
+id: hypothesis:0035-organoid
+type: hypothesis
+title: Organoid therapy benchmark gap
+""",
+        body="Organoid therapy clone validation should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic benchmark
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: outcome
+      prediction_target: outcome
+      held_out_unit: patient
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: outcome
+""",
+    )
+
+    payload = gaps_report(tmp_path, evidence_report=True)
+
+    evidence = payload["evidence_report"]
+    assert evidence["enabled"] is True
+    row = evidence["entities"]["hypothesis:0035-organoid"]
+    assert row["candidate_mode"] == "fallback-only"
+    assert row["facet_hints"] == []
+    assert "organoid" in row["unmapped_high_value_terms"]
+    assert "therapy" in row["unmapped_high_value_terms"]
+    assert "no-facet-hints" in row["why_no_specific_candidate"]
+    assert "only-fallback-candidates" in row["why_no_specific_candidate"]
+    assert evidence["summary"]["entities_with_fallback_only_candidates"] == 1
+    assert evidence["lexicon_candidates"][0]["term"] == "clone"
+
+
+def test_gaps_report_evidence_report_distinguishes_entity_specific_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0036-drug",
+        """
+id: hypothesis:0036-drug
+type: hypothesis
+title: Drug benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+
+    payload = gaps_report(tmp_path, evidence_report=True)
+
+    row = payload["evidence_report"]["entities"]["hypothesis:0036-drug"]
+    assert row["candidate_mode"] == "entity-specific"
+    assert row["facet_hints"] == ["perturbation"]
+    assert "perturbation" in row["matched_facets"]
+    assert "only-fallback-candidates" not in row["why_no_specific_candidate"]
+
+
 def test_gaps_report_omits_generic_candidates_when_entity_specific_candidates_exist(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
