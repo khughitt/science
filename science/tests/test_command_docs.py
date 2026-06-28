@@ -220,6 +220,16 @@ def test_pipeline_audit_process_documents_clean_base_qa_checkpoint_pattern() -> 
         assert expected in text
 
 
+def test_pipeline_audit_process_uses_layout_v3_dataset_owner_paths() -> None:
+    text = _read("docs/process/pipeline-audit-and-refactor.md")
+
+    assert "entities/datasets/*.md" in text
+    assert "entities/datasets/<slug>.md" in text
+    assert "doc/datasets/data-*.md" not in text
+    assert "doc/datasets/data-<slug>.md" not in text
+    assert "mixin-dataset-1.0` fields" not in text
+
+
 def test_pipeline_audit_process_documents_result_bundle_validation_modes() -> None:
     text = _read("docs/process/pipeline-audit-and-refactor.md")
 

@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `15`
+- Pending thread count: `14`
 
 ## b-migration-paper-datasets
 
@@ -166,21 +166,6 @@
 - remaining_gaps:
   - Reconcile this thread together with docs/plans/2026-04-05-project-model-design.md before deciding whether to delete, move both to historical, or migrate a durable paper/manuscript model note.
   - Confirm whether the originally planned graph store operations and CLI commands still exist or were replaced by entity source files and interpret-results workflow.
-
-## phase4c-operationalization
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-03-07-phase4c-operationalization-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; command-doc and CLI mismatch needs triage
-    - `docs/plans/2026-03-07-phase4c-operationalization-design.md`
-- remaining_gaps:
-  - CLI and command docs appear inconsistent: find-datasets instructs science datasets search, but current CLI exposes science dataset catalog/entity lifecycle commands.
-  - The March plan's Frictionless dependency and datasets validate/check-coverage CLI shape were not found as originally designed.
-  - The thread combines adapter search, dataset entity lifecycle, datapackage validation, and pipeline guidance, which now live in separate evolved systems.
 
 ## project-model
 

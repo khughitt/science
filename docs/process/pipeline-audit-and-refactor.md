@@ -96,7 +96,7 @@ Use an explicit discovery pass before hand-curating the inventory:
 - generated substrates: `data/processed/`, `pipeline/`, `results/`, `reports/`, `knowledge/sources/`;
 - manifests and packages: `datapackage.json`, research packages, lockfiles, provenance manifests;
 - QA and validation: test files, audit scripts, health checks, schema validators;
-- dataset entities: `doc/datasets/data-*.md`, KG dataset records, commons registrations.
+- dataset entities: `entities/datasets/*.md`, runtime datapackages, commons registrations.
 
 **Phase 1 — Per-chain sweep (all three axes together).** Walk each chain once and score the three
 axis rubrics. Record findings in `pipeline-refactor/findings.md`, one section per chain, and attach a
@@ -215,13 +215,12 @@ A clean base substrate is commons-ready only when:
 - license/access restrictions are recorded.
 
 **Promotion procedure (not a one-liner).** `science commons promote dataset` sources from the
-project's dataset entity descriptors (`doc/datasets/data-<slug>.md`), requires `--slug`, and selects
+project's dataset entity descriptors under `entities/datasets/`, requires `--slug`, and selects
 the source project with `--from <project-id>`. So promotion has prerequisites that are themselves
 refactor tasks:
 
-1. **Create / verify the dataset entity** at `doc/datasets/data-<slug>.md` with the required
-   `mixin-dataset-1.0` fields and a `datapackage:` pointer to the clean base substrate's
-   `datapackage.json`.
+1. **Create / verify the dataset entity** at `entities/datasets/<slug>.md` with the current dataset
+   lifecycle fields and a `datapackage:` pointer to the clean base substrate's runtime datapackage.
 2. **Dry-run** `science commons promote dataset --from <project-id> --slug <slug>` and inspect the plan.
 3. **Apply** with `--apply` (add `--mixin <bio.*>` where a bio extension matches the dataset modality).
 
