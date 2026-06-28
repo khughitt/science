@@ -135,8 +135,8 @@ non-eliminated edges. The precedence rules live in the render spec.
   `eliminated`.
 - **`docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md`** —
   the posterior block schema.
-- **`docs/specs/2026-03-07-phase4b-causal-dag-design.md`** — the
-  underlying inquiry / graph/causal layer that these annotations
+- **`docs/user-guide/epistemic-model.md`** — the current source-first causal
+  inquiry profile and graph/causal export contract that these annotations
   compose with.
 
 ## Quick vocabulary check

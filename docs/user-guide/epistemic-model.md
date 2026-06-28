@@ -77,6 +77,57 @@ named graphs and then derives patch-membership records. Boundary nodes and edge
 endpoints must resolve to existing entities; assumption and transformation nodes
 are minted by the compiler.
 
+### Causal Inquiry Profiles
+
+Causal modeling is a typed inquiry profile, not a separate project subsystem.
+Use `profile: causal` when the inquiry is about a treatment, intervention,
+causal DAG, confounders, or a treatment-effect estimand. Use
+`profile: investigation` for data flow, computational flow, and non-causal
+exploration.
+
+A causal inquiry source must name:
+
+| Field | Purpose |
+|---|---|
+| `profile: causal` | Enables causal validation and export behavior after graph build. |
+| `treatment` | Existing entity ref for the intervention or exposure variable. |
+| `outcome` | Existing entity ref for the effect variable. |
+
+Causal variables remain normal source-authored entities. The inquiry source
+selects the treatment, outcome, boundary variables, assumptions, unknowns, and
+local candidate edges around the focal question or hypothesis.
+
+Causal edges use `predicate: causes` in the authored inquiry `flow_edges` block;
+graph build materializes them as `scic:causes` in the compiled inquiry graph.
+Reusable project-level causal structure can also live in the generated
+`graph/causal` layer and is read by causal exports when it connects inquiry
+members. Treat causal edges as claim-like assertions: attach candidate
+`proposition:` refs in `claim_refs` when a causal edge has explicit support, and
+leave weak or ungrounded edges visible rather than upgrading them into evidence.
+
+Causal validation and export commands read the materialized graph:
+
+```bash
+science inquiry validate <slug> --format json
+science inquiry export-pgmpy <slug> --output code/causal/<slug>.py
+science inquiry export-chirho <slug> --output code/causal/<slug>.py
+```
+
+`export-pgmpy` produces a graph-theoretic analysis scaffold for adjustment-set
+and identifiability review. `export-chirho` produces a Pyro/ChiRho scaffold for
+future interventional or counterfactual modeling. Exports are scaffolds, not
+fitted models; researchers still need to provide data, distributions, priors,
+and sensitivity analysis.
+
+When reviewing causal inquiries, keep two questions separate:
+
+- Is the relation replicated or otherwise well supported?
+- Is the causal direction identified by interventional, longitudinal,
+  observational, structural, or no evidence?
+
+`references/dag-two-axis-evidence-model.md` documents that two-axis evidence
+vocabulary for rendered causal DAG edges.
+
 ### Inquiry CLI
 
 The current `science inquiry` CLI is source-first:

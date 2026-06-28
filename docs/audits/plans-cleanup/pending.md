@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `19`
+- Pending thread count: `18`
 
 ## b-migration-paper-datasets
 
@@ -196,21 +196,6 @@
 - remaining_gaps:
   - Reconcile this thread together with docs/plans/2026-04-05-project-model-design.md before deciding whether to delete, move both to historical, or migrate a durable paper/manuscript model note.
   - Confirm whether the originally planned graph store operations and CLI commands still exist or were replaced by entity source files and interpret-results workflow.
-
-## phase4b-causal-dag
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-03-07-phase4b-causal-dag-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until causal-inquiry rationale and stale references are migrated
-    - `docs/plans/2026-03-07-phase4b-causal-dag-design.md`
-- remaining_gaps:
-  - Active docs still reference docs/specs/2026-03-07-phase4b-causal-dag-design.md in places, while the actual file is under docs/plans/.
-  - Current CLI differs from the plan: inquiry init uses --profile causal, not --type causal; direct graph mutators such as set-estimand/add-node/add-edge are retired source-editing bridges.
-  - No compact durable causal-inquiry rationale doc found outside the old plan and skill docs.
 
 ## phase4c-operationalization
 

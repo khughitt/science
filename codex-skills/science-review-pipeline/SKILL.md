@@ -105,8 +105,10 @@ uv run science <command>
 ### Step 1: Load inquiry and plan
 
 **Resolve the target first.** Not every project routes plans through `inquiry`. If the
-artifact under review is an `inquiry` (a `entities/inquiries/<slug>.md` with an inquiry slug), use
-the inquiry commands below. If it is a standalone `type: plan` document (e.g. `entities/plans/<stem>.md`
+artifact under review is a graph-backed inquiry (a compiled `inquiry:<slug>` whose
+source normally lives at `entities/patches/<slug>.md`), use the inquiry commands
+below. If it is a prose-first inquiry (`entities/inquiries/<slug>.md`) or a
+standalone `type: plan` document (e.g. `entities/plans/<stem>.md`
 with no inquiry slug), the `science inquiry show/validate <slug>` calls do **not** resolve — skip
 them and instead drive the review from the plan document itself plus its frontmatter `related:`
 entities. Save the review outside the entity tree as `doc/reviews/<stem>-pipeline-review.md` so layout
@@ -120,7 +122,8 @@ science inquiry validate "<slug>" --format json
 ```
 
 Also read (whichever exist):
-- `entities/inquiries/<slug>.md` — inquiry document (inquiry target)
+- `entities/patches/<slug>.md` — graph-backed inquiry source, if present
+- `entities/inquiries/<slug>.md` — prose-first or legacy inquiry document, if present
 - `entities/plans/<stem>.md` and its `related:` entities — plan document (plan target)
 - `entities/plans/*<slug>*` — implementation plan (if exists)
 - `specs/scope-boundaries.md` — project scope
@@ -165,8 +168,9 @@ in the plan):
   - At least one of `entity.datapackage` or `entity.local_path` is populated AND
     the referenced runtime file exists on disk.
 - `consumed_by` includes `plan:<this-plan-file-stem>`.
-- All eleven state invariants hold (see the spec at
-  `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md`).
+- The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
+  external records use `access:`, derived records use `derivation:`, and
+  resource-level metadata lives in the runtime datapackage.
 
 **Scoring:**
 

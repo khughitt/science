@@ -154,27 +154,30 @@ Inquiries are named subgraphs that represent self-contained investigations. They
 
 | Entity | CLI Command | When to use |
 |--------|-------------|-------------|
-| Inquiry | `inquiry init "<slug>" --label --target` | Named subgraph container for an investigation |
+| Inquiry | `inquiry init "<slug>" --label --target --profile` | Source-backed subgraph container for an investigation |
 | Variable | `graph add concept "<label>" --type sci:Variable` | A quantity in the model (observed, latent, or computed) |
 | Transformation | (via `/science:plan-pipeline`) | A computational/analytical step in the pipeline |
-| Assumption | (via `add_assumption` or specify-model) | An explicit modeling assumption with provenance |
+| Assumption | (via the inquiry source or specify-model) | An explicit modeling assumption with provenance |
 | Unknown | `graph add concept "<label>" --type sci:Unknown` | Placeholder for unidentified factors (sketch only) |
 | ValidationCheck | `graph add concept "<label>" --type sci:ValidationCheck` | A criterion for verifying a step or result |
 
 ### Inquiry CLI Commands
 
 ```
-inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION>
-inquiry add-node <SLUG> <ENTITY> [--role <BoundaryIn|BoundaryOut>]
-inquiry add-edge <SLUG> <SUBJECT> <PREDICATE> <OBJECT>
-inquiry add-assumption <SLUG> <LABEL> --source <REF>
-inquiry add-transformation <SLUG> <LABEL> [--tool <TOOL>]
+inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION> --profile investigation
+inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION> --profile causal --treatment <REF> --outcome <REF>
+inquiry import <SLUG>
 inquiry list [--format table|json]
 inquiry show <SLUG> [--format table|json]
 inquiry validate <SLUG> [--format table|json]
+inquiry export-pgmpy <SLUG>
+inquiry export-chirho <SLUG>
 ```
 
-Note: `add-node` without `--role` adds an interior node (no boundary classification).
+`inquiry init` scaffolds `entities/patches/<slug>.md`. Edit that source file's
+`inquiry:` block to add boundary roles, flow edges, assumptions,
+transformations, and unknowns, then run `science graph build`. The old
+graph-mutating inquiry commands are retired.
 
 ### Inquiry-Specific Predicates
 

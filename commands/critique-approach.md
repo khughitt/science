@@ -4,7 +4,12 @@ description: Critically review a causal DAG inquiry for missing confounders, ide
 
 # Critique a Causal Approach
 
-> **Prerequisite:** Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, `docs/plans/historical/2026-03-01-knowledge-graph-design.md`, `references/dag-two-axis-evidence-model.md`, and `docs/specs/2026-03-07-phase4b-causal-dag-design.md` for model, entity, graph, and causal modeling reference.
+> **Prerequisite:** Read `docs/user-guide/science-model.md`,
+> `docs/user-guide/entities.md`, `docs/user-guide/epistemic-model.md`,
+> `docs/user-guide/graph-and-derived-state.md`,
+> `docs/plans/historical/2026-03-01-knowledge-graph-design.md`, and
+> `references/dag-two-axis-evidence-model.md` for model, entity, inquiry,
+> graph, and causal modeling reference.
 
 ## Overview
 
