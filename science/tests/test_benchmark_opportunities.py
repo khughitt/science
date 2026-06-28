@@ -816,6 +816,27 @@ title: Proteomics gap
     assert payload["summary"]["entities_with_gaps"] == 1
 
 
+def test_benchmark_gaps_cli_reports_commons_notice(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0010-proteomics",
+        """
+id: hypothesis:0010-proteomics
+type: hypothesis
+title: Proteomics commons gap
+""",
+        body="Proteomics coverage is missing.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    assert "notice: commons benchmarks unavailable" in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["commons_notice"] is not None
+
+
 def test_benchmark_gaps_cli_table_empty_state(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
