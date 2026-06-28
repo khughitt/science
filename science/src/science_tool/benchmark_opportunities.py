@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -381,6 +382,30 @@ class BenchmarkGapReport(TypedDict):
     summary: BenchmarkGapSummary
     calibration: GapCalibrationPayload
     commons_notice: str | None
+
+
+class FacetCountRow(TypedDict):
+    facet: str
+    count: int
+
+
+class BenchmarkCountRow(TypedDict):
+    benchmark_id: str
+    count: int
+
+
+class GapCalibrationSummary(TypedDict):
+    gap_rows: int
+    rows_with_suggested_facets: int
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    score_min: int | None
+    score_median: float | None
+    score_max: int | None
+    top_suggested_facets: list[FacetCountRow]
+    top_matched_hint_facets: list[FacetCountRow]
+    top_fallback_benchmarks: list[BenchmarkCountRow]
 
 
 def _string_list(value: object) -> list[str]:
@@ -1082,6 +1107,60 @@ def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkG
         "uncovered_entities": sum(1 for row in rows if row["gap_level"] == "uncovered"),
         "weakly_covered_entities": sum(1 for row in rows if row["gap_level"] == "weak"),
         "missing_facet_entities": sum(1 for row in rows if row["gap_level"] == "missing-facet"),
+    }
+
+
+def _median_score(scores: list[int]) -> float | None:
+    if not scores:
+        return None
+    ordered = sorted(scores)
+    midpoint = len(ordered) // 2
+    if len(ordered) % 2:
+        return float(ordered[midpoint])
+    return (ordered[midpoint - 1] + ordered[midpoint]) / 2
+
+
+def _top_facet_counts(counter: Counter[str], *, top: int) -> list[FacetCountRow]:
+    return [
+        {"facet": facet, "count": count}
+        for facet, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _top_benchmark_counts(counter: Counter[str], *, top: int) -> list[BenchmarkCountRow]:
+    return [
+        {"benchmark_id": benchmark_id, "count": count}
+        for benchmark_id, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> GapCalibrationSummary:
+    rows = report["benchmark_gaps"]
+    candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
+    entity_specific_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
+    ]
+    fallback_candidates = [
+        candidate for candidate in candidates if candidate["reason_notes"] == ["high-baseline-fallback"]
+    ]
+    scores = [candidate["candidate_score"] for candidate in candidates]
+    suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
+    matched_hint_facets = Counter(facet for candidate in candidates for facet in candidate["matched_hint_facets"])
+    fallback_benchmarks = Counter(candidate["benchmark_id"] for candidate in fallback_candidates)
+    return {
+        "gap_rows": len(rows),
+        "rows_with_suggested_facets": sum(1 for row in rows if row["suggested_search_facets"]),
+        "candidate_rows": len(candidates),
+        "entity_specific_candidate_rows": len(entity_specific_candidates),
+        "fallback_candidate_rows": len(fallback_candidates),
+        "score_min": min(scores) if scores else None,
+        "score_median": _median_score(scores),
+        "score_max": max(scores) if scores else None,
+        "top_suggested_facets": _top_facet_counts(suggested_facets, top=top),
+        "top_matched_hint_facets": _top_facet_counts(matched_hint_facets, top=top),
+        "top_fallback_benchmarks": _top_benchmark_counts(fallback_benchmarks, top=top),
     }
 
 

@@ -1012,6 +1012,65 @@ title: Perturbation CLI gap
     assert "gap_entity_evidence" in payload["calibration"]
 
 
+def test_benchmark_gaps_cli_calibration_summary_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0029-cli-summary",
+        """
+id: hypothesis:0029-cli-summary
+type: hypothesis
+title: Drug screen CLI summary gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-summary", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["calibration"]["enabled"] is False
+    assert payload["calibration_summary"]["gap_rows"] == 1
+    assert payload["calibration_summary"]["rows_with_suggested_facets"] == 1
+    assert payload["calibration_summary"]["entity_specific_candidate_rows"] == 1
+    assert payload["calibration_summary"]["top_matched_hint_facets"] == [{"count": 1, "facet": "perturbation"}]
+
+
+def test_benchmark_gaps_cli_calibration_summary_table(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0030-cli-summary-table",
+        """
+id: hypothesis:0030-cli-summary-table
+type: hypothesis
+title: Drug screen CLI summary table gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-summary")
+
+    assert result.exit_code == 0
+    assert "Benchmark Gaps" in result.output
+    assert "Gap Calibration Summary" in result.output
+    assert "gap_rows" in result.output
+
+
 def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> None:
     result = _invoke_gaps(tmp_path, "--entity", "hypothesis:nope")
 
@@ -1837,3 +1896,95 @@ benchmark:
 
     assert score.components["missing_facet_overlap"] == 30
     assert score.total <= 100
+
+
+def test_gap_calibration_summary_projects_gap_report_metrics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gap_calibration_summary, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0027-drug-screen",
+        """
+id: hypothesis:0027-drug-screen
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0028-generic",
+        """
+id: hypothesis:0028-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    report = gaps_report(tmp_path)
+    summary = gap_calibration_summary(report, top=3)
+
+    assert summary["gap_rows"] == 2
+    assert summary["rows_with_suggested_facets"] == 1
+    assert summary["candidate_rows"] == 3
+    assert summary["entity_specific_candidate_rows"] == 1
+    assert summary["fallback_candidate_rows"] == 2
+    assert summary["score_min"] is not None
+    assert summary["score_median"] is not None
+    assert summary["score_max"] is not None
+    assert summary["score_min"] <= summary["score_median"] <= summary["score_max"]
+    assert summary["top_suggested_facets"] == [{"facet": "perturbation", "count": 1}]
+    assert summary["top_matched_hint_facets"] == [{"facet": "perturbation", "count": 1}]
+    assert summary["top_fallback_benchmarks"] == [
+        {"benchmark_id": "dataset:generic", "count": 1},
+        {"benchmark_id": "dataset:sciplex", "count": 1},
+    ]

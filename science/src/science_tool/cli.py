@@ -6060,6 +6060,7 @@ def benchmark_opportunities(
 @click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
 @click.option("--calibration-report", is_flag=True, help="Include gap token/candidate calibration details.")
+@click.option("--calibration-summary", is_flag=True, help="Summarize benchmark gap calibration metrics.")
 @click.option(
     "--format",
     "output_format",
@@ -6079,6 +6080,7 @@ def benchmark_gaps(
     facet: str | None,
     include_commons: bool,
     calibration_report: bool,
+    calibration_summary: bool,
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6086,7 +6088,7 @@ def benchmark_gaps(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.benchmark_opportunities import gaps_report
+    from science_tool.benchmark_opportunities import gap_calibration_summary, gaps_report
     from science_tool.entities import EntityCommandError, resolve_entity_ref
 
     root = project_root.resolve() if project_root else _project_root_from_env()
@@ -6113,8 +6115,12 @@ def benchmark_gaps(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
+    summary_payload = gap_calibration_summary(payload) if calibration_summary else None
     if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        output_payload: dict[str, object] = dict(payload)
+        if summary_payload is not None:
+            output_payload["calibration_summary"] = summary_payload
+        click.echo(json.dumps(output_payload, indent=2, sort_keys=True))
         return
 
     rows = payload["benchmark_gaps"]
@@ -6136,6 +6142,30 @@ def benchmark_gaps(
                 row["reason"],
             )
         Console(width=200).print(table)
+
+    if summary_payload is not None:
+        summary_table = Table(title="Gap Calibration Summary", show_header=True, header_style="bold")
+        summary_table.add_column("field", overflow="fold", no_wrap=False)
+        summary_table.add_column("value", overflow="fold", no_wrap=False)
+        score_range = (
+            "-"
+            if summary_payload["score_min"] is None
+            else f"{summary_payload['score_min']} / {summary_payload['score_median']} / {summary_payload['score_max']}"
+        )
+        scalar_rows = {
+            "gap_rows": summary_payload["gap_rows"],
+            "rows_with_suggested_facets": summary_payload["rows_with_suggested_facets"],
+            "candidate_rows": summary_payload["candidate_rows"],
+            "entity_specific_candidate_rows": summary_payload["entity_specific_candidate_rows"],
+            "fallback_candidate_rows": summary_payload["fallback_candidate_rows"],
+            "score_min_median_max": score_range,
+            "top_suggested_facets": summary_payload["top_suggested_facets"],
+            "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
+            "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
+        }
+        for field, value in scalar_rows.items():
+            summary_table.add_row(field, json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value))
+        Console(width=200).print(summary_table)
 
     if calibration_report:
         calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
