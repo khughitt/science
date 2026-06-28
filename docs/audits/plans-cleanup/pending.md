@@ -11,11 +11,11 @@
 - files:
   - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - pending_actions:
-  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke, RG3+ workflows, and C4c transcript/protein projection
+  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke, broader reference-graph promotion/RG5 identity work, and C4c transcript/protein projection
     - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
-  - RG3+ workflows
+  - broader reference-graph promotion workflows and RG5 identity resolvers
   - C4c transcript/protein projection
 
 ## bio-identity-and-reference-genome
@@ -40,10 +40,10 @@
 - files:
   - `docs/plans/2026-05-31-bio-reference-graph-design.md`
 - pending_actions:
-  - `deferred`: review status incomplete; RG3 broader graph-member workflows and RG5 non-molecular identity resolvers remain open
+  - `deferred`: review status incomplete; unpromoted-member B materialization is implemented, but broader graph-member promotion workflows and RG5 non-molecular identity resolvers remain open
     - `docs/plans/2026-05-31-bio-reference-graph-design.md`
 - remaining_gaps:
-  - RG3 broader graph-member promotion workflows and unpromoted-member B materialization hooks
+  - RG3 broader graph-member promotion workflows
   - RG5 non-molecular identity resolvers over reference graphs
 
 ## c4-variant-identity

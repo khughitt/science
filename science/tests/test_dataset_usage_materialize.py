@@ -172,6 +172,14 @@ def test_virtual_geneset_member_uri_uses_canonical_percent_encoding() -> None:
     assert uri == URIRef(PROJECT_NS["virtual/geneset-member/reactome-v89/A%20B%2F%C3%A9"])
 
 
+def test_virtual_reference_graph_member_uri_uses_canonical_percent_encoding() -> None:
+    from science_tool.graph.dataset_usage import virtual_reference_graph_member_uri
+
+    uri = virtual_reference_graph_member_uri("dataset:mondo-v1", "MONDO:0005148/é")
+
+    assert uri == URIRef(PROJECT_NS["virtual/reference-graph-member/mondo-v1/MONDO%3A0005148%2F%C3%A9"])
+
+
 def test_virtual_member_uri_normalizes_nfc() -> None:
     from science_tool.graph.dataset_usage import virtual_geneset_member_uri
 
@@ -228,6 +236,36 @@ def test_geneset_row_usage_rejects_virtual_uri_normalization_collision() -> None
             source_path="data/reactome/datapackage.yaml",
             rows=rows,
         )
+
+
+def test_reference_graph_node_usage_records_materialize_virtual_members() -> None:
+    from types import SimpleNamespace
+
+    from science_tool.graph.dataset_usage import usage_records_for_reference_graph_nodes
+
+    rows = [
+        SimpleNamespace(
+            member_key="MONDO:0005148",
+            dataset_usage=({"ref": "dataset:ordo", "role": "set_definition_source", "overlap": "partial"},),
+        )
+    ]
+
+    records = usage_records_for_reference_graph_nodes(
+        collection_id="dataset:mondo-v1",
+        source_path="data/mondo/datapackage.yaml",
+        rows=rows,
+    )
+
+    assert [(r.consumer_id, r.dataset_ref, r.role, r.overlap, r.source, r.row_key) for r in records] == [
+        (
+            str(PROJECT_NS["virtual/reference-graph-member/mondo-v1/MONDO%3A0005148"]),
+            "dataset:ordo",
+            "set_definition_source",
+            "partial",
+            "reference_graph.node_index_resource",
+            "MONDO:0005148",
+        )
+    ]
 
 
 def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
@@ -808,6 +846,53 @@ def _write_geneset_collection(root, *, with_members=True):
         )
 
 
+def _write_reference_graph_collection(root, *, with_nodes=True):
+    dp_dir = root / "data" / "mondo"
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:mondo-v1\n"
+        "type: dataset\n"
+        "title: MONDO\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0\n"
+        "source_class: reference\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "graph_resource: graph\n"
+        "graph_format: obograph_json\n"
+        "member_key_space: {kind: curie, prefixes: [MONDO], resolution_status: resolved}\n"
+        "node_index_resource: nodes\n"
+        "edge_resource: edges\n"
+        "member_count: 1\n"
+        "edge_count: 1\n"
+        "resources:\n"
+        "  - name: graph\n"
+        "    path: mondo.json\n"
+        "  - name: nodes\n"
+        "    path: nodes.csv\n"
+        "  - name: edges\n"
+        "    path: edges.csv\n",
+        encoding="utf-8",
+    )
+    (dp_dir / "mondo.json").write_text('{"graphs":[]}\n', encoding="utf-8")
+    (dp_dir / "edges.csv").write_text(
+        "subject,predicate,object,evidence,dataset_usage\n"
+        'MONDO:0005148,is_a,MONDO:0000001,,"[]"\n',
+        encoding="utf-8",
+    )
+    if with_nodes:
+        (dp_dir / "nodes.csv").write_text(
+            "member_key,member_kind,label,status,replaced_by,dataset_usage\n"
+            'MONDO:0005148,term,multiple myeloma,active,,"[{""ref"":""dataset:ordo"",""role"":""set_definition_source"",""overlap"":""full""}]"\n',
+            encoding="utf-8",
+        )
+
+
 def test_materialize_graph_emits_geneset_row_usage_nodes(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
@@ -830,6 +915,30 @@ def test_materialize_graph_emits_geneset_row_usage_nodes(tmp_path):
     assert (nodes[0], SCI_NS.usageRole, Literal("set_definition_source")) in graph
     assert (nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
     assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
+
+
+def test_materialize_graph_emits_reference_graph_node_usage_nodes(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "ordo" / "datapackage.yaml",
+        "ordo",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
+    )
+    _write_reference_graph_collection(tmp_path)
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+
+    row_uri = PROJECT_NS["virtual/reference-graph-member/mondo-v1/MONDO%3A0005148"]
+    nodes = list(graph.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/ordo"]) in graph
+    assert (nodes[0], SCI_NS.usageRole, Literal("set_definition_source")) in graph
+    assert (nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
+    assert (nodes[0], SCI_NS.usageSource, Literal("reference_graph.node_index_resource")) in graph
 
 
 def test_materialize_graph_canonicalizes_geneset_row_usage_alias(tmp_path):

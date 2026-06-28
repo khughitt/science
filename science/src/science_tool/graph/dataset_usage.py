@@ -16,7 +16,13 @@ from science_model.packages.schema import DerivationBlock
 
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
-UsageSource = Literal["authored", "paper.datasets", "derivation.inputs", "geneset.members_resource"]
+UsageSource = Literal[
+    "authored",
+    "paper.datasets",
+    "derivation.inputs",
+    "geneset.members_resource",
+    "reference_graph.node_index_resource",
+]
 
 _UNRESERVED = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
 
@@ -146,6 +152,40 @@ def usage_records_for_geneset_rows(
     return records
 
 
+def usage_records_for_reference_graph_nodes(
+    *,
+    collection_id: str,
+    source_path: str,
+    rows,
+    resolve_dataset_ref: Callable[[str], str] | None = None,
+) -> list[DatasetUsageRecord]:
+    records: list[DatasetUsageRecord] = []
+    seen_virtual: dict[str, str] = {}
+    for row in rows:
+        consumer_uri = virtual_reference_graph_member_uri(collection_id, row.member_key)
+        previous = seen_virtual.get(str(consumer_uri))
+        if previous is not None and previous != row.member_key:
+            raise DatasetUsageMaterializationError(
+                f"{collection_id}: member_key {row.member_key!r} collides with {previous!r}"
+            )
+        seen_virtual[str(consumer_uri)] = row.member_key
+        for usage in row.dataset_usage:
+            dataset_ref = _canonical_dataset_ref(str(usage["ref"]), resolve_dataset_ref)
+            overlap = str(usage.get("overlap") or "unknown")
+            records.append(
+                DatasetUsageRecord(
+                    consumer_id=str(consumer_uri),
+                    dataset_ref=dataset_ref,
+                    role=str(usage["role"]),
+                    overlap=overlap,
+                    source="reference_graph.node_index_resource",
+                    source_path=source_path,
+                    row_key=row.member_key,
+                )
+            )
+    return records
+
+
 def _canonical_dataset_ref(raw_ref: str, resolve_dataset_ref: Callable[[str], str] | None) -> str:
     if resolve_dataset_ref is None:
         return raw_ref
@@ -171,6 +211,15 @@ def virtual_geneset_member_uri(collection_id: str, set_key: str) -> URIRef:
         raise DatasetUsageMaterializationError(f"gene-set collection id must be dataset:<slug>, got {collection_id!r}")
     dataset_slug = collection_id.split(":", 1)[1].lower()
     return URIRef(PROJECT_NS[f"virtual/geneset-member/{dataset_slug}/{_encode_path_segment(set_key)}"])
+
+
+def virtual_reference_graph_member_uri(collection_id: str, member_key: str) -> URIRef:
+    if not collection_id.startswith("dataset:"):
+        raise DatasetUsageMaterializationError(
+            f"reference-graph collection id must be dataset:<slug>, got {collection_id!r}"
+        )
+    dataset_slug = collection_id.split(":", 1)[1].lower()
+    return URIRef(PROJECT_NS[f"virtual/reference-graph-member/{dataset_slug}/{_encode_path_segment(member_key)}"])
 
 
 def _encode_path_segment(value: str) -> str:

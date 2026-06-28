@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1, RG2, and RG4 implemented; real recipes built — `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON, plus the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A); RG3 and RG5 pending
+Status: RG1, RG2, RG3-B, and RG4 implemented; real recipes built — `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON, plus the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A); broader RG3 promotion workflows and RG5 pending
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -396,20 +396,24 @@ The model therefore covers non-tabular references without weakening the flat gen
 |---|---|---|
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
-| RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | pending |
+| RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | B materialization hooks implemented; broader promotion workflows pending |
 | RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections; `dataset:opentargets-associations` as the first association graph (Open Targets 25.12 overall-direct, Model A entity nodes, `edge_resource` omitted) | implemented |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
 RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
 `member_of` payload dispatcher now detects unsupported collection kinds explicitly, and the
 reference-graph resolver returns the member node row plus directly incident normalized edges.
-Automated B materialization from unpromoted graph members remains RG3+/B follow-up work; RG2
-preserves the node/edge `dataset_usage` data needed for that work.
+Automated B materialization from unpromoted graph members now emits virtual
+`reference_graph.node_index_resource` usage records for node-index rows with member-level
+`dataset_usage`. Those virtual graph-member consumers are treated like gene-set virtual rows in B2:
+they can contribute candidate shared-source signals without becoming direct full-overlap commitments.
+Broader graph-member promotion workflows remain RG3 follow-up work.
 
 RG2 implemented the generic virtual-member payload dispatcher and the first concrete
 `bio.reference_graph.member` resolver. The sibling `bio.geneset.member` resolver is now implemented on the
-same dispatch boundary. Unpromoted-member B materialization remains separate follow-up work because RG2
-only returns payload data; it does not emit influence graph records.
+same dispatch boundary. Reference-graph node-index `dataset_usage` materialization is handled by the
+graph builder rather than the payload resolver, so promoted payload resolution and unpromoted B
+materialization stay separate code paths.
 
 ---
 
@@ -433,4 +437,4 @@ only returns payload data; it does not emit influence graph records.
 
 RG1, RG2, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first association graph
 `dataset:opentargets-associations` as the real recipes. Remaining follow-ups are RG3 broader graph-member
-promotion workflows, unpromoted-member B materialization, and RG5 non-molecular identity resolvers.
+promotion workflows and RG5 non-molecular identity resolvers.

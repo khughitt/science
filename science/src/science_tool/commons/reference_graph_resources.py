@@ -19,6 +19,7 @@ from science_tool.commons.errors import (
     DataResourceNotFoundError,
 )
 from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.commons.geneset_resources import resolve_dataset_datapackage_source
 from science_tool.commons.reference_graph import is_reference_graph_frontmatter
 from science_tool.commons.resolver import resolve
 
@@ -47,6 +48,21 @@ def reference_graph_resource_frontmatter(project_root: Path, entity_path: str | 
     else:
         fm["_path"] = str(path)
     return fm
+
+
+def dataset_reference_graph_frontmatter(
+    project_root: Path,
+    entity_path: str | Path,
+    *,
+    entity_adapter: str | None,
+    datapackage_rel: str | None,
+) -> dict[str, Any] | None:
+    source = resolve_dataset_datapackage_source(
+        entity_adapter=entity_adapter, entity_path=entity_path, datapackage_rel=datapackage_rel
+    )
+    if source is None:
+        return None
+    return reference_graph_resource_frontmatter(project_root, source)
 
 
 def resource_path_for_reference_graph(

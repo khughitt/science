@@ -530,7 +530,7 @@ before committing there.
   mutable `go.json`/`current`/`snapshot` URLs are explicitly rejected.
 - **Deferred:** GO annotation (GAF gene→term) ingestion is *not* in scope — that is gene-set/association
   territory, not the term graph (this is exactly the "GO may tempt conflation with gene sets" caution from
-  the reference-graph design §rationale). RG3 unpromoted-member B materialization, RG5 non-molecular
+  the reference-graph design §rationale). Broader graph-member promotion workflows, RG5 non-molecular
   identity resolvers, and Open Targets remain pending.
 - **Built-data placement:** all bulk artifacts live under `~/d/science-commons-data/go/`; only metadata +
   recipe are committed, matching MONDO.
