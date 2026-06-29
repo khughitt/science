@@ -6,13 +6,16 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import yaml
 
+from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import load_data_overrides, resolve_commons_data_root
 from science_tool.commons.datapackage import validate_logical_path
-from science_tool.commons.errors import DataLogicalPathError
+from science_tool.commons.errors import CommonsEntityError, DataLogicalPathError
+from science_tool.data_policy import DEFAULT_DATA_POLICY, FileClass, classify
+from science_tool.markdown_utils import parse_frontmatter
 
 
 _DATASET_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
@@ -50,6 +53,20 @@ class DatasetStatus:
     output_dir: Path
     outputs_present: list[str]
     outputs_missing: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetPackageFinding:
+    code: str
+    message: str
+    path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetPackageValidationReport:
+    slug: str
+    valid: bool
+    findings: list[DatasetPackageFinding]
 
 
 def validate_dataset_slug(slug: str) -> str:
@@ -123,6 +140,66 @@ def dataset_status(commons_root: Path, slug: str) -> DatasetStatus:
     )
 
 
+def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageValidationReport:
+    slug = validate_dataset_slug(slug)
+    root = Path(commons_root)
+    paths = dataset_paths(root, slug)
+    findings: list[DatasetPackageFinding] = []
+
+    if not paths.entity_path.is_file():
+        findings.append(
+            DatasetPackageFinding(
+                "missing-entity",
+                "dataset package is missing entity.md",
+                paths.entity_path,
+            )
+        )
+        frontmatter: dict[str, Any] = {}
+    else:
+        frontmatter, _ = parse_frontmatter(paths.entity_path)
+        _validate_entity_frontmatter(findings, paths, slug, frontmatter)
+        try:
+            CommonsEntityAdapter(root).load(f"dataset:{slug}")
+        except CommonsEntityError as exc:
+            findings.append(
+                DatasetPackageFinding(
+                    "entity-invalid",
+                    str(exc.cause),
+                    exc.path,
+                )
+            )
+
+    if not paths.datapackage_path.is_file():
+        findings.append(
+            DatasetPackageFinding(
+                "missing-datapackage",
+                "dataset package is missing datapackage.yaml",
+                paths.datapackage_path,
+            )
+        )
+
+    if not paths.snakefile_path.is_file():
+        findings.append(
+            DatasetPackageFinding(
+                "missing-workflow",
+                "dataset package is missing recipe/Snakefile",
+                paths.snakefile_path,
+            )
+        )
+    else:
+        _validate_snakefile_paths(findings, paths.snakefile_path)
+
+    if paths.dataset_dir.is_dir():
+        allowlist = _tracked_payload_allowlist(frontmatter)
+        _validate_tracked_payloads(findings, paths.dataset_dir, allowlist)
+
+    return DatasetPackageValidationReport(
+        slug=slug,
+        valid=not findings,
+        findings=findings,
+    )
+
+
 def scaffold_dataset_package(
     commons_root: Path,
     slug: str,
@@ -153,6 +230,139 @@ def scaffold_dataset_package(
         path.write_text(text, encoding="utf-8")
 
     return ScaffoldResult(paths=paths, created=tuple(path for path, _ in files))
+
+
+def _validate_entity_frontmatter(
+    findings: list[DatasetPackageFinding],
+    paths: DatasetPackagePaths,
+    slug: str,
+    frontmatter: dict[str, Any],
+) -> None:
+    entity_id = frontmatter.get("id")
+    if entity_id != f"dataset:{slug}":
+        findings.append(
+            DatasetPackageFinding(
+                "id-mismatch",
+                f"frontmatter id must be dataset:{slug}",
+                paths.entity_path,
+            )
+        )
+
+    entity_type = frontmatter.get("type")
+    if entity_type != "dataset":
+        findings.append(
+            DatasetPackageFinding(
+                "type-mismatch",
+                "frontmatter type must be dataset",
+                paths.entity_path,
+            )
+        )
+
+    version = frontmatter.get("version")
+    if version is None:
+        findings.append(
+            DatasetPackageFinding(
+                "missing-version",
+                "frontmatter version is required",
+                paths.entity_path,
+            )
+        )
+    elif not isinstance(version, str) or not _DATASET_VERSION_RE.fullmatch(version):
+        findings.append(
+            DatasetPackageFinding(
+                "version-invalid",
+                "frontmatter version must be semver MAJOR.MINOR.PATCH",
+                paths.entity_path,
+            )
+        )
+
+    datapackage = frontmatter.get("datapackage")
+    if datapackage != "datapackage.yaml":
+        findings.append(
+            DatasetPackageFinding(
+                "datapackage-field",
+                "frontmatter datapackage must be datapackage.yaml",
+                paths.entity_path,
+            )
+        )
+
+
+def _validate_snakefile_paths(
+    findings: list[DatasetPackageFinding],
+    snakefile_path: Path,
+) -> None:
+    try:
+        text = snakefile_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        findings.append(
+            DatasetPackageFinding(
+                "workflow-unreadable",
+                str(exc),
+                snakefile_path,
+            )
+        )
+        return
+
+    markers = ("/data/proj/", "/data/raw/", "/data/clean/", "/data/processed/")
+    for marker in markers:
+        if marker in text:
+            findings.append(
+                DatasetPackageFinding(
+                    "parent-project-path",
+                    f"recipe/Snakefile references parent project path marker {marker}",
+                    snakefile_path,
+                )
+            )
+            return
+
+
+def _tracked_payload_allowlist(frontmatter: dict[str, Any]) -> set[Path]:
+    raw = frontmatter.get("tracked_payload_allowlist")
+    if not isinstance(raw, list):
+        return set()
+
+    allowlist: set[Path] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        item_path = item.get("path")
+        if isinstance(item_path, str):
+            allowlist.add(Path(item_path))
+    return allowlist
+
+
+def _validate_tracked_payloads(
+    findings: list[DatasetPackageFinding],
+    dataset_dir: Path,
+    allowlist: set[Path],
+) -> None:
+    metadata_paths = {
+        Path("entity.md"),
+        Path("datapackage.yaml"),
+        Path("recipe/Snakefile"),
+        Path("recipe/README.md"),
+        Path("recipe/lockfile.yaml"),
+    }
+
+    for path in sorted(dataset_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel_path = path.relative_to(dataset_dir)
+        if rel_path in metadata_paths or rel_path in allowlist:
+            continue
+        size_bytes = path.stat().st_size
+        file_class = classify(rel_path, size_bytes)
+        if file_class is FileClass.PAYLOAD or (
+            file_class is FileClass.FLAG
+            and size_bytes > DEFAULT_DATA_POLICY.size_threshold
+        ):
+            findings.append(
+                DatasetPackageFinding(
+                    "tracked-payload",
+                    "payload-like file is tracked inside the dataset package",
+                    path,
+                )
+            )
 
 
 def _read_datapackage_resources(path: Path) -> list[dict[str, object]]:

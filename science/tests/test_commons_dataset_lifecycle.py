@@ -12,6 +12,7 @@ from science_tool.commons.dataset_lifecycle import (
     dataset_paths,
     resolve_dataset_output_dir,
     scaffold_dataset_package,
+    validate_dataset_package,
     validate_dataset_slug,
     validate_dataset_version,
 )
@@ -250,3 +251,166 @@ def test_dataset_status_rejects_unsafe_resource_path(tmp_path: Path) -> None:
 
     with pytest.raises(DatasetLifecycleError, match="path may not contain '..'"):
         dataset_status(root, "dbsnp-human")
+
+
+def test_validate_dataset_package_accepts_unbuilt_scaffold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is True
+    assert report.findings == []
+
+
+def test_validate_dataset_package_reports_missing_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").unlink()
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "missing-workflow" for f in report.findings)
+
+
+def test_validate_dataset_package_reports_non_semver_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    entity = root / "datasets" / "dbsnp-human" / "entity.md"
+    entity.write_text(
+        entity.read_text(encoding="utf-8").replace('version: "0.1.0"', 'version: "foo"'),
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "version-invalid" for f in report.findings)
+
+
+def test_validate_dataset_package_reports_tracked_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    payload = root / "datasets" / "dbsnp-human" / "bulk.feather"
+    payload.write_bytes(b"x" * 10)
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
+
+
+def test_validate_dataset_package_respects_tracked_payload_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    entity = root / "datasets" / "dbsnp-human" / "entity.md"
+    text = entity.read_text(encoding="utf-8")
+    text = text.replace(
+        "datapackage: datapackage.yaml\n",
+        "datapackage: datapackage.yaml\ntracked_payload_allowlist:\n- path: bulk.feather\n  reason: tiny fixture\n",
+    )
+    entity.write_text(text, encoding="utf-8")
+    (root / "datasets" / "dbsnp-human" / "bulk.feather").write_bytes(b"x" * 10)
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is True
+    assert report.findings == []
+
+
+def test_validate_dataset_package_reports_parent_project_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").write_text(
+        "rule all:\n"
+        "    input:\n"
+        "        '/data/proj/example/data/raw/x.csv'\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "parent-project-path" for f in report.findings)
+
+
+def test_validate_dataset_package_reports_payload_inside_recipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    payload = root / "datasets" / "dbsnp-human" / "recipe" / "big.parquet"
+    payload.write_bytes(b"x" * 10)
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
+
+
+def test_validate_dataset_package_reports_large_record_pattern_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    payload = root / "datasets" / "dbsnp-human" / "dbsnp-report.json"
+    payload.write_bytes(b"x" * 200_000)
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
+
+
+def test_validate_dataset_package_reports_large_recipe_lookup_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    payload = root / "datasets" / "dbsnp-human" / "recipe" / "lookup.json"
+    payload.write_bytes(b"x" * 200_000)
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)

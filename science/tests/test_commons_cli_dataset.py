@@ -150,3 +150,38 @@ def test_dataset_status_reports_malformed_data_yaml_as_click_error(tmp_path: Pat
     assert result.exit_code == 1
     assert str(cfg / "data.yaml") in result.output
     assert "Traceback" not in result.output
+
+
+def test_dataset_validate_json_accepts_unbuilt_scaffold(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+
+    result = runner.invoke(commons_group, ["dataset", "validate", "dbsnp-human", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["valid"] is True
+    assert payload["findings"] == []
+
+
+def test_dataset_validate_exits_1_for_missing_workflow(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").unlink()
+
+    result = runner.invoke(commons_group, ["dataset", "validate", "dbsnp-human"])
+
+    assert result.exit_code == 1
+    assert "missing-workflow" in result.output

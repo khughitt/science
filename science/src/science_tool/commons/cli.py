@@ -16,8 +16,10 @@ from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
+    DatasetPackageValidationReport,
     dataset_status,
     scaffold_dataset_package,
+    validate_dataset_package,
 )
 from science_tool.commons.errors import (
     CommonsError,
@@ -492,6 +494,58 @@ def dataset_status_cmd(slug: str, as_json: bool) -> None:
     click.echo(f"  output_dir: {status.output_dir}")
     click.echo(f"  outputs_present: {len(status.outputs_present)}")
     click.echo(f"  outputs_missing: {len(status.outputs_missing)}")
+
+
+@dataset_group.command("validate")
+@click.argument("slug")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_validate_cmd(slug: str, as_json: bool) -> None:
+    """Validate a commons-born dataset package."""
+    root = _require_root()
+    try:
+        report = validate_dataset_package(root, slug)
+    except DatasetLifecycleError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if as_json:
+        click.echo(json.dumps(_dataset_validation_to_json(report, root), indent=2, sort_keys=True))
+    else:
+        state = "valid" if report.valid else "invalid"
+        click.echo(f"dataset:{report.slug} {state}")
+        for finding in report.findings:
+            path = _validation_path_text(finding.path, root)
+            path_text = f"{path} " if path is not None else ""
+            click.echo(f"  {finding.code}: {path_text}{finding.message}", err=True)
+
+    if not report.valid:
+        raise click.exceptions.Exit(1)
+
+
+def _dataset_validation_to_json(
+    report: DatasetPackageValidationReport,
+    root: Path,
+) -> dict[str, object]:
+    return {
+        "findings": [
+            {
+                "code": finding.code,
+                "message": finding.message,
+                "path": _validation_path_text(finding.path, root),
+            }
+            for finding in report.findings
+        ],
+        "slug": report.slug,
+        "valid": report.valid,
+    }
+
+
+def _validation_path_text(path: Path | None, root: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 @commons_group.group("data")
