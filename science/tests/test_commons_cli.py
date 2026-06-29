@@ -492,6 +492,25 @@ def test_find_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload[0]["canonical_id"] == "paper:Adams2025"
 
 
+def test_find_warns_on_stale_registry_for_all_entity_types(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.delenv("SCIENCE_COMMONS_QUIET_STALE", raising=False)
+    runner = CliRunner()
+    rebuild = runner.invoke(commons_group, ["index", "rebuild"])
+    assert rebuild.exit_code == 0, rebuild.output
+
+    paper = root / "papers" / "Adams2025.md"
+    paper.write_text(paper.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    result = runner.invoke(commons_group, ["find", "paper"])
+
+    assert result.exit_code == 0, result.output
+    assert "warning: commons registry is stale" in result.stderr
+
+
 def test_find_year_filter_only_for_papers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
