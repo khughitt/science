@@ -51,6 +51,66 @@ def test_load_commons_catalog_rejects_unknown_source_type(tmp_path: Path) -> Non
         load_commons_catalog(path)
 
 
+def test_load_commons_catalog_rejects_malformed_yaml(tmp_path: Path) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_text("sources: [", encoding="utf-8")
+
+    with pytest.raises(CatalogError, match="malformed YAML"):
+        load_commons_catalog(path)
+
+
+def test_load_commons_catalog_rejects_duplicate_top_level_keys(tmp_path: Path) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_text(
+        "catalog_version: 1\n"
+        "sources: {}\n"
+        "sources:\n"
+        "  local:\n"
+        "    type: path\n"
+        "    uri: ~/d/science-commons\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogError, match="duplicate key"):
+        load_commons_catalog(path)
+
+
+@pytest.mark.parametrize("field", ["type", "uri"])
+def test_load_commons_catalog_rejects_duplicate_source_keys(tmp_path: Path, field: str) -> None:
+    path = tmp_path / "commons.yaml"
+    duplicate_line = "    type: git\n" if field == "type" else "    uri: ~/d/science-commons-copy\n"
+    path.write_text(
+        "catalog_version: 1\n"
+        "sources:\n"
+        "  local:\n"
+        "    type: path\n"
+        "    uri: ~/d/science-commons\n"
+        f"{duplicate_line}",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogError, match="duplicate key"):
+        load_commons_catalog(path)
+
+
+@pytest.mark.parametrize("catalog_version", ["true", "1.0", '"1"', "2"])
+def test_load_commons_catalog_rejects_invalid_catalog_version_values(
+    tmp_path: Path, catalog_version: str
+) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_text(
+        f"catalog_version: {catalog_version}\n"
+        "sources:\n"
+        "  local:\n"
+        "    type: path\n"
+        "    uri: ~/d/science-commons\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogError, match="catalog_version"):
+        load_commons_catalog(path)
+
+
 @pytest.mark.parametrize(
     ("source_type", "field"),
     [

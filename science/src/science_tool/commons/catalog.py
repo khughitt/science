@@ -41,19 +41,47 @@ class CommonsCatalog:
     sources: dict[str, CatalogSource]
 
 
+def _load_yaml_no_duplicate_keys(path: Path, text: str) -> object:
+    try:
+        node = yaml.compose(text)
+        _reject_duplicate_mapping_keys(path, node)
+        return yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise CatalogError(f"{path}: malformed YAML: {exc}") from exc
+
+
+def _reject_duplicate_mapping_keys(path: Path, node: object) -> None:
+    if node is None:
+        return
+    if isinstance(node, yaml.MappingNode):
+        seen_keys: set[str] = set()
+        for key_node, value_node in node.value:
+            if not isinstance(key_node, yaml.ScalarNode):
+                raise CatalogError(f"{path}: malformed YAML: expected scalar mapping keys")
+            key = key_node.value
+            if key in seen_keys:
+                raise CatalogError(f"{path}: duplicate key {key!r}")
+            seen_keys.add(key)
+            _reject_duplicate_mapping_keys(path, value_node)
+        return
+    if isinstance(node, yaml.SequenceNode):
+        for value_node in node.value:
+            _reject_duplicate_mapping_keys(path, value_node)
+
+
 def load_commons_catalog(path: Path) -> CommonsCatalog:
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return CommonsCatalog(catalog_version=1, sources={})
 
-    loaded = yaml.safe_load(text)
+    loaded = _load_yaml_no_duplicate_keys(path, text)
     raw = {} if loaded is None else loaded
     if not isinstance(raw, dict):
         raise CatalogError(f"{path}: expected mapping")
 
     catalog_version = raw.get("catalog_version", 1)
-    if catalog_version != 1:
+    if type(catalog_version) is not int or catalog_version != 1:
         raise CatalogError(f"{path}: expected catalog_version 1")
 
     raw_sources = raw.get("sources", {})
