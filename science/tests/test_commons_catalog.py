@@ -75,6 +75,23 @@ def test_load_commons_catalog_rejects_duplicate_top_level_keys(tmp_path: Path) -
         load_commons_catalog(path)
 
 
+def test_load_commons_catalog_rejects_yaml_merge_keys(tmp_path: Path) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_text(
+        "catalog_version: 1\n"
+        "defaults: &d\n"
+        "  type: path\n"
+        "  uri: ~/d/science-commons\n"
+        "sources:\n"
+        "  local:\n"
+        "    <<: *d\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogError, match="merge keys|unsupported YAML merge"):
+        load_commons_catalog(path)
+
+
 @pytest.mark.parametrize("field", ["type", "uri"])
 def test_load_commons_catalog_rejects_duplicate_source_keys(tmp_path: Path, field: str) -> None:
     path = tmp_path / "commons.yaml"
@@ -108,6 +125,14 @@ def test_load_commons_catalog_rejects_invalid_catalog_version_values(
     )
 
     with pytest.raises(CatalogError, match="catalog_version"):
+        load_commons_catalog(path)
+
+
+def test_load_commons_catalog_rejects_invalid_utf8(tmp_path: Path) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_bytes(b"\xff")
+
+    with pytest.raises(CatalogError, match="cannot read|malformed"):
         load_commons_catalog(path)
 
 

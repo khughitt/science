@@ -59,6 +59,8 @@ def _reject_duplicate_mapping_keys(path: Path, node: object) -> None:
             if not isinstance(key_node, yaml.ScalarNode):
                 raise CatalogError(f"{path}: malformed YAML: expected scalar mapping keys")
             key = key_node.value
+            if key == "<<":
+                raise CatalogError(f"{path}: unsupported YAML merge keys")
             if key in seen_keys:
                 raise CatalogError(f"{path}: duplicate key {key!r}")
             seen_keys.add(key)
@@ -74,6 +76,8 @@ def load_commons_catalog(path: Path) -> CommonsCatalog:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return CommonsCatalog(catalog_version=1, sources={})
+    except UnicodeDecodeError as exc:
+        raise CatalogError(f"{path}: cannot read catalog as UTF-8: {exc}") from exc
 
     loaded = _load_yaml_no_duplicate_keys(path, text)
     raw = {} if loaded is None else loaded
