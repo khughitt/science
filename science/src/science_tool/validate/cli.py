@@ -19,11 +19,19 @@ from science_tool.validate.result import Result, Severity
 from science_tool.validate.runner import VALIDATE_PROFILES, RunResult, ValidationProfile, run
 
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+_VISIBLE_INFO_RULES = frozenset({"prose_lints.config"})
 
 
 @click.command(name="validate")
 @click.option("--verbose", is_flag=True, default=False, help="Show verbose validation details.")
 @click.option("--strict", is_flag=True, default=False, help="Enable strict validation checks.")
+@click.option(
+    "--all",
+    "include_all_checks",
+    is_flag=True,
+    default=False,
+    help="Run checks disabled by project-level narrowing configuration.",
+)
 @click.option(
     "--fail-on",
     "fail_on",
@@ -61,6 +69,7 @@ def validate_cmd(
     ctx: click.Context,
     verbose: bool,
     strict: bool,
+    include_all_checks: bool,
     fail_on: str | None,
     output_format: str,
     profile: str,
@@ -76,6 +85,7 @@ def validate_cmd(
                 verbose=verbose,
                 fail_on=fail_on,
                 profile=cast(ValidationProfile, profile),
+                include_all_checks=include_all_checks,
             )
             result = _with_accepted_warnings_filtered(project_root, result)
     except ValidateContextError as exc:
@@ -90,7 +100,7 @@ def validate_cmd(
     if output_format == "json":
         click.echo(json.dumps(_json_payload(result), indent=2))
     else:
-        _emit_text(result)
+        _emit_text(result, verbose=verbose)
 
     if result.errors or result.gated:
         ctx.exit(1)
@@ -127,13 +137,14 @@ def _record_validation_summary(
 
 
 def _json_payload(result: RunResult) -> dict[str, Any]:
+    emitted_results = [item for item in result.results if item.severity is not Severity.INFO]
     return {
         "summary": {
-            "errors": result.errors,
-            "warnings": result.warnings,
-            "infos": result.infos,
+            "errors": sum(1 for item in emitted_results if item.severity is Severity.ERROR),
+            "warnings": sum(1 for item in emitted_results if item.severity is Severity.WARN),
+            "infos": sum(1 for item in emitted_results if item.severity is Severity.INFO),
         },
-        "results": [item.to_dict() for item in result.results if item.severity is not Severity.INFO],
+        "results": [item.to_dict() for item in emitted_results],
     }
 
 
@@ -151,29 +162,67 @@ def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> R
     )
 
 
-def _emit_text(result: RunResult) -> None:
+def _emit_text(result: RunResult, *, verbose: bool = False) -> None:
     console = get_console(file=click.get_text_stream("stdout"))
     console.print(BANNER)
     console.print("Science Project Validation")
     console.print(BANNER)
+    console.print(_format_check_coverage(result), soft_wrap=True)
+    for item in _notice_results(result):
+        console.print(_format_notice(item), soft_wrap=True)
 
-    for section in _section_names(result):
-        console.print()
-        console.print(section_banner(section))
+    if verbose:
+        for section in _section_names(result):
+            console.print(section_banner(section))
 
-    for item in result.results:
-        console.print(_format_result(item))
+    for item in _text_results(result, verbose=verbose):
+        console.print(_format_result(item), soft_wrap=True)
 
     console.print()
     console.print(BANNER)
-    console.print(_format_summary(result))
+    console.print(_format_summary(result), soft_wrap=True)
+
+
+def _format_check_coverage(result: RunResult) -> str:
+    included_count = len(result.sections)
+    skipped_count = len(result.skipped_sections)
+    if skipped_count:
+        skipped = ", ".join(result.skipped_sections)
+        return f"Checks: {included_count} included, {skipped_count} skipped (profile: {result.profile}; skipped: {skipped})"
+    return f"Checks: {included_count} included, 0 skipped (profile: {result.profile})"
+
+
+def _text_results(result: RunResult, *, verbose: bool) -> list[Result]:
+    if verbose:
+        return [item for item in result.results if not _is_visible_info(item)]
+    return [item for item in result.results if item.severity is not Severity.INFO]
+
+
+def _notice_results(result: RunResult) -> list[Result]:
+    return [item for item in result.results if _is_visible_info(item)]
+
+
+def _is_visible_info(result: Result) -> bool:
+    return result.severity is Severity.INFO and result.rule in _VISIBLE_INFO_RULES
 
 
 def _section_names(result: RunResult) -> list[str]:
-    return list(result.sections) or ["Science project"]
+    return list(result.sections)
+
+
+def _format_notice(result: Result) -> Text:
+    text = Text()
+    text.append("NOTE")
+    text.append(f" {result.message}")
+    if result.task:
+        text.append(f" ({result.task})")
+    return text
 
 
 def _format_result(result: Result) -> Text:
+    if _is_checking_info(result):
+        return _format_checking_info_result(result)
+
     style = _severity_style(result.severity)
     text = Text(style=style)
     text.append(result.severity.name)
@@ -191,6 +240,21 @@ def _format_result(result: Result) -> Text:
     if result.task:
         text.append(f" ({result.task})")
     return text
+
+
+def _format_checking_info_result(result: Result) -> Text:
+    text = Text(style=_severity_style(result.severity))
+    text.append(result.severity.name)
+    if result.rule:
+        text.append(f" [{result.rule}]")
+    text.append(f" {result.message}")
+    if result.task:
+        text.append(f" ({result.task})")
+    return text
+
+
+def _is_checking_info(result: Result) -> bool:
+    return result.severity is Severity.INFO and result.path is not None and result.message.startswith("Checking ")
 
 
 def _location(result: Result) -> str | None:

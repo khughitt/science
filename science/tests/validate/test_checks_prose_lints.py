@@ -30,9 +30,20 @@ def _write_manifest(root: Path, *, prose_lint: str = "") -> None:
     )
 
 
-def _ctx(root: Path, *, strict: bool = False, prose_lint: str = "") -> ValidateContext:
+def _ctx(
+    root: Path,
+    *,
+    strict: bool = False,
+    prose_lint: str = "",
+    include_all_checks: bool = False,
+) -> ValidateContext:
     _write_manifest(root, prose_lint=prose_lint)
-    return ValidateContext.from_project_root(root, strict=strict, verbose=False)
+    return ValidateContext.from_project_root(
+        root,
+        strict=strict,
+        verbose=False,
+        include_all_checks=include_all_checks,
+    )
 
 
 def _write_doc(root: Path, text: str) -> None:
@@ -43,6 +54,10 @@ def _write_doc(root: Path, text: str) -> None:
 
 def _summary(results: Iterable[Result]) -> list[tuple[Severity, str, str | None]]:
     return [(result.severity, result.message, result.rule) for result in results]
+
+
+def _located_summary(results: Iterable[Result]) -> list[tuple[Severity, Path | None, int | None, str, str | None]]:
+    return [(result.severity, result.path, result.line, result.message, result.rule) for result in results]
 
 
 def test_missing_doc_directory_emits_no_results(tmp_path: Path) -> None:
@@ -60,7 +75,15 @@ def test_non_strict_bare_author_year_emits_exact_warn_message(tmp_path: Path) ->
 
     results = list(check_prose_lints(_ctx(tmp_path)))
 
-    assert _summary(results) == [(Severity.WARN, "1 prose lint issue(s): bare-author-year", "prose_lints")]
+    assert _located_summary(results) == [
+        (
+            Severity.WARN,
+            Path("doc/note.md"),
+            1,
+            "bare author-year mention 'Smith 2020' has no adjacent [@key]",
+            "prose_lints.bare-author-year",
+        )
+    ]
 
 
 def test_non_strict_numeric_anchor_is_silent(tmp_path: Path) -> None:
@@ -70,7 +93,9 @@ def test_non_strict_numeric_anchor_is_silent(tmp_path: Path) -> None:
 
     results = list(check_prose_lints(_ctx(tmp_path)))
 
-    assert _summary(results) == []
+    assert _summary(results) == [
+        (Severity.INFO, "1 prose lint issue(s): numeric-anchor (use --strict to promote)", "prose_lints.numeric-anchor")
+    ]
 
 
 def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
@@ -80,7 +105,15 @@ def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
 
     results = list(check_prose_lints(_ctx(tmp_path, strict=True)))
 
-    assert _summary(results) == [(Severity.WARN, "1 prose lint issue(s): numeric-anchor", "prose_lints")]
+    assert _located_summary(results) == [
+        (
+            Severity.WARN,
+            Path("doc/note.md"),
+            1,
+            "numeric claim '123' has no anchor in this paragraph",
+            "prose_lints.numeric-anchor",
+        )
+    ]
 
 
 def test_project_config_controls_enabled_checks_and_anchor_patterns(tmp_path: Path) -> None:
@@ -114,7 +147,92 @@ def test_project_config_controls_enabled_checks_and_anchor_patterns(tmp_path: Pa
         )
     )
 
-    assert results == []
+    assert _summary(results) == [
+        (
+            Severity.INFO,
+            "prose lint checks limited by science.yaml: 1/5 enabled (numeric-anchor); disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, unsupported-citation-syntax",
+            "prose_lints.config",
+        )
+    ]
+
+
+def test_include_all_checks_overrides_project_enabled_checks(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_doc(
+        tmp_path,
+        "\n".join(
+            [
+                "Smith 2020 should be reported when all checks are active.",
+                "",
+                "The cohort included 123 participants, anchored by custom-anchor.",
+            ]
+        ),
+    )
+
+    results = list(
+        check_prose_lints(
+            _ctx(
+                tmp_path,
+                include_all_checks=True,
+                prose_lint="\n".join(
+                    [
+                        "prose_lint:",
+                        "  enabled_checks:",
+                        "    - numeric-anchor",
+                        "  anchor_patterns:",
+                        "    - custom-anchor",
+                    ]
+                ),
+            )
+        )
+    )
+
+    assert _summary(results)[:1] == [
+        (
+            Severity.INFO,
+            "prose lint checks limited by science.yaml but --all is active; running all 5 checks (science.yaml enabled: numeric-anchor)",
+            "prose_lints.config",
+        )
+    ]
+    assert (
+        Severity.WARN,
+        Path("doc/note.md"),
+        1,
+        "bare author-year mention 'Smith 2020' has no adjacent [@key]",
+        "prose_lints.bare-author-year",
+    ) in _located_summary(results)
+
+
+def test_strict_include_all_checks_promotes_disabled_info_lints(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_doc(tmp_path, "The cohort included 123 participants without a linked anchor.\n")
+
+    results = list(
+        check_prose_lints(
+            _ctx(
+                tmp_path,
+                strict=True,
+                include_all_checks=True,
+                prose_lint="\n".join(
+                    [
+                        "prose_lint:",
+                        "  enabled_checks:",
+                        "    - unsupported-citation-syntax",
+                    ]
+                ),
+            )
+        )
+    )
+
+    assert (
+        Severity.WARN,
+        Path("doc/note.md"),
+        1,
+        "numeric claim '123' has no anchor in this paragraph",
+        "prose_lints.numeric-anchor",
+    ) in _located_summary(results)
 
 
 def test_registration_includes_prose_lints_after_cross_references() -> None:

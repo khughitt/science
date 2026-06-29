@@ -400,6 +400,13 @@ Write durable result interpretations under `entities/interpretations/`, and when
    - `/science:add-hypothesis`
    - `/science:pre-register`
 
+## When results surprise you
+
+If a result contradicted a pre-registered expectation, a run failed, or an
+assumption turned out to be violated, consider `/science:post-mortem` to capture
+a generalized methodology lesson — what would have surfaced the issue sooner —
+as feedback.
+
 ## Process Reflection
 
 Reflect on the **template** and **workflow** used above.

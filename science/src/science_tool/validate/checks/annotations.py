@@ -58,9 +58,10 @@ fi
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from science_tool.annotation.verify import verify_path
+from science_tool.annotation.verify import VerifyIssue, verify_path
 from science_tool.validate.checks import Check
 from science_tool.validate.result import Result, Severity
 
@@ -68,8 +69,8 @@ if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "annotations", None)
+def _result(severity: Severity, message: str, *, path: Path | None = None, rule: str = "annotations") -> Result:
+    return Result(severity, path, None, message, rule, None)
 
 
 @Check(section="annotation drift...", order=22)
@@ -80,31 +81,13 @@ def check_annotations(ctx: "ValidateContext") -> Iterable[Result]:
         return [_result(Severity.INFO, "no annotation sidecars (*.anno.trig) in this project")]
 
     results: list[Result] = []
-    if report.broken > 0:
-        results.append(
-            _result(
-                Severity.WARN,
-                f"{report.broken} annotation(s) with broken selectors "
-                "(run `science annotate verify --apply --actor <you>` to mark superseded)",
-            )
-        )
-    if report.parse_errors > 0:
-        results.append(_result(Severity.WARN, f"{report.parse_errors} sidecar parse error(s)"))
-
+    included_issue_kinds = {"broken", "parse-error"}
     if ctx.strict:
-        if report.degraded > 0:
-            results.append(
-                _result(
-                    Severity.WARN,
-                    f"{report.degraded} annotation(s) with degraded selectors (anchors no longer match)",
-                )
-            )
-        if report.fuzzy > 0:
-            results.append(_result(Severity.WARN, f"{report.fuzzy} annotation(s) resolved via fuzzy match"))
-        if report.source_missing > 0:
-            results.append(
-                _result(Severity.WARN, f"{report.source_missing} annotation(s) point at missing source files")
-            )
+        included_issue_kinds.update({"degraded", "fuzzy", "source-missing"})
+    for issue in report.issues:
+        if issue.kind not in included_issue_kinds:
+            continue
+        results.append(_issue_result(ctx, issue))
 
     if (
         report.broken == 0
@@ -121,3 +104,33 @@ def check_annotations(ctx: "ValidateContext") -> Iterable[Result]:
         )
 
     return results
+
+
+def _issue_result(ctx: "ValidateContext", issue: VerifyIssue) -> Result:
+    path = _relative_path(ctx, issue.sidecar)
+    rule = f"annotations.{issue.kind}"
+    preview = _single_line(issue.exact_preview)
+    if issue.kind == "parse-error":
+        return _result(Severity.WARN, f"sidecar parse error: {preview}", path=path, rule=rule)
+
+    message_kind = issue.kind.replace("-", " ")
+    selector = "selector"
+    if issue.kind == "source-missing":
+        message = f"annotation {issue.annotation_id} source missing: {issue.source}; preview: {preview}"
+    else:
+        message = (
+            f"annotation {issue.annotation_id} {message_kind} {selector} in {issue.source}; "
+            f"preview: {preview}"
+        )
+    return _result(Severity.WARN, message, path=path, rule=rule)
+
+
+def _relative_path(ctx: "ValidateContext", path: Path) -> Path:
+    try:
+        return path.resolve().relative_to(ctx.project_root.resolve())
+    except (OSError, ValueError):
+        return path
+
+
+def _single_line(value: str) -> str:
+    return " ".join(value.split())

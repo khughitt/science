@@ -220,9 +220,21 @@ __pycache__/
 # Managed artifact rollback backups
 *.pre-update*.bak
 
+# Transient agent outputs
+entities/meta/*next-steps*.md
+doc/meta/next-steps-*.md
+docs/meta/next-steps-*.md
+doc/plans/*-plan-review.md
+docs/plans/*-plan-review.md
+
 # OS
 .DS_Store
 ```
+
+These generated next-steps and plan-review files are scratch outputs by
+default and stay out of version control unless explicitly promoted. If one
+becomes durable project evidence, promote it deliberately by renaming it to a
+tracked report/plan path and adding it explicitly.
 
 For research projects, also ignore raw/processed data payloads while keeping descriptors or `.gitkeep` files as appropriate.
 

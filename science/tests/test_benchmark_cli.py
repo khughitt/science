@@ -15,6 +15,12 @@ def _write_dataset(root: Path, slug: str, frontmatter: str) -> None:
     path.write_text(f"---\n{frontmatter}---\nbody\n", encoding="utf-8")
 
 
+def _write_entity(root: Path, folder: str, slug: str, frontmatter: str, *, body: str) -> None:
+    path = root / "entities" / folder / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{frontmatter}---\n{body}\n", encoding="utf-8")
+
+
 def _invoke(tmp_path: Path, *args: str):
     return CliRunner().invoke(
         science_cli,
@@ -30,6 +36,33 @@ def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
         ["benchmark", "list", *args],
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(commons_root)},
+    )
+
+
+def _invoke_gap_calibration(*args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "gap-calibration", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_COMMONS_ROOT": "/tmp/science-no-commons"},
+    )
+
+
+def _invoke_gaps(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "gaps", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+
+def _invoke_tests(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "tests", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
     )
 
 
@@ -312,3 +345,454 @@ def test_coverage_summary_table_renders_when_no_rows_match(tmp_path: Path) -> No
     assert result.exit_code == 0
     assert "facet" in result.output
     assert "No matching benchmark dataset entities." not in result.output
+
+
+def test_benchmark_gap_calibration_json_summarizes_projects(tmp_path: Path) -> None:
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    project_a.mkdir()
+    project_b.mkdir()
+    _write_entity(
+        project_a,
+        "hypotheses",
+        "0001-drug",
+        """
+id: hypothesis:0001-drug
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        project_a,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+    _write_entity(
+        project_b,
+        "hypotheses",
+        "0002-temporal",
+        """
+id: hypothesis:0002-temporal
+type: hypothesis
+title: Temporal benchmark gap
+""",
+        body="Temporal dynamic measurements should be tested.",
+    )
+
+    result = _invoke_gap_calibration(
+        "--project",
+        f"a={project_a}",
+        "--project",
+        f"b={project_b}",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert [row["label"] for row in payload["projects"]] == ["a", "b"]
+    assert payload["aggregate"]["project_count"] == 2
+    assert payload["aggregate"]["entity_specific_candidate_rows"] == 1
+
+
+def test_benchmark_gap_calibration_rejects_duplicate_project_labels(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    result = _invoke_gap_calibration("--project", f"demo={project}", "--project", f"demo={project}")
+
+    assert result.exit_code != 0
+    assert "duplicate --project label: demo" in result.output
+
+
+def test_benchmark_gap_calibration_table_renders_sections(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_entity(
+        project,
+        "hypotheses",
+        "0001-drug",
+        """
+id: hypothesis:0001-drug
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+
+    result = _invoke_gap_calibration("--project", f"demo={project}")
+
+    assert result.exit_code == 0
+    assert "Benchmark Gap Calibration" in result.output
+    assert "Aggregate Benchmark Gap Calibration" in result.output
+    assert "top_fallback_reasons" in result.output
+    assert "top_fallback_selection_reasons" in result.output
+    assert "top_fallback_benchmark_shares" in result.output
+    assert "fallback_concentration_warning" in result.output
+    assert "demo" in result.output
+
+
+def test_benchmark_gaps_cli_evidence_report_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-organoid",
+        """
+id: hypothesis:0001-organoid
+type: hypothesis
+title: Organoid therapy benchmark gap
+""",
+        body="Organoid therapy clone validation should be tested.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--evidence-report", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["evidence_report"]["enabled"] is True
+    assert "entities" in payload["evidence_report"]
+    assert "hypothesis:0001-organoid" in payload["evidence_report"]["entities"]
+
+
+def test_benchmark_gaps_cli_evidence_report_table(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-organoid",
+        """
+id: hypothesis:0002-organoid
+type: hypothesis
+title: Organoid therapy benchmark gap
+""",
+        body="Organoid therapy clone validation should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic benchmark
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: outcome
+      prediction_target: outcome
+      held_out_unit: patient
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: outcome
+""",
+    )
+
+    result = _invoke_gaps(tmp_path, "--evidence-report")
+
+    assert result.exit_code == 0
+    assert "Gap Evidence" in result.output
+    assert "fallback-only" in result.output
+
+
+def test_benchmark_tests_cli_json_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-perturbation",
+        """
+id: hypothesis:0001-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["concrete_rows"] == 1
+    assert payload["benchmark_tests"][0]["test_plan_state"] == "concrete"
+    assert payload["benchmark_tests"][0]["priority_source"] == "opportunity-relative"
+
+
+def test_benchmark_tests_cli_table_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial",
+        """
+id: hypothesis:0002-spatial
+type: hypothesis
+title: Spatial hypothesis
+""",
+        body="Microenvironment region needs spatial validation.",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_tests(tmp_path)
+
+    assert result.exit_code == 0
+    assert "Benchmark Tests" in result.output
+    assert "hypothesis:0002-spatial" in result.output
+    assert "draft-needed" in result.output
+    assert "source" in result.output
+    assert "readiness" in result.output
+    assert "opportunity-relative" in result.output
+    assert "metadata-only" in result.output
+    assert "dataset:hca-spatial" in result.output
+    assert "prediction-target" in result.output
+
+
+def test_benchmark_tests_cli_filters_and_empty_state(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0003-drug",
+        """
+id: hypothesis:0003-drug
+type: hypothesis
+title: Drug hypothesis
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--state", "concrete")
+
+    assert result.exit_code == 0
+    assert "No benchmark test plans." in result.output
+
+
+def test_benchmark_tests_cli_source_and_readiness_filters(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-triage",
+        """
+id: hypothesis:0004-triage
+type: hypothesis
+title: Triage hypothesis
+""",
+        body="Drug perturbation should shift response states. Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    source_result = _invoke_tests(tmp_path, "--source", "opportunity-relative", "--format", "json")
+    readiness_result = _invoke_tests(tmp_path, "--runnable-only", "--format", "json")
+
+    source_payload = json.loads(source_result.output)
+    readiness_payload = json.loads(readiness_result.output)
+    assert source_result.exit_code == 0
+    assert [row["benchmark_id"] for row in source_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["priority_source"] for row in source_payload["benchmark_tests"]} == {"opportunity-relative"}
+    assert readiness_result.exit_code == 0
+    assert [row["benchmark_id"] for row in readiness_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
+
+
+def test_benchmark_tests_cli_exclude_fallback(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-spatial",
+        """
+id: hypothesis:0005-spatial
+type: hypothesis
+title: Spatial fallback hypothesis
+""",
+        body="Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--exclude-fallback", "--format", "json")
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload["benchmark_tests"] == []
+    assert payload["summary"]["test_plan_rows"] == 0
+
+
+def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> None:
+    entity_result = _invoke_tests(tmp_path, "--entity", "hypothesis:missing")
+    assert entity_result.exit_code != 0
+    assert "Entity not found" in entity_result.output
+
+    facet_result = _invoke_tests(tmp_path, "--facet", "not-a-facet")
+    assert facet_result.exit_code != 0
+    assert "unknown benchmark gap facet" in facet_result.output
+
+
+def test_benchmark_tests_cli_rejects_conflicting_readiness_filters(tmp_path: Path) -> None:
+    result = _invoke_tests(tmp_path, "--readiness", "metadata-only", "--runnable-only")
+
+    assert result.exit_code != 0
+    assert "--runnable-only conflicts with --readiness metadata-only" in result.output
+
+
+def test_benchmark_tests_cli_commons_unavailable_degrades_to_local_rows(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-local",
+        """
+id: hypothesis:0004-local
+type: hypothesis
+title: Local hypothesis
+""",
+        body="Drug response should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "local-benchmark",
+        """
+id: dataset:local-benchmark
+type: dataset
+title: Local Benchmark
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    assert "notice: commons benchmarks unavailable" in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["commons_notice"] is not None
+    assert payload["benchmark_tests"]

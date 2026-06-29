@@ -274,6 +274,79 @@ def test_entity_show_json_outputs_machine_readable_payload() -> None:
         }
 
 
+def test_entity_remove_dry_run_reports_safe_and_manual_references() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/reports/0001-target-report.md",
+            {"id": "report:0001-target-report", "type": "report", "title": "Target", "status": "complete"},
+        )
+        write_markdown_entity(
+            root,
+            "entities/questions/0001-alpha.md",
+            {
+                "id": "question:0001-alpha",
+                "type": "question",
+                "title": "Alpha",
+                "status": "open",
+                "related": ["report:0001-target-report"],
+            },
+        )
+        task_path = root / "tasks" / "done" / "2026-06.md"
+        task_path.parent.mkdir(parents=True)
+        task_path.write_text(
+            "- archived entities/reports/0001-target-report.md after review\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["entity", "remove", "entities/reports/0001-target-report.md"])
+
+        assert result.exit_code == 0, result.output
+        assert "DRY RUN" in result.output
+        assert "delete entities/reports/0001-target-report.md" in result.output
+        assert "safe structured reference" in result.output
+        assert "entities/questions/0001-alpha.md" in result.output
+        assert "manual reference" in result.output
+        assert "tasks/done/2026-06.md" in result.output
+        assert Path("entities/reports/0001-target-report.md").is_file()
+
+
+def test_entity_remove_apply_deletes_file_and_rewrites_safe_frontmatter_refs() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/reports/0001-target-report.md",
+            {"id": "report:0001-target-report", "type": "report", "title": "Target", "status": "complete"},
+        )
+        dependent = write_markdown_entity(
+            root,
+            "entities/questions/0001-alpha.md",
+            {
+                "id": "question:0001-alpha",
+                "type": "question",
+                "title": "Alpha",
+                "status": "open",
+                "related": ["report:0001-target-report", "hypothesis:0001-other"],
+                "source_refs": ["report:0001-target-report"],
+            },
+        )
+
+        result = runner.invoke(main, ["entity", "remove", "report:0001-target-report", "--apply"])
+
+        assert result.exit_code == 0, result.output
+        assert "Removed report:0001-target-report" in result.output
+        assert not Path("entities/reports/0001-target-report.md").exists()
+        frontmatter = yaml.safe_load(dependent.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["related"] == ["hypothesis:0001-other"]
+        assert "source_refs" not in frontmatter
+
+
 def test_entity_edit_adds_related_without_replacing_existing() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

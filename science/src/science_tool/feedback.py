@@ -12,10 +12,26 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 VALID_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 VALID_STATUSES = ("open", "addressed", "deferred", "wontfix")
+VALID_CONCERNS = (
+    "tooling",
+    "methodology:statistics",
+    "methodology:qa",
+    "methodology:design",
+    "methodology:data-fitness",
+    "methodology:reasoning",
+)
+
+
+def _validate_concern_value(value: str) -> str:
+    if value not in VALID_CONCERNS:
+        allowed = ", ".join(VALID_CONCERNS)
+        msg = f"Invalid concern {value!r}; must be one of: {allowed}"
+        raise ValueError(msg)
+    return value
 
 _ID_RE = re.compile(r"^fb-(\d{4}-\d{2}-\d{2})-(\d{3})$")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -46,11 +62,18 @@ class FeedbackEntry(BaseModel):
     resolution: str | None = None
     recurrence: int = 1
     related: list[str] = Field(default_factory=list)
+    concern: str = "tooling"
+
+    @field_validator("concern")
+    @classmethod
+    def _check_concern(cls, value: str) -> str:
+        return _validate_concern_value(value)
 
 
 @dataclass
 class _FeedbackCluster:
     target: str
+    concern: str
     category: str
     summary_key: str
     representative_summary: str
@@ -116,6 +139,7 @@ def list_entries(
     target: str | None = None,
     category: str | None = None,
     project: str | None = None,
+    concern: str | None = None,
 ) -> list[FeedbackEntry]:
     """Filter feedback entries. Default: open entries only. Pass status=None for all."""
     entries = load_all_entries(feedback_dir)
@@ -128,6 +152,8 @@ def list_entries(
         entries = [e for e in entries if e.category == category]
     if project is not None:
         entries = [e for e in entries if e.project == project]
+    if concern is not None:
+        entries = [e for e in entries if fnmatch(e.concern, concern)]
 
     # Sort by recurrence descending, then date descending (most recent first)
     entries.sort(key=lambda e: (e.recurrence, e.created), reverse=True)
@@ -145,6 +171,7 @@ def update_entry(
     summary: str | None = None,
     detail: str | None = None,
     related: list[str] | None = None,
+    concern: str | None = None,
 ) -> FeedbackEntry:
     """Update fields on an existing entry. Raises FileNotFoundError if not found."""
     path = feedback_dir / f"{entry_id}.yaml"
@@ -169,6 +196,8 @@ def update_entry(
         entry.detail = detail
     if related is not None:
         entry.related = related
+    if concern is not None:
+        entry.concern = _validate_concern_value(concern)
 
     save_entry(feedback_dir, entry)
     return entry
@@ -179,15 +208,18 @@ def find_duplicate(
     *,
     target: str,
     summary: str,
+    concern: str = "tooling",
 ) -> FeedbackEntry | None:
-    """Find an existing open entry with the same target and similar summary.
+    """Find an existing open entry with the same target, concern, and similar summary.
 
-    Uses bidirectional substring matching: returns a match if either summary
-    is a substring of the other.
+    Uses bidirectional substring matching on summary. Entries differing in
+    concern are distinct even when target and summary match.
     """
     entries = list_entries(feedback_dir, status="open", target=target)
     summary_lower = summary.lower()
     for entry in entries:
+        if entry.concern != concern:
+            continue
         entry_summary_lower = entry.summary.lower()
         if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
             return entry
@@ -198,28 +230,33 @@ def group_for_triage(
     feedback_dir: Path,
     *,
     target: str | None = None,
-) -> dict[str, dict]:
-    """Group open entries by target for triage display.
+    concern: str | None = None,
+) -> dict[tuple[str, str], dict]:
+    """Group open entries by (concern, target) for triage display.
 
-    Returns: {target: {entries: [...], projects: set, total_recurrence: int}}
-    Sorted by total_recurrence descending.
+    Returns: {(concern, target): {concern, target, entries, projects, total_recurrence}}
+    Sorted by total_recurrence descending. The grouped value carries explicit
+    `concern` and `target` so callers never read the tuple key for display or
+    telemetry joins.
     """
-    entries = list_entries(feedback_dir, status="open", target=target)
+    entries = list_entries(feedback_dir, status="open", target=target, concern=concern)
 
-    groups: dict[str, dict] = {}
+    groups: dict[tuple[str, str], dict] = {}
     for entry in entries:
-        if entry.target not in groups:
-            groups[entry.target] = {
+        key = (entry.concern, entry.target)
+        if key not in groups:
+            groups[key] = {
+                "concern": entry.concern,
+                "target": entry.target,
                 "entries": [],
                 "projects": set(),
                 "total_recurrence": 0,
             }
-        groups[entry.target]["entries"].append(entry)
+        groups[key]["entries"].append(entry)
         if entry.project:
-            groups[entry.target]["projects"].add(entry.project)
-        groups[entry.target]["total_recurrence"] += entry.recurrence
+            groups[key]["projects"].add(entry.project)
+        groups[key]["total_recurrence"] += entry.recurrence
 
-    # Sort groups by total recurrence descending
     return dict(sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"]))
 
 
@@ -227,11 +264,12 @@ def cluster_for_triage(
     feedback_dir: Path,
     *,
     target: str | None = None,
+    concern: str | None = None,
     since_days: int | None = None,
     today: date | None = None,
 ) -> list[dict[str, object]]:
-    """Cluster open entries by target, category, and near-duplicate summary."""
-    entries = list_entries(feedback_dir, status="open", target=target)
+    """Cluster open entries by concern, target, category, and near-duplicate summary."""
+    entries = list_entries(feedback_dir, status="open", target=target, concern=concern)
     if since_days is not None:
         cutoff = (today or date.today()) - timedelta(days=since_days)
         entries = [entry for entry in entries if date.fromisoformat(entry.created) >= cutoff]
@@ -243,6 +281,7 @@ def cluster_for_triage(
         if cluster is None:
             cluster = _FeedbackCluster(
                 target=entry.target,
+                concern=entry.concern,
                 category=entry.category,
                 summary_key=_summary_key(entry.summary),
                 representative_summary=entry.summary,
@@ -367,7 +406,7 @@ def _matching_cluster(
     tokens: set[str],
 ) -> _FeedbackCluster | None:
     for cluster in clusters:
-        if cluster.target != entry.target or cluster.category != entry.category:
+        if cluster.target != entry.target or cluster.concern != entry.concern or cluster.category != entry.category:
             continue
         if _token_similarity(tokens, cluster.tokens) >= 0.75:
             return cluster
@@ -378,6 +417,7 @@ def _cluster_row(cluster: _FeedbackCluster) -> dict[str, object]:
     entries = sorted(cluster.entries, key=lambda entry: (entry.created, entry.id))
     return {
         "target": cluster.target,
+        "concern": cluster.concern,
         "category": cluster.category,
         "summary_key": cluster.summary_key,
         "representative_summary": cluster.representative_summary,
@@ -452,30 +492,36 @@ def render_report(
     *,
     status: str | None = None,
     project: str | None = None,
+    concern: str | None = None,
 ) -> str:
-    """Render a human-readable markdown report of feedback entries."""
-    entries = list_entries(feedback_dir, status=status, project=project)
+    """Render a human-readable markdown report grouped by concern then target."""
+    entries = list_entries(feedback_dir, status=status, project=project, concern=concern)
 
     if not entries:
         return "No feedback entries found.\n"
 
-    # Group by target
-    by_target: dict[str, list[FeedbackEntry]] = {}
+    by_concern: dict[str, dict[str, list[FeedbackEntry]]] = {}
     for entry in entries:
-        by_target.setdefault(entry.target, []).append(entry)
+        by_concern.setdefault(entry.concern, {}).setdefault(entry.target, []).append(entry)
 
     lines = ["# Feedback Report", ""]
-    for target, group in sorted(by_target.items()):
-        lines.append(f"## {target}")
+    # Alphabetical order is intentional: methodology:* groups sort before
+    # tooling, giving the methodology lens top billing. A future reorder must
+    # not break the Task-5 test that relies on this.
+    for concern_value, by_target in sorted(by_concern.items()):
+        lines.append(f"## {concern_value}")
         lines.append("")
-        for entry in group:
-            status_badge = f"[{entry.status}]"
-            lines.append(f"- **{entry.id}** {status_badge} ({entry.category}) — {entry.summary}")
-            if entry.recurrence > 1:
-                lines.append(f"  - Recurrence: {entry.recurrence}")
-            if entry.resolution:
-                lines.append(f"  - Resolution: {entry.resolution}")
-        lines.append("")
+        for target, group in sorted(by_target.items()):
+            lines.append(f"### {target}")
+            lines.append("")
+            for entry in group:
+                status_badge = f"[{entry.status}]"
+                lines.append(f"- **{entry.id}** {status_badge} ({entry.category}) — {entry.summary}")
+                if entry.recurrence > 1:
+                    lines.append(f"  - Recurrence: {entry.recurrence}")
+                if entry.resolution:
+                    lines.append(f"  - Resolution: {entry.resolution}")
+            lines.append("")
 
     return "\n".join(lines)
 

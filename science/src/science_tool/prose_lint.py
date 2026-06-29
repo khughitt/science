@@ -120,6 +120,7 @@ _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
 # their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
 _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
 _CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
+_KNOWN_CELL_LINE_SHORT_FORMS: frozenset[str] = frozenset({"H929", "H1112", "H1634"})
 
 
 def _mask_wikilinks(line: str) -> str:
@@ -130,6 +131,13 @@ def _mask_wikilinks(line: str) -> str:
 def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
     window = line[max(0, match.start() - 40) : min(len(line), match.end() + 40)]
     return bool(_CELL_LINE_CONTEXT_RE.search(window))
+
+
+def _is_cell_line_short_form(line: str, match: re.Match[str]) -> bool:
+    short = match.group(0)
+    return short in _KNOWN_CELL_LINE_SHORT_FORMS or (
+        match.group(1).isupper() and _is_cell_line_context(line, match)
+    )
 
 
 def _utf8_byte_col(line: str, char_index: int) -> int:
@@ -251,7 +259,7 @@ def detect_short_form_ids(
             short = match.group(0)
             if deny and short in deny:
                 continue
-            if match.group(1).isupper() and _is_cell_line_context(line, match):
+            if _is_cell_line_short_form(line, match):
                 continue
             if resolver and (short in resolver or short.lower() in resolver):
                 continue
@@ -272,11 +280,15 @@ def detect_short_form_ids(
 
 
 def detect_frontmatter_inline_gaps(
-    path: Path, *, strict: bool = False
+    path: Path, *, strict: bool = False, alias_map: dict[str, str] | None = None
 ) -> list[LintIssue]:
     """For each `related:` entry in frontmatter, flag if absent from body text.
 
     Reports all gaps at line 1 (the file is the unit, not the location).
+
+    `alias_map` (alias → canonical-id, e.g. from `build_short_form_resolver`)
+    lets the body satisfy a `related:` entry via any equivalent spelling — a
+    project shorthand like `mm30` counts as a mention of `multiple-myeloma`.
     """
     data, body_start = parse_frontmatter(path)
     related = data.get("related") if isinstance(data, dict) else None
@@ -287,12 +299,20 @@ def detect_frontmatter_inline_gaps(
     except (OSError, UnicodeDecodeError):
         return []
     body = "\n".join(lines[body_start - 1 :])
+    equivalents_by_canonical: dict[str, set[str]] = {}
+    for alias, canonical in (alias_map or {}).items():
+        equivalents_by_canonical.setdefault(canonical, set()).add(alias)
     issues: list[LintIssue] = []
     for ref in related:
         if not isinstance(ref, str) or not ref.strip():
             continue
         if ref in body:
             continue
+        if alias_map:
+            canonical = alias_map.get(ref) or alias_map.get(ref.lower()) or ref
+            equivalents = equivalents_by_canonical.get(canonical, set())
+            if any(equiv in body for equiv in equivalents):
+                continue
         issues.append(
             LintIssue(
                 file=path,
@@ -310,14 +330,45 @@ def detect_frontmatter_inline_gaps(
 # Numeric claim: float, integer with %, ratio. Excludes bare integers <100
 # (too noisy) and bare 4-digit years (handled separately below).
 _NUMERIC_CLAIM_RE = re.compile(
-    r"(?<![0-9.])"
-    r"(?:[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
-    r"(?![0-9.])"
+    r"(?<![A-Za-z0-9_.,])"
+    r"(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?%?|[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
+    r"(?![A-Za-z0-9_.,])"
 )
 # Standalone 4-digit years (1900-2099) — never claims, always exclude.
 _BARE_YEAR_RE = re.compile(r"^(?:19\d{2}|20\d{2})$")
+# DOI and accession-like identifiers frequently contain punctuation-delimited
+# numeric fragments; those are identifiers, not prose claims needing anchors.
+_DOI_SPAN_RE = re.compile(
+    r"\b(?:doi\s*:\s*|https?://(?:dx\.)?doi\.org/)?10\.\d{4,9}/[-._;()/:A-Z0-9]+",
+    re.IGNORECASE,
+)
+_IDENTIFIER_SPAN_RE = re.compile(
+    r"\b(?:"
+    r"(?:PMID|PMCID|PMC|NCT|GSE|GSM|SRR|ERR|DRR|PRJNA|PRJEB|PRJDB|ENSG|ENST|RS)"
+    r"\s*:?\s*[A-Z]*\d[A-Z0-9_.-]*"
+    r"|[A-Z]{2,}(?:-[A-Z0-9]{2,})*-\d{2,}[A-Z0-9_.-]*"
+    r")\b",
+    re.IGNORECASE,
+)
 # Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
 _HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
+_LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
+# Internal cross-references (`Figure 3.2`, `Section 4.1`, `Table 100`, `§4.2`,
+# `Eq. 2`) name a structural element, not a numeric claim that needs a data
+# anchor. The number (including dotted/ranged forms) is consumed alongside the
+# keyword so its span can be excluded from numeric-claim matching.
+_CROSS_REFERENCE_RE = re.compile(
+    r"(?:\b(?:Sections?|Secs?|Chapters?|Chaps?|Figures?|Figs?|Tables?|Tbls?|"
+    r"Equations?|Eqs?|Appendix|Appendices|Appx|Panels?)|§)"
+    r"\.?\s*\d+(?:\.\d+)*(?:[-–]\d+(?:\.\d+)*)?",
+    re.IGNORECASE,
+)
+
+
+def _mask_numeric_identifier_spans(line: str) -> str:
+    """Blank identifier spans, preserving columns for remaining numeric claims."""
+    line = _DOI_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    return _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
 
 
 def detect_numeric_anchor(
@@ -346,6 +397,7 @@ def detect_numeric_anchor(
     lines = text.splitlines()
     issues: list[LintIssue] = []
     in_fence = False
+    in_list_item = False
     # Pre-compute paragraph boundaries (1-based line index → paragraph index).
     paragraph_id_per_line: list[int] = [0] * (len(lines) + 1)
     para_id = 0
@@ -367,13 +419,25 @@ def detect_numeric_anchor(
             continue
         if in_fence:
             continue
-        if _HEADER_OR_LIST_RE.match(raw_line):
+        if not raw_line.strip():
+            in_list_item = False
             continue
-        line = strip_inline_code(raw_line)
+        if _HEADER_OR_LIST_RE.match(raw_line):
+            in_list_item = bool(_LIST_RE.match(raw_line))
+            continue
+        if in_list_item and raw_line.startswith((" ", "\t")):
+            continue
+        in_list_item = False
+        if raw_line.lstrip().startswith("|"):
+            continue
+        line = _mask_numeric_identifier_spans(strip_inline_code(raw_line))
+        crossref_spans = [m.span() for m in _CROSS_REFERENCE_RE.finditer(line)]
         for match in _NUMERIC_CLAIM_RE.finditer(line):
             value = match.group(0)
             if _BARE_YEAR_RE.match(value):
                 continue  # standalone year, not a claim
+            if any(start <= match.start() < end for start, end in crossref_spans):
+                continue  # internal cross-reference (Figure/Section/Table/…)
             paragraph = paragraph_text[paragraph_id_per_line[lineno]]
             if anchor_re and anchor_re.search(paragraph):
                 continue
@@ -518,6 +582,24 @@ def _collect_markdown_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
+def _archived_task_aliases(root: Path) -> dict[str, str]:
+    """Map historical task short-forms (e.g. ``t075``) to a canonical task id.
+
+    Archived tasks live only in ``tasks/archive.md``; the graph TaskAdapter
+    deliberately skips that file, so archived IDs never reach the entity alias
+    map and a prose mention of one would be flagged as a style violation. This
+    reads the archive declarations directly so historical references stay green.
+    Returns ``{}`` on any read error (the lint must not hard-fail).
+    """
+    try:
+        from science_tool.refs import _load_task_ids  # noqa: PLC0415
+
+        return {f"t{num}": f"task:t{num}" for num in _load_task_ids(root)}
+    except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on read issues
+        logger.warning("archived task aliases unavailable (%s)", exc)
+        return {}
+
+
 def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     """Build an alias → canonical-id map for resolver-aware short-form-ids.
 
@@ -525,6 +607,9 @@ def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     authored reference to a real entity, not a style violation. Returns ``None``
     and logs a warning if project sources can't be loaded — short-form-ids then
     falls back to deny-list-only behavior rather than failing the lint.
+
+    Archived task IDs (from ``tasks/archive.md``) are merged in so prose
+    references to retired tasks resolve too.
     """
     try:
         from science_tool.graph.sources import build_alias_map, load_project_sources
@@ -535,7 +620,10 @@ def build_short_form_resolver(root: Path) -> dict[str, str] | None:
             "short-form-ids resolver unavailable (%s); falling back to deny-list only", exc
         )
         return None
-    return build_alias_map(sources.entities, sources.manual_aliases)
+    alias_map = build_alias_map(sources.entities, sources.manual_aliases)
+    for alias, canonical in _archived_task_aliases(root.resolve()).items():
+        alias_map.setdefault(alias, canonical)
+    return alias_map
 
 
 def scan_root(
@@ -573,6 +661,8 @@ def scan_root(
                 hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
             elif check == "short-form-ids":
                 hits.extend(detector(path, strict=strict, deny=short_form_ids_deny, resolver=resolver))
+            elif check == "frontmatter-inline-gap":
+                hits.extend(detector(path, strict=strict, alias_map=resolver))
             elif check == "bare-author-year":
                 hits.extend(
                     detector(path, strict=strict, deny=bare_author_year_deny, bib_surnames=bib_surnames)

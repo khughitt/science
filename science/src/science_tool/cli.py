@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+import yaml
 from rich.text import Text
 from science_model.reasoning import MembershipRole
 
@@ -27,12 +28,15 @@ from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
 from science_tool.entities import (
     EntityCommandError,
+    EntityRemovalPlan,
     append_entity_note,
     create_entity,
     edit_entity,
     find_entity,
     graph_is_stale,
     list_entities,
+    plan_entity_removal,
+    remove_entity,
 )
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
@@ -108,6 +112,9 @@ from science_tool.styles import (
     resolve_color_policy,
     set_color_policy,
 )
+from science_tool.data_audit import audit_project, render_json
+from science_tool.data_audit_fix import apply_fixes
+from science_tool.project_config import load_project_config, resolve_data_policy
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.wander.cli import wander_command
@@ -364,6 +371,88 @@ main.add_command(qa_audit_command)
 main.add_command(commons_group)
 main.add_command(validate_cmd)
 main.add_command(patch_group)
+
+
+@main.group("data")
+def data_group() -> None:
+    """Audit the data/results/entities tracking boundary."""
+
+
+@data_group.command("audit")
+@click.option("--project", "project_path", type=click.Path(path_type=Path),
+              default=None, envvar="SCIENCE_PROJECT_ROOT",
+              help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
+@click.option("--fix", is_flag=True, default=False,
+              help="Relocate stranded records data/ → results/ (stages, never commits).")
+@click.option("--json", "as_json", is_flag=True, default=False,
+              help="Emit the machine-readable move report.")
+def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> None:
+    """Report (and optionally fix) data/results/entities boundary violations."""
+    project_path = project_path or Path.cwd()  # runtime default; honors the env var above
+    try:
+        policy = resolve_data_policy(load_project_config(project_path))
+    except FileNotFoundError:
+        from science_tool.data_policy import DEFAULT_DATA_POLICY
+        policy = DEFAULT_DATA_POLICY
+    violations = audit_project(project_path, policy)
+
+    if fix:
+        outcomes = apply_fixes(project_path, violations)
+        if as_json:
+            click.echo(render_json(violations, outcomes), nl=False)
+        else:
+            performed = sum(1 for o in outcomes if o.performed)
+            flagged = sum(1 for o in outcomes if not o.performed)
+            for o in outcomes:
+                mark = "moved" if o.performed else "FLAG"
+                tgt = o.violation.proposed_target or "-"
+                click.echo(f"  [{mark}] {o.violation.path} → {tgt}"
+                           + (f"  ({o.reason})" if o.reason else ""))
+            click.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
+        return
+
+    if as_json:
+        click.echo(render_json(violations), nl=False)
+    else:
+        if not violations:
+            click.echo("clean: no data/results boundary violations.")
+        for v in violations:
+            tgt = v.proposed_target or "-"
+            click.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
+    if violations:
+        raise SystemExit(1)
+
+
+@main.group("labnote")
+def labnote() -> None:
+    """Export Labnote app packages."""
+
+
+@labnote.command("export")
+@click.option(
+    "--project-root",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True, exists=True),
+    default=Path("."),
+    show_default=True,
+    help="Science project root containing science.yaml.",
+)
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    required=True,
+    help="Output Labnote app package directory.",
+)
+def labnote_export(project_root: Path, out_dir: Path) -> None:
+    """Export a public Labnote app package from a Science project."""
+    from science_tool.labnote_export import export_labnote_package
+
+    try:
+        diagnostics = export_labnote_package(project_root=project_root, out_dir=out_dir)
+    except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    warning_count = len(diagnostics.get("warnings", []))
+    click.echo(f"Exported Labnote package to {out_dir} ({warning_count} warning(s))")
 
 
 @main.group("entities")
@@ -849,6 +938,19 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
     display_date = (date_value or _date.today()).isoformat()
     click.echo(f"Added note to {result.entity_id} ({display_date})")
     _emit_entity_warnings(result.warnings)
+
+
+@entity_group.command("remove")
+@click.argument("target")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Delete the entity and safe references.")
+def entity_remove(target: str, apply_changes: bool) -> None:
+    """Preview or remove an entity file and safely removable references."""
+
+    try:
+        plan = remove_entity(Path.cwd(), target) if apply_changes else plan_entity_removal(Path.cwd(), target)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_entity_removal_plan(plan, applied=apply_changes)
 
 
 @entity_group.command("list")
@@ -1486,6 +1588,26 @@ def _emit_entity_show(location: Any, output_format: str) -> None:
     if location.body:
         click.echo()
         console.print(Text(location.body.rstrip("\n")))
+
+
+def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:
+    action = "Removed" if applied else "DRY RUN"
+    click.echo(f"{action} {plan.entity_id}")
+    click.echo(f"- delete {plan.rel_path}")
+    if plan.safe_hits:
+        click.echo("- safe structured reference cleanup:")
+        for hit in sorted(plan.safe_hits, key=lambda item: (item.rel_path, item.line, item.detail)):
+            click.echo(f"  - {hit.rel_path}:{hit.line}: {hit.detail}")
+    else:
+        click.echo("- safe structured reference cleanup: none")
+    if plan.manual_hits:
+        click.echo("- manual references:")
+        for hit in sorted(plan.manual_hits, key=lambda item: (item.rel_path, item.line, item.detail)):
+            click.echo(f"  - {hit.rel_path}:{hit.line}: {hit.detail}")
+    else:
+        click.echo("- manual references: none")
+    if not applied:
+        click.echo("Run with --apply to delete the entity and rewrite safe structured references.")
 
 
 def _print_entity_field(console: Any, label: str, value: Text) -> None:
@@ -5554,6 +5676,15 @@ def telemetry_prune_cmd(before_date: datetime, output_format: str) -> None:
 
 _FB_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 _FB_STATUSES = ("open", "addressed", "deferred", "wontfix")
+# Keep in sync with science_tool.feedback.VALID_CONCERNS.
+_FB_CONCERNS = (
+    "tooling",
+    "methodology:statistics",
+    "methodology:qa",
+    "methodology:design",
+    "methodology:data-fitness",
+    "methodology:reasoning",
+)
 
 
 @main.group()
@@ -5574,6 +5705,7 @@ def _get_feedback_dir() -> Path:
 @click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
 @click.option("--summary", required=True, help="One-line description")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens")
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -5584,6 +5716,7 @@ def feedback_add(
     target: str,
     summary: str,
     category: str | None,
+    concern: str | None,
     detail: str | None,
     project: str | None,
     related: tuple[str, ...],
@@ -5615,12 +5748,13 @@ def feedback_add(
     if target is None:
         raise click.UsageError("--target is required unless --from-recent is used")
     category = category or "suggestion"
+    concern = concern or "tooling"
 
     if project is None:
         project = detect_project(Path.cwd())
 
     # Check for duplicates
-    dup = find_duplicate(fb_dir, target=target, summary=summary)
+    dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
     if dup is not None:
         dup.recurrence += 1
         save_entry(fb_dir, dup)
@@ -5639,6 +5773,7 @@ def feedback_add(
         summary=summary,
         detail=detail,
         related=list(related),
+        concern=concern,
     )
     save_entry(fb_dir, entry)
     click.echo(f"Created {entry.id}: {entry.summary}")
@@ -5667,12 +5802,14 @@ def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int
 @click.option("--target", default=None, help="Filter by target (supports fnmatch globs)")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
 @click.option("--project", default=None, help="Filter by project")
+@click.option("--concern", default=None, help="Filter by concern (supports fnmatch globs, e.g. 'methodology:*')")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_list(
     status: str | None,
     target: str | None,
     category: str | None,
     project: str | None,
+    concern: str | None,
     output_format: str,
 ) -> None:
     """List feedback entries (default: open only)."""
@@ -5682,13 +5819,14 @@ def feedback_list(
         status = None
 
     fb_dir = _get_feedback_dir()
-    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project)
+    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project, concern=concern)
 
     columns = [
         ("id", "ID"),
         ("created", "Date"),
         ("project", "Project"),
         ("target", "Target"),
+        ("concern", "Concern"),
         ("category", "Category"),
         ("summary", "Summary"),
         ("recurrence", "Recur"),
@@ -5699,6 +5837,7 @@ def feedback_list(
             "created": e.created,
             "project": e.project,
             "target": e.target,
+            "concern": e.concern,
             "category": e.category,
             "summary": e.summary,
             "recurrence": e.recurrence,
@@ -5713,6 +5852,7 @@ def feedback_list(
 @click.option("--status", default=None, type=click.Choice(_FB_STATUSES))
 @click.option("--resolution", default=None, help="Required when setting terminal status")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS))
 @click.option("--summary", default=None)
 @click.option("--detail", default=None)
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -5721,6 +5861,7 @@ def feedback_update(
     status: str | None,
     resolution: str | None,
     category: str | None,
+    concern: str | None,
     summary: str | None,
     detail: str | None,
     related: tuple[str, ...],
@@ -5736,6 +5877,7 @@ def feedback_update(
             status=status,
             resolution=resolution,
             category=category,
+            concern=concern,
             summary=summary,
             detail=detail,
             related=list(related) if related else None,
@@ -5747,6 +5889,7 @@ def feedback_update(
 
 @feedback.command("triage")
 @click.option("--target", default=None, help="Filter by target (fnmatch glob)")
+@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
 @click.option(
     "--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category"
 )
@@ -5757,6 +5900,7 @@ def feedback_update(
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_triage(
     target: str | None,
+    concern: str | None,
     cluster_mode: bool,
     since_days: int | None,
     with_telemetry: bool,
@@ -5767,7 +5911,7 @@ def feedback_triage(
 
     fb_dir = _get_feedback_dir()
     if cluster_mode or output_format == "json":
-        rows = cluster_for_triage(fb_dir, target=target, since_days=since_days)
+        rows = cluster_for_triage(fb_dir, target=target, concern=concern, since_days=since_days)
         if with_telemetry:
             from science_tool.telemetry import format_feedback_telemetry, get_telemetry_dir, read_events
 
@@ -5790,6 +5934,7 @@ def feedback_triage(
             return
         columns = [
             ("target", "Target"),
+            ("concern", "Concern"),
             ("category", "Category"),
             ("count", "Count"),
             ("total_recurrence", "Recur"),
@@ -5810,7 +5955,7 @@ def feedback_triage(
         )
         return
 
-    groups = group_for_triage(fb_dir, target=target)
+    groups = group_for_triage(fb_dir, target=target, concern=concern)
 
     if not groups:
         click.echo("No open feedback entries.")
@@ -5822,20 +5967,21 @@ def feedback_triage(
 
         telemetry_events = read_events(get_telemetry_dir())
 
-    for target_key, group in groups.items():
+    for (concern_key, target_key), group in groups.items():
         n_projects = len(group["projects"])
         n_entries = len(group["entries"])
         total_recur = group["total_recurrence"]
         projects_str = ", ".join(sorted(group["projects"])) if group["projects"] else "unknown"
         click.echo(
-            f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
+            f"\n## [{concern_key}] {target_key}  "
+            f"({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
         )
         if with_telemetry:
             from science_tool.telemetry import format_feedback_telemetry, summarize_recent_for_feedback_target
 
             summary = summarize_recent_for_feedback_target(
                 telemetry_events,
-                target=target_key,
+                target=group["target"],
                 since_days=since_days if since_days is not None else 14,
             )
             click.echo(f"Telemetry: {format_feedback_telemetry(summary)}")
@@ -5919,12 +6065,13 @@ def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, 
 @feedback.command("report")
 @click.option("--status", default=None, help="Filter by status")
 @click.option("--project", default=None, help="Filter by project")
-def feedback_report(status: str | None, project: str | None) -> None:
+@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
+def feedback_report(status: str | None, project: str | None, concern: str | None) -> None:
     """Generate a markdown report of feedback entries."""
     from science_tool.feedback import render_report
 
     fb_dir = _get_feedback_dir()
-    report = render_report(fb_dir, status=status, project=project)
+    report = render_report(fb_dir, status=status, project=project, concern=concern)
     click.echo(report)
 
 
@@ -6114,11 +6261,270 @@ def benchmark_opportunities(
         Console(width=200).print(calibration_table)
 
 
+def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path]]:
+    if not project_specs:
+        raise click.ClickException("at least one --project label=path is required")
+    parsed: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    for spec in project_specs:
+        if "=" not in spec:
+            raise click.ClickException("--project must use label=path")
+        label, raw_path = spec.split("=", 1)
+        label = label.strip()
+        if not label:
+            raise click.ClickException("--project label must be non-empty")
+        if label in seen:
+            raise click.ClickException(f"duplicate --project label: {label}")
+        path = Path(raw_path).expanduser().resolve()
+        if not path.is_dir():
+            raise click.ClickException(f"--project {label} path does not exist: {path}")
+        seen.add(label)
+        parsed.append((label, path))
+    return parsed
+
+
+def _format_count_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+    values = [f"{row[key]}:{row['count']}" for row in rows]
+    return ", ".join(values) if values else "-"
+
+
+def _format_share_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+    values = [f"{row[key]}:{row['count']} ({row['share']})" for row in rows]
+    return ", ".join(values) if values else "-"
+
+
+@benchmark_group.command("gap-calibration")
+@click.option("--project", "project_specs", multiple=True, help="Project as label=path. Repeat for each project.")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+def benchmark_gap_calibration(
+    project_specs: tuple[str, ...],
+    domain: str | None,
+    facet: str | None,
+    include_commons: bool,
+    output_format: str,
+) -> None:
+    """Summarize benchmark gap calibration across projects."""
+    from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
+
+    projects = _parse_project_specs(project_specs)
+    try:
+        payload = benchmark_gap_calibration_batch(
+            projects,
+            include_commons=include_commons,
+            domain=domain,
+            facet=facet,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(title="Benchmark Gap Calibration", show_header=True, header_style="bold")
+    for col in (
+        "project",
+        "gap rows",
+        "entity candidates",
+        "fallback candidates",
+        "fallback ratio",
+        "suggested facets",
+        "matched facets",
+        "fallback benchmarks",
+    ):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for project in payload["projects"]:
+        summary = project["calibration_summary"]
+        ratio = "-"
+        if summary["candidate_rows"]:
+            ratio = f"{summary['fallback_candidate_rows'] / summary['candidate_rows']:.3f}"
+        table.add_row(
+            project["label"],
+            str(summary["gap_rows"]),
+            str(summary["entity_specific_candidate_rows"]),
+            str(summary["fallback_candidate_rows"]),
+            ratio,
+            _format_count_rows(summary["top_suggested_facets"], key="facet"),
+            _format_count_rows(summary["top_matched_hint_facets"], key="facet"),
+            _format_count_rows(summary["top_fallback_benchmarks"], key="benchmark_id"),
+        )
+    Console(width=200).print(table)
+
+    aggregate_table = Table(title="Aggregate Benchmark Gap Calibration", show_header=True, header_style="bold")
+    aggregate_table.add_column("field", overflow="fold", no_wrap=False)
+    aggregate_table.add_column("value", overflow="fold", no_wrap=False)
+    aggregate = payload["aggregate"]
+    for field in (
+        "project_count",
+        "gap_rows",
+        "candidate_rows",
+        "entity_specific_candidate_rows",
+        "fallback_candidate_rows",
+        "fallback_candidate_ratio",
+    ):
+        aggregate_table.add_row(field, str(aggregate[field]))
+    aggregate_table.add_row(
+        "top_suggested_facets",
+        _format_count_rows(aggregate["top_suggested_facets"], key="facet"),
+    )
+    aggregate_table.add_row(
+        "top_matched_hint_facets",
+        _format_count_rows(aggregate["top_matched_hint_facets"], key="facet"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_benchmarks",
+        _format_count_rows(aggregate["top_fallback_benchmarks"], key="benchmark_id"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_reasons",
+        _format_count_rows(aggregate["top_fallback_reasons"], key="reason"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_selection_reasons",
+        _format_count_rows(aggregate["top_fallback_selection_reasons"], key="reason"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_benchmark_shares",
+        _format_share_rows(aggregate["top_fallback_benchmark_shares"], key="benchmark_id"),
+    )
+    aggregate_table.add_row("fallback_concentration_warning", str(aggregate["fallback_concentration_warning"]))
+    Console(width=200).print(aggregate_table)
+
+
+@benchmark_group.command("tests")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
+@click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
+@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--source",
+    "priority_source",
+    type=click.Choice(["opportunity-relative", "gap-candidate", "gap-fallback"]),
+    default=None,
+    help="Filter by benchmark test priority source.",
+)
+@click.option("--exclude-fallback", is_flag=True, help="Drop broad fallback benchmark rows.")
+@click.option(
+    "--readiness",
+    "readiness_label",
+    type=click.Choice(["runnable", "stage-needed", "metadata-only", "blocked"]),
+    default=None,
+    help="Filter by benchmark runtime/readiness label.",
+)
+@click.option("--runnable-only", is_flag=True, help="Shortcut for --readiness runnable.")
+@click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_tests(
+    domain: str | None,
+    entity_ref: str | None,
+    facet: str | None,
+    state: str | None,
+    priority_source: str | None,
+    exclude_fallback: bool,
+    readiness_label: str | None,
+    runnable_only: bool,
+    benchmark_ref: str | None,
+    include_commons: bool,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report benchmark test plans for project entities."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import TestPlanState, benchmark_tests_report
+    from science_tool.entities import EntityCommandError, resolve_entity_ref
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    entity_id: str | None = None
+    if entity_ref is not None:
+        try:
+            entity_id = resolve_entity_ref(root, entity_ref)
+        except EntityCommandError as exc:
+            raise click.ClickException(str(exc)) from exc
+    if runnable_only and readiness_label not in {None, "runnable"}:
+        raise click.ClickException(f"--runnable-only conflicts with --readiness {readiness_label}")
+
+    try:
+        payload = benchmark_tests_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            facet=facet,
+            state=cast("TestPlanState | None", state),
+            source=cast("Any", priority_source),
+            exclude_fallback=exclude_fallback,
+            readiness="runnable" if runnable_only else cast("Any", readiness_label),
+            benchmark_id=benchmark_ref,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = payload["benchmark_tests"]
+    if not rows:
+        click.echo("No benchmark test plans.")
+        return
+
+    table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
+    for col in ("entity", "state", "source", "readiness", "benchmark", "task", "score", "facets", "needs"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        table.add_row(
+            row["entity_id"],
+            row["test_plan_state"],
+            row["priority_source"],
+            row["readiness_label"],
+            row["benchmark_id"],
+            row["task_id"] or "-",
+            str(row["priority_score"]),
+            ", ".join(row["matched_facets"]) or "-",
+            ", ".join(row["needs"]) or "-",
+        )
+    Console(width=200).print(table)
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit gaps to a high-value missing benchmark facet.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--calibration-report", is_flag=True, help="Include gap token/candidate calibration details.")
+@click.option("--calibration-summary", is_flag=True, help="Summarize benchmark gap calibration metrics.")
+@click.option("--evidence-report", is_flag=True, help="Include benchmark gap evidence extraction details.")
 @click.option(
     "--format",
     "output_format",
@@ -6137,6 +6543,9 @@ def benchmark_gaps(
     entity_ref: str | None,
     facet: str | None,
     include_commons: bool,
+    calibration_report: bool,
+    calibration_summary: bool,
+    evidence_report: bool,
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6144,7 +6553,7 @@ def benchmark_gaps(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.benchmark_opportunities import gaps_report
+    from science_tool.benchmark_opportunities import gap_calibration_summary, gaps_report
     from science_tool.entities import EntityCommandError, resolve_entity_ref
 
     root = project_root.resolve() if project_root else _project_root_from_env()
@@ -6162,6 +6571,8 @@ def benchmark_gaps(
             entity_id=entity_id,
             domain=domain,
             facet=facet,
+            calibration_report=calibration_report,
+            evidence_report=evidence_report,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -6170,30 +6581,92 @@ def benchmark_gaps(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
+    summary_payload = gap_calibration_summary(payload) if calibration_summary else None
     if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        output_payload: dict[str, object] = dict(payload)
+        if summary_payload is not None:
+            output_payload["calibration_summary"] = summary_payload
+        click.echo(json.dumps(output_payload, indent=2, sort_keys=True))
         return
 
     rows = payload["benchmark_gaps"]
     if not rows:
         click.echo("No benchmark gaps.")
-        return
+    else:
+        table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
+        for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
+            candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
+            table.add_row(
+                row["entity_id"],
+                row["gap_level"],
+                missing,
+                str(len(row["current_matches"])),
+                candidates,
+                row["reason"],
+            )
+        Console(width=200).print(table)
 
-    table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
-    for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for row in rows:
-        missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
-        candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
-        table.add_row(
-            row["entity_id"],
-            row["gap_level"],
-            missing,
-            str(len(row["current_matches"])),
-            candidates,
-            row["reason"],
+    if summary_payload is not None:
+        summary_table = Table(title="Gap Calibration Summary", show_header=True, header_style="bold")
+        summary_table.add_column("field", overflow="fold", no_wrap=False)
+        summary_table.add_column("value", overflow="fold", no_wrap=False)
+        score_range = (
+            "-"
+            if summary_payload["score_min"] is None
+            else f"{summary_payload['score_min']} / {summary_payload['score_median']} / {summary_payload['score_max']}"
         )
-    Console(width=200).print(table)
+        scalar_rows = {
+            "gap_rows": summary_payload["gap_rows"],
+            "rows_with_suggested_facets": summary_payload["rows_with_suggested_facets"],
+            "candidate_rows": summary_payload["candidate_rows"],
+            "entity_specific_candidate_rows": summary_payload["entity_specific_candidate_rows"],
+            "fallback_candidate_rows": summary_payload["fallback_candidate_rows"],
+            "score_min_median_max": score_range,
+            "top_suggested_facets": summary_payload["top_suggested_facets"],
+            "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
+            "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
+            "top_fallback_reasons": summary_payload["top_fallback_reasons"],
+            "top_fallback_selection_reasons": summary_payload["top_fallback_selection_reasons"],
+            "top_fallback_benchmark_shares": summary_payload["top_fallback_benchmark_shares"],
+            "fallback_concentration_warning": summary_payload["fallback_concentration_warning"],
+        }
+        for field, value in scalar_rows.items():
+            if field == "top_fallback_benchmark_shares":
+                rendered = _format_share_rows(value, key="benchmark_id")
+            elif field in {"top_fallback_reasons", "top_fallback_selection_reasons"}:
+                rendered = _format_count_rows(value, key="reason")
+            else:
+                rendered = json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value)
+            summary_table.add_row(field, rendered)
+        Console(width=200).print(summary_table)
+
+    if calibration_report:
+        calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
+        calibration_table.add_column("field", overflow="fold", no_wrap=False)
+        calibration_table.add_column("value", overflow="fold", no_wrap=False)
+        for field, value in payload["calibration"].items():
+            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+        Console(width=200).print(calibration_table)
+
+    if evidence_report:
+        evidence_payload = payload["evidence_report"]
+        evidence_rows = evidence_payload.get("entities", {}) if evidence_payload["enabled"] else {}
+        evidence_table = Table(title="Gap Evidence", show_header=True, header_style="bold")
+        for col in ("entity", "mode", "hints", "matched facets", "unmapped terms", "why"):
+            evidence_table.add_column(col, overflow="fold", no_wrap=False)
+        for entity_id, row in evidence_rows.items():
+            evidence_table.add_row(
+                entity_id,
+                row["candidate_mode"],
+                ", ".join(row["facet_hints"]) or "-",
+                ", ".join(row["matched_facets"]) or "-",
+                ", ".join(row["unmapped_high_value_terms"][:8]) or "-",
+                ", ".join(row["why_no_specific_candidate"]) or "-",
+            )
+        Console(width=200).print(evidence_table)
 
 
 @main.group("dataset")
@@ -6512,6 +6985,13 @@ def dataset_add(
 @click.option("--superseded-by", "superseded_by", default=None)
 @click.option("--followup-task", "followup_task", default=None)
 @click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+@click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
@@ -6531,6 +7011,7 @@ def dataset_verify_access(
     rationale: str,
     superseded_by: str | None,
     followup_task: str | None,
+    show_preexisting: bool,
     project_root: Path | None,
 ) -> None:
     """Verify (or exception-gate) a dataset's accessibility.
@@ -6562,14 +7043,26 @@ def dataset_verify_access(
     except EntityCommandError as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for w in warnings:
-        click.echo(f"warning: {w}", err=True)
     from science_model.frontmatter import parse_frontmatter
     from science_tool.datasets.semantics import runtime_state_for
 
     parsed = parse_frontmatter(dest)
     runtime_state = runtime_state_for(parsed[0]) if parsed else "blocked-access"
+    # Print the actionable verify-access result FIRST so it is not buried under
+    # pre-existing, unrelated project audit warnings (fb-2026-06-28-015).
     click.echo(f"{entity_id} -> access={state} (weight {weight:g}), runtime={runtime_state}")
+
+    preexisting = [w for w in warnings if w.startswith("pre-existing audit failure:")]
+    for w in warnings:
+        if w in preexisting and not show_preexisting:
+            continue
+        click.echo(f"warning: {w}", err=True)
+    if preexisting and not show_preexisting:
+        click.echo(
+            f"note: {len(preexisting)} pre-existing project audit warning(s) unrelated to this "
+            "dataset (run `science validate`, or --show-preexisting to list here)",
+            err=True,
+        )
 
 
 def _resolve_dataset_or_exit(root: Path, ref: str):

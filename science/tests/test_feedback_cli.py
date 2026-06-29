@@ -452,6 +452,109 @@ class TestFeedbackScaffoldTest:
         assert "[dry run]" in result.output
 
 
+class TestFeedbackConcern:
+    def test_add_with_concern_round_trips(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(
+            main,
+            [
+                "feedback", "add",
+                "--target", "skill:statistics",
+                "--summary", "needs an independence check",
+                "--concern", "methodology:statistics",
+            ],
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        from science_tool.feedback import list_entries
+        entries = list_entries(tmp_path, status="open")
+        assert len(entries) == 1
+        assert entries[0].concern == "methodology:statistics"
+
+    def test_add_rejects_unknown_concern(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "x", "--summary", "s", "--concern", "bogus"],
+            env=env,
+        )
+        assert result.exit_code != 0
+
+    def test_add_distinct_concern_not_deduplicated(self, runner: CliRunner, tmp_path):
+        # Regression: `add` must thread --concern into find_duplicate, so the same
+        # target+summary under a different concern creates a SECOND entry rather
+        # than incrementing recurrence on the first.
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        from science_tool.feedback import list_entries
+
+        first = runner.invoke(
+            main,
+            [
+                "feedback", "add", "--target", "skill:statistics",
+                "--summary", "check independence assumption",
+                # no --concern → defaults to tooling
+            ],
+            env=env,
+        )
+        assert first.exit_code == 0, first.output
+
+        second = runner.invoke(
+            main,
+            [
+                "feedback", "add", "--target", "skill:statistics",
+                "--summary", "check independence assumption",
+                "--concern", "methodology:statistics",
+            ],
+            env=env,
+        )
+        assert second.exit_code == 0, second.output
+        assert "Incremented recurrence" not in second.output
+
+        yaml_files = sorted(tmp_path.glob("fb-*.yaml"))
+        assert len(yaml_files) == 2
+        entries = list_entries(tmp_path, status="open")
+        assert {e.concern for e in entries} == {"tooling", "methodology:statistics"}
+        assert all(e.recurrence == 1 for e in entries)
+
+    def test_list_filters_by_concern_glob(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        from science_tool.feedback import FeedbackEntry, save_entry
+        save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="a", concern="tooling"))
+        save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="b", concern="methodology:statistics"))
+        result = runner.invoke(main, ["feedback", "list", "--concern", "methodology:*", "--format", "json"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "fb-2026-06-28-002" in result.output
+        assert "fb-2026-06-28-001" not in result.output
+
+    def test_update_corrects_concern(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        from science_tool.feedback import FeedbackEntry, load_entry, save_entry
+        save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
+        result = runner.invoke(
+            main,
+            ["feedback", "update", "fb-2026-06-28-001", "--concern", "methodology:statistics"],
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        assert load_entry(tmp_path / "fb-2026-06-28-001.yaml").concern == "methodology:statistics"
+
+    def test_fb_concerns_constant_matches_lib(self):
+        # Fail-loud guard against vocab drift between the CLI's click.Choice tuple
+        # and the library SSOT.
+        from science_tool.cli import _FB_CONCERNS
+        from science_tool.feedback import VALID_CONCERNS
+        assert _FB_CONCERNS == VALID_CONCERNS
+
+    def test_triage_group_heading_shows_concern(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        from science_tool.feedback import FeedbackEntry, save_entry
+        save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="methodology:statistics"))
+        result = runner.invoke(main, ["feedback", "triage"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "methodology:statistics" in result.output
+        assert "skill:statistics" in result.output
+
+
 class TestFeedbackReport:
     def test_report_generates_markdown(self, runner: CliRunner, tmp_path):
         env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}

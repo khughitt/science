@@ -33,6 +33,14 @@ class ResolutionResult:
 _FUZZY_MAX_RATIO = 0.05
 # Clear-margin requirement: second-best score must be ≥ this multiple of best.
 _FUZZY_MARGIN = 2.0
+# Cost ceiling for the fuzzy fallback. The scan is O(windows · n · max_distance)
+# per the capped Levenshtein, so a stale selector against a large source (e.g. a
+# stale lifted-marker sidecar over a big .source.md) would scan the whole
+# document and hang. Fuzzy is best-effort recovery: above this estimated
+# comparison budget, bail to "no match" (→ SUPERSEDED) instead. The caller then
+# treats the marker as not-lifted, which surfaces the stale sidecar rather than
+# silently hiding it.
+_FUZZY_MAX_COMPARISONS = 50_000_000
 
 
 def resolve_selector(source_text: str, selector: TextQuoteSelector) -> ResolutionResult:
@@ -122,6 +130,9 @@ def _fuzzy_unique_match(source_text: str, exact: str) -> Optional[int]:
     if n == 0 or len(source_text) < n:
         return None
     max_distance = max(1, int(n * _FUZZY_MAX_RATIO))
+    window_count = len(source_text) - n + 1
+    if window_count * n * (max_distance + 1) > _FUZZY_MAX_COMPARISONS:
+        return None  # pathological cost (e.g. stale selector vs large source)
     best_score = max_distance + 1
     best_offset = -1
     second_best = max_distance + 1

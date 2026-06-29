@@ -32,13 +32,21 @@ class ValidateContext:
     manifest: dict[str, Any]
     strict: bool
     verbose: bool
+    include_all_checks: bool = False
     _text_cache: dict[tuple[Path, int], str] = field(default_factory=dict, init=False, repr=False)
     _yaml_cache: dict[tuple[Path, int], Any] = field(default_factory=dict, init=False, repr=False)
     _frontmatter_cache: dict[tuple[Path, int], dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
     _resource_cache: dict[tuple[object, ...], Any] = field(default_factory=dict, init=False, repr=False)
 
     @classmethod
-    def from_project_root(cls, project_root: Path, *, strict: bool, verbose: bool) -> "ValidateContext":
+    def from_project_root(
+        cls,
+        project_root: Path,
+        *,
+        strict: bool,
+        verbose: bool,
+        include_all_checks: bool = False,
+    ) -> "ValidateContext":
         root = project_root.resolve()
         manifest_path = root / "science.yaml"
         if not manifest_path.is_file():
@@ -63,6 +71,7 @@ class ValidateContext:
             manifest=manifest_data,
             strict=strict,
             verbose=verbose,
+            include_all_checks=include_all_checks,
         )
 
     def _cache_key(self, path: Path) -> tuple[Path, int]:

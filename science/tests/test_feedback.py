@@ -6,9 +6,11 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from science_tool.feedback import (
     VALID_CATEGORIES,
+    VALID_CONCERNS,
     VALID_STATUSES,
     FeedbackEntry,
     cluster_for_triage,
@@ -290,25 +292,52 @@ def test_find_duplicate_different_target_no_match(tmp_path: Path):
     assert dup is None
 
 
+def test_find_duplicate_distinguishes_concern(tmp_path):
+    base = dict(target="skill:statistics", summary="check independence assumption", status="open")
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", concern="tooling", **base))
+
+    # Same target + same summary but different concern → NOT a duplicate.
+    dup = find_duplicate(
+        tmp_path,
+        target="skill:statistics",
+        summary="check independence assumption",
+        concern="methodology:statistics",
+    )
+    assert dup is None
+
+    # Same target + summary + concern → IS a duplicate.
+    same = find_duplicate(
+        tmp_path,
+        target="skill:statistics",
+        summary="check independence assumption",
+        concern="tooling",
+    )
+    assert same is not None
+    assert same.id == "fb-2026-06-28-001"
+
+
 def test_group_for_triage(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss", project="proj-a")
     _make_entry(tmp_path, "fb-2026-03-25-002", target="command:discuss", project="proj-b")
     _make_entry(tmp_path, "fb-2026-03-25-003", target="command:next-steps", project="proj-a")
 
     groups = group_for_triage(tmp_path)
-    assert "command:discuss" in groups
-    assert "command:next-steps" in groups
-    assert len(groups["command:discuss"]["entries"]) == 2
-    assert groups["command:discuss"]["projects"] == {"proj-a", "proj-b"}
-    assert groups["command:discuss"]["total_recurrence"] == 2
+    discuss_key = ("tooling", "command:discuss")
+    assert discuss_key in groups
+    assert ("tooling", "command:next-steps") in groups
+    assert groups[discuss_key]["concern"] == "tooling"
+    assert groups[discuss_key]["target"] == "command:discuss"
+    assert len(groups[discuss_key]["entries"]) == 2
+    assert groups[discuss_key]["projects"] == {"proj-a", "proj-b"}
+    assert groups[discuss_key]["total_recurrence"] == 2
 
 
 def test_group_for_triage_with_target_glob(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss")
     _make_entry(tmp_path, "fb-2026-03-25-002", target="template:discussion")
     groups = group_for_triage(tmp_path, target="command:*")
-    assert "command:discuss" in groups
-    assert "template:discussion" not in groups
+    assert ("tooling", "command:discuss") in groups
+    assert ("tooling", "template:discussion") not in groups
 
 
 def test_cluster_for_triage_groups_duplicate_summaries_and_suggests_test_target(tmp_path: Path):
@@ -441,3 +470,102 @@ def test_detect_project_no_science_yaml_uses_cwd_name(tmp_path: Path):
     leaf.mkdir()
     result = detect_project(leaf)
     assert result == "some-dir"
+
+
+def test_concern_defaults_to_tooling():
+    entry = FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="s")
+    assert entry.concern == "tooling"
+
+
+def test_concern_accepts_methodology_value():
+    entry = FeedbackEntry(
+        id="fb-2026-06-28-001",
+        target="skill:statistics",
+        summary="s",
+        concern="methodology:statistics",
+    )
+    assert entry.concern == "methodology:statistics"
+
+
+def test_concern_rejects_unknown_value():
+    with pytest.raises(ValidationError):
+        FeedbackEntry(id="fb-2026-06-28-001", target="x", summary="s", concern="bogus")
+
+
+def test_legacy_yaml_without_concern_loads_as_tooling(tmp_path):
+    path = tmp_path / "fb-2026-01-01-001.yaml"
+    path.write_text(
+        "id: fb-2026-01-01-001\ncreated: '2026-01-01'\n"
+        "target: command:x\nsummary: s\n",
+        encoding="utf-8",
+    )
+    entry = load_entry(path)
+    assert entry.concern == "tooling"
+
+
+def test_valid_concerns_membership():
+    assert "tooling" in VALID_CONCERNS
+    assert "methodology:statistics" in VALID_CONCERNS
+
+
+def test_list_entries_filters_concern_glob(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="a", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="b", concern="methodology:statistics"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-003", target="skill:qa", summary="c", concern="methodology:qa"))
+
+    methodology = list_entries(tmp_path, status="open", concern="methodology:*")
+    assert {e.id for e in methodology} == {"fb-2026-06-28-002", "fb-2026-06-28-003"}
+
+    tooling = list_entries(tmp_path, status="open", concern="tooling")
+    assert {e.id for e in tooling} == {"fb-2026-06-28-001"}
+
+
+def test_update_entry_sets_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
+    updated = update_entry(tmp_path, "fb-2026-06-28-001", concern="methodology:statistics")
+    assert updated.concern == "methodology:statistics"
+    assert load_entry(tmp_path / "fb-2026-06-28-001.yaml").concern == "methodology:statistics"
+
+
+def test_update_entry_rejects_unknown_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="x", summary="a"))
+    with pytest.raises(ValueError):
+        update_entry(tmp_path, "fb-2026-06-28-001", concern="bogus")
+
+
+def test_group_for_triage_partitions_by_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="b", concern="methodology:statistics"))
+
+    groups = group_for_triage(tmp_path)
+    assert set(groups.keys()) == {("tooling", "skill:statistics"), ("methodology:statistics", "skill:statistics")}
+    for (concern_key, target_key), group in groups.items():
+        assert group["concern"] == concern_key
+        assert group["target"] == target_key
+
+
+def test_cluster_for_triage_includes_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="check independence", concern="methodology:statistics"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="check independence", concern="tooling"))
+
+    rows = cluster_for_triage(tmp_path)
+    concerns = {row["concern"] for row in rows}
+    assert concerns == {"methodology:statistics", "tooling"}
+    # Same target + similar summary but different concern must not merge.
+    assert all(row["count"] == 1 for row in rows)
+
+
+def test_render_report_groups_by_concern_then_target(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="tool issue", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="assumption gap", concern="methodology:statistics"))
+
+    report = render_report(tmp_path)
+    assert "## methodology:statistics" in report
+    assert "### skill:statistics" in report
+    assert "## tooling" in report
+    # concern heading precedes its target subheading
+    assert report.index("## methodology:statistics") < report.index("### skill:statistics")
+
+    filtered = render_report(tmp_path, concern="methodology:*")
+    assert "skill:statistics" in filtered
+    assert "command:x" not in filtered

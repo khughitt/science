@@ -3,6 +3,7 @@
 from science_tool.annotation import TextQuoteSelector
 from science_tool.annotation.selector import (
     ResolutionStatus,
+    _fuzzy_unique_match,
     resolve_selector,
 )
 
@@ -59,6 +60,27 @@ def test_fuzzy_match_with_clear_margin() -> None:
     assert r.status is ResolutionStatus.FUZZY
     matched = text[r.start:r.end]
     assert "brown" in matched
+
+
+def test_fuzzy_guard_skips_pathological_inputs() -> None:
+    # A stale selector against a large source must not trigger a whole-document
+    # fuzzy scan (fb-2026-06-28-013): the cost guard returns no match so the
+    # caller treats it as SUPERSEDED instead of hanging.
+    source = "lorem ipsum dolor sit amet consectetur " * 30000  # ~1.2M chars
+    exact = "this selector text is stale and totally absent here xyz"
+    assert _fuzzy_unique_match(source, exact) is None
+    sel = _sel(exact=exact)
+    assert resolve_selector(source, sel).status is ResolutionStatus.SUPERSEDED
+
+
+def test_fuzzy_still_recovers_on_normal_sized_source() -> None:
+    # The guard must not disable legitimate fuzzy recovery on ordinary text:
+    # a unique 1-substitution match in a several-KB source still resolves.
+    source = "filler text. " * 500 + "the quick brown fox jumps. " + "more. " * 500
+    sel = _sel(exact="quick brawn fox", prefix="WRONG", suffix="WRONG")
+    r = resolve_selector(source, sel)
+    assert r.status is ResolutionStatus.FUZZY
+    assert "brown" in source[r.start:r.end]
 
 
 def test_fuzzy_match_rejected_without_margin() -> None:
