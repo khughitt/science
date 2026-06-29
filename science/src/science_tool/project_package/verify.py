@@ -13,6 +13,10 @@ from pydantic import ValidationError
 from science_tool.project_package.core import content_version
 from science_tool.project_package.manifest import SerializedManifest, data_version_chunks
 
+MAX_ARCHIVE_MEMBERS = 50_000
+MAX_MEMBER_BYTES = 100 * 1024 * 1024
+MAX_TOTAL_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
+
 
 class VerifyError(Exception):
     """Raised for operational/precondition failures."""
@@ -82,23 +86,44 @@ def load_bundle(bundle_path: Path) -> LoadedBundle:
 
 def _read_archive(bundle_path: Path) -> dict[str, bytes]:
     members: dict[str, bytes] = {}
+    seen: set[str] = set()
+    total_size = 0
     with tarfile.open(bundle_path, "r:gz") as tar:
-        for member in tar.getmembers():
-            _validate_member(member, seen=members)
+        while member := tar.next():
+            if len(seen) >= MAX_ARCHIVE_MEMBERS:
+                raise BundleIntegrityError(
+                    f"archive member count exceeds limit: {MAX_ARCHIVE_MEMBERS}"
+                )
+            _validate_member(member, seen=seen)
+            total_size = _checked_total_size(total_size, member)
             fileobj = tar.extractfile(member)
             if fileobj is None:
                 raise BundleIntegrityError(f"cannot read regular member: {member.name}")
-            members[member.name] = fileobj.read()
+            data = fileobj.read()
+            if len(data) != member.size:
+                raise BundleIntegrityError(
+                    f"archive member size changed while reading {member.name}: "
+                    f"header={member.size} read={len(data)}"
+                )
+            seen.add(member.name)
+            members[member.name] = data
     return members
 
 
-def _validate_member(member: tarfile.TarInfo, *, seen: dict[str, bytes]) -> None:
+def _validate_member(member: tarfile.TarInfo, *, seen: set[str]) -> None:
     name = member.name
     if name in seen:
         raise BundleIntegrityError(f"duplicate archive member: {name}")
     if not member.isfile():
         raise BundleIntegrityError(f"archive member is not a regular file: {name}")
     _validate_member_name(name)
+    if member.size < 0:
+        raise BundleIntegrityError(f"archive member has negative size: {name}")
+    if member.size > MAX_MEMBER_BYTES:
+        raise BundleIntegrityError(
+            f"archive member exceeds size limit ({MAX_MEMBER_BYTES} bytes): "
+            f"{name} ({member.size} bytes)"
+        )
 
 
 def _validate_member_name(name: str) -> None:
@@ -122,6 +147,17 @@ def _single_prefix(members: dict[str, bytes]) -> str:
     if len(prefixes) != 1:
         raise BundleIntegrityError(f"bundle uses mixed project prefixes: {sorted(prefixes)}")
     return next(iter(prefixes))
+
+
+def _checked_total_size(total_size: int, member: tarfile.TarInfo) -> int:
+    next_total = total_size + member.size
+    if next_total > MAX_TOTAL_UNCOMPRESSED_BYTES:
+        raise BundleIntegrityError(
+            "archive total uncompressed size exceeds limit "
+            f"({MAX_TOTAL_UNCOMPRESSED_BYTES} bytes) at {member.name}: "
+            f"{next_total} bytes"
+        )
+    return next_total
 
 
 def _verify_source_members(

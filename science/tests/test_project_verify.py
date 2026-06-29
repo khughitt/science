@@ -13,6 +13,7 @@ from science_tool.project_package.verify import (
     VerifyError,
     load_bundle,
 )
+import science_tool.project_package.verify as verify
 
 
 def _init_repo(root: Path) -> None:
@@ -50,6 +51,18 @@ def _write_bundle(path: Path, members: dict[str, bytes]) -> None:
     with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
         with tarfile.open(fileobj=gz, mode="w") as tar:
             for name, data in sorted(members.items()):
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                info.mtime = 0
+                tar.addfile(info, io.BytesIO(data))
+    path.write_bytes(raw.getvalue())
+
+
+def _write_raw_bundle(path: Path, members: list[tuple[str, bytes]]) -> None:
+    raw = io.BytesIO()
+    with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for name, data in members:
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 info.mtime = 0
@@ -204,5 +217,64 @@ def test_load_bundle_duplicate_member_is_integrity(tmp_path: Path):
                 tar.addfile(info, io.BytesIO(data))
     bad = tmp_path / "dup.tar.gz"
     bad.write_bytes(raw.getvalue())
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_member_count_over_limit_is_integrity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(verify, "MAX_ARCHIVE_MEMBERS", 1)
+    bad = tmp_path / "too-many.tar.gz"
+    _write_bundle(
+        bad,
+        {
+            "demo/manifest.json": b"{}",
+            "demo/science.yaml": b"id: demo\n",
+        },
+    )
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_member_size_over_limit_is_integrity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(verify, "MAX_MEMBER_BYTES", 3)
+    bad = tmp_path / "too-large.tar.gz"
+    _write_bundle(bad, {"demo/manifest.json": b"{}"})
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_total_uncompressed_bytes_over_limit_is_integrity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(verify, "MAX_TOTAL_UNCOMPRESSED_BYTES", 4)
+    bad = tmp_path / "too-large-total.tar.gz"
+    _write_bundle(
+        bad,
+        {
+            "demo/manifest.json": b"{}",
+            "demo/science.yaml": b"x",
+        },
+    )
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_absolute_member_path_is_integrity(tmp_path: Path):
+    bad = tmp_path / "absolute.tar.gz"
+    _write_raw_bundle(bad, [("/demo/manifest.json", b"{}")])
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_traversal_member_path_is_integrity(tmp_path: Path):
+    bad = tmp_path / "traversal.tar.gz"
+    _write_raw_bundle(bad, [("demo/../manifest.json", b"{}")])
     with pytest.raises(BundleIntegrityError):
         load_bundle(bad)
