@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
 import subprocess
 import tarfile
+import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,6 +144,39 @@ def preflight_against(root: Path) -> str:
         ).stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         raise VerifyError(f"--against root has no HEAD commit: {root}") from exc
+
+
+def preflight_extract(dest: Path) -> None:
+    """Validate that an extract target is absent or an existing empty directory."""
+    if not dest.exists():
+        return
+    if not dest.is_dir():
+        raise VerifyError(f"--extract target exists and is not a directory: {dest}")
+    if any(dest.iterdir()):
+        raise VerifyError(f"--extract target is not empty: {dest}")
+
+
+def extract_bundle(bundle: LoadedBundle, dest: Path) -> Path:
+    """Write the bundle's source tree to dest/<project-id>/ atomically."""
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".verify-extract-", dir=str(dest.parent)))
+    except OSError as exc:
+        raise VerifyError(f"failed to prepare --extract target: {exc}") from exc
+
+    try:
+        root = staging / bundle.project_id
+        root.mkdir(parents=True)
+        (root / "manifest.json").write_bytes(bundle.manifest_bytes)
+        for rel, data in bundle.members.items():
+            out = root / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(data)
+        os.rename(staging, dest)
+    except OSError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise VerifyError(f"failed to extract bundle: {exc}") from exc
+    return dest
 
 
 def compare_against(bundle: LoadedBundle, root: Path, head: str) -> AgainstResult:

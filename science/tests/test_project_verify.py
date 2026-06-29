@@ -17,8 +17,10 @@ from science_tool.project_package.verify import (
     SourceCompare,
     VerifyError,
     compare_against,
+    extract_bundle,
     load_bundle,
     preflight_against,
+    preflight_extract,
 )
 import science_tool.project_package.verify as verify
 
@@ -436,3 +438,69 @@ def test_preflight_against_bare_repo_is_operational(tmp_path: Path):
 
     with pytest.raises(VerifyError, match="git worktree"):
         preflight_against(root)
+
+
+def test_extract_writes_faithful_tree(tmp_path: Path):
+    _, bundle = _make_bundle(tmp_path)
+    loaded = load_bundle(bundle)
+    dest = tmp_path / "out"
+    preflight_extract(dest)
+
+    result = extract_bundle(loaded, dest)
+
+    assert result == dest
+    assert (dest / "demo" / "manifest.json").is_file()
+    assert (dest / "demo" / "science.yaml").read_bytes() == loaded.members["science.yaml"]
+    assert (dest / "demo" / "entities" / "questions" / "q1.md").is_file()
+    assert (dest / "demo" / "manifest.json").read_bytes() == loaded.manifest_bytes
+
+
+def test_extract_into_existing_empty_dir_ok(tmp_path: Path):
+    _, bundle = _make_bundle(tmp_path)
+    loaded = load_bundle(bundle)
+    dest = tmp_path / "out"
+    dest.mkdir()
+    preflight_extract(dest)
+
+    extract_bundle(loaded, dest)
+
+    assert (dest / "demo" / "science.yaml").is_file()
+
+
+def test_preflight_extract_non_empty_is_operational(tmp_path: Path):
+    dest = tmp_path / "out"
+    dest.mkdir()
+    (dest / "preexisting").write_text("x", encoding="utf-8")
+
+    with pytest.raises(VerifyError):
+        preflight_extract(dest)
+
+
+def test_preflight_extract_file_target_is_operational(tmp_path: Path):
+    dest = tmp_path / "out"
+    dest.write_text("i am a file", encoding="utf-8")
+
+    with pytest.raises(VerifyError):
+        preflight_extract(dest)
+
+
+def test_extract_mid_write_error_leaves_existing_dest_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _, bundle = _make_bundle(tmp_path)
+    loaded = load_bundle(bundle)
+    dest = tmp_path / "out"
+    dest.mkdir()
+
+    original_write_bytes = Path.write_bytes
+
+    def flaky_write_bytes(self: Path, data: bytes) -> int:
+        if self.name == "science.yaml":
+            raise OSError("simulated write failure")
+        return original_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", flaky_write_bytes)
+
+    with pytest.raises(VerifyError):
+        extract_bundle(loaded, dest)
+
+    assert dest.exists() and dest.is_dir()
+    assert list(dest.iterdir()) == []
