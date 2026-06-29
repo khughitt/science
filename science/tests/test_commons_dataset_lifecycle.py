@@ -225,3 +225,28 @@ def test_dataset_status_reports_real_and_missing_resources(tmp_path: Path, monke
     assert status.output_dir == override
     assert status.outputs_present == ["built.txt"]
     assert status.outputs_missing == ["missing.txt"]
+
+
+def test_dataset_status_rejects_malformed_datapackage_yaml(tmp_path: Path) -> None:
+    root = tmp_path / "commons"
+    result = scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    result.paths.datapackage_path.write_text("resources: [\n", encoding="utf-8")
+
+    with pytest.raises(DatasetLifecycleError, match="datapackage.yaml"):
+        dataset_status(root, "dbsnp-human")
+
+
+def test_dataset_status_rejects_unsafe_resource_path(tmp_path: Path) -> None:
+    root = tmp_path / "commons"
+    result = scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    result.paths.datapackage_path.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: unsafe\n"
+        "  path: ../outside.txt\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DatasetLifecycleError, match="path may not contain '..'"):
+        dataset_status(root, "dbsnp-human")

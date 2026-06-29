@@ -465,7 +465,7 @@ def dataset_status_cmd(slug: str, as_json: bool) -> None:
     root = _require_root()
     try:
         status = dataset_status(root, slug)
-    except DatasetLifecycleError as exc:
+    except (DatasetLifecycleError, CommonsError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     if as_json:

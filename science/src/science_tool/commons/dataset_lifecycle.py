@@ -6,10 +6,13 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import yaml
 
 from science_tool.commons.config import load_data_overrides, resolve_commons_data_root
+from science_tool.commons.datapackage import validate_logical_path
+from science_tool.commons.errors import DataLogicalPathError
 
 
 _DATASET_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
@@ -157,14 +160,29 @@ def _read_datapackage_resources(path: Path) -> list[dict[str, object]]:
         return []
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return []
+    except (OSError, yaml.YAMLError) as exc:
+        raise DatasetLifecycleError(f"invalid datapackage {path}: {exc}") from exc
     if not isinstance(raw, dict):
         return []
     resources = raw.get("resources")
     if not isinstance(resources, list):
         return []
-    return [resource for resource in resources if isinstance(resource, dict)]
+
+    valid_resources: list[dict[str, object]] = []
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        resource_map = cast(dict[str, object], resource)
+        resource_path = resource_map.get("path")
+        if isinstance(resource_path, str):
+            try:
+                validate_logical_path(resource_path)
+            except DataLogicalPathError as exc:
+                raise DatasetLifecycleError(
+                    f"invalid datapackage {path}: {exc}"
+                ) from exc
+        valid_resources.append(resource_map)
+    return valid_resources
 
 
 def _is_placeholder_resource(resource: dict[str, object]) -> bool:

@@ -131,3 +131,22 @@ def test_dataset_status_human_does_not_fail_for_missing_payloads(tmp_path: Path,
     assert result.exit_code == 0, result.output
     assert "dataset:dbsnp-human" in result.output
     assert "workflow: present" in result.output
+
+
+def test_dataset_status_reports_malformed_data_yaml_as_click_error(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    init = runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    assert init.exit_code == 0, init.output
+    (cfg / "data.yaml").write_text('": bad: yaml', encoding="utf-8")
+
+    result = runner.invoke(commons_group, ["dataset", "status", "dbsnp-human"])
+
+    assert result.exit_code == 1
+    assert str(cfg / "data.yaml") in result.output
+    assert "Traceback" not in result.output
