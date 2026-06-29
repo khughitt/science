@@ -270,6 +270,97 @@ def test_validate_dataset_package_accepts_unbuilt_scaffold(
     assert report.findings == []
 
 
+def test_validate_dataset_package_reports_placeholder_resource_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    data_root = tmp_path / "science-commons-data"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+    root = tmp_path / "commons"
+    result = scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    result.paths.datapackage_path.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: built\n"
+        "  path: built.txt\n"
+        f"  hash: sha256:{'0' * 64}\n"
+        "  bytes: 0\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        finding.code == "placeholder-resource"
+        and finding.path == result.paths.datapackage_path
+        for finding in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_missing_declared_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    data_root = tmp_path / "science-commons-data"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+    root = tmp_path / "commons"
+    result = scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    result.paths.datapackage_path.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: built\n"
+        "  path: missing.txt\n"
+        f"  hash: sha256:{'a' * 64}\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        finding.code == "missing-output"
+        and finding.path == data_root / "dbsnp-human" / "missing.txt"
+        and "missing.txt" in finding.message
+        for finding in report.findings
+    )
+
+
+def test_validate_dataset_package_accepts_present_declared_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    data_root = tmp_path / "science-commons-data"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+    root = tmp_path / "commons"
+    result = scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    result.paths.datapackage_path.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: built\n"
+        "  path: built.txt\n"
+        f"  hash: sha256:{'a' * 64}\n",
+        encoding="utf-8",
+    )
+    output = data_root / "dbsnp-human" / "built.txt"
+    output.parent.mkdir(parents=True)
+    output.write_text("built\n", encoding="utf-8")
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is True
+    assert not any(finding.code == "missing-output" for finding in report.findings)
+
+
 def test_validate_dataset_package_reports_missing_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -589,7 +680,7 @@ def test_validate_dataset_package_reports_tracked_payload(
     assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
 
 
-def test_validate_dataset_package_respects_tracked_payload_allowlist(
+def test_validate_dataset_package_ignores_tracked_payload_allowlist(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = tmp_path / "cfg"
@@ -604,12 +695,13 @@ def test_validate_dataset_package_respects_tracked_payload_allowlist(
         "datapackage: datapackage.yaml\ntracked_payload_allowlist:\n- path: bulk.feather\n  reason: tiny fixture\n",
     )
     entity.write_text(text, encoding="utf-8")
-    (root / "datasets" / "dbsnp-human" / "bulk.feather").write_bytes(b"x" * 10)
+    payload = root / "datasets" / "dbsnp-human" / "bulk.feather"
+    payload.write_bytes(b"x" * 10)
 
     report = validate_dataset_package(root, "dbsnp-human")
 
-    assert report.valid is True
-    assert report.findings == []
+    assert report.valid is False
+    assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
 
 
 def test_validate_dataset_package_reports_parent_project_paths(

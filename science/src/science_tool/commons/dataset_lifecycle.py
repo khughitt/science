@@ -20,6 +20,7 @@ from science_tool.commons.datapackage import (
     validate_source,
 )
 from science_tool.commons.errors import (
+    CommonsError,
     CommonsEntityError,
     CommonsLayoutError,
     DataLogicalPathError,
@@ -220,6 +221,7 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
     else:
         try:
             _validate_datapackage_shape(paths.datapackage_path)
+            _validate_declared_resource_state(findings, paths.datapackage_path, slug)
         except DatasetLifecycleError as exc:
             findings.append(
                 DatasetPackageFinding(
@@ -261,8 +263,7 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
             )
 
     if paths.dataset_dir.is_dir():
-        allowlist = _tracked_payload_allowlist(frontmatter)
-        _validate_tracked_payloads(findings, paths.dataset_dir, allowlist)
+        _validate_tracked_payloads(findings, paths.dataset_dir)
 
     return DatasetPackageValidationReport(
         slug=slug,
@@ -387,25 +388,9 @@ def _validate_snakefile_paths(
             return
 
 
-def _tracked_payload_allowlist(frontmatter: dict[str, Any]) -> set[Path]:
-    raw = frontmatter.get("tracked_payload_allowlist")
-    if not isinstance(raw, list):
-        return set()
-
-    allowlist: set[Path] = set()
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        item_path = item.get("path")
-        if isinstance(item_path, str):
-            allowlist.add(Path(item_path))
-    return allowlist
-
-
 def _validate_tracked_payloads(
     findings: list[DatasetPackageFinding],
     dataset_dir: Path,
-    allowlist: set[Path],
 ) -> None:
     metadata_paths = {
         Path("entity.md"),
@@ -419,7 +404,7 @@ def _validate_tracked_payloads(
         if not path.is_file():
             continue
         rel_path = path.relative_to(dataset_dir)
-        if rel_path in metadata_paths or rel_path in allowlist:
+        if rel_path in metadata_paths:
             continue
         size_bytes = path.stat().st_size
         file_class = classify(rel_path, size_bytes)
@@ -432,6 +417,50 @@ def _validate_tracked_payloads(
                     "tracked-payload",
                     "payload-like file is tracked inside the dataset package",
                     path,
+                )
+            )
+
+
+def _validate_declared_resource_state(
+    findings: list[DatasetPackageFinding],
+    datapackage_path: Path,
+    slug: str,
+) -> None:
+    resources = _read_datapackage_resources(datapackage_path)
+    if not resources:
+        return
+
+    try:
+        output_dir = resolve_dataset_output_dir(slug)
+    except CommonsError as exc:
+        findings.append(
+            DatasetPackageFinding(
+                "data-root-invalid",
+                str(exc),
+                datapackage_path,
+            )
+        )
+        return
+
+    for resource in resources:
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str):
+            continue
+        if _is_placeholder_resource(resource):
+            findings.append(
+                DatasetPackageFinding(
+                    "placeholder-resource",
+                    f"resource {resource_path!r} still has placeholder hash or byte metadata",
+                    datapackage_path,
+                )
+            )
+        output_path = output_dir / validate_logical_path(resource_path)
+        if not output_path.is_file():
+            findings.append(
+                DatasetPackageFinding(
+                    "missing-output",
+                    f"declared resource output is missing: {resource_path}",
+                    output_path,
                 )
             )
 
