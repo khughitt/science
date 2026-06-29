@@ -3,14 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rdflib import URIRef
 
 from science_tool.bibliography import load_bib_entries
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
+from science_tool.graph.store.dataset import _load_dataset
+from science_tool.graph.store.identity import _graph_uri
 from science_tool.markdown_utils import parse_frontmatter
 from science_tool.project_config import load_project_config
 from science_tool.references import MarkdownPayload, build_reference_bundle, validate_exported_markdown
@@ -151,7 +155,11 @@ GRAPH_LINK_PREDICATES = {
     key
     for key, (_role, backlink) in PREDICATE_ROLE.items()
     if backlink
-    and not key.startswith("cito:")
+}
+CITO_PREDICATES = {
+    "cito:supports",
+    "cito:disputes",
+    "cito:discusses",
 }
 
 
@@ -657,7 +665,13 @@ def _graph_link_rows(
         return []
     exported_ids = {entity.record["id"] for entity in entities}
     type_by_id = {entity.record["id"]: entity.record["type"] for entity in entities}
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = _graph_cito_link_rows(
+        graph_path,
+        exported_ids=exported_ids,
+        restricted_ids=restricted_ids,
+        type_by_id=type_by_id,
+        warnings=warnings,
+    )
     payload = export_graph_payload(graph_path, overlays=[])
     skipped = {"non_knowledge_layer": 0, "structural_predicate": 0, "unexported_endpoint": 0}
     for edge in payload.edges:
@@ -697,6 +711,44 @@ def _graph_link_rows(
                 f"{skipped['unexported_endpoint']} unexported endpoint",
                 "knowledge/graph.trig",
             )
+        )
+    return rows
+
+
+def _graph_cito_link_rows(
+    graph_path: Path,
+    *,
+    exported_ids: set[str],
+    restricted_ids: set[str],
+    type_by_id: dict[str, str],
+    warnings: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    rows: list[dict[str, Any]] = []
+    for subject, predicate, target in knowledge.triples((None, None, None)):
+        predicate_curie = _predicate_curie(str(predicate))
+        if predicate_curie not in CITO_PREDICATES:
+            continue
+        if not isinstance(subject, URIRef) or not isinstance(target, URIRef):
+            continue
+        source_id = canonical_id_from_entity_uri(str(subject))
+        target_id = canonical_id_from_entity_uri(str(target))
+        if source_id not in exported_ids or target_id not in exported_ids:
+            continue
+        role, backlink = _role_for_predicate(predicate_curie, warnings, "knowledge/graph.trig")
+        _emit_link_row(
+            rows,
+            source_id=source_id,
+            target=target_id,
+            predicate=predicate_curie,
+            role=role,
+            backlink=backlink,
+            source_path="knowledge/graph.trig",
+            exported_ids=exported_ids,
+            restricted_ids=restricted_ids,
+            type_by_id=type_by_id,
+            warnings=warnings,
         )
     return rows
 
@@ -777,6 +829,7 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     views = _views_for_entities(entities, raw_config)
     _validate_capabilities(project, views)
 
+    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     _json_write(out_dir / "project.json", project)
     _json_write(out_dir / "views.json", views)

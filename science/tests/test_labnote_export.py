@@ -451,6 +451,13 @@ def test_export_labnote_package_exports_knowledge_graph_links(tmp_path: Path) ->
     assert (
         "proposition:0001-example-proposition",
         "synthesis:0001-example-synthesis",
+        "cito:supports",
+        "supports",
+        True,
+    ) in rows
+    assert (
+        "proposition:0001-example-proposition",
+        "synthesis:0001-example-synthesis",
         "sci:synthesizes",
         "synthesizes",
         True,
@@ -466,7 +473,6 @@ def test_export_labnote_package_exports_knowledge_graph_links(tmp_path: Path) ->
         )
         == 1
     )
-    assert not any(row["predicate"] == "cito:supports" for row in links["links"])
     assert not any(row["predicate"] == "sci:implements" for row in links["links"])
     skipped = [
         warning
@@ -474,6 +480,19 @@ def test_export_labnote_package_exports_knowledge_graph_links(tmp_path: Path) ->
         if warning["message"].startswith("graph links skipped:")
     ]
     assert len(skipped) == 1
+
+
+def test_export_labnote_package_clears_stale_output_files(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    stale = out / "findings" / "index.json"
+    write_text(stale, '{"findings": [{"id": "stale"}]}')
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert not stale.exists()
+    assert (out / "manifest.json").exists()
 
 
 def test_export_labnote_package_data_version_changes_with_graph_links(tmp_path: Path) -> None:
