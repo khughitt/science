@@ -484,6 +484,35 @@ def test_preflight_extract_file_target_is_operational(tmp_path: Path):
         preflight_extract(dest)
 
 
+def test_preflight_extract_inspect_error_is_operational(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    dest = tmp_path / "out"
+    dest.mkdir()
+
+    def broken_iterdir(self: Path):
+        if self == dest:
+            raise OSError("simulated inspection failure")
+        return original_iterdir(self)
+
+    original_iterdir = Path.iterdir
+    monkeypatch.setattr(Path, "iterdir", broken_iterdir)
+
+    with pytest.raises(VerifyError, match="cannot inspect --extract target"):
+        preflight_extract(dest)
+
+
+def test_preflight_extract_symlink_target_is_operational(tmp_path: Path):
+    target = tmp_path / "target"
+    target.mkdir()
+    dest = tmp_path / "out"
+    try:
+        dest.symlink_to(target, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not supported: {exc}")
+
+    with pytest.raises(VerifyError, match="not a directory"):
+        preflight_extract(dest)
+
+
 def test_extract_mid_write_error_leaves_existing_dest_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _, bundle = _make_bundle(tmp_path)
     loaded = load_bundle(bundle)
@@ -504,3 +533,4 @@ def test_extract_mid_write_error_leaves_existing_dest_untouched(tmp_path: Path, 
 
     assert dest.exists() and dest.is_dir()
     assert list(dest.iterdir()) == []
+    assert list(tmp_path.glob(".verify-extract-*")) == []

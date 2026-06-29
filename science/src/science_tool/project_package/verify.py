@@ -150,9 +150,15 @@ def preflight_extract(dest: Path) -> None:
     """Validate that an extract target is absent or an existing empty directory."""
     if not dest.exists():
         return
+    if dest.is_symlink():
+        raise VerifyError(f"--extract target is a symlink, not a directory: {dest}")
     if not dest.is_dir():
         raise VerifyError(f"--extract target exists and is not a directory: {dest}")
-    if any(dest.iterdir()):
+    try:
+        has_entries = any(dest.iterdir())
+    except OSError as exc:
+        raise VerifyError(f"cannot inspect --extract target: {dest}: {exc}") from exc
+    if has_entries:
         raise VerifyError(f"--extract target is not empty: {dest}")
 
 
