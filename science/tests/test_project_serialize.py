@@ -117,3 +117,32 @@ def test_data_version_changes_on_path_rename(tmp_path: Path):
         tmp_path, b, [], audit_passed=True, forced=False, git_commit="abc123"
     )["data_version"]
     assert va != vb
+
+
+def test_write_archive_is_deterministic(tmp_path: Path):
+    import tarfile
+    from science_tool.project_package.core import file_resource
+    from science_tool.project_package.serialize import _build_manifest, _write_archive
+
+    _write(tmp_path, "science.yaml", b"id: demo\nname: Demo\nlast_modified: 2026-06-29\n")
+    _write(tmp_path, "entities/questions/q1.md", b"# q\n")
+    files = [file_resource(tmp_path, "science.yaml"),
+             file_resource(tmp_path, "entities/questions/q1.md")]
+    manifest = _build_manifest(
+        tmp_path, files, [], audit_passed=True, forced=False, git_commit="abc123"
+    )
+
+    a = tmp_path / "a.tar.gz"
+    b = tmp_path / "b.tar.gz"
+    _write_archive(a, tmp_path, "demo", files, manifest)
+    _write_archive(b, tmp_path, "demo", files, manifest)
+    assert a.read_bytes() == b.read_bytes()  # byte-identical
+
+    with tarfile.open(a, "r:gz") as tar:
+        names = tar.getnames()
+        assert names == sorted(names)  # sorted members
+        assert "demo/manifest.json" in names
+        assert "demo/entities/questions/q1.md" in names
+        for m in tar.getmembers():
+            assert m.mtime == 0 and m.uid == 0 and m.gid == 0
+            assert m.uname == "" and m.gname == "" and m.mode == 0o644

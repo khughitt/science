@@ -7,10 +7,13 @@ docs/plans/2026-06-29-project-serialize-design.md.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import json
 import os
 import subprocess
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -140,3 +143,33 @@ def _build_manifest(
         "files": [{"path": fr.path, "sha256": fr.sha256, "bytes": fr.bytes} for fr in files],
         "payloads": payloads,
     }
+
+
+def _write_archive(
+    out_path: Path,
+    project_root: Path,
+    project_id: str,
+    files: list[FileResource],
+    manifest: dict,
+) -> None:
+    members: list[tuple[str, bytes]] = [(
+        f"{project_id}/manifest.json",
+        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+    )]
+    for fr in files:
+        members.append((f"{project_id}/{fr.path}", (project_root / fr.path).read_bytes()))
+    members.sort(key=lambda m: m[0])
+
+    raw = io.BytesIO()
+    with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for arcname, data in members:
+                info = tarfile.TarInfo(arcname)
+                info.size = len(data)
+                info.mtime = 0
+                info.mode = 0o644
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
+                info.type = tarfile.REGTYPE
+                tar.addfile(info, io.BytesIO(data))
+    out_path.write_bytes(raw.getvalue())
