@@ -12,7 +12,11 @@ import yaml
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import load_data_overrides, resolve_commons_data_root
-from science_tool.commons.datapackage import validate_logical_path
+from science_tool.commons.datapackage import (
+    parse_resource_hash,
+    validate_logical_path,
+    validate_source,
+)
 from science_tool.commons.errors import (
     CommonsEntityError,
     CommonsLayoutError,
@@ -162,24 +166,6 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
     else:
         frontmatter, _ = parse_frontmatter(paths.entity_path)
         _validate_entity_frontmatter(findings, paths, slug, frontmatter)
-        try:
-            CommonsEntityAdapter(root).load(f"dataset:{slug}")
-        except CommonsEntityError as exc:
-            findings.append(
-                DatasetPackageFinding(
-                    "entity-invalid",
-                    str(exc.cause),
-                    exc.path,
-                )
-            )
-        except CommonsLayoutError as exc:
-            findings.append(
-                DatasetPackageFinding(
-                    "entity-invalid",
-                    str(exc),
-                    exc.path,
-                )
-            )
 
     if not paths.datapackage_path.is_file():
         findings.append(
@@ -211,6 +197,26 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
         )
     else:
         _validate_snakefile_paths(findings, paths.snakefile_path)
+
+    if paths.entity_path.is_file() and paths.datapackage_path.is_file():
+        try:
+            CommonsEntityAdapter(root).load(f"dataset:{slug}")
+        except CommonsEntityError as exc:
+            findings.append(
+                DatasetPackageFinding(
+                    "entity-invalid",
+                    str(exc.cause),
+                    exc.path,
+                )
+            )
+        except CommonsLayoutError as exc:
+            findings.append(
+                DatasetPackageFinding(
+                    "entity-invalid",
+                    str(exc),
+                    exc.path,
+                )
+            )
 
     if paths.dataset_dir.is_dir():
         allowlist = _tracked_payload_allowlist(frontmatter)
@@ -408,12 +414,37 @@ def _validate_datapackage_shape(path: Path) -> None:
                 f"invalid datapackage {path}: resources[{index}] must be a mapping"
             )
         resource_path = resource.get("path")
-        if isinstance(resource_path, str):
-            try:
-                validate_logical_path(resource_path)
-            except DataLogicalPathError as exc:
+        if not isinstance(resource_path, str) or not resource_path.strip():
+            raise DatasetLifecycleError(
+                f"invalid datapackage {path}: resources[{index}] has no usable path"
+            )
+        try:
+            logical_path = validate_logical_path(resource_path)
+        except DataLogicalPathError as exc:
+            raise DatasetLifecycleError(
+                f"invalid datapackage {path}: {exc}"
+            ) from exc
+
+        resource_hash = resource.get("hash")
+        if resource_hash is not None:
+            if not isinstance(resource_hash, str):
                 raise DatasetLifecycleError(
-                    f"invalid datapackage {path}: {exc}"
+                    f"invalid datapackage {path}: resource {logical_path!r} hash must be a string"
+                )
+            try:
+                parse_resource_hash(resource_hash)
+            except ValueError as exc:
+                raise DatasetLifecycleError(
+                    f"invalid datapackage {path}: resource {logical_path!r} has malformed hash: {exc}"
+                ) from exc
+
+        source = resource.get("source")
+        if source is not None:
+            try:
+                validate_source(source)
+            except ValueError as exc:
+                raise DatasetLifecycleError(
+                    f"invalid datapackage {path}: resource {logical_path!r} has malformed source: {exc}"
                 ) from exc
 
 

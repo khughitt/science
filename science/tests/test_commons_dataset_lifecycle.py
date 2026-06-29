@@ -298,6 +298,7 @@ def test_validate_dataset_package_reports_missing_datapackage(
 
     assert report.valid is False
     assert any(f.code == "missing-datapackage" for f in report.findings)
+    assert not any(f.code == "entity-invalid" for f in report.findings)
 
 
 def test_validate_dataset_package_reports_malformed_datapackage_yaml(
@@ -335,6 +336,117 @@ def test_validate_dataset_package_reports_unsafe_datapackage_resource_path(
         "resources:\n"
         "- name: unsafe\n"
         "  path: ../outside.txt\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_resource_without_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: no-path\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_resource_non_string_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: non-string-path\n"
+        "  path: 123\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_resource_malformed_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: bad-hash\n"
+        "  path: ok.csv\n"
+        "  hash: not-a-hash\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_resource_malformed_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: bad-source\n"
+        "  path: ok.csv\n"
+        "  source:\n"
+        "    type: bogus\n"
+        "    ref: x\n",
         encoding="utf-8",
     )
 
