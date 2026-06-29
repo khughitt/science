@@ -296,6 +296,361 @@ benchmark:
     assert not any("measured" in reason for reason in rows[0]["match_reasons"])
 
 
+def test_benchmark_tests_report_includes_concrete_opportunity_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-perturbation",
+        """
+id: hypothesis:0001-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift single-cell response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  limitations:
+    - Focused on measured transcriptional response.
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: post-treatment expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured expression after perturbation
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    assert payload["commons_notice"] is None
+    assert payload["summary"]["test_plan_rows"] == 1
+    assert payload["summary"]["concrete_rows"] == 1
+    assert payload["summary"]["draft_needed_rows"] == 0
+    row = payload["benchmark_tests"][0]
+    assert row["entity_id"] == "hypothesis:0001-perturbation"
+    assert row["benchmark_id"] == "dataset:sciplex3"
+    assert row["task_id"] == "dataset:sciplex3#compound-response"
+    assert row["test_plan_state"] == "concrete"
+    assert row["task_type"] == "perturbation response"
+    assert row["benchmark_kinds"] == ["perturbation-response"]
+    assert row["readiness_label"] == "runnable"
+    assert row["priority_source"] == "opportunity-relative"
+    assert row["priority_score"] == sum(row["score_components"]["source"].values())
+    assert row["score_components"]["baseline"]["task_completeness"] == 30
+    assert row["matched_facets"] == ["perturbation", "single-cell-rna-seq"]
+    assert row["prediction_target"] == "post-treatment expression"
+    assert row["held_out_unit"] == "compound"
+    assert row["metric"] == "rank-correlation"
+    assert row["baseline"] == "nearest-neighbor"
+    assert row["ground_truth"] == {
+        "type": "measured-outcome",
+        "description": "measured expression after perturbation",
+    }
+    assert row["needs"] == []
+
+
+def test_benchmark_tests_report_marks_incomplete_tasks_draft_needed(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-incomplete-task",
+        """
+id: hypothesis:0002-incomplete-task
+type: hypothesis
+title: Incomplete perturbation task
+""",
+        body="Drug perturbation should be validated.",
+    )
+    _write_dataset(
+        tmp_path,
+        "incomplete-task",
+        """
+id: dataset:incomplete-task
+type: dataset
+title: Incomplete Task
+dataset_class: deposit
+local_path: data/incomplete
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: draft-task
+      task_type: perturbation response
+      prediction_target: response state
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    row = payload["benchmark_tests"][0]
+    assert row["test_plan_state"] == "draft-needed"
+    assert row["needs"] == ["held-out-unit", "metric", "baseline", "ground-truth"]
+    assert "draft-needed" in row["reason_notes"]
+
+
+def test_benchmark_tests_report_benchmark_filter_accepts_slug(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0003-filter",
+        """
+id: hypothesis:0003-filter
+type: hypothesis
+title: Perturbation filter
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path, benchmark_id="sciplex3")
+
+    assert [row["benchmark_id"] for row in payload["benchmark_tests"]] == ["dataset:sciplex3"]
+
+
+def test_benchmark_tests_report_keeps_non_hint_declared_facets(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-related",
+        """
+id: hypothesis:0004-related
+type: hypothesis
+title: Bulk expression model
+""",
+        body="Expression model.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bulk-expression",
+        """
+id: dataset:bulk-expression
+type: dataset
+title: Bulk Expression
+dataset_class: deposit
+local_path: data/bulk
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: []
+  benchmark_kinds: [static-association]
+  related_beliefs:
+    - hypothesis:0004-related calibrates the expression model.
+  tasks:
+    - id: expression-task
+      prediction_target: expression
+      held_out_unit: sample
+      metric: correlation
+      baseline: mean
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    assert payload["benchmark_tests"][0]["matched_facets"] == ["bulk-rna-seq"]
+
+
+def test_benchmark_tests_report_filters_by_non_hint_declared_facet(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-related",
+        """
+id: hypothesis:0005-related
+type: hypothesis
+title: Bulk expression model
+""",
+        body="Expression model.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bulk-expression",
+        """
+id: dataset:bulk-expression
+type: dataset
+title: Bulk Expression
+dataset_class: deposit
+local_path: data/bulk
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: []
+  benchmark_kinds: [static-association]
+  related_beliefs:
+    - hypothesis:0005-related calibrates the expression model.
+  tasks:
+    - id: expression-task
+      prediction_target: expression
+      held_out_unit: sample
+      metric: correlation
+      baseline: mean
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path, facet="bulk-rna-seq")
+
+    assert [row["benchmark_id"] for row in payload["benchmark_tests"]] == ["dataset:bulk-expression"]
+
+
+def test_benchmark_tests_report_extra_facets_must_be_declared_by_benchmark(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import (
+        _dataset_context,
+        _matched_facets_for_context,
+        load_opportunity_datasets,
+    )
+
+    _write_dataset(
+        tmp_path,
+        "bulk-expression",
+        """
+id: dataset:bulk-expression
+type: dataset
+title: Bulk Expression
+dataset_class: deposit
+local_path: data/bulk
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: []
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
+    context = _dataset_context(datasets[0], include_prose_tokens=False)
+
+    assert _matched_facets_for_context(context, extra={"perturbation"}) == ["bulk-rna-seq"]
+
+
+def test_benchmark_tests_report_readiness_labels_handle_special_states(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import (
+        _dataset_context,
+        _readiness_label,
+        load_opportunity_datasets,
+    )
+
+    cases = [
+        ("derived", "origin: derived\ndataset_class: deposit\nproduced_by: [code-file:builder]", True, "stage-needed"),
+        (
+            "embargoed",
+            "origin: external\ndataset_class: deposit\naccess:\n  level: public\n  availability: embargoed\n  verified: true",
+            True,
+            "blocked",
+        ),
+        (
+            "unverified",
+            "origin: external\ndataset_class: deposit\naccess:\n  level: public\n  availability: available\n  verified: false",
+            True,
+            "blocked",
+        ),
+        ("reference", "dataset_class: reference", False, "metadata-only"),
+        ("pointer", "dataset_class: pointer", False, "metadata-only"),
+    ]
+    for slug, access_block, has_task, _expected in cases:
+        tasks = (
+            """
+  tasks:
+    - id: task
+      prediction_target: target
+      held_out_unit: unit
+      metric: auroc
+      baseline: baseline
+      ground_truth:
+        type: label
+        description: label
+"""
+            if has_task
+            else ""
+        )
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: {slug}
+{access_block}
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [perturbation]
+  benchmark_kinds: [static-association]
+{tasks}""",
+        )
+
+    datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
+    labels = {
+        dataset.id: _readiness_label(_dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks))
+        for dataset in datasets
+    }
+
+    assert labels == {
+        "dataset:derived": "stage-needed",
+        "dataset:embargoed": "blocked",
+        "dataset:pointer": "metadata-only",
+        "dataset:reference": "metadata-only",
+        "dataset:unverified": "blocked",
+    }
+
+
 def test_opportunity_report_matches_prefixed_shorthand_related_belief(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 

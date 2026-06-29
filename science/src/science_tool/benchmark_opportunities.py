@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Literal, NotRequired, TypedDict
 
 from science_tool.benchmark_catalog import benchmark_sources
-from science_tool.dataset_prioritize import readiness_weight
-from science_tool.datasets.semantics import dataset_class_for
+from science_tool.dataset_prioritize import readiness_for, readiness_weight
+from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entities import (
     load_markdown_entities,
     numeric_variants,
@@ -492,6 +492,60 @@ class BenchmarkGapReport(TypedDict):
     summary: BenchmarkGapSummary
     calibration: GapCalibrationPayload
     evidence_report: EvidenceReport
+    commons_notice: str | None
+
+
+TestPlanState = Literal["concrete", "draft-needed"]
+PrioritySource = Literal["opportunity-relative", "gap-candidate", "gap-fallback"]
+ReadinessLabel = Literal["runnable", "stage-needed", "metadata-only", "blocked"]
+
+
+class BenchmarkTestScoreComponents(TypedDict):
+    source: dict[str, int]
+    baseline: dict[str, int]
+
+
+class BenchmarkTestGroundTruth(TypedDict):
+    type: str
+    description: str
+
+
+class BenchmarkTestRow(TypedDict):
+    entity_id: str
+    entity_title: str
+    benchmark_id: str
+    benchmark_title: str
+    task_id: str | None
+    test_plan_state: TestPlanState
+    task_type: str
+    benchmark_kinds: list[str]
+    readiness_label: ReadinessLabel
+    priority_score: int
+    priority_source: PrioritySource
+    score_components: BenchmarkTestScoreComponents
+    matched_facets: list[str]
+    reason_notes: list[str]
+    prediction_target: str
+    held_out_unit: str
+    metric: str
+    baseline: str
+    ground_truth: BenchmarkTestGroundTruth
+    needs: list[str]
+
+
+class BenchmarkTestSummary(TypedDict):
+    entities_total: int
+    test_plan_rows: int
+    concrete_rows: int
+    draft_needed_rows: int
+    entities_with_test_plans: int
+    entities_without_test_plans: int
+    top_facets: list[FacetCountRow]
+
+
+class BenchmarkTestReport(TypedDict):
+    benchmark_tests: list[BenchmarkTestRow]
+    summary: BenchmarkTestSummary
     commons_notice: str | None
 
 
@@ -1882,6 +1936,223 @@ def _gap_calibration_payload(
     }
 
 
+def _task_needs(task: OpportunityTask | None) -> list[str]:
+    if task is None:
+        return ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]
+    needs: list[str] = []
+    if not task.prediction_target:
+        needs.append("prediction-target")
+    if not task.held_out_unit:
+        needs.append("held-out-unit")
+    if not task.metric:
+        needs.append("metric")
+    if not task.baseline:
+        needs.append("baseline")
+    if not task.ground_truth_type and not task.ground_truth_description:
+        needs.append("ground-truth")
+    return needs
+
+
+def _test_plan_state(task: OpportunityTask | None) -> TestPlanState:
+    return "concrete" if task is not None and not _task_needs(task) else "draft-needed"
+
+
+def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> ReadinessLabel:
+    fm = context.dataset.frontmatter
+    runtime_state = runtime_state_for(fm)
+    if runtime_state in {"reference-only", "pointer-only"}:
+        return "metadata-only"
+
+    readiness_state = readiness_for(dict(fm)).state
+    if readiness_state in {"embargoed", "withdrawn"} or readiness_state.endswith(", unverified"):
+        return "blocked"
+    if readiness_state in {
+        "derived-via-code",
+        "derived-via-member-of",
+        "derived-via-workflow-recipe",
+        "consumable-via-scope-reduced",
+        "consumable-via-substituted",
+        "acquiring",
+    }:
+        return "stage-needed"
+
+    if runtime_state == "runnable" and has_task:
+        return "runnable"
+    if runtime_state == "unstaged-deposit":
+        return "stage-needed"
+    if runtime_state == "blocked-access":
+        return "blocked"
+    if readiness_state == "unknown":
+        return "blocked"
+    return "metadata-only"
+
+
+def _context_declared_hint_facets(context: DatasetOpportunityContext) -> set[str]:
+    return {
+        _normalize_token(value)
+        for value in (
+            *context.dataset.modalities,
+            *context.dataset.signal_types,
+        )
+    } & BENCHMARK_GAP_HINT_FACET_SET
+
+
+def _matched_facets_for_context(context: DatasetOpportunityContext, extra: set[str] | None = None) -> list[str]:
+    facets = {
+        _normalize_token(value)
+        for value in (
+            *context.dataset.modalities,
+            *context.dataset.signal_types,
+        )
+    }
+    if extra is not None:
+        normalized_extra = {_normalize_token(value) for value in extra}
+        facets.update(normalized_extra & _context_declared_hint_facets(context))
+    return _sorted_facets(facets)
+
+
+def _ground_truth_payload(task: OpportunityTask | None) -> BenchmarkTestGroundTruth:
+    if task is None:
+        return {"type": "", "description": ""}
+    return {"type": task.ground_truth_type, "description": task.ground_truth_description}
+
+
+def _benchmark_test_row(
+    opportunity: OpportunityRow,
+    context: DatasetOpportunityContext,
+    task: OpportunityTask | None,
+    *,
+    priority_source: PrioritySource,
+) -> BenchmarkTestRow:
+    source_components = dict(opportunity["score_components"]["relative"])
+    reason_notes = list(opportunity["match_reasons"])
+    if _test_plan_state(task) == "draft-needed" and "draft-needed" not in reason_notes:
+        reason_notes.append("draft-needed")
+    return {
+        "entity_id": opportunity["entity_id"],
+        "entity_title": opportunity["entity_title"],
+        "benchmark_id": context.dataset.id,
+        "benchmark_title": context.dataset.title,
+        "task_id": task.canonical_task_id if task is not None else None,
+        "test_plan_state": _test_plan_state(task),
+        "task_type": task.task_type if task is not None else "",
+        "benchmark_kinds": list(context.dataset.benchmark_kinds),
+        "readiness_label": _readiness_label(context, has_task=task is not None),
+        "priority_score": int(opportunity["relative_score"]),
+        "priority_source": priority_source,
+        "score_components": {
+            "source": source_components,
+            "baseline": dict(context.baseline.components),
+        },
+        "matched_facets": _matched_facets_for_context(context),
+        "reason_notes": sorted(set(reason_notes), key=_reason_note_sort_key),
+        "prediction_target": task.prediction_target if task is not None else "",
+        "held_out_unit": task.held_out_unit if task is not None else "",
+        "metric": task.metric if task is not None else "",
+        "baseline": task.baseline if task is not None else "",
+        "ground_truth": _ground_truth_payload(task),
+        "needs": _task_needs(task),
+    }
+
+
+def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportunityContext) -> list[BenchmarkTestRow]:
+    task_id = opportunity["task_id"]
+    if task_id is None:
+        return [
+            _benchmark_test_row(
+                opportunity,
+                context,
+                None,
+                priority_source="opportunity-relative",
+            )
+        ]
+    task_by_id = {task.canonical_task_id: task for task in context.dataset.tasks}
+    task = task_by_id.get(task_id)
+    if task is None:
+        return []
+    return [
+        _benchmark_test_row(
+            opportunity,
+            context,
+            task,
+            priority_source="opportunity-relative",
+        )
+    ]
+
+
+def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int) -> BenchmarkTestSummary:
+    concrete_rows = sum(1 for row in rows if row["test_plan_state"] == "concrete")
+    entities_with_test_plans = {row["entity_id"] for row in rows}
+    facet_counts = Counter(facet for row in rows for facet in row["matched_facets"])
+    top_facets = [
+        {"facet": facet, "count": count}
+        for facet, count in sorted(facet_counts.items(), key=lambda item: (-item[1], _facet_sort_key(item[0])))[:10]
+    ]
+    return {
+        "entities_total": entities_total,
+        "test_plan_rows": len(rows),
+        "concrete_rows": concrete_rows,
+        "draft_needed_rows": len(rows) - concrete_rows,
+        "entities_with_test_plans": len(entities_with_test_plans),
+        "entities_without_test_plans": max(entities_total - len(entities_with_test_plans), 0),
+        "top_facets": top_facets,
+    }
+
+
+def _normalize_benchmark_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized if normalized.startswith("dataset:") else f"dataset:{normalized}"
+
+
+def _normalize_benchmark_test_facet(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = _normalize_token(value)
+    if not normalized:
+        raise ValueError("facet must not be blank")
+    return normalized
+
+
+def _filter_benchmark_test_rows(
+    rows: list[BenchmarkTestRow],
+    *,
+    facet: str | None,
+    state: TestPlanState | None,
+    benchmark_id: str | None,
+) -> list[BenchmarkTestRow]:
+    normalized_facet = _normalize_benchmark_test_facet(facet)
+    normalized_benchmark_id = _normalize_benchmark_filter(benchmark_id)
+    filtered: list[BenchmarkTestRow] = []
+    for row in rows:
+        if normalized_facet is not None and normalized_facet not in row["matched_facets"]:
+            continue
+        if state is not None and state != row["test_plan_state"]:
+            continue
+        if normalized_benchmark_id is not None and normalized_benchmark_id != row["benchmark_id"]:
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def _benchmark_test_state_sort_key(state: TestPlanState) -> int:
+    order = {"concrete": 0, "draft-needed": 1}
+    return order[state]
+
+
+def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, str, str, str]:
+    return (
+        _benchmark_test_state_sort_key(row["test_plan_state"]),
+        -row["priority_score"],
+        row["entity_id"],
+        row["benchmark_id"],
+        "" if row["task_id"] is None else row["task_id"],
+    )
+
+
 def _build_opportunity_report(
     entities: list[ProjectBenchmarkEntity],
     contexts: list[DatasetOpportunityContext],
@@ -1964,6 +2235,44 @@ def opportunity_report(
         domain=domain,
         calibration_report=calibration_report,
     ).report
+
+
+def benchmark_tests_report(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    facet: str | None = None,
+    state: TestPlanState | None = None,
+    benchmark_id: str | None = None,
+) -> BenchmarkTestReport:
+    analysis = _opportunity_analysis(
+        project_root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+        include_prose_tokens=False,
+    )
+    context_by_id = {context.dataset.id: context for context in analysis.contexts}
+    rows: list[BenchmarkTestRow] = []
+    for opportunity in analysis.report["matched_opportunities"]:
+        context = context_by_id.get(opportunity["benchmark_id"])
+        if context is None:
+            continue
+        rows.extend(_rows_for_context_tasks(opportunity, context))
+    rows = _filter_benchmark_test_rows(
+        rows,
+        facet=facet,
+        state=state,
+        benchmark_id=benchmark_id,
+    )
+    rows.sort(key=_benchmark_test_sort_key)
+    return {
+        "benchmark_tests": rows,
+        "summary": _benchmark_test_summary(rows, entities_total=len(analysis.entities)),
+        "commons_notice": analysis.report["commons_notice"],
+    }
 
 
 def gaps_report(
