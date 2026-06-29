@@ -8,6 +8,7 @@ import yaml
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
+    dataset_status,
     dataset_paths,
     resolve_dataset_output_dir,
     scaffold_dataset_package,
@@ -173,3 +174,54 @@ def test_resolve_dataset_output_dir_uses_commons_data_root_without_override(
     monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
 
     assert resolve_dataset_output_dir("dbsnp-human") == data_root / "dbsnp-human"
+
+
+def test_dataset_status_reports_unbuilt_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+
+    status = dataset_status(root, "dbsnp-human")
+
+    assert status.exists is True
+    assert status.workflow_exists is True
+    assert status.lockfile_exists is False
+    assert status.datapackage_exists is True
+    assert status.datapackage_placeholder_hashes is False
+    assert status.output_dir == tmp_path / "data" / "dbsnp-human"
+    assert status.outputs_present == []
+    assert status.outputs_missing == []
+
+
+def test_dataset_status_reports_real_and_missing_resources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    override = tmp_path / "science-commons-data" / "dbsnp-human"
+    (cfg / "data.yaml").write_text(f"dbsnp-human: {override}\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "fallback"))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    override.mkdir(parents=True)
+    (override / "built.txt").write_text("ok", encoding="utf-8")
+    (root / "datasets" / "dbsnp-human" / "datapackage.yaml").write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- name: built\n"
+        "  path: built.txt\n"
+        "  hash: sha256:0000000000000000000000000000000000000000000000000000000000000001\n"
+        "- name: missing\n"
+        "  path: missing.txt\n"
+        "  hash: sha256:0000000000000000000000000000000000000000000000000000000000000002\n",
+        encoding="utf-8",
+    )
+
+    status = dataset_status(root, "dbsnp-human")
+
+    assert status.output_dir == override
+    assert status.outputs_present == ["built.txt"]
+    assert status.outputs_missing == ["missing.txt"]

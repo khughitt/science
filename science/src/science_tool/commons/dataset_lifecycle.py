@@ -35,6 +35,20 @@ class ScaffoldResult:
     created: tuple[Path, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class DatasetStatus:
+    slug: str
+    exists: bool
+    dataset_dir: Path
+    workflow_exists: bool
+    lockfile_exists: bool
+    datapackage_exists: bool
+    datapackage_placeholder_hashes: bool
+    output_dir: Path
+    outputs_present: list[str]
+    outputs_missing: list[str]
+
+
 def validate_dataset_slug(slug: str) -> str:
     if not _DATASET_SLUG_RE.fullmatch(slug):
         raise DatasetLifecycleError(
@@ -73,6 +87,39 @@ def resolve_dataset_output_dir(slug: str, data_root: Path | None = None) -> Path
     return resolve_commons_data_root() / slug
 
 
+def dataset_status(commons_root: Path, slug: str) -> DatasetStatus:
+    slug = validate_dataset_slug(slug)
+    paths = dataset_paths(Path(commons_root), slug)
+    output_dir = resolve_dataset_output_dir(slug)
+    resources = _read_datapackage_resources(paths.datapackage_path)
+    outputs_present: list[str] = []
+    outputs_missing: list[str] = []
+
+    for resource in resources:
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str):
+            continue
+        if (output_dir / resource_path).is_file():
+            outputs_present.append(resource_path)
+        else:
+            outputs_missing.append(resource_path)
+
+    return DatasetStatus(
+        slug=slug,
+        exists=paths.dataset_dir.is_dir(),
+        dataset_dir=paths.dataset_dir,
+        workflow_exists=paths.snakefile_path.is_file(),
+        lockfile_exists=(paths.snakefile_path.parent / "lockfile.yaml").is_file(),
+        datapackage_exists=paths.datapackage_path.is_file(),
+        datapackage_placeholder_hashes=any(
+            _is_placeholder_resource(resource) for resource in resources
+        ),
+        output_dir=output_dir,
+        outputs_present=outputs_present,
+        outputs_missing=outputs_missing,
+    )
+
+
 def scaffold_dataset_package(
     commons_root: Path,
     slug: str,
@@ -103,6 +150,28 @@ def scaffold_dataset_package(
         path.write_text(text, encoding="utf-8")
 
     return ScaffoldResult(paths=paths, created=tuple(path for path, _ in files))
+
+
+def _read_datapackage_resources(path: Path) -> list[dict[str, object]]:
+    if not path.is_file():
+        return []
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(raw, dict):
+        return []
+    resources = raw.get("resources")
+    if not isinstance(resources, list):
+        return []
+    return [resource for resource in resources if isinstance(resource, dict)]
+
+
+def _is_placeholder_resource(resource: dict[str, object]) -> bool:
+    return (
+        resource.get("hash") == f"sha256:{'0' * 64}"
+        or resource.get("bytes") == 0
+    )
 
 
 def _entity_text(slug: str, title: str, version: str, today: str) -> str:

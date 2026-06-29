@@ -16,6 +16,7 @@ from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
+    dataset_status,
     scaffold_dataset_package,
 )
 from science_tool.commons.errors import (
@@ -454,6 +455,43 @@ def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | No
     click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
     for step in next_steps:
         click.echo(f"next: {step}")
+
+
+@dataset_group.command("status")
+@click.argument("slug")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_status_cmd(slug: str, as_json: bool) -> None:
+    """Report commons-born dataset package/build status."""
+    root = _require_root()
+    try:
+        status = dataset_status(root, slug)
+    except DatasetLifecycleError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if as_json:
+        payload = {
+            "datapackage_exists": status.datapackage_exists,
+            "datapackage_placeholder_hashes": status.datapackage_placeholder_hashes,
+            "dataset_dir": str(status.dataset_dir.relative_to(root)),
+            "exists": status.exists,
+            "lockfile_exists": status.lockfile_exists,
+            "output_dir": str(status.output_dir),
+            "outputs_missing": status.outputs_missing,
+            "outputs_present": status.outputs_present,
+            "slug": status.slug,
+            "workflow_exists": status.workflow_exists,
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"dataset:{status.slug}")
+    click.echo(f"  package: {'present' if status.exists else 'missing'}")
+    click.echo(f"  workflow: {'present' if status.workflow_exists else 'missing'}")
+    click.echo(f"  lockfile: {'present' if status.lockfile_exists else 'missing'}")
+    click.echo(f"  datapackage: {'present' if status.datapackage_exists else 'missing'}")
+    click.echo(f"  output_dir: {status.output_dir}")
+    click.echo(f"  outputs_present: {len(status.outputs_present)}")
+    click.echo(f"  outputs_missing: {len(status.outputs_missing)}")
 
 
 @commons_group.group("data")

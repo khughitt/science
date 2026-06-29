@@ -90,3 +90,44 @@ def test_dataset_init_reports_scaffold_write_errors(tmp_path: Path, monkeypatch)
     assert result.exit_code == 1
     assert "disk full" in result.output
     assert "Traceback" not in result.output
+
+
+def test_dataset_status_json_reports_unbuilt_scaffold(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    init = runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    assert init.exit_code == 0, init.output
+
+    result = runner.invoke(commons_group, ["dataset", "status", "dbsnp-human", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["slug"] == "dbsnp-human"
+    assert payload["exists"] is True
+    assert payload["workflow_exists"] is True
+    assert payload["lockfile_exists"] is False
+    assert payload["output_dir"] == str(tmp_path / "data" / "dbsnp-human")
+
+
+def test_dataset_status_human_does_not_fail_for_missing_payloads(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+
+    result = runner.invoke(commons_group, ["dataset", "status", "dbsnp-human"])
+
+    assert result.exit_code == 0, result.output
+    assert "dataset:dbsnp-human" in result.output
+    assert "workflow: present" in result.output
