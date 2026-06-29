@@ -103,7 +103,14 @@ def propose_results_target(
     sub = _data_subpath(rel_path, data_dirs)
     if sub is None or not sub.parts:
         return None
-    slug = _workflow_slug_from_siblings(project_root, rel_path) or sub.parts[0]
+    slug = _workflow_slug_from_siblings(project_root, rel_path)
+    if slug is None:
+        if len(sub.parts) > 1:
+            slug = sub.parts[0]
+        else:
+            # No experiment segment and no workflow: sibling → no unambiguous
+            # results/<exp>/ target. Conservative: propose nothing (fixer FLAGs).
+            return None
     beneath = Path(*sub.parts[1:]) if len(sub.parts) > 1 else Path(sub.name)
     return (Path("results") / slug / beneath).as_posix()
 
@@ -199,6 +206,8 @@ _DATAPACKAGE_NAMES = ("datapackage.yaml", "datapackage.json")
 def _planned_action(v: Violation) -> str:
     """The action the fixer *would* take, for read-only report parity with --fix."""
     if v.quadrant is Quadrant.STRANDED_RECORD:
+        if v.proposed_target is None:
+            return "flag"  # fixer cannot propose a target → FLAG
         if Path(v.path).name in _DATAPACKAGE_NAMES:
             return "move+rewrite-resources"
         return "move"

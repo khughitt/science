@@ -77,3 +77,23 @@ def test_leaked_payload_never_moved(tmp_path: Path):
     o = [o for o in outcomes if o.violation.quadrant is Quadrant.LEAKED_PAYLOAD][0]
     assert o.performed is False and o.action == "flag"
     assert (tmp_path / "entities/x/big.feather").exists()
+
+
+def test_record_directly_under_data_dir_is_flagged_not_moved(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/README.md", b"# top\n")
+    outcomes = apply_fixes(tmp_path, audit_project(tmp_path))
+    o = [o for o in outcomes if o.violation.path == "data/processed/README.md"][0]
+    assert o.performed is False and o.action == "flag"
+    assert (tmp_path / "data/processed/README.md").exists()  # not moved
+
+
+def test_dedupe_identical_untracked_drops_source_and_stages_target(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
+    _write(tmp_path, "results/exp1/RESULTS.md", b"# r\n")  # identical content, untracked
+    outcomes = apply_fixes(tmp_path, audit_project(tmp_path))
+    o = [o for o in outcomes if o.violation.quadrant is Quadrant.STRANDED_RECORD][0]
+    assert o.performed is True and o.action == "move" and o.reason == "deduped"
+    assert not (tmp_path / "data/processed/exp1/RESULTS.md").exists()  # source dropped
+    assert "results/exp1/RESULTS.md" in _staged(tmp_path)  # target staged

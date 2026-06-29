@@ -417,7 +417,7 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
         for v in violations:
             tgt = v.proposed_target or "-"
             click.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
-    if violations and not fix:
+    if violations:
         raise SystemExit(1)
 
 

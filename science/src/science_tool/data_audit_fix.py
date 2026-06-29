@@ -144,15 +144,17 @@ def _move_record(
                 _git(project_root, "rm", "-q", "-f", v.path)
             else:
                 src.unlink()
+            if not _is_tracked(project_root, v.proposed_target):
+                _git(project_root, "add", v.proposed_target)
             return FixOutcome(v, performed=True, action="move", reason="deduped")
         return _flag(v, f"destination exists with different content: {v.proposed_target}")
-    dst.parent.mkdir(parents=True, exist_ok=True)
     is_dp = src.name in ("datapackage.yaml", "datapackage.json")
     if is_dp:
         rewrite = _rewrite_datapackage(project_root, v.path, v.proposed_target)
         if rewrite is None:
             return _flag(v, "datapackage resources not structurally rewritable")
         text, basepath, rewritten = rewrite
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if _is_tracked(project_root, v.path):
             _git(project_root, "rm", "-q", "--cached", v.path)
             (project_root / v.path).unlink()
@@ -162,6 +164,7 @@ def _move_record(
         _git(project_root, "add", v.proposed_target)
         return FixOutcome(v, performed=True, action="move+rewrite-resources",
                           rewritten_resources=rewritten, basepath=basepath)
+    dst.parent.mkdir(parents=True, exist_ok=True)
     if _is_tracked(project_root, v.path):
         _git(project_root, "mv", v.path, v.proposed_target)
     else:

@@ -107,3 +107,30 @@ def test_render_json_datapackage_planned_action(tmp_path: Path):
     dp_row = [r for r in payload["violations"] if r["path"].endswith("datapackage.yaml")][0]
     assert dp_row["action"] == "move+rewrite-resources"
     assert dp_row["performed"] is False
+
+
+def test_record_directly_under_data_dir_has_no_target(tmp_path: Path):
+    # No experiment subfolder under data/processed → ambiguous → no proposed target.
+    target = propose_results_target(
+        tmp_path, Path("data/processed/RESULTS.md"), DEFAULT_DATA_DIRS
+    )
+    assert target is None
+
+
+def test_single_segment_with_workflow_sibling_resolves(tmp_path: Path):
+    _write(tmp_path, "data/processed/datapackage.yaml", b"workflow: workflow:flowX\n")
+    target = propose_results_target(
+        tmp_path, Path("data/processed/datapackage.yaml"), DEFAULT_DATA_DIRS
+    )
+    assert target == "results/flowX/datapackage.yaml"
+
+
+def test_stranded_record_directly_under_data_dir_flag_action(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/README.md", b"# top\n")
+    import json as _json
+    payload = _json.loads(render_json(audit_project(tmp_path)))
+    row = [r for r in payload["violations"] if r["path"] == "data/processed/README.md"][0]
+    assert row["quadrant"] == "stranded_record"
+    assert row["target"] is None
+    assert row["action"] == "flag"  # read-only parity: fixer can't propose a target

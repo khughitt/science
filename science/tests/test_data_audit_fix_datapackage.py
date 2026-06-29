@@ -1,6 +1,5 @@
 # science/tests/test_data_audit_fix_datapackage.py
 """Datapackage resource-path rewrite on relocation."""
-import os
 import subprocess
 from pathlib import Path
 
@@ -115,3 +114,14 @@ def test_basepath_escaping_repo_flags(tmp_path: Path):
     o = [o for o in outcomes if o.violation.path.endswith("datapackage.yaml")][0]
     assert o.performed is False and o.action == "flag"
     assert (tmp_path / "data/processed/exp1/datapackage.yaml").exists()  # not moved
+
+
+def test_flagged_datapackage_leaves_no_empty_results_dir(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/datapackage.yaml",
+           yaml.safe_dump({
+               "name": "x",
+               "resources": [{"name": "m", "path": "/abs/matrix.feather"}],
+           }).encode())
+    apply_fixes(tmp_path, audit_project(tmp_path))
+    assert not (tmp_path / "results" / "exp1").exists()  # no empty dir littered
