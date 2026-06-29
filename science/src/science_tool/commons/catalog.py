@@ -21,6 +21,8 @@ _REQUIRED_FIELD_BY_TYPE: dict[SourceType, str] = {
     "github": "repo",
     "zenodo": "doi",
 }
+_YAML_MERGE_TAG = "tag:yaml.org,2002:merge"
+_YAML_STRING_TAG = "tag:yaml.org,2002:str"
 
 
 class CatalogError(ValueError):
@@ -59,8 +61,10 @@ def _reject_duplicate_mapping_keys(path: Path, node: object) -> None:
             if not isinstance(key_node, yaml.ScalarNode):
                 raise CatalogError(f"{path}: malformed YAML: expected scalar mapping keys")
             key = key_node.value
-            if key == "<<":
+            if key_node.tag == _YAML_MERGE_TAG or key == "<<":
                 raise CatalogError(f"{path}: unsupported YAML merge keys")
+            if key_node.tag != _YAML_STRING_TAG:
+                raise CatalogError(f"{path}: mapping keys must be strings")
             if key in seen_keys:
                 raise CatalogError(f"{path}: duplicate key {key!r}")
             seen_keys.add(key)
