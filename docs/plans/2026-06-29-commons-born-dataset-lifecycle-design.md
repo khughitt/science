@@ -15,9 +15,10 @@ Science commons data has mostly followed a project-first lifecycle:
 3. promote the dataset into `~/d/science-commons`.
 
 That pattern remains useful for project-derived artifacts, but it is the wrong
-default for reusable reference wrappers such as dbSNP, OpenAlex, ontology tables,
-reference genomes, crosswalks, and other modular external datasets. Those
-datasets should be able to start in commons with no parent project.
+default for reusable external reference wrappers such as dbSNP, OpenAlex,
+ontology tables, reference genomes, crosswalks, and other modular external
+datasets. Those datasets should be able to start in commons with no parent
+project.
 
 The data-audit design in
 `docs/plans/2026-06-28-data-audit-design.md` clarifies the project-side boundary:
@@ -95,11 +96,13 @@ science commons find dataset [filters]
 Remote catalog metadata is reserved now, but remote execution commands such as
 `add-remote`, `update-sources`, and `pull` are deferred.
 
-`science commons find` already owns local index search. V1 should extend that
-path, for example with index-freshness warnings and any missing dataset-oriented
-filters, rather than introducing `science commons search` as a second local
-query command. A future package-manager phase may add `search` as an alias or
-remote-aware verb, but that is out of scope for v1.
+`science commons find` already owns local index search and already emits the
+shared stale-index warning through `CommonsQuery.find()`. V1 should preserve
+that behavior, add regression coverage for it, and add only missing
+dataset-oriented filters if needed, rather than introducing
+`science commons search` as a second local query command. A future
+package-manager phase may add `search` as an alias or remote-aware verb, but
+that is out of scope for v1.
 
 Index freshness should reuse `RegistryBuilder.is_stale()`, not a new freshness
 heuristic. The existing registry staleness contract is: stale when
@@ -172,9 +175,9 @@ as `~/d/science-commons-data/<slug>/` via `data.yaml` overrides.
 
 ## Dataset Versioning
 
-Each commons dataset has an explicit `version:` in `entity.md`. This is the
-human-facing compatibility contract for the Science wrapper package, not the
-upstream artifact release.
+Each commons dataset has an explicit semver `version:` in `entity.md`. This is
+the human-facing compatibility contract for the Science wrapper package, not
+the upstream artifact release.
 
 For external wrappers, upstream versions belong in the workflow source pins:
 `recipe/lockfile.yaml`, source sidecars, build summaries, or equivalent recipe
@@ -191,7 +194,8 @@ dataset:<slug>@<version>
 source:<remote-name>@<catalog-revision-or-commit>
 ```
 
-In v1, validation only requires that a dataset version exists.
+In v1, validation requires that the dataset version exists and satisfies the
+base entity semver pattern (`^[0-9]+\.[0-9]+\.[0-9]+$`).
 
 ## Project Consumption
 
@@ -226,7 +230,7 @@ The command:
 - rejects invalid slugs;
 - rejects an existing dataset directory;
 - writes only under the commons root;
-- creates an exploratory package that is valid as an unbuilt scaffold;
+- creates an external reference package that is valid as an unbuilt scaffold;
 - prints the next build/validation commands;
 - does not fetch or build data.
 
@@ -296,9 +300,10 @@ Searches the local commons index/catalog only in v1. The existing
 `science commons find` command already supports entity-type search plus filters
 such as tags, ontology terms, years, slug globs, and `--json`; v1 should improve
 that command for dataset lifecycle use instead of adding a competing
-`search` command. It should warn when the index is missing or stale and tell the
-user how to rebuild it. The warning applies to the shared `find` command for all
-supported entity types, not only `dataset`.
+`search` command. It already warns when the index is stale and tells the user
+how to rebuild it; v1 should keep that behavior covered by tests. The warning
+applies to the shared `find` command for all supported entity types, not only
+`dataset`.
 
 Remote search is deferred.
 
@@ -359,9 +364,11 @@ science pull dataset:<slug>@<version>
 
 A commons-born dataset package is valid when:
 
-1. It has `entity.md` with `id: dataset:<slug>`, `type: dataset`, `version:`,
-   `status:`, `origin: external|derived|manual`, and
-   `datapackage: datapackage.yaml`.
+1. It has `entity.md` with `id: dataset:<slug>`, `type: dataset`, semver
+   `version:`, `status:`, schema-legal dataset `origin`, and
+   `datapackage: datapackage.yaml`. V1 `science commons dataset init` scaffolds
+   `origin: external` wrappers only; derived dataset packages require a
+   `derivation:` block and are deferred to a later explicit workflow.
 2. It has `datapackage.yaml` with stable resource names, relative resource
    paths, and hashes/bytes when built.
 3. It has `recipe/Snakefile`.
@@ -370,19 +377,21 @@ A commons-born dataset package is valid when:
    `datapackage.json` conventions do not change this package format.
 5. Payload bytes are not stored in the tracked dataset directory unless they
    pass the tracked-package file policy below.
-6. Dataset `version:` is present and means wrapper-package version.
+6. Dataset `version:` is present, semver, and means wrapper-package version.
 7. The package can build independently of any parent project.
 
 Tracked-package file policy:
 
-- metadata, recipes, tests, README files, and lockfiles are allowed tracked
-  package files;
+- canonical tracked package files such as `entity.md`, `datapackage.yaml`,
+  `recipe/Snakefile`, `recipe/README.md`, and workflow lockfiles are allowed;
 - generated payload extensions from the data-audit policy, or files larger than
   `150_000` bytes, are invalid in the tracked dataset package unless explicitly
   allowlisted. The implementation should reuse the data-audit SSOT
   (`science_tool.data_policy.DataPolicy.payload_extensions` and
   `science_tool.data_policy.classify()` once that design lands) rather than
-  reimplementing a parallel extension/size classifier;
+  reimplementing a parallel extension/size classifier. This policy also applies
+  inside `recipe/` except for canonical workflow metadata files, so large lookup
+  tables and generated payloads are not hidden under recipe paths;
 - the allowlist should be explicit package metadata, for example
   `tracked_payload_allowlist:` entries with path and reason in `entity.md`;
 - allowlisted tracked data should be reserved for deliberately small reference
@@ -423,8 +432,8 @@ Tests should cover:
 - `validate` distinguishes valid unbuilt scaffold, missing workflow, placeholder
   datapackage, and built package with real hashes;
 - `status --json` returns stable machine-readable state;
-- `find` returns local indexed commons datasets and degrades clearly when the
-  index is missing or stale;
+- `find` returns local indexed commons datasets and has regression coverage for
+  the existing shared stale-index warning;
 - remote catalog parsing accepts `path`, `git`, `github`, and `zenodo` source
   declarations even though execution is deferred.
 
