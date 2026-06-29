@@ -471,7 +471,7 @@ def dataset_build_cmd(slug: str, cores: int) -> None:
     root = _require_root()
     try:
         exit_code = build_dataset_package(root, slug, cores=cores)
-    except DatasetLifecycleError as exc:
+    except (DatasetLifecycleError, CommonsError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"snakemake exited {exit_code}")
