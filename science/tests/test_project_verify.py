@@ -421,6 +421,15 @@ def test_preflight_against_non_git_is_operational(tmp_path: Path):
         preflight_against(root)
 
 
+def test_preflight_against_no_head_is_operational(tmp_path: Path):
+    repo = tmp_path / "empty-repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+
+    with pytest.raises(VerifyError, match="no HEAD commit"):
+        preflight_against(repo)
+
+
 def test_preflight_against_bare_repo_is_operational(tmp_path: Path):
     root = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-q", str(root)], check=True)
