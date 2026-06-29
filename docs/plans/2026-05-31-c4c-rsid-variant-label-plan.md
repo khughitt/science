@@ -4,7 +4,7 @@
 
 **Goal:** Add rsID input support for variant identity by resolving pinned dbSNP labels to exact small alleles, then minting the existing assembly-anchored VRS identity.
 
-**Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons` for C4c-1. The rsID resolver, VRS minting boundary, variant-row validation, and dbSNP recipe are in place; the recipe fixture build passes. Full dbSNP archive fetch/build, full-source lockfile pinning, datapackage hash refresh, and resolver smoke against the real commons artifact remain operator-pending because the generated SQLite was not built in this session. Transcript/protein HGVS projection remains out of scope.
+**Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons` for C4c-1. The rsID resolver, VRS minting boundary, variant-row validation, dbSNP recipe, and Snakemake workflow entrypoint are in place; the recipe fixture build passes. Full dbSNP archive fetch/build through Snakemake, full-source lockfile pinning, datapackage hash refresh, and resolver smoke against the real commons artifact remain operator-pending because the generated SQLite was not built in this session. Transcript/protein HGVS projection remains out of scope.
 
 **Architecture:** C4c-1 is an input translation layer over C4a, not a new variant identity namespace. A pinned dbSNP reference dataset provides an indexed rsID-to-allele artifact; `science_tool.commons.rsid` resolves one rsID within a declared seqcol assembly; `variant.vrs_id_from_rsid(...)` converts the resolved allele to SPDI and delegates to `variant.vrs_id(...)`. The variant validator accepts `locator.format: rsid` while keeping `identity_context.molecular_ids.variant.namespace: vrs`.
 
@@ -164,6 +164,7 @@ Commons repo (`~/d/science-commons`):
 - Create: `datasets/variant-labels-dbsnp-human/datapackage.yaml`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/fetch.py`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/build.py`
+- Create: `datasets/variant-labels-dbsnp-human/recipe/Snakefile`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/README.md`
 - Create after fetch: `datasets/variant-labels-dbsnp-human/recipe/lockfile.yaml`
 - Create after build under `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`:
@@ -970,6 +971,7 @@ rtk git commit -m "feat: validate rsid variant rows"
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/datapackage.yaml`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/fetch.py`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/build.py`
+- Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/README.md`
 - Create after fetch: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/lockfile.yaml`
 
@@ -1088,7 +1090,31 @@ The commons repository stores the recipe, lockfile, entity, and datapackage hash
 or VCF bytes.
 ```
 
-- [x] **Step 6: Run a tiny fixture build before the full source build**
+- [x] **Step 6: Add a Snakemake workflow entrypoint**
+
+Create `recipe/Snakefile` so operators regenerate the artifact through the workflow rather than one-off
+script invocations. The default target must:
+
+- fetch the pinned dbSNP archive sources and `.md5` sidecars;
+- write `recipe/lockfile.yaml`;
+- require `assembly-registry/assemblies.csv` as an explicit input;
+- build `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/rsid_mappings.sqlite`;
+- write `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/build-summary.yaml`;
+- refresh `datapackage.yaml`.
+
+Run the workflow from the Science environment:
+
+```bash
+rtk uv run --frozen --project ~/d/science/meta snakemake \
+  -s ~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile \
+  --cores 1
+```
+
+The workflow defaults to `$SCIENCE_COMMONS_DATA_ROOT` or `/data/science-commons`. Override
+`assembly_registry` only for an equivalent pinned registry CSV; do not hardcode GRCh37/GRCh38 seqcol
+digests into the dbSNP recipe.
+
+- [x] **Step 7: Run a tiny fixture build before the full source build**
 
 Add fixture mode or a small test VCF under a temporary directory and verify:
 
@@ -1098,7 +1124,15 @@ rtk uv run --frozen --project science python ~/d/science-commons/datasets/varian
 
 Expected: `rsid_mappings.sqlite` exists and contains at least one row for the fixture rsID.
 
-- [ ] **Step 7: Run full-build feasibility check**
+- [ ] **Step 8: Run full-build feasibility check through Snakemake**
+
+Start the full build only through the workflow:
+
+```bash
+rtk uv run --frozen --project ~/d/science/meta snakemake \
+  -s ~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile \
+  --cores 1
+```
 
 After the full archive build finishes, inspect `build-summary.yaml` before updating the datapackage:
 
@@ -1111,7 +1145,7 @@ Expected: the summary reports input rows, retained alleles, skipped buckets, dis
 per-assembly counts, SQLite bytes, and build seconds. If the SQLite size or build time is outside local
 operational limits, stop before committing datapackage hashes and revisit partitioning/indexing.
 
-- [x] **Step 8: Commit commons recipe**
+- [x] **Step 9: Commit commons recipe**
 
 In `~/d/science-commons`:
 
@@ -1125,14 +1159,14 @@ rtk git commit -m "data: add dbsnp variant label recipe"
 **Files:**
 - No new files unless the smoke reveals defects.
 
-**Status:** Deferred until an operator fetches/builds or installs the full dbSNP SQLite artifact under
-`$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`. The recipe and fixture path are implemented,
-but this session intentionally did not download the 26 GB / 28 GB source archives or build the full
-SQLite.
+**Status:** Deferred until an operator fetches/builds the full dbSNP SQLite artifact through
+`recipe/Snakefile` under `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`. The recipe, workflow
+entrypoint, and fixture path are implemented, but this session intentionally did not complete the 26 GB /
+28 GB source archive workflow or build the full SQLite.
 
-- [ ] **Step 1: Build or install the SQLite artifact**
+- [ ] **Step 1: Build the SQLite artifact through Snakemake**
 
-Run the recipe against the pinned archive sources, or install a previously built artifact under:
+Run the workflow against the pinned archive sources and verify the outputs under:
 
 ```text
 $SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/rsid_mappings.sqlite

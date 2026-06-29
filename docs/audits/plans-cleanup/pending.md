@@ -11,12 +11,11 @@
 - files:
   - `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
 - pending_actions:
-  - `deferred`: review status incomplete; full dbSNP artifact build, lockfile/hash refresh, and real-artifact resolver smoke remain operator-pending
+  - `deferred`: review status incomplete; full dbSNP artifact workflow run, lockfile/hash refresh, and real-artifact resolver smoke remain operator-pending
     - `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
 - remaining_gaps:
-  - full dbSNP archive fetch/build
+  - full dbSNP archive fetch/build through `recipe/Snakefile`
   - full-source lockfile pinning
   - datapackage hash refresh
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
-

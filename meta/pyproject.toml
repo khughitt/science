@@ -26,6 +26,7 @@ dev = [
     "pyright>=1.1.380",
     "science",
     "pandas>=2.0",
+    "snakemake>=9.0",
 ]
 
 [tool.hatch.build.targets.wheel]
