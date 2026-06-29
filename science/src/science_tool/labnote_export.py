@@ -478,27 +478,43 @@ def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list
     return f"{base}+{digest.hexdigest()[:12]}"
 
 
-def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> dict[str, Any]:
+def _view_config_for_type(entity_type: str, raw_config: dict[str, Any]) -> dict[str, Any]:
     overrides = ((raw_config.get("labnote") or {}).get("views") or {})
+    base = dict(
+        DEFAULT_VIEW_BY_TYPE.get(
+            entity_type,
+            {
+                "surface": "explore",
+                "route": f"/explore/{entity_type.replace('_', '-')}",
+                "label": entity_type.replace("_", " ").title(),
+                "order": 500,
+            },
+        )
+    )
+    override = overrides.get(entity_type) or {}
+    unknown = set(override) - {"label", "order", "surface", "hidden"}
+    if unknown:
+        raise ValueError(f"invalid labnote view override for {entity_type}: {sorted(unknown)}")
+    base.update(override)
+    return base
+
+
+def _filter_hidden_entities(
+    entities: list[ExportedEntity],
+    raw_config: dict[str, Any],
+) -> list[ExportedEntity]:
+    return [
+        entity
+        for entity in entities
+        if not _view_config_for_type(entity.record["type"], raw_config).get("hidden")
+    ]
+
+
+def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> dict[str, Any]:
     seen_types = sorted({entity.record["type"] for entity in entities})
     views = []
     for entity_type in seen_types:
-        base = dict(
-            DEFAULT_VIEW_BY_TYPE.get(
-                entity_type,
-                {
-                    "surface": "explore",
-                    "route": f"/explore/{entity_type.replace('_', '-')}",
-                    "label": entity_type.replace("_", " ").title(),
-                    "order": 500,
-                },
-            )
-        )
-        override = overrides.get(entity_type) or {}
-        unknown = set(override) - {"label", "order", "surface", "hidden"}
-        if unknown:
-            raise ValueError(f"invalid labnote view override for {entity_type}: {sorted(unknown)}")
-        base.update(override)
+        base = _view_config_for_type(entity_type, raw_config)
         if base.get("hidden"):
             continue
         views.append(
@@ -734,6 +750,7 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
         raise ValueError("science.yaml must declare a non-empty project id")
     known_citekeys = set(load_bib_entries(project_root))
     entities, restricted_present, restricted_ids = _discover_entities(project_root, known_citekeys)
+    entities = _filter_hidden_entities(entities, raw_config)
     data_version = _data_version(project_root, raw_config, entities)
     label = str(((raw_config.get("labnote") or {}).get("label")) or raw_config.get("name") or config.id)
     project = {

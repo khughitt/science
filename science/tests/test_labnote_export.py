@@ -85,6 +85,20 @@ def write_minimal_project(root: Path) -> None:
         This record must not enter the public package.
         """,
     )
+    write_text(
+        root / "entities" / "papers" / "Smith2020.md",
+        """
+        ---
+        id: paper:Smith2020
+        type: paper
+        title: Example immune persistence paper
+        sensitivity: public
+        source_refs:
+          - cite: Smith2020
+        ---
+        Public paper notes are citation-only in the Labnote v1 package.
+        """,
+    )
 
 
 def read_json(path: Path) -> dict:
@@ -143,6 +157,7 @@ def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -
         "proposition:0001-example-proposition",
         "synthesis:0001-example-synthesis",
     }
+    assert "paper:Smith2020" not in exported_ids
     proposition = next(e for e in entities["entities"] if e["type"] == "proposition")
     assert proposition["class"] == "epistemic"
     assert proposition["display_name"] == "Example proposition"
@@ -161,6 +176,7 @@ def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -
 
     view_ids = [view["id"] for view in views["views"]]
     assert view_ids == ["proposition", "synthesis"]
+    assert "paper" not in view_ids
     assert views["views"][0]["surface"] == "findings"
     assert views["views"][0]["route"] == "/findings/proposition"
 
