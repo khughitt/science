@@ -17,6 +17,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
     DatasetPackageValidationReport,
+    build_dataset_package,
     dataset_status,
     scaffold_dataset_package,
     validate_dataset_package,
@@ -457,6 +458,25 @@ def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | No
     click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
     for step in next_steps:
         click.echo(f"next: {step}")
+
+
+@dataset_group.command("build")
+@click.argument("slug")
+@click.option("--cores", type=int, default=1, show_default=True, help="Snakemake cores.")
+def dataset_build_cmd(slug: str, cores: int) -> None:
+    """Build a commons-born dataset package through Snakemake."""
+    if cores < 1:
+        raise click.UsageError("--cores must be at least 1")
+
+    root = _require_root()
+    try:
+        exit_code = build_dataset_package(root, slug, cores=cores)
+    except DatasetLifecycleError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"snakemake exited {exit_code}")
+    if exit_code != 0:
+        raise click.exceptions.Exit(exit_code)
 
 
 @dataset_group.command("status")

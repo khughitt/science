@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -32,6 +34,9 @@ _DATASET_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
 class DatasetLifecycleError(ValueError):
     """Raised when a commons dataset lifecycle operation is invalid."""
+
+
+BuildRunner = Callable[[list[str]], int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +118,43 @@ def resolve_dataset_output_dir(slug: str, data_root: Path | None = None) -> Path
     if data_root is not None:
         return Path(data_root) / slug
     return resolve_commons_data_root() / slug
+
+
+def snakemake_build_command(commons_root: Path, slug: str, *, cores: int = 1) -> list[str]:
+    slug = validate_dataset_slug(slug)
+    paths = dataset_paths(Path(commons_root), slug)
+    if not paths.snakefile_path.is_file():
+        raise DatasetLifecycleError(f"missing recipe/Snakefile: {paths.snakefile_path}")
+
+    data_root = resolve_commons_data_root()
+    dataset_output_dir = resolve_dataset_output_dir(slug, data_root=data_root)
+    return [
+        "snakemake",
+        "-s",
+        str(paths.snakefile_path),
+        "--cores",
+        str(cores),
+        "--config",
+        f"dataset_slug={slug}",
+        f"commons_data_root={data_root}",
+        f"output_root={data_root}",
+        f"source_root={dataset_output_dir / '_src'}",
+        f"dataset_output_dir={dataset_output_dir}",
+    ]
+
+
+def build_dataset_package(
+    commons_root: Path,
+    slug: str,
+    *,
+    cores: int = 1,
+    runner: BuildRunner | None = None,
+) -> int:
+    command = snakemake_build_command(commons_root, slug, cores=cores)
+    if runner is not None:
+        return runner(command)
+    result = subprocess.run(command, check=False)
+    return int(result.returncode)
 
 
 def dataset_status(commons_root: Path, slug: str) -> DatasetStatus:

@@ -185,3 +185,52 @@ def test_dataset_validate_exits_1_for_missing_workflow(tmp_path: Path, monkeypat
 
     assert result.exit_code == 1
     assert "missing-workflow" in result.output
+
+
+def test_dataset_build_invokes_snakemake(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    calls: list[list[str]] = []
+
+    def fake_run(command, check=False):
+        calls.append(list(command))
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr("science_tool.commons.dataset_lifecycle.subprocess.run", fake_run)
+
+    result = runner.invoke(commons_group, ["dataset", "build", "dbsnp-human", "--cores", "2"])
+
+    assert result.exit_code == 0, result.output
+    assert "snakemake exited 0" in result.output
+    assert calls
+    assert calls[0][0] == "snakemake"
+    assert "--cores" in calls[0]
+    assert "2" in calls[0]
+
+
+def test_dataset_build_reports_missing_snakefile_as_click_error(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").unlink()
+
+    result = runner.invoke(commons_group, ["dataset", "build", "dbsnp-human"])
+
+    assert result.exit_code == 1
+    assert "missing recipe/Snakefile" in result.output

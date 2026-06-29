@@ -8,10 +8,12 @@ import yaml
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
+    build_dataset_package,
     dataset_status,
     dataset_paths,
     resolve_dataset_output_dir,
     scaffold_dataset_package,
+    snakemake_build_command,
     validate_dataset_package,
     validate_dataset_slug,
     validate_dataset_version,
@@ -700,3 +702,56 @@ def test_validate_dataset_package_reports_large_recipe_lookup_json(
 
     assert report.valid is False
     assert any(f.code == "tracked-payload" and f.path == payload for f in report.findings)
+
+
+def test_snakemake_build_command_uses_workflow_and_override_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    override = tmp_path / "science-commons-data" / "dbsnp-human"
+    (cfg / "data.yaml").write_text(f"dbsnp-human: {override}\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "fallback"))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+
+    command = snakemake_build_command(root, "dbsnp-human", cores=2)
+
+    assert command[:3] == ["snakemake", "-s", str(root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile")]
+    assert "--cores" in command
+    assert "2" in command
+    assert "--config" in command
+    assert "dataset_slug=dbsnp-human" in command
+    assert f"dataset_output_dir={override}" in command
+    assert f"source_root={override / '_src'}" in command
+
+
+def test_build_dataset_package_invokes_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    calls: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> int:
+        calls.append(command)
+        return 0
+
+    exit_code = build_dataset_package(root, "dbsnp-human", cores=1, runner=fake_runner)
+
+    assert exit_code == 0
+    assert calls
+    assert calls[0][0] == "snakemake"
+
+
+def test_build_dataset_package_refuses_missing_snakefile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").unlink()
+
+    with pytest.raises(DatasetLifecycleError, match="missing recipe/Snakefile"):
+        snakemake_build_command(root, "dbsnp-human")
