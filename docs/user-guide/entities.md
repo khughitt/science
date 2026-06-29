@@ -390,6 +390,11 @@ to preview a promoted `bio.reference_graph.member` child dataset. Dry-run is
 the default; add `--apply` to write the child `entity.md` plus the virtual
 `datapackage.yaml` sibling.
 
+Use `science commons reference-graph resolve-member <registry_id> <member_key> --json`
+to resolve an exact graph member key from a pinned reference graph node index.
+Deprecated or withdrawn members are returned with lifecycle state and
+`replaced_by`; replacements are not followed automatically.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether

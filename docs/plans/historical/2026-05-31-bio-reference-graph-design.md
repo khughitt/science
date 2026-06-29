@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1, RG2, RG3-B, and RG4 implemented; real recipes built — `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON, plus the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A); broader RG3 promotion workflows and RG5 pending
+Status: implemented and retained as historical rationale — RG1, RG2, RG3, RG4, and RG5 are implemented; real recipes built include `dataset:mondo` (pushed to origin), `dataset:go` from pinned OBO Graph JSON, and the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A)
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -10,7 +10,7 @@ Related:
 - `docs/plans/historical/2026-05-26-bio-geneset-type-design.md` — flat set collections; this design is the sibling for graph-shaped references
 - `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; graph/member provenance feeds dataset influence
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; reference graphs are `source_class: reference`
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; non-molecular identity resolution is a later consumer
+- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; molecular identity context and later transcript/protein projection
 - `science/model/src/science_model/ontologies/` — lightweight ontology catalogs; related but not the data-artifact layer
 
 ---
@@ -30,10 +30,12 @@ The core decision is:
 > pinned graph artifact. They promote to child `dataset` entities only when an evidence line or review
 > workflow needs a citable member.
 
-This design starts with the data-artifact model, not non-molecular identity resolution. Disease, ontology,
-cell-line, tissue, and association identity resolvers can consume this substrate later. The first
-implementation should prove schema, parsing, validation, graph-member resolution, and provenance hooks
-with tiny fixture artifacts; the real MONDO, GO, and Open Targets recipes (`dataset:mondo`, `dataset:go`, `dataset:opentargets-associations`) are now implemented.
+This design starts with the data-artifact model. The implementation now includes a generic exact
+graph-member identity resolver over pinned node indexes; disease-, ontology-, cell-line-, tissue-, or
+association-specific wrapper APIs can build on that generic resolver later if needed. The first
+implementation proved schema, parsing, validation, graph-member resolution, and provenance hooks with
+tiny fixture artifacts; the real MONDO, GO, and Open Targets recipes (`dataset:mondo`, `dataset:go`,
+`dataset:opentargets-associations`) are now implemented.
 
 Explicit non-goals:
 
@@ -41,7 +43,7 @@ Explicit non-goals:
 - Do not build full GO, MONDO, or Open Targets ingestion in the first increment.
 - Do not add live ontology-service calls to reproducible validation or graph builds.
 - Do not force graph resources into `bio.geneset` or `bio.table`.
-- Do not implement broad non-molecular identity resolution in this phase.
+- Do not add broad domain-specific identity wrapper APIs in this phase.
 
 ---
 
@@ -359,20 +361,18 @@ association without losing the upstream provenance needed for double-counting re
 
 ## 7. Relationship to identity
 
-This design does not implement disease, ontology, cell-line, tissue, or association identity resolution.
-It provides the pinned graph/member substrate those resolvers need.
+This design implements the generic pinned graph-member identity resolver that disease, ontology,
+cell-line, tissue, or association identity wrappers can consume later.
 
-Later non-molecular identity work can add resolvers such as:
+The implemented generic resolver is:
 
 ```text
-resolve_disease(curie, registry=dataset:mondo) -> resolved | deprecated | ambiguous | unresolved
-resolve_cell_line(curie, registry=dataset:cellosaurus) -> ...
 resolve_graph_member(key, registry=dataset:go) -> ...
 ```
 
-Those resolvers should obey the same pinned-authoritative rule as C: no live service in reproducible
-runs, explicit `declared_unresolved` when a namespace is outside implemented resolver scope, and no
-automatic collapse across compatibility/xref relations.
+It obeys the same pinned-authoritative rule as C: no live service in reproducible runs, explicit
+unresolved output for absent keys, deprecated/withdrawn lifecycle state surfaced with `replaced_by`, and
+no automatic collapse across compatibility/xref relations.
 
 ---
 
@@ -398,7 +398,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
 | RG3 | Graph-member promotion scaffold/apply workflow and unpromoted-member B materialization hooks | implemented locally |
 | RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections; `dataset:opentargets-associations` as the first association graph (Open Targets 25.12 overall-direct, Model A entity nodes, `edge_resource` omitted) | implemented |
-| RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
+| RG5 | Generic non-molecular identity resolver over pinned reference graph node indexes | implemented locally |
 
 RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
 `member_of` payload dispatcher now detects unsupported collection kinds explicitly, and the
@@ -412,6 +412,9 @@ virtual payload for promoted graph members, giving curators a promotion inspecti
 `science commons reference-graph scaffold-member <parent_dataset> <member_key> --slug <slug>`
 previews the promoted child dataset by default and writes the child `entity.md` plus virtual
 `datapackage.yaml` sibling when `--apply` is passed.
+`science commons reference-graph resolve-member <registry_id> <member_key> --json` resolves an exact
+graph member key from a pinned reference graph node index and surfaces lifecycle state without following
+replacement links automatically.
 
 RG2 implemented the generic virtual-member payload dispatcher and the first concrete
 `bio.reference_graph.member` resolver. The sibling `bio.geneset.member` resolver is now implemented on the
@@ -439,7 +442,8 @@ materialization stay separate code paths.
 
 ## 11. Next step
 
-RG1, RG2, RG3, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first
-association graph `dataset:opentargets-associations` as the real recipes. Member-payload inspection
-and scaffold/apply promotion commands exist for promoted graph members. The remaining follow-up is RG5
-non-molecular identity resolvers.
+RG1, RG2, RG3, RG4, and RG5 are implemented, with `dataset:mondo`, `dataset:go`, and the first
+association graph `dataset:opentargets-associations` as the real recipes. Member-payload inspection,
+scaffold/apply promotion, and exact graph-member identity resolution commands exist for reference graph
+members. This design is retained historically as the rationale for the implemented reference-graph
+substrate.

@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `5`
+- Pending thread count: `4`
 
 ## bio-data-architecture-umbrella
 
@@ -11,11 +11,10 @@
 - files:
   - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - pending_actions:
-  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke, RG5 identity work, and C4c transcript/protein projection
+  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke and C4c transcript/protein projection
     - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
-  - RG5 non-molecular identity resolvers over reference graphs
   - C4c transcript/protein projection
 
 ## bio-identity-and-reference-genome
@@ -31,19 +30,6 @@
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
   - C4c transcript/protein projection
-
-## bio-reference-graph-design
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-05-31-bio-reference-graph-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; RG1-RG4 plus graph-member inspection and scaffold/apply workflows are implemented, but RG5 non-molecular identity resolvers remain open
-    - `docs/plans/2026-05-31-bio-reference-graph-design.md`
-- remaining_gaps:
-  - RG5 non-molecular identity resolvers over reference graphs
 
 ## c4-variant-identity
 

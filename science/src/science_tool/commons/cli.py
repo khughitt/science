@@ -42,6 +42,10 @@ from science_tool.commons.promote import (
     plan_promote,
 )
 from science_tool.commons.query import CommonsQuery
+from science_tool.commons.reference_graph_identity import (
+    ReferenceGraphIdentityError,
+    resolve_graph_member,
+)
 from science_tool.commons.reference_graph_promotion import scaffold_reference_graph_member
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
@@ -512,6 +516,40 @@ def reference_graph_scaffold_member_cmd(
     click.echo(f"entity: {planned.entity_path.relative_to(root)}")
     if not planned.applied:
         click.echo("Re-run with --apply to write.")
+
+
+@reference_graph_group.command("resolve-member")
+@click.argument("registry_id")
+@click.argument("member_key")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, as_json: bool) -> None:
+    """Resolve a graph member key in a pinned reference graph."""
+    try:
+        match = resolve_graph_member(member_key, registry_id=registry_id)
+    except (CommonsError, ReferenceGraphIdentityError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if match is None:
+        payload = {
+            "resolution_status": "unresolved",
+            "registry_id": registry_id,
+            "member_key": member_key,
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2, sort_keys=True))
+            return
+        click.echo(f"unresolved {registry_id} {member_key}")
+        return
+
+    if as_json:
+        click.echo(json.dumps(match.to_json(), indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{match.member_key} ({match.status})")
+    click.echo(f"registry: {match.registry_id}")
+    click.echo(f"label: {match.label}")
+    if match.replaced_by:
+        click.echo(f"replaced_by: {', '.join(match.replaced_by)}")
 
 
 @commons_group.group("promote")

@@ -431,6 +431,28 @@ def test_reference_graph_scaffold_member_apply_writes_valid_member(
     assert resolved_payload["payload"]["node"]["label"] == "multiple myeloma"
 
 
+def test_reference_graph_resolve_member_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["reference-graph", "resolve-member", "dataset:mondo-v1", "MONDO:0005148", "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["registry_id"] == "dataset:mondo-v1"
+    assert payload["member_key"] == "MONDO:0005148"
+    assert payload["status"] == "active"
+    assert payload["label"] == "multiple myeloma"
+    assert payload["replaced_by"] == []
+
+
 def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
