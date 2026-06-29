@@ -234,7 +234,7 @@ def test_load_bundle_member_count_over_limit_is_integrity(
             "demo/science.yaml": b"id: demo\n",
         },
     )
-    with pytest.raises(BundleIntegrityError):
+    with pytest.raises(BundleIntegrityError, match="member count exceeds limit"):
         load_bundle(bad)
 
 
@@ -244,8 +244,8 @@ def test_load_bundle_member_size_over_limit_is_integrity(
 ):
     monkeypatch.setattr(verify, "MAX_MEMBER_BYTES", 3)
     bad = tmp_path / "too-large.tar.gz"
-    _write_bundle(bad, {"demo/manifest.json": b"{}"})
-    with pytest.raises(BundleIntegrityError):
+    _write_bundle(bad, {"demo/manifest.json": b"{}{}"})
+    with pytest.raises(BundleIntegrityError, match="exceeds size limit"):
         load_bundle(bad)
 
 
@@ -259,22 +259,25 @@ def test_load_bundle_total_uncompressed_bytes_over_limit_is_integrity(
         bad,
         {
             "demo/manifest.json": b"{}",
-            "demo/science.yaml": b"x",
+            "demo/science.yaml": b"xxx",
         },
     )
-    with pytest.raises(BundleIntegrityError):
+    with pytest.raises(
+        BundleIntegrityError,
+        match="total uncompressed size exceeds limit",
+    ):
         load_bundle(bad)
 
 
 def test_load_bundle_absolute_member_path_is_integrity(tmp_path: Path):
     bad = tmp_path / "absolute.tar.gz"
     _write_raw_bundle(bad, [("/demo/manifest.json", b"{}")])
-    with pytest.raises(BundleIntegrityError):
+    with pytest.raises(BundleIntegrityError, match="unsafe archive member path"):
         load_bundle(bad)
 
 
 def test_load_bundle_traversal_member_path_is_integrity(tmp_path: Path):
     bad = tmp_path / "traversal.tar.gz"
     _write_raw_bundle(bad, [("demo/../manifest.json", b"{}")])
-    with pytest.raises(BundleIntegrityError):
+    with pytest.raises(BundleIntegrityError, match="unsafe archive member path"):
         load_bundle(bad)
