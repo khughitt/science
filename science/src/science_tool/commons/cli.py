@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -41,6 +42,7 @@ from science_tool.commons.promote import (
     plan_promote,
 )
 from science_tool.commons.query import CommonsQuery
+from science_tool.commons.reference_graph_promotion import scaffold_reference_graph_member
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
@@ -461,6 +463,55 @@ def member_payload_cmd(member_id: str, as_json: bool) -> None:
     click.echo(f"{payload.member_id} ({payload.payload_kind})")
     click.echo(f"parent: {payload.parent_dataset}")
     click.echo(f"member_key: {payload.member_key}")
+
+
+@commons_group.group("reference-graph")
+def reference_graph_group() -> None:
+    """Manage reference graph member workflows."""
+
+
+@reference_graph_group.command("scaffold-member")
+@click.argument("parent_dataset")
+@click.argument("member_key")
+@click.option("--slug", required=True, help="Slug for the promoted child dataset.")
+@click.option("--title", default=None, help="Override the promoted member title.")
+@click.option("--date", "stamp", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Created/updated date.")
+@click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="use-now", show_default=True)
+@click.option("--apply", "apply_flag", is_flag=True, help="Write the promoted member dataset.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def reference_graph_scaffold_member_cmd(
+    parent_dataset: str,
+    member_key: str,
+    slug: str,
+    title: str | None,
+    stamp: Any,
+    tier: str,
+    apply_flag: bool,
+    as_json: bool,
+) -> None:
+    """Scaffold a promoted bio.reference_graph.member dataset."""
+    try:
+        planned = scaffold_reference_graph_member(
+            parent_dataset=parent_dataset,
+            member_key=member_key,
+            slug=slug,
+            title=title,
+            stamp=date.fromisoformat(stamp.strftime("%Y-%m-%d")) if stamp is not None else None,
+            tier=tier,
+            apply=apply_flag,
+        )
+    except (CommonsError, ValueError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    root = _require_root()
+    if as_json:
+        click.echo(json.dumps(planned.to_json(commons_root=root), indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{'wrote' if planned.applied else 'planned'} {planned.canonical_id}")
+    click.echo(f"entity: {planned.entity_path.relative_to(root)}")
+    if not planned.applied:
+        click.echo("Re-run with --apply to write.")
 
 
 @commons_group.group("promote")

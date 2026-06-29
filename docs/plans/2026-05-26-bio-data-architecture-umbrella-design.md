@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1/D2, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG3-B/RG4 with `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) built in `~/d/science-commons`; read-only graph-member payload inspection exists, while graph-member promotion scaffold/apply workflows and RG5 identity resolvers remain pending; C4c transcript/protein projection remains open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1/D2, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG3/RG4 with `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) built in `~/d/science-commons`; graph-member payload inspection and promotion scaffold/apply workflows exist, while RG5 identity resolvers remain pending; C4c transcript/protein projection remains open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -281,14 +281,13 @@ collapsed into identity.
 7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
    services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
    provenance but not replace pinned identity inputs.
-8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, RG3-B, and RG4 are implemented
+8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, RG3, and RG4 are implemented
    and pushed to origin: RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as
-   node rows plus directly incident edges, RG3-B materializes node-index member `dataset_usage` as
-   virtual graph-member usage records, and RG4 adds `dataset:mondo` (pushed to origin), `dataset:go`
+   node rows plus directly incident edges, RG3 materializes node-index member `dataset_usage` as
+   virtual graph-member usage records and scaffolds/applies promoted graph members, and RG4 adds `dataset:mondo` (pushed to origin), `dataset:go`
    (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease
    association graph, 25.12) as the first real pinned reference graph recipes in `~/d/science-commons`.
-   Read-only graph-member payload inspection exists; graph-member promotion scaffold/apply workflows and
-   non-molecular identity resolvers remain follow-up work.
+   Non-molecular identity resolvers remain follow-up work.
 
 ---
 
@@ -338,13 +337,13 @@ C4c-1 rsID input all merged and pushed to origin), D, and B1/B2 are now exercise
 the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons` (merged
 and pushed to origin on 2026-06-01), and the pan-disease local Reactome stub was removed so consumers
 resolve through commons.
-`bio.reference_graph` RG1, RG2, RG3-B, and RG4 are implemented and pushed to origin: RG1 validates node indexes,
-RG2 resolves promoted graph-member virtual payloads as node rows plus directly incident edges, RG3-B
-materializes node-index member `dataset_usage` as virtual graph-member usage records, and RG4 adds
+`bio.reference_graph` RG1, RG2, RG3, and RG4 are implemented and pushed to origin: RG1 validates node indexes,
+RG2 resolves promoted graph-member virtual payloads as node rows plus directly incident edges, RG3
+materializes node-index member `dataset_usage` as virtual graph-member usage records and scaffolds/applies
+promoted graph members, and RG4 adds
 `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and
 `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) as the first
-real pinned reference graph recipes. Read-only graph-member payload inspection exists; graph-member
-promotion scaffold/apply workflows and non-molecular identity resolvers remain follow-up work.
+real pinned reference graph recipes. Non-molecular identity resolvers remain follow-up work.
 
 **Operational follow-ups.**
 - `~/d/science` and `~/d/science-commons` `main` are pushed to origin as of 2026-06-01 (Pillars A-E +

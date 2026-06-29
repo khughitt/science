@@ -396,7 +396,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 |---|---|---|
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
-| RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | B materialization hooks implemented; broader promotion workflows pending |
+| RG3 | Graph-member promotion scaffold/apply workflow and unpromoted-member B materialization hooks | implemented locally |
 | RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections; `dataset:opentargets-associations` as the first association graph (Open Targets 25.12 overall-direct, Model A entity nodes, `edge_resource` omitted) | implemented |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
@@ -409,7 +409,9 @@ Automated B materialization from unpromoted graph members now emits virtual
 they can contribute candidate shared-source signals without becoming direct full-overlap commitments.
 A read-only `science commons member-payload <dataset_id> --json` command exposes the resolved
 virtual payload for promoted graph members, giving curators a promotion inspection workflow.
-Full scaffold/apply workflows for minting promoted graph-member datasets remain RG3 follow-up work.
+`science commons reference-graph scaffold-member <parent_dataset> <member_key> --slug <slug>`
+previews the promoted child dataset by default and writes the child `entity.md` plus virtual
+`datapackage.yaml` sibling when `--apply` is passed.
 
 RG2 implemented the generic virtual-member payload dispatcher and the first concrete
 `bio.reference_graph.member` resolver. The sibling `bio.geneset.member` resolver is now implemented on the
@@ -437,7 +439,7 @@ materialization stay separate code paths.
 
 ## 11. Next step
 
-RG1, RG2, RG3-B, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first
-association graph `dataset:opentargets-associations` as the real recipes. A read-only member-payload
-inspection command exists for promoted graph members. Remaining follow-ups are RG3 scaffold/apply
-promotion workflows and RG5 non-molecular identity resolvers.
+RG1, RG2, RG3, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first
+association graph `dataset:opentargets-associations` as the real recipes. Member-payload inspection
+and scaffold/apply promotion commands exist for promoted graph members. The remaining follow-up is RG5
+non-molecular identity resolvers.

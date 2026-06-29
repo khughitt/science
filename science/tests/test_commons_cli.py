@@ -1,13 +1,15 @@
 """Tests for science_tool.commons.cli."""
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
+from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.cli import commons_group
 
 
@@ -328,6 +330,105 @@ def test_member_payload_json_resolves_reference_graph_member(
     assert payload["payload_kind"] == "bio.reference_graph.member"
     assert payload["payload"]["node"]["label"] == "multiple myeloma"
     assert payload["payload"]["incident_edges"][0]["predicate"] == "is_a"
+
+
+def test_reference_graph_scaffold_member_json_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    target = root / "datasets" / "mondo-0005148-scaffold" / "entity.md"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        [
+            "reference-graph",
+            "scaffold-member",
+            "dataset:mondo-v1",
+            "MONDO:0005148",
+            "--slug",
+            "mondo-0005148-scaffold",
+            "--date",
+            "2026-06-28",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not target.exists()
+    payload = json.loads(result.output)
+    assert payload["applied"] is False
+    assert payload["canonical_id"] == "dataset:mondo-0005148-scaffold"
+    assert payload["entity_path"] == "datasets/mondo-0005148-scaffold/entity.md"
+    frontmatter = payload["frontmatter"]
+    assert frontmatter == {
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "id": "dataset:mondo-0005148-scaffold",
+        "type": "dataset",
+        "title": "multiple myeloma",
+        "version": "1.0.0",
+        "status": "active",
+        "created": "2026-06-28",
+        "updated": "2026-06-28",
+        "origin": "derived",
+        "tier": "use-now",
+        "source_class": "reference",
+        "parent_dataset": "dataset:mondo-v1",
+        "datapackage": "virtual:member-of",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:mondo-v1",
+            "member_key": "MONDO:0005148",
+        },
+        "member_kind": "term",
+        "label": "multiple myeloma",
+    }
+
+
+def test_reference_graph_scaffold_member_apply_writes_valid_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        [
+            "reference-graph",
+            "scaffold-member",
+            "dataset:mondo-v1",
+            "MONDO:0005148",
+            "--slug",
+            "mondo-0005148-scaffold",
+            "--date",
+            "2026-06-28",
+            "--apply",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["applied"] is True
+    member_dir = root / "datasets" / "mondo-0005148-scaffold"
+    entity_text = (member_dir / "entity.md").read_text(encoding="utf-8")
+    assert "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0" in entity_text
+    assert yaml.safe_load((member_dir / "datapackage.yaml").read_text(encoding="utf-8")) == {"resources": []}
+
+    record = CommonsEntityAdapter(root).load("dataset:mondo-0005148-scaffold")
+    assert record.frontmatter["derivation"]["member_key"] == "MONDO:0005148"
+    resolved = runner.invoke(commons_group, ["member-payload", "dataset:mondo-0005148-scaffold", "--json"])
+    assert resolved.exit_code == 0, resolved.output
+    resolved_payload = json.loads(resolved.output)
+    assert resolved_payload["payload"]["node"]["label"] == "multiple myeloma"
 
 
 def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -384,6 +384,12 @@ resolved virtual payload for a promoted member dataset. The command uses the
 shared `member_of` dispatcher and supports both `bio.geneset.member` and
 `bio.reference_graph.member` datasets.
 
+For reference graphs, use
+`science commons reference-graph scaffold-member <parent_dataset> <member_key> --slug <slug>`
+to preview a promoted `bio.reference_graph.member` child dataset. Dry-run is
+the default; add `--apply` to write the child `entity.md` plus the virtual
+`datapackage.yaml` sibling.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether
