@@ -94,8 +94,12 @@ class SerializedManifest(BaseModel):
 
     @model_validator(mode="after")
     def _records_are_unique_and_sorted(self) -> SerializedManifest:
-        _validate_ordered_unique("files", [record.path for record in self.files])
-        _validate_ordered_unique("payloads", [record.path for record in self.payloads])
+        file_paths = [record.path for record in self.files]
+        payload_paths = [record.path for record in self.payloads]
+        _validate_ordered_unique("files", file_paths)
+        _validate_ordered_unique("payloads", payload_paths)
+        if set(file_paths) & set(payload_paths):
+            raise ValueError("duplicate path across files and payloads")
         return self
 
 
