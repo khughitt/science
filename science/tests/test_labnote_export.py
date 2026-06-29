@@ -540,6 +540,15 @@ def test_science_labnote_export_cli_writes_package(tmp_path: Path) -> None:
     assert "Exported Labnote package" in result.output
 
 
+def test_data_version_is_stable_golden(tmp_path: Path):
+    write_minimal_project(tmp_path)
+    out = tmp_path / "out"
+    export_labnote_package(project_root=tmp_path, out_dir=out)
+    project = json.loads((out / "project.json").read_text())
+    # Golden: exact digest must survive the project_package.core extraction byte-for-byte.
+    assert project["package"]["data_version"] == "2026-06-28+4d829889ef73"
+
+
 def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Path) -> None:
     from click.testing import CliRunner
     from science_tool.cli import main
