@@ -5,10 +5,10 @@ Date: 2026-05-26
 Status: implemented; retained as historical Pillar B rationale
 
 Related (builds on):
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar B ("north star")
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar B ("north star")
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `dataset_usage` and source-class substrate
 - `docs/plans/2026-05-26-bio-geneset-type-design.md` — Pillar D; D1 realizes row-level gene-set provenance
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; dataset identity the refs resolve through
+- `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; dataset identity the refs resolve through
 - `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` — `consumed_by`, `bears_on`, the provenance closure
 - `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin (`derivation.inputs`)
 - `science/model/src/science_model/schemas/mixin-dataset-1.0.json` — shipped `dataset_usage` vocabulary

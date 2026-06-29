@@ -5,9 +5,9 @@ Date: 2026-05-26
 Status: design for review (foundation primitive; consumed by Pillars C and D, and later non-molecular identity work)
 
 Related (builds on):
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; routes here
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; routes here
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin (`origin`, `derivation`, `parent_dataset`)
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; the assembly registry is an instance
+- `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; the assembly registry is an instance
 - `docs/plans/2026-05-26-bio-geneset-type-design.md` — Pillar D; the gene-set collection is the first instance
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; collections are typically `source_class: reference`
 

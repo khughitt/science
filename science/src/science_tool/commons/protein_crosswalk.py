@@ -16,7 +16,7 @@ collapsed). A **merged** secondary accession surfaces ``status='merged'`` +
 ``replacement_protein_key`` (never auto-followed). An ambiguous input returns a
 distinct ``AmbiguousProteinMatch`` with no ``protein_key``. Each row carries the
 C2 ``gene_key`` (protein->gene join pointer). See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/§8 C3).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/§8 C3).
 """
 
 from __future__ import annotations

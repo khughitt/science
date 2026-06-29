@@ -2,10 +2,12 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — C1/C2/C3/C4a/C4b merged locally, C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending (Phase 1 of the bio data architecture; foundational)
+Status: historical Pillar C rationale — C1/C2/C3/C4a/C4b and C4c-1 rsID input are implemented locally.
+Remaining active work is delegated to `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`: full
+dbSNP artifact build/operator smoke and later transcript/protein projection.
 
 Related (builds on):
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry is an instance
 - `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin, `origin`, `access`
 - `science/model/src/science_model/schemas/extension-bio-*.json` — `bio.rnaseq`/`bio.scrna`/`bio.cna` carry free-text `reference_genome`

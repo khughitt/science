@@ -5,12 +5,12 @@ Date: 2026-05-31
 Status: implemented and retained as historical rationale — RG1, RG2, RG3, RG4, and RG5 are implemented; real recipes built include `dataset:mondo` (pushed to origin), `dataset:go` from pinned OBO Graph JSON, and the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A)
 
 Related:
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; graph nodes/associations are keyed members
 - `docs/plans/historical/2026-05-26-bio-geneset-type-design.md` — flat set collections; this design is the sibling for graph-shaped references
 - `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; graph/member provenance feeds dataset influence
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; reference graphs are `source_class: reference`
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; molecular identity context and later transcript/protein projection
+- `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; molecular identity context and later transcript/protein projection
 - `science/model/src/science_model/ontologies/` — lightweight ontology catalogs; related but not the data-artifact layer
 
 ---

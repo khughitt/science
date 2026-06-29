@@ -5,7 +5,7 @@ fields) and resolves declared assembly seqcol digests against the assembly
 registry via the Plan 1 substrate `evaluate_key_resolution` (RCM-D2 guardrail 1,
 exact-equality RCM-D6). Check 3 (cross-dataset assembly mismatch) is added in a
 later task in this same module. See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md.
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md.
 
 Dataset frontmatter is gathered by TOLERANT FILE DISCOVERY (both
 DatapackageAdapter and MarkdownAdapter, via `dataset_frontmatters` in

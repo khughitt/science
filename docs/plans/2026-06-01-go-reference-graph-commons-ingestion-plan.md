@@ -86,7 +86,7 @@ member payload resolution already shipped with MONDO and are reused unchanged.
 - Create: `~/d/science-commons/datasets/go/datapackage.yaml` — graph (`_src/go.json`) + nodes + edges + build_summary resources.
 - Create: `~/d/science-commons/datasets/go/entity.md` — `dataset:go` reference-graph record.
 - Modify: `docs/plans/historical/2026-05-31-bio-reference-graph-design.md` — mark the GO recipe implemented.
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — add `dataset:go` to the reference-graph status.
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — add `dataset:go` to the reference-graph status.
 
 ---
 
@@ -468,7 +468,7 @@ print(payload.node.member_kind, len(payload.incident_edges))
 
 **Files:**
 - Modify: `docs/plans/historical/2026-05-31-bio-reference-graph-design.md`
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
 
 - [ ] **Step 1: Reference-graph design doc**
 

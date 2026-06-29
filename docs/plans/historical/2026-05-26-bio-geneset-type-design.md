@@ -5,11 +5,11 @@ Date: 2026-05-26
 Status: historical; D1 collection type and D2 promoted-member payload path implemented
 
 Related (builds on):
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; D is its first concrete instance
 - `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
+- `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
 - `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin (`origin`, `derivation`, `parent_dataset`)
 - `science/model/src/science_model/schemas/extension-bio-*.json` — sibling bio extensions
 

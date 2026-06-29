@@ -6,7 +6,7 @@ the level-2 record but is not part of the collection identity. Per-contig
 ``SQ.`` digests come from a refget seqcol server's level-2 record, so no FASTA
 is ever fetched. ``refget`` is imported lazily — only building the registry
 needs it; resolving/validating it does not. See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D2).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D2).
 """
 
 from __future__ import annotations

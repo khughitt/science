@@ -151,11 +151,11 @@ Science repo (`~/d/science`):
   - Add `format: rsid` locator validation and row minting.
 - Modify: `science/tests/validate/test_checks_variant_identity.py`
   - Add rsID locator and row-layer tests.
-- Modify: `docs/plans/2026-05-28-c4-variant-identity-design.md`
+- Modify: `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`
   - Mark C4c-1 planned/implemented after landing.
-- Modify: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`
   - Update C4 status after landing.
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
   - Update umbrella status after landing.
 
 Commons repo (`~/d/science-commons`):
@@ -1161,14 +1161,14 @@ rtk git commit -m "fix: pin dbsnp variant label hashes"
 ### Task 7: Docs and Status Updates
 
 **Files:**
-- Modify: `docs/plans/2026-05-28-c4-variant-identity-design.md`
-- Modify: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
 - Modify: `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
 
 - [x] **Step 1: Update C4 design status**
 
-In `docs/plans/2026-05-28-c4-variant-identity-design.md`, change C4c from wholly remaining to:
+In `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`, change C4c from wholly remaining to:
 
 ```markdown
 C4c-1 rsID input is implemented through `dataset:variant-labels-dbsnp-human`; transcript/protein HGVS
@@ -1177,7 +1177,7 @@ projection remains deferred. Full dbSNP artifact build/operator smoke remains pe
 
 - [x] **Step 2: Update Pillar C status**
 
-In `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`, update the C4 row to say:
+In `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`, update the C4 row to say:
 
 ```markdown
 C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input implemented locally; full dbSNP artifact build/operator smoke and transcript/protein projection remain.
@@ -1185,7 +1185,7 @@ C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input implement
 
 - [x] **Step 3: Update umbrella status**
 
-In `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`, update the status line and §8 so C4c no longer appears fully open once C4c-1 lands.
+In `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`, update the status line and §8 so C4c no longer appears fully open once C4c-1 lands.
 
 - [x] **Step 4: Mark this plan implemented**
 
@@ -1198,7 +1198,7 @@ Change this plan's task checkboxes as tasks land and add an implementation statu
 - [x] **Step 5: Commit docs**
 
 ```bash
-rtk git add docs/plans/2026-05-28-c4-variant-identity-design.md docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md
+rtk git add docs/plans/historical/2026-05-28-c4-variant-identity-design.md docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md
 rtk git commit -m "docs: update c4c rsid status"
 ```
 

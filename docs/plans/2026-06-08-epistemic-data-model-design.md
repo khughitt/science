@@ -65,7 +65,7 @@ Their design intent feeds the facet migrations; they are superseded as standalon
   `docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md`,
   `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`,
   verdict token guidance in `docs/user-guide/epistemic-model.md` → feed `epistemic-edges`.
-- Dataset predecessors: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`,
+- Dataset predecessors: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`,
   `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`,
   and the A1/A2/B1/B2 dataset designs/plans → feed `dataset-evidence-flow`.
 
@@ -286,7 +286,7 @@ Full end-to-end (per approved scope):
 | `docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md` | **predecessor (rendering)** | posterior block → `epistemic-edges` |
 | `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
 | `docs/user-guide/epistemic-model.md` verdict tokens | **predecessor (rendering)** | per-interpretation verdict join → `epistemic-edges` |
-| `2026-05-26-bio-data-architecture-umbrella-design.md` | **predecessor (dataset)** | → `dataset-evidence-flow` |
+| `2026-05-26-bio-data-architecture-umbrella-design.md` | **historical predecessor (dataset)** | → `dataset-evidence-flow` |
 | `2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` | **predecessor (dataset)** | → `dataset-evidence-flow` |
 | A1/A2/B1/B2 dataset designs+plans | **predecessor (dataset)** | already-merged machinery → `dataset-evidence-flow` |
 

@@ -2,14 +2,13 @@
 
 Date: 2026-05-28
 
-Status: C4a implemented; C4b implemented in liftover, assembly-compatibility, and identity-context
-validation code; C4c-1 rsID input implemented locally via
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`, with full dbSNP artifact build/operator smoke pending
-(Pillar C, sub-phase 4 of the bio data architecture)
+Status: historical C4 rationale — C4a, C4b, and C4c-1 rsID input are implemented. Remaining active work
+is delegated to `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`: full dbSNP artifact
+build/operator smoke and later transcript/protein projection.
 
 Related (builds on):
-- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella (C4 = the heavyweight sub-phase, "decompose before planning")
+- `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella (C4 = the heavyweight sub-phase, "decompose before planning")
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry / sequence store are instances; guardrail-2 (RCM-D6) is the compatibility-relation home (C4b)
 - `science/src/science_tool/commons/assembly.py`, `assembly_registry_build.py` — C1 seqcol registry + level-2 build (the per-contig digests C4a materializes)
 - `science/model/src/science_model/schemas/extension-bio-identity_context-1.0.json` — `molecular_ids` open map (variant tier needs no schema edit)

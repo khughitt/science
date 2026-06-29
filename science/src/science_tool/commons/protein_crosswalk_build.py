@@ -7,7 +7,7 @@ file into ``merged`` rows with a forward pointer. Each approved row carries the 
 network call (build-time only); all parsing is pure. The v1 scope (reviewed
 Swiss-Prot, human) is a source-file choice — the parser is source-agnostic (it
 emits one row per accession it sees). See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/C-D3).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/C-D3).
 """
 
 from __future__ import annotations
