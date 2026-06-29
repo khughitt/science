@@ -717,6 +717,46 @@ def test_load_bundle_symlink_member_is_integrity(tmp_path: Path):
     bad.write_bytes(raw.getvalue())
     with pytest.raises(BundleIntegrityError):
         load_bundle(bad)
+
+
+def test_load_bundle_hardlink_member_is_integrity(tmp_path: Path):
+    _, bundle = _make_bundle(tmp_path)
+    with tarfile.open(bundle, "r:gz") as tar:
+        members = {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
+    raw = io.BytesIO()
+    with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for name, data in sorted(members.items()):
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            link = tarfile.TarInfo("demo/evil-hardlink")
+            link.type = tarfile.LNKTYPE
+            link.linkname = "demo/science.yaml"
+            tar.addfile(link)
+    bad = tmp_path / "hardlink.tar.gz"
+    bad.write_bytes(raw.getvalue())
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
+
+
+def test_load_bundle_duplicate_member_is_integrity(tmp_path: Path):
+    _, bundle = _make_bundle(tmp_path)
+    with tarfile.open(bundle, "r:gz") as tar:
+        members = [(m.name, tar.extractfile(m).read()) for m in tar.getmembers()]
+    # Append a second copy of an existing source member (same arcname twice).
+    dup_name, dup_data = next((n, d) for n, d in members if n.endswith("science.yaml"))
+    raw = io.BytesIO()
+    with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for name, data in [*members, (dup_name, dup_data)]:
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    bad = tmp_path / "dup.tar.gz"
+    bad.write_bytes(raw.getvalue())
+    with pytest.raises(BundleIntegrityError):
+        load_bundle(bad)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -789,6 +829,8 @@ def _read_members(raw: bytes) -> dict[str, bytes]:
                     raise BundleIntegrityError(f"unsafe tar member path: {name}")
                 if not info.isreg():
                     raise BundleIntegrityError(f"unsafe non-regular tar member: {name}")
+                if name in members:
+                    raise BundleIntegrityError(f"duplicate tar member: {name}")
                 extracted = tar.extractfile(info)
                 members[name] = extracted.read() if extracted is not None else b""
             return members
@@ -1032,6 +1074,14 @@ def preflight_against(root: Path) -> str:
     if not root.exists() or not root.is_dir():
         raise VerifyError(f"--against root not found: {root}")
     try:
+        # Must be a real worktree (a bare repo can have HEAD but no working
+        # tree to compare source bytes against), then resolve the HEAD sha.
+        inside = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if inside != "true":
+            raise VerifyError(f"--against root is not a git worktree: {root}")
         return subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True,
@@ -1204,10 +1254,15 @@ def preflight_extract(dest: Path) -> None:
 def extract_bundle(bundle: LoadedBundle, dest: Path) -> Path:
     """Write the bundle's source tree to dest/<project-id>/ atomically.
 
-    Materialize into a sibling staging dir, then rename into place, so a
-    mid-extract filesystem error leaves dest untouched.
+    Materialize into a sibling staging dir, then rename it onto ``dest`` as the
+    final step. On Linux ``os.rename`` replaces an existing *empty* directory
+    atomically, so we never explicitly remove ``dest``: a mid-extract error (or
+    a failed rename) leaves ``dest`` exactly as it was.
     """
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise VerifyError(f"failed to prepare --extract target parent: {exc}") from exc
     staging = Path(tempfile.mkdtemp(prefix=".verify-extract-", dir=str(dest.parent)))
     try:
         root = staging / bundle.project_id
@@ -1217,8 +1272,8 @@ def extract_bundle(bundle: LoadedBundle, dest: Path) -> Path:
             out = root / rel
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(data)
-        if dest.exists():
-            dest.rmdir()  # preflight guaranteed empty
+        # rename onto dest: succeeds whether dest is absent or an existing
+        # empty dir (preflight guaranteed empty); dest is never rmdir'd first.
         os.rename(staging, dest)
     except OSError as exc:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1558,11 +1613,13 @@ def test_cli_verify_against_differ_exit_1(tmp_path: Path):
 def test_cli_verify_json_is_pure_json(tmp_path: Path):
     proj, bundle = _bundle(tmp_path)
     (proj / "data" / "processed" / "x.parquet").unlink()
-    result = CliRunner(mix_stderr=False).invoke(
+    result = CliRunner().invoke(
         main, ["project", "verify", str(bundle), "--against", str(proj), "--json"]
     )
     assert result.exit_code == 3
-    payload = json.loads(result.stdout)  # stdout parses as a single JSON object
+    # In --json mode nothing is written to stderr (warnings only print to stderr
+    # in human mode), so result.output is exactly the JSON object.
+    payload = json.loads(result.output)  # output parses as a single JSON object
     assert payload["status"] == "missing"
     assert payload["version"] == 1
 
@@ -1731,4 +1788,4 @@ Expected: no findings.
 
 **Placeholder scan:** no TBD/TODO; every code step shows complete code; every test step shows real assertions.
 
-> Note: the symlink-member self-check test (Task 3) covers the symlink case; a hardlink member is rejected by the same `info.isreg()` guard. If the final reviewer wants an explicit hardlink case, it is a one-line addition mirroring the symlink test with `tarfile.LNKTYPE`.
+**Unsafe-member coverage:** Task 3 has explicit self-check tests for a symlink member (`tarfile.SYMTYPE`), a hardlink member (`tarfile.LNKTYPE`), and a duplicate member name — each rejected as `BundleIntegrityError`. The design's symlink/hardlink-rejection requirement is covered directly, not by inference.
