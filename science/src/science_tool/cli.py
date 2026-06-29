@@ -4577,6 +4577,48 @@ def project() -> None:
 project.add_command(_artifacts_group)
 
 
+@project.command("serialize")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    envvar="SCIENCE_PROJECT_ROOT",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root containing science.yaml.",
+)
+@click.option(
+    "--out",
+    "out_archive",
+    required=True,
+    type=click.Path(path_type=Path, dir_okay=False),
+    help="Output .tar.gz path (must be outside the project root).",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Build despite data-audit boundary violations (audit only; "
+    "never bypasses missing/untracked science.yaml or guard failures).",
+)
+def project_serialize(project_root: Path, out_archive: Path, force: bool) -> None:
+    """Serialize the tracked project source into a deterministic, shareable bundle.
+
+    Reproducibility, not a privacy scrubber: ships all git-tracked entities and
+    results faithfully; restricted material must not be tracked.
+    """
+    from science_tool.project_package.serialize import SerializeError, serialize_project
+
+    try:
+        result = serialize_project(project_root, out_archive, force=force)
+    except SerializeError as exc:
+        raise click.ClickException(str(exc)) from exc
+    suffix = " [forced]" if result.forced else ""
+    click.echo(
+        f"Serialized {result.file_count} file(s), {result.payload_count} payload(s)"
+        f"{suffix} → {result.out_path}"
+    )
+
+
 @project.command("index")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
