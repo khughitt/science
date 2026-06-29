@@ -10,6 +10,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
+
 
 class ProjectRole(StrEnum):
     META = "meta"
@@ -108,6 +110,27 @@ class RefsConfig(BaseModel):
     )
 
 
+class DataPolicyConfig(BaseModel):
+    """Per-project override of the data-tracking policy (`science data audit`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_patterns: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_DATA_POLICY.record_patterns)
+    )
+    payload_extensions: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_DATA_POLICY.payload_extensions)
+    )
+    size_threshold: int = DEFAULT_DATA_POLICY.size_threshold
+
+    def to_policy(self) -> DataPolicy:
+        return DataPolicy(
+            record_patterns=tuple(self.record_patterns),
+            payload_extensions=tuple(self.payload_extensions),
+            size_threshold=self.size_threshold,
+        )
+
+
 class ProjectConfig(BaseModel):
     """Typed view of science.yaml. Non-listed fields are preserved as-is."""
 
@@ -119,6 +142,7 @@ class ProjectConfig(BaseModel):
     peers: list[PeerEntry] = Field(default_factory=list)
     prose_lint: ProseLintConfig | None = None
     refs: RefsConfig | None = None
+    data_policy: DataPolicyConfig | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -140,6 +164,13 @@ def load_project_config(project_root: Path) -> ProjectConfig:
     if "id" not in raw or raw["id"] is None:
         raw["id"] = project_root.resolve().name
     return ProjectConfig.model_validate(raw)
+
+
+def resolve_data_policy(config: ProjectConfig) -> DataPolicy:
+    """Return the effective DataPolicy: the project override or the framework default."""
+    if config.data_policy is not None:
+        return config.data_policy.to_policy()
+    return DEFAULT_DATA_POLICY
 
 
 def paths_equivalent(a: Path, b: Path) -> bool:
