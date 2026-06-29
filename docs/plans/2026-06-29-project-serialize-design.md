@@ -161,8 +161,20 @@ Every copied file (including `science.yaml`, `references.bib`, `graph.trig`) get
 
 - Run `audit_project(project_root, policy)` (from `data_audit.py`) **before** archive
   creation.
-- **Fail closed:** any violation → refuse with a summary of the quadrants + count, exit 1.
-- `--force` bypasses **only** audit violations. It does **not** bypass missing
+- **Gate only on the payload-boundary quadrants** — `STRANDED_RECORD`, `LEAKED_PAYLOAD`,
+  `TRACKED_PAYLOAD`. These are the misplacement breaches serialize exists to catch (payload in
+  the wrong place; record stranded under `data/`).
+- **`Quadrant.FLAG` never blocks serialization.** Under the default data policy, `classify`
+  returns `FileClass.FLAG` for nearly every ordinary source file (`entities/*.md`,
+  `science.yaml`, `results/*.md`, `papers/references.bib`, `knowledge/graph.trig`) — `FLAG`
+  is the generic "couldn't classify, a human may want to look" signal surfaced project-wide by
+  `science data audit`, **not** a payload-boundary breach. Gating on it would block 100% of
+  real projects. Serialize filters `audit_project`'s output to the three boundary quadrants;
+  the gate decision, the `forced` flag, and `boundary_audit.passed` all key off that same
+  filtered set.
+- **Fail closed:** any *boundary* violation → refuse with a summary of the quadrants + count,
+  exit 1.
+- `--force` bypasses **only** boundary-quadrant violations. It does **not** bypass missing
   `science.yaml`, dirty source, unreadable files, invalid project config, or payload-walk
   guard failures — those always hard-fail.
 
@@ -198,8 +210,10 @@ quadrant** rather than overloading `LEAKED_PAYLOAD`, because its remediation dif
 }
 ```
 
-- `boundary_audit.passed` = audit found zero violations; `forced` = `--force` was used to
-  build despite violations. A forced archive is always distinguishable from a clean one.
+- `boundary_audit.passed` = audit found zero **boundary-quadrant** violations (`STRANDED_RECORD`
+  / `LEAKED_PAYLOAD` / `TRACKED_PAYLOAD`); plain `FLAG` classifications are ignored here.
+  `forced` = `--force` was used to build despite boundary violations. A forced archive is always
+  distinguishable from a clean one.
 - `data_version` uses `content_version(base, chunks)` where `base` mirrors labnote's
   (`raw_config.last_modified or version or "0"`). To capture path/manifest changes (not just
   bytes — a rename with identical content must change the version), serialize hashes the
@@ -226,8 +240,8 @@ science project serialize --project-root <root> --out <bundle.tar.gz> [--force]
 - `--out`: required, the output `.tar.gz` path. **Must not resolve inside the project root**
   (see error handling) — otherwise a prior archive sitting under a tracked path could be
   selected into the new one, breaking determinism and making the bundle self-referential.
-- `--force`: bypass audit violations only.
-- Exit 0 on success; exit 1 on audit violations (no `--force`) or hard-fail conditions
+- `--force`: bypass boundary-quadrant audit violations only.
+- Exit 0 on success; exit 1 on boundary-quadrant violations (no `--force`) or hard-fail conditions
   (missing/untracked `science.yaml`, non-git worktree, `--out` inside project root,
   dirty source, invalid config, unreadable/guard failures).
 - On success, echo a one-line summary: file count, payload count, forced flag, out path.
@@ -256,8 +270,9 @@ A test asserts two consecutive runs over the same project produce identical arch
 | Selected source is a symlink / non-regular | Hard fail, exit 1; name the path |
 | Unsafe project id (empty, `.`/`..`, contains `/` or `\`) | Hard fail, exit 1 |
 | `--out` resolves inside the project root | Hard fail, exit 1 (not bypassable) |
-| Audit violations, no `--force` | Refuse with summary, exit 1 |
-| Audit violations, `--force` | Build; `boundary_audit.forced=true` |
+| Boundary-quadrant violations (`STRANDED_RECORD`/`LEAKED_PAYLOAD`/`TRACKED_PAYLOAD`), no `--force` | Refuse with summary, exit 1 |
+| Boundary-quadrant violations, `--force` | Build; `boundary_audit.forced=true` |
+| `FLAG`-only audit output (ordinary source files) | Not a boundary breach — build normally; `boundary_audit.passed=true` |
 | Symlink cycle / non-regular file in `data/` | Hard fail, name the path |
 | Filesystem read/stat error (source or payload) | Wrap `OSError` → hard fail naming the path (CLI catches it) |
 | Invalid/unreadable `science.yaml` during config/manifest load | Wrap as hard fail (`SerializeError`) after clean-source checks |
@@ -278,8 +293,9 @@ A test asserts two consecutive runs over the same project produce identical arch
    correct sha256/bytes and `git_tracked=false`; symlink-hydrated content hashed via target.
 4. **results selection** — only `git ls-files -- results/` included; an untracked
    `results/` file is omitted.
-5. **boundary gate** — violations → refuse + exit 1; `--force` → build with
-   `boundary_audit.forced=true`.
+5. **boundary gate** — a boundary-quadrant violation → refuse + exit 1; `--force` → build with
+   `boundary_audit.forced=true`. A `FLAG`-only project (ordinary source) builds normally with
+   `boundary_audit.passed=true`.
 6. **guard failure** — a non-regular / cyclic data entry hard-fails with the path named.
 7. **determinism** — two runs produce byte-identical archives; a path-only rename (identical
    bytes) changes `data_version` (canonical-record hashing).
