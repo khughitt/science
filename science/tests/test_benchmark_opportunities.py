@@ -580,6 +580,245 @@ benchmark:
     assert _matched_facets_for_context(context, extra={"perturbation"}) == ["bulk-rna-seq"]
 
 
+def test_benchmark_tests_report_includes_draft_needed_gap_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial",
+        """
+id: hypothesis:0002-spatial
+type: hypothesis
+title: Region validation hypothesis
+""",
+        body="Tumor microenvironment region structure needs validation.",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  limitations:
+    - Facets only.
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    assert payload["summary"]["test_plan_rows"] == 1
+    assert payload["summary"]["draft_needed_rows"] == 1
+    row = payload["benchmark_tests"][0]
+    assert row["test_plan_state"] == "draft-needed"
+    assert row["priority_source"] == "gap-candidate"
+    assert row["task_id"] is None
+    assert row["readiness_label"] == "metadata-only"
+    assert row["matched_facets"] == ["spatial", "cross-context-generalization"]
+    assert "entity-hint:spatial" in row["reason_notes"]
+    assert row["priority_score"] == min(sum(row["score_components"]["source"].values()), 100)
+    assert row["needs"] == ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]
+
+
+def test_benchmark_tests_report_filters_state_facet_and_benchmark(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0003-drug",
+        """
+id: hypothesis:0003-drug
+type: hypothesis
+title: Drug response hypothesis
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    by_state = benchmark_tests_report(tmp_path, state="concrete")
+    assert [row["benchmark_id"] for row in by_state["benchmark_tests"]] == ["dataset:sciplex3"]
+
+    by_facet = benchmark_tests_report(tmp_path, facet="perturbation")
+    assert [row["benchmark_id"] for row in by_facet["benchmark_tests"]] == ["dataset:sciplex3"]
+
+    by_benchmark = benchmark_tests_report(tmp_path, benchmark_id="sciplex3")
+    assert [row["benchmark_id"] for row in by_benchmark["benchmark_tests"]] == ["dataset:sciplex3"]
+
+
+def test_benchmark_tests_report_filters_gap_candidates_after_projection(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-spatial",
+        """
+id: hypothesis:0004-spatial
+type: hypothesis
+title: Spatial gap hypothesis
+""",
+        body="Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path, facet="perturbation")
+
+    assert [row["benchmark_id"] for row in payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert payload["benchmark_tests"][0]["priority_source"] == "gap-fallback"
+
+
+def test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-weak",
+        """
+id: hypothesis:0004-weak
+type: hypothesis
+title: Weak spatial hypothesis
+""",
+        body="Spatial hypothesis.",
+    )
+    _write_dataset(
+        tmp_path,
+        "atlas",
+        """
+id: dataset:atlas
+type: dataset
+title: Atlas
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: []
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    keys = [(row["entity_id"], row["benchmark_id"], row["task_id"]) for row in payload["benchmark_tests"]]
+    assert keys == [("hypothesis:0004-weak", "dataset:atlas", None)]
+    row = payload["benchmark_tests"][0]
+    assert row["priority_source"] == "opportunity-relative"
+
+
+def test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence() -> None:
+    from science_tool.benchmark_opportunities import _dedupe_benchmark_test_rows
+
+    base = {
+        "entity_id": "hypothesis:0005-merge",
+        "entity_title": "Merge",
+        "benchmark_id": "dataset:merge",
+        "benchmark_title": "Merge Benchmark",
+        "task_id": None,
+        "test_plan_state": "draft-needed",
+        "task_type": "",
+        "benchmark_kinds": ["static-association"],
+        "readiness_label": "metadata-only",
+        "priority_score": 10,
+        "priority_source": "gap-fallback",
+        "score_components": {"source": {"task_readiness": 10}, "baseline": {}},
+        "matched_facets": ["spatial"],
+        "reason_notes": ["fallback:task-ready"],
+        "prediction_target": "",
+        "held_out_unit": "",
+        "metric": "",
+        "baseline": "",
+        "ground_truth": {"type": "", "description": ""},
+        "needs": ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"],
+    }
+    stronger = {
+        **base,
+        "priority_score": 25,
+        "priority_source": "opportunity-relative",
+        "score_components": {"source": {"facet_overlap": 25}, "baseline": {}},
+        "matched_facets": ["perturbation"],
+        "reason_notes": ["facet-token:perturbation"],
+    }
+
+    rows = _dedupe_benchmark_test_rows([base, stronger])
+
+    assert len(rows) == 1
+    assert rows[0]["priority_source"] == "opportunity-relative"
+    assert rows[0]["priority_score"] == 25
+    assert rows[0]["matched_facets"] == ["spatial", "perturbation"]
+    assert rows[0]["reason_notes"] == ["facet-token:perturbation", "fallback:task-ready"]
+
+
 def test_benchmark_tests_report_readiness_labels_handle_special_states(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import (
         _dataset_context,

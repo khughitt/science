@@ -8,7 +8,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict, cast
 
 from science_tool.benchmark_catalog import benchmark_sources
 from science_tool.dataset_prioritize import readiness_for, readiness_weight
@@ -1318,6 +1318,7 @@ def _reason_note_sort_key(note: str) -> tuple[int, str]:
         "entity-hint": 1,
         "task-ready": 2,
         "high-baseline": 3,
+        "facet-token": 4,
         "fallback": 4,
         "selected": 5,
     }
@@ -2011,6 +2012,34 @@ def _matched_facets_for_context(context: DatasetOpportunityContext, extra: set[s
     return _sorted_facets(facets)
 
 
+def _gap_candidate_components(
+    gap_payload: BenchmarkGapReport,
+    *,
+    entities: list[ProjectBenchmarkEntity],
+    contexts: list[DatasetOpportunityContext],
+) -> dict[tuple[str, str], dict[str, int]]:
+    entity_by_id = {entity.id: entity for entity in entities}
+    context_by_id = {context.dataset.id: context for context in contexts}
+    components: dict[tuple[str, str], dict[str, int]] = {}
+    for row in gap_payload["benchmark_gaps"]:
+        entity = entity_by_id.get(row["entity_id"])
+        hint_facets = set(_entity_facet_hints(entity)) if entity is not None else set()
+        missing_facets = {
+            _normalize_token(value)
+            for value in (
+                *row["missing_modalities"],
+                *row["missing_signal_types"],
+            )
+        }
+        for candidate in row["candidate_benchmarks"]:
+            context = context_by_id.get(candidate["benchmark_id"])
+            if context is None:
+                continue
+            score = _candidate_score(context, missing_facets=missing_facets, hint_facets=hint_facets)
+            components[(row["entity_id"], candidate["benchmark_id"])] = dict(score.components)
+    return components
+
+
 def _ground_truth_payload(task: OpportunityTask | None) -> BenchmarkTestGroundTruth:
     if task is None:
         return {"type": "", "description": ""}
@@ -2018,19 +2047,22 @@ def _ground_truth_payload(task: OpportunityTask | None) -> BenchmarkTestGroundTr
 
 
 def _benchmark_test_row(
-    opportunity: OpportunityRow,
+    *,
+    entity_id: str,
+    entity_title: str,
     context: DatasetOpportunityContext,
     task: OpportunityTask | None,
-    *,
+    priority_score: int,
     priority_source: PrioritySource,
+    source_components: dict[str, int],
+    reason_notes: list[str],
+    matched_facets: list[str],
 ) -> BenchmarkTestRow:
-    source_components = dict(opportunity["score_components"]["relative"])
-    reason_notes = list(opportunity["match_reasons"])
     if _test_plan_state(task) == "draft-needed" and "draft-needed" not in reason_notes:
         reason_notes.append("draft-needed")
     return {
-        "entity_id": opportunity["entity_id"],
-        "entity_title": opportunity["entity_title"],
+        "entity_id": entity_id,
+        "entity_title": entity_title,
         "benchmark_id": context.dataset.id,
         "benchmark_title": context.dataset.title,
         "task_id": task.canonical_task_id if task is not None else None,
@@ -2038,13 +2070,13 @@ def _benchmark_test_row(
         "task_type": task.task_type if task is not None else "",
         "benchmark_kinds": list(context.dataset.benchmark_kinds),
         "readiness_label": _readiness_label(context, has_task=task is not None),
-        "priority_score": int(opportunity["relative_score"]),
+        "priority_score": priority_score,
         "priority_source": priority_source,
         "score_components": {
-            "source": source_components,
+            "source": dict(source_components),
             "baseline": dict(context.baseline.components),
         },
-        "matched_facets": _matched_facets_for_context(context),
+        "matched_facets": matched_facets,
         "reason_notes": sorted(set(reason_notes), key=_reason_note_sort_key),
         "prediction_target": task.prediction_target if task is not None else "",
         "held_out_unit": task.held_out_unit if task is not None else "",
@@ -2060,10 +2092,15 @@ def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportu
     if task_id is None:
         return [
             _benchmark_test_row(
-                opportunity,
-                context,
-                None,
+                entity_id=opportunity["entity_id"],
+                entity_title=opportunity["entity_title"],
+                context=context,
+                task=None,
+                priority_score=int(opportunity["relative_score"]),
                 priority_source="opportunity-relative",
+                source_components=dict(opportunity["score_components"]["relative"]),
+                reason_notes=list(opportunity["match_reasons"]),
+                matched_facets=_matched_facets_for_context(context),
             )
         ]
     task_by_id = {task.canonical_task_id: task for task in context.dataset.tasks}
@@ -2072,12 +2109,74 @@ def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportu
         return []
     return [
         _benchmark_test_row(
-            opportunity,
-            context,
-            task,
+            entity_id=opportunity["entity_id"],
+            entity_title=opportunity["entity_title"],
+            context=context,
+            task=task,
+            priority_score=int(opportunity["relative_score"]),
             priority_source="opportunity-relative",
+            source_components=dict(opportunity["score_components"]["relative"]),
+            reason_notes=list(opportunity["match_reasons"]),
+            matched_facets=_matched_facets_for_context(context),
         )
     ]
+
+
+def _rows_for_gap_candidate(
+    *,
+    entity_id: str,
+    entity_title: str,
+    context: DatasetOpportunityContext,
+    priority_score: int,
+    priority_source: PrioritySource,
+    source_components: dict[str, int],
+    reason_notes: list[str],
+    matched_facets: list[str],
+) -> list[BenchmarkTestRow]:
+    tasks: list[OpportunityTask | None] = list(context.dataset.tasks) or [None]
+    return [
+        _benchmark_test_row(
+            entity_id=entity_id,
+            entity_title=entity_title,
+            context=context,
+            task=task,
+            priority_score=priority_score,
+            priority_source=priority_source,
+            source_components=source_components,
+            reason_notes=list(reason_notes),
+            matched_facets=matched_facets,
+        )
+        for task in tasks
+    ]
+
+
+def _benchmark_test_source_rank(source: PrioritySource) -> int:
+    return {
+        "opportunity-relative": 0,
+        "gap-candidate": 1,
+        "gap-fallback": 2,
+    }[source]
+
+
+def _merge_benchmark_test_rows(left: BenchmarkTestRow, right: BenchmarkTestRow) -> BenchmarkTestRow:
+    left_rank = _benchmark_test_source_rank(left["priority_source"])
+    right_rank = _benchmark_test_source_rank(right["priority_source"])
+    if right_rank < left_rank or (right_rank == left_rank and right["priority_score"] > left["priority_score"]):
+        merged = dict(right)
+    else:
+        merged = dict(left)
+    merged["matched_facets"] = _sorted_facets(set(left["matched_facets"]) | set(right["matched_facets"]))
+    merged["reason_notes"] = sorted({*left["reason_notes"], *right["reason_notes"]}, key=_reason_note_sort_key)
+    return cast("BenchmarkTestRow", merged)
+
+
+def _dedupe_benchmark_test_rows(rows: list[BenchmarkTestRow]) -> list[BenchmarkTestRow]:
+    by_key: dict[tuple[str, str, str | None], BenchmarkTestRow] = {}
+    for row in rows:
+        key = (row["entity_id"], row["benchmark_id"], row["task_id"])
+        existing = by_key.get(key)
+        by_key[key] = row if existing is None else _merge_benchmark_test_rows(existing, row)
+    return list(by_key.values())
 
 
 def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int) -> BenchmarkTestSummary:
@@ -2261,6 +2360,37 @@ def benchmark_tests_report(
         if context is None:
             continue
         rows.extend(_rows_for_context_tasks(opportunity, context))
+    gap_payload = gaps_report(
+        project_root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+    )
+    gap_components = _gap_candidate_components(
+        gap_payload,
+        entities=analysis.entities,
+        contexts=analysis.contexts,
+    )
+    for gap_row in gap_payload["benchmark_gaps"]:
+        for candidate in gap_row["candidate_benchmarks"]:
+            context = context_by_id.get(candidate["benchmark_id"])
+            if context is None:
+                continue
+            priority_source: PrioritySource = "gap-fallback" if _is_fallback_candidate(candidate) else "gap-candidate"
+            extra_facets = set(candidate["matched_missing_facets"]) | set(candidate["matched_hint_facets"])
+            rows.extend(
+                _rows_for_gap_candidate(
+                    entity_id=gap_row["entity_id"],
+                    entity_title=gap_row["entity_title"],
+                    context=context,
+                    priority_score=int(candidate["candidate_score"]),
+                    priority_source=priority_source,
+                    source_components=gap_components[(gap_row["entity_id"], candidate["benchmark_id"])],
+                    reason_notes=list(candidate["reason_notes"]),
+                    matched_facets=_matched_facets_for_context(context, extra=extra_facets),
+                )
+            )
+    rows = _dedupe_benchmark_test_rows(rows)
     rows = _filter_benchmark_test_rows(
         rows,
         facet=facet,
