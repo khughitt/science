@@ -189,6 +189,17 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
                 paths.datapackage_path,
             )
         )
+    else:
+        try:
+            _read_datapackage_resources(paths.datapackage_path)
+        except DatasetLifecycleError as exc:
+            findings.append(
+                DatasetPackageFinding(
+                    "datapackage-invalid",
+                    str(exc),
+                    paths.datapackage_path,
+                )
+            )
 
     if not paths.snakefile_path.is_file():
         findings.append(
