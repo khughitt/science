@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+import yaml
 from rich.text import Text
 from science_model.reasoning import MembershipRole
 
@@ -366,6 +367,38 @@ main.add_command(qa_audit_command)
 main.add_command(commons_group)
 main.add_command(validate_cmd)
 main.add_command(patch_group)
+
+
+@main.group("labnote")
+def labnote() -> None:
+    """Export Labnote app packages."""
+
+
+@labnote.command("export")
+@click.option(
+    "--project-root",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True, exists=True),
+    default=Path("."),
+    show_default=True,
+    help="Science project root containing science.yaml.",
+)
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    required=True,
+    help="Output Labnote app package directory.",
+)
+def labnote_export(project_root: Path, out_dir: Path) -> None:
+    """Export a public Labnote app package from a Science project."""
+    from science_tool.labnote_export import export_labnote_package
+
+    try:
+        diagnostics = export_labnote_package(project_root=project_root, out_dir=out_dir)
+    except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    warning_count = len(diagnostics.get("warnings", []))
+    click.echo(f"Exported Labnote package to {out_dir} ({warning_count} warning(s))")
 
 
 @main.group("entities")

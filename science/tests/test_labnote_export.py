@@ -484,3 +484,41 @@ def test_export_labnote_package_data_version_changes_with_graph_links(tmp_path: 
     assert read_json(first / "manifest.json")["data_version"] != read_json(second / "manifest.json")[
         "data_version"
     ]
+
+
+def test_science_labnote_export_cli_writes_package(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+
+    result = CliRunner().invoke(
+        main,
+        ["labnote", "export", "--project-root", str(project_root), "--out", str(out)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (out / "project.json").exists()
+    assert (out / "manifest.json").exists()
+    assert "Exported Labnote package" in result.output
+
+
+def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    project_root = tmp_path / "missing-config"
+    project_root.mkdir()
+    out = tmp_path / "out"
+
+    result = CliRunner().invoke(
+        main,
+        ["labnote", "export", "--project-root", str(project_root), "--out", str(out)],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "missing science.yaml" in result.output
+    assert "Traceback" not in result.output

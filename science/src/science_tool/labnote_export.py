@@ -728,10 +728,10 @@ def _link_bundle(
 def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     project_root = project_root.expanduser().resolve()
     out_dir = out_dir.expanduser().resolve()
+    raw_config = _load_raw_project_yaml(project_root)
     config = load_project_config(project_root)
     if not config.id:
         raise ValueError("science.yaml must declare a non-empty project id")
-    raw_config = _load_raw_project_yaml(project_root)
     known_citekeys = set(load_bib_entries(project_root))
     entities, restricted_present, restricted_ids = _discover_entities(project_root, known_citekeys)
     data_version = _data_version(project_root, raw_config, entities)
