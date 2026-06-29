@@ -19,6 +19,7 @@ from pathlib import Path
 import yaml
 
 from science_tool.data_audit import Quadrant, Violation
+from science_tool.data_worktree import DEFAULT_DATA_DIRS
 
 
 @dataclass
@@ -50,6 +51,30 @@ def _flag(v: Violation, reason: str) -> FixOutcome:
 
 def _norm(*parts: str) -> str:
     return os.path.normpath(os.path.join(*parts))
+
+
+def _traverses_symlinked_data_dir(
+    project_root: Path, rel: str, data_dirs: tuple[Path, ...]
+) -> bool:
+    """True if any ancestor of rel within a data dir is a symlink, or rel's real path
+    escapes project_root — i.e. moving it would mutate a shared/external source."""
+    rel_path = Path(rel)
+    in_data = any(d in rel_path.parents for d in data_dirs)
+    if not in_data:
+        return False
+    cur = project_root
+    for part in rel_path.parts[:-1]:
+        cur = cur / part
+        if cur.is_symlink():
+            return True
+    try:
+        real = (project_root / rel_path).resolve()
+        root = project_root.resolve()
+        if root != real and root not in real.parents:
+            return True
+    except OSError:
+        return True
+    return False
 
 
 def _rewrite_datapackage(
@@ -104,16 +129,17 @@ def _rewrite_datapackage(
     return text, basepath, rewritten
 
 
-def _move_record(project_root: Path, v: Violation) -> FixOutcome:
+def _move_record(
+    project_root: Path, v: Violation, data_dirs: tuple[Path, ...]
+) -> FixOutcome:
+    if _traverses_symlinked_data_dir(project_root, v.path, data_dirs):
+        return _flag(v, "source is under a symlinked data dir; move would mutate shared source")
     if v.proposed_target is None:
         return _flag(v, "no target could be proposed")
     src = project_root / v.path
     dst = project_root / v.proposed_target
     if dst.exists():
         if dst.read_bytes() == src.read_bytes():
-            # Identical content already present; drop the stranded copy. If the source
-            # was force-added (tracked), stage the deletion via git rm so we don't leave
-            # an unstaged delete; otherwise a plain unlink suffices.
             if _is_tracked(project_root, v.path):
                 _git(project_root, "rm", "-q", "-f", v.path)
             else:
@@ -144,11 +170,15 @@ def _move_record(project_root: Path, v: Violation) -> FixOutcome:
     return FixOutcome(v, performed=True, action="move")
 
 
-def apply_fixes(project_root: Path, violations: list[Violation]) -> list[FixOutcome]:
+def apply_fixes(
+    project_root: Path,
+    violations: list[Violation],
+    data_dirs: tuple[Path, ...] = DEFAULT_DATA_DIRS,
+) -> list[FixOutcome]:
     outcomes: list[FixOutcome] = []
     for v in violations:
         if v.quadrant is Quadrant.STRANDED_RECORD:
-            outcomes.append(_move_record(project_root, v))
-        else:  # LEAKED_PAYLOAD, FLAG → never auto-acted
+            outcomes.append(_move_record(project_root, v, data_dirs))
+        else:
             outcomes.append(_flag(v, "reported only; author decides"))
     return outcomes
