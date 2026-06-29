@@ -145,8 +145,9 @@ in the plan):
 
 - Does every `sci:Transformation` have a `sci:validatedBy` check?
 - Is the check specific enough to catch failures?
+- For steps that ingest real-world/heterogeneous input: does validation include a **scale/resource run on real data** (representative slice or full corpus, peak memory + wall-clock), not just fixture-based logic checks? Green fixtures do not prove resource behavior on real input.
 
-**Scoring:** PASS (all steps validated), WARN (gaps), FAIL (no validation)
+**Scoring:** PASS (all steps validated, incl. scale/resource on real data where applicable), WARN (gaps, or scale validation deferred entirely to production), FAIL (no validation)
 
 #### Dimension 7: Scope Check
 
