@@ -191,7 +191,7 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
         )
     else:
         try:
-            _read_datapackage_resources(paths.datapackage_path)
+            _validate_datapackage_shape(paths.datapackage_path)
         except DatasetLifecycleError as exc:
             findings.append(
                 DatasetPackageFinding(
@@ -386,6 +386,35 @@ def _validate_tracked_payloads(
                     path,
                 )
             )
+
+
+def _validate_datapackage_shape(path: Path) -> None:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise DatasetLifecycleError(f"invalid datapackage {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise DatasetLifecycleError(f"invalid datapackage {path}: top-level YAML must be a mapping")
+
+    resources = raw.get("resources")
+    if resources is None:
+        return
+    if not isinstance(resources, list):
+        raise DatasetLifecycleError(f"invalid datapackage {path}: resources must be a list")
+
+    for index, resource in enumerate(resources):
+        if not isinstance(resource, dict):
+            raise DatasetLifecycleError(
+                f"invalid datapackage {path}: resources[{index}] must be a mapping"
+            )
+        resource_path = resource.get("path")
+        if isinstance(resource_path, str):
+            try:
+                validate_logical_path(resource_path)
+            except DataLogicalPathError as exc:
+                raise DatasetLifecycleError(
+                    f"invalid datapackage {path}: {exc}"
+                ) from exc
 
 
 def _read_datapackage_resources(path: Path) -> list[dict[str, object]]:

@@ -347,6 +347,77 @@ def test_validate_dataset_package_reports_unsafe_datapackage_resource_path(
     )
 
 
+def test_validate_dataset_package_reports_non_mapping_datapackage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text("[]\n", encoding="utf-8")
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_non_list_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources: nope\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
+def test_validate_dataset_package_reports_non_mapping_resource_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_text(
+        "name: dbsnp-human\n"
+        "profile: data-package\n"
+        "resources:\n"
+        "- nope\n",
+        encoding="utf-8",
+    )
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
 def test_validate_dataset_package_reports_non_semver_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
