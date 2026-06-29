@@ -6257,6 +6257,93 @@ def benchmark_gap_calibration(
     Console(width=200).print(aggregate_table)
 
 
+@benchmark_group.command("tests")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
+@click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
+@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_tests(
+    domain: str | None,
+    entity_ref: str | None,
+    facet: str | None,
+    state: str | None,
+    benchmark_ref: str | None,
+    include_commons: bool,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report benchmark test plans for project entities."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import TestPlanState, benchmark_tests_report
+    from science_tool.entities import EntityCommandError, resolve_entity_ref
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    entity_id: str | None = None
+    if entity_ref is not None:
+        try:
+            entity_id = resolve_entity_ref(root, entity_ref)
+        except EntityCommandError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    try:
+        payload = benchmark_tests_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            facet=facet,
+            state=cast("TestPlanState | None", state),
+            benchmark_id=benchmark_ref,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = payload["benchmark_tests"]
+    if not rows:
+        click.echo("No benchmark test plans.")
+        return
+
+    table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
+    for col in ("entity", "state", "benchmark", "task", "score", "facets", "needs"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        table.add_row(
+            row["entity_id"],
+            row["test_plan_state"],
+            row["benchmark_id"],
+            row["task_id"] or "-",
+            str(row["priority_score"]),
+            ", ".join(row["matched_facets"]) or "-",
+            ", ".join(row["needs"]) or "-",
+        )
+    Console(width=200).print(table)
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")

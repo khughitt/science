@@ -57,6 +57,15 @@ def _invoke_gaps(tmp_path: Path, *args: str):
     )
 
 
+def _invoke_tests(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "tests", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+
 def _write_corrupt_commons_registry(root: Path, frontmatter_json: str = "{not-json") -> None:
     root.mkdir()
     conn = sqlite3.connect(root / "registry.sqlite")
@@ -496,3 +505,170 @@ benchmark:
     assert result.exit_code == 0
     assert "Gap Evidence" in result.output
     assert "fallback-only" in result.output
+
+
+def test_benchmark_tests_cli_json_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-perturbation",
+        """
+id: hypothesis:0001-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["concrete_rows"] == 1
+    assert payload["benchmark_tests"][0]["test_plan_state"] == "concrete"
+    assert payload["benchmark_tests"][0]["priority_source"] == "opportunity-relative"
+
+
+def test_benchmark_tests_cli_table_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial",
+        """
+id: hypothesis:0002-spatial
+type: hypothesis
+title: Spatial hypothesis
+""",
+        body="Microenvironment region needs spatial validation.",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_tests(tmp_path)
+
+    assert result.exit_code == 0
+    assert "Benchmark Tests" in result.output
+    assert "hypothesis:0002-spatial" in result.output
+    assert "draft-needed" in result.output
+    assert "dataset:hca-spatial" in result.output
+    assert "prediction-target" in result.output
+
+
+def test_benchmark_tests_cli_filters_and_empty_state(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0003-drug",
+        """
+id: hypothesis:0003-drug
+type: hypothesis
+title: Drug hypothesis
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--state", "concrete")
+
+    assert result.exit_code == 0
+    assert "No benchmark test plans." in result.output
+
+
+def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> None:
+    entity_result = _invoke_tests(tmp_path, "--entity", "hypothesis:missing")
+    assert entity_result.exit_code != 0
+    assert "Entity not found" in entity_result.output
+
+    facet_result = _invoke_tests(tmp_path, "--facet", "   ")
+    assert facet_result.exit_code != 0
+    assert "facet must not be blank" in facet_result.output
+
+
+def test_benchmark_tests_cli_commons_unavailable_degrades_to_local_rows(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-local",
+        """
+id: hypothesis:0004-local
+type: hypothesis
+title: Local hypothesis
+""",
+        body="Drug response should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "local-benchmark",
+        """
+id: dataset:local-benchmark
+type: dataset
+title: Local Benchmark
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    assert "notice: commons benchmarks unavailable" in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["commons_notice"] is not None
+    assert payload["benchmark_tests"]
