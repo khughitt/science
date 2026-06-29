@@ -167,6 +167,19 @@ def test_load_commons_catalog_rejects_yaml_resolved_duplicate_keys(tmp_path: Pat
         load_commons_catalog(path)
 
 
+def test_load_commons_catalog_rejects_recursive_alias(tmp_path: Path) -> None:
+    path = tmp_path / "commons.yaml"
+    path.write_text(
+        "catalog_version: 1\n"
+        "sources: &sources\n"
+        "  local: *sources\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogError, match="recursive|alias"):
+        load_commons_catalog(path)
+
+
 @pytest.mark.parametrize(
     ("source_type", "field"),
     [

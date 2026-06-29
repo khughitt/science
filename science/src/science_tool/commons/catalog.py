@@ -46,33 +46,40 @@ class CommonsCatalog:
 def _load_yaml_no_duplicate_keys(path: Path, text: str) -> object:
     try:
         node = yaml.compose(text)
-        _reject_duplicate_mapping_keys(path, node)
+        _reject_duplicate_mapping_keys(path, node, set())
         return yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise CatalogError(f"{path}: malformed YAML: {exc}") from exc
 
 
-def _reject_duplicate_mapping_keys(path: Path, node: object) -> None:
+def _reject_duplicate_mapping_keys(path: Path, node: object, seen: set[int]) -> None:
     if node is None:
         return
-    if isinstance(node, yaml.MappingNode):
-        seen_keys: set[str] = set()
-        for key_node, value_node in node.value:
-            if not isinstance(key_node, yaml.ScalarNode):
-                raise CatalogError(f"{path}: malformed YAML: expected scalar mapping keys")
-            key = key_node.value
-            if key_node.tag == _YAML_MERGE_TAG or key == "<<":
-                raise CatalogError(f"{path}: unsupported YAML merge keys")
-            if key_node.tag != _YAML_STRING_TAG:
-                raise CatalogError(f"{path}: mapping keys must be strings")
-            if key in seen_keys:
-                raise CatalogError(f"{path}: duplicate key {key!r}")
-            seen_keys.add(key)
-            _reject_duplicate_mapping_keys(path, value_node)
-        return
-    if isinstance(node, yaml.SequenceNode):
-        for value_node in node.value:
-            _reject_duplicate_mapping_keys(path, value_node)
+    node_id = id(node)
+    if node_id in seen:
+        raise CatalogError(f"{path}: recursive YAML aliases are unsupported")
+    seen.add(node_id)
+    try:
+        if isinstance(node, yaml.MappingNode):
+            seen_keys: set[str] = set()
+            for key_node, value_node in node.value:
+                if not isinstance(key_node, yaml.ScalarNode):
+                    raise CatalogError(f"{path}: malformed YAML: expected scalar mapping keys")
+                key = key_node.value
+                if key_node.tag == _YAML_MERGE_TAG or key == "<<":
+                    raise CatalogError(f"{path}: unsupported YAML merge keys")
+                if key_node.tag != _YAML_STRING_TAG:
+                    raise CatalogError(f"{path}: mapping keys must be strings")
+                if key in seen_keys:
+                    raise CatalogError(f"{path}: duplicate key {key!r}")
+                seen_keys.add(key)
+                _reject_duplicate_mapping_keys(path, value_node, seen)
+            return
+        if isinstance(node, yaml.SequenceNode):
+            for value_node in node.value:
+                _reject_duplicate_mapping_keys(path, value_node, seen)
+    finally:
+        seen.remove(node_id)
 
 
 def load_commons_catalog(path: Path) -> CommonsCatalog:
