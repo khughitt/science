@@ -53,9 +53,7 @@ def load_bundle(bundle_path: Path) -> LoadedBundle:
     try:
         manifest_bytes = archived[manifest_name]
     except KeyError as exc:
-        raise BundleIntegrityError(
-            f"bundle is missing manifest member: {manifest_name}"
-        ) from exc
+        raise BundleIntegrityError(f"bundle is missing manifest member: {manifest_name}") from exc
 
     try:
         manifest = SerializedManifest.model_validate_json(manifest_bytes)
@@ -64,15 +62,10 @@ def load_bundle(bundle_path: Path) -> LoadedBundle:
 
     if prefix != manifest.project.id:
         raise BundleIntegrityError(
-            f"archive prefix {prefix!r} does not match manifest project id "
-            f"{manifest.project.id!r}"
+            f"archive prefix {prefix!r} does not match manifest project id {manifest.project.id!r}"
         )
 
-    members = {
-        name.removeprefix(f"{prefix}/"): data
-        for name, data in archived.items()
-        if name != manifest_name
-    }
+    members = {name.removeprefix(f"{prefix}/"): data for name, data in archived.items() if name != manifest_name}
     _verify_source_members(members, manifest)
     _verify_data_version(manifest)
 
@@ -91,9 +84,7 @@ def _read_archive(bundle_path: Path) -> dict[str, bytes]:
     with tarfile.open(bundle_path, "r:gz") as tar:
         while member := tar.next():
             if len(seen) >= MAX_ARCHIVE_MEMBERS:
-                raise BundleIntegrityError(
-                    f"archive member count exceeds limit: {MAX_ARCHIVE_MEMBERS}"
-                )
+                raise BundleIntegrityError(f"archive member count exceeds limit: {MAX_ARCHIVE_MEMBERS}")
             _validate_member(member, seen=seen)
             total_size = _checked_total_size(total_size, member)
             fileobj = tar.extractfile(member)
@@ -102,8 +93,7 @@ def _read_archive(bundle_path: Path) -> dict[str, bytes]:
             data = fileobj.read()
             if len(data) != member.size:
                 raise BundleIntegrityError(
-                    f"archive member size changed while reading {member.name}: "
-                    f"header={member.size} read={len(data)}"
+                    f"archive member size changed while reading {member.name}: header={member.size} read={len(data)}"
                 )
             seen.add(member.name)
             members[member.name] = data
@@ -121,8 +111,7 @@ def _validate_member(member: tarfile.TarInfo, *, seen: set[str]) -> None:
         raise BundleIntegrityError(f"archive member has negative size: {name}")
     if member.size > MAX_MEMBER_BYTES:
         raise BundleIntegrityError(
-            f"archive member exceeds size limit ({MAX_MEMBER_BYTES} bytes): "
-            f"{name} ({member.size} bytes)"
+            f"archive member exceeds size limit ({MAX_MEMBER_BYTES} bytes): {name} ({member.size} bytes)"
         )
 
 
@@ -181,14 +170,9 @@ def _verify_source_members(
         record = records[path]
         digest = hashlib.sha256(data).hexdigest()
         if digest != record.sha256:
-            raise BundleIntegrityError(
-                f"sha256 mismatch for {path}: archive={digest} manifest={record.sha256}"
-            )
+            raise BundleIntegrityError(f"sha256 mismatch for {path}: archive={digest} manifest={record.sha256}")
         if len(data) != record.bytes:
-            raise BundleIntegrityError(
-                f"byte count mismatch for {path}: archive={len(data)} "
-                f"manifest={record.bytes}"
-            )
+            raise BundleIntegrityError(f"byte count mismatch for {path}: archive={len(data)} manifest={record.bytes}")
 
 
 def _verify_data_version(manifest: SerializedManifest) -> None:
@@ -199,15 +183,12 @@ def _verify_data_version(manifest: SerializedManifest) -> None:
             f"manifest data_version is missing '+' separator: {manifest.data_version!r}"
         ) from exc
     if not base:
-        raise BundleIntegrityError(
-            f"manifest data_version has empty base: {manifest.data_version!r}"
-        )
+        raise BundleIntegrityError(f"manifest data_version has empty base: {manifest.data_version!r}")
 
     files = [record.model_dump() for record in manifest.files]
     payloads = [record.model_dump() for record in manifest.payloads]
     expected = content_version(base, data_version_chunks(files, payloads))
     if manifest.data_version != expected:
         raise BundleIntegrityError(
-            f"manifest data_version mismatch: manifest={manifest.data_version!r} "
-            f"computed={expected!r}"
+            f"manifest data_version mismatch: manifest={manifest.data_version!r} computed={expected!r}"
         )

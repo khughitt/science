@@ -138,9 +138,7 @@ def test_load_bundle_edited_data_version_is_integrity(tmp_path: Path):
         members = {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
     manifest = json.loads(members["demo/manifest.json"])
     manifest["data_version"] = "0+deadbeefdead"
-    members["demo/manifest.json"] = (
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    ).encode()
+    members["demo/manifest.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
     bad = tmp_path / "dv.tar.gz"
     _write_bundle(bad, members)
     with pytest.raises(BundleIntegrityError):
@@ -150,10 +148,7 @@ def test_load_bundle_edited_data_version_is_integrity(tmp_path: Path):
 def test_load_bundle_prefix_ne_project_id_is_integrity(tmp_path: Path):
     _, bundle = _make_bundle(tmp_path)
     with tarfile.open(bundle, "r:gz") as tar:
-        members = {
-            m.name.replace("demo/", "other/", 1): tar.extractfile(m).read()
-            for m in tar.getmembers()
-        }
+        members = {m.name.replace("demo/", "other/", 1): tar.extractfile(m).read() for m in tar.getmembers()}
     bad = tmp_path / "prefix.tar.gz"
     _write_bundle(bad, members)
     with pytest.raises(BundleIntegrityError):
