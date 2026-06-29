@@ -2208,12 +2208,7 @@ def _normalize_benchmark_filter(value: str | None) -> str | None:
 
 
 def _normalize_benchmark_test_facet(value: str | None) -> str | None:
-    if value is None:
-        return None
-    normalized = _normalize_token(value)
-    if not normalized:
-        raise ValueError("facet must not be blank")
-    return normalized
+    return _normalized_gap_facet(value)
 
 
 def _filter_benchmark_test_rows(

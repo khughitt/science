@@ -632,9 +632,9 @@ def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> 
     assert entity_result.exit_code != 0
     assert "Entity not found" in entity_result.output
 
-    facet_result = _invoke_tests(tmp_path, "--facet", "   ")
+    facet_result = _invoke_tests(tmp_path, "--facet", "not-a-facet")
     assert facet_result.exit_code != 0
-    assert "facet must not be blank" in facet_result.output
+    assert "unknown benchmark gap facet" in facet_result.output
 
 
 def test_benchmark_tests_cli_commons_unavailable_degrades_to_local_rows(tmp_path: Path) -> None:

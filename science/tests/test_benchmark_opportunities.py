@@ -503,7 +503,7 @@ benchmark:
     assert payload["benchmark_tests"][0]["matched_facets"] == ["bulk-rna-seq"]
 
 
-def test_benchmark_tests_report_filters_by_non_hint_declared_facet(tmp_path: Path) -> None:
+def test_benchmark_tests_report_rejects_display_only_facet_filter(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
     _write_entity(
@@ -545,9 +545,8 @@ benchmark:
 """,
     )
 
-    payload = benchmark_tests_report(tmp_path, facet="bulk-rna-seq")
-
-    assert [row["benchmark_id"] for row in payload["benchmark_tests"]] == ["dataset:bulk-expression"]
+    with pytest.raises(ValueError, match="unknown benchmark gap facet: bulk-rna-seq"):
+        benchmark_tests_report(tmp_path, facet="bulk-rna-seq")
 
 
 def test_benchmark_tests_report_extra_facets_must_be_declared_by_benchmark(tmp_path: Path) -> None:
