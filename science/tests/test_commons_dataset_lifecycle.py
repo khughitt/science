@@ -284,6 +284,22 @@ def test_validate_dataset_package_reports_missing_workflow(
     assert any(f.code == "missing-workflow" for f in report.findings)
 
 
+def test_validate_dataset_package_reports_missing_datapackage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    (root / "datasets" / "dbsnp-human" / "datapackage.yaml").unlink()
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(f.code == "missing-datapackage" for f in report.findings)
+
+
 def test_validate_dataset_package_reports_non_semver_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

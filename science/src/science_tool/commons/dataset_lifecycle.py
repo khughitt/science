@@ -13,7 +13,11 @@ import yaml
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import load_data_overrides, resolve_commons_data_root
 from science_tool.commons.datapackage import validate_logical_path
-from science_tool.commons.errors import CommonsEntityError, DataLogicalPathError
+from science_tool.commons.errors import (
+    CommonsEntityError,
+    CommonsLayoutError,
+    DataLogicalPathError,
+)
 from science_tool.data_policy import DEFAULT_DATA_POLICY, FileClass, classify
 from science_tool.markdown_utils import parse_frontmatter
 
@@ -165,6 +169,14 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
                 DatasetPackageFinding(
                     "entity-invalid",
                     str(exc.cause),
+                    exc.path,
+                )
+            )
+        except CommonsLayoutError as exc:
+            findings.append(
+                DatasetPackageFinding(
+                    "entity-invalid",
+                    str(exc),
                     exc.path,
                 )
             )
