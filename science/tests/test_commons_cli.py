@@ -492,8 +492,9 @@ def test_find_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload[0]["canonical_id"] == "paper:Adams2025"
 
 
+@pytest.mark.parametrize("entity_type", ["dataset", "paper", "topic", "theme"])
 def test_find_warns_on_stale_registry_for_all_entity_types(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entity_type: str
 ) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
@@ -502,10 +503,29 @@ def test_find_warns_on_stale_registry_for_all_entity_types(
     rebuild = runner.invoke(commons_group, ["index", "rebuild"])
     assert rebuild.exit_code == 0, rebuild.output
 
-    paper = root / "papers" / "Adams2025.md"
-    paper.write_text(paper.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    (root / "papers" / "Brown2026.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Brown2026"\n'
+        'type: "paper"\n'
+        'title: "A second representative paper"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-29"\n'
+        'updated: "2026-06-29"\n'
+        'bibkey: "Brown2026"\n'
+        'authors: ["Brown, B."]\n'
+        "year: 2026\n"
+        'journal: "Example Journal"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\n"
+        "\n"
+        "# A second representative paper\n",
+        encoding="utf-8",
+    )
 
-    result = runner.invoke(commons_group, ["find", "paper"])
+    result = runner.invoke(commons_group, ["find", entity_type])
 
     assert result.exit_code == 0, result.output
     assert "warning: commons registry is stale" in result.stderr
