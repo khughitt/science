@@ -23,6 +23,7 @@ from science_tool.data_audit import Quadrant, audit_project
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_config import load_project_config, resolve_data_policy
 from science_tool.project_package.core import FileResource, content_version, file_resource
+from science_tool.project_package.manifest import data_version_chunks
 from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
@@ -89,17 +90,10 @@ def _build_manifest(
     raw = yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
     base = str(raw.get("last_modified") or raw.get("version") or "0")
 
-    chunks: list[bytes] = []
-    for fr in files:
-        chunks.append(json.dumps(
-            {"path": fr.path, "sha256": fr.sha256, "bytes": fr.bytes}, sort_keys=True
-        ).encode("utf-8"))
-    for p in payloads:
-        chunks.append(json.dumps(
-            {"path": p["path"], "sha256": p["sha256"], "bytes": p["bytes"],
-             "git_tracked": p["git_tracked"]},
-            sort_keys=True,
-        ).encode("utf-8"))
+    file_records = sorted(
+        ({"path": fr.path, "sha256": fr.sha256, "bytes": fr.bytes} for fr in files),
+        key=lambda record: record["path"],
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -108,12 +102,12 @@ def _build_manifest(
             "label": str(raw.get("name") or config.id),
             "summary": raw.get("summary"),
         },
-        "data_version": content_version(base, chunks),
+        "data_version": content_version(base, data_version_chunks(file_records, payloads)),
         "provenance": {"git_commit": git_commit, "tool": "science"},
         # `passed` = zero blocking payload-boundary violations (STRANDED_RECORD /
         # LEAKED_PAYLOAD / TRACKED_PAYLOAD); non-blocking FLAG findings are not counted.
         "boundary_audit": {"passed": audit_passed, "forced": forced},
-        "files": [{"path": fr.path, "sha256": fr.sha256, "bytes": fr.bytes} for fr in files],
+        "files": file_records,
         "payloads": payloads,
     }
 
