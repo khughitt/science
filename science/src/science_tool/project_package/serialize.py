@@ -179,6 +179,11 @@ def _write_archive(
 
 
 _SAFE_ID_RE = re.compile(r"\A[A-Za-z0-9._-]+\Z")
+_BOUNDARY_QUADRANTS = {
+    Quadrant.STRANDED_RECORD,
+    Quadrant.LEAKED_PAYLOAD,
+    Quadrant.TRACKED_PAYLOAD,
+}
 
 
 def _out_inside_root(project_root: Path, out_archive: Path) -> bool:
@@ -262,9 +267,6 @@ def serialize_project(
     except (OSError, ValueError, yaml.YAMLError, ValidationError) as exc:
         raise _config_error(exc) from exc
 
-    _BOUNDARY_QUADRANTS = {
-        Quadrant.STRANDED_RECORD, Quadrant.LEAKED_PAYLOAD, Quadrant.TRACKED_PAYLOAD,
-    }
     all_violations = audit_project(project_root, policy)
     violations = [v for v in all_violations if v.quadrant in _BOUNDARY_QUADRANTS]
     if violations and not force:
