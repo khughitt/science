@@ -73,3 +73,20 @@ def test_dataset_init_refuses_non_semver_version(tmp_path: Path, monkeypatch) ->
 
     assert result.exit_code == 1
     assert "invalid dataset version" in result.output
+
+
+def test_dataset_init_reports_scaffold_write_errors(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    def fail_scaffold(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("science_tool.commons.cli.scaffold_dataset_package", fail_scaffold)
+
+    result = CliRunner().invoke(commons_group, ["dataset", "init", "dbsnp-human"])
+
+    assert result.exit_code == 1
+    assert "disk full" in result.output
+    assert "Traceback" not in result.output

@@ -432,6 +432,8 @@ def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | No
         if message.startswith("dataset version must"):
             message = f"invalid dataset version: {message}"
         raise click.ClickException(message) from exc
+    except OSError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     dataset_dir = result.paths.dataset_dir.relative_to(root)
     created = [str(path.relative_to(root)) for path in result.created]
