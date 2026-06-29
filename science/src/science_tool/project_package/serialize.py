@@ -8,10 +8,8 @@ docs/plans/2026-06-29-project-serialize-design.md.
 from __future__ import annotations
 
 import gzip
-import hashlib
 import io
 import json
-import os
 import re
 import subprocess
 import tarfile
@@ -25,6 +23,7 @@ from science_tool.data_audit import Quadrant, audit_project
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_config import load_project_config, resolve_data_policy
 from science_tool.project_package.core import FileResource, content_version, file_resource
+from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
 SOURCE_ROOTS = ("entities", "results")
@@ -69,43 +68,12 @@ def _payload_inventory(
     data_dirs: tuple[Path, ...],
     tracked_set: set[str],
 ) -> list[dict]:
-    payloads: list[dict] = []
-    seen_dirs: set[str] = set()
-    for d in data_dirs:
-        base = project_root / d
-        if not base.exists():
-            continue
-        _walk_payload_dir(project_root, base, tracked_set, seen_dirs, payloads)
-    payloads.sort(key=lambda p: p["path"])
-    return payloads
-
-
-def _walk_payload_dir(
-    project_root: Path,
-    directory: Path,
-    tracked_set: set[str],
-    seen_dirs: set[str],
-    payloads: list[dict],
-) -> None:
-    real = os.path.realpath(directory)
-    if real in seen_dirs:
-        raise SerializeError(f"symlink cycle under data dir: {directory}")
-    seen_dirs.add(real)
-    for entry in sorted(os.scandir(directory), key=lambda e: e.name):
-        path = Path(entry.path)
-        if entry.is_dir(follow_symlinks=True):
-            _walk_payload_dir(project_root, path, tracked_set, seen_dirs, payloads)
-        elif entry.is_file(follow_symlinks=True):
-            data = path.read_bytes()  # follows symlink to hydrated content
-            rel = path.relative_to(project_root).as_posix()
-            payloads.append({
-                "path": rel,
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "bytes": len(data),
-                "git_tracked": rel in tracked_set,
-            })
-        else:
-            raise SerializeError(f"non-regular file under data dir: {entry.path}")
+    """Serialize's view of the shared walk: translate guard failures to
+    SerializeError so the existing fail-loud contract is unchanged."""
+    try:
+        return payload_inventory(project_root, data_dirs, tracked_set)
+    except PayloadError as exc:
+        raise SerializeError(str(exc)) from exc
 
 
 def _build_manifest(
