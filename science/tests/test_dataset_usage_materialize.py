@@ -594,9 +594,8 @@ def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
         materialize_graph(tmp_path)
 
     message = str(excinfo.value)
-    assert "Cannot materialize graph with unresolved references" in message
-    assert "datasets" in message
-    assert "gtex" in message
+    assert "paper:Adams2025" in message
+    assert "paper.datasets entry 'gtex' is not a dataset reference" in message
 
 
 def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):

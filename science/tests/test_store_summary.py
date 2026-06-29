@@ -1,18 +1,18 @@
-from science_tool.graph.store.summary import _is_empirical_type
+from science_tool.graph.store.summary import is_empirical_evidence_type
 
 
-def test_is_empirical_type_canonical():
-    assert _is_empirical_type("empirical_data")
-    assert _is_empirical_type("benchmark")
+def test_is_empirical_evidence_type_canonical():
+    assert is_empirical_evidence_type("empirical_data")
+    assert is_empirical_evidence_type("benchmark")
 
 
-def test_is_empirical_type_suffixed():
-    assert _is_empirical_type("empirical_data_evidence")
-    assert _is_empirical_type("benchmark_evidence")
+def test_is_empirical_evidence_type_suffixed():
+    assert is_empirical_evidence_type("empirical_data_evidence")
+    assert is_empirical_evidence_type("benchmark_evidence")
 
 
-def test_is_empirical_type_negatives():
-    assert not _is_empirical_type("literature")
-    assert not _is_empirical_type("simulation_evidence")
-    assert not _is_empirical_type("expert_judgment")
-    assert not _is_empirical_type("")
+def test_is_empirical_evidence_type_negatives():
+    assert not is_empirical_evidence_type("literature")
+    assert not is_empirical_evidence_type("simulation_evidence")
+    assert not is_empirical_evidence_type("expert_judgment")
+    assert not is_empirical_evidence_type("")

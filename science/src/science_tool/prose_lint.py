@@ -54,6 +54,8 @@ class LintIssue:
 
 def severity_for(check: str, *, strict: bool) -> str:
     base = DEFAULT_SEVERITY[check]
+    if check == "frontmatter-inline-gap":
+        return base
     return "warn" if strict and base == "info" else base
 
 
@@ -393,7 +395,9 @@ def detect_numeric_anchor(
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    _, body_start = parse_frontmatter(path)
+    data, body_start = parse_frontmatter(path)
+    if _paper_note_has_source_context(path, data):
+        return []
     lines = text.splitlines()
     issues: list[LintIssue] = []
     in_fence = False
@@ -453,6 +457,20 @@ def detect_numeric_anchor(
                 )
             )
     return issues
+
+
+def _paper_note_has_source_context(path: Path, frontmatter: dict) -> bool:
+    """Paper notes with explicit source identity are already single-source anchored."""
+    parts = path.parts
+    is_paper_path = any(left == "entities" and right == "papers" for left, right in zip(parts, parts[1:]))
+    if not is_paper_path:
+        return False
+    if frontmatter.get("type") != "paper" and not str(frontmatter.get("id", "")).startswith("paper:"):
+        return False
+    source_refs = frontmatter.get("source_refs")
+    if isinstance(source_refs, list) and any(isinstance(ref, str) and ref.strip() for ref in source_refs):
+        return True
+    return any(isinstance(frontmatter.get(key), str) and frontmatter[key].strip() for key in ("doi", "pmid", "url", "bibkey"))
 
 
 def detect_unsupported_citation_syntax(

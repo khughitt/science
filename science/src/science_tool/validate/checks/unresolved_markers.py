@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from science_tool.markers import scan_markers
@@ -66,5 +67,21 @@ def check_unresolved_markers(ctx: "ValidateContext") -> Iterable[Result]:
     results: list[Result] = []
     for token, count in sorted(counts.items()):
         if count > 0 and severity_by_token.get(token, "warn") == "warn":
-            results.append(_result(f"{count} [{token}] marker(s) found in documents"))
+            examples = _marker_examples(ctx.project_root, [hit for hit in filtered_hits if hit.token == token])
+            results.append(_result(f"{count} [{token}] marker(s) found in documents; examples: {examples}"))
     return results
+
+
+def _marker_examples(project_root: Path, hits: list, *, limit: int = 5) -> str:
+    examples: list[str] = []
+    for hit in sorted(hits, key=lambda item: (item.file, item.line)):
+        try:
+            path = hit.file.resolve().relative_to(project_root.resolve())
+        except (OSError, ValueError):
+            path = hit.file
+        examples.append(f"{path.as_posix()}:{hit.line}")
+        if len(examples) == limit:
+            break
+    if len(hits) > limit:
+        examples.append("...")
+    return ", ".join(examples)

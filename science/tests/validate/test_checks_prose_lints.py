@@ -235,6 +235,32 @@ def test_strict_include_all_checks_promotes_disabled_info_lints(tmp_path: Path) 
     ) in _located_summary(results)
 
 
+def test_strict_frontmatter_inline_gap_stays_summary_only(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    path = tmp_path / "doc" / "note.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        "related:\n"
+        "  - task:t001\n"
+        "  - hypothesis:h001\n"
+        "---\n"
+        "Body text without graph metadata mentions.\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_prose_lints(_ctx(tmp_path, strict=True)))
+
+    assert _summary(results) == [
+        (
+            Severity.INFO,
+            "2 prose lint issue(s): frontmatter-inline-gap (graph metadata advisory)",
+            "prose_lints.frontmatter-inline-gap",
+        )
+    ]
+
+
 def test_registration_includes_prose_lints_after_cross_references() -> None:
     import science_tool.validate.checks.cross_references as cross_references
     import science_tool.validate.checks.prose_lints as prose_lints

@@ -18,6 +18,7 @@ from science_tool.graph.store.identity import _graph_uri
 from science_tool.markdown_utils import parse_frontmatter
 from science_tool.project_config import load_project_config
 from science_tool.references import MarkdownPayload, build_reference_bundle, validate_exported_markdown
+from science_tool.entity_scan import iter_entity_markdown
 
 PROJECT_SCHEMA_VERSION = "science-project-package.v1"
 ENTITY_CONTRACT = "science.entities"
@@ -405,7 +406,7 @@ def _discover_entities(
     restricted_present = False
     restricted_ids: set[str] = set()
     seen: set[str] = set()
-    for path in sorted(entity_root.rglob("*.md")):
+    for path in iter_entity_markdown(entity_root):
         frontmatter, body_start_line = parse_frontmatter(path)
         body = _read_markdown_body(path, body_start_line)
         entity_id = frontmatter.get("id")
@@ -684,6 +685,9 @@ def _graph_link_rows(
             continue
         source_id = canonical_id_from_entity_uri(edge.subject)
         target_id = canonical_id_from_entity_uri(edge.object)
+        if source_id is None or target_id is None:
+            skipped["unexported_endpoint"] += 1
+            continue
         if source_id not in exported_ids or target_id not in exported_ids:
             skipped["unexported_endpoint"] += 1
             continue

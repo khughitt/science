@@ -286,14 +286,14 @@ class TestFrontmatterInlineGap:
         )
         assert detect_frontmatter_inline_gaps(path) == []
 
-    def test_strict_promotes_severity(self, tmp_path):
+    def test_strict_keeps_gap_advisory(self, tmp_path):
         path = _write(
             tmp_path,
             "Body without mention.\n",
             frontmatter="related:\n  - task:t050",
         )
         issues = detect_frontmatter_inline_gaps(path, strict=True)
-        assert all(i.severity == "warn" for i in issues)
+        assert all(i.severity == "info" for i in issues)
 
     def test_resolves_project_shorthand_alias(self, tmp_path):
         # Body uses the project shorthand `mm30`; frontmatter declares the
@@ -448,6 +448,40 @@ class TestNumericAnchor:
         path = _write(tmp_path, "Figure 3.2 reports the 47% improvement.\n")
         issues = detect_numeric_anchor(path)
         assert [i.match for i in issues] == ["47%"]
+
+    def test_no_flag_in_paper_note_with_source_context(self, tmp_path):
+        paper_dir = tmp_path / "entities" / "papers"
+        paper_dir.mkdir(parents=True)
+        path = paper_dir / "Smith2024.md"
+        path.write_text(
+            "---\n"
+            "id: paper:Smith2024\n"
+            "type: paper\n"
+            "source_refs:\n"
+            "  - doi:10.1000/example\n"
+            "---\n"
+            "The cohort included 123 participants and 47% improved.\n",
+            encoding="utf-8",
+        )
+
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
+    def test_flags_paper_note_without_source_context(self, tmp_path):
+        paper_dir = tmp_path / "entities" / "papers"
+        paper_dir.mkdir(parents=True)
+        path = paper_dir / "Smith2024.md"
+        path.write_text(
+            "---\n"
+            "id: paper:Smith2024\n"
+            "type: paper\n"
+            "---\n"
+            "The cohort included 123 participants.\n",
+            encoding="utf-8",
+        )
+
+        issues = detect_numeric_anchor(path, anchor_patterns=[])
+
+        assert [issue.match for issue in issues] == ["123"]
 
 
 class TestArchivedTaskAliases:

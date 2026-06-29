@@ -49,7 +49,13 @@ def test_warning_token_in_doc_markdown_emits_exact_warn_message(tmp_path: Path) 
     results = list(check_unresolved_markers(_ctx(tmp_path)))
 
     assert [(result.severity, result.path, result.line, result.message, result.rule) for result in results] == [
-        (Severity.WARN, None, None, "1 [UNVERIFIED] marker(s) found in documents", "unresolved_markers")
+        (
+            Severity.WARN,
+            None,
+            None,
+            "1 [UNVERIFIED] marker(s) found in documents; examples: doc/note.md:1",
+            "unresolved_markers",
+        )
     ]
 
 
@@ -75,7 +81,7 @@ def test_info_token_in_strict_mode_emits_warn(tmp_path: Path) -> None:
     results = list(check_unresolved_markers(_ctx(tmp_path, strict=True)))
 
     assert [(result.severity, result.message) for result in results] == [
-        (Severity.WARN, "1 [SPECULATION] marker(s) found in documents")
+        (Severity.WARN, "1 [SPECULATION] marker(s) found in documents; examples: doc/note.md:1")
     ]
 
 
@@ -121,8 +127,23 @@ def test_warn_tokens_are_output_sorted_alphabetically(tmp_path: Path) -> None:
     results = list(check_unresolved_markers(_ctx(tmp_path)))
 
     assert [result.message for result in results] == [
-        "1 [MISSING_CITATION] marker(s) found in documents",
-        "2 [UNVERIFIED] marker(s) found in documents",
+        "1 [MISSING_CITATION] marker(s) found in documents; examples: doc/note.md:2",
+        "2 [UNVERIFIED] marker(s) found in documents; examples: doc/note.md:1, doc/note.md:3",
+    ]
+
+
+def test_warning_marker_examples_are_capped(tmp_path: Path) -> None:
+    from science_tool.validate.checks.unresolved_markers import check_unresolved_markers
+
+    doc_dir = tmp_path / "doc"
+    doc_dir.mkdir()
+    doc_dir.joinpath("note.md").write_text("\n".join(["[UNVERIFIED]"] * 7) + "\n", encoding="utf-8")
+
+    results = list(check_unresolved_markers(_ctx(tmp_path)))
+
+    assert [result.message for result in results] == [
+        "7 [UNVERIFIED] marker(s) found in documents; examples: "
+        "doc/note.md:1, doc/note.md:2, doc/note.md:3, doc/note.md:4, doc/note.md:5, ..."
     ]
 
 

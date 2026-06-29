@@ -85,7 +85,7 @@ def test_pin_writes_entry(project_with_installed_artifact: Path) -> None:
 
 def test_pin_refuses_when_already_pinned(project_with_installed_artifact: Path) -> None:
     runner = CliRunner()
-    runner.invoke(
+    first = runner.invoke(
         main,
         [
             "project",
@@ -98,8 +98,12 @@ def test_pin_refuses_when_already_pinned(project_with_installed_artifact: Path) 
             "x",
             "--revisit-by",
             "2026-06-01",
+            "--no-commit",
         ],
     )
+    assert first.exit_code == 0, first.output
+    subprocess.run(["git", "add", "."], cwd=project_with_installed_artifact, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "pin setup"], cwd=project_with_installed_artifact, check=True)
     result = runner.invoke(
         main,
         [

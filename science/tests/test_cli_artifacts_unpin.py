@@ -84,7 +84,7 @@ def test_unpin_removes_entry(project_with_pin: Path) -> None:
 
 def test_unpin_refuses_if_no_pin(project_with_pin: Path) -> None:
     runner = CliRunner()
-    runner.invoke(
+    first = runner.invoke(
         main,
         [
             "project",
@@ -93,8 +93,12 @@ def test_unpin_refuses_if_no_pin(project_with_pin: Path) -> None:
             "validate.sh",
             "--project-root",
             str(project_with_pin),
+            "--no-commit",
         ],
     )
+    assert first.exit_code == 0, first.output
+    subprocess.run(["git", "add", "."], cwd=project_with_pin, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "unpin setup"], cwd=project_with_pin, check=True)
     result = runner.invoke(
         main,
         [

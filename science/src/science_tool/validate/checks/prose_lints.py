@@ -123,10 +123,15 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         if count <= 0:
             continue
         if severity_by_check.get(check, "warn") != "warn":
+            detail = (
+                "graph metadata advisory"
+                if check == "frontmatter-inline-gap"
+                else "use --strict to promote"
+            )
             results.append(
                 _result(
                     Severity.INFO,
-                    f"{count} prose lint issue(s): {check} (use --strict to promote)",
+                    f"{count} prose lint issue(s): {check} ({detail})",
                     rule=f"prose_lints.{check}",
                 )
             )
