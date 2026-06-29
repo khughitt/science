@@ -60,6 +60,7 @@ class _ManifestPathMixin(BaseModel):
             value == ""
             or value.startswith("/")
             or "\\" in value
+            or "\0" in value
             or any(part in ("", ".", "..") for part in parts)
         ):
             raise ValueError(f"unsafe manifest path: {value!r}")

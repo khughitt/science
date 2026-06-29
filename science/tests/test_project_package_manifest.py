@@ -87,6 +87,13 @@ def test_duplicate_path_across_files_and_payloads_rejected():
         SerializedManifest.model_validate(d)
 
 
+def test_nul_byte_in_manifest_path_rejected():
+    d = _valid()
+    d["files"][0]["path"] = "bad\0name"
+    with pytest.raises(ValidationError):
+        SerializedManifest.model_validate(d)
+
+
 def test_data_version_chunks_are_canonical_and_ordered():
     files = [
         {"path": "a", "sha256": _SHA, "bytes": 1},
