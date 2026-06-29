@@ -826,6 +826,7 @@ def test_benchmark_tests_report_readiness_labels_handle_special_states(tmp_path:
     )
 
     cases = [
+        ("local", "dataset_class: deposit\nlocal_path: data/local", True, "runnable"),
         ("derived", "origin: derived\ndataset_class: deposit\nproduced_by: [code-file:builder]", True, "stage-needed"),
         (
             "embargoed",
@@ -883,6 +884,7 @@ benchmark:
     assert labels == {
         "dataset:derived": "stage-needed",
         "dataset:embargoed": "blocked",
+        "dataset:local": "runnable",
         "dataset:pointer": "metadata-only",
         "dataset:reference": "metadata-only",
         "dataset:unverified": "blocked",

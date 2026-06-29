@@ -1977,6 +1977,8 @@ def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> R
     }:
         return "stage-needed"
 
+    # A staged local artifact is actionable for test planning even when sparse
+    # access metadata leaves readiness_for(...).state at "unknown".
     if runtime_state == "runnable" and has_task:
         return "runnable"
     if runtime_state == "unstaged-deposit":

@@ -278,16 +278,18 @@ embargoed dataset can be `runtime_state=unstaged-deposit` but
 1. If runtime state is `reference-only` or `pointer-only`, label
    `metadata-only`. These rows often have no external/derived `origin`, so their
    readiness can be `unknown` without implying an access block.
-2. If readiness is `embargoed`, `withdrawn`, `unknown`, or ends with
+2. If runtime state is `runnable` and the row has a task, label `runnable`.
+   A staged local artifact is actionable for test planning even when sparse
+   access metadata makes `readiness_for(...).state` report `unknown`.
+3. If readiness is `embargoed`, `withdrawn`, `unknown`, or ends with
    `, unverified`, label `blocked`.
-3. If readiness is `derived-via-code`, `derived-via-member-of`,
+4. If readiness is `derived-via-code`, `derived-via-member-of`,
    `derived-via-workflow-recipe`, `consumable-via-scope-reduced`,
    `consumable-via-substituted`, or `acquiring`, label `stage-needed`.
-4. Otherwise, use runtime stageability:
-   - `runtime_state == "runnable"` and the row has a task: `runnable`;
+5. Otherwise, use runtime stageability:
    - `runtime_state == "unstaged-deposit"`: `stage-needed`;
    - `runtime_state == "blocked-access"`: `blocked`.
-5. If no task metadata is present and no earlier rule matched, label
+6. If no task metadata is present and no earlier rule matched, label
    `metadata-only`.
 
 The label is a presentation projection over existing dataset readiness and
