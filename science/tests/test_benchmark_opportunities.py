@@ -737,6 +737,119 @@ benchmark:
     assert payload["benchmark_tests"][0]["priority_source"] == "gap-fallback"
 
 
+def test_benchmark_tests_report_filters_source_and_readiness(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-triage",
+        """
+id: hypothesis:0005-triage
+type: hypothesis
+title: Triage hypothesis
+""",
+        body="Drug perturbation should shift response states. Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    source_payload = benchmark_tests_report(tmp_path, source="opportunity-relative")
+    assert [row["benchmark_id"] for row in source_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["priority_source"] for row in source_payload["benchmark_tests"]} == {"opportunity-relative"}
+
+    readiness_payload = benchmark_tests_report(tmp_path, readiness="runnable")
+    assert [row["benchmark_id"] for row in readiness_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
+
+
+def test_benchmark_tests_report_excludes_fallback_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0006-spatial",
+        """
+id: hypothesis:0006-spatial
+type: hypothesis
+title: Spatial fallback hypothesis
+""",
+        body="Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    with_fallback = benchmark_tests_report(tmp_path)
+    without_fallback = benchmark_tests_report(tmp_path, exclude_fallback=True)
+
+    assert [row["priority_source"] for row in with_fallback["benchmark_tests"]] == ["gap-fallback"]
+    assert without_fallback["benchmark_tests"] == []
+    assert without_fallback["summary"]["test_plan_rows"] == 0
+
+
 def test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 

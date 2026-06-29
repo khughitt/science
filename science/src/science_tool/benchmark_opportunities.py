@@ -2218,6 +2218,9 @@ def _filter_benchmark_test_rows(
     *,
     facet: str | None,
     state: TestPlanState | None,
+    source: PrioritySource | None,
+    exclude_fallback: bool,
+    readiness: ReadinessLabel | None,
     benchmark_id: str | None,
 ) -> list[BenchmarkTestRow]:
     normalized_facet = _normalize_benchmark_test_facet(facet)
@@ -2227,6 +2230,12 @@ def _filter_benchmark_test_rows(
         if normalized_facet is not None and normalized_facet not in row["matched_facets"]:
             continue
         if state is not None and state != row["test_plan_state"]:
+            continue
+        if source is not None and source != row["priority_source"]:
+            continue
+        if exclude_fallback and row["priority_source"] == "gap-fallback":
+            continue
+        if readiness is not None and readiness != row["readiness_label"]:
             continue
         if normalized_benchmark_id is not None and normalized_benchmark_id != row["benchmark_id"]:
             continue
@@ -2341,6 +2350,9 @@ def benchmark_tests_report(
     domain: str | None = None,
     facet: str | None = None,
     state: TestPlanState | None = None,
+    source: PrioritySource | None = None,
+    exclude_fallback: bool = False,
+    readiness: ReadinessLabel | None = None,
     benchmark_id: str | None = None,
 ) -> BenchmarkTestReport:
     analysis = _opportunity_analysis(
@@ -2392,6 +2404,9 @@ def benchmark_tests_report(
         rows,
         facet=facet,
         state=state,
+        source=source,
+        exclude_fallback=exclude_fallback,
+        readiness=readiness,
         benchmark_id=benchmark_id,
     )
     rows.sort(key=_benchmark_test_sort_key)

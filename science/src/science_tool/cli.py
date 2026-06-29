@@ -6262,6 +6262,22 @@ def benchmark_gap_calibration(
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
 @click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--source",
+    "priority_source",
+    type=click.Choice(["opportunity-relative", "gap-candidate", "gap-fallback"]),
+    default=None,
+    help="Filter by benchmark test priority source.",
+)
+@click.option("--exclude-fallback", is_flag=True, help="Drop broad fallback benchmark rows.")
+@click.option(
+    "--readiness",
+    "readiness_label",
+    type=click.Choice(["runnable", "stage-needed", "metadata-only", "blocked"]),
+    default=None,
+    help="Filter by benchmark runtime/readiness label.",
+)
+@click.option("--runnable-only", is_flag=True, help="Shortcut for --readiness runnable.")
 @click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
 @click.option(
@@ -6282,6 +6298,10 @@ def benchmark_tests(
     entity_ref: str | None,
     facet: str | None,
     state: str | None,
+    priority_source: str | None,
+    exclude_fallback: bool,
+    readiness_label: str | None,
+    runnable_only: bool,
     benchmark_ref: str | None,
     include_commons: bool,
     output_format: str,
@@ -6301,6 +6321,8 @@ def benchmark_tests(
             entity_id = resolve_entity_ref(root, entity_ref)
         except EntityCommandError as exc:
             raise click.ClickException(str(exc)) from exc
+    if runnable_only and readiness_label not in {None, "runnable"}:
+        raise click.ClickException(f"--runnable-only conflicts with --readiness {readiness_label}")
 
     try:
         payload = benchmark_tests_report(
@@ -6310,6 +6332,9 @@ def benchmark_tests(
             domain=domain,
             facet=facet,
             state=cast("TestPlanState | None", state),
+            source=cast("Any", priority_source),
+            exclude_fallback=exclude_fallback,
+            readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
         )
     except ValueError as exc:
@@ -6329,12 +6354,14 @@ def benchmark_tests(
         return
 
     table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
-    for col in ("entity", "state", "benchmark", "task", "score", "facets", "needs"):
+    for col in ("entity", "state", "source", "readiness", "benchmark", "task", "score", "facets", "needs"):
         table.add_column(col, overflow="fold", no_wrap=False)
     for row in rows:
         table.add_row(
             row["entity_id"],
             row["test_plan_state"],
+            row["priority_source"],
+            row["readiness_label"],
             row["benchmark_id"],
             row["task_id"] or "-",
             str(row["priority_score"]),

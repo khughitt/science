@@ -40,6 +40,10 @@ science benchmark tests --entity hypothesis:0005
 science benchmark tests --facet clinical-outcome
 science benchmark tests --state concrete
 science benchmark tests --state draft-needed
+science benchmark tests --source gap-candidate
+science benchmark tests --exclude-fallback
+science benchmark tests --readiness runnable
+science benchmark tests --runnable-only
 science benchmark tests --benchmark dataset:sciplex3
 science benchmark tests --format json
 ```
@@ -49,6 +53,10 @@ The command is read-only. It mirrors the existing benchmark command conventions:
 - `--entity` resolves through `resolve_entity_ref()`;
 - `--domain` filters benchmark datasets by benchmark domain;
 - `--facet` uses the same valid hint-facet vocabulary as `benchmark gaps`;
+- `--source` filters by `priority_source`;
+- `--exclude-fallback` drops broad fallback rows without changing scoring;
+- `--readiness` filters by `readiness_label`;
+- `--runnable-only` is shorthand for `--readiness runnable`;
 - `--commons` includes commons benchmark dataset entities;
 - `--format table|json` follows the existing CLI pattern;
 - commons degradation emits the same stderr notice and still returns local rows.
@@ -307,10 +315,12 @@ access/runtime readiness is not.
 Default table columns:
 
 ```text
-entity | state | benchmark | task | score | facets | needs
+entity | state | source | readiness | benchmark | task | score | facets | needs
 ```
 
-The table should be compact and sorted like JSON. If no rows remain after
+The table should be compact and sorted like JSON. `source` and `readiness`
+are included because `priority_score` has different provenance for matched
+opportunities, gap candidates, and fallback rows. If no rows remain after
 filters, print:
 
 ```text
@@ -320,6 +330,12 @@ No benchmark test plans.
 ## Filters
 
 - `--state concrete|draft-needed` filters by `test_plan_state`.
+- `--source opportunity-relative|gap-candidate|gap-fallback` filters by
+  `priority_source`.
+- `--exclude-fallback` removes rows where `priority_source == "gap-fallback"`.
+- `--readiness runnable|stage-needed|metadata-only|blocked` filters by
+  `readiness_label`.
+- `--runnable-only` is shorthand for `--readiness runnable`.
 - `--benchmark <dataset-ref>` filters exact benchmark ids. Accept canonical ids
   such as `dataset:sciplex3` and bare dataset slugs when unambiguous.
 - `--facet <facet>` filters by projected `matched_facets`, using the same

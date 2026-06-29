@@ -589,6 +589,10 @@ benchmark:
     assert "Benchmark Tests" in result.output
     assert "hypothesis:0002-spatial" in result.output
     assert "draft-needed" in result.output
+    assert "source" in result.output
+    assert "readiness" in result.output
+    assert "opportunity-relative" in result.output
+    assert "metadata-only" in result.output
     assert "dataset:hca-spatial" in result.output
     assert "prediction-target" in result.output
 
@@ -627,6 +631,119 @@ benchmark:
     assert "No benchmark test plans." in result.output
 
 
+def test_benchmark_tests_cli_source_and_readiness_filters(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-triage",
+        """
+id: hypothesis:0004-triage
+type: hypothesis
+title: Triage hypothesis
+""",
+        body="Drug perturbation should shift response states. Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    source_result = _invoke_tests(tmp_path, "--source", "opportunity-relative", "--format", "json")
+    readiness_result = _invoke_tests(tmp_path, "--runnable-only", "--format", "json")
+
+    source_payload = json.loads(source_result.output)
+    readiness_payload = json.loads(readiness_result.output)
+    assert source_result.exit_code == 0
+    assert [row["benchmark_id"] for row in source_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["priority_source"] for row in source_payload["benchmark_tests"]} == {"opportunity-relative"}
+    assert readiness_result.exit_code == 0
+    assert [row["benchmark_id"] for row in readiness_payload["benchmark_tests"]] == ["dataset:sciplex3"]
+    assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
+
+
+def test_benchmark_tests_cli_exclude_fallback(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-spatial",
+        """
+id: hypothesis:0005-spatial
+type: hypothesis
+title: Spatial fallback hypothesis
+""",
+        body="Microenvironment region needs benchmark support.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--exclude-fallback", "--format", "json")
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload["benchmark_tests"] == []
+    assert payload["summary"]["test_plan_rows"] == 0
+
+
 def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> None:
     entity_result = _invoke_tests(tmp_path, "--entity", "hypothesis:missing")
     assert entity_result.exit_code != 0
@@ -635,6 +752,13 @@ def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> 
     facet_result = _invoke_tests(tmp_path, "--facet", "not-a-facet")
     assert facet_result.exit_code != 0
     assert "unknown benchmark gap facet" in facet_result.output
+
+
+def test_benchmark_tests_cli_rejects_conflicting_readiness_filters(tmp_path: Path) -> None:
+    result = _invoke_tests(tmp_path, "--readiness", "metadata-only", "--runnable-only")
+
+    assert result.exit_code != 0
+    assert "--runnable-only conflicts with --readiness metadata-only" in result.output
 
 
 def test_benchmark_tests_cli_commons_unavailable_degrades_to_local_rows(tmp_path: Path) -> None:
