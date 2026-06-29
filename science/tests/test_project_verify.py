@@ -1,6 +1,7 @@
 import gzip
 import io
 import json
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -9,9 +10,15 @@ import pytest
 
 from science_tool.project_package.serialize import serialize_project
 from science_tool.project_package.verify import (
+    AgainstResult,
     BundleIntegrityError,
+    CommitCompare,
+    PayloadCompare,
+    SourceCompare,
     VerifyError,
+    compare_against,
     load_bundle,
+    preflight_against,
 )
 import science_tool.project_package.verify as verify
 
@@ -44,6 +51,16 @@ def _make_bundle(tmp_path: Path) -> tuple[Path, Path]:
     bundle = tmp_path / "bundle.tar.gz"
     serialize_project(proj, bundle)
     return proj, bundle
+
+
+def _copy_checkout(source: Path, target: Path) -> None:
+    shutil.copytree(source, target)
+
+
+def _against_result(bundle_path: Path, target: Path) -> AgainstResult:
+    loaded = load_bundle(bundle_path)
+    head = preflight_against(target)
+    return compare_against(loaded, target, head)
 
 
 def _write_bundle(path: Path, members: dict[str, bytes]) -> None:
@@ -276,3 +293,137 @@ def test_load_bundle_traversal_member_path_is_integrity(tmp_path: Path):
     _write_raw_bundle(bad, [("demo/../manifest.json", b"{}")])
     with pytest.raises(BundleIntegrityError, match="unsafe archive member path"):
         load_bundle(bad)
+
+
+def test_against_clean_checkout_matches(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+
+    result = _against_result(bundle, target)
+
+    head = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert result == AgainstResult(
+        root=str(target),
+        commit=CommitCompare(bundle=head, head=head, match=True),
+        source=SourceCompare(total=2, match=2, differ=[], absent=[]),
+        payloads=PayloadCompare(ok=1, differ=[], missing=[], extra=[]),
+    )
+
+
+def test_against_payload_missing(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "data" / "processed" / "x.parquet").unlink()
+
+    result = _against_result(bundle, target)
+
+    assert result.payloads == PayloadCompare(
+        ok=0,
+        differ=[],
+        missing=["data/processed/x.parquet"],
+        extra=[],
+    )
+
+
+def test_against_payload_differs(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "data" / "processed" / "x.parquet").write_bytes(b"CHANGED")
+
+    result = _against_result(bundle, target)
+
+    assert result.payloads == PayloadCompare(
+        ok=0,
+        differ=["data/processed/x.parquet"],
+        missing=[],
+        extra=[],
+    )
+
+
+def test_against_payload_extra_is_non_fatal(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "data" / "processed" / "extra.parquet").write_bytes(b"EXTRA")
+
+    result = _against_result(bundle, target)
+
+    assert result.payloads == PayloadCompare(
+        ok=1,
+        differ=[],
+        missing=[],
+        extra=["data/processed/extra.parquet"],
+    )
+
+
+def test_against_source_differs(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "science.yaml").write_text("id: demo\nname: Changed\n", encoding="utf-8")
+
+    result = _against_result(bundle, target)
+
+    assert result.source == SourceCompare(
+        total=2,
+        match=1,
+        differ=["science.yaml"],
+        absent=[],
+    )
+
+
+def test_against_source_absent(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "entities" / "questions" / "q1.md").unlink()
+
+    result = _against_result(bundle, target)
+
+    assert result.source == SourceCompare(
+        total=2,
+        match=1,
+        differ=[],
+        absent=["entities/questions/q1.md"],
+    )
+
+
+def test_against_commit_differs_after_new_commit(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "doc").mkdir()
+    (target / "doc" / "note.md").write_text("note\n", encoding="utf-8")
+    subprocess.run(["git", "add", "doc/note.md"], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "new commit"], cwd=target, check=True)
+
+    result = _against_result(bundle, target)
+
+    assert result.commit.match is False
+    assert result.commit.bundle != result.commit.head
+    assert result.source == SourceCompare(total=2, match=2, differ=[], absent=[])
+    assert result.payloads == PayloadCompare(ok=1, differ=[], missing=[], extra=[])
+
+
+def test_preflight_against_non_git_is_operational(tmp_path: Path):
+    root = tmp_path / "not-git"
+    root.mkdir()
+
+    with pytest.raises(VerifyError, match="git worktree"):
+        preflight_against(root)
+
+
+def test_preflight_against_bare_repo_is_operational(tmp_path: Path):
+    root = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(root)], check=True)
+
+    with pytest.raises(VerifyError, match="git worktree"):
+        preflight_against(root)

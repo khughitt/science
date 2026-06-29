@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import tarfile
 import zlib
 from dataclasses import dataclass
@@ -10,8 +11,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_package.core import content_version
+from science_tool.project_package.core import file_resource
 from science_tool.project_package.manifest import SerializedManifest, data_version_chunks
+from science_tool.project_package.payload import PayloadError, payload_inventory
 
 MAX_ARCHIVE_MEMBERS = 50_000
 MAX_MEMBER_BYTES = 100 * 1024 * 1024
@@ -32,6 +36,37 @@ class LoadedBundle:
     manifest: SerializedManifest
     manifest_bytes: bytes
     members: dict[str, bytes]
+
+
+@dataclass(frozen=True)
+class CommitCompare:
+    bundle: str
+    head: str
+    match: bool
+
+
+@dataclass(frozen=True)
+class SourceCompare:
+    total: int
+    match: int
+    differ: list[str]
+    absent: list[str]
+
+
+@dataclass(frozen=True)
+class PayloadCompare:
+    ok: int
+    differ: list[str]
+    missing: list[str]
+    extra: list[str]
+
+
+@dataclass(frozen=True)
+class AgainstResult:
+    root: str
+    commit: CommitCompare
+    source: SourceCompare
+    payloads: PayloadCompare
 
 
 def load_bundle(bundle_path: Path) -> LoadedBundle:
@@ -75,6 +110,125 @@ def load_bundle(bundle_path: Path) -> LoadedBundle:
         manifest_bytes=manifest_bytes,
         members=members,
     )
+
+
+def preflight_against(root: Path) -> str:
+    """Validate a target checkout and return its HEAD commit."""
+    root = root.expanduser()
+    if not root.exists():
+        raise VerifyError(f"--against root does not exist: {root}")
+    if not root.is_dir():
+        raise VerifyError(f"--against root is not a directory: {root}")
+
+    try:
+        inside = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise VerifyError(f"--against root is not a git worktree: {root}") from exc
+    if inside != "true":
+        raise VerifyError(f"--against root is not a git worktree or has no working tree: {root}")
+
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise VerifyError(f"--against root has no HEAD commit: {root}") from exc
+
+
+def compare_against(bundle: LoadedBundle, root: Path, head: str) -> AgainstResult:
+    """Compare a loaded bundle with a target checkout."""
+    root = root.expanduser()
+    commit = CommitCompare(
+        bundle=bundle.manifest.provenance.git_commit,
+        head=head,
+        match=bundle.manifest.provenance.git_commit == head,
+    )
+    return AgainstResult(
+        root=str(root),
+        commit=commit,
+        source=_compare_source(bundle, root),
+        payloads=_compare_payloads(bundle, root),
+    )
+
+
+def _compare_source(bundle: LoadedBundle, root: Path) -> SourceCompare:
+    match = 0
+    differ: list[str] = []
+    absent: list[str] = []
+    for record in bundle.manifest.files:
+        path = root / record.path
+        if path.is_symlink() or not path.is_file():
+            absent.append(record.path)
+            continue
+        try:
+            actual = file_resource(root, record.path)
+        except OSError as exc:
+            raise VerifyError(f"filesystem error reading --against source {record.path} under {root}: {exc}") from exc
+        if actual.sha256 == record.sha256 and actual.bytes == record.bytes:
+            match += 1
+        else:
+            differ.append(record.path)
+    return SourceCompare(
+        total=len(bundle.manifest.files),
+        match=match,
+        differ=sorted(differ),
+        absent=sorted(absent),
+    )
+
+
+def _compare_payloads(bundle: LoadedBundle, root: Path) -> PayloadCompare:
+    tracked = _tracked_set(root)
+    try:
+        actual_payloads = payload_inventory(root, DEFAULT_DATA_DIRS, tracked)
+    except PayloadError as exc:
+        raise VerifyError(f"payload inventory failed for --against root {root}: {exc}") from exc
+
+    expected = {record.path: record for record in bundle.manifest.payloads}
+    actual = {record["path"]: record for record in actual_payloads}
+
+    ok = 0
+    differ: list[str] = []
+    missing: list[str] = []
+    extra: list[str] = []
+    for path, expected_record in expected.items():
+        actual_record = actual.get(path)
+        if actual_record is None:
+            missing.append(path)
+            continue
+        if actual_record["sha256"] == expected_record.sha256 and actual_record["bytes"] == expected_record.bytes:
+            ok += 1
+        else:
+            differ.append(path)
+    for path in actual:
+        if path not in expected:
+            extra.append(path)
+
+    return PayloadCompare(
+        ok=ok,
+        differ=sorted(differ),
+        missing=sorted(missing),
+        extra=sorted(extra),
+    )
+
+
+def _tracked_set(root: Path) -> set[str]:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise VerifyError(f"cannot list git-tracked files for --against root: {root}") from exc
+    return {path for path in out.decode("utf-8").split("\0") if path}
 
 
 def _read_archive(bundle_path: Path) -> dict[str, bytes]:
