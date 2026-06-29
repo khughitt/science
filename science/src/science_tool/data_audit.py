@@ -29,6 +29,7 @@ from science_tool.data_worktree import DEFAULT_DATA_DIRS
 class Quadrant(StrEnum):
     STRANDED_RECORD = "stranded_record"
     LEAKED_PAYLOAD = "leaked_payload"
+    TRACKED_PAYLOAD = "tracked_payload"
     FLAG = "flag"
 
 
@@ -183,6 +184,10 @@ def _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs) -> Violat
         return Violation(
             Quadrant.LEAKED_PAYLOAD, rel.as_posix(), cls, "data/processed/" + rel.name,
         )
+    if cls is FileClass.PAYLOAD and is_tracked and loc == "DATA":
+        # Tracked payload sitting in ignored data/ territory. Remediation is
+        # `git rm --cached` (untrack-in-place); never an auto-move, so no target.
+        return Violation(Quadrant.TRACKED_PAYLOAD, rel.as_posix(), cls, None)
     if cls is FileClass.FLAG:
         return Violation(Quadrant.FLAG, rel.as_posix(), cls, None)
     return None

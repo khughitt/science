@@ -1035,11 +1035,17 @@ def serialize_project(
     except (OSError, ValueError, yaml.YAMLError, ValidationError) as exc:
         raise _config_error(exc) from exc
 
-    violations = audit_project(project_root, policy)
+    # Gate ONLY on payload-boundary quadrants. Under the default data policy `classify`
+    # returns FileClass.FLAG for nearly every ordinary source file (entities/*.md,
+    # science.yaml, results/*.md, references.bib, graph.trig), so gating on all violations
+    # would block 100% of real projects. FLAG is a project-wide "needs attention" signal
+    # surfaced by `science data audit`, not a payload-boundary breach.
+    all_violations = audit_project(project_root, policy)
+    violations = [v for v in all_violations if v.quadrant in _BOUNDARY_QUADRANTS]
     if violations and not force:
         quadrants = sorted({v.quadrant.value for v in violations})
         raise SerializeError(
-            f"refusing to serialize: {len(violations)} data-audit violation(s) "
+            f"refusing to serialize: {len(violations)} data-audit boundary violation(s) "
             f"[{', '.join(quadrants)}]. Run `science data audit` to inspect, or pass --force."
         )
     forced = bool(violations) and force

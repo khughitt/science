@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 from rdflib import URIRef
 
 from science_tool.bibliography import load_bib_entries
+from science_tool.project_package.core import content_version, file_resource
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
@@ -177,19 +177,15 @@ def _json_write(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _json_resource(name: str, path: str, kind: str, root: Path) -> dict[str, Any]:
-    file_path = root / path
+    fr = file_resource(root, path)
     return {
         "name": name,
         "path": path,
         "kind": kind,
         "sensitivity": "public",
-        "bytes": file_path.stat().st_size,
-        "sha256": _sha256(file_path),
+        "bytes": fr.bytes,
+        "sha256": fr.sha256,
         "media_type": "application/json",
     }
 
@@ -471,20 +467,22 @@ def _discover_entities(
 
 def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list[ExportedEntity]) -> str:
     base = str(raw_config.get("last_modified") or raw_config.get("version") or "0")
-    digest = hashlib.sha256()
-    digest.update((project_root / "science.yaml").read_bytes())
-    bib = project_root / "papers" / "references.bib"
-    if bib.exists():
-        digest.update(bib.read_bytes())
-    graph = project_root / "knowledge" / "graph.trig"
-    if graph.exists():
-        digest.update(graph.read_bytes())
-    for entity in entities:
-        digest.update(entity.source_path.encode("utf-8"))
-        digest.update(json.dumps(entity.frontmatter, sort_keys=True, default=str).encode("utf-8"))
-        digest.update(json.dumps(entity.record, sort_keys=True, default=str).encode("utf-8"))
-        digest.update(entity.markdown.encode("utf-8"))
-    return f"{base}+{digest.hexdigest()[:12]}"
+
+    def chunks() -> Iterator[bytes]:
+        yield (project_root / "science.yaml").read_bytes()
+        bib = project_root / "papers" / "references.bib"
+        if bib.exists():
+            yield bib.read_bytes()
+        graph = project_root / "knowledge" / "graph.trig"
+        if graph.exists():
+            yield graph.read_bytes()
+        for entity in entities:
+            yield entity.source_path.encode("utf-8")
+            yield json.dumps(entity.frontmatter, sort_keys=True, default=str).encode("utf-8")
+            yield json.dumps(entity.record, sort_keys=True, default=str).encode("utf-8")
+            yield entity.markdown.encode("utf-8")
+
+    return content_version(base, chunks())
 
 
 def _view_config_for_type(entity_type: str, raw_config: dict[str, Any]) -> dict[str, Any]:

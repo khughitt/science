@@ -134,3 +134,24 @@ def test_stranded_record_directly_under_data_dir_flag_action(tmp_path: Path):
     assert row["quadrant"] == "stranded_record"
     assert row["target"] is None
     assert row["action"] == "flag"  # read-only parity: fixer can't propose a target
+
+
+def test_tracked_payload_inside_data_flagged(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/big.feather", b"\x00" * 32)  # PAYLOAD by ext
+    # Untracked payload under data/ → no violation (the normal, healthy case).
+    assert not [v for v in audit_project(tmp_path)
+                if v.quadrant is Quadrant.TRACKED_PAYLOAD]
+    # Track it → TRACKED_PAYLOAD violation, report-only (no move target).
+    subprocess.run(["git", "add", "-f", "data/processed/exp1/big.feather"],
+                   cwd=tmp_path, check=True)
+    tracked = [v for v in audit_project(tmp_path)
+               if v.quadrant is Quadrant.TRACKED_PAYLOAD]
+    assert len(tracked) == 1
+    assert tracked[0].path == "data/processed/exp1/big.feather"
+    assert tracked[0].proposed_target is None
+    # Stable JSON contract surfaces it as a report-only "flag" action.
+    payload = json.loads(render_json(tracked))
+    assert payload["violations"][0]["quadrant"] == "tracked_payload"
+    assert payload["violations"][0]["action"] == "flag"
+    assert payload["violations"][0]["performed"] is False
