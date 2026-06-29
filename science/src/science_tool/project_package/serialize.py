@@ -142,6 +142,8 @@ def _build_manifest(
         },
         "data_version": content_version(base, chunks),
         "provenance": {"git_commit": git_commit, "tool": "science"},
+        # `passed` = zero blocking payload-boundary violations (STRANDED_RECORD /
+        # LEAKED_PAYLOAD / TRACKED_PAYLOAD); non-blocking FLAG findings are not counted.
         "boundary_audit": {"passed": audit_passed, "forced": forced},
         "files": [{"path": fr.path, "sha256": fr.sha256, "bytes": fr.bytes} for fr in files],
         "payloads": payloads,
@@ -272,7 +274,7 @@ def serialize_project(
     if violations and not force:
         quadrants = sorted({v.quadrant.value for v in violations})
         raise SerializeError(
-            f"refusing to serialize: {len(violations)} data-audit violation(s) "
+            f"refusing to serialize: {len(violations)} data-audit boundary violation(s) "
             f"[{', '.join(quadrants)}]. Run `science data audit` to inspect, or pass --force."
         )
     forced = bool(violations) and force
