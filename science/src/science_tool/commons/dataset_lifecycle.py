@@ -107,14 +107,15 @@ def scaffold_dataset_package(
 
 def _entity_text(slug: str, title: str, version: str, today: str) -> str:
     yaml_title = yaml.safe_dump(title, default_style='"').strip()
+    yaml_today = yaml.safe_dump(today, default_style='"').strip()
     return f"""---
 schema_profile: science-entity-base/1.0+dataset/1.0
 id: dataset:{slug}
 type: dataset
 title: {yaml_title}
 version: "{version}"
-created: {today}
-updated: {today}
+created: {yaml_today}
+updated: {yaml_today}
 status: active
 origin: external
 source_class: reference

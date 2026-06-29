@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
     dataset_paths,
@@ -83,6 +84,25 @@ def test_scaffold_dataset_package_writes_required_files(tmp_path: Path) -> None:
     assert "rule all:" in snakefile_text
     assert 'DATASET_SLUG = "dbsnp-human"' in snakefile_text
     assert "dataset_output_dir" in snakefile_text
+
+
+def test_scaffold_dataset_package_loads_with_commons_entity_adapter(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "commons"
+    scaffold_dataset_package(
+        root,
+        "dbsnp-human",
+        title="Human dbSNP labels",
+        version="0.1.0",
+        today="2026-06-29",
+    )
+
+    record = CommonsEntityAdapter(root).load("dataset:dbsnp-human")
+
+    assert record.canonical_id == "dataset:dbsnp-human"
+    assert record.type == "dataset"
+    assert record.slug == "dbsnp-human"
 
 
 def test_scaffold_snakefile_parses_with_snakemake_dry_run(tmp_path: Path) -> None:
