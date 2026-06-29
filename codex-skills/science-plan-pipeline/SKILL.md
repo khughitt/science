@@ -164,6 +164,10 @@ Walk the inquiry subgraph and identify:
 - How is it validated?
 - What does "success" look like?
 
+**Scale & resource behavior** — for any step that ingests real-world, heterogeneous, or externally-sourced input:
+- What is the expected peak memory and wall-clock on *real* data, not the small fixtures used in tests? Heterogeneous real input — one pathological record, a super-linear parser — can inflate resource use by orders of magnitude even when the logic is correct.
+- Plan an explicit scale/resource validation task (carried in the plan templates below): the pipeline is not "done" until it has run on a scale-representative slice (or the full corpus) with peak memory and wall-clock observed.
+
 ### Step 2a: Consider rented GPU execution when the workload looks GPU-intensive
 
 Before continuing, check whether the planned workflow appears likely to need substantial GPU execution. Common signals include:
@@ -399,6 +403,7 @@ Enumerate every file to modify / create with a one-line intent.
 
 ## Final validation task
 - [ ] Run test suite / smoke / linter.
+- [ ] **Scale/resource run on real data** (for pipelines ingesting real heterogeneous input): execute on a scale-representative slice or the full corpus, observing peak memory + wall-clock. Fixtures validate logic, not resource behavior — do not declare done on green fixtures alone.
 - [ ] Manual UI check (if applicable).
 - [ ] Commit.
 
@@ -453,6 +458,7 @@ science graph stamp-revision
 - **RunPod is advisory, not automatic.** For GPU-intensive workflows, suggest the RunPod skill and let the user choose whether to incorporate it.
 - **Pilot first.** For complex pipelines, suggest a `probe`-mode precursor before a `design`-mode plan.
 - **Validation is mode-specific, not per-transformation.** `probe` plans carry a single `Decision criteria` block + `Validation` summary; `design` plans carry per-WP `Definition of done` plus closing `Acceptance Criteria`; `implementation` plans carry per-task checkbox steps with inline commands. Do not emit per-transformation validation matrices.
+- **Fixtures validate logic, not scale.** "Reviewed + tests green" is not "validated against real data." Any pipeline that ingests real-world, heterogeneous, or externally-sourced input needs an explicit scale/resource validation task — a run on a representative slice or the full corpus, watching peak memory and wall-clock — *before* it is considered complete, not deferred entirely to the production run.
 - **The plan document is the canonical artifact.** Inquiry-graph annotations (Step 3) are optional and only meaningful when downstream tooling consumes them; they are not the source of truth for the plan.
 - **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry source from `entities/patches/` when present, or prose context from `entities/inquiries/` for legacy projects. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 

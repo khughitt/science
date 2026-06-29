@@ -30,6 +30,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 2. **Frictionless Data Packages.** Every data directory should have a `datapackage.json` describing its contents, schemas, and provenance.
 3. **Provenance tracking.** Document where data came from, when it was acquired, and what transformations were applied.
 4. **Reproducible preprocessing.** All data transformations should be scripted (in `code/scripts/` or `code/workflows/`) and documented.
+5. **Bound untrusted input before parsing.** When a step feeds real-world, heterogeneous, or externally-sourced content to a parser (LaTeX, HTML, XML, regex, etc.), cap the input length up front with a per-step budget. Many real parsers are super-linear, so a single pathological record can exhaust memory and OOM-kill the whole run — a failure mode small fixtures never exhibit. Verify the bound is output-neutral on normal records.
 
 ## Data Directory Convention
 
