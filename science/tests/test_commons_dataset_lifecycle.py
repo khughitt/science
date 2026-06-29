@@ -321,6 +321,26 @@ def test_validate_dataset_package_reports_malformed_datapackage_yaml(
     )
 
 
+def test_validate_dataset_package_reports_non_utf8_datapackage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    datapackage = root / "datasets" / "dbsnp-human" / "datapackage.yaml"
+    datapackage.write_bytes(b"\xff")
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "datapackage-invalid" and f.path == datapackage
+        for f in report.findings
+    )
+
+
 def test_validate_dataset_package_reports_unsafe_datapackage_resource_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -609,6 +629,26 @@ def test_validate_dataset_package_reports_parent_project_paths(
 
     assert report.valid is False
     assert any(f.code == "parent-project-path" for f in report.findings)
+
+
+def test_validate_dataset_package_reports_unreadable_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    root = tmp_path / "commons"
+    scaffold_dataset_package(root, "dbsnp-human", today="2026-06-29")
+    snakefile = root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile"
+    snakefile.write_bytes(b"\xff")
+
+    report = validate_dataset_package(root, "dbsnp-human")
+
+    assert report.valid is False
+    assert any(
+        f.code == "workflow-unreadable" and f.path == snakefile
+        for f in report.findings
+    )
 
 
 def test_validate_dataset_package_reports_payload_inside_recipe(

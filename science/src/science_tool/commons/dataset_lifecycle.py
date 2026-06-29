@@ -322,7 +322,7 @@ def _validate_snakefile_paths(
 ) -> None:
     try:
         text = snakefile_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         findings.append(
             DatasetPackageFinding(
                 "workflow-unreadable",
@@ -397,7 +397,7 @@ def _validate_tracked_payloads(
 def _validate_datapackage_shape(path: Path) -> None:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise DatasetLifecycleError(f"invalid datapackage {path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise DatasetLifecycleError(f"invalid datapackage {path}: top-level YAML must be a mapping")
