@@ -513,6 +513,17 @@ def test_preflight_extract_symlink_target_is_operational(tmp_path: Path):
         preflight_extract(dest)
 
 
+def test_preflight_extract_broken_symlink_target_is_operational(tmp_path: Path):
+    dest = tmp_path / "out"
+    try:
+        dest.symlink_to(tmp_path / "missing-target")
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not supported: {exc}")
+
+    with pytest.raises(VerifyError, match="symlink"):
+        preflight_extract(dest)
+
+
 def test_extract_mid_write_error_leaves_existing_dest_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _, bundle = _make_bundle(tmp_path)
     loaded = load_bundle(bundle)
