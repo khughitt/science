@@ -14,6 +14,10 @@ import yaml
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.dataset_lifecycle import (
+    DatasetLifecycleError,
+    scaffold_dataset_package,
+)
 from science_tool.commons.errors import (
     CommonsError,
     CommonsRootNotFoundError,
@@ -405,6 +409,49 @@ def inventory_cmd(output: Path | None) -> None:
         click.echo(rendered, nl=False)
     else:
         output.write_text(rendered, encoding="utf-8")
+
+
+@commons_group.group("dataset")
+def dataset_group() -> None:
+    """Manage commons-born dataset packages."""
+
+
+@dataset_group.command("init")
+@click.argument("slug")
+@click.option("--title", default=None, help="Dataset title. Defaults to title-cased slug.")
+@click.option("--version", default="0.1.0", show_default=True, help="Wrapper package version.")
+@click.option("--date", "today", default=None, help="Creation/update date override for tests.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | None, as_json: bool) -> None:
+    """Create a commons-born dataset package scaffold."""
+    root = _require_root()
+    try:
+        result = scaffold_dataset_package(root, slug, title=title, version=version, today=today)
+    except DatasetLifecycleError as exc:
+        message = str(exc)
+        if message.startswith("dataset version must"):
+            message = f"invalid dataset version: {message}"
+        raise click.ClickException(message) from exc
+
+    dataset_dir = result.paths.dataset_dir.relative_to(root)
+    created = [str(path.relative_to(root)) for path in result.created]
+    next_steps = [
+        f"science commons dataset build {slug}",
+        f"science commons dataset validate {slug}",
+    ]
+    if as_json:
+        payload = {
+            "created": created,
+            "dataset_dir": str(dataset_dir),
+            "next": next_steps,
+            "slug": slug,
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
+    for step in next_steps:
+        click.echo(f"next: {step}")
 
 
 @commons_group.group("data")
