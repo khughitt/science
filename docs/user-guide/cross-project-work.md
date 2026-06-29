@@ -88,6 +88,36 @@ individual project. The commons root resolves from `SCIENCE_COMMONS_ROOT`, then
 roots similarly resolve from `SCIENCE_COMMONS_DATA_ROOT`, then
 `commons.data_root`, then `/data/science-commons/`.
 
+## Commons-Born Dataset Packages
+
+Reusable reference wrappers can start directly in commons instead of being
+promoted from a project:
+
+```bash
+science commons dataset init <slug>
+science commons dataset build <slug>
+science commons dataset validate <slug>
+science commons dataset status <slug> --json
+```
+
+`science commons init` initializes the commons store. `science commons dataset
+init <slug>` initializes one dataset package under `datasets/<slug>/`.
+
+Every commons-born dataset package has a tracked `recipe/Snakefile`.
+`science commons dataset build <slug>` runs that workflow and passes standard
+commons roots, including the per-dataset output directory. The workflow owns
+downloads, source lockfiles, generated payloads, summaries, and datapackage hash
+refreshes.
+
+Tracked package metadata and recipes live under `~/d/science-commons/datasets/<slug>/`.
+Generated payload bytes live under `$SCIENCE_COMMONS_DATA_ROOT/<slug>/` unless
+`~/.config/science/data.yaml` maps the slug to a machine-local override such as
+`~/d/science-commons-data/<slug>/`.
+
+Projects continue to reference commons datasets by id, for example
+`dataset:<slug>`. Project-local dependency locks and remote pulls are reserved
+for a later package-manager phase.
+
 Projects borrow commons records through local overlays. Overlay files keep
 project-specific context local while pointing `overlay_of` at the commons
 canonical owner.
