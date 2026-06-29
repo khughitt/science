@@ -3,13 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rdflib import URIRef
 
 from science_tool.bibliography import load_bib_entries
+from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
+from science_tool.graph.store.dataset import _load_dataset
+from science_tool.graph.store.identity import _graph_uri
 from science_tool.markdown_utils import parse_frontmatter
 from science_tool.project_config import load_project_config
 from science_tool.references import MarkdownPayload, build_reference_bundle, validate_exported_markdown
@@ -89,6 +94,73 @@ TYPE_DIR_MAP = {
     "papers": "paper",
 }
 PUBLIC_ACCESS_LEVELS = {"public", "open", "open-access", "unrestricted"}
+BACKLINK_ROLES = {
+    "supports",
+    "contradicts",
+    "related",
+    "addresses",
+    "synthesizes",
+    "grounds",
+    "tests",
+    "amends",
+    "supersedes",
+    "mechanism",
+    "evidence",
+    "subject",
+    "object",
+}
+PREDICATE_ROLE = {
+    "cito:supports": ("supports", True),
+    "supports": ("supports", True),
+    "cito:disputes": ("contradicts", True),
+    "disputes": ("contradicts", True),
+    "cito:discusses": ("related", True),
+    "skos:related": ("related", True),
+    "mentions": ("related", True),
+    "about": ("related", True),
+    "related": ("related", True),
+    "sci:addresses": ("addresses", True),
+    "addresses": ("addresses", True),
+    "sci:synthesizes": ("synthesizes", True),
+    "synthesizes": ("synthesizes", True),
+    "sci:grounds": ("grounds", True),
+    "sci:groundedby": ("grounds", True),
+    "sci:grounded_by": ("grounds", True),
+    "grounds": ("grounds", True),
+    "grounded_by": ("grounds", True),
+    "sci:tests": ("tests", True),
+    "tests": ("tests", True),
+    "sci:amends": ("amends", True),
+    "amends": ("amends", True),
+    "sci:supersedes": ("supersedes", True),
+    "sci:supersedesclaim": ("supersedes", True),
+    "sci:supersedes_claim": ("supersedes", True),
+    "supersedes": ("supersedes", True),
+    "supersedes_claim": ("supersedes", True),
+    "sci:hasproposition": ("has_proposition", False),
+    "has_proposition": ("has_proposition", False),
+    "sci:feedsinto": ("feeds_into", False),
+    "feeds_into": ("feeds_into", False),
+    "sci:bearson": ("bears_on", False),
+    "bears_on": ("bears_on", False),
+    "sci:realizes": ("realizes", False),
+    "realizes": ("realizes", False),
+    "sci:implements": ("implements", False),
+    "implements": ("implements", False),
+    "cito:usesmethodin": ("uses", False),
+    "uses": ("uses", False),
+    "uses_method_in": ("uses", False),
+}
+GRAPH_LINK_PREDICATES = {
+    key
+    for key, (_role, backlink) in PREDICATE_ROLE.items()
+    if backlink
+}
+CITO_PREDICATES = {
+    "cito:supports",
+    "cito:disputes",
+    "cito:discusses",
+}
 
 
 @dataclass(frozen=True)
@@ -221,12 +293,117 @@ def _validate_source_refs(frontmatter: dict[str, Any], known_citekeys: set[str],
         raise ValueError(f"unresolved source_refs citation in {source_path}: {', '.join(missing)}")
 
 
-def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[list[ExportedEntity], bool]:
+def _predicate_key(value: object) -> str:
+    return str(value or "").strip().replace("-", "_").lower()
+
+
+def _predicate_curie(uri_or_curie: object) -> str:
+    value = str(uri_or_curie or "").strip()
+    return shorten_uri(value) if value.startswith(("http://", "https://")) else value
+
+
+def _warning(message: str, source_path: str | None = None) -> dict[str, str]:
+    payload = {"message": message}
+    if source_path:
+        payload["source_path"] = source_path
+    return payload
+
+
+def _role_for_predicate(
+    predicate: str,
+    warnings: list[dict[str, str]],
+    source_path: str,
+) -> tuple[str, bool]:
+    mapped = PREDICATE_ROLE.get(_predicate_key(predicate))
+    if mapped:
+        return mapped
+    warnings.append(_warning(f"unknown link predicate kept generic: {predicate}", source_path))
+    return "related", False
+
+
+def _role_for_discusses(
+    value: object,
+    warnings: list[dict[str, str]],
+    source_path: str,
+) -> tuple[str, bool]:
+    role = str(value or "related").strip().replace("-", "_").lower()
+    if role in BACKLINK_ROLES:
+        return role, True
+    warnings.append(_warning(f"unknown discusses role kept generic: {role}", source_path))
+    return role, False
+
+
+def _is_finding_entity(entity_id: str, entity_type_by_id: dict[str, str]) -> bool:
+    return entity_type_by_id.get(entity_id) in FINDING_TYPES
+
+
+def _finding_backlink(
+    *,
+    source_id: str,
+    target_id: str,
+    backlink: bool,
+    type_by_id: dict[str, str],
+) -> bool:
+    if not backlink:
+        return False
+    if _is_finding_entity(target_id, type_by_id):
+        return True
+    if not _is_finding_entity(source_id, type_by_id):
+        return False
+    return ENTITY_CLASS_BY_TYPE.get(type_by_id.get(target_id, ""), "source") != "workflow"
+
+
+def _emit_link_row(
+    rows: list[dict[str, Any]],
+    *,
+    source_id: str,
+    target: object,
+    predicate: str,
+    role: str,
+    backlink: bool,
+    source_path: str,
+    exported_ids: set[str],
+    restricted_ids: set[str],
+    type_by_id: dict[str, str],
+    warnings: list[dict[str, str]],
+) -> None:
+    if not isinstance(target, str) or not target:
+        warnings.append(_warning(f"link target is missing for predicate {predicate}", source_path))
+        return
+    if target not in exported_ids:
+        message = "link target omitted because it is not exported"
+        if target not in restricted_ids:
+            message = f"{message}: {target}"
+        warnings.append(_warning(message, source_path))
+        return
+    rows.append(
+        {
+            "source": source_id,
+            "target": target,
+            "predicate": predicate,
+            "label": role.replace("_", " "),
+            "link_role": role,
+            "finding_backlink": _finding_backlink(
+                source_id=source_id,
+                target_id=target,
+                backlink=backlink,
+                type_by_id=type_by_id,
+            ),
+            "source_path": source_path,
+        }
+    )
+
+
+def _discover_entities(
+    project_root: Path,
+    known_citekeys: set[str],
+) -> tuple[list[ExportedEntity], bool, set[str]]:
     entity_root = project_root / "entities"
     if not entity_root.exists():
-        return [], False
+        return [], False, set()
     exported: list[ExportedEntity] = []
     restricted_present = False
+    restricted_ids: set[str] = set()
     seen: set[str] = set()
     for path in sorted(entity_root.rglob("*.md")):
         frontmatter, body_start_line = parse_frontmatter(path)
@@ -239,6 +416,7 @@ def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[li
         seen.add(entity_id)
         if not _is_public_frontmatter(frontmatter):
             restricted_present = True
+            restricted_ids.add(entity_id)
             continue
         entity_type = _entity_type_for_path(path, frontmatter)
         source_path = path.relative_to(project_root).as_posix()
@@ -287,7 +465,7 @@ def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[li
         exported.append(
             ExportedEntity(record=record, markdown=body, frontmatter=frontmatter, source_path=source_path)
         )
-    return exported, restricted_present
+    return exported, restricted_present, restricted_ids
 
 
 def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list[ExportedEntity]) -> str:
@@ -297,6 +475,9 @@ def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list
     bib = project_root / "papers" / "references.bib"
     if bib.exists():
         digest.update(bib.read_bytes())
+    graph = project_root / "knowledge" / "graph.trig"
+    if graph.exists():
+        digest.update(graph.read_bytes())
     for entity in entities:
         digest.update(entity.source_path.encode("utf-8"))
         digest.update(json.dumps(entity.frontmatter, sort_keys=True, default=str).encode("utf-8"))
@@ -305,27 +486,43 @@ def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list
     return f"{base}+{digest.hexdigest()[:12]}"
 
 
-def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> dict[str, Any]:
+def _view_config_for_type(entity_type: str, raw_config: dict[str, Any]) -> dict[str, Any]:
     overrides = ((raw_config.get("labnote") or {}).get("views") or {})
+    base = dict(
+        DEFAULT_VIEW_BY_TYPE.get(
+            entity_type,
+            {
+                "surface": "explore",
+                "route": f"/explore/{entity_type.replace('_', '-')}",
+                "label": entity_type.replace("_", " ").title(),
+                "order": 500,
+            },
+        )
+    )
+    override = overrides.get(entity_type) or {}
+    unknown = set(override) - {"label", "order", "surface", "hidden"}
+    if unknown:
+        raise ValueError(f"invalid labnote view override for {entity_type}: {sorted(unknown)}")
+    base.update(override)
+    return base
+
+
+def _filter_hidden_entities(
+    entities: list[ExportedEntity],
+    raw_config: dict[str, Any],
+) -> list[ExportedEntity]:
+    return [
+        entity
+        for entity in entities
+        if not _view_config_for_type(entity.record["type"], raw_config).get("hidden")
+    ]
+
+
+def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> dict[str, Any]:
     seen_types = sorted({entity.record["type"] for entity in entities})
     views = []
     for entity_type in seen_types:
-        base = dict(
-            DEFAULT_VIEW_BY_TYPE.get(
-                entity_type,
-                {
-                    "surface": "explore",
-                    "route": f"/explore/{entity_type.replace('_', '-')}",
-                    "label": entity_type.replace("_", " ").title(),
-                    "order": 500,
-                },
-            )
-        )
-        override = overrides.get(entity_type) or {}
-        unknown = set(override) - {"label", "order", "surface", "hidden"}
-        if unknown:
-            raise ValueError(f"invalid labnote view override for {entity_type}: {sorted(unknown)}")
-        base.update(override)
+        base = _view_config_for_type(entity_type, raw_config)
         if base.get("hidden"):
             continue
         views.append(
@@ -375,19 +572,237 @@ def _prose_bundle(entities: list[ExportedEntity]) -> dict[str, Any]:
     }
 
 
-def _empty_link_bundle() -> dict[str, Any]:
-    return {"contract": LINK_CONTRACT, "schema_version": BUNDLE_SCHEMA_VERSION, "links": []}
+def _frontmatter_link_rows(
+    entities: list[ExportedEntity],
+    restricted_ids: set[str],
+    warnings: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    exported_ids = {entity.record["id"] for entity in entities}
+    type_by_id = {entity.record["id"]: entity.record["type"] for entity in entities}
+    rows: list[dict[str, Any]] = []
+    for entity in entities:
+        source_id = entity.record["id"]
+        source_path = entity.source_path
+        frontmatter = entity.frontmatter
+        for item in frontmatter.get("discusses") or []:
+            if isinstance(item, str):
+                _emit_link_row(
+                    rows,
+                    source_id=source_id,
+                    target=item,
+                    predicate="cito:discusses",
+                    role="related",
+                    backlink=True,
+                    source_path=source_path,
+                    exported_ids=exported_ids,
+                    restricted_ids=restricted_ids,
+                    type_by_id=type_by_id,
+                    warnings=warnings,
+                )
+                continue
+            if isinstance(item, dict):
+                target = item.get("frame") or item.get("target") or item.get("entity")
+                role, backlink = _role_for_discusses(item.get("role"), warnings, source_path)
+                _emit_link_row(
+                    rows,
+                    source_id=source_id,
+                    target=target,
+                    predicate="cito:discusses",
+                    role=role,
+                    backlink=backlink,
+                    source_path=source_path,
+                    exported_ids=exported_ids,
+                    restricted_ids=restricted_ids,
+                    type_by_id=type_by_id,
+                    warnings=warnings,
+                )
+                continue
+            warnings.append(_warning("unsupported discusses entry omitted", source_path))
+        for target in frontmatter.get("related") or []:
+            _emit_link_row(
+                rows,
+                source_id=source_id,
+                target=target,
+                predicate="skos:related",
+                role="related",
+                backlink=True,
+                source_path=source_path,
+                exported_ids=exported_ids,
+                restricted_ids=restricted_ids,
+                type_by_id=type_by_id,
+                warnings=warnings,
+            )
+        for item in frontmatter.get("relations") or []:
+            if not isinstance(item, dict):
+                warnings.append(_warning("unsupported relations entry omitted", source_path))
+                continue
+            predicate = str(item.get("predicate") or item.get("relation") or "related")
+            role, backlink = _role_for_predicate(predicate, warnings, source_path)
+            _emit_link_row(
+                rows,
+                source_id=source_id,
+                target=item.get("target") or item.get("object"),
+                predicate=predicate,
+                role=role,
+                backlink=backlink,
+                source_path=source_path,
+                exported_ids=exported_ids,
+                restricted_ids=restricted_ids,
+                type_by_id=type_by_id,
+                warnings=warnings,
+            )
+    return rows
+
+
+def _graph_link_rows(
+    project_root: Path,
+    entities: list[ExportedEntity],
+    restricted_ids: set[str],
+    warnings: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    graph_path = project_root / "knowledge" / "graph.trig"
+    if not graph_path.exists():
+        return []
+    exported_ids = {entity.record["id"] for entity in entities}
+    type_by_id = {entity.record["id"]: entity.record["type"] for entity in entities}
+    rows: list[dict[str, Any]] = _graph_cito_link_rows(
+        graph_path,
+        exported_ids=exported_ids,
+        restricted_ids=restricted_ids,
+        type_by_id=type_by_id,
+        warnings=warnings,
+    )
+    payload = export_graph_payload(graph_path, overlays=[])
+    skipped = {"non_knowledge_layer": 0, "structural_predicate": 0, "unexported_endpoint": 0}
+    for edge in payload.edges:
+        if edge.graph_layer != "graph/knowledge":
+            skipped["non_knowledge_layer"] += 1
+            continue
+        predicate = _predicate_curie(edge.predicate)
+        if _predicate_key(predicate) not in GRAPH_LINK_PREDICATES:
+            skipped["structural_predicate"] += 1
+            continue
+        source_id = canonical_id_from_entity_uri(edge.subject)
+        target_id = canonical_id_from_entity_uri(edge.object)
+        if source_id not in exported_ids or target_id not in exported_ids:
+            skipped["unexported_endpoint"] += 1
+            continue
+        role, backlink = _role_for_predicate(predicate, warnings, "knowledge/graph.trig")
+        _emit_link_row(
+            rows,
+            source_id=source_id,
+            target=target_id,
+            predicate=predicate,
+            role=role,
+            backlink=backlink,
+            source_path="knowledge/graph.trig",
+            exported_ids=exported_ids,
+            restricted_ids=restricted_ids,
+            type_by_id=type_by_id,
+            warnings=warnings,
+        )
+    skipped_total = sum(skipped.values())
+    if skipped_total:
+        warnings.append(
+            _warning(
+                "graph links skipped: "
+                f"{skipped['non_knowledge_layer']} non-knowledge-layer, "
+                f"{skipped['structural_predicate']} structural predicate, "
+                f"{skipped['unexported_endpoint']} unexported endpoint",
+                "knowledge/graph.trig",
+            )
+        )
+    return rows
+
+
+def _graph_cito_link_rows(
+    graph_path: Path,
+    *,
+    exported_ids: set[str],
+    restricted_ids: set[str],
+    type_by_id: dict[str, str],
+    warnings: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    rows: list[dict[str, Any]] = []
+    for subject, predicate, target in knowledge.triples((None, None, None)):
+        predicate_curie = _predicate_curie(str(predicate))
+        if predicate_curie not in CITO_PREDICATES:
+            continue
+        if not isinstance(subject, URIRef) or not isinstance(target, URIRef):
+            continue
+        source_id = canonical_id_from_entity_uri(str(subject))
+        target_id = canonical_id_from_entity_uri(str(target))
+        if source_id not in exported_ids or target_id not in exported_ids:
+            continue
+        role, backlink = _role_for_predicate(predicate_curie, warnings, "knowledge/graph.trig")
+        _emit_link_row(
+            rows,
+            source_id=source_id,
+            target=target_id,
+            predicate=predicate_curie,
+            role=role,
+            backlink=backlink,
+            source_path="knowledge/graph.trig",
+            exported_ids=exported_ids,
+            restricted_ids=restricted_ids,
+            type_by_id=type_by_id,
+            warnings=warnings,
+        )
+    return rows
+
+
+def _link_identity(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (row["source"], row["target"], row["predicate"], row["link_role"])
+
+
+def _dedupe_link_rows(
+    frontmatter_rows: list[dict[str, Any]],
+    graph_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows_by_identity: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in frontmatter_rows:
+        rows_by_identity[_link_identity(row)] = row
+    for row in graph_rows:
+        rows_by_identity[_link_identity(row)] = row
+    return list(rows_by_identity.values())
+
+
+def _link_rows(
+    project_root: Path,
+    entities: list[ExportedEntity],
+    restricted_ids: set[str],
+    warnings: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    frontmatter_rows = _frontmatter_link_rows(entities, restricted_ids, warnings)
+    graph_rows = _graph_link_rows(project_root, entities, restricted_ids, warnings)
+    return _dedupe_link_rows(frontmatter_rows, graph_rows)
+
+
+def _link_bundle(
+    project_root: Path,
+    entities: list[ExportedEntity],
+    restricted_ids: set[str],
+    warnings: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "contract": LINK_CONTRACT,
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "links": _link_rows(project_root, entities, restricted_ids, warnings),
+    }
 
 
 def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     project_root = project_root.expanduser().resolve()
     out_dir = out_dir.expanduser().resolve()
+    raw_config = _load_raw_project_yaml(project_root)
     config = load_project_config(project_root)
     if not config.id:
         raise ValueError("science.yaml must declare a non-empty project id")
-    raw_config = _load_raw_project_yaml(project_root)
     known_citekeys = set(load_bib_entries(project_root))
-    entities, restricted_present = _discover_entities(project_root, known_citekeys)
+    entities, restricted_present, restricted_ids = _discover_entities(project_root, known_citekeys)
+    entities = _filter_hidden_entities(entities, raw_config)
     data_version = _data_version(project_root, raw_config, entities)
     label = str(((raw_config.get("labnote") or {}).get("label")) or raw_config.get("name") or config.id)
     project = {
@@ -414,14 +829,18 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     views = _views_for_entities(entities, raw_config)
     _validate_capabilities(project, views)
 
+    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     _json_write(out_dir / "project.json", project)
     _json_write(out_dir / "views.json", views)
     _json_write(out_dir / "entities" / "index.json", _entity_bundle(entities))
     _json_write(out_dir / "prose_bundles" / "entity_prose_bundles.json", _prose_bundle(entities))
     _json_write(out_dir / "references" / "index.json", build_reference_bundle(project_root))
-    _json_write(out_dir / "links" / "index.json", _empty_link_bundle())
     diagnostics = {"errors": [], "warnings": []}
+    _json_write(
+        out_dir / "links" / "index.json",
+        _link_bundle(project_root, entities, restricted_ids, diagnostics["warnings"]),
+    )
     _json_write(out_dir / "export_diagnostics.json", diagnostics)
 
     manifest = {
