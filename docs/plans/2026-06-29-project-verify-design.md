@@ -63,6 +63,10 @@ self-check (integrity) failure. The model is **strict on integrity-critical fiel
 - `*.bytes` — integer `>= 0`.
 - **Duplicate rejection** — `files[].path` and `payloads[].path` must each be unique;
   duplicates are an integrity failure.
+- **No unknown fields** — every model (top-level and nested: `project`, `provenance`,
+  `boundary_audit`, each `files[]`/`payloads[]` entry) sets `extra="forbid"`. A v1 manifest
+  must not carry fields that are neither schema-owned nor folded into `data_version`; an
+  unexpected field is an integrity failure.
 
 A test asserts that `serialize`'s manifest dict parses cleanly through `SerializedManifest`,
 keeping writer and reader in lockstep **without** modifying `serialize.py`.
@@ -144,8 +148,8 @@ Then all three comparisons run and each is reported independently:
 - **payloads** — `payload_inventory(<root>, DEFAULT_DATA_DIRS, tracked_set_of_root)` vs the
   manifest's `payloads[]`, joined by `path` (the `git_tracked` field is informational, not
   part of the match):
-  - present + sha256 match → **ok**
-  - present + sha256 differs → **DIFFER** (exit 1)
+  - present + sha256/bytes match → **ok**
+  - present + sha256 or bytes differs → **DIFFER** (exit 1)
   - in bundle, absent locally → **MISSING** (exit 3)
   - local-only (not in bundle) → **EXTRA** — reported as info, **non-fatal** (a recipient
     holding *more* data than the bundle referenced is not a reproducibility failure).
@@ -165,13 +169,19 @@ leaves the target untouched (operational → exit 4). Extraction is path-travers
 same safe-member rules as self-check step 5) and writes the archive **faithfully**:
 `<dir>/<project-id>/manifest.json` + the full source tree.
 
-`--against` and `--extract` may be combined: self-check → `--against` comparisons → extract.
-Extraction is gated only on the self-check (integrity), not on `--against` drift.
+`--against` and `--extract` may be combined. The full sequence is: **self-check → preflight
+all operational preconditions (including `--against` target validity and `--extract` target
+emptiness) → run `--against` comparisons → extract.** Both targets are preflighted *up front*,
+so an empty-dir or invalid-root failure surfaces as exit 4 before any comparison verdict is
+computed; a *mid-extract* filesystem write error still exits 4 (the staging-rename keeps the
+target untouched). Extraction is gated only on the self-check (integrity), not on `--against`
+drift.
 
 ## Exit codes
 
-Self-check always runs first, so a broken bundle wins. After that, operational failures
-short-circuit before comparison verdicts are computed. Precedence: **2 → 4 → 1 → 3 → 0**.
+Self-check always runs first, so a broken bundle wins. Operational preconditions are then
+preflighted and short-circuit (exit 4) before any comparison verdict is computed. Precedence:
+**2 → 4 → 1 → 3 → 0**.
 
 | Code | Meaning |
 |---|---|
@@ -198,8 +208,11 @@ science project verify <bundle.tar.gz> [--against <root>] [--extract <dir>] [--j
 
 - `<bundle.tar.gz>` — positional, required, `click.Path(exists=False, dir_okay=False,
   path_type=Path)` (verify opens and validates it; a missing file is exit 4).
-- `--against` — `click.Path(file_okay=False, path_type=Path)`; honors `SCIENCE_PROJECT_ROOT`
-  envvar to match the sibling.
+- `--against` — `click.Path(file_okay=False, path_type=Path)`. **No envvar binding.**
+  Comparison must be requested *explicitly*; binding `--against` to `SCIENCE_PROJECT_ROOT`
+  would make a plain `verify bundle.tar.gz` silently run checkout comparison (and exit 1/3/4)
+  whenever that env var happens to be set — self-check-only verification must stay
+  environment-independent.
 - `--extract` — `click.Path(file_okay=False, path_type=Path)`.
 - `--json` — emit a stable machine-readable verdict; **stdout stays pure JSON**.
 
@@ -219,13 +232,17 @@ science project verify bundle.tar.gz --against ~/proj
             0 differ
 ```
 
-**`--json` output** (stable contract): overall `status` + `exit_code`, the self-check result,
-per-dimension `--against` results, and explicit `missing` / `differ` / `extra` payload lists,
-plus a `warnings` array.
+**`--json` output** (stable contract): its own top-level `version` (the **CLI JSON-shape**
+contract, independent of the bundle schema — matches `data audit --json`), overall `status` +
+`exit_code`, the bundle's own `bundle_schema_version`, the self-check result, per-dimension
+`--against` results, and explicit `missing` / `differ` / `extra` payload lists, plus a
+`warnings` array. The bundle-schema field is named `bundle_schema_version` (not
+`schema_version`) so it is never confused with the JSON-shape `version`.
 
 ```json
 {
-  "schema_version": "science-project-serialized.v1",
+  "version": 1,
+  "bundle_schema_version": "science-project-serialized.v1",
   "exit_code": 3,
   "status": "missing",
   "self_check": {"passed": true, "files": 142, "data_version": "2026-06-29+ab12cd"},
@@ -271,7 +288,8 @@ staging-rename so a mid-extract error leaves nothing behind).
 
 1. **manifest model** — valid manifest parses; each strict rule rejects (bad schema_version,
    unsafe `project.id`, absolute/`..` file path, 63-char sha, negative bytes, **duplicate
-   `files[].path`**, **duplicate `payloads[].path`**).
+   `files[].path`**, **duplicate `payloads[].path`**, **an unexpected/unknown field on a
+   nested model** via `extra="forbid"`).
 2. **serialize ↔ model lockstep** — `serialize`'s manifest dict parses cleanly through
    `SerializedManifest`.
 3. **payload extraction golden** — serialize's payload inventory byte-identical after the
