@@ -82,6 +82,6 @@ Examples: small sample size, model dependence, single dataset, weak controls.
 ## Related
 
 - Hypothesis: `entities/hypotheses/<hypothesis-id>.md`
-- Inquiry: `entities/inquiries/<inquiry-slug>.md`
+- Inquiry: `inquiry:<slug>` or the source file that defines it (`entities/patches/<slug>.md` for graph-backed inquiries; `entities/inquiries/<slug>.md` for prose-first inquiries)
 - Pipeline: `entities/plans/<pipeline-plan>.md`
 - Data: `data/processed/<output>`

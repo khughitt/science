@@ -6,7 +6,7 @@ composite ``gene_key`` (see ``gene_crosswalk.make_gene_key``). HGNC's native
 within-cell ``|`` separators are re-emitted as ``;`` so they never collide with
 the ``|`` inside a ``gene_key``. ``fetch_text`` is the only network call
 (build-time only); all parsing is pure. See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/C-D3).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/C-D3).
 """
 
 from __future__ import annotations

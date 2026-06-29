@@ -4,7 +4,7 @@ Pure over pinned, sha256-verified inputs (no network): reads the registry's
 data resource through the commons resolver and exposes the seqcol-digest key
 set + a label/digest lookup. Exact ``seqcol_digest`` equality is identity
 (RCM-D6); ``label`` is an advisory alias. See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D2).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D2).
 """
 
 from __future__ import annotations

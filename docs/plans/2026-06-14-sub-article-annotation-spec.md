@@ -12,7 +12,7 @@
 - **Scope:** Extend `science`'s existing W3C annotation system to capture rich,
   semantic, sub-article (word / phrase / sentence) annotations of research
   articles, seeded by PubTator3 and extended by an agent.
-- **Related:** `~/d/science/docs/plans/2026-05-10-annotation-system-spec.md`
+- **Related:** `~/d/science/docs/plans/historical/2026-05-10-annotation-system-spec.md`
   (annotation data model — the substrate this builds on)
 
 ## Motivation

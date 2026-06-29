@@ -1,6 +1,6 @@
 """Freshness engine — bears_on derivation and EpistemicFreshness computation.
 
-Implements Phase 1 of docs/plans/2026-05-03-epistemic-dependency-graph-design.md.
+Implements Phase 1 of docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md.
 Operates over an rdflib Dataset that has already been populated with the
 project's typed relations and provenance triples by `materialize_graph()`.
 

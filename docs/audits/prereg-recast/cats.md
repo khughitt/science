@@ -1,9 +1,9 @@
 # Pre-registration recast audit — cats
 
 **Audit date:** 2026-05-04
-**Project root:** `/mnt/ssd/Dropbox/cats`
+**Project root:** `~/d/cats`
 **Scope:** completeness — 0 pre-regs
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 
 ---
 
@@ -41,7 +41,7 @@ This is the final per-project audit. Cumulative coverage:
 - **60 pre-regs reviewed** across 7 pre-reg-using projects (natural-systems 14, protein-landscape 3, seq-feats 5, multiple-myeloma 30, cbioportal 2, mechanisms/evolution 2, 3d-attention-bias 4).
 - **0 pre-regs** in cancer/meta, conditions/pre-cancer (skipped per user), and cats.
 
-Next: consolidated revision of the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`) incorporating all surfaced findings.
+Next: consolidated revision of the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`) incorporating all surfaced findings.
 
 The plan revisions to apply (per cumulative audit state):
 

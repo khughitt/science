@@ -191,6 +191,5 @@ In short: **mm30 ends up with one half-migrated file (emergent-threads with inva
 
 - `docs/plans/2026-04-25-downstream-conventions-migration.md` (the migration plan; Task 2 paused)
 - `docs/audits/downstream-project-conventions/synthesis.md` (the audit; § 3.3 is the section needing correction)
-- `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` (the upstream Plan #4)
-- `templates/synthesis.md`, `commands/big-picture.md`, `meta/validate.sh` (Plan #4 canonical surfaces)
+- `templates/synthesis.md`, `commands/big-picture.md`, `science/src/science_tool/validate/checks/discussions.py` (the upstream Plan #4 canonical surfaces)
 - `scripts/migrate_downstream_conventions.py` (the rules; lines 354–717 are the additions from commit `497a75f`)

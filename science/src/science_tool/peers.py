@@ -1,6 +1,6 @@
 """Project peers: non-fatal path resolution.
 
-See docs/superpowers/specs/2026-05-05-project-peers-design.md.
+See docs/plans/historical/2026-05-05-project-peers-design.md.
 """
 
 from __future__ import annotations

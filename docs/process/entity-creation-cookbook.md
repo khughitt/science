@@ -19,6 +19,10 @@ Create an entity only when it has stable semantic identity. If the phrase is jus
 - Internal `canonical_id` is separate from external authority identifiers.
 - Use exactly one `primary_external_id` when the entity kind requires one.
 - Store additional authority mappings as typed `xrefs`.
+- Treat a `primary_external_id` collision across two internal entities as a hard review stop until a split,
+  merge, or synonym decision is recorded.
+- Do not add guessed xrefs. Prefer no xref over a speculative xref, and record provenance for every
+  external identifier.
 - Keep project scope in metadata, not in the id:
   - `scope: project`
   - `scope: shared`
@@ -39,6 +43,26 @@ xrefs:
     provenance: manual
 ```
 
+## Authority Defaults
+
+Use the best supported authority for the entity's kind and species. These defaults are a policy surface,
+not a complete ontology-unification plan.
+
+| Kind | Preferred authority |
+| --- | --- |
+| Human genes | HGNC; use NCBIGene as a broad fallback |
+| Mouse genes | MGI; use NCBIGene as a broad fallback |
+| Proteins | UniProt, species-scoped |
+| Diseases | MONDO, then DO, then MeSH for literature-oriented backfill |
+| Drugs and chemicals | ChEBI, then PubChem CID, then DrugBank |
+| Cell types | Cell Ontology |
+| Human phenotypes | HPO |
+| Mouse phenotypes | MP |
+| Anatomy | UBERON |
+| Pathways | Reactome, then WikiPathways, then KEGG when license constraints are acceptable |
+| Processes, functions, and components | GO |
+| Taxa | NCBITaxon |
+
 ## When To Create An Entity
 
 Create an entity when at least one is true:
@@ -49,6 +73,24 @@ Create an entity when at least one is true:
 - it is needed by a query, dashboard, or downstream workflow
 
 Otherwise keep it as prose-only.
+
+## Granularity And Lifecycle
+
+Use a lumper default for vague abstractions: collapse near-synonyms into one entity with aliases unless
+claims materially diverge. Use a splitter default for named molecules, taxa, diseases, and other
+authority-backed identities: one entity per canonical authority-backed referent.
+
+Do not create standalone entities for transient modifiers such as "high EZH2 expression." Model them as
+attributes, observations, or measurement values on the stable entity instead. Reify events only when the
+event carries its own properties, such as timing, perturbation, magnitude, or inhibitors.
+
+Merge two entities only when they share a confirmed primary external id, or when they are confirmed
+synonyms and do not carry diverging claims. Split an entity when a claim attached to it could not
+simultaneously be true of every referent currently collapsed into that entity. The common gene/protein
+case is a split signal: expression claims and protein-activity claims usually belong on separate entities.
+
+Flag orphan entities with no meaningful graph participation for review. After a grace period, demote them
+to prose or merge them into an existing entity rather than letting project-local placeholders accumulate.
 
 ## Worked Examples
 

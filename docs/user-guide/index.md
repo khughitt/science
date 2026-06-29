@@ -13,7 +13,7 @@ derived graph state, validation, agent workflows, and cross-project work.
 1. Start with [Introduction](introduction.md) and [Science Model](science-model.md).
 2. Learn [Project Layout](project-layout.md) and [Entities](entities.md).
 3. Learn the [Epistemic Model](epistemic-model.md) and [Evidence Lines](evidence-lines.md).
-4. Learn [Graph And Derived State](graph-and-derived-state.md), [Health And Validation](health-and-validation.md), [Agent Workflows](agent-workflows.md), and [Cross-Project Work](cross-project-work.md).
+4. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Agent Workflows](agent-workflows.md), and [Cross-Project Work](cross-project-work.md).
 
 ## Chapters
 
@@ -22,10 +22,11 @@ derived graph state, validation, agent workflows, and cross-project work.
 | [Introduction](introduction.md) | What Science helps users do and how Claude, Codex, and the CLI fit together. |
 | [Science Model](science-model.md) | The big-picture model: authored sources, derived graph views, epistemic neighborhoods, provenance, and federation. |
 | [Project Layout](project-layout.md) | The steady-state filesystem, `science.yaml`, `pyproject.toml`, and source/generated boundaries. |
-| [Entities](entities.md) | What entity files look like and which core entity kinds Science understands. |
+| [Entities](entities.md) | What entity files look like, which core entity kinds Science understands, and the dataset lifecycle. |
 | [Epistemic Model](epistemic-model.md) | Propositions, hypotheses, belief, and uncertainty. |
 | [Evidence Lines](evidence-lines.md) | How to author durable support or dispute with provenance, role, strength, and independence. |
 | [Graph And Derived State](graph-and-derived-state.md) | How authored files become graph state, summaries, snapshots, and reports. |
+| [Big-Picture Synthesis](big-picture-synthesis.md) | Generated synthesis reports, question resolution, and topic-coverage knowledge gaps. |
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
 | [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
 | [Cross-Project Work](cross-project-work.md) | Peers, sync, project collections, and federated Science projects. |

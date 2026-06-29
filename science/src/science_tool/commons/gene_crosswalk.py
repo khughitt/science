@@ -15,7 +15,7 @@ provenance (``status`` + ``replacement_gene_key``), never silently returned as
 canonical; an ambiguous input returns a distinct ``AmbiguousGeneMatch`` with no
 ``gene_key`` so a caller cannot misuse an unresolved identity (RCM-D6: never
 collapse distinct keys). See
-docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/§5).
+docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md (C-D1/§5).
 """
 
 from __future__ import annotations

@@ -1,7 +1,8 @@
 # science/src/science_tool/annotation/audit.py
 """Audit orchestration: per-source merge with deterministic ID minting.
 
-See spec docs/plans/2026-05-11-annotation-system-p3.2-spec.md §audit.py.
+See docs/conventions/annotation-tokens.md and
+docs/plans/historical/2026-05-10-annotation-system-spec.md.
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ implemented.
 **Goal:** Ingest a pinned Gene Ontology release into `~/d/science-commons` as the second real
 `bio.reference_graph` commons dataset (`dataset:go`), directly reusing the `obograph_json` recipe path
 proven by `dataset:mondo` (RG4). This is the GO instantiation anticipated by
-`docs/plans/2026-05-31-bio-reference-graph-design.md` (line 383: "Term graph keyed by `GO:` CURIEs;
+`docs/plans/historical/2026-05-31-bio-reference-graph-design.md` (line 383: "Term graph keyed by `GO:` CURIEs;
 obsolete/replaced terms matter; `is_a`/`part_of` edges live in graph artifact").
 
 **Architecture:** GO is published as OBO Graph JSON. The recipe pins one immutable, dated GO release,
@@ -85,8 +85,8 @@ member payload resolution already shipped with MONDO and are reused unchanged.
 - Create: `~/d/science-commons/datasets/go/recipe/README.md` — operator rebuild instructions.
 - Create: `~/d/science-commons/datasets/go/datapackage.yaml` — graph (`_src/go.json`) + nodes + edges + build_summary resources.
 - Create: `~/d/science-commons/datasets/go/entity.md` — `dataset:go` reference-graph record.
-- Modify: `docs/plans/2026-05-31-bio-reference-graph-design.md` — mark the GO recipe implemented.
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — add `dataset:go` to the reference-graph status.
+- Modify: `docs/plans/historical/2026-05-31-bio-reference-graph-design.md` — mark the GO recipe implemented.
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — add `dataset:go` to the reference-graph status.
 
 ---
 
@@ -467,8 +467,8 @@ print(payload.node.member_kind, len(payload.incident_edges))
 ## Task 7: Update Status Docs
 
 **Files:**
-- Modify: `docs/plans/2026-05-31-bio-reference-graph-design.md`
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-31-bio-reference-graph-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
 
 - [ ] **Step 1: Reference-graph design doc**
 
@@ -530,7 +530,7 @@ before committing there.
   mutable `go.json`/`current`/`snapshot` URLs are explicitly rejected.
 - **Deferred:** GO annotation (GAF gene→term) ingestion is *not* in scope — that is gene-set/association
   territory, not the term graph (this is exactly the "GO may tempt conflation with gene sets" caution from
-  the reference-graph design §rationale). RG3 unpromoted-member B materialization, RG5 non-molecular
-  identity resolvers, and Open Targets remain pending.
+  the reference-graph design §rationale). Open Targets remained pending at this checkpoint and was
+  implemented later.
 - **Built-data placement:** all bulk artifacts live under `~/d/science-commons-data/go/`; only metadata +
   recipe are committed, matching MONDO.

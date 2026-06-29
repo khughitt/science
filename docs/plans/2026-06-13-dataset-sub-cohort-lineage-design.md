@@ -5,7 +5,7 @@ Date: 2026-06-13
 Status: implemented on branch `feat/dataset-sub-cohort-lineage`. Paired implementation plan: `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md` (executed).
 
 Related:
-- `docs/plans/2026-05-29-b2-dataset-independence-design.md` — B2 collapse semantics this extends; §10 names cross-dataset overlap an explicit non-goal
+- `docs/plans/historical/2026-05-29-b2-dataset-independence-design.md` — B2 collapse semantics this extends; §10 names cross-dataset overlap an explicit non-goal
 - `docs/plans/2026-06-05-dataset-first-class-entity-design.md` — dataset entity model (origin/access/derivation, `parent_dataset`/`siblings` fields)
 - `~/d/science/science/model/src/science_model/entities.py` — `Entity.parent_dataset` / `Entity.siblings` (lines 329–330), `DatasetEntity` invariants #7/#8
 - `~/d/science/science/model/src/science_model/packages/schema.py` — `DerivationBlock` / `WorkflowRecipeDerivationBlock` / `MemberOfDerivationBlock`

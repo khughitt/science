@@ -1,12 +1,15 @@
 """Tests for science_tool.commons.cli."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
+from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.cli import commons_group
 
 
@@ -226,6 +229,230 @@ def test_show_missing_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert "not found" in result.output.lower() or "failed" in result.output.lower()
 
 
+def _write_reference_graph_member_commons(root: Path, data_root: Path) -> None:
+    parent = root / "datasets" / "mondo-v1"
+    parent.mkdir(parents=True)
+    (parent / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0\n"
+        "id: dataset:mondo-v1\n"
+        "type: dataset\n"
+        "title: MONDO\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-31'\n"
+        "updated: '2026-05-31'\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "source_class: reference\n"
+        "access: {level: public, verified: true}\n"
+        "graph_resource: graph\n"
+        "graph_format: obograph_json\n"
+        "member_key_space: {kind: curie, prefixes: [MONDO], resolution_status: resolved}\n"
+        "node_index_resource: nodes\n"
+        "edge_resource: edges\n"
+        "member_count: 1\n"
+        "edge_count: 1\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    data_dir = data_root / "mondo-v1"
+    data_dir.mkdir(parents=True)
+    graph_text = '{"graphs":[]}\n'
+    nodes_text = (
+        "member_key,member_kind,label,status,replaced_by,dataset_usage\n"
+        'MONDO:0005148,term,multiple myeloma,active,,"[]"\n'
+    )
+    edges_text = "subject,predicate,object,evidence,dataset_usage\n" 'MONDO:0005148,is_a,MONDO:0000001,,"[]"\n'
+    (data_dir / "mondo.json").write_text(graph_text, encoding="utf-8")
+    (data_dir / "nodes.csv").write_text(nodes_text, encoding="utf-8")
+    (data_dir / "edges.csv").write_text(edges_text, encoding="utf-8")
+    (parent / "datapackage.yaml").write_text(
+        "resources:\n"
+        "  - name: graph\n"
+        "    path: mondo.json\n"
+        f"    hash: sha256:{hashlib.sha256(graph_text.encode('utf-8')).hexdigest()}\n"
+        "  - name: nodes\n"
+        "    path: nodes.csv\n"
+        f"    hash: sha256:{hashlib.sha256(nodes_text.encode('utf-8')).hexdigest()}\n"
+        "  - name: edges\n"
+        "    path: edges.csv\n"
+        f"    hash: sha256:{hashlib.sha256(edges_text.encode('utf-8')).hexdigest()}\n",
+        encoding="utf-8",
+    )
+
+    member = root / "datasets" / "mondo-0005148"
+    member.mkdir(parents=True)
+    (member / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0\n"
+        "id: dataset:mondo-0005148\n"
+        "type: dataset\n"
+        "title: MONDO 0005148\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-31'\n"
+        "updated: '2026-05-31'\n"
+        "origin: derived\n"
+        "tier: use-now\n"
+        "datapackage: virtual:member-of\n"
+        "parent_dataset: dataset:mondo-v1\n"
+        "derivation:\n"
+        "  kind: member_of\n"
+        "  parent_dataset: dataset:mondo-v1\n"
+        "  member_key: MONDO:0005148\n"
+        "member_kind: term\n"
+        "label: multiple myeloma\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (member / "datapackage.yaml").write_text("resources: []\n", encoding="utf-8")
+
+
+def test_member_payload_json_resolves_reference_graph_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["member-payload", "dataset:mondo-0005148", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["member_id"] == "dataset:mondo-0005148"
+    assert payload["parent_dataset"] == "dataset:mondo-v1"
+    assert payload["member_key"] == "MONDO:0005148"
+    assert payload["payload_kind"] == "bio.reference_graph.member"
+    assert payload["payload"]["node"]["label"] == "multiple myeloma"
+    assert payload["payload"]["incident_edges"][0]["predicate"] == "is_a"
+
+
+def test_reference_graph_scaffold_member_json_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    target = root / "datasets" / "mondo-0005148-scaffold" / "entity.md"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        [
+            "reference-graph",
+            "scaffold-member",
+            "dataset:mondo-v1",
+            "MONDO:0005148",
+            "--slug",
+            "mondo-0005148-scaffold",
+            "--date",
+            "2026-06-28",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not target.exists()
+    payload = json.loads(result.output)
+    assert payload["applied"] is False
+    assert payload["canonical_id"] == "dataset:mondo-0005148-scaffold"
+    assert payload["entity_path"] == "datasets/mondo-0005148-scaffold/entity.md"
+    frontmatter = payload["frontmatter"]
+    assert frontmatter == {
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "id": "dataset:mondo-0005148-scaffold",
+        "type": "dataset",
+        "title": "multiple myeloma",
+        "version": "1.0.0",
+        "status": "active",
+        "created": "2026-06-28",
+        "updated": "2026-06-28",
+        "origin": "derived",
+        "tier": "use-now",
+        "source_class": "reference",
+        "parent_dataset": "dataset:mondo-v1",
+        "datapackage": "virtual:member-of",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:mondo-v1",
+            "member_key": "MONDO:0005148",
+        },
+        "member_kind": "term",
+        "label": "multiple myeloma",
+    }
+
+
+def test_reference_graph_scaffold_member_apply_writes_valid_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        [
+            "reference-graph",
+            "scaffold-member",
+            "dataset:mondo-v1",
+            "MONDO:0005148",
+            "--slug",
+            "mondo-0005148-scaffold",
+            "--date",
+            "2026-06-28",
+            "--apply",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["applied"] is True
+    member_dir = root / "datasets" / "mondo-0005148-scaffold"
+    entity_text = (member_dir / "entity.md").read_text(encoding="utf-8")
+    assert "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0" in entity_text
+    assert yaml.safe_load((member_dir / "datapackage.yaml").read_text(encoding="utf-8")) == {"resources": []}
+
+    record = CommonsEntityAdapter(root).load("dataset:mondo-0005148-scaffold")
+    assert record.frontmatter["derivation"]["member_key"] == "MONDO:0005148"
+    resolved = runner.invoke(commons_group, ["member-payload", "dataset:mondo-0005148-scaffold", "--json"])
+    assert resolved.exit_code == 0, resolved.output
+    resolved_payload = json.loads(resolved.output)
+    assert resolved_payload["payload"]["node"]["label"] == "multiple myeloma"
+
+
+def test_reference_graph_resolve_member_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["reference-graph", "resolve-member", "dataset:mondo-v1", "MONDO:0005148", "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["registry_id"] == "dataset:mondo-v1"
+    assert payload["member_key"] == "MONDO:0005148"
+    assert payload["status"] == "active"
+    assert payload["label"] == "multiple myeloma"
+    assert payload["replaced_by"] == []
+
+
 def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
@@ -263,6 +490,45 @@ def test_find_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.loads(result.output)
     assert isinstance(payload, list)
     assert payload[0]["canonical_id"] == "paper:Adams2025"
+
+
+@pytest.mark.parametrize("entity_type", ["dataset", "paper", "topic", "theme"])
+def test_find_warns_on_stale_registry_for_all_entity_types(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entity_type: str
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.delenv("SCIENCE_COMMONS_QUIET_STALE", raising=False)
+    runner = CliRunner()
+    rebuild = runner.invoke(commons_group, ["index", "rebuild"])
+    assert rebuild.exit_code == 0, rebuild.output
+
+    (root / "papers" / "Brown2026.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Brown2026"\n'
+        'type: "paper"\n'
+        'title: "A second representative paper"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-29"\n'
+        'updated: "2026-06-29"\n'
+        'bibkey: "Brown2026"\n'
+        'authors: ["Brown, B."]\n'
+        "year: 2026\n"
+        'journal: "Example Journal"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\n"
+        "\n"
+        "# A second representative paper\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(commons_group, ["find", entity_type])
+
+    assert result.exit_code == 0, result.output
+    assert "warning: commons registry is stale" in result.stderr
 
 
 def test_find_year_filter_only_for_papers(

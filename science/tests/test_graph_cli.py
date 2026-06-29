@@ -509,6 +509,56 @@ def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
         assert any(pred == PROV.wasDerivedFrom for _, pred, _ in provenance)
 
 
+def test_graph_add_story_warns_graph_only_not_durable() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "story",
+                "A story",
+                "--summary",
+                "Narrative summary",
+                "--about",
+                "hypothesis:h1",
+                "--interpretation",
+                "interpretation:i1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "written directly to graph.trig" in result.output
+        assert "source-authored story entity" in result.output
+
+
+def test_graph_add_paper_warns_legacy_composition_not_literature_note() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "paper",
+                "A draft paper",
+                "--story",
+                "story:s1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "legacy composition command" in result.output
+        assert "external literature note" in result.output
+
+
 def test_graph_add_edge_targets_requested_layer() -> None:
     runner = CliRunner()
 

@@ -5,7 +5,7 @@ description: Generate a computational implementation plan from an inquiry — pi
 # Plan Pipeline from Inquiry
 
 > **Prerequisites:**
-> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics
+> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics
 > - Load the `research-methodology` skill for evidence standards
 
 ## Overview
@@ -75,7 +75,7 @@ Verify status is `specified`. If it's `sketch`, warn the user and suggest `/scie
 
 If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `/science:critique-approach <slug>` first. Proceeding anyway."
 
-**Fallback:** If `science inquiry show` fails or times out, read the inquiry document directly from `entities/inquiries/<slug>.md`.
+**Fallback:** If `science inquiry show` fails or times out, read the graph-backed inquiry source directly from `entities/patches/<slug>.md`. If the project only has `entities/inquiries/<slug>.md`, treat it as prose context rather than a compiled inquiry source.
 
 ### Step 2: Identify computational requirements
 
@@ -168,24 +168,31 @@ Skip this step in Task mode — the plan document is the canonical artifact. Als
 
 Run only when (a) input mode is Inquiry, AND (b) the inquiry's downstream tooling (e.g. `science inquiry diagram`) actually consumes these nodes.
 
-For each identified step:
+For each identified step, edit the source file at `entities/patches/<slug>.md`.
+Add transformation records under `inquiry.transformations` and connect them with
+`flow_edges`. Then run `science graph build` and re-run `science inquiry
+validate`.
 
-```bash
-# Add transformation to knowledge graph and inquiry
-science graph add concept "<step name>" --type sci:Transformation \
-  --note "<what this step does>"
-
-science inquiry add-node "<slug>" "concept:<step>" --role BoundaryIn
-# or no --role for interior nodes (just add edges)
-
-# Connect in the data flow
-science inquiry add-edge "<slug>" "concept:<input>" "sci:feedsInto" "concept:<step>"
-science inquiry add-edge "<slug>" "concept:<step>" "sci:produces" "concept:<output>"
-
-# Add validation criterion
-science graph add concept "<check name>" --type sci:ValidationCheck \
-  --note "<what to check>"
-science inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<check>"
+```yaml
+inquiry:
+  transformations:
+    - ref: "transformation:<step>"
+      tool: "<tool>"
+      validated_by: "concept:<check>"
+      params:
+        - value: "<value>"
+          source: "<literature|empirical|design_decision>"
+          ref: "<source-ref>"
+          note: "<why this parameter is justified>"
+  flow_edges:
+    - subject: "dataset:<input>"
+      predicate: feedsInto
+      object: "transformation:<step>"
+      claim_refs: []
+    - subject: "transformation:<step>"
+      predicate: produces
+      object: "dataset:<output>"
+      claim_refs: []
 ```
 
 #### Register Workflow Entity
@@ -358,9 +365,10 @@ Append a short log entry to each dataset entity's verification log:
 
 Skip this step in Task mode.
 
-Update the inquiry status to `planned`. Regenerate `entities/inquiries/<slug>.md`.
+Update `inquiry.status` to `planned` in `entities/patches/<slug>.md`, then rebuild.
 
 ```bash
+science graph build
 science graph stamp-revision
 ```
 
@@ -379,7 +387,7 @@ science graph stamp-revision
 - **Pilot first.** For complex pipelines, suggest a `probe`-mode precursor before a `design`-mode plan.
 - **Validation is mode-specific, not per-transformation.** `probe` plans carry a single `Decision criteria` block + `Validation` summary; `design` plans carry per-WP `Definition of done` plus closing `Acceptance Criteria`; `implementation` plans carry per-task checkbox steps with inline commands. Do not emit per-transformation validation matrices.
 - **The plan document is the canonical artifact.** Inquiry-graph annotations (Step 3) are optional and only meaningful when downstream tooling consumes them; they are not the source of truth for the plan.
-- **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `entities/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
+- **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry source from `entities/patches/` when present, or prose context from `entities/inquiries/` for legacy projects. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 
 ## Process Reflection
 

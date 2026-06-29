@@ -1,7 +1,7 @@
 # science/src/science_tool/annotation/selector.py
 """TextQuoteSelector resolution algorithm.
 
-See docs/plans/2026-05-10-annotation-system-spec.md §Span addressing.
+See docs/plans/historical/2026-05-10-annotation-system-spec.md §Span addressing.
 The algorithm is uniqueness-preserving at every step: ambiguous matches
 fall through rather than guess.
 """

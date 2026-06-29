@@ -87,3 +87,42 @@ def test_deleted_user_docs_are_not_reintroduced() -> None:
     )
     for path in deleted:
         assert not path.exists(), f"retired doc path should not exist: {path.relative_to(ROOT)}"
+
+
+def test_convention_docs_do_not_link_retired_user_docs() -> None:
+    retired_refs = (
+        "project-organization-profiles.md",
+        "project-working-model-h00.md",
+        "proposition-and-evidence-model.md",
+        "claim-and-evidence-model.md",
+    )
+    offenders: list[str] = []
+    for path in sorted((ROOT / "docs" / "conventions").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for retired in retired_refs:
+            if retired in text:
+                offenders.append(f"{path.relative_to(ROOT)} links retired {retired}")
+    assert not offenders
+
+
+def test_entities_chapter_documents_compositional_outputs_and_paper_split() -> None:
+    text = _read(GUIDE_ROOT / "entities.md")
+    normalized = " ".join(text.split())
+
+    assert "## Compositional Research Outputs" in text
+    assert "`finding`" in text
+    assert "`story`" in text
+    assert "The current loadable `paper` kind is an external literature note" in normalized
+    assert "do not use `paper:<id>` for the project's own publication draft" in normalized
+
+
+def test_entities_chapter_documents_reference_semantics_and_topic_deprecation() -> None:
+    text = _read(GUIDE_ROOT / "entities.md")
+    normalized = " ".join(text.split())
+
+    assert "## Reference Semantics" in text
+    assert "cross-kind slug fallback" in normalized
+    assert "`terms.yaml` is for lightweight semantic rows" in normalized
+    assert "Field-scoped `tag:*`" in text
+    assert "`topic` remains registered for legacy projects and migration surfaces" in normalized
+    assert "Do not create topic stubs to silence unresolved-reference checks." in normalized

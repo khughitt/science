@@ -230,6 +230,16 @@ def test_pipeline_audit_process_documents_clean_base_qa_checkpoint_pattern() -> 
         assert expected in text
 
 
+def test_pipeline_audit_process_uses_layout_v3_dataset_owner_paths() -> None:
+    text = _read("docs/process/pipeline-audit-and-refactor.md")
+
+    assert "entities/datasets/*.md" in text
+    assert "entities/datasets/<slug>.md" in text
+    assert "doc/datasets/data-*.md" not in text
+    assert "doc/datasets/data-<slug>.md" not in text
+    assert "mixin-dataset-1.0` fields" not in text
+
+
 def test_pipeline_audit_process_documents_result_bundle_validation_modes() -> None:
     text = _read("docs/process/pipeline-audit-and-refactor.md")
 
@@ -806,6 +816,16 @@ def test_entity_creation_cookbook_covers_positive_and_negative_examples() -> Non
         "concept:high-proliferation-rate",
     ):
         assert expected in text
+
+
+def test_health_command_uses_semantic_triage_for_legacy_topic_refs() -> None:
+    text = _read("commands/health.md")
+
+    assert "**looks_like=semantic-triage**" in text
+    assert "Do not create `topic:*` stubs as" in text
+    assert "Create stub topic entity files" not in text
+    assert "Creating topic stubs" not in text
+    assert "field-scoped `tag:` ref" in text
 
 
 def test_tasks_command_documents_flat_ids_parent_and_namespace_refs() -> None:

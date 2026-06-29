@@ -6,7 +6,7 @@ status: "active"
 created: "2026-06-21"
 updated: "2026-06-21"
 related:
-  - "plan:2026-04-19-dataset-entity-lifecycle-design"
+  - "docs/user-guide/entities.md#dataset-lifecycle"
 ---
 
 # Dataset catalog CLI — ergonomic authoring, listing, and candidate lifecycle
@@ -15,8 +15,8 @@ related:
 
 Make the singular `science dataset` group an ergonomic **catalog** surface: hand-author a
 not-yet-acquired dataset, list/filter the catalog richly, and inspect a single entry. This completes
-the read/inspect commands that `plan:2026-04-19-dataset-entity-lifecycle-design` already approved but
-left unbuilt (`show`, `consumers`, rich `list` filters), and adds two genuinely new capabilities
+the read/inspect commands covered by the dataset lifecycle contract in
+`docs/user-guide/entities.md#dataset-lifecycle`, and adds two genuinely new capabilities
 motivated by recent cataloguing work in `health-post-acute-infection` (t013): a `dataset add`
 authoring command and a first-class **candidate** (not-yet-acquired) lifecycle state.
 

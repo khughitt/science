@@ -3,11 +3,9 @@
 
 Three module-level LintSource instances wrap the prose-lint detector
 functions and emit PlannedAnnotation rows. frontmatter-inline-gap is
-deferred (file-level finding doesn't fit sentence-target selectors —
-see spec §Module layout).
+deferred because a file-level finding doesn't fit sentence-target selectors.
 
-See spec docs/plans/2026-05-11-annotation-system-p3.2-spec.md
-§sources/lint.py.
+See docs/conventions/prose-lints.md for the prose-lint convention.
 """
 
 from __future__ import annotations

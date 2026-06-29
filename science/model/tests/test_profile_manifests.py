@@ -223,6 +223,21 @@ def test_core_profile_has_new_entity_kinds() -> None:
     assert {"proposition", "observation", "finding", "interpretation", "story", "paper"} <= kind_names
 
 
+def test_core_profile_paper_kind_is_external_literature_note() -> None:
+    kind = next(k for k in CORE_PROFILE.entity_kinds if k.name == "paper")
+
+    assert kind.home == "entities/papers"
+    assert kind.strategy == "citekey"
+    assert "External literature note" in kind.description
+
+
+def test_core_profile_topic_kind_is_legacy_guidance() -> None:
+    kind = next(k for k in CORE_PROFILE.entity_kinds if k.name == "topic")
+
+    assert "Legacy research-topic synthesis note" in kind.description
+    assert "prefer typed semantic entities for new work" in kind.description
+
+
 def test_supports_uses_observation_and_proposition() -> None:
     supports = next(r for r in CORE_PROFILE.relation_kinds if r.name == "supports")
     assert {"observation", "proposition"} <= set(supports.source_kinds)
@@ -269,6 +284,7 @@ def test_comprises_relation() -> None:
     assert rel.source_kinds == ["paper"]
     assert rel.target_kinds == ["story"]
     assert rel.predicate == "sci:comprises"
+    assert "Legacy graph-only" in rel.description
 
 
 def test_grounds_relation() -> None:

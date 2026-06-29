@@ -8,7 +8,7 @@ Run an agent-led curation pass across the project corpus. The CLI helpers are ev
 
 Use `$ARGUMENTS` as optional scope filters, for example: `all`, `links`, `drift`, `forgotten-insights`, `tasks`, `dag`, `topics`, `papers`, `--since 2026-04-01`, or `--apply-obvious`.
 
-See the design spec at `docs/specs/2026-04-21-project-curation-design.md` for full semantics.
+Historical design context lives at `docs/plans/historical/2026-04-21-project-curation-design.md`.
 
 ## Flags
 

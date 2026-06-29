@@ -32,6 +32,8 @@ from science_tool.commons.geneset_resources import (
     dataset_geneset_frontmatter,
     read_member_rows,
 )
+from science_tool.commons.reference_graph import ReferenceGraphCollectionError, parse_node_index_rows
+from science_tool.commons.reference_graph_resources import dataset_reference_graph_frontmatter, read_node_rows
 from science_tool.graph.dataset_independence import (
     derive_dataset_independence_records,
     emit_dataset_independence_records,
@@ -42,6 +44,7 @@ from science_tool.graph.dataset_usage import (
     project_entity_uri,
     usage_records_for_entity,
     usage_records_for_geneset_rows,
+    usage_records_for_reference_graph_nodes,
 )
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
@@ -1007,6 +1010,8 @@ def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceReso
             add_usage_record_to_graph(record, provenance)
     for record in _geneset_usage_records(sources, resolver=resolver):
         add_usage_record_to_graph(record, provenance)
+    for record in _reference_graph_usage_records(sources, resolver=resolver):
+        add_usage_record_to_graph(record, provenance)
 
 
 def _resource_uri(dataset_canonical_id: str, resource: DatasetResource) -> URIRef:
@@ -1098,6 +1103,36 @@ def _geneset_usage_records(sources: ProjectSources, *, resolver: ReferenceResolv
             # Cite the resource's real source (the datapackage), not whichever owner
             # won the column — fm["_path"] is the datapackage for a promoted owner and
             # is identical to entity.file_path for an orphan datapackage (no change).
+            source_path=str(fm["_path"]),
+            rows=rows,
+            resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),
+        )
+
+
+def _reference_graph_usage_records(sources: ProjectSources, *, resolver: ReferenceResolver):
+    project_root = Path(sources.project_root)
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        fm = dataset_reference_graph_frontmatter(
+            project_root,
+            entity.file_path,
+            entity_adapter=sources.entity_source_adapters.get(entity.canonical_id),
+            datapackage_rel=sources.dataset_datapackages.get(entity.canonical_id),
+        )
+        if fm is None:
+            continue
+        raw_rows = read_node_rows(project_root, fm)
+        if raw_rows is None:
+            raise RuntimeError(f"{entity.canonical_id}: node_index_resource unavailable for graph materialization")
+        if isinstance(raw_rows, Exception):
+            raise RuntimeError(f"{entity.canonical_id}: node_index_resource malformed: {raw_rows}") from raw_rows
+        try:
+            rows = parse_node_index_rows(raw_rows)
+        except ReferenceGraphCollectionError as exc:
+            raise RuntimeError(f"{entity.canonical_id}: node_index_resource malformed: {exc}") from exc
+        yield from usage_records_for_reference_graph_nodes(
+            collection_id=entity.canonical_id,
             source_path=str(fm["_path"]),
             rows=rows,
             resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),

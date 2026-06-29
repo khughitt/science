@@ -44,7 +44,7 @@ Datasets are **already typed graph entities**, just deliberately classified as
 | workflow | `doc/workflows/*.md` | — (executable definition lives in pipeline code) | MarkdownAdapter (doc/workflows) |
 | workflow-run | `doc/workflow-runs/*.md` (secondary) | `results/**/datapackage.json` (SSOT) | MarkdownAdapter + WorkflowRunAdapter |
 
-Design intent (`docs/plans/2026-04-19-dataset-entity-lifecycle-design.md:39`):
+Design intent now recorded in `docs/user-guide/entities.md#dataset-lifecycle`:
 "the dataset entity is the authority for project-level metadata; the runtime
 `datapackage.yaml` is the authority for resource-level metadata." This dual-SSOT
 split is the genuine reason datasets are not plain markdown entities.

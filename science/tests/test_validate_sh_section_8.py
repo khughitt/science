@@ -78,21 +78,21 @@ def test_registry_changelog_has_validate_cli_migration_release_notes() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     changelog = validate["changelog"]
-    design = "docs/plans/2026-05-19-validate-cli-migration-design.md"
+    validate_convention = "docs/conventions/validate.md"
     porting_guide = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
 
     phase_1 = changelog["2026.05.19.1"]
     assert "Phase 1" in phase_1
     assert "science validate" in phase_1
     assert "canonical parity" in phase_1
-    assert design in phase_1
+    assert validate_convention in phase_1
 
     phase_2 = changelog["2026.05.20.1"]
     assert "Phase 2" in phase_2
     assert "validate_local.py" in phase_2
     assert "validate.sh shim" in phase_2
     assert porting_guide in phase_2
-    assert design in phase_2
+    assert validate_convention in phase_2
 
     phase_3 = changelog["2026.05.21.1"]
     assert "Phase 3" in phase_3

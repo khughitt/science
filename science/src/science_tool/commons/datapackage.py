@@ -1,8 +1,7 @@
 """Reader for the Frictionless datapackage.yaml sidecar of a commons dataset.
 
-Phase C only needs resources[].path + resources[].hash; schemas, dialects and
-other Frictionless fields are ignored. See
-docs/plans/2026-05-14-commons-data-resolver-design.md §5.2.
+The commons resolver needs resources[].path + resources[].hash; schemas,
+dialects and other Frictionless fields are ignored.
 """
 
 from __future__ import annotations

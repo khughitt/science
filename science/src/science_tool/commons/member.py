@@ -2,7 +2,7 @@
 
 Pure helpers shared by every reference-collection instance (assembly registry,
 gene-set collection, crosswalks). No network, no bio. See
-docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
+docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md.
 """
 
 from __future__ import annotations

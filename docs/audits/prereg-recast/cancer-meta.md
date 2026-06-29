@@ -1,9 +1,9 @@
 # Pre-registration recast audit — cancer/meta
 
 **Audit date:** 2026-05-04
-**Project root:** `~/d/cancer/meta` (= `/mnt/ssd/Dropbox/cancer/meta`)
+**Project root:** `~/d/cancer/meta`
 **Scope:** federation umbrella project; 0 local pre-regs, but inherits / federates pre-reg conventions from children
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 
 ---
 
@@ -98,7 +98,7 @@ The `validate.sh` comment refers to multiple-myeloma by its earlier name "mm30".
 2. **Confirm with maintainer**: the federation `graph build` will inherit the recast's `bears_on` deriver from `science` once Prerequisite 2 lands; no meta-specific configuration needed.
 3. **Pre-existing**: "mm30" → "multiple-myeloma" comment cleanup in `validate.sh`. Out of t012 scope.
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Add a federation note** in § "Code prerequisites" or § "Sequencing for landing": "Federation builders inherit the `bears_on` deriver from `science`; no per-federation configuration required. Pre-reg → epistemic-target edges propagate to the federated graph automatically once Prerequisite 2 lands."
 

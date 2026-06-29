@@ -4,8 +4,7 @@
 Lifts the four phase-2 inline tokens ([UNVERIFIED], [MISSING_CITATION],
 [SPECULATION], [INACCESSIBLE]) into PlannedAnnotation rows.
 
-See spec docs/plans/2026-05-11-annotation-system-p3.2-spec.md
-§sources/marker_token.py.
+See docs/conventions/annotation-tokens.md.
 """
 
 from __future__ import annotations
@@ -79,5 +78,4 @@ class MarkerTokenSource:
                 )
             )
         return out
-
 

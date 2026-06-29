@@ -7,14 +7,18 @@ description: Reference guide for causal DAG modeling within the science inquiry 
 
 ## When to Use Causal vs. General Inquiries
 
-| Use case | Inquiry type |
+| Use case | Inquiry profile |
 |----------|-------------|
-| Exploring data flow, variables, computational steps | `general` |
+| Exploring data flow, variables, computational steps | `investigation` |
 | Modeling cause-and-effect relationships between variables | `causal` |
 | Estimating treatment effects, testing interventions | `causal` |
 | Identifying confounders and adjustment sets | `causal` |
 
-A **general inquiry** uses `sci:feedsInto` edges for data/computational flow. A **causal inquiry** uses `scic:causes` and `scic:confounds` edges in `graph/causal` to represent believed causal relationships.
+An **investigation inquiry** uses `feedsInto`, `produces`, and similar
+flow edges for data or computational structure. A **causal inquiry** uses
+`causes` flow edges in the authored inquiry source; graph build materializes
+them as `scic:causes` in the compiled inquiry graph. Reusable project-level
+causal structure can also live in the generated `graph/causal` layer.
 
 ## Causal Structure
 
@@ -32,10 +36,11 @@ A **general inquiry** uses `sci:feedsInto` edges for data/computational flow. A 
 
 | Predicate | Layer | Meaning |
 |-----------|-------|---------|
-| `scic:causes` | `graph/causal` | A causally influences B |
-| `scic:confounds` | `graph/causal` | A confounds the relationship between two variables |
+| `causes` / `scic:causes` | inquiry source / compiled graph | A causally influences B |
+| `scic:confounds` | compiled graph / graph/causal | A confounds the relationship between two variables |
 
-Causal edges live in `graph/causal` (shared, reusable across inquiries). The inquiry subgraph contains boundary roles and membership only.
+Causal inquiries are source-first. Edit `entities/patches/<slug>.md`, then run
+`science graph build`; do not hand-edit `knowledge/graph.trig`.
 
 ## Common Pitfalls
 
@@ -56,15 +61,16 @@ Adjusting for a mediator on the causal path blocks the effect you're trying to e
 
 ## Provenance Discipline
 
-Every `scic:causes` edge should have an associated claim:
+Every causal edge should have an associated proposition when it has explicit
+support. In the inquiry source, attach those propositions through `claim_refs`:
 
-```bash
-# Add the causal edge
-science graph add edge "concept/smoking" "scic:causes" "concept/lung_cancer" --graph graph/causal
-
-# Add a supporting claim with provenance
-science graph add claim "Smoking causes lung cancer via carcinogenic tar compounds" \
-  --source "paper:doi_10.xxxx/yyyy" --confidence 0.95
+```yaml
+flow_edges:
+  - subject: "concept:smoking"
+    predicate: causes
+    object: "concept:lung_cancer"
+    claim_refs:
+      - "proposition:smoking-causes-lung-cancer"
 ```
 
 Confidence scores reflect evidence strength:
@@ -91,22 +97,47 @@ Confidence scores reflect evidence strength:
 
 ```bash
 # Initialize causal inquiry
-science inquiry init "my-dag" --type causal --label "Treatment Effect" \
-  --target "hypothesis:h01"
+science inquiry init "my-dag" \
+  --label "Treatment Effect" \
+  --target "hypothesis:h01" \
+  --profile causal \
+  --treatment "concept:treatment" \
+  --outcome "concept:outcome"
+```
 
-# Add variables as boundary nodes
-science inquiry add-node "my-dag" "concept/treatment" --role BoundaryIn
-science inquiry add-node "my-dag" "concept/outcome" --role BoundaryOut
-science inquiry add-node "my-dag" "concept/confounder" --role BoundaryIn
+Then edit `entities/patches/my-dag.md`:
 
-# Set the estimand (treatment → outcome)
-science inquiry set-estimand "my-dag" \
-  --treatment "concept/treatment" --outcome "concept/outcome"
+```yaml
+inquiry:
+  profile: causal
+  treatment: "concept:treatment"
+  outcome: "concept:outcome"
+  boundary_roles:
+    - ref: "concept:treatment"
+      role: BoundaryIn
+    - ref: "concept:outcome"
+      role: BoundaryOut
+    - ref: "concept:confounder"
+      role: BoundaryIn
+  flow_edges:
+    - subject: "concept:treatment"
+      predicate: causes
+      object: "concept:outcome"
+      claim_refs: []
+    - subject: "concept:confounder"
+      predicate: causes
+      object: "concept:treatment"
+      claim_refs: []
+    - subject: "concept:confounder"
+      predicate: causes
+      object: "concept:outcome"
+      claim_refs: []
+```
 
-# Add causal edges to graph/causal
-science graph add edge "concept/treatment" "scic:causes" "concept/outcome" --graph graph/causal
-science graph add edge "concept/confounder" "scic:causes" "concept/treatment" --graph graph/causal
-science graph add edge "concept/confounder" "scic:causes" "concept/outcome" --graph graph/causal
+Build the compiled graph view:
+
+```bash
+science graph build
 ```
 
 ### Validation

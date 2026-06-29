@@ -235,6 +235,19 @@ def test_virtual_geneset_member_is_candidate_only_even_with_full_overlap() -> No
     assert [(record.kind, record.reason) for record in records] == [("candidate", "virtual-row")]
 
 
+def test_virtual_reference_graph_member_is_candidate_only_even_with_full_overlap() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    virtual = PROJECT_NS["virtual/reference-graph-member/mondo-v1/MONDO%3A0005148"]
+    _add_usage(provenance, virtual, dataset, "analyzed", "full", "virtual")
+    provenance.add((line_a, PROV.wasDerivedFrom, virtual))
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "line")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "virtual-row")]
+
+
 def _add_sub_cohort(knowledge, child, parent):
     knowledge.add((child, SCI_NS.subCohortOf, parent))
 
@@ -379,6 +392,31 @@ def test_dependence_datasets_by_line_includes_virtual_member():
     p.add((usage, SCI_NS.usageOverlap, Literal("full")))
 
     assert dependence_datasets_by_line(k, p).get(line, set()) == {ds}     # virtual path INCLUDED
+
+
+def test_dependence_datasets_by_line_includes_virtual_reference_graph_member():
+    from rdflib import RDF, Graph, Literal, URIRef
+    from rdflib.namespace import PROV
+
+    from science_tool.graph.dataset_independence import dependence_datasets_by_line
+    from science_tool.graph.io import CITO_NS, SCI_NS
+
+    k, p = Graph(), Graph()
+    line = URIRef("https://example.org/p/evidence-line/ev-rg")
+    target = URIRef("https://example.org/p/proposition/crg")
+    consumer = URIRef("https://example.org/p/virtual/reference-graph-member/mondo-v1/MONDO%3A0005148")
+    ds = URIRef("https://example.org/p/dataset/vds")
+    k.add((line, RDF.type, SCI_NS.EvidenceLine))
+    k.add((line, CITO_NS.supports, target))
+    p.add((line, PROV.wasDerivedFrom, consumer))
+    usage = URIRef("https://example.org/p/usage/rg")
+    p.add((consumer, SCI_NS.hasDatasetUsage, usage))
+    p.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    p.add((usage, SCI_NS.dataset, ds))
+    p.add((usage, SCI_NS.usageRole, Literal("analyzed")))
+    p.add((usage, SCI_NS.usageOverlap, Literal("full")))
+
+    assert dependence_datasets_by_line(k, p).get(line, set()) == {ds}
 
 
 def test_dependence_datasets_by_line_excludes_indirect_bears_on():

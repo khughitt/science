@@ -4,7 +4,7 @@ description: Build a project knowledge graph from canonical upstream sources, th
 
 # Create Knowledge Graph
 
-> **Prerequisite:** Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics before starting.
+> **Prerequisite:** Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics before starting.
 
 ## Overview
 
@@ -49,7 +49,7 @@ Build the graph from these upstream sources:
   - `knowledge/sources/<local-profile>/relations.yaml`
   - `knowledge/sources/<local-profile>/mappings.yaml`
 
-Use `science-model/core` semantics for shared entity and relation types. Declare domain ontologies (e.g., `biolink`) in `science.yaml` to enable vocabulary for entity types and relation predicates. Put anything project-local but still useful in the configured local profile directory, which defaults to `local`.
+Use `science-model/core` semantics for shared entity and relation types. Declare domain ontologies (e.g., `biology`, `chemistry`, or `physics`) in `science.yaml` to enable vocabulary for entity types and relation predicates. Put anything project-local but still useful in the configured local profile directory, which defaults to `local`.
 
 ## Workflow
 
@@ -58,12 +58,12 @@ Use `science-model/core` semantics for shared entity and relation types. Declare
 Ensure `science.yaml` declares the ontologies and profiles you want to compose:
 
 ```yaml
-ontologies: [biolink]
+ontologies: [biology]
 knowledge_profiles:
   local: local
 ```
 
-`ontologies` declares which community ontologies provide vocabulary for entity types and relation predicates. Currently available: `biolink`. `core` is always implied.
+`ontologies` declares which community ontologies provide vocabulary for entity types and relation predicates. Currently available: `biology`, `physics`, `units`, `math`, `earth`, `chemistry`, `astronomy`, and `information`. `core` is always implied.
 `local` also determines the directory name under `knowledge/sources/`; if omitted, use `local`.
 
 ### Step 2: Author canonical sources

@@ -49,23 +49,24 @@ This spec conforms to and reuses, without replacing:
 Each gets a "superseded by → this doc" banner; their still-valid content is absorbed below or routed
 to a facet:
 
-- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase-1/phase-0 plans)
-- `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md`
+- `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase-1/phase-0 plans)
+- `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md`
 - the **Part-A epistemic content** of `docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md`
   (its Part-B/C substrate content stays with the substrate docs)
-- `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`
-- `docs/plans/2026-04-15-layered-claims-and-causal-methodology-design.md`
-- `docs/plans/2026-03-16-claim-centric-uncertainty-design.md`
+- `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md`
+- April layered-claims/causal-methodology predecessor (deleted during plans cleanup)
+- March claim-centric uncertainty predecessor (deleted during plans cleanup)
 
 ### 1.3 Predecessors folded as migration/rendering inputs (credited, not authorities)
 Their design intent feeds the facet migrations; they are superseded as standalone designs:
 
-- DAG rendering / edge-status predecessors: `docs/plans/2026-04-17-edge-status-dashboard-design.md`,
-  `docs/plans/2026-04-17-inquiry-edge-posterior-annotations-design.md`,
-  `docs/plans/2026-04-19-dag-rendering-and-audit-pipeline-design.md`,
-  `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md` → feed `epistemic-edges`.
-- Dataset predecessors: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`,
-  `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`,
+- DAG rendering / edge-status predecessors:
+  `docs/plans/historical/2026-04-17-edge-status-dashboard-design.md`,
+  `docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md`,
+  `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`,
+  verdict token guidance in `docs/user-guide/epistemic-model.md` → feed `epistemic-edges`.
+- Dataset predecessors: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`,
+  `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`,
   and the A1/A2/B1/B2 dataset designs/plans → feed `dataset-evidence-flow`.
 
 ### 1.4 Out of scope (separate layer)
@@ -275,17 +276,17 @@ Full end-to-end (per approved scope):
 | `meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` | **reused authority** | parent RFC (t022 extension contract) |
 | t034 (`graph_object_type` / `epistemic_role` / payload / promotion) | **reused authority** | causal/edge-typing substrate — reused verbatim, untouched |
 | DAG two-axis / rendering tooling (`dag-two-axis-evidence-model.md`, `dag/schema.py`) | **reused authority** | 5-value edge_status + identification; role → derived projection (§3) |
-| `2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase0/1 plans) | **superseded — folded** | evidence-line, belief engine, independence → §2.4–2.6 |
+| `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase0/1 plans) | **superseded — folded** | evidence-line, belief engine, independence → §2.4–2.6 |
 | `2026-05-24-evidence-aggregation-phase2-design.md` | **superseded — folded** | continuous log-odds scalar → §2.5 |
 | `2026-06-06-knowledge-meta-model-and-substrate-design.md` (Part A only) | **superseded — folded** | epistemic-model consolidation → §2; Part B/C stays with substrate |
 | `2026-05-03-epistemic-dependency-graph-design.md` | **superseded — folded** | entity classes + `bears_on` → §2.1, §2.7 |
-| `2026-04-15-layered-claims-and-causal-methodology-design.md` | **superseded — folded** | claim_layer/identification axes → §2.2–2.3, §3 |
-| `2026-03-16-claim-centric-uncertainty-design.md` | **superseded — folded** | claim-centric stance → §2.2, §2.5 |
-| `2026-04-17-edge-status-dashboard-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
-| `2026-04-17-inquiry-edge-posterior-annotations-design.md` | **predecessor (rendering)** | posterior block → `epistemic-edges` |
-| `2026-04-19-dag-rendering-and-audit-pipeline-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
-| `2026-04-19-verdict-tokens-and-atomic-decomposition-design.md` | **predecessor (rendering)** | per-interpretation verdict join → `epistemic-edges` |
-| `2026-05-26-bio-data-architecture-umbrella-design.md` | **predecessor (dataset)** | → `dataset-evidence-flow` |
+| April layered-claims/causal-methodology predecessor (deleted during plans cleanup) | **superseded — folded** | claim_layer/identification axes → §2.2–2.3, §3 |
+| `2026-03-16-claim-centric-uncertainty-design.md` (deleted during plans cleanup) | **superseded — folded** | claim-centric stance → §2.2, §2.5 |
+| `docs/plans/historical/2026-04-17-edge-status-dashboard-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
+| `docs/plans/historical/2026-04-17-inquiry-edge-posterior-annotations-design.md` | **predecessor (rendering)** | posterior block → `epistemic-edges` |
+| `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md` | **predecessor (rendering)** | → `epistemic-edges` |
+| `docs/user-guide/epistemic-model.md` verdict tokens | **predecessor (rendering)** | per-interpretation verdict join → `epistemic-edges` |
+| `2026-05-26-bio-data-architecture-umbrella-design.md` | **historical predecessor (dataset)** | → `dataset-evidence-flow` |
 | `2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` | **predecessor (dataset)** | → `dataset-evidence-flow` |
 | A1/A2/B1/B2 dataset designs+plans | **predecessor (dataset)** | already-merged machinery → `dataset-evidence-flow` |
 

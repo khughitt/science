@@ -9,8 +9,8 @@
 > **Series:** complements the substrate-retirement line
 > (`2026-06-07-substrate-3a-entities-retirement-visibility-design.md`), which
 > retires *aggregate-stub* rows; this doc addresses *authored markdown entities*.
-> **Naming note:** the verb "distill" is already claimed by
-> `science distill` (external-KG snapshot import, `2026-03-04-distill-import-design.md`).
+> **Naming note:** the verb "distill" is already claimed by `science distill`
+> (external-KG snapshot import; see `docs/user-guide/graph-and-derived-state.md`).
 > This feature is therefore named **consolidation / archive**, never "distill".
 
 ## 1. Why this exists

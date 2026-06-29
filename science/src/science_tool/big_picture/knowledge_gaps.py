@@ -3,7 +3,7 @@
 This module computes coverage gaps over explicitly authored ``topic`` entities
 (``entities/topics/``) against the demand expressed by questions referencing
 them. It does not imply that unresolved semantic refs should be migrated into
-new ``topic`` entities. See docs/specs/2026-04-19-knowledge-gaps-design.md.
+new ``topic`` entities. See docs/user-guide/big-picture-synthesis.md.
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def _compute_coverage(
     """Compute |related_papers(T) ∪ inverse_papers(T) ∪ bibtex_refs(T)|.
 
     Dedup uses bibkey-based comparison per the canonical rule in the
-    manuscript+paper rename spec (§Canonical bibkey extraction).
+    durable big-picture synthesis documentation.
     """
     topic_fm = topics.get(topic_id)
     if topic_fm is None:
@@ -228,7 +228,7 @@ def compute_topic_gaps(
     ``included_question_ids`` via the big-picture aspect filter before
     invoking this function. This remains a legacy topic-coverage surface over
     existing topic docs rather than a general semantic gap model.
-    See the knowledge-gaps spec §Aspect Integration.
+    See docs/user-guide/big-picture-synthesis.md.
     """
     topics = _load_topics(project_root)
     papers = _load_papers(project_root)

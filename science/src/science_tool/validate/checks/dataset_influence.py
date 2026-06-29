@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,16 +13,13 @@ from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.graph.dataset_independence import DEPENDENCE_ROLES
+from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 DatasetRefStatus = Literal["resolved", "missing", "unavailable", "non_dataset"]
-
-
-def _is_paper_dataset_role_conflict(entry: Mapping[str, Any]) -> bool:
-    return entry.get("role") != "analyzed"
 
 
 _COMMONS_LAYOUT_DIRS = (".git", "datasets", "papers", "topics", "themes")
@@ -167,7 +164,7 @@ def evaluate_dataset_influence(
                 ref = canonicalize_dataset_ref(raw_ref)
                 if ref in explicit_by_ref:
                     entry = explicit_by_ref[ref]
-                    if _is_paper_dataset_role_conflict(entry):
+                    if is_paper_dataset_role_conflict(entry):
                         yield _result(
                             Severity.WARN,
                             path,

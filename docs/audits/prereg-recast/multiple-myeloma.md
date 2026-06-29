@@ -1,9 +1,9 @@
 # Pre-registration recast audit — multiple-myeloma
 
 **Audit date:** 2026-05-04
-**Project root:** `~/d/cancer/cancer-types/multiple-myeloma` (= `/mnt/ssd/Dropbox/cancer/cancer-types/multiple-myeloma`)
+**Project root:** `~/d/cancer/cancer-types/multiple-myeloma`
 **Scope:** all 30 pre-regs across two placements
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
@@ -194,7 +194,7 @@ Same as natural-systems' Issue 4 and seq-feats' Issue 2. The recast must handle 
 4. **Stale local prereg kind cleanup:** remove `pre-registration` from `knowledge/sources/local/manifest.yaml` and remove stale aggregate placeholders for preregs now loaded from markdown frontmatter.
 5. **`decision:` and `latent:` kind registration** (project-side, mm has a documented cleanup task): when the project decides which `EntityClass` they belong to, register them. Lean: `decision` → `REFERENCE`; `latent` → `EPISTEMIC` (latent variables are uncertain assertions about underlying constructs).
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Inquiry classification resolved.** Revision 3 reclassifies `inquiry` as `EPISTEMIC`.
 2. **Unregistered kinds in `related:`.** Document the silent-skip behavior and recommend project-side regularization.

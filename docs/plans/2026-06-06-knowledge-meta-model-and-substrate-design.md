@@ -35,7 +35,7 @@ This is **one consolidated meta-model** in two layers:
 | `~/d/science/meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md` (t022) | Evidence payload contract (Part A §A5). Reused. |
 | `~/d/science/meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md` (t034) | Sole causal/edge-typing substrate (Part A §A3, §A8). Reused per D-005. |
 | `~/d/science/docs/proposition-and-evidence-model.md` | Propositions, evidence taxonomy, belief, freshness (Part A §A4–A7). Reused. |
-| `~/d/science/docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md` and `…-commons-scaffolding-design.md` | Adapter architecture + commons store the substrate formalizes (Part C). |
+| `~/d/science/docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md` and `science/src/science_tool/commons/adapter.py` | Adapter architecture + commons store the substrate formalizes (Part C). |
 | `~/d/science/docs/plans/2026-06-05-dataset-first-class-entity-design.md` | The dataset dual-SSOT this doc reconciles (Part B §B4). |
 | `~/d/science/docs/plans/2026-06-05-local-kind-layout-migration-design.md` | **Tactical / near-term.** Migrates project-local *markdown* kinds as-is. This doc is the **target state** that, additionally, retires structural *fileless* declarations. The two are reconciled explicitly in §D3 so they do not appear to disagree. |
 
@@ -85,7 +85,7 @@ compiles into** — the fact Part B makes load-bearing.
 Entities carry a canonical identity `<kind>:<local-id>` (regex enforced;
 case-insensitive aliases; deprecated-id support — `entity_identity.py`). Entities
 fall into three orthogonal **classes** that determine belief/freshness behavior
-(`~/d/science/docs/plans/2026-05-03-epistemic-dependency-graph-design.md`):
+(`~/d/science/docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md`):
 
 | Class | Examples | Belief-carrying | Freshness |
 |---|---|---|---|
@@ -422,7 +422,7 @@ impossible.
 
 ### C3. Adapters, formalized
 
-The existing adapter set (`…/2026-05-13-multiproject-schema-and-shared-store-design.md`)
+The existing adapter set (`~/d/science/docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md`)
 already funnels into a global identity table; the substrate formalizes each
 adapter's **participation mode** + **owner_scope**:
 

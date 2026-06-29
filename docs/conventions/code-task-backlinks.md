@@ -1,6 +1,10 @@
 # Code → Task Back-Link Convention
 
-> **Status callout.** Pattern 3 (descriptor sidecar field) names optional fields whose canonical schema is **pending Bucket C / P1 #8 namespace decision** (datapackage `<project>:` extension profile). Field names below are stable; if Bucket C namespaces them, this doc updates in lockstep.
+> **Status callout.** Pattern 3 (descriptor sidecar field) names optional fields
+> that projects may use today. The broader datapackage project-extension and
+> descriptor-sidecar schema remains tracked in the downstream conventions audit
+> synthesis; field names below are stable, while future schema work may decide
+> whether they stay top-level or move under a Science extension block.
 
 This doc lists four sanctioned patterns for linking code or notebooks back to a task, question, hypothesis, or interpretation. The reverse direction (entity → code via `Files:` lists in plan and interpretation prose) remains primary; these patterns close the code-side gap where it is cheap. Adoption is per-project and per-artifact. None are validator-enforced upstream.
 
@@ -52,7 +56,7 @@ For artifact-producer descriptor JSONs (e.g., protein-landscape's `descriptors/<
 }
 ```
 
-Each field is optional and accepts either a string or a list (`"task": ["t131", "t070"]`). **Status: pending Bucket C / P1 #8 namespace decision** — when the datapackage `<project>:` extension profile lands, these field names become part of the canonical descriptor schema. They may end up at top level or under a `science:` block. Field names themselves are stable; only nesting may change. Projects already shipping descriptors (protein-landscape today, 19 files) MAY adopt the field names early.
+Each field is optional and accepts either a string or a list (`"task": ["t131", "t070"]`). These fields are sanctioned for code-task backlinks. The broader descriptor schema may later choose top-level placement or a `science:` extension block; field names themselves are stable, only nesting may change. Projects already shipping descriptors (protein-landscape today, 19 files) MAY adopt the field names early.
 
 ## Pattern 4: Commit-message tag
 
@@ -75,6 +79,6 @@ Both audit projects that use this pattern (cbioportal and protein-landscape) enf
 
 ## See also
 
-- [`../project-organization-profiles.md`](../project-organization-profiles.md) — Code → Task Back-Link section.
+- [`README.md`](README.md) — convention directory scope and deferred convention backlog.
 - [`../audits/downstream-project-conventions/synthesis.md`](../audits/downstream-project-conventions/synthesis.md) §6.4, §8.2 — evidence base from the four-project audit.
-- [`README.md`](README.md) — directory scope and entry bar.
+- [`../user-guide/project-layout.md`](../user-guide/project-layout.md) — current project-root layout and profile/aspect boundary.

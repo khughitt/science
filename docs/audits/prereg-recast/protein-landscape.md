@@ -2,10 +2,10 @@
 
 **Audit date:** 2026-05-04
 **Migration date:** 2026-05-05
-**Project root:** `/mnt/ssd/Dropbox/protein-landscape`
+**Project root:** `~/d/protein-landscape`
 **Migration branch:** `migration/prereg-recast-protein-landscape`
 **Scope:** all 3 pre-regs under `doc/meta/pre-registration-*.md` (worktree duplicates excluded)
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 
 ---
 
@@ -81,8 +81,8 @@ Important graph nuance: protein-landscape already has provenance and closure pat
 Commands run from the Science worktree:
 
 ```bash
-uv run --frozen science graph build --project-root /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape
-uv run --frozen science graph validate --path /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape/knowledge/graph.trig
+uv run --frozen science graph build --project-root ~/d/protein-landscape/.worktrees/prereg-recast-protein-landscape
+uv run --frozen science graph validate --path ~/d/protein-landscape/.worktrees/prereg-recast-protein-landscape/knowledge/graph.trig
 ```
 
 Result:

@@ -4,7 +4,7 @@ Reads RAW frontmatter (the closed graph Entity does not surface these on a toler
 discovery pass, and a malformed core-kind entity would otherwise crash the strict
 loader), so the schema-critical rules are re-enforced here with friendly messages.
 The curation down-weight itself, and the reference-as-evidence cross-entity check,
-land in A2. See docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md.
+land in A2. See docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md.
 """
 
 from __future__ import annotations

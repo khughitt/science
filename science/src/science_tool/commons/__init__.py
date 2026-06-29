@@ -7,8 +7,7 @@ show, find, validate}`.
 Phase C (data resolver): datapackage.yaml reader, hash-verified bulk-data
 resolution, and the `science commons data resolve` CLI command.
 
-See docs/plans/2026-05-13-multiproject-commons-scaffolding-design.md and
-docs/plans/2026-05-14-commons-data-resolver-design.md.
+See docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md.
 """
 
 from __future__ import annotations

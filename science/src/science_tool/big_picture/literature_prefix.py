@@ -5,9 +5,9 @@ tracked project completing its migration, downstream consumers must treat
 ``article:<bibkey>`` as a legacy alias of canonical ``paper:<bibkey>``.
 This helper is the single place that encodes that rule.
 
-Removal: this module is deleted (one-line change per consumer) once all
-tracked projects confirm migration. See
-docs/specs/2026-04-19-manuscript-paper-rename-design.md §Transition-Window.
+Removal: this module can be retired once tracked projects no longer carry
+structured ``article:`` references and consumers no longer need the alias. See
+docs/conventions/refs-check.md.
 """
 
 from __future__ import annotations

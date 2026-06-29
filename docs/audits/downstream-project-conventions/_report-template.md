@@ -14,7 +14,7 @@
 
 ## Known Starting Conditions
 
-Pre-existing conditions surfaced from `docs/plans/2026-04-25-downstream-project-conventions-audit.md` "Known Starting Conditions" or discovered during inventory. List paths, not classifications — these are *not* findings.
+Pre-existing conditions surfaced from `docs/plans/historical/2026-04-25-downstream-project-conventions-audit.md` "Known Starting Conditions" or discovered during inventory. List paths, not classifications — these are *not* findings.
 
 - `<path or area>` — `<one-line description>`
 

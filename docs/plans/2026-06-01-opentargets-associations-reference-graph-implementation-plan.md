@@ -35,8 +35,8 @@ In `~/d/science-commons` (branch `feat/opentargets-associations`):
 
 In `~/d/science` (branch `feat/opentargets-associations`):
 - `science/pyproject.toml` + `science/uv.lock` — add `pyarrow`.
-- `docs/plans/2026-05-31-bio-reference-graph-design.md` — mark `dataset:opentargets-associations` implemented (RG4 / §8 / §11).
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — same.
+- `docs/plans/historical/2026-05-31-bio-reference-graph-design.md` — mark `dataset:opentargets-associations` implemented (RG4 / §8 / §11).
+- `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — same.
 
 Outside both repos (NOT committed):
 - `~/.config/science/data.yaml` — add `opentargets-associations: ~/d/science-commons-data/opentargets-associations`.
@@ -1341,8 +1341,8 @@ cd ~/d/science-commons && git add datasets/opentargets-associations/entity.md &&
 ## Task 9: Mark implemented in the design + umbrella docs
 
 **Files:**
-- Modify: `~/d/science/docs/plans/2026-05-31-bio-reference-graph-design.md`
-- Modify: `~/d/science/docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `~/d/science/docs/plans/historical/2026-05-31-bio-reference-graph-design.md`
+- Modify: `~/d/science/docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
 
 - [ ] **Step 1: Update the reference-graph design doc**
 
@@ -1354,12 +1354,12 @@ In `2026-05-31-bio-reference-graph-design.md`:
 
 - [ ] **Step 2: Update the umbrella doc**
 
-In `2026-05-26-bio-data-architecture-umbrella-design.md`: wherever GO/MONDO reference graphs are listed as implemented, add `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12). Remove any "Open Targets recipe pending" phrasing.
+In `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`: wherever GO/MONDO reference graphs are listed as implemented, add `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12). Remove any "Open Targets recipe pending" phrasing.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/d/science && git add docs/plans/2026-05-31-bio-reference-graph-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md && git commit -m "docs: mark dataset:opentargets-associations implemented (RG4 association graph)"
+cd ~/d/science && git add docs/plans/historical/2026-05-31-bio-reference-graph-design.md docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md && git commit -m "docs: mark dataset:opentargets-associations implemented (RG4 association graph)"
 ```
 
 ---

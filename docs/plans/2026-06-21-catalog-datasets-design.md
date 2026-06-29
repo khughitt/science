@@ -7,7 +7,7 @@ created: "2026-06-21"
 updated: "2026-06-21"
 related:
   - "plan:2026-06-21-dataset-catalog-cli-design"
-  - "plan:2026-04-19-dataset-entity-lifecycle-design"
+  - "docs/user-guide/entities.md#dataset-lifecycle"
 ---
 
 # Catalog datasets — gap-driven discovery, accessibility verification, and reproducible prioritization
@@ -22,7 +22,7 @@ of near-term usefulness — so the project knows *which dataset to operationaliz
 This is the "front half" of the dataset arc. The "back half" — per-dataset download/QA/preprocessing
 workflows — is already served by `/science:plan-pipeline` → `superpowers:executing-plans` applied per
 dataset, and is explicitly out of scope here. The seam between the two halves mirrors the deliberate
-singular/plural split that `plan:2026-04-19-dataset-entity-lifecycle-design` established: the singular
+singular/plural split documented in `docs/user-guide/entities.md#dataset-lifecycle`: the singular
 `science dataset` group is the **catalog/lifecycle** surface; acquisition runs live elsewhere.
 
 **Guiding principle.** Design only around signals that are *actually populated*, not signals the model

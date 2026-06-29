@@ -4,7 +4,7 @@
 
 **Goal:** Add rsID input support for variant identity by resolving pinned dbSNP labels to exact small alleles, then minting the existing assembly-anchored VRS identity.
 
-**Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons` for C4c-1. The rsID resolver, VRS minting boundary, variant-row validation, and dbSNP recipe are in place; the recipe fixture build passes. Full dbSNP archive fetch/build, full-source lockfile pinning, datapackage hash refresh, and resolver smoke against the real commons artifact remain operator-pending because the generated SQLite was not built in this session. Transcript/protein HGVS projection remains out of scope.
+**Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons` for C4c-1. The rsID resolver, VRS minting boundary, variant-row validation, dbSNP recipe, and Snakemake workflow entrypoint are in place; the recipe fixture build passes. Full dbSNP archive fetch/build through Snakemake, full-source lockfile pinning, datapackage hash refresh, and resolver smoke against the real commons artifact remain operator-pending because the generated SQLite was not built in this session. Transcript/protein HGVS projection remains out of scope.
 
 **Architecture:** C4c-1 is an input translation layer over C4a, not a new variant identity namespace. A pinned dbSNP reference dataset provides an indexed rsID-to-allele artifact; `science_tool.commons.rsid` resolves one rsID within a declared seqcol assembly; `variant.vrs_id_from_rsid(...)` converts the resolved allele to SPDI and delegates to `variant.vrs_id(...)`. The variant validator accepts `locator.format: rsid` while keeping `identity_context.molecular_ids.variant.namespace: vrs`.
 
@@ -151,11 +151,11 @@ Science repo (`~/d/science`):
   - Add `format: rsid` locator validation and row minting.
 - Modify: `science/tests/validate/test_checks_variant_identity.py`
   - Add rsID locator and row-layer tests.
-- Modify: `docs/plans/2026-05-28-c4-variant-identity-design.md`
+- Modify: `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`
   - Mark C4c-1 planned/implemented after landing.
-- Modify: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`
   - Update C4 status after landing.
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
   - Update umbrella status after landing.
 
 Commons repo (`~/d/science-commons`):
@@ -164,6 +164,7 @@ Commons repo (`~/d/science-commons`):
 - Create: `datasets/variant-labels-dbsnp-human/datapackage.yaml`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/fetch.py`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/build.py`
+- Create: `datasets/variant-labels-dbsnp-human/recipe/Snakefile`
 - Create: `datasets/variant-labels-dbsnp-human/recipe/README.md`
 - Create after fetch: `datasets/variant-labels-dbsnp-human/recipe/lockfile.yaml`
 - Create after build under `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`:
@@ -970,6 +971,7 @@ rtk git commit -m "feat: validate rsid variant rows"
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/datapackage.yaml`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/fetch.py`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/build.py`
+- Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile`
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/README.md`
 - Create after fetch: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/lockfile.yaml`
 
@@ -1088,7 +1090,31 @@ The commons repository stores the recipe, lockfile, entity, and datapackage hash
 or VCF bytes.
 ```
 
-- [x] **Step 6: Run a tiny fixture build before the full source build**
+- [x] **Step 6: Add a Snakemake workflow entrypoint**
+
+Create `recipe/Snakefile` so operators regenerate the artifact through the workflow rather than one-off
+script invocations. The default target must:
+
+- fetch the pinned dbSNP archive sources and `.md5` sidecars;
+- write `recipe/lockfile.yaml`;
+- require `assembly-registry/assemblies.csv` as an explicit input;
+- build `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/rsid_mappings.sqlite`;
+- write `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/build-summary.yaml`;
+- refresh `datapackage.yaml`.
+
+Run the workflow from the Science environment:
+
+```bash
+rtk uv run --frozen --project ~/d/science/meta snakemake \
+  -s ~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile \
+  --cores 1
+```
+
+The workflow defaults to `$SCIENCE_COMMONS_DATA_ROOT` or `/data/science-commons`. Override
+`assembly_registry` only for an equivalent pinned registry CSV; do not hardcode GRCh37/GRCh38 seqcol
+digests into the dbSNP recipe.
+
+- [x] **Step 7: Run a tiny fixture build before the full source build**
 
 Add fixture mode or a small test VCF under a temporary directory and verify:
 
@@ -1098,7 +1124,15 @@ rtk uv run --frozen --project science python ~/d/science-commons/datasets/varian
 
 Expected: `rsid_mappings.sqlite` exists and contains at least one row for the fixture rsID.
 
-- [ ] **Step 7: Run full-build feasibility check**
+- [ ] **Step 8: Run full-build feasibility check through Snakemake**
+
+Start the full build only through the workflow:
+
+```bash
+rtk uv run --frozen --project ~/d/science/meta snakemake \
+  -s ~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/Snakefile \
+  --cores 1
+```
 
 After the full archive build finishes, inspect `build-summary.yaml` before updating the datapackage:
 
@@ -1111,7 +1145,7 @@ Expected: the summary reports input rows, retained alleles, skipped buckets, dis
 per-assembly counts, SQLite bytes, and build seconds. If the SQLite size or build time is outside local
 operational limits, stop before committing datapackage hashes and revisit partitioning/indexing.
 
-- [x] **Step 8: Commit commons recipe**
+- [x] **Step 9: Commit commons recipe**
 
 In `~/d/science-commons`:
 
@@ -1125,14 +1159,14 @@ rtk git commit -m "data: add dbsnp variant label recipe"
 **Files:**
 - No new files unless the smoke reveals defects.
 
-**Status:** Deferred until an operator fetches/builds or installs the full dbSNP SQLite artifact under
-`$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`. The recipe and fixture path are implemented,
-but this session intentionally did not download the 26 GB / 28 GB source archives or build the full
-SQLite.
+**Status:** Deferred until an operator fetches/builds the full dbSNP SQLite artifact through
+`recipe/Snakefile` under `$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`. The recipe, workflow
+entrypoint, and fixture path are implemented, but this session intentionally did not complete the 26 GB /
+28 GB source archive workflow or build the full SQLite.
 
-- [ ] **Step 1: Build or install the SQLite artifact**
+- [ ] **Step 1: Build the SQLite artifact through Snakemake**
 
-Run the recipe against the pinned archive sources, or install a previously built artifact under:
+Run the workflow against the pinned archive sources and verify the outputs under:
 
 ```text
 $SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/rsid_mappings.sqlite
@@ -1161,14 +1195,14 @@ rtk git commit -m "fix: pin dbsnp variant label hashes"
 ### Task 7: Docs and Status Updates
 
 **Files:**
-- Modify: `docs/plans/2026-05-28-c4-variant-identity-design.md`
-- Modify: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
-- Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
+- Modify: `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`
+- Modify: `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`
 - Modify: `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
 
 - [x] **Step 1: Update C4 design status**
 
-In `docs/plans/2026-05-28-c4-variant-identity-design.md`, change C4c from wholly remaining to:
+In `docs/plans/historical/2026-05-28-c4-variant-identity-design.md`, change C4c from wholly remaining to:
 
 ```markdown
 C4c-1 rsID input is implemented through `dataset:variant-labels-dbsnp-human`; transcript/protein HGVS
@@ -1177,7 +1211,7 @@ projection remains deferred. Full dbSNP artifact build/operator smoke remains pe
 
 - [x] **Step 2: Update Pillar C status**
 
-In `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`, update the C4 row to say:
+In `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md`, update the C4 row to say:
 
 ```markdown
 C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input implemented locally; full dbSNP artifact build/operator smoke and transcript/protein projection remain.
@@ -1185,7 +1219,7 @@ C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input implement
 
 - [x] **Step 3: Update umbrella status**
 
-In `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`, update the status line and §8 so C4c no longer appears fully open once C4c-1 lands.
+In `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md`, update the status line and §8 so C4c no longer appears fully open once C4c-1 lands.
 
 - [x] **Step 4: Mark this plan implemented**
 
@@ -1198,7 +1232,7 @@ Change this plan's task checkboxes as tasks land and add an implementation statu
 - [x] **Step 5: Commit docs**
 
 ```bash
-rtk git add docs/plans/2026-05-28-c4-variant-identity-design.md docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md
+rtk git add docs/plans/historical/2026-05-28-c4-variant-identity-design.md docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md
 rtk git commit -m "docs: update c4c rsid status"
 ```
 

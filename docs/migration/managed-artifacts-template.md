@@ -1,6 +1,6 @@
 # Managed-Artifacts Migration Template
 
-> One-time migration of a Science project's `validate.sh` (and any future managed artifacts) onto the managed-artifact system per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`.
+> One-time migration of a Science project's `validate.sh` (and any future managed artifacts) onto the managed-artifact system per `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`.
 
 This template guides converting a project's standalone `validate.sh` into a managed install that tracks the upstream canonical (currently v2026.04.26.2). Per-project specs adapt this template to each project's specific drift profile.
 
@@ -310,7 +310,7 @@ Copy this section into `<project>/doc/plans/2026-04-27-managed-artifacts-migrati
 
 ## Reference: what each hook point sees
 
-Per `docs/superpowers/specs/2026-04-27-validate-hook-points.md`:
+Per `docs/plans/historical/2026-04-27-validate-hook-points.md`:
 
 | Hook | Fires | Globals available | Typical use |
 |---|---|---|---|

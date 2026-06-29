@@ -73,13 +73,28 @@ def resolve_virtual_member_payload(
             payload_kind="bio.reference_graph.member",
             payload=graph_payload.to_dict(),
         )
+    if is_geneset_frontmatter(parent.frontmatter):
+        from science_tool.commons.geneset_payload import resolve_geneset_member_payload
+
+        geneset_payload = resolve_geneset_member_payload(
+            parent=parent,
+            member_of=member_of,
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+        return VirtualMemberPayload(
+            member_id=member_id,
+            parent_dataset=member_of.parent_dataset,
+            parent_slug=parent.slug,
+            member_key=member_of.member_key,
+            payload_kind="bio.geneset.member",
+            payload=geneset_payload.to_dict(),
+        )
 
     raise UnsupportedMemberPayloadError(_unsupported_message(parent))
 
 
 def _unsupported_message(parent: CommonsEntityRecord) -> str:
-    if is_geneset_frontmatter(parent.frontmatter):
-        return "bio.geneset virtual payload resolution is reserved for D2"
     return (
         "unsupported parent collection profile for "
         f"{parent.canonical_id}: {parent.schema_profile}"

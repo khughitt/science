@@ -6,8 +6,8 @@ of PlannedAnnotation records. The audit orchestrator calls
 adapters per file, then hands the planned rows to merge_planned for
 idempotent persistence.
 
-See spec docs/plans/2026-05-11-annotation-system-p3.2-spec.md
-§Module layout for the contract.
+See docs/conventions/annotation-tokens.md for the marker-token
+source behavior.
 """
 
 from __future__ import annotations

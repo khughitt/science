@@ -4,7 +4,7 @@ description: Formalize a research model with explicit claims, evidence provenanc
 
 # Specify a Research Model
 
-> **Prerequisite:** Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics before starting.
+> **Prerequisite:** Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics before starting.
 
 ## Overview
 
@@ -51,15 +51,15 @@ project represents its model graph — otherwise `science inquiry show` errors (
    **not** run `science inquiry show` — read the entity file directly and treat *it* as the model to
    specify.
 
-2. **Detect the DAG representation.** Some projects author the proposition/relation graph through the
-   inquiry RDF-graph CRUD path (`science graph add concept`, `science inquiry add-edge`). Others author
+2. **Detect the DAG representation.** Some projects author the inquiry graph through the
+   source-first inquiry patch path (`entities/patches/<slug>.md` with `patch_type: inquiry`). Others author
    per-hypothesis DAGs as a **file pair** — e.g. `doc/figures/dags/<id>.dot` + `<id>.edges.yaml` —
    consumed by `science big-picture` provenance-coverage rather than by `science graph add`. Check the
    project for such a convention (look under `doc/figures/dags/`, `*.edges.yaml`, or the project's
-   `RESEARCH_PLAN`/conventions) before assuming the graph-CRUD path.
+   `RESEARCH_PLAN`/conventions) before assuming the inquiry patch path.
 
 3. **Route accordingly:**
-   - **Inquiry + RDF-graph project** → Steps 1–6 as written.
+   - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.
    - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
      `graph add concept` steps (they don't map onto the file pair). Instead author/validate the
      `.dot` + `.edges.yaml` pair the project's tooling consumes, and still do Step 3 (durable
@@ -73,7 +73,7 @@ project represents its model graph — otherwise `science inquiry show` errors (
      from those proposition records rather than replacing them.
 
 The proposition + evidence-line authoring (Steps 3–4) is representation-agnostic; only the
-structural-graph steps (1, 2, the `add-edge` in 3, and 6's `inquiry validate`) are inquiry-specific.
+structural-graph steps (1, 2, the inquiry source edit in 3, and 6's `inquiry validate`) are inquiry-specific.
 
 ### Step 1: Load And Assess The Target
 
@@ -143,11 +143,18 @@ object: "concept:<object>"
 claim_layer: "empirical_regularity|causal_effect|mechanistic_narrative|structural_claim"
 ```
 
-3. Attach the proposition to the inquiry edge when the edge should remain in the model
+3. Attach the proposition to the inquiry edge when the edge should remain in the model.
 
-```bash
-science inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concept:<object>" \
-  --claim "proposition:<id>"
+Edit `entities/patches/<slug>.md` and add the proposition to the edge's
+`claim_refs:` list:
+
+```yaml
+flow_edges:
+  - subject: "concept:<subject>"
+    predicate: feedsInto
+    object: "concept:<object>"
+    claim_refs:
+      - "proposition:<id>"
 ```
 
 Use direct structural edges without propositions only when the edge is organizational or procedural rather than epistemic.
@@ -201,6 +208,7 @@ For each assumption:
 ### Step 6: Validate And Finalize
 
 ```bash
+science graph build
 science inquiry validate "<slug>" --format json
 ```
 

@@ -1,0 +1,2881 @@
+{
+  "file_count": 186,
+  "generated_at": "2026-06-28T20:00:35+00:00",
+  "non_conforming_files": [],
+  "schema_version": 1,
+  "source_dir": "docs/plans",
+  "thread_count": 117,
+  "threads": [
+    {
+      "earliest_file_date": "2026-06-21",
+      "files": [
+        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md"
+      ],
+      "latest_file_date": "2026-06-21",
+      "normalized_slug": "adapter-entity-layout-and-overlay-root",
+      "raw_slugs": {
+        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "adapter-entity-layout-and-overlay-root-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "design"
+      },
+      "thread_id": "adapter-entity-layout-and-overlay-root"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-authored-confidence-design.md",
+        "docs/plans/2026-06-16-authored-confidence-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "authored-confidence",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-authored-confidence-design.md": "authored-confidence-design",
+        "docs/plans/2026-06-16-authored-confidence-plan.md": "authored-confidence-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-authored-confidence-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-authored-confidence-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-authored-confidence-design.md": "design",
+        "docs/plans/2026-06-16-authored-confidence-plan.md": "plan"
+      },
+      "thread_id": "authored-confidence"
+    },
+    {
+      "earliest_file_date": "2026-05-29",
+      "files": [
+        "docs/plans/2026-05-29-b-migration-paper-datasets-design.md",
+        "docs/plans/2026-05-29-b-migration-paper-datasets-plan.md"
+      ],
+      "latest_file_date": "2026-05-29",
+      "normalized_slug": "b-migration-paper-datasets",
+      "raw_slugs": {
+        "docs/plans/2026-05-29-b-migration-paper-datasets-design.md": "b-migration-paper-datasets-design",
+        "docs/plans/2026-05-29-b-migration-paper-datasets-plan.md": "b-migration-paper-datasets-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-29-b-migration-paper-datasets-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-05-29-b-migration-paper-datasets-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-29-b-migration-paper-datasets-design.md": "design",
+        "docs/plans/2026-05-29-b-migration-paper-datasets-plan.md": "plan"
+      },
+      "thread_id": "b-migration-paper-datasets"
+    },
+    {
+      "earliest_file_date": "2026-06-22",
+      "files": [
+        "docs/plans/2026-06-22-bears-on-multihop-reach.md"
+      ],
+      "latest_file_date": "2026-06-22",
+      "normalized_slug": "bears-on-multihop-reach",
+      "raw_slugs": {
+        "docs/plans/2026-06-22-bears-on-multihop-reach.md": "bears-on-multihop-reach"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-06-22-bears-on-multihop-reach.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-22-bears-on-multihop-reach.md": null
+      },
+      "thread_id": "bears-on-multihop-reach"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-belief-policy-keystone-design.md",
+        "docs/plans/2026-06-16-belief-policy-keystone-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "belief-policy-keystone",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-belief-policy-keystone-design.md": "belief-policy-keystone-design",
+        "docs/plans/2026-06-16-belief-policy-keystone-plan.md": "belief-policy-keystone-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-belief-policy-keystone-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-belief-policy-keystone-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-belief-policy-keystone-design.md": "design",
+        "docs/plans/2026-06-16-belief-policy-keystone-plan.md": "plan"
+      },
+      "thread_id": "belief-policy-keystone"
+    },
+    {
+      "earliest_file_date": "2026-06-23",
+      "files": [
+        "docs/plans/2026-06-23-belief-profile-design.md",
+        "docs/plans/2026-06-23-belief-profile-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-23",
+      "normalized_slug": "belief-profile",
+      "raw_slugs": {
+        "docs/plans/2026-06-23-belief-profile-design.md": "belief-profile-design",
+        "docs/plans/2026-06-23-belief-profile-implementation-plan.md": "belief-profile-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-23-belief-profile-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-23-belief-profile-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-23-belief-profile-design.md": "design",
+        "docs/plans/2026-06-23-belief-profile-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "belief-profile"
+    },
+    {
+      "earliest_file_date": "2026-06-27",
+      "files": [
+        "docs/plans/2026-06-27-benchmark-catalog-v1-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-27",
+      "normalized_slug": "benchmark-catalog-v1",
+      "raw_slugs": {
+        "docs/plans/2026-06-27-benchmark-catalog-v1-implementation-plan.md": "benchmark-catalog-v1-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-27-benchmark-catalog-v1-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-27-benchmark-catalog-v1-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "benchmark-catalog-v1"
+    },
+    {
+      "earliest_file_date": "2026-06-28",
+      "files": [
+        "docs/plans/2026-06-28-benchmark-gaps-design.md",
+        "docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-28",
+      "normalized_slug": "benchmark-gaps",
+      "raw_slugs": {
+        "docs/plans/2026-06-28-benchmark-gaps-design.md": "benchmark-gaps-design",
+        "docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md": "benchmark-gaps-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-28-benchmark-gaps-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-28-benchmark-gaps-design.md": "design",
+        "docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "benchmark-gaps"
+    },
+    {
+      "earliest_file_date": "2026-06-26",
+      "files": [
+        "docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md"
+      ],
+      "latest_file_date": "2026-06-26",
+      "normalized_slug": "benchmark-grounded-model-assessment",
+      "raw_slugs": {
+        "docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md": "benchmark-grounded-model-assessment-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md": "design"
+      },
+      "thread_id": "benchmark-grounded-model-assessment"
+    },
+    {
+      "earliest_file_date": "2026-06-27",
+      "files": [
+        "docs/plans/2026-06-27-benchmark-opportunities-design.md",
+        "docs/plans/2026-06-27-benchmark-opportunities-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-27",
+      "normalized_slug": "benchmark-opportunities",
+      "raw_slugs": {
+        "docs/plans/2026-06-27-benchmark-opportunities-design.md": "benchmark-opportunities-design",
+        "docs/plans/2026-06-27-benchmark-opportunities-implementation-plan.md": "benchmark-opportunities-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-27-benchmark-opportunities-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-27-benchmark-opportunities-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-27-benchmark-opportunities-design.md": "design",
+        "docs/plans/2026-06-27-benchmark-opportunities-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "benchmark-opportunities"
+    },
+    {
+      "earliest_file_date": "2026-05-26",
+      "files": [
+        "docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md"
+      ],
+      "latest_file_date": "2026-05-26",
+      "normalized_slug": "bio-data-architecture-umbrella",
+      "raw_slugs": {
+        "docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md": "bio-data-architecture-umbrella-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md": "design"
+      },
+      "thread_id": "bio-data-architecture-umbrella"
+    },
+    {
+      "earliest_file_date": "2026-05-26",
+      "files": [
+        "docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md"
+      ],
+      "latest_file_date": "2026-05-26",
+      "normalized_slug": "bio-dataset-influence-provenance",
+      "raw_slugs": {
+        "docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md": "bio-dataset-influence-provenance-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md": "design"
+      },
+      "thread_id": "bio-dataset-influence-provenance"
+    },
+    {
+      "earliest_file_date": "2026-05-26",
+      "files": [
+        "docs/plans/2026-05-26-bio-geneset-type-design.md"
+      ],
+      "latest_file_date": "2026-05-26",
+      "normalized_slug": "bio-geneset-type",
+      "raw_slugs": {
+        "docs/plans/2026-05-26-bio-geneset-type-design.md": "bio-geneset-type-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-26-bio-geneset-type-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-26-bio-geneset-type-design.md": "design"
+      },
+      "thread_id": "bio-geneset-type"
+    },
+    {
+      "earliest_file_date": "2026-05-26",
+      "files": [
+        "docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md"
+      ],
+      "latest_file_date": "2026-05-26",
+      "normalized_slug": "bio-identity-and-reference-genome",
+      "raw_slugs": {
+        "docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md": "bio-identity-and-reference-genome-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md": "design"
+      },
+      "thread_id": "bio-identity-and-reference-genome"
+    },
+    {
+      "earliest_file_date": "2026-05-31",
+      "files": [
+        "docs/plans/2026-05-31-bio-reference-graph-design.md"
+      ],
+      "latest_file_date": "2026-05-31",
+      "normalized_slug": "bio-reference-graph",
+      "raw_slugs": {
+        "docs/plans/2026-05-31-bio-reference-graph-design.md": "bio-reference-graph-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-31-bio-reference-graph-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-31-bio-reference-graph-design.md": "design"
+      },
+      "thread_id": "bio-reference-graph-design"
+    },
+    {
+      "earliest_file_date": "2026-06-11",
+      "files": [
+        "docs/plans/2026-06-11-bundle-belief-rollup-design.md",
+        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md"
+      ],
+      "latest_file_date": "2026-06-11",
+      "normalized_slug": "bundle-belief-rollup",
+      "raw_slugs": {
+        "docs/plans/2026-06-11-bundle-belief-rollup-design.md": "bundle-belief-rollup-design",
+        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md": "bundle-belief-rollup-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-11-bundle-belief-rollup-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-11-bundle-belief-rollup-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-11-bundle-belief-rollup-design.md": "design",
+        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md": "plan"
+      },
+      "thread_id": "bundle-belief-rollup"
+    },
+    {
+      "earliest_file_date": "2026-05-28",
+      "files": [
+        "docs/plans/2026-05-28-c4-variant-identity-design.md"
+      ],
+      "latest_file_date": "2026-05-28",
+      "normalized_slug": "c4-variant-identity",
+      "raw_slugs": {
+        "docs/plans/2026-05-28-c4-variant-identity-design.md": "c4-variant-identity-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-05-28-c4-variant-identity-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-28-c4-variant-identity-design.md": "design"
+      },
+      "thread_id": "c4-variant-identity"
+    },
+    {
+      "earliest_file_date": "2026-05-31",
+      "files": [
+        "docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md"
+      ],
+      "latest_file_date": "2026-05-31",
+      "normalized_slug": "c4c-rsid-variant-label",
+      "raw_slugs": {
+        "docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md": "c4c-rsid-variant-label-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "plan": [
+          "docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md": "plan"
+      },
+      "thread_id": "c4c-rsid-variant-label"
+    },
+    {
+      "earliest_file_date": "2026-06-21",
+      "files": [
+        "docs/plans/2026-06-21-catalog-datasets-design.md",
+        "docs/plans/2026-06-21-catalog-datasets-plan.md"
+      ],
+      "latest_file_date": "2026-06-21",
+      "normalized_slug": "catalog-datasets",
+      "raw_slugs": {
+        "docs/plans/2026-06-21-catalog-datasets-design.md": "catalog-datasets-design",
+        "docs/plans/2026-06-21-catalog-datasets-plan.md": "catalog-datasets-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-21-catalog-datasets-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-21-catalog-datasets-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-21-catalog-datasets-design.md": "design",
+        "docs/plans/2026-06-21-catalog-datasets-plan.md": "plan"
+      },
+      "thread_id": "catalog-datasets"
+    },
+    {
+      "earliest_file_date": "2026-06-19",
+      "files": [
+        "docs/plans/2026-06-19-contextual-structural-roles-design.md"
+      ],
+      "latest_file_date": "2026-06-19",
+      "normalized_slug": "contextual-structural-roles",
+      "raw_slugs": {
+        "docs/plans/2026-06-19-contextual-structural-roles-design.md": "contextual-structural-roles-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-19-contextual-structural-roles-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-19-contextual-structural-roles-design.md": "design"
+      },
+      "thread_id": "contextual-structural-roles"
+    },
+    {
+      "earliest_file_date": "2026-04-25",
+      "files": [
+        "docs/plans/2026-04-25-conventions-audit-p1-rollout.md"
+      ],
+      "latest_file_date": "2026-04-25",
+      "normalized_slug": "conventions-audit-p1-rollout",
+      "raw_slugs": {
+        "docs/plans/2026-04-25-conventions-audit-p1-rollout.md": "conventions-audit-p1-rollout"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-04-25-conventions-audit-p1-rollout.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-25-conventions-audit-p1-rollout.md": null
+      },
+      "thread_id": "conventions-audit-p1-rollout"
+    },
+    {
+      "earliest_file_date": "2026-06-17",
+      "files": [
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md",
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md"
+      ],
+      "latest_file_date": "2026-06-17",
+      "normalized_slug": "curate-canonical-entity-inventory",
+      "raw_slugs": {
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md": "curate-canonical-entity-inventory-design",
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md": "curate-canonical-entity-inventory-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md": "design",
+        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md": "plan"
+      },
+      "thread_id": "curate-canonical-entity-inventory"
+    },
+    {
+      "earliest_file_date": "2026-06-10",
+      "files": [
+        "docs/plans/2026-06-10-data-driven-discovery-improvements.md"
+      ],
+      "latest_file_date": "2026-06-10",
+      "normalized_slug": "data-driven-discovery-improvements",
+      "raw_slugs": {
+        "docs/plans/2026-06-10-data-driven-discovery-improvements.md": "data-driven-discovery-improvements"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-06-10-data-driven-discovery-improvements.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-10-data-driven-discovery-improvements.md": null
+      },
+      "thread_id": "data-driven-discovery-improvements"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-dataset-adapters-phase1-design.md",
+        "docs/plans/2026-06-14-dataset-adapters-phase1-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "dataset-adapters-phase1",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-dataset-adapters-phase1-design.md": "dataset-adapters-phase1-design",
+        "docs/plans/2026-06-14-dataset-adapters-phase1-plan.md": "dataset-adapters-phase1-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-dataset-adapters-phase1-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-dataset-adapters-phase1-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-dataset-adapters-phase1-design.md": "design",
+        "docs/plans/2026-06-14-dataset-adapters-phase1-plan.md": "plan"
+      },
+      "thread_id": "dataset-adapters-phase1"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-dataset-adapters-phase2-design.md",
+        "docs/plans/2026-06-14-dataset-adapters-phase2-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "dataset-adapters-phase2",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-dataset-adapters-phase2-design.md": "dataset-adapters-phase2-design",
+        "docs/plans/2026-06-14-dataset-adapters-phase2-plan.md": "dataset-adapters-phase2-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-dataset-adapters-phase2-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-dataset-adapters-phase2-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-dataset-adapters-phase2-design.md": "design",
+        "docs/plans/2026-06-14-dataset-adapters-phase2-plan.md": "plan"
+      },
+      "thread_id": "dataset-adapters-phase2"
+    },
+    {
+      "earliest_file_date": "2026-06-21",
+      "files": [
+        "docs/plans/2026-06-21-dataset-catalog-cli-design.md",
+        "docs/plans/2026-06-21-dataset-catalog-cli-plan.md"
+      ],
+      "latest_file_date": "2026-06-21",
+      "normalized_slug": "dataset-catalog-cli",
+      "raw_slugs": {
+        "docs/plans/2026-06-21-dataset-catalog-cli-design.md": "dataset-catalog-cli-design",
+        "docs/plans/2026-06-21-dataset-catalog-cli-plan.md": "dataset-catalog-cli-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-21-dataset-catalog-cli-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-21-dataset-catalog-cli-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-21-dataset-catalog-cli-design.md": "design",
+        "docs/plans/2026-06-21-dataset-catalog-cli-plan.md": "plan"
+      },
+      "thread_id": "dataset-catalog-cli"
+    },
+    {
+      "earliest_file_date": "2026-06-26",
+      "files": [
+        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-26",
+      "normalized_slug": "dataset-catalog-phase1",
+      "raw_slugs": {
+        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md": "dataset-catalog-phase1-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "dataset-catalog-phase1"
+    },
+    {
+      "earliest_file_date": "2026-06-26",
+      "files": [
+        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md"
+      ],
+      "latest_file_date": "2026-06-26",
+      "normalized_slug": "dataset-catalog-triage-pack",
+      "raw_slugs": {
+        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md": "dataset-catalog-triage-pack-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md": "design"
+      },
+      "thread_id": "dataset-catalog-triage-pack"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-dataset-evidence-flow-design.md",
+        "docs/plans/2026-06-08-dataset-evidence-flow-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "dataset-evidence-flow",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-dataset-evidence-flow-design.md": "dataset-evidence-flow-design",
+        "docs/plans/2026-06-08-dataset-evidence-flow-plan.md": "dataset-evidence-flow-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-dataset-evidence-flow-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-08-dataset-evidence-flow-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-dataset-evidence-flow-design.md": "design",
+        "docs/plans/2026-06-08-dataset-evidence-flow-plan.md": "plan"
+      },
+      "thread_id": "dataset-evidence-flow"
+    },
+    {
+      "earliest_file_date": "2026-06-05",
+      "files": [
+        "docs/plans/2026-06-05-dataset-first-class-entity-design.md"
+      ],
+      "latest_file_date": "2026-06-05",
+      "normalized_slug": "dataset-first-class-entity",
+      "raw_slugs": {
+        "docs/plans/2026-06-05-dataset-first-class-entity-design.md": "dataset-first-class-entity-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-05-dataset-first-class-entity-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-05-dataset-first-class-entity-design.md": "design"
+      },
+      "thread_id": "dataset-first-class-entity"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-dataset-qa-seam-design.md",
+        "docs/plans/2026-06-16-dataset-qa-seam-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "dataset-qa-seam",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-dataset-qa-seam-design.md": "dataset-qa-seam-design",
+        "docs/plans/2026-06-16-dataset-qa-seam-plan.md": "dataset-qa-seam-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-dataset-qa-seam-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-dataset-qa-seam-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-dataset-qa-seam-design.md": "design",
+        "docs/plans/2026-06-16-dataset-qa-seam-plan.md": "plan"
+      },
+      "thread_id": "dataset-qa-seam"
+    },
+    {
+      "earliest_file_date": "2026-06-24",
+      "files": [
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md",
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-24",
+      "normalized_slug": "dataset-reach-authoring-surfaces",
+      "raw_slugs": {
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md": "dataset-reach-authoring-surfaces-design",
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md": "dataset-reach-authoring-surfaces-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md": "design",
+        "docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "dataset-reach-authoring-surfaces"
+    },
+    {
+      "earliest_file_date": "2026-06-13",
+      "files": [
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md",
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md"
+      ],
+      "latest_file_date": "2026-06-13",
+      "normalized_slug": "dataset-sub-cohort-lineage",
+      "raw_slugs": {
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md": "dataset-sub-cohort-lineage-design",
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md": "dataset-sub-cohort-lineage-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md": "design",
+        "docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md": "plan"
+      },
+      "thread_id": "dataset-sub-cohort-lineage"
+    },
+    {
+      "earliest_file_date": "2026-06-24",
+      "files": [
+        "docs/plans/2026-06-24-dataset-verify-access-design.md",
+        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-24",
+      "normalized_slug": "dataset-verify-access",
+      "raw_slugs": {
+        "docs/plans/2026-06-24-dataset-verify-access-design.md": "dataset-verify-access-design",
+        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md": "dataset-verify-access-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-24-dataset-verify-access-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-24-dataset-verify-access-design.md": "design",
+        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "dataset-verify-access"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-datasets-qa-reachability-design.md",
+        "docs/plans/2026-06-16-datasets-qa-reachability-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "datasets-qa-reachability",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-datasets-qa-reachability-design.md": "datasets-qa-reachability-design",
+        "docs/plans/2026-06-16-datasets-qa-reachability-plan.md": "datasets-qa-reachability-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-datasets-qa-reachability-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-datasets-qa-reachability-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-datasets-qa-reachability-design.md": "design",
+        "docs/plans/2026-06-16-datasets-qa-reachability-plan.md": "plan"
+      },
+      "thread_id": "datasets-qa-reachability"
+    },
+    {
+      "earliest_file_date": "2026-06-19",
+      "files": [
+        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md",
+        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-19",
+      "normalized_slug": "discusses-membership-surfaces",
+      "raw_slugs": {
+        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md": "discusses-membership-surfaces-design",
+        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md": "discusses-membership-surfaces-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-19-discusses-membership-surfaces-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md": "design",
+        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "discusses-membership-surfaces"
+    },
+    {
+      "earliest_file_date": "2026-04-25",
+      "files": [
+        "docs/plans/2026-04-25-downstream-conventions-migration.md"
+      ],
+      "latest_file_date": "2026-04-25",
+      "normalized_slug": "downstream-conventions-migration",
+      "raw_slugs": {
+        "docs/plans/2026-04-25-downstream-conventions-migration.md": "downstream-conventions-migration"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-04-25-downstream-conventions-migration.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-25-downstream-conventions-migration.md": null
+      },
+      "thread_id": "downstream-conventions-migration"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "entity-consolidation-and-archive",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md": "entity-consolidation-and-archive-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md": "design"
+      },
+      "thread_id": "entity-consolidation-and-archive"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "entity-consolidation-p1-visibility",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md": "entity-consolidation-p1-visibility-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "plan": [
+          "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md": "plan"
+      },
+      "thread_id": "entity-consolidation-p1-visibility"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md",
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "entity-consolidation-p2-candidate-detector",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md": "entity-consolidation-p2-candidate-detector-design",
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md": "entity-consolidation-p2-candidate-detector-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md": "design",
+        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md": "plan"
+      },
+      "thread_id": "entity-consolidation-p2-candidate-detector"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md",
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "entity-consolidation-p3-archive",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md": "entity-consolidation-p3-archive-design",
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md": "entity-consolidation-p3-archive-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md": "design",
+        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md": "plan"
+      },
+      "thread_id": "entity-consolidation-p3-archive"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md",
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "entity-consolidation-p4-consolidate-apply",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md": "entity-consolidation-p4-consolidate-apply-design",
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md": "entity-consolidation-p4-consolidate-apply-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md": "design",
+        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md": "plan"
+      },
+      "thread_id": "entity-consolidation-p4-consolidate-apply"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md",
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "entity-consolidation-p5-tier4-substitution",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md": "entity-consolidation-p5-tier4-substitution-design",
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md": "entity-consolidation-p5-tier4-substitution-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md": "design",
+        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md": "plan"
+      },
+      "thread_id": "entity-consolidation-p5-tier4-substitution"
+    },
+    {
+      "earliest_file_date": "2026-06-03",
+      "files": [
+        "docs/plans/2026-06-03-entity-organization-and-naming-design.md",
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation.md"
+      ],
+      "latest_file_date": "2026-06-03",
+      "normalized_slug": "entity-organization-and-naming",
+      "raw_slugs": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-design.md": "entity-organization-and-naming-design",
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation.md": "entity-organization-and-naming-implementation"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-03-entity-organization-and-naming-design.md"
+        ],
+        "implementation": [
+          "docs/plans/2026-06-03-entity-organization-and-naming-implementation.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-design.md": "design",
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation.md": "implementation"
+      },
+      "thread_id": "entity-organization-and-naming"
+    },
+    {
+      "earliest_file_date": "2026-06-03",
+      "files": [
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan2.md"
+      ],
+      "latest_file_date": "2026-06-03",
+      "normalized_slug": "entity-organization-and-naming-implementation-plan2",
+      "raw_slugs": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan2.md": "entity-organization-and-naming-implementation-plan2"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan2.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan2.md": null
+      },
+      "thread_id": "entity-organization-and-naming-implementation-plan2"
+    },
+    {
+      "earliest_file_date": "2026-06-03",
+      "files": [
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md"
+      ],
+      "latest_file_date": "2026-06-03",
+      "normalized_slug": "entity-organization-and-naming-implementation-plan3",
+      "raw_slugs": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md": "entity-organization-and-naming-implementation-plan3"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md": null
+      },
+      "thread_id": "entity-organization-and-naming-implementation-plan3"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-epistemic-data-model-design.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "epistemic-data-model",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-epistemic-data-model-design.md": "epistemic-data-model-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-epistemic-data-model-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-epistemic-data-model-design.md": "design"
+      },
+      "thread_id": "epistemic-data-model"
+    },
+    {
+      "earliest_file_date": "2026-06-04",
+      "files": [
+        "docs/plans/2026-06-04-epistemic-drift-detection-design.md"
+      ],
+      "latest_file_date": "2026-06-04",
+      "normalized_slug": "epistemic-drift-detection",
+      "raw_slugs": {
+        "docs/plans/2026-06-04-epistemic-drift-detection-design.md": "epistemic-drift-detection-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-04-epistemic-drift-detection-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-04-epistemic-drift-detection-design.md": "design"
+      },
+      "thread_id": "epistemic-drift-detection"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-epistemic-edges-design.md",
+        "docs/plans/2026-06-08-epistemic-edges-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "epistemic-edges",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-epistemic-edges-design.md": "epistemic-edges-design",
+        "docs/plans/2026-06-08-epistemic-edges-plan.md": "epistemic-edges-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-epistemic-edges-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-08-epistemic-edges-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-epistemic-edges-design.md": "design",
+        "docs/plans/2026-06-08-epistemic-edges-plan.md": "plan"
+      },
+      "thread_id": "epistemic-edges"
+    },
+    {
+      "earliest_file_date": "2026-06-27",
+      "files": [
+        "docs/plans/2026-06-27-feedback-from-recent-design.md",
+        "docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-27",
+      "normalized_slug": "feedback-from-recent",
+      "raw_slugs": {
+        "docs/plans/2026-06-27-feedback-from-recent-design.md": "feedback-from-recent-design",
+        "docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md": "feedback-from-recent-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-27-feedback-from-recent-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-27-feedback-from-recent-design.md": "design",
+        "docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "feedback-from-recent"
+    },
+    {
+      "earliest_file_date": "2026-06-26",
+      "files": [
+        "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md"
+      ],
+      "latest_file_date": "2026-06-26",
+      "normalized_slug": "feedback-telemetry-adaptation",
+      "raw_slugs": {
+        "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md": "feedback-telemetry-adaptation-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md": "design"
+      },
+      "thread_id": "feedback-telemetry-adaptation"
+    },
+    {
+      "earliest_file_date": "2026-06-01",
+      "files": [
+        "docs/plans/2026-06-01-go-reference-graph-commons-ingestion-plan.md"
+      ],
+      "latest_file_date": "2026-06-01",
+      "normalized_slug": "go-reference-graph-commons-ingestion",
+      "raw_slugs": {
+        "docs/plans/2026-06-01-go-reference-graph-commons-ingestion-plan.md": "go-reference-graph-commons-ingestion-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "plan": [
+          "docs/plans/2026-06-01-go-reference-graph-commons-ingestion-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-01-go-reference-graph-commons-ingestion-plan.md": "plan"
+      },
+      "thread_id": "go-reference-graph-commons-ingestion"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-infer-schema-scaffold-design.md",
+        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "infer-schema-scaffold",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-infer-schema-scaffold-design.md": "infer-schema-scaffold-design",
+        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md": "infer-schema-scaffold-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-infer-schema-scaffold-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-infer-schema-scaffold-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-infer-schema-scaffold-design.md": "design",
+        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md": "plan"
+      },
+      "thread_id": "infer-schema-scaffold"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md",
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "inquiry-patch-profile-subsumption",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md": "inquiry-patch-profile-subsumption-design",
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-plan.md": "inquiry-patch-profile-subsumption-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md": "design",
+        "docs/plans/2026-06-14-inquiry-patch-profile-subsumption-plan.md": "plan"
+      },
+      "thread_id": "inquiry-patch-profile-subsumption"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-kind-descriptor-keystone-design.md",
+        "docs/plans/2026-06-14-kind-descriptor-keystone-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "kind-descriptor-keystone",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-kind-descriptor-keystone-design.md": "kind-descriptor-keystone-design",
+        "docs/plans/2026-06-14-kind-descriptor-keystone-plan.md": "kind-descriptor-keystone-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-kind-descriptor-keystone-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-kind-descriptor-keystone-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-kind-descriptor-keystone-design.md": "design",
+        "docs/plans/2026-06-14-kind-descriptor-keystone-plan.md": "plan"
+      },
+      "thread_id": "kind-descriptor-keystone"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md",
+        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "kind-descriptor-model-registry",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md": "kind-descriptor-model-registry-design",
+        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md": "kind-descriptor-model-registry-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md": "design",
+        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md": "plan"
+      },
+      "thread_id": "kind-descriptor-model-registry"
+    },
+    {
+      "earliest_file_date": "2026-06-06",
+      "files": [
+        "docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md"
+      ],
+      "latest_file_date": "2026-06-06",
+      "normalized_slug": "knowledge-meta-model-and-substrate",
+      "raw_slugs": {
+        "docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md": "knowledge-meta-model-and-substrate-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md": "design"
+      },
+      "thread_id": "knowledge-meta-model-and-substrate"
+    },
+    {
+      "earliest_file_date": "2026-06-05",
+      "files": [
+        "docs/plans/2026-06-05-local-kind-layout-migration-design.md",
+        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md"
+      ],
+      "latest_file_date": "2026-06-05",
+      "normalized_slug": "local-kind-layout-migration",
+      "raw_slugs": {
+        "docs/plans/2026-06-05-local-kind-layout-migration-design.md": "local-kind-layout-migration-design",
+        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md": "local-kind-layout-migration-implementation"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-05-local-kind-layout-migration-design.md"
+        ],
+        "implementation": [
+          "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-05-local-kind-layout-migration-design.md": "design",
+        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md": "implementation"
+      },
+      "thread_id": "local-kind-layout-migration"
+    },
+    {
+      "earliest_file_date": "2026-06-04",
+      "files": [
+        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md"
+      ],
+      "latest_file_date": "2026-06-04",
+      "normalized_slug": "m1-epistemic-drift-detection",
+      "raw_slugs": {
+        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "m1-epistemic-drift-detection-implementation"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation": [
+          "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "implementation"
+      },
+      "thread_id": "m1-epistemic-drift-detection"
+    },
+    {
+      "earliest_file_date": "2026-06-19",
+      "files": [
+        "docs/plans/2026-06-19-membership-roles-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-19",
+      "normalized_slug": "membership-roles",
+      "raw_slugs": {
+        "docs/plans/2026-06-19-membership-roles-implementation-plan.md": "membership-roles-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-19-membership-roles-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-19-membership-roles-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "membership-roles"
+    },
+    {
+      "earliest_file_date": "2026-06-06",
+      "files": [
+        "docs/plans/2026-06-06-migration-robustness-design.md",
+        "docs/plans/2026-06-06-migration-robustness-plan.md"
+      ],
+      "latest_file_date": "2026-06-06",
+      "normalized_slug": "migration-robustness",
+      "raw_slugs": {
+        "docs/plans/2026-06-06-migration-robustness-design.md": "migration-robustness-design",
+        "docs/plans/2026-06-06-migration-robustness-plan.md": "migration-robustness-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-06-migration-robustness-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-06-migration-robustness-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-06-migration-robustness-design.md": "design",
+        "docs/plans/2026-06-06-migration-robustness-plan.md": "plan"
+      },
+      "thread_id": "migration-robustness"
+    },
+    {
+      "earliest_file_date": "2026-06-19",
+      "files": [
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md",
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md"
+      ],
+      "latest_file_date": "2026-06-19",
+      "normalized_slug": "natural-systems-prose-epistemics-application",
+      "raw_slugs": {
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md": "natural-systems-prose-epistemics-application-design",
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md": "natural-systems-prose-epistemics-application-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md": "design",
+        "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md": "plan"
+      },
+      "thread_id": "natural-systems-prose-epistemics-application"
+    },
+    {
+      "earliest_file_date": "2026-06-01",
+      "files": [
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-design.md",
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-01",
+      "normalized_slug": "opentargets-associations-reference-graph",
+      "raw_slugs": {
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-design.md": "opentargets-associations-reference-graph-design",
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-implementation-plan.md": "opentargets-associations-reference-graph-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-01-opentargets-associations-reference-graph-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-01-opentargets-associations-reference-graph-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-design.md": "design",
+        "docs/plans/2026-06-01-opentargets-associations-reference-graph-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "opentargets-associations-reference-graph"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md",
+        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "paper-annotate-phase3a",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md": "paper-annotate-phase3a-design",
+        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md": "paper-annotate-phase3a-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-paper-annotate-phase3a-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md": "design",
+        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md": "plan"
+      },
+      "thread_id": "paper-annotate-phase3a"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md",
+        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "paper-annotate-phase3b",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md": "paper-annotate-phase3b-design",
+        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md": "paper-annotate-phase3b-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-paper-annotate-phase3b-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md": "design",
+        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md": "plan"
+      },
+      "thread_id": "paper-annotate-phase3b"
+    },
+    {
+      "earliest_file_date": "2026-04-05",
+      "files": [
+        "docs/plans/2026-04-05-paper-model-design.md",
+        "docs/plans/2026-04-05-paper-model.md"
+      ],
+      "latest_file_date": "2026-04-05",
+      "normalized_slug": "paper-model",
+      "raw_slugs": {
+        "docs/plans/2026-04-05-paper-model-design.md": "paper-model-design",
+        "docs/plans/2026-04-05-paper-model.md": "paper-model"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-04-05-paper-model-design.md"
+        ],
+        "primary": [
+          "docs/plans/2026-04-05-paper-model.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-05-paper-model-design.md": "design",
+        "docs/plans/2026-04-05-paper-model.md": null
+      },
+      "thread_id": "paper-model"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-patch-contract-keystone-design.md",
+        "docs/plans/2026-06-14-patch-contract-keystone-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "patch-contract-keystone",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-patch-contract-keystone-design.md": "patch-contract-keystone-design",
+        "docs/plans/2026-06-14-patch-contract-keystone-plan.md": "patch-contract-keystone-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-patch-contract-keystone-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-patch-contract-keystone-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-patch-contract-keystone-design.md": "design",
+        "docs/plans/2026-06-14-patch-contract-keystone-plan.md": "plan"
+      },
+      "thread_id": "patch-contract-keystone"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "patchwork-kernel-architecture",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md": "patchwork-kernel-architecture-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md": "design"
+      },
+      "thread_id": "patchwork-kernel-architecture"
+    },
+    {
+      "earliest_file_date": "2026-03-07",
+      "files": [
+        "docs/plans/2026-03-07-phase4c-operationalization-design.md"
+      ],
+      "latest_file_date": "2026-03-07",
+      "normalized_slug": "phase4c-operationalization",
+      "raw_slugs": {
+        "docs/plans/2026-03-07-phase4c-operationalization-design.md": "phase4c-operationalization-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-03-07-phase4c-operationalization-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-03-07-phase4c-operationalization-design.md": "design"
+      },
+      "thread_id": "phase4c-operationalization"
+    },
+    {
+      "earliest_file_date": "2026-04-05",
+      "files": [
+        "docs/plans/2026-04-05-project-model-design.md",
+        "docs/plans/2026-04-05-project-model.md"
+      ],
+      "latest_file_date": "2026-04-05",
+      "normalized_slug": "project-model",
+      "raw_slugs": {
+        "docs/plans/2026-04-05-project-model-design.md": "project-model-design",
+        "docs/plans/2026-04-05-project-model.md": "project-model"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-04-05-project-model-design.md"
+        ],
+        "primary": [
+          "docs/plans/2026-04-05-project-model.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-05-project-model-design.md": "design",
+        "docs/plans/2026-04-05-project-model.md": null
+      },
+      "thread_id": "project-model"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-design.md",
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "proposition-synthesis-phase4c",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-design.md": "proposition-synthesis-phase4c-design",
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-plan.md": "proposition-synthesis-phase4c-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-proposition-synthesis-phase4c-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-proposition-synthesis-phase4c-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-design.md": "design",
+        "docs/plans/2026-06-16-proposition-synthesis-phase4c-plan.md": "plan"
+      },
+      "thread_id": "proposition-synthesis-phase4c"
+    },
+    {
+      "earliest_file_date": "2026-06-17",
+      "files": [
+        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md"
+      ],
+      "latest_file_date": "2026-06-17",
+      "normalized_slug": "prose-epistemics-p1-source-adapter",
+      "raw_slugs": {
+        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md": "prose-epistemics-p1-source-adapter-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "plan": [
+          "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md": "plan"
+      },
+      "thread_id": "prose-epistemics-p1-source-adapter"
+    },
+    {
+      "earliest_file_date": "2026-06-18",
+      "files": [
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md",
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md"
+      ],
+      "latest_file_date": "2026-06-18",
+      "normalized_slug": "prose-epistemics-p2-internal-prose",
+      "raw_slugs": {
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md": "prose-epistemics-p2-internal-prose-design",
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md": "prose-epistemics-p2-internal-prose-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md": "design",
+        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md": "plan"
+      },
+      "thread_id": "prose-epistemics-p2-internal-prose"
+    },
+    {
+      "earliest_file_date": "2026-06-18",
+      "files": [
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md",
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md"
+      ],
+      "latest_file_date": "2026-06-18",
+      "normalized_slug": "prose-epistemics-p3-domain-grounding",
+      "raw_slugs": {
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md": "prose-epistemics-p3-domain-grounding-design",
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md": "prose-epistemics-p3-domain-grounding-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md": "design",
+        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md": "plan"
+      },
+      "thread_id": "prose-epistemics-p3-domain-grounding"
+    },
+    {
+      "earliest_file_date": "2026-06-18",
+      "files": [
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md",
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md"
+      ],
+      "latest_file_date": "2026-06-18",
+      "normalized_slug": "prose-epistemics-p4-health-coverage",
+      "raw_slugs": {
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md": "prose-epistemics-p4-health-coverage-design",
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md": "prose-epistemics-p4-health-coverage-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md": "design",
+        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md": "plan"
+      },
+      "thread_id": "prose-epistemics-p4-health-coverage"
+    },
+    {
+      "earliest_file_date": "2026-06-19",
+      "files": [
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md",
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md"
+      ],
+      "latest_file_date": "2026-06-19",
+      "normalized_slug": "prose-epistemics-pilot-improvements",
+      "raw_slugs": {
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md": "prose-epistemics-pilot-improvements-design",
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md": "prose-epistemics-pilot-improvements-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md": "design",
+        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md": "plan"
+      },
+      "thread_id": "prose-epistemics-pilot-improvements"
+    },
+    {
+      "earliest_file_date": "2026-06-17",
+      "files": [
+        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md"
+      ],
+      "latest_file_date": "2026-06-17",
+      "normalized_slug": "prose-epistemics-umbrella",
+      "raw_slugs": {
+        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md": "prose-epistemics-umbrella-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md": "design"
+      },
+      "thread_id": "prose-epistemics-umbrella"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-prose-grounding-spike-design.md",
+        "docs/plans/2026-06-17-prose-grounding-spike-findings.md"
+      ],
+      "latest_file_date": "2026-06-17",
+      "normalized_slug": "prose-grounding-spike",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-prose-grounding-spike-design.md": "prose-grounding-spike-design",
+        "docs/plans/2026-06-17-prose-grounding-spike-findings.md": "prose-grounding-spike-findings"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-prose-grounding-spike-design.md"
+        ],
+        "findings": [
+          "docs/plans/2026-06-17-prose-grounding-spike-findings.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-prose-grounding-spike-design.md": "design",
+        "docs/plans/2026-06-17-prose-grounding-spike-findings.md": "findings"
+      },
+      "thread_id": "prose-grounding-spike"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "pubtator-seeder-phase2a",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md": "pubtator-seeder-phase2a-design",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md": "pubtator-seeder-phase2a-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md": "design",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md": "plan"
+      },
+      "thread_id": "pubtator-seeder-phase2a"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-design.md",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "pubtator-seeder-phase2b",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-design.md": "pubtator-seeder-phase2b-design",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-plan.md": "pubtator-seeder-phase2b-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-pubtator-seeder-phase2b-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-pubtator-seeder-phase2b-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-design.md": "design",
+        "docs/plans/2026-06-15-pubtator-seeder-phase2b-plan.md": "plan"
+      },
+      "thread_id": "pubtator-seeder-phase2b"
+    },
+    {
+      "earliest_file_date": "2026-06-13",
+      "files": [
+        "docs/plans/2026-06-13-qa-check-library-design.md",
+        "docs/plans/2026-06-13-qa-check-library-plan.md"
+      ],
+      "latest_file_date": "2026-06-13",
+      "normalized_slug": "qa-check-library",
+      "raw_slugs": {
+        "docs/plans/2026-06-13-qa-check-library-design.md": "qa-check-library-design",
+        "docs/plans/2026-06-13-qa-check-library-plan.md": "qa-check-library-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-13-qa-check-library-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-13-qa-check-library-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-13-qa-check-library-design.md": "design",
+        "docs/plans/2026-06-13-qa-check-library-plan.md": "plan"
+      },
+      "thread_id": "qa-check-library"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-qa-schema-compiler-design.md",
+        "docs/plans/2026-06-14-qa-schema-compiler-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "qa-schema-compiler",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-qa-schema-compiler-design.md": "qa-schema-compiler-design",
+        "docs/plans/2026-06-14-qa-schema-compiler-plan.md": "qa-schema-compiler-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-qa-schema-compiler-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-qa-schema-compiler-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-qa-schema-compiler-design.md": "design",
+        "docs/plans/2026-06-14-qa-schema-compiler-plan.md": "plan"
+      },
+      "thread_id": "qa-schema-compiler"
+    },
+    {
+      "earliest_file_date": "2026-06-11",
+      "files": [
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md",
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md"
+      ],
+      "latest_file_date": "2026-06-11",
+      "normalized_slug": "qa-toolkit-and-iteration-audit",
+      "raw_slugs": {
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md": "qa-toolkit-and-iteration-audit-design",
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md": "qa-toolkit-and-iteration-audit-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md": "design",
+        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md": "plan"
+      },
+      "thread_id": "qa-toolkit-and-iteration-audit"
+    },
+    {
+      "earliest_file_date": "2026-06-20",
+      "files": [
+        "docs/plans/2026-06-20-remove-v3-migration-code-design.md",
+        "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-20",
+      "normalized_slug": "remove-v3-migration-code",
+      "raw_slugs": {
+        "docs/plans/2026-06-20-remove-v3-migration-code-design.md": "remove-v3-migration-code-design",
+        "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md": "remove-v3-migration-code-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-20-remove-v3-migration-code-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-20-remove-v3-migration-code-design.md": "design",
+        "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "remove-v3-migration-code"
+    },
+    {
+      "earliest_file_date": "2026-06-13",
+      "files": [
+        "docs/plans/2026-06-13-review-books-implementation.md"
+      ],
+      "latest_file_date": "2026-06-13",
+      "normalized_slug": "review-books",
+      "raw_slugs": {
+        "docs/plans/2026-06-13-review-books-implementation.md": "review-books-implementation"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation": [
+          "docs/plans/2026-06-13-review-books-implementation.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-13-review-books-implementation.md": "implementation"
+      },
+      "thread_id": "review-books"
+    },
+    {
+      "earliest_file_date": "2026-06-13",
+      "files": [
+        "docs/plans/2026-06-13-review-books-command-design.md"
+      ],
+      "latest_file_date": "2026-06-13",
+      "normalized_slug": "review-books-command",
+      "raw_slugs": {
+        "docs/plans/2026-06-13-review-books-command-design.md": "review-books-command-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-13-review-books-command-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-13-review-books-command-design.md": "design"
+      },
+      "thread_id": "review-books-command"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-schema-adoption-campaign-design.md",
+        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md",
+        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "schema-adoption-campaign",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-schema-adoption-campaign-design.md": "schema-adoption-campaign-design",
+        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md": "schema-adoption-campaign-manifest",
+        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md": "schema-adoption-campaign-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-14-schema-adoption-campaign-design.md"
+        ],
+        "manifest": [
+          "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-14-schema-adoption-campaign-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-schema-adoption-campaign-design.md": "design",
+        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md": "manifest",
+        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md": "plan"
+      },
+      "thread_id": "schema-adoption-campaign"
+    },
+    {
+      "earliest_file_date": "2026-06-23",
+      "files": [
+        "docs/plans/2026-06-23-science-citations-and-references-design.md",
+        "docs/plans/2026-06-23-science-citations-and-references-plan.md"
+      ],
+      "latest_file_date": "2026-06-23",
+      "normalized_slug": "science-citations-and-references",
+      "raw_slugs": {
+        "docs/plans/2026-06-23-science-citations-and-references-design.md": "science-citations-and-references-design",
+        "docs/plans/2026-06-23-science-citations-and-references-plan.md": "science-citations-and-references-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-23-science-citations-and-references-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-23-science-citations-and-references-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-23-science-citations-and-references-design.md": "design",
+        "docs/plans/2026-06-23-science-citations-and-references-plan.md": "plan"
+      },
+      "thread_id": "science-citations-and-references"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md",
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "source-compiler-adapter-policy-keystone",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md": "source-compiler-adapter-policy-keystone-design",
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md": "source-compiler-adapter-policy-keystone-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md": "design",
+        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md": "plan"
+      },
+      "thread_id": "source-compiler-adapter-policy-keystone"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-source-compiler-phase-split-design.md",
+        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "source-compiler-phase-split",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-source-compiler-phase-split-design.md": "source-compiler-phase-split-design",
+        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md": "source-compiler-phase-split-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-source-compiler-phase-split-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-source-compiler-phase-split-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-source-compiler-phase-split-design.md": "design",
+        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md": "plan"
+      },
+      "thread_id": "source-compiler-phase-split"
+    },
+    {
+      "earliest_file_date": "2026-06-15",
+      "files": [
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md",
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md"
+      ],
+      "latest_file_date": "2026-06-15",
+      "normalized_slug": "source-compiler-snapshot-freshness",
+      "raw_slugs": {
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md": "source-compiler-snapshot-freshness-design",
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "source-compiler-snapshot-freshness-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md": "design",
+        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "plan"
+      },
+      "thread_id": "source-compiler-snapshot-freshness"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-statement-promotion-phase4a-design.md",
+        "docs/plans/2026-06-16-statement-promotion-phase4a-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "statement-promotion-phase4a",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-statement-promotion-phase4a-design.md": "statement-promotion-phase4a-design",
+        "docs/plans/2026-06-16-statement-promotion-phase4a-plan.md": "statement-promotion-phase4a-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-statement-promotion-phase4a-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-statement-promotion-phase4a-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-statement-promotion-phase4a-design.md": "design",
+        "docs/plans/2026-06-16-statement-promotion-phase4a-plan.md": "plan"
+      },
+      "thread_id": "statement-promotion-phase4a"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md",
+        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "statement-promotion-phase4b",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md": "statement-promotion-phase4b-design",
+        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "statement-promotion-phase4b-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-statement-promotion-phase4b-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md": "design",
+        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "plan"
+      },
+      "thread_id": "statement-promotion-phase4b"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-sub-article-annotation-spec.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "sub-article-annotation",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-sub-article-annotation-spec.md": "sub-article-annotation-spec"
+      },
+      "related_threads": [],
+      "role_files": {
+        "spec": [
+          "docs/plans/2026-06-14-sub-article-annotation-spec.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-sub-article-annotation-spec.md": "spec"
+      },
+      "thread_id": "sub-article-annotation"
+    },
+    {
+      "earliest_file_date": "2026-06-14",
+      "files": [
+        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md"
+      ],
+      "latest_file_date": "2026-06-14",
+      "normalized_slug": "sub-article-annotation-phase1",
+      "raw_slugs": {
+        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md": "sub-article-annotation-phase1-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "plan": [
+          "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md": "plan"
+      },
+      "thread_id": "sub-article-annotation-phase1"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md",
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-3a-entities-retirement-visibility",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md": "substrate-3a-entities-retirement-visibility-design",
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md": "substrate-3a-entities-retirement-visibility-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md": "design",
+        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-3a-entities-retirement-visibility"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md",
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "substrate-3b-entities-retirement-apply",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md": "substrate-3b-entities-retirement-apply-design",
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md": "substrate-3b-entities-retirement-apply-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md": "design",
+        "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-3b-entities-retirement-apply"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md",
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "substrate-3c-decision-log-promotion",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md": "substrate-3c-decision-log-promotion-design",
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md": "substrate-3c-decision-log-promotion-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md": "design",
+        "docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-3c-decision-log-promotion"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md",
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "substrate-4a-terms-coined-promotion",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md": "substrate-4a-terms-coined-promotion-design",
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md": "substrate-4a-terms-coined-promotion-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md": "design",
+        "docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-4a-terms-coined-promotion"
+    },
+    {
+      "earliest_file_date": "2026-06-08",
+      "files": [
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md",
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-08",
+      "normalized_slug": "substrate-4b-bibliography-external-reference",
+      "raw_slugs": {
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md": "substrate-4b-bibliography-external-reference-design",
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md": "substrate-4b-bibliography-external-reference-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md": "design",
+        "docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-4b-bibliography-external-reference"
+    },
+    {
+      "earliest_file_date": "2026-06-09",
+      "files": [
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md",
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-09",
+      "normalized_slug": "substrate-4c-ambiguous-adjudication",
+      "raw_slugs": {
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md": "substrate-4c-ambiguous-adjudication-design",
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md": "substrate-4c-ambiguous-adjudication-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md": "design",
+        "docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-4c-ambiguous-adjudication"
+    },
+    {
+      "earliest_file_date": "2026-06-06",
+      "files": [
+        "docs/plans/2026-06-06-substrate-adapter-enforcement-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-06",
+      "normalized_slug": "substrate-adapter-enforcement",
+      "raw_slugs": {
+        "docs/plans/2026-06-06-substrate-adapter-enforcement-implementation-plan.md": "substrate-adapter-enforcement-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-06-substrate-adapter-enforcement-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-06-substrate-adapter-enforcement-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-adapter-enforcement"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-dataset-promotion-members-gate",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md": "substrate-dataset-promotion-members-gate-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-dataset-promotion-members-gate"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-dataset-reconciliation-2b",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md": "substrate-dataset-reconciliation-2b-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-dataset-reconciliation-2b"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2c-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-dataset-reconciliation-2c",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2c-implementation-plan.md": "substrate-dataset-reconciliation-2c-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-dataset-reconciliation-2c-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2c-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-dataset-reconciliation-2c"
+    },
+    {
+      "earliest_file_date": "2026-06-06",
+      "files": [
+        "docs/plans/2026-06-06-substrate-identity-table-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-06",
+      "normalized_slug": "substrate-identity-table",
+      "raw_slugs": {
+        "docs/plans/2026-06-06-substrate-identity-table-implementation-plan.md": "substrate-identity-table-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-06-substrate-identity-table-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-06-substrate-identity-table-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-identity-table"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-migrator-compiled-model-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-migrator-compiled-model",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-migrator-compiled-model-implementation-plan.md": "substrate-migrator-compiled-model-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-migrator-compiled-model-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-migrator-compiled-model-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-migrator-compiled-model"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-orphan-datapackage-owners",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md": "substrate-orphan-datapackage-owners-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-orphan-datapackage-owners"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-scope-aware-loading",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md": "substrate-scope-aware-loading-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-scope-aware-loading"
+    },
+    {
+      "earliest_file_date": "2026-06-07",
+      "files": [
+        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-07",
+      "normalized_slug": "substrate-scoped-ref-resolution",
+      "raw_slugs": {
+        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md": "substrate-scoped-ref-resolution-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "substrate-scoped-ref-resolution"
+    },
+    {
+      "earliest_file_date": "2026-06-27",
+      "files": [
+        "docs/plans/2026-06-27-telemetry-core-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-27",
+      "normalized_slug": "telemetry-core",
+      "raw_slugs": {
+        "docs/plans/2026-06-27-telemetry-core-implementation-plan.md": "telemetry-core-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "implementation-plan": [
+          "docs/plans/2026-06-27-telemetry-core-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-27-telemetry-core-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "telemetry-core"
+    },
+    {
+      "earliest_file_date": "2026-06-27",
+      "files": [
+        "docs/plans/2026-06-27-telemetry-v1.5-design.md",
+        "docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md"
+      ],
+      "latest_file_date": "2026-06-27",
+      "normalized_slug": "telemetry-v1.5",
+      "raw_slugs": {
+        "docs/plans/2026-06-27-telemetry-v1.5-design.md": "telemetry-v1.5-design",
+        "docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md": "telemetry-v1.5-implementation-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-27-telemetry-v1.5-design.md"
+        ],
+        "implementation-plan": [
+          "docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-27-telemetry-v1.5-design.md": "design",
+        "docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md": "implementation-plan"
+      },
+      "thread_id": "telemetry-v1.5"
+    },
+    {
+      "earliest_file_date": "2026-04-22",
+      "files": [
+        "docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md"
+      ],
+      "latest_file_date": "2026-04-22",
+      "normalized_slug": "topic-deprecation-and-mechanism",
+      "raw_slugs": {
+        "docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md": "topic-deprecation-and-mechanism-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md": "design"
+      },
+      "thread_id": "topic-deprecation-and-mechanism"
+    },
+    {
+      "earliest_file_date": "2026-06-13",
+      "files": [
+        "docs/plans/2026-06-13-typed-dataset-schema-design.md",
+        "docs/plans/2026-06-13-typed-dataset-schema-plan.md"
+      ],
+      "latest_file_date": "2026-06-13",
+      "normalized_slug": "typed-dataset-schema",
+      "raw_slugs": {
+        "docs/plans/2026-06-13-typed-dataset-schema-design.md": "typed-dataset-schema-design",
+        "docs/plans/2026-06-13-typed-dataset-schema-plan.md": "typed-dataset-schema-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-13-typed-dataset-schema-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-13-typed-dataset-schema-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-13-typed-dataset-schema-design.md": "design",
+        "docs/plans/2026-06-13-typed-dataset-schema-plan.md": "plan"
+      },
+      "thread_id": "typed-dataset-schema"
+    },
+    {
+      "earliest_file_date": "2026-06-16",
+      "files": [
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md",
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md"
+      ],
+      "latest_file_date": "2026-06-16",
+      "normalized_slug": "typed-evidence-vocabularies",
+      "raw_slugs": {
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md": "typed-evidence-vocabularies-design",
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md": "typed-evidence-vocabularies-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md": "design",
+        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md": "plan"
+      },
+      "thread_id": "typed-evidence-vocabularies"
+    },
+    {
+      "earliest_file_date": "2026-04-21",
+      "files": [
+        "docs/plans/2026-04-21-unified-entity-references-design.md"
+      ],
+      "latest_file_date": "2026-04-21",
+      "normalized_slug": "unified-entity-references",
+      "raw_slugs": {
+        "docs/plans/2026-04-21-unified-entity-references-design.md": "unified-entity-references-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-04-21-unified-entity-references-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-04-21-unified-entity-references-design.md": "design"
+      },
+      "thread_id": "unified-entity-references"
+    },
+    {
+      "earliest_file_date": "2026-06-20",
+      "files": [
+        "docs/plans/2026-06-20-user-guide-restructure-design.md",
+        "docs/plans/2026-06-20-user-guide-restructure-plan.md"
+      ],
+      "latest_file_date": "2026-06-20",
+      "normalized_slug": "user-guide-restructure",
+      "raw_slugs": {
+        "docs/plans/2026-06-20-user-guide-restructure-design.md": "user-guide-restructure-design",
+        "docs/plans/2026-06-20-user-guide-restructure-plan.md": "user-guide-restructure-plan"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "docs/plans/2026-06-20-user-guide-restructure-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-20-user-guide-restructure-plan.md"
+        ]
+      },
+      "stripped_roles": {
+        "docs/plans/2026-06-20-user-guide-restructure-design.md": "design",
+        "docs/plans/2026-06-20-user-guide-restructure-plan.md": "plan"
+      },
+      "thread_id": "user-guide-restructure"
+    }
+  ]
+}

@@ -3,8 +3,8 @@
 - Status: design (approved for planning)
 - Date: 2026-06-01
 - Related:
-  - `docs/plans/2026-05-31-bio-reference-graph-design.md` — the `bio.reference_graph` resource model (RG1–RG5)
-  - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — bio data umbrella
+  - `docs/plans/historical/2026-05-31-bio-reference-graph-design.md` — the `bio.reference_graph` resource model (RG1–RG5)
+  - `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — bio data umbrella
   - `docs/plans/2026-06-01-go-reference-graph-commons-ingestion-plan.md` — the GO recipe, used as the template
 
 ## 1. Goal

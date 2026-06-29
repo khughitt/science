@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,14 @@ import yaml
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.dataset_lifecycle import (
+    DatasetLifecycleError,
+    DatasetPackageValidationReport,
+    build_dataset_package,
+    dataset_status,
+    scaffold_dataset_package,
+    validate_dataset_package,
+)
 from science_tool.commons.errors import (
     CommonsError,
     CommonsRootNotFoundError,
@@ -20,6 +29,7 @@ from science_tool.commons.errors import (
     PromoteWriteError,
 )
 from science_tool.commons.inventory import build_commons_inventory
+from science_tool.commons.member_payload import resolve_virtual_member_payload
 from science_tool.commons.overlay import (
     MergedEntity,
     resolve_entity,
@@ -40,6 +50,11 @@ from science_tool.commons.promote import (
     plan_promote,
 )
 from science_tool.commons.query import CommonsQuery
+from science_tool.commons.reference_graph_identity import (
+    ReferenceGraphIdentityError,
+    resolve_graph_member,
+)
+from science_tool.commons.reference_graph_promotion import scaffold_reference_graph_member
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
@@ -400,6 +415,159 @@ def inventory_cmd(output: Path | None) -> None:
         output.write_text(rendered, encoding="utf-8")
 
 
+@commons_group.group("dataset")
+def dataset_group() -> None:
+    """Manage commons-born dataset packages."""
+
+
+@dataset_group.command("init")
+@click.argument("slug")
+@click.option("--title", default=None, help="Dataset title. Defaults to title-cased slug.")
+@click.option("--version", default="0.1.0", show_default=True, help="Wrapper package version.")
+@click.option("--date", "today", default=None, help="Creation/update date override for tests.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | None, as_json: bool) -> None:
+    """Create a commons-born dataset package scaffold."""
+    root = _require_root()
+    try:
+        result = scaffold_dataset_package(root, slug, title=title, version=version, today=today)
+    except DatasetLifecycleError as exc:
+        message = str(exc)
+        if message.startswith("dataset version must"):
+            message = f"invalid dataset version: {message}"
+        raise click.ClickException(message) from exc
+    except OSError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    dataset_dir = result.paths.dataset_dir.relative_to(root)
+    created = [str(path.relative_to(root)) for path in result.created]
+    next_steps = [
+        f"science commons dataset build {slug}",
+        f"science commons dataset validate {slug}",
+    ]
+    if as_json:
+        payload = {
+            "created": created,
+            "dataset_dir": str(dataset_dir),
+            "next": next_steps,
+            "slug": slug,
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
+    for step in next_steps:
+        click.echo(f"next: {step}")
+
+
+@dataset_group.command("build")
+@click.argument("slug")
+@click.option("--cores", type=int, default=1, show_default=True, help="Snakemake cores.")
+def dataset_build_cmd(slug: str, cores: int) -> None:
+    """Build a commons-born dataset package through Snakemake."""
+    if cores < 1:
+        raise click.UsageError("--cores must be at least 1")
+
+    root = _require_root()
+    try:
+        exit_code = build_dataset_package(root, slug, cores=cores)
+    except (DatasetLifecycleError, CommonsError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"snakemake exited {exit_code}")
+    if exit_code != 0:
+        raise click.exceptions.Exit(exit_code)
+
+
+@dataset_group.command("status")
+@click.argument("slug")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_status_cmd(slug: str, as_json: bool) -> None:
+    """Report commons-born dataset package/build status."""
+    root = _require_root()
+    try:
+        status = dataset_status(root, slug)
+    except (DatasetLifecycleError, CommonsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if as_json:
+        payload = {
+            "datapackage_exists": status.datapackage_exists,
+            "datapackage_placeholder_hashes": status.datapackage_placeholder_hashes,
+            "dataset_dir": str(status.dataset_dir.relative_to(root)),
+            "exists": status.exists,
+            "lockfile_exists": status.lockfile_exists,
+            "output_dir": str(status.output_dir),
+            "outputs_missing": status.outputs_missing,
+            "outputs_present": status.outputs_present,
+            "slug": status.slug,
+            "workflow_exists": status.workflow_exists,
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"dataset:{status.slug}")
+    click.echo(f"  package: {'present' if status.exists else 'missing'}")
+    click.echo(f"  workflow: {'present' if status.workflow_exists else 'missing'}")
+    click.echo(f"  lockfile: {'present' if status.lockfile_exists else 'missing'}")
+    click.echo(f"  datapackage: {'present' if status.datapackage_exists else 'missing'}")
+    click.echo(f"  output_dir: {status.output_dir}")
+    click.echo(f"  outputs_present: {len(status.outputs_present)}")
+    click.echo(f"  outputs_missing: {len(status.outputs_missing)}")
+
+
+@dataset_group.command("validate")
+@click.argument("slug")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def dataset_validate_cmd(slug: str, as_json: bool) -> None:
+    """Validate a commons-born dataset package."""
+    root = _require_root()
+    try:
+        report = validate_dataset_package(root, slug)
+    except DatasetLifecycleError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if as_json:
+        click.echo(json.dumps(_dataset_validation_to_json(report, root), indent=2, sort_keys=True))
+    else:
+        state = "valid" if report.valid else "invalid"
+        click.echo(f"dataset:{report.slug} {state}")
+        for finding in report.findings:
+            path = _validation_path_text(finding.path, root)
+            path_text = f"{path} " if path is not None else ""
+            click.echo(f"  {finding.code}: {path_text}{finding.message}", err=True)
+
+    if not report.valid:
+        raise click.exceptions.Exit(1)
+
+
+def _dataset_validation_to_json(
+    report: DatasetPackageValidationReport,
+    root: Path,
+) -> dict[str, object]:
+    return {
+        "findings": [
+            {
+                "code": finding.code,
+                "message": finding.message,
+                "path": _validation_path_text(finding.path, root),
+            }
+            for finding in report.findings
+        ],
+        "slug": report.slug,
+        "valid": report.valid,
+    }
+
+
+def _validation_path_text(path: Path | None, root: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
 @commons_group.group("data")
 def data_group() -> None:
     """Resolve bulk data for commons datasets."""
@@ -431,6 +599,118 @@ def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
         )
     else:
         click.echo(str(resolved.path))
+
+
+@commons_group.command("member-payload")
+@click.argument("member_id")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def member_payload_cmd(member_id: str, as_json: bool) -> None:
+    """Resolve a promoted virtual collection member payload."""
+    try:
+        payload = resolve_virtual_member_payload(member_id)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if payload is None:
+        raise click.ClickException(f"{member_id} is not a virtual member dataset")
+
+    rendered = {
+        "member_id": payload.member_id,
+        "parent_dataset": payload.parent_dataset,
+        "parent_slug": payload.parent_slug,
+        "member_key": payload.member_key,
+        "payload_kind": payload.payload_kind,
+        "payload": payload.payload,
+    }
+    if as_json:
+        click.echo(json.dumps(rendered, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{payload.member_id} ({payload.payload_kind})")
+    click.echo(f"parent: {payload.parent_dataset}")
+    click.echo(f"member_key: {payload.member_key}")
+
+
+@commons_group.group("reference-graph")
+def reference_graph_group() -> None:
+    """Manage reference graph member workflows."""
+
+
+@reference_graph_group.command("scaffold-member")
+@click.argument("parent_dataset")
+@click.argument("member_key")
+@click.option("--slug", required=True, help="Slug for the promoted child dataset.")
+@click.option("--title", default=None, help="Override the promoted member title.")
+@click.option("--date", "stamp", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Created/updated date.")
+@click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="use-now", show_default=True)
+@click.option("--apply", "apply_flag", is_flag=True, help="Write the promoted member dataset.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def reference_graph_scaffold_member_cmd(
+    parent_dataset: str,
+    member_key: str,
+    slug: str,
+    title: str | None,
+    stamp: Any,
+    tier: str,
+    apply_flag: bool,
+    as_json: bool,
+) -> None:
+    """Scaffold a promoted bio.reference_graph.member dataset."""
+    try:
+        planned = scaffold_reference_graph_member(
+            parent_dataset=parent_dataset,
+            member_key=member_key,
+            slug=slug,
+            title=title,
+            stamp=date.fromisoformat(stamp.strftime("%Y-%m-%d")) if stamp is not None else None,
+            tier=tier,
+            apply=apply_flag,
+        )
+    except (CommonsError, ValueError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    root = _require_root()
+    if as_json:
+        click.echo(json.dumps(planned.to_json(commons_root=root), indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{'wrote' if planned.applied else 'planned'} {planned.canonical_id}")
+    click.echo(f"entity: {planned.entity_path.relative_to(root)}")
+    if not planned.applied:
+        click.echo("Re-run with --apply to write.")
+
+
+@reference_graph_group.command("resolve-member")
+@click.argument("registry_id")
+@click.argument("member_key")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, as_json: bool) -> None:
+    """Resolve a graph member key in a pinned reference graph."""
+    try:
+        match = resolve_graph_member(member_key, registry_id=registry_id)
+    except (CommonsError, ReferenceGraphIdentityError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if match is None:
+        payload = {
+            "resolution_status": "unresolved",
+            "registry_id": registry_id,
+            "member_key": member_key,
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2, sort_keys=True))
+            return
+        click.echo(f"unresolved {registry_id} {member_key}")
+        return
+
+    if as_json:
+        click.echo(json.dumps(match.to_json(), indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{match.member_key} ({match.status})")
+    click.echo(f"registry: {match.registry_id}")
+    click.echo(f"label: {match.label}")
+    if match.replaced_by:
+        click.echo(f"replaced_by: {', '.join(match.replaced_by)}")
 
 
 @commons_group.group("promote")

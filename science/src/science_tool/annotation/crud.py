@@ -1,8 +1,8 @@
 # science/src/science_tool/annotation/crud.py
 """CRUD orchestrator powering ack/dismiss/fix.
 
-See spec docs/plans/2026-05-11-annotation-system-p3.3-spec.md
-§"Write concerns: crud.py".
+See docs/plans/historical/2026-05-10-annotation-system-spec.md for the
+underlying annotation-system model.
 """
 
 from __future__ import annotations

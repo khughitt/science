@@ -1,7 +1,7 @@
 # science/src/science_tool/annotation/model.py
 """Frozen domain model for the phase-3 annotation system.
 
-See docs/plans/2026-05-10-annotation-system-spec.md §Data model.
+See docs/plans/historical/2026-05-10-annotation-system-spec.md §Data model.
 """
 
 from __future__ import annotations

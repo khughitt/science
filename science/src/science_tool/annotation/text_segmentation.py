@@ -2,9 +2,8 @@
 """Sentence segmentation + TextQuoteSelector construction.
 
 Single source of truth for sentence-boundary detection and selector
-windowing across all annotation sources. See spec
-docs/plans/2026-05-11-annotation-system-p3.3-spec.md §"Folded
-follow-ups 1 + 7" for the consolidation rationale.
+windowing across all annotation sources. See docs/conventions/annotation-tokens.md
+for the durable annotation-token conventions.
 
 Two sentence-lookup functions are intentionally provided:
 - `sentence_range_at(text, line, col)` for callers with both line

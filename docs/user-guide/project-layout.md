@@ -37,7 +37,8 @@ a reader can locate anything by *what it is*:
 
 This replaces the older v2 arrangement where dataset, paper, topic, and theme
 files were scattered under `doc/<type>/`. See
-`docs/user-guide/entities.md` for the entity model itself.
+`docs/user-guide/entities.md` for the entity model and source entity CLI
+contract.
 
 ## `science.yaml` And `pyproject.toml`
 
@@ -51,7 +52,7 @@ profile: research
 layout_version: 3
 aspects:
   - computational-analysis
-ontologies: [biolink]
+ontologies: [biology]
 knowledge_profiles:
   local: local
 ```

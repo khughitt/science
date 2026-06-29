@@ -300,16 +300,17 @@ def _ancestor_path(
     consumer: URIRef,
 ) -> Literal["direct", "indirect-bears-on", "virtual"] | None:
     if consumer == line:
-        return "virtual" if _is_virtual_gene_set_member(consumer) else "direct"
+        return "virtual" if _is_virtual_member(consumer) else "direct"
     if (line, PROV.wasDerivedFrom, consumer) in provenance:
-        return "virtual" if _is_virtual_gene_set_member(consumer) else "direct"
+        return "virtual" if _is_virtual_member(consumer) else "direct"
     if (consumer, SCI_NS.bearsOn, target) in knowledge:
         return "indirect-bears-on"
     return None
 
 
-def _is_virtual_gene_set_member(uri: URIRef) -> bool:
-    return "/virtual/geneset-member/" in str(uri)
+def _is_virtual_member(uri: URIRef) -> bool:
+    text = str(uri)
+    return "/virtual/geneset-member/" in text or "/virtual/reference-graph-member/" in text
 
 
 def _commitment_components(

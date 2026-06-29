@@ -2,8 +2,8 @@
 """Annotation source adapters.
 
 Each adapter scans a markdown file and emits PlannedAnnotation
-records consumed by `annotation.audit.merge_planned`. See spec
-docs/plans/2026-05-11-annotation-system-p3.2-spec.md §Module layout.
+records consumed by `annotation.audit.merge_planned`. See
+docs/conventions/annotation-tokens.md for marker-token behavior.
 """
 
 from __future__ import annotations
