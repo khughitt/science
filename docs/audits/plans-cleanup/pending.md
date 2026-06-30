@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `46`
+- Pending thread count: `50`
 
 ## authored-confidence
 
@@ -68,6 +68,20 @@
   - datapackage hash refresh
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
+
+## contextual-structural-roles
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-19-contextual-structural-roles-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until membership-role semantics and causal-role boundary are documented
+    - `docs/plans/2026-06-19-contextual-structural-roles-design.md`
+- remaining_gaps:
+  - Durable docs do not yet explain the semantic boundary: membership role is frame-relative bundle plumbing, not a proposition role or causal structural role.
+  - docs/user-guide/epistemic-model.md only gives high-level weakest-link bundle belief and does not describe rival/background exclusion or the BundleMembership node.
 
 ## data-driven-discovery-improvements
 
@@ -147,6 +161,22 @@
 - remaining_gaps:
   - No durable user-guide page documents science datasets qa usage, exit codes, report layout, or the relationship between transient QA runs and persisted qa_report.json consumed by graph build.
   - docs/conventions/pipeline-qa-checkpoints.md documents workflow QA reports, not this datapackage command contract.
+
+## discusses-membership-surfaces
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-19-discusses-membership-surfaces-design.md`
+  - `docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until discusses membership surfaces and validation contract are documented
+    - `docs/plans/2026-06-19-discusses-membership-surfaces-design.md`
+    - `docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md`
+- remaining_gaps:
+  - Durable docs/templates mention frontmatter object-form discusses, but do not document relations.yaml role, --bridge-role, the proposition-to-bundle subtype rule, or the non-membership cito:discusses cases.
+  - Validation messages still cite design section numbers, so the plan is acting as accidental rationale.
 
 ## entity-consolidation-and-archive
 
@@ -361,6 +391,20 @@
 - remaining_gaps:
   - M1 behavior is implemented and tested, but durable user-facing docs outside the command/skill source do not explain open_question_debt, graph attention-rank, or the artifact-required review contract.
 
+## membership-roles
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-19-membership-roles-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until final membership-role vocabulary, syntax, and roll-up contract are documented
+    - `docs/plans/2026-06-19-membership-roles-implementation-plan.md`
+- remaining_gaps:
+  - The original plan is stale as an implementation guide because BundleMembership emission moved into graph/io.py and relations.yaml/bridge support was added later.
+  - Durable user docs lack the complete current contract for role vocabulary, default core behavior, frontmatter syntax, roll-up gating, and surface parity.
+
 ## migration-robustness
 
 - status: `implemented_needs_durable_docs`
@@ -466,6 +510,23 @@
 - remaining_gaps:
   - Durable docs do not describe data/prose-health/manifest.json, data/prose-health/prose-health.json, source-state precedence, coverage ratios, finding codes, or the science health prose_epistemics behavior beyond a short derived-state mention.
   - The plan remains the clearest source for downstream consumer contract details, so deletion would lose useful operational knowledge.
+
+## prose-epistemics-pilot-improvements
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md`
+  - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until prose-epistemics framework hardening contract is documented
+    - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md`
+    - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md`
+- remaining_gaps:
+  - Durable non-plan docs still only briefly mention prose-derived reports and prose-source; they do not describe the raw validation CLI, batch promotion plan schema, project-relative path policy, revision_manifest_excludes, or operational annotation-ref behavior.
+  - Existing cleanup records for P2/P3/P4 already mark migration checkpoints as needed; this improvement plan expands the same as-built prose-epistemics contract that should be documented together.
+  - The offline-agent pilot validates one source only; larger natural-systems decomposition quality remains future campaign work.
 
 ## qa-check-library
 
