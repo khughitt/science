@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `7`
+- Pending thread count: `5`
 
 ## benchmark-grounded-model-assessment
 
@@ -52,19 +52,6 @@
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
 
-## downstream-feedback-fixes-2026-06-28
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-28-downstream-feedback-fixes.md`
-- pending_actions:
-  - `deferred`: review status incomplete; six downstream feedback fixes are implemented or documented, but fb-2026-06-28-014 remains deferred and should be kept for triage
-    - `docs/plans/2026-06-28-downstream-feedback-fixes.md`
-- remaining_gaps:
-  - fb-2026-06-28-014 remains deferred; the plan records that catalog gap-scan no-candidate flooding likely needs upstream question formulation and brainstorming rather than an output filter.
-
 ## epistemic-drift-detection
 
 - status: `incomplete`
@@ -93,20 +80,3 @@
 - remaining_gaps:
   - Large parts of the overview remain target-state rather than implementation reality.
   - Separate shipped invariants from aspirational subsystem backlog before cleanup.
-
-## remove-v3-migration-code
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-20-remove-v3-migration-code-design.md`
-  - `docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md`
-- pending_actions:
-  - `deferred`: review status incomplete; later work intentionally restored migration surfaces, so this needs triage rather than deletion
-    - `docs/plans/2026-06-20-remove-v3-migration-code-design.md`
-    - `docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md`
-- remaining_gaps:
-  - Plan still says to remove surfaces that are currently live and tested: entities migrate/entity_layout_migration and graph migrate-paper-datasets/paper_dataset_migration.
-  - Manifest guard still references the restored command at science/src/science_tool/validate/checks/manifest.py.
-  - Triage needed to decide whether this plan should be split into completed cleanup notes plus explicit supersession by later migration plans.

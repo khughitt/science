@@ -885,6 +885,12 @@ row per question or hypothesis. Coverage states are `covered-runnable`,
 `only-reference`, `only-pointer`, `only-gated`, `only-unverified`, and
 `no-candidate`.
 
+Treat a flood of `no-candidate` rows as a curation-design signal, not only as a
+filtering problem. Especially when the missing rows are internal,
+methodological, or too abstract for dataset discovery, the likely follow-up is
+to reformulate the upstream question or hypothesis into dataset-addressable
+needs before tuning the scan output.
+
 ### Typed Resource Schemas
 
 Runtime datapackages can give each tabular resource a typed Frictionless Table
