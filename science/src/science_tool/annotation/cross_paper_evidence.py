@@ -29,6 +29,7 @@ class LiteratureAssertion:
     stance: str
     annotation_id: str
     sidecar: str
+    annotation_ref: str
 
 
 @dataclass(frozen=True)
@@ -351,7 +352,14 @@ def scan_literature_assertions(
                 continue
 
             assertions.append(
-                LiteratureAssertion(ann.promoted_to, paper_ref, stance, ann.id, sidecar_ref)
+                LiteratureAssertion(
+                    proposition_ref=ann.promoted_to,
+                    paper_ref=paper_ref,
+                    stance=stance,
+                    annotation_id=ann.id,
+                    sidecar=sidecar_ref,
+                    annotation_ref=ann_ref,
+                )
             )
 
     return assertions, faults
