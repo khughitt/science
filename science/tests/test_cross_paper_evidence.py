@@ -184,6 +184,21 @@ def test_scan_happy_path_collects_active_proposition_assertions(tmp_path: Path):
     )
 
 
+def test_scan_ignores_sidecars_outside_project_entity_roots(tmp_path: Path):
+    _write_sidecar_for_markdown(
+        tmp_path,
+        "tests/_fixtures/annotation/bad.md",
+        [_ann("a-1", stance="asserted")],
+    )
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert faults == []
+    assert [(a.paper_ref, a.stance) for a in assertions] == [("paper:Smith2020", "asserted")]
+
+
 def test_scan_skips_question_and_hypothesis_typed_annotations(tmp_path: Path):
     _write_paper_sidecar(
         tmp_path,

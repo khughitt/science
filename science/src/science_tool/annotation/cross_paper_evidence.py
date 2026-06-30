@@ -244,6 +244,12 @@ def _resolve_paper_ref(sidecar_path: Path) -> str | None:
         return None
 
 
+def _iter_project_annotation_sidecars(project_root: Path):
+    entities_root = project_root / "entities"
+    if entities_root.is_dir():
+        yield from iter_sidecars(entities_root)
+
+
 def scan_literature_assertions(
     project_root: Path,
     proposition_source_refs: dict[str, frozenset[str]],
@@ -251,7 +257,7 @@ def scan_literature_assertions(
     assertions: list[LiteratureAssertion] = []
     faults: list[AssertionFault] = []
 
-    for sidecar_path, sidecar in iter_sidecars(project_root):
+    for sidecar_path, sidecar in _iter_project_annotation_sidecars(project_root):
         sidecar_ref = str(sidecar_path)
         paper_ref: str | None = None
         paper_resolved = False
