@@ -1,21 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `32`
-
-## adapter-entity-layout-and-overlay-root
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until layout-v3 migration deviations and plan citations are checkpointed
-    - `docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md`
-- remaining_gaps:
-  - Live code/test comments still cite docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md.
-  - The plan includes migration-deviation notes useful as a compact historical checkpoint, but current user-facing layout knowledge is already durable.
+- Pending thread count: `27`
 
 ## benchmark-grounded-model-assessment
 
@@ -66,21 +52,6 @@
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
 
-## entity-organization-and-naming-implementation-plan3
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until v2-to-v3 migration cutover facts and guide intent are checkpointed in durable docs
-    - `docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md`
-- remaining_gaps:
-  - Planned docs/entity-layout-migration-guide.md is not present in durable docs.
-  - The migration command still exists while later remove-v3-migration plans propose deleting it.
-  - No durable checkpoint summarizing pilot/cutover outcome was found outside plans.
-
 ## epistemic-data-model
 
 - status: `implemented_needs_durable_docs`
@@ -129,38 +100,6 @@
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
 
-## kind-descriptor-model-registry
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-14-kind-descriptor-model-registry-design.md`
-  - `docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until CORE_PROFILE source-of-truth decision and CORE_KINDS removal are documented
-    - `docs/plans/2026-06-14-kind-descriptor-model-registry-design.md`
-    - `docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md`
-- remaining_gaps:
-  - The architectural decision that CORE_PROFILE is the source of truth and CORE_KINDS was removed is still mostly in plans/test names, not in durable docs.
-  - Later adapter work changed the exact strategy typing boundary, so the design is not an exact as-built spec.
-
-## local-kind-layout-migration
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-05-local-kind-layout-migration-design.md`
-  - `docs/plans/2026-06-05-local-kind-layout-migration-implementation.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until local entity_kinds migration, status override, and skip-warn behavior are checkpointed in durable docs
-    - `docs/plans/2026-06-05-local-kind-layout-migration-design.md`
-    - `docs/plans/2026-06-05-local-kind-layout-migration-implementation.md`
-- remaining_gaps:
-  - Durable docs do not clearly document local profile entity_kinds layout/status overrides, migration behavior, or the fact source entity CLI creation remains built-in-only.
-  - docs/user-guide/entities.md still says the CLI creates only built-in Markdown path-policy kinds.
-
 ## m1-epistemic-drift-detection
 
 - status: `implemented_needs_durable_docs`
@@ -173,21 +112,6 @@
     - `docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md`
 - remaining_gaps:
   - M1 behavior is implemented and tested, but durable user-facing docs outside the command/skill source do not explain open_question_debt, graph attention-rank, or the artifact-required review contract.
-
-## migration-robustness
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-06-migration-robustness-design.md`
-  - `docs/plans/2026-06-06-migration-robustness-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until current migration report contract and blocking/warning model are checkpointed in durable docs
-    - `docs/plans/2026-06-06-migration-robustness-design.md`
-    - `docs/plans/2026-06-06-migration-robustness-plan.md`
-- remaining_gaps:
-  - No durable migration guide/checkpoint was found that records the current dry-run report contract, structural-vs-prose blocking model, and skip+warn manifest behavior outside these plans and tests.
 
 ## patch-contract-keystone
 

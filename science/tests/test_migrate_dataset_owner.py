@@ -2,7 +2,7 @@
 family to entities/ via the id-local strategy, and confirm owner destination
 collisions block --apply.
 
-See docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md Phase 2.
+See docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md.
 These exercise the *core* `dataset` kind (now home=entities/datasets,
 strategy=id-local), so they depend on the Phase 2 core-profile wiring.
 """

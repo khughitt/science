@@ -14,7 +14,8 @@ Scope note: this gate covers the THREE kinds this slice moved. The federated
 pre-existing v2/v3 dual-layout support from the earlier paper/topic migration and
 are out of this slice; they are not policed here.
 
-See docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md Phase 3.
+See docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md and
+docs/user-guide/project-layout.md.
 """
 
 from __future__ import annotations

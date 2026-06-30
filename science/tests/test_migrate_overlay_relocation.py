@@ -1,8 +1,7 @@
 """Phase 3 of the adapter-entity-layout migration: relocate commons overlays out
 of the prose-only doc/<type>/ tree into the dedicated overlays/<type>/ root.
 
-See docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md Phase 3
-(Key decision 5 — owner vs overlay relocation are two passes).
+See docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md.
 """
 
 from __future__ import annotations

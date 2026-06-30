@@ -1,32 +1,11 @@
 {
-  "file_count": 51,
+  "file_count": 43,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 33,
+  "thread_count": 28,
   "threads": [
-    {
-      "earliest_file_date": "2026-06-21",
-      "files": [
-        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md"
-      ],
-      "latest_file_date": "2026-06-21",
-      "normalized_slug": "adapter-entity-layout-and-overlay-root",
-      "raw_slugs": {
-        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "adapter-entity-layout-and-overlay-root-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "design"
-      },
-      "thread_id": "adapter-entity-layout-and-overlay-root"
-    },
     {
       "earliest_file_date": "2026-06-26",
       "files": [
@@ -112,27 +91,6 @@
       "thread_id": "downstream-feedback-fixes"
     },
     {
-      "earliest_file_date": "2026-06-03",
-      "files": [
-        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md"
-      ],
-      "latest_file_date": "2026-06-03",
-      "normalized_slug": "entity-organization-and-naming-implementation-plan3",
-      "raw_slugs": {
-        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md": "entity-organization-and-naming-implementation-plan3"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-03-entity-organization-and-naming-implementation-plan3.md": null
-      },
-      "thread_id": "entity-organization-and-naming-implementation-plan3"
-    },
-    {
       "earliest_file_date": "2026-06-08",
       "files": [
         "docs/plans/2026-06-08-epistemic-data-model-design.md"
@@ -202,60 +160,6 @@
       "thread_id": "epistemic-edges"
     },
     {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md",
-        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "kind-descriptor-model-registry",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md": "kind-descriptor-model-registry-design",
-        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md": "kind-descriptor-model-registry-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md": "design",
-        "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md": "plan"
-      },
-      "thread_id": "kind-descriptor-model-registry"
-    },
-    {
-      "earliest_file_date": "2026-06-05",
-      "files": [
-        "docs/plans/2026-06-05-local-kind-layout-migration-design.md",
-        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md"
-      ],
-      "latest_file_date": "2026-06-05",
-      "normalized_slug": "local-kind-layout-migration",
-      "raw_slugs": {
-        "docs/plans/2026-06-05-local-kind-layout-migration-design.md": "local-kind-layout-migration-design",
-        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md": "local-kind-layout-migration-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-05-local-kind-layout-migration-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-05-local-kind-layout-migration-design.md": "design",
-        "docs/plans/2026-06-05-local-kind-layout-migration-implementation.md": "implementation"
-      },
-      "thread_id": "local-kind-layout-migration"
-    },
-    {
       "earliest_file_date": "2026-06-04",
       "files": [
         "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md"
@@ -275,33 +179,6 @@
         "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "implementation"
       },
       "thread_id": "m1-epistemic-drift-detection"
-    },
-    {
-      "earliest_file_date": "2026-06-06",
-      "files": [
-        "docs/plans/2026-06-06-migration-robustness-design.md",
-        "docs/plans/2026-06-06-migration-robustness-plan.md"
-      ],
-      "latest_file_date": "2026-06-06",
-      "normalized_slug": "migration-robustness",
-      "raw_slugs": {
-        "docs/plans/2026-06-06-migration-robustness-design.md": "migration-robustness-design",
-        "docs/plans/2026-06-06-migration-robustness-plan.md": "migration-robustness-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-06-migration-robustness-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-06-migration-robustness-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-06-migration-robustness-design.md": "design",
-        "docs/plans/2026-06-06-migration-robustness-plan.md": "plan"
-      },
-      "thread_id": "migration-robustness"
     },
     {
       "earliest_file_date": "2026-06-14",

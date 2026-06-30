@@ -296,6 +296,31 @@ and attempts to shadow core/profile/catalog kinds are hard errors; unknown
 kinds are skipped with an explicit diagnostic instead of being silently treated
 as a different entity type.
 
+Core kind facts live in the built-in `CORE_PROFILE` descriptors. Those
+descriptors are the source of truth for core kind category, entity class,
+template readiness, shortform aliases, markdown home, filename strategy, default
+status, and closed status vocabulary. The tool layer derives path policies,
+status validation, and shortform maps from those descriptors instead of keeping
+parallel kind tables.
+
+Kind categories are named contracts. `authored-core` kinds are Science-owned
+project records. `reserved` kinds are built-in sentinels such as `unknown`.
+`source-only` kinds are valid profile kinds loaded from structured sources rather
+than authored as core Markdown files.
+
+Project-local profiles can declare additional markdown kinds under
+`entity_kinds:`. A local kind's `name` is its kind, id prefix, and default
+directory segment. Unless the profile says otherwise, a local kind is stored at
+`entities/<kind>/`, uses numeric local ids, defaults to `active`, and accepts any
+status. Optional profile fields can set `home`, `strategy`, `default_status`, and
+`statuses`. Local `home` overrides must stay under `entities/<segment>/...`, and
+local kinds cannot shadow core kinds or use singleton layout.
+
+The source-entity creation CLI remains conservative: `science entities create`
+mints only built-in Markdown path-policy kinds. Project-local kinds are loaded,
+migrated, and validated when authored as Markdown, but new local-kind creation is
+still a manual authoring or project-specific workflow.
+
 Storage adapters own discovery and parsing only. They discover project-relative
 source locations, load a raw record with `kind` and identity fields, and pass
 that record to the registry. They do not decide dataset semantics, task state,
@@ -331,6 +356,13 @@ Current project source loading uses these adapter families:
 | `datapackage` | `data/**/datapackage.yaml` and `results/**/datapackage.yaml` with `science-pkg-entity-1.0` | Dataset entity records embedded in promoted runtime packages; if a Markdown owner already exists, the datapackage defers but remains available as resource metadata. |
 | `workflow-run`, `task`, and `code` | workflow run files, task sources, and configured code roots | Specialized storage formats that materialize first-class entities into the same registry flow. |
 | `commons-merged` and `overlay` | shared/commons entities and local overlays | Cross-project entity owners and borrower overlays loaded into the same identity table. |
+
+Dataset, workflow, workflow-run, and workflow-step owners are first-class
+Markdown entity kinds. They use `strategy: id-local`: the explicit frontmatter
+`id` is authoritative and the filename follows the id local part. For example,
+`dataset:ctrpv2` lives at `entities/datasets/ctrpv2.md`. Commons borrower files
+with `overlay_of:` live under `overlays/<type>/`, not under `entities/` and not
+under `doc/`.
 
 Every loaded entity records the adapter that sourced it. The loader also keeps
 `SourceRef` metadata: adapter name, project-relative path, and entry index when
