@@ -1496,6 +1496,8 @@ def _hint_candidate_rows_from_evidence(
     )
     for source_key, category in category_sources:
         for term_row in categories[source_key]:
+            if term_row["term"] in FACET_HINT_TERMS:
+                continue
             if term_row["count"] >= min_count:
                 rows.append(
                     _hint_candidate_from_term_row(

@@ -2787,6 +2787,36 @@ title: Rare signal
     assert "marker" not in terms
 
 
+def test_hint_candidates_report_does_not_leak_existing_hints_from_project_local_terms(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    project_root = tmp_path / "proteomics"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0070-local",
+        """
+id: hypothesis:0070-local
+type: hypothesis
+title: Local proteomics term
+""",
+        body="Unmapped cytogenetic evidence should be reviewed.",
+    )
+
+    default_payload = benchmark_hint_candidates_report(project_root)
+    default_terms = {row["term"] for row in default_payload["hint_candidates"]}
+    assert "proteomics" not in default_terms
+
+    include_payload = benchmark_hint_candidates_report(project_root, include_existing=True)
+    proteomics_rows = [row for row in include_payload["hint_candidates"] if row["term"] == "proteomics"]
+    assert len(proteomics_rows) == 1
+    assert proteomics_rows[0]["category"] == "existing-hint"
+    assert proteomics_rows[0]["count"] is None
+    assert proteomics_rows[0]["current_hint"] == "proteomics"
+    assert proteomics_rows[0]["example_entities"] == []
+
+
 def test_hint_candidates_report_existing_hints_are_directly_enumerated_when_requested(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import FACET_HINT_TERMS, benchmark_hint_candidates_report
 
