@@ -3,12 +3,78 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.model import (
+    Annotation,
+    Motivation,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
+)
 from science_tool.graph.health import check_dataset_anomalies
+
+
+_CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
+
+
+def _write_cross_paper_manifest(root: Path) -> None:
+    (root / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+
+def _write_cross_paper_proposition(root: Path, slug: str, source_refs: list[str]) -> None:
+    path = root / "entities" / "propositions" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    refs = "".join(f"  - {ref}\n" for ref in source_refs)
+    path.write_text(
+        f"---\nid: proposition:{slug}\ntype: proposition\ntitle: {slug}\nstatus: active\n"
+        f"source_refs:\n{refs}---\n\nClaim.\n",
+        encoding="utf-8",
+    )
+
+
+def _cross_paper_annotation(frag: str, *, stance: str, promoted_to: str = "proposition:claim") -> Annotation:
+    body = json.dumps({"section": "results", "stance": stance})
+    return Annotation(
+        id=frag,
+        target=SpecificResource(
+            source="x.source.md",
+            selector=TextQuoteSelector(exact=frag, prefix="", suffix=""),
+        ),
+        bodies=(TextualBody(value=body, format="application/json"),),
+        motivation=Motivation.CLASSIFYING,
+        annotation_type="proposition",
+        source="llm-annot:m:paper-annotate-v1",
+        status=Status.OPEN,
+        creator="paper-annotate",
+        created=_CREATED,
+        content_hash="0" * 64,
+        promoted_to=promoted_to,
+    )
+
+
+def _write_cross_paper(root: Path, citekey: str, *, stance: str, promoted_to: str = "proposition:claim") -> None:
+    md = root / "entities" / "papers" / f"{citekey}.source.md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Results show the claim.\n", encoding="utf-8")
+    anno_io.write_sidecar(
+        anno_io.sidecar_for_markdown(md),
+        anno_io.Sidecar(
+            annotations=(
+                _cross_paper_annotation(f"{citekey}-1", stance=stance, promoted_to=promoted_to),
+            )
+        ),
+    )
+
+
+def _cross_paper_ann_ref(citekey: str) -> str:
+    return f"annotation:entities/papers/{citekey}.source#{citekey}-1"
 
 
 def _write_identity_policy_project(tmp_path: Path) -> Path:
@@ -425,6 +491,76 @@ class TestBuildHealthReport:
                 "duration_seconds": report["_meta"]["timings"][1]["duration_seconds"],
             }
         ]
+
+    def test_cross_paper_evidence_empty_project_reports_empty_state(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        _write_cross_paper_manifest(tmp_path)
+
+        report = build_health_report(tmp_path, checks={"cross_paper_evidence"})
+
+        cross_paper = report["cross_paper_evidence"]
+        assert cross_paper["status"] == "ok"
+        assert cross_paper["empty_state"] == "no_propositions"
+        assert cross_paper["summary"]["propositions"] == 0
+        assert cross_paper["findings"] == []
+        assert report["total_issues"] == 0
+
+    def test_cross_paper_evidence_faults_are_health_findings(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        _write_cross_paper_manifest(tmp_path)
+        _write_cross_paper_proposition(tmp_path, "claim", ["paper:A2020"])
+        _write_cross_paper(tmp_path, "A2020", stance="asserted", promoted_to="proposition:ghost")
+
+        report = build_health_report(tmp_path, checks={"cross_paper_evidence"})
+
+        cross_paper = report["cross_paper_evidence"]
+        assert cross_paper["status"] == "fail"
+        assert cross_paper["empty_state"] == "no_cross_paper_evidence"
+        assert cross_paper["summary"]["faults_by_reason"] == {"stale-proposition": 1}
+        assert cross_paper["findings"] == [
+            {
+                "code": "cross_paper_evidence.stale-proposition",
+                "severity": "error",
+                "sidecar": str(tmp_path / "entities" / "papers" / "A2020.source.anno.trig"),
+                "annotation": "A2020-1",
+                "reason": "stale-proposition",
+                "detail": "proposition:ghost not found",
+            }
+        ]
+        assert report["total_issues"] == 1
+
+    def test_cross_paper_evidence_reports_derived_unit_counts(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        _write_cross_paper_manifest(tmp_path)
+        papers = ["A2020", "B2021"]
+        source_refs = [f"paper:{citekey}" for citekey in papers] + [
+            _cross_paper_ann_ref(citekey) for citekey in papers
+        ]
+        _write_cross_paper_proposition(tmp_path, "claim", source_refs)
+        _write_cross_paper(tmp_path, "A2020", stance="asserted")
+        _write_cross_paper(tmp_path, "B2021", stance="asserted")
+
+        report = build_health_report(tmp_path, checks={"cross_paper_evidence"})
+
+        cross_paper = report["cross_paper_evidence"]
+        assert cross_paper["status"] == "ok"
+        assert cross_paper["empty_state"] == "active"
+        assert cross_paper["summary"]["units"] == 2
+        assert cross_paper["summary"]["propositions_with_units"] == 1
+        assert cross_paper["summary"]["contested"] == 0
+        assert cross_paper["propositions"] == [
+            {
+                "proposition": "proposition:claim",
+                "unit_count": 2,
+                "supporting_papers": 2,
+                "disputing_papers": 0,
+                "belief": cross_paper["propositions"][0]["belief"],
+            }
+        ]
+        assert report["total_issues"] == 0
 
     def test_build_health_report_validate_check_surfaces_runner_findings(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -967,6 +1103,26 @@ class TestHealthCLI:
             "load_project_sources",
             "unregistered_ref_kinds",
         ]
+
+    def test_table_output_cross_paper_evidence_check_surfaces_faults(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        _write_cross_paper_manifest(tmp_path)
+        _write_cross_paper_proposition(tmp_path, "claim", ["paper:A2020"])
+        _write_cross_paper(tmp_path, "A2020", stance="asserted", promoted_to="proposition:ghost")
+
+        result = CliRunner().invoke(
+            main,
+            ["health", "--project-root", str(tmp_path), "--check", "cross_paper_evidence"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Project is clean" not in result.output
+        assert "Cross-paper evidence" in result.output
+        assert "stale-proposition" in result.output
+        assert "proposition:ghost not found" in result.output
 
     def test_json_output_validate_check_uses_runner_without_subprocess(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

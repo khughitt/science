@@ -4948,6 +4948,15 @@ def health_command(
         if isinstance(raw_prose_epistemics_findings, list)
         else []
     )
+    cross_paper_evidence = report.get("cross_paper_evidence") or {}
+    raw_cross_paper_findings = (
+        cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
+    )
+    cross_paper_findings: list[dict[str, object]] = (
+        [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
+        if isinstance(raw_cross_paper_findings, list)
+        else []
+    )
 
     total_issues = (
         len(report["unresolved_refs"])
@@ -4966,6 +4975,7 @@ def health_command(
         + len(agent_context)
         + len(validation)
         + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
+        + len(cross_paper_findings)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -5056,6 +5066,33 @@ def health_command(
             )
         console.print(pe_table)
         console.print(f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan].")
+
+    if cross_paper_findings:
+        cpe_table = Table(title=f"Cross-paper evidence ({len(cross_paper_findings)})")
+        cpe_table.add_column("Reason", style="bold", no_wrap=True)
+        cpe_table.add_column("Sidecar", overflow="fold")
+        cpe_table.add_column("Annotation", no_wrap=True)
+        cpe_table.add_column("Detail", overflow="fold")
+        fault_lines: list[str] = []
+        for row in cross_paper_findings:
+            sidecar = str(row.get("sidecar", ""))
+            if sidecar:
+                try:
+                    sidecar = str(Path(sidecar).resolve().relative_to(project_root))
+                except ValueError:
+                    pass
+            reason = str(row.get("reason", ""))
+            annotation = str(row.get("annotation", ""))
+            detail = str(row.get("detail", ""))
+            cpe_table.add_row(
+                reason,
+                sidecar,
+                annotation,
+                detail,
+            )
+            fault_lines.append(f"- {reason} {sidecar}#{annotation}: {detail}")
+        console.print(cpe_table)
+        console.print("\n".join(fault_lines))
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")

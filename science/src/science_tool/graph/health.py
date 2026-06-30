@@ -19,6 +19,7 @@ import yaml as _yaml
 from science_model.contracts.inventory_common import InventoryWarning
 from science_model.entities import Entity
 
+from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
@@ -339,6 +340,7 @@ class HealthReport(TypedDict):
     identity_policy: list["IdentityPolicyFinding"]
     entity_identity: list[EntityIdentityFinding]
     layered_claims: "LayeredClaimHealthReport"
+    cross_paper_evidence: "CrossPaperEvidenceHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
     legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
@@ -555,6 +557,23 @@ class LayeredClaimHealthReport(TypedDict):
     migration_issues: list[LayeredClaimIssue]
 
 
+class CrossPaperEvidenceFinding(TypedDict):
+    code: str
+    severity: str
+    sidecar: str
+    annotation: str
+    reason: str
+    detail: str
+
+
+class CrossPaperEvidenceHealthReport(TypedDict):
+    status: str
+    empty_state: str
+    summary: dict[str, object]
+    findings: list[CrossPaperEvidenceFinding]
+    propositions: list[dict[str, object]]
+
+
 def _health_check_names() -> frozenset[str]:
     return frozenset(check.name for check in HEALTH_CHECKS)
 
@@ -607,11 +626,29 @@ def _empty_layered_claim_migration_report(project_root: Path) -> LayeredClaimMig
     }
 
 
+def _empty_cross_paper_evidence_health() -> CrossPaperEvidenceHealthReport:
+    return {
+        "status": "ok",
+        "empty_state": "no_propositions",
+        "summary": {
+            "propositions": 0,
+            "propositions_with_units": 0,
+            "units": 0,
+            "faults": 0,
+            "faults_by_reason": {},
+            "contested": 0,
+        },
+        "findings": [],
+        "propositions": [],
+    }
+
+
 def _empty_check_results(project_root: Path) -> dict[str, object]:
     return {
         "identity_policy": [],
         "entity_identity": [],
         "layered_claim_migration": _empty_layered_claim_migration_report(project_root),
+        "cross_paper_evidence": _empty_cross_paper_evidence_health(),
         "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
         "managed_artifacts": [],
         "tooling_scaffold": [],
@@ -665,6 +702,10 @@ def build_health_report(
         else []
     )
     migration_report = cast(LayeredClaimMigrationReport, check_results["layered_claim_migration"])
+    cross_paper_evidence = cast(
+        "CrossPaperEvidenceHealthReport",
+        check_results["cross_paper_evidence"],
+    )
     causal_leaning_rows = [
         row
         for row in migration_report["rows"]
@@ -770,6 +811,7 @@ def build_health_report(
         + len(tooling_scaffold)
         + len(validation)
         + prose_epistemics_issue_count
+        + len(cross_paper_evidence["findings"])
     )
 
     report: HealthReport = {
@@ -785,6 +827,7 @@ def build_health_report(
             "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
             "migration_issues": migration_issues,
         },
+        "cross_paper_evidence": cross_paper_evidence,
         "legacy_task_type": legacy_task_type,
         "invalid_entity_aspects": invalid_entity_aspects,
         "legacy_structured_literature_prefixes": legacy_structured_literature_prefixes,
@@ -1739,6 +1782,37 @@ def _collect_archive_lag(context: HealthContext) -> TaskArchiveLag:
     return cast("TaskArchiveLag", count_archivable(context.project_root / "tasks"))
 
 
+def _cross_paper_empty_state(summary: dict[str, object]) -> str:
+    if summary.get("propositions") == 0:
+        return "no_propositions"
+    if summary.get("units") == 0:
+        return "no_cross_paper_evidence"
+    return "active"
+
+
+def _collect_cross_paper_evidence(context: HealthContext) -> CrossPaperEvidenceHealthReport:
+    report = build_cross_paper_evidence_report(context.project_root)
+    summary = cast("dict[str, object]", report["summary"])
+    findings: list[CrossPaperEvidenceFinding] = [
+        {
+            "code": f"cross_paper_evidence.{row['reason']}",
+            "severity": "error",
+            "sidecar": row["sidecar"],
+            "annotation": row["annotation"],
+            "reason": row["reason"],
+            "detail": row["detail"],
+        }
+        for row in cast("list[dict[str, str]]", report["faults"])
+    ]
+    return {
+        "status": "fail" if findings else "ok",
+        "empty_state": _cross_paper_empty_state(summary),
+        "summary": summary,
+        "findings": findings,
+        "propositions": cast("list[dict[str, object]]", report["propositions"]),
+    }
+
+
 def _collect_managed_artifacts(context: HealthContext) -> list[dict]:
     from science_tool.project_artifacts.health_integration import health_findings
 
@@ -1856,6 +1930,12 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         run=lambda context: build_layered_claim_migration_report(
             context.project_root, sources=_context_sources(context)
         ),
+    ),
+    HealthCheck(
+        name="cross_paper_evidence",
+        description="Report derived cross-paper literature evidence and scanner faults.",
+        requires_sources=False,
+        run=_collect_cross_paper_evidence,
     ),
     HealthCheck(
         name="archive_lag",
