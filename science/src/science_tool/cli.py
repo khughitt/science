@@ -6697,6 +6697,99 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     return ", ".join(candidate["benchmark_id"] for candidate in candidates[:3])
 
 
+def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
+    count = row["count"]
+    return "-" if count is None else str(count)
+
+
+def _hint_candidate_table_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [row for row in rows if row["category"] == "domain-candidate"]
+
+
+@benchmark_group.command("hint-candidates")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count.")
+@click.option("--include-existing", is_flag=True, help="Include terms already mapped by the benchmark hint lexicon.")
+@click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=True, dir_okay=False),
+    help="Review artifact path. Relative paths are resolved under the project root.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_hint_candidates(
+    domain: str | None,
+    include_commons: bool,
+    min_count: int,
+    include_existing: bool,
+    write_review_file: bool,
+    output_path: Path | None,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report candidate terms for benchmark facet hint review."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    if output_path is not None and not write_review_file:
+        raise click.ClickException("--output requires --write-review-file")
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        payload = benchmark_hint_candidates_report(
+            root,
+            include_commons=include_commons,
+            domain=domain,
+            min_count=min_count,
+            include_existing=include_existing,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = _hint_candidate_table_rows(payload["hint_candidates"])
+    if not rows:
+        click.echo("No benchmark hint candidates.")
+        return
+
+    table = Table(title="Benchmark Hint Candidates", show_header=True, header_style="bold")
+    for col in ("term", "count", "action", "suggested facets", "examples"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        table.add_row(
+            row["term"],
+            _format_hint_candidate_count(row),
+            row["suggested_action"],
+            ", ".join(row["suggested_facets"]) or "-",
+            ", ".join(row["example_entities"]) or "-",
+        )
+    Console(width=200).print(table)
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
