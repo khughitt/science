@@ -379,13 +379,18 @@ def data_group() -> None:
 
 
 @data_group.command("audit")
-@click.option("--project", "project_path", type=click.Path(path_type=Path),
-              default=None, envvar="SCIENCE_PROJECT_ROOT",
-              help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
-@click.option("--fix", is_flag=True, default=False,
-              help="Relocate stranded records data/ → results/ (stages, never commits).")
-@click.option("--json", "as_json", is_flag=True, default=False,
-              help="Emit the machine-readable move report.")
+@click.option(
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    envvar="SCIENCE_PROJECT_ROOT",
+    help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).",
+)
+@click.option(
+    "--fix", is_flag=True, default=False, help="Relocate stranded records data/ → results/ (stages, never commits)."
+)
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the machine-readable move report.")
 def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> None:
     """Report (and optionally fix) data/results/entities boundary violations."""
     project_path = project_path or Path.cwd()  # runtime default; honors the env var above
@@ -393,6 +398,7 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
         policy = resolve_data_policy(load_project_config(project_path))
     except FileNotFoundError:
         from science_tool.data_policy import DEFAULT_DATA_POLICY
+
         policy = DEFAULT_DATA_POLICY
     violations = audit_project(project_path, policy)
 
@@ -406,8 +412,7 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
             for o in outcomes:
                 mark = "moved" if o.performed else "FLAG"
                 tgt = o.violation.proposed_target or "-"
-                click.echo(f"  [{mark}] {o.violation.path} → {tgt}"
-                           + (f"  ({o.reason})" if o.reason else ""))
+                click.echo(f"  [{mark}] {o.violation.path} → {tgt}" + (f"  ({o.reason})" if o.reason else ""))
             click.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
         return
 
@@ -1214,9 +1219,7 @@ def evidence_line_group() -> None:
 @click.option(
     "--evidence-role",
     default=None,
-    type=click.Choice(
-        ["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]
-    ),
+    type=click.Choice(["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]),
 )
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--id", "entity_id")
@@ -1847,7 +1850,9 @@ def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, projec
     if output_format == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        rows: list[dict[str, str]] = [{"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files]
+        rows: list[dict[str, str]] = [
+            {"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files
+        ]
         rows.extend(
             {
                 "kind": "conflict",
@@ -4673,10 +4678,99 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     except SerializeError as exc:
         raise click.ClickException(str(exc)) from exc
     suffix = " [forced]" if result.forced else ""
-    click.echo(
-        f"Serialized {result.file_count} file(s), {result.payload_count} payload(s)"
-        f"{suffix} → {result.out_path}"
+    click.echo(f"Serialized {result.file_count} file(s), {result.payload_count} payload(s){suffix} → {result.out_path}")
+
+
+@project.command("verify")
+@click.argument("bundle", type=click.Path(exists=False, dir_okay=False, path_type=Path))
+@click.option(
+    "--against",
+    "against_root",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Compare the bundle to a live checkout (commit, source, payloads). Explicit only.",
+)
+@click.option(
+    "--extract",
+    "extract_to",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Materialize the bundle's source tree into this empty or new directory.",
+)
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit a JSON verdict.")
+@click.pass_context
+def project_verify(
+    ctx: click.Context,
+    bundle: Path,
+    against_root: Path | None,
+    extract_to: Path | None,
+    as_json: bool,
+) -> None:
+    """Verify a serialized project bundle."""
+    from science_tool.project_package.verify import (
+        BundleIntegrityError,
+        VerifyError,
+        verdict_json,
+        verify_project,
     )
+
+    try:
+        result = verify_project(bundle, against=against_root, extract=extract_to)
+    except BundleIntegrityError as exc:
+        _emit_verify_error(as_json, exit_code=2, status="integrity", message=str(exc))
+        ctx.exit(2)
+    except VerifyError as exc:
+        _emit_verify_error(as_json, exit_code=4, status="operational", message=str(exc))
+        ctx.exit(4)
+
+    if as_json:
+        click.echo(json.dumps(verdict_json(result), indent=2, sort_keys=True))
+    else:
+        _render_verify_human(result)
+        for warning in result.warnings:
+            click.echo(f"warning: {warning}", err=True)
+    ctx.exit(result.exit_code)
+
+
+def _emit_verify_error(as_json: bool, *, exit_code: int, status: str, message: str) -> None:
+    if as_json:
+        click.echo(
+            json.dumps(
+                {"version": 1, "exit_code": exit_code, "status": status, "error": message},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        click.echo(f"error: {message}", err=True)
+
+
+def _render_verify_human(result: Any) -> None:
+    click.echo(f"  OK schema {result.bundle_schema_version}")
+    click.echo(f"  OK {result.file_count} file(s) match manifest hashes")
+    click.echo(f"  OK data_version {result.data_version} recomputes")
+    if result.extracted_to is not None:
+        click.echo(f"  OK extracted -> {result.extracted_to}")
+
+    against = result.against
+    if against is not None:
+        click.echo(f"\n  against: {against.root}")
+        mark = "OK" if against.commit.match else "DIFFER"
+        click.echo(f"    commit:   {against.commit.bundle[:8]} vs {against.commit.head[:8]}  {mark}")
+        click.echo(
+            f"    source:   {against.source.match}/{against.source.total} match"
+            f"  (differ {len(against.source.differ)}, absent {len(against.source.absent)})"
+        )
+        click.echo(
+            f"    payloads: {against.payloads.ok} ok, {len(against.payloads.differ)} differ, "
+            f"{len(against.payloads.missing)} missing, {len(against.payloads.extra)} extra"
+        )
+        for path in against.payloads.missing:
+            click.echo(f"              MISSING: {path}")
+        for path in against.payloads.differ:
+            click.echo(f"              DIFFER:  {path}")
+
+    click.echo(f"\n  status: {result.status} (exit {result.exit_code})")
 
 
 @project.command("index")
@@ -5747,7 +5841,9 @@ def _get_feedback_dir() -> Path:
 @click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
 @click.option("--summary", required=True, help="One-line description")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens")
+@click.option(
+    "--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens"
+)
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -5987,7 +6083,9 @@ def feedback_triage(
         ]
         if with_telemetry:
             columns.append(("telemetry_text", "Telemetry"))
-        table_rows = rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
+        table_rows = (
+            rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
+        )
         emit_query_rows(
             output_format=output_format,
             title="Feedback Triage",
@@ -6449,7 +6547,9 @@ def benchmark_gap_calibration(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
+)
 @click.option(
     "--source",
     "priority_source",
