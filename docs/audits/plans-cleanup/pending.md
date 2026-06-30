@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `54`
+- Pending thread count: `55`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -32,6 +32,21 @@
 - remaining_gaps:
   - Durable user docs only list expert_judgment as an evidence type; they do not explain confidence as a gate, authored-only ceiling, authored_capped, or excluded_authored_confidence.
   - Implementation comments still reference Spec 5/Slice B plan docs as rationale.
+
+## bears-on-multihop-reach
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-22-bears-on-multihop-reach.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset-prioritization reach rationale is checkpointed and later plan citations are repointed
+    - `docs/plans/2026-06-22-bears-on-multihop-reach.md`
+- remaining_gaps:
+  - The behavior is implemented and tested, but the explanatory contract is still mostly in plan files and the code docstring rather than a stable non-plan dataset-prioritize reference.
+  - docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md still cites plan:2026-06-22-bears-on-multihop-reach, so deleting this plan without a checkpoint or citation repoint would remove context.
+  - The parent catalog-datasets thread is already pending a migration checkpoint for dataset prioritization rationale; this small plan should be folded into that checkpoint rather than kept as active work.
 
 ## belief-policy-keystone
 
