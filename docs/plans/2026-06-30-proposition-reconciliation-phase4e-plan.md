@@ -395,6 +395,7 @@ class ReconciliationReport:
     factorization_disagreements: tuple[FactorizationCandidate, ...] = ()
     faults: tuple[ReconciliationFault, ...] = ()
     summary: dict[str, Any] = field(default_factory=dict)
+    proposition_snapshots: dict[str, PropositionSnapshot] = field(default_factory=dict)
 
 
 def _digest(parts: list[str]) -> str:
@@ -614,6 +615,10 @@ def _pair_key(a: str, b: str) -> tuple[str, str]:
 
 
 def _blocking_pairs(propositions: list[PropositionSnapshot]) -> set[tuple[str, str]]:
+    # Bucketed blocking keeps the common case sub-quadratic. A single hot title token shared
+    # by many propositions can still produce a quadratic bucket, but `_pair_signals` requires a
+    # strong structural signal (endpoint match or shared paper) for inclusion and
+    # MAX_RECONCILIATION_COMPONENT_SIZE caps emitted groups; both bound real output at meta scale.
     buckets: dict[tuple[str, str], list[str]] = {}
     for prop in propositions:
         subject = normalize_phrase(prop.subject)
@@ -725,10 +730,20 @@ def build_same_claim_candidates(propositions: list[PropositionSnapshot]) -> Same
         priority = "high" if "high" in priorities else "medium" if "medium" in priorities else "low"
         flags = tuple(sorted({flag for edge in group_edges for flag in edges[edge][1]}))
         explanation = tuple(sorted({item for edge in group_edges for item in edges[edge][2]}))
-        signals = {
-            "pair_count": len(group_edges),
-            "max_title_token_jaccard": max(edges[edge][0]["title_token_jaccard"] for edge in group_edges),
-        }
+        # Carry the design §2 signal shape (same_subject / same_object / predicate_compatible /
+        # polarity_compatible / title_token_jaccard / shared_source_papers). A pair has exactly
+        # one edge; a larger component surfaces its strongest edge (max title overlap, with a
+        # deterministic tie-break on the sorted edge tuple) as the representative, plus aggregate
+        # counts. Without this the agent scaffold and JSON consumers lose every structural signal.
+        representative = max(
+            sorted(group_edges),
+            key=lambda edge: edges[edge][0]["title_token_jaccard"],
+        )
+        signals = dict(edges[representative][0])
+        signals["pair_count"] = len(group_edges)
+        signals["max_title_token_jaccard"] = max(
+            edges[edge][0]["title_token_jaccard"] for edge in group_edges
+        )
         candidates.append(
             SameClaimCandidate(
                 candidate_id=candidate_id(LANE_SAME_CLAIM, list(refs)),
@@ -1077,6 +1092,63 @@ def report_to_json(report: ReconciliationReport) -> dict[str, Any]:
         ],
         "faults": [fault_to_json(item) for item in report.faults],
     }
+
+
+SCAFFOLD_INSTRUCTION = (
+    "Review each candidate using ONLY the propositions, refs, and statement hints listed "
+    "here. Never invent proposition or annotation refs. For a same_claim group, choose a "
+    "decision from the closed vocabulary and, when the decision is same_claim, a "
+    "canonical_proposition drawn from the listed members. For a factorization candidate, "
+    "choose exactly one Lane B decision."
+)
+
+
+def _snapshot_public(snapshot: PropositionSnapshot) -> dict[str, Any]:
+    return {
+        "ref": snapshot.ref,
+        "title": snapshot.title,
+        "subject": snapshot.subject,
+        "predicate": snapshot.predicate,
+        "object": snapshot.object,
+        "polarity": snapshot.polarity,
+        "claim_layer": snapshot.claim_layer,
+        "identification_strength": snapshot.identification_strength,
+        "paper_refs": sorted(snapshot.paper_refs),
+        "annotation_refs": sorted(snapshot.annotation_refs),
+    }
+
+
+def same_claim_scaffold(
+    candidate: SameClaimCandidate, snapshots: dict[str, PropositionSnapshot]
+) -> dict[str, Any]:
+    payload = candidate_to_json(candidate)
+    payload["lane"] = LANE_SAME_CLAIM
+    # Replace the bare ref list with full per-member snapshots so the reviewing agent has
+    # the frontmatter / factorization context the design §4 scaffold requires, instead of
+    # being handed opaque proposition refs it would have to re-load itself.
+    payload["propositions"] = [
+        _snapshot_public(snapshots[ref]) if ref in snapshots else {"ref": ref}
+        for ref in candidate.propositions
+    ]
+    return payload
+
+
+def report_to_scaffold(report: ReconciliationReport) -> dict[str, Any]:
+    base = report_to_json(report)
+    return {
+        "instruction": SCAFFOLD_INSTRUCTION,
+        "decision_vocabulary": sorted(DECISIONS),
+        "confidence_vocabulary": sorted(CONFIDENCE_VALUES),
+        "summary": base["summary"],
+        "same_claim_candidates": [
+            same_claim_scaffold(candidate, report.proposition_snapshots)
+            for candidate in report.same_claim_candidates
+        ],
+        "factorization_disagreements": [
+            {**item, "lane": LANE_FACTORIZATION} for item in base["factorization_disagreements"]
+        ],
+        "faults": base["faults"],
+    }
 ```
 
 - [ ] **Step 4: Add project loading helpers**
@@ -1105,27 +1177,6 @@ def snapshot_from_entity(entity: Any) -> PropositionSnapshot:
     )
 
 
-def _scope_filter(
-    snapshots: dict[str, PropositionSnapshot],
-    assertions: list[Any],
-    *,
-    proposition_ref: str | None,
-    source_sidecar: str | None,
-) -> tuple[dict[str, PropositionSnapshot], list[Any]]:
-    scoped_assertions = assertions
-    scoped_refs: set[str] | None = None
-    if proposition_ref is not None:
-        scoped_refs = {proposition_ref}
-        scoped_assertions = [a for a in scoped_assertions if a.proposition_ref == proposition_ref]
-    if source_sidecar is not None:
-        scoped_assertions = [a for a in scoped_assertions if a.sidecar == source_sidecar]
-        source_refs = {a.proposition_ref for a in scoped_assertions}
-        scoped_refs = source_refs if scoped_refs is None else scoped_refs & source_refs
-    if scoped_refs is None:
-        return snapshots, scoped_assertions
-    return {ref: snapshots[ref] for ref in sorted(scoped_refs) if ref in snapshots}, scoped_assertions
-
-
 def build_reconciliation_report(
     project_root,
     *,
@@ -1135,36 +1186,56 @@ def build_reconciliation_report(
     from pathlib import Path
 
     from science_tool.annotation.cross_paper_evidence import (
-        load_proposition_source_refs,
+        proposition_source_refs_map,
         scan_literature_assertions,
     )
     from science_tool.graph.sources import load_project_sources
 
     root = Path(project_root).resolve()
-    sources = load_project_sources(root)
-    snapshots = {
-        entity.canonical_id: snapshot_from_entity(entity)
-        for entity in sources.entities
-        if getattr(entity, "kind", None) == "proposition"
-    }
-    assertions, scan_faults = scan_literature_assertions(root, load_proposition_source_refs(root))
-    scoped_snapshots, scoped_assertions = _scope_filter(
-        snapshots,
-        assertions,
-        proposition_ref=proposition_ref,
-        source_sidecar=source_sidecar,
+    sources = load_project_sources(root)  # load once; reuse entities for refs + snapshots
+    proposition_entities = [
+        entity for entity in sources.entities if getattr(entity, "kind", None) == "proposition"
+    ]
+    snapshots = {entity.canonical_id: snapshot_from_entity(entity) for entity in proposition_entities}
+    assertions, scan_faults = scan_literature_assertions(
+        root, proposition_source_refs_map(sources.entities)
     )
-    same = build_same_claim_candidates(list(scoped_snapshots.values()))
-    factors = build_factorization_disagreements(scoped_snapshots, scoped_assertions)
+
+    # Lane A blocking must see the whole corpus, so candidates are always generated over the
+    # full snapshot set; scope is then applied as a post-filter on candidates. Pre-filtering
+    # the universe (the earlier approach) would hide a scoped proposition's blocking partners
+    # and make `--proposition` produce zero same-claim candidates.
+    same = build_same_claim_candidates(list(snapshots.values()))
+    factors = build_factorization_disagreements(snapshots, assertions)
+
+    scope_refs: set[str] | None = None
+    if proposition_ref is not None:
+        scope_refs = {proposition_ref}
+    if source_sidecar is not None:
+        sidecar_props = {a.proposition_ref for a in assertions if a.sidecar == source_sidecar}
+        scope_refs = sidecar_props if scope_refs is None else scope_refs & sidecar_props
+
+    same_candidates = same.candidates
+    factor_candidates = factors
+    scoped_snapshots = snapshots
+    if scope_refs is not None:
+        same_candidates = tuple(c for c in same.candidates if scope_refs & set(c.propositions))
+        factor_candidates = tuple(c for c in factors if c.proposition in scope_refs)
+        keep: set[str] = set(scope_refs)
+        for candidate in same_candidates:
+            keep.update(candidate.propositions)
+        scoped_snapshots = {ref: snapshots[ref] for ref in sorted(keep) if ref in snapshots}
+
     faults = [
         ReconciliationFault(fault.reason, f"{fault.sidecar}:{fault.annotation_id} {fault.detail}")
         for fault in scan_faults
     ]
     faults.extend(same.faults)
     return ReconciliationReport(
-        same_claim_candidates=same.candidates,
-        factorization_disagreements=factors,
+        same_claim_candidates=same_candidates,
+        factorization_disagreements=factor_candidates,
         faults=tuple(faults),
+        proposition_snapshots=scoped_snapshots,
     )
 ```
 
@@ -1365,6 +1436,70 @@ def test_validate_review_doc_rejects_lane_b_same_claim_decision():
 
     with pytest.raises(ReconciliationValidationError, match="Lane B"):
         validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_rejects_incomplete_direct_splittable_review():
+    current = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+            _prop("proposition:c", "BRCA1 loss promotes genomic instability"),
+        ]
+    )
+    report = ReconciliationReport(same_claim_candidates=current.candidates)
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": "a and b are the same claim; c was left unjudged.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="incomplete"):
+        validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_rejects_second_factorization_judgment():
+    factor = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="medium",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(),
+        disagreement=("object differs",),
+        recommended_action="factorization_needs_resynthesis",
+    )
+    report = ReconciliationReport(factorization_disagreements=(factor,))
+    judgment = {
+        "candidate_id": factor.candidate_id,
+        "judgment_id": judgment_id(
+            "factorization_disagreement", "stance_review_needed", ["proposition:p"]
+        ),
+        "lane": "factorization_disagreement",
+        "decision": "stance_review_needed",
+        "proposition": "proposition:p",
+        "rationale": "valid rationale",
+        "confidence": "medium",
+    }
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [dict(judgment), dict(judgment)],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="more than one"):
+        validate_review_doc(doc, report)
 ```
 
 - [ ] **Step 2: Run failing validation tests**
@@ -1443,6 +1578,8 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
     _require(isinstance(judgments, list), "judgments must be a list")
     same_by_id, factor_by_id = _candidate_indexes(report)
     covered_by_candidate: dict[str, set[str]] = {}
+    directly_targeted: set[str] = set()
+    factor_seen: set[str] = set()
     errors: list[str] = []
 
     for idx, judgment in enumerate(judgments):
@@ -1466,6 +1603,8 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
                 report.same_claim_candidates,
             )
             _require(candidate is not None, f"judgments[{idx}].candidate_id is stale or unknown")
+            if candidate_ref == candidate.candidate_id:
+                directly_targeted.add(candidate.candidate_id)
             candidate_members = set(candidate.propositions)
             if candidate.splittable:
                 _require(member_set <= candidate_members, f"judgments[{idx}].members must be a subset of the candidate")
@@ -1482,6 +1621,11 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
         elif lane == LANE_FACTORIZATION:
             candidate = factor_by_id.get(candidate_ref)
             _require(candidate is not None, f"judgments[{idx}].candidate_id is stale or unknown")
+            _require(
+                candidate_ref not in factor_seen,
+                f"judgments[{idx}].candidate_id has more than one factorization judgment",
+            )
+            factor_seen.add(candidate_ref)
             _require(decision in LANE_B_DECISIONS, f"judgments[{idx}] Lane B decision is not allowed")
             proposition = _require_non_empty_string(judgment.get("proposition"), f"judgments[{idx}].proposition")
             _require(proposition == candidate.proposition, f"judgments[{idx}].proposition does not match candidate")
@@ -1497,8 +1641,18 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
             continue
         covered = covered_by_candidate.get(candidate.candidate_id, set())
         missing = sorted(set(candidate.propositions) - covered)
-        if missing:
-            incomplete.append({"candidate_id": candidate.candidate_id, "missing": missing})
+        if not missing:
+            continue
+        # Two regimes (design §3/§4). A review authored *against the current candidate* (a
+        # direct candidate_id hit) must cover every member — leaving one unjudged is a silent
+        # fall-through and fails the authoring gate. A subset judgment that only re-anchored
+        # to this component after membership churn (stale candidate_id) leaves the newly added
+        # members as advisory "not-yet-reviewed", never a hard failure.
+        if candidate.candidate_id in directly_targeted:
+            raise ReconciliationValidationError(
+                f"review of {candidate.candidate_id} is incomplete: unjudged members {missing}"
+            )
+        incomplete.append({"candidate_id": candidate.candidate_id, "missing": missing})
 
     return {
         "status": "ok" if not errors else "error",
@@ -1658,6 +1812,48 @@ def test_reconcile_propositions_rejects_multiple_scopes(tmp_path: Path):
 
     assert result.exit_code != 0
     assert "choose exactly one scope" in result.output
+
+
+def test_reconcile_propositions_scaffold_embeds_member_snapshots(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "scaffold"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert "instruction" in payload
+    members = payload["same_claim_candidates"][0]["propositions"]
+    assert {m["ref"] for m in members} == {"proposition:a", "proposition:b"}
+    assert all("title" in m and "subject" in m for m in members)
+
+
+def test_reconcile_propositions_proposition_scope_keeps_involving_candidates(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "reconcile-propositions",
+            "--proposition",
+            "proposition:a",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["same_claim_candidates"] == 1
+    assert "proposition:a" in payload["same_claim_candidates"][0]["propositions"]
 ```
 
 - [ ] **Step 2: Run failing CLI tests**
@@ -1693,6 +1889,7 @@ def reconcile_propositions_cmd(
     from science_tool.annotation.proposition_reconciliation import (
         build_reconciliation_report,
         report_to_json,
+        report_to_scaffold,
     )
 
     selected = sum(1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item)
@@ -1714,7 +1911,10 @@ def reconcile_propositions_cmd(
     )
     payload = report_to_json(report)
 
-    if fmt in {"json", "scaffold"}:
+    if fmt == "scaffold":
+        click.echo(json.dumps(report_to_scaffold(report), indent=2, sort_keys=True))
+        return
+    if fmt == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 
@@ -1883,8 +2083,11 @@ If no code changed, do not create an empty commit.
 
 - 4d cross-paper evidence behavior remains unchanged except that `LiteratureAssertion` exposes additional context fields.
 - `science annotate reconcile-propositions --all --format json` emits stable `summary`, `same_claim_candidates`, `factorization_disagreements`, and `faults`.
+- Same-claim candidate `signals` carry the design §2 shape (`same_subject`, `same_object`, `predicate_compatible`, `polarity_compatible`, `title_token_jaccard`, `shared_source_papers`) plus aggregate `pair_count` / `max_title_token_jaccard`.
+- `--format scaffold` emits an agent-facing payload: a review instruction, the decision/confidence vocabularies, and per-member proposition snapshots (title + factorization fields) embedded in each same-claim candidate — not a bare alias of `json`.
+- `--proposition` / `--source` filters output to candidates involving the scoped proposition(s), while Lane A blocking still runs over the full corpus so blocking partners are not hidden.
 - Lane A candidates use deterministic full-SHA-256 candidate ids over `same_claim\0<sorted refs>`.
 - Lane B diagnostics consume uncollapsed per-annotation assertions and can see subject/object/exact context.
-- `science annotate validate-proposition-reconciliation --input review.json` validates reviewed files without writing proposition files.
+- `science annotate validate-proposition-reconciliation --input review.json` validates reviewed files without writing proposition files; it enforces splittable coverage as an authoring gate on a directly-targeted candidate, treats re-anchored subsets' missing members as advisory `review_incomplete`, and rejects a second factorization judgment for one candidate.
 - No proposition entities, sidecars, aliases, archives, or belief aggregation code are mutated by 4e Half A.
 - Targeted pytest, pyright, and real-corpus smoke pass.

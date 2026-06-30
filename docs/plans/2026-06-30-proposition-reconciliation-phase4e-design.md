@@ -98,7 +98,7 @@ be reviewed together:
   "propositions": ["proposition:a", "proposition:b"],
   "priority": "high",
   "splittable": false,
-  "review_coverage_required": true,
+  "flags": [],
   "signals": {
     "title_token_jaccard": 0.82,
     "same_subject": true,
@@ -258,7 +258,8 @@ Compatibility rules:
   `conflict_or_negation` review if subject/object/predicate match;
 - sign-less predicates require `not_applicable`;
 - missing fields do not block candidacy if lexical/provenance signals are strong, but
-  they lower priority and mark the candidate as `needs_factorization_context`.
+  they lower priority and add `needs_factorization_context` to the candidate's `flags`
+  array (the same `flags` field shown in the §2 same-claim candidate shape).
 
 Grouping:
 
@@ -279,10 +280,13 @@ Grouping:
   `<lane>\0<decision>\0<sorted judged member refs or proposition ref>`. For
   same-claim judgments, the judged member set is the member set the reviewer actually
   ruled on, not necessarily the full generated component;
-- splittable components require coverage: every member in the generated component must
-  appear in at least one reviewed judgment for that `candidate_id`, even if the decision
-  is `related_but_distinct` or `needs_human`. This avoids silent fall-through for
-  excluded members;
+- splittable components require coverage *at review time*: when a reviewed file is
+  authored against a generated splittable candidate, every member of that component must
+  appear in at least one reviewed judgment (even if the decision is
+  `related_but_distinct` or `needs_human`), so no member silently falls through. This is
+  an authoring-completeness gate, distinct from the per-judgment durability check (§4);
+  later growth of the component does not retroactively fail an already-complete review —
+  the new members are simply not-yet-reviewed;
 - very large components become `component-too-large` faults with member ids instead of
   unreadable scaffold payloads. Half A uses `MAX_RECONCILIATION_COMPONENT_SIZE = 25`;
   larger components are reported and skipped from scaffold generation.
@@ -345,37 +349,59 @@ The scaffold is read-only. It is regenerated from the current corpus whenever ne
 
 ### Validation
 
-Python validates reviewed files with fail-loud semantics:
+Python validates reviewed files with fail-loud semantics. Two guarantees are checked, and
+the design deliberately keeps them separate: **(a) per-judgment durability**, a standing
+invariant re-checked on every run and anchored to the member set the reviewer actually
+ruled on; and **(b) review completeness**, an authoring-time gate checked against the
+candidate the file was generated against, *not* a standing invariant. Conflating the two
+is what makes membership churn either over- or under-invalidate review.
+
+**(a) Per-judgment durability (always re-validated).** Each judgment is anchored by its
+judged member/proposition set via `judgment_id`, never by the whole-component
+`candidate_id`:
 
 - top-level `source` must match
   `^llm-review:[A-Za-z0-9._-]+:proposition-reconcile-v1$`;
-- every `candidate_id` must exist in the current generated candidate set, except that a
-  same-claim judgment over a splittable subset may remain valid when its judged
-  `members` are still a subset of the current component and still satisfy at least one
-  current candidate edge among themselves. Churn in excluded members does not
-  invalidate the subset judgment;
-- `judgment_id` must equal the deterministic hash for the lane, decision, and judged
-  member/proposition set;
-- `lane` must match the candidate's lane;
-- `decision` must be from the closed vocabulary;
-- `same_claim` is valid only for Lane A; Lane B accepts
-  `factorization_needs_resynthesis`, `stance_review_needed`, `split_possible`,
-  `insufficient_hints`, or `needs_human`;
-- `members` must be exactly the candidate group, or a subset only when the candidate group
-  was explicitly marked splittable;
-- for a splittable same-claim group, the reviewed file must cover every generated member
-  through at least one judgment for that candidate id;
-- `canonical_proposition` is required for `same_claim` and must be one of `members`;
-- `canonical_proposition` is forbidden for non-merge decisions;
-- factorization decisions must name the single proposition in the candidate;
-- `confidence` must be `high`, `medium`, or `low`;
-- `rationale` is required and non-empty.
+- `judgment_id` must equal the deterministic hash of lane + decision + judged
+  member/proposition set; a mismatch fails;
+- `lane` must match the resolved candidate's lane;
+- `decision` must be from the closed vocabulary; `same_claim` is valid only for Lane A;
+  Lane B accepts `factorization_needs_resynthesis`, `stance_review_needed`,
+  `split_possible`, `insufficient_hints`, or `needs_human`;
+- `members` (same-claim) must be exactly the candidate group when non-splittable, or a
+  subset when splittable;
+- `canonical_proposition` is required for `same_claim` and must be one of `members`; it is
+  forbidden for non-merge decisions;
+- a factorization candidate carries **at most one** judgment, which must name the single
+  proposition in the candidate;
+- `confidence` ∈ {`high`, `medium`, `low`}; `rationale` is required and non-empty.
+
+A judgment re-anchors to the *current* candidate set by its judged member/proposition set,
+**not** by the stored `candidate_id` (which is a hash over whole-component membership and
+so changes whenever the component grows, shrinks, or splits):
+
+- a Lane B judgment is live iff its proposition still generates a factorization candidate;
+- a splittable same-claim subset judgment is live iff its judged `members` all sit within
+  a *single* current same-claim component and still satisfy at least one current candidate
+  edge among themselves. The stored `candidate_id` being absent from the current set does
+  **not** invalidate it as long as that member-set anchor holds;
+- a non-splittable pair has no subset to re-anchor: the pair must still be a current
+  candidate, or the judgment is stale;
+- a judgment whose members no longer co-occur in any one current component, or no longer
+  form an edge, is stale and fails — forcing re-review rather than silently accepting an
+  obsolete merge.
+
+**(b) Review completeness (authoring gate, not a standing invariant).** When a reviewed
+file is authored against a freshly generated splittable candidate, every member of *that*
+generated component must be covered by at least one judgment (`same_claim`,
+`related_but_distinct`, `needs_human`, or any Lane B decision), so no member silently falls
+through. Completeness is a property of the review as authored. If the component later
+grows, the new members are *not-yet-reviewed* — surfaced as a review-incomplete status
+against the current candidate, never as a validation failure of the already-durable
+judgments.
 
 Validation writes nothing to proposition files. It only confirms that the reviewed
-artifact is coherent and current. Non-splittable stale `candidate_id`s fail, forcing
-regeneration/review rather than silently accepting obsolete judgments. Splittable subset
-judgments are durable over the member set actually ruled on, so unrelated membership
-churn in the larger component does not invalidate the review.
+artifact is coherent and that each judgment is still anchored in the current corpus.
 
 ## 5. Integration points
 
@@ -385,7 +411,11 @@ churn in the larger component does not invalidate the review.
   `statement_exact`, `section`, `subject`, `object`, `subject_concept`, and
   `object_concept`. The scanner already has the annotation in hand; it should parse the
   statement JSON once into this richer assertion record instead of having reconciliation
-  re-open sidecars with a second parser.
+  re-open sidecars with a second parser. Lane B consumes the **per-annotation** assertion
+  list as returned by `scan_literature_assertions` (one record per annotation), *not* 4d's
+  downstream `(proposition, paper, stance)` collapse: two annotations from the same paper
+  with divergent `subject`/`object` are exactly the factorization signal and must not be
+  collapsed away.
 - Reuse proposition loading via `load_project_sources` / `PropositionEntity` so candidate
   generation sees the same canonical ids and source refs as materialize/validate.
 - Reuse 4c synthesis fields as structured comparison signals; do not add new proposition
@@ -435,6 +465,30 @@ Focused tests:
   missing rationale, and bad source strings;
 - CLI JSON/scaffold shapes are stable;
 - real-corpus smoke over `meta` reports candidates/faults without writing entities.
+
+New-mechanism tests (the subtle, highest-risk paths):
+
+- predicate compatibility matrix: exact-equality is compatible; two
+  `SIGN_MEANINGFUL_PREDICATES` (`affects`/`regulates`/`associates_with`) are compatible
+  only with matching endpoints and compatible polarity; sign-less predicates
+  (`subtype_of`, `part_of`) are compatible only by exact equality and never cross a
+  family boundary;
+- Lane B decisions `stance_review_needed`, `split_possible`, and `insufficient_hints`
+  validate as accepted reviewed decisions, and `same_claim` on a Lane B candidate is
+  rejected;
+- `judgment_id` equals the deterministic hash of lane + decision + judged
+  member/proposition set; a mismatched `judgment_id` fails;
+- review-completeness gate: a file authored against a splittable candidate that leaves a
+  generated member unjudged fails at authoring time;
+- subset durability: a same-claim subset judgment stays valid when the larger component
+  grows or an excluded member churns, and fails when its own judged members no longer
+  co-occur in one current component or no longer form a current candidate edge;
+- a factorization candidate accepts at most one judgment;
+- component cap: a component larger than `MAX_RECONCILIATION_COMPONENT_SIZE` (25) is
+  emitted as a `component-too-large` fault and excluded from scaffold generation;
+- Lane B reads the uncollapsed per-annotation assertions: two annotations from one paper
+  with divergent subject/object yield a factorization diagnostic rather than being
+  collapsed to a single stance.
 
 ## 8. Non-goals
 
