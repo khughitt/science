@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `78`
+- Pending thread count: `79`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -818,6 +818,22 @@
 - remaining_gaps:
   - No durable user/workflow doc was found for science project verify, self-check versus --against behavior, extraction, JSON verdict shape, warnings, or exit codes.
   - Implementation differs from the design: verify treats payload git_tracked mismatches as differ, while the design said git_tracked was informational. The shipped behavior is tested and should be checkpointed explicitly.
+
+## proposition-cross-paper-evidence-phase4d
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md`
+  - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until derived cross-paper literature evidence scanning, materialize behavior, diagnostic command, fault semantics, belief effect, and non-goals are documented outside active plans
+    - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md`
+    - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md`
+- remaining_gaps:
+  - No durable user or developer doc was found for the derived literature evidence scanner, materialize-time behavior, diagnostic command, fault semantics, belief effect, or non-goals.
+  - docs/conventions/annotation-tokens.md still mentions cross-paper evidence as future work, so durable docs should replace that stale forward-looking note.
 
 ## prose-epistemics-p1-source-adapter
 
