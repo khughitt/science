@@ -13,6 +13,7 @@ from science_tool.annotation import io as anno_io
 from science_tool.annotation.cross_paper_evidence import (
     CrossPaperEvidenceError,
     LiteratureAssertion,
+    build_cross_paper_evidence_report,
     emit_literature_evidence,
     derive_literature_evidence,
     lit_assertion_uri,
@@ -243,6 +244,37 @@ def _scaffold_three_papers(root: Path) -> None:
     _paper_with_promoted(root, "A2020", stance="asserted")
     _paper_with_promoted(root, "B2021", stance="asserted")
     _paper_with_promoted(root, "C2022", stance="negated")
+
+
+def test_corpus_shaped_three_paper_smoke_fixture_is_contested_without_well_supported(
+    tmp_path: Path,
+) -> None:
+    _manifest(tmp_path)
+    papers = ["Alpha2026", "Beta2026", "Gamma2026"]
+    source_refs = [f"paper:{citekey}" for citekey in papers] + [
+        _ann_ref(citekey) for citekey in papers
+    ]
+    _proposition_entity(tmp_path, "p", source_refs)
+    _paper_with_promoted(tmp_path, "Alpha2026", stance="asserted", slug="p")
+    _paper_with_promoted(tmp_path, "Beta2026", stance="asserted", slug="p")
+    _paper_with_promoted(tmp_path, "Gamma2026", stance="negated", slug="p")
+
+    report = build_cross_paper_evidence_report(tmp_path)
+    row = {item["proposition"]: item for item in report["propositions"]}["proposition:p"]
+
+    assert report["summary"]["propositions"] == 1
+    assert report["summary"]["units"] == 3
+    assert row["belief"]["contested"] is True
+    assert row["belief"]["belief_magnitude"] != "well_supported"
+
+    trig = materialize_graph(tmp_path, strict=False)
+    knowledge, provenance = load_grounding_graphs(trig)
+    result = ground_proposition("proposition:p", knowledge, provenance, floor="fragile")
+
+    assert result.support_units == 2
+    assert result.dispute_units == 1
+    assert result.contested is True
+    assert result.belief_magnitude != "well_supported"
 
 
 def test_e2e_two_papers_assert_one_disputes_is_contested(tmp_path: Path) -> None:
