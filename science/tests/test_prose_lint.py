@@ -135,6 +135,14 @@ class TestBareAuthorYear:
         path = _write(tmp_path, "The IMMULITE 2000 assay was used throughout.\n")
         assert detect_bare_author_year(path, deny=["IMMULITE 2000"]) == []
 
+    def test_no_flag_hyphenated_author_group_with_adjacent_citation(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Hammack-Segur 1974 [@AblowitzKaupNewellSegur1974] is the cited source.\n"
+            "Perkowski-Villanueva-Mariz 2025 [@PerkowskiVillanuevaMariz2025] is cited too.\n",
+        )
+        assert detect_bare_author_year(path) == []
+
 
 class TestShortFormIds:
     def test_flags_bare_q_number(self, tmp_path):
@@ -170,9 +178,7 @@ class TestShortFormIds:
         # Q1 -> question, h05 -> hypothesis, t050 -> task
         assert len(issues) == 3
         kinds_in_messages = {
-            "question:" if "question:" in i.message else
-            "hypothesis:" if "hypothesis:" in i.message else
-            "task:"
+            "question:" if "question:" in i.message else "hypothesis:" if "hypothesis:" in i.message else "task:"
             for i in issues
         }
         assert kinds_in_messages == {"question:", "hypothesis:", "task:"}
@@ -209,6 +215,18 @@ class TestShortFormIds:
         assert len(issues) == 1
         assert "h007" in issues[0].message
 
+    def test_no_flag_h1_heading_or_homology_notation(self, tmp_path):
+        path = _write(tmp_path, "An H1 heading starts the page; persistent homology H1 is computed.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_no_flag_local_task_or_section_labels(self, tmp_path):
+        path = _write(tmp_path, "Task D1/D2 covers the first pass; see §D6 for the local section.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_no_flag_embedded_short_form_inside_canonical_id(self, tmp_path):
+        path = _write(tmp_path, "See report:0017-q93-h01-synthesis for the generated artifact.\n")
+        assert detect_short_form_ids(path) == []
+
 
 class TestShortFormIdsResolver:
     def test_resolver_skips_resolvable_token(self, tmp_path):
@@ -239,9 +257,7 @@ class TestShortFormIdsResolver:
 
     def test_scan_root_threads_resolver(self, tmp_path):
         (tmp_path / "doc").mkdir()
-        (tmp_path / "doc" / "a.md").write_text(
-            "See h006 (resolves) and bare t999 (does not).\n"
-        )
+        (tmp_path / "doc" / "a.md").write_text("See h006 (resolves) and bare t999 (does not).\n")
         result = scan_root(
             tmp_path,
             checks=["short-form-ids"],
@@ -354,9 +370,7 @@ class TestNumericAnchor:
     def test_no_flag_in_markdown_table_row(self, tmp_path):
         path = _write(
             tmp_path,
-            "| panel_id | n | median_tmb_post |\n"
-            "|---|---:|---:|\n"
-            "| MSK-IMPACT-341 | 2,809 | 3.371 |\n",
+            "| panel_id | n | median_tmb_post |\n|---|---:|---:|\n| MSK-IMPACT-341 | 2,809 | 3.371 |\n",
         )
         assert detect_numeric_anchor(path) == []
 
@@ -394,8 +408,7 @@ class TestNumericAnchor:
     def test_no_flag_in_wrapped_ordered_list_continuation(self, tmp_path):
         path = _write(
             tmp_path,
-            "1. Dimensionality reduction: Jaccard-distanced t-SNE to\n"
-            "   2D coordinates before clustering.\n",
+            "1. Dimensionality reduction: Jaccard-distanced t-SNE to\n   2D coordinates before clustering.\n",
         )
         assert detect_numeric_anchor(path) == []
 
@@ -471,11 +484,7 @@ class TestNumericAnchor:
         paper_dir.mkdir(parents=True)
         path = paper_dir / "Smith2024.md"
         path.write_text(
-            "---\n"
-            "id: paper:Smith2024\n"
-            "type: paper\n"
-            "---\n"
-            "The cohort included 123 participants.\n",
+            "---\nid: paper:Smith2024\ntype: paper\n---\nThe cohort included 123 participants.\n",
             encoding="utf-8",
         )
 
@@ -483,13 +492,18 @@ class TestNumericAnchor:
 
         assert [issue.match for issue in issues] == ["123"]
 
+    def test_no_flag_numeric_segments_inside_canonical_ids(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "See hypothesis:0007-empirical-fidelity-alignment and report:0017-q93-h01-synthesis.\n",
+        )
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
 
 class TestArchivedTaskAliases:
     def test_reads_archived_task_ids(self, tmp_path):
         (tmp_path / "tasks").mkdir()
-        (tmp_path / "tasks" / "archive.md").write_text(
-            "# Archived\n\n## [t075] Retired pipeline\n\nNotes.\n"
-        )
+        (tmp_path / "tasks" / "archive.md").write_text("# Archived\n\n## [t075] Retired pipeline\n\nNotes.\n")
         aliases = _archived_task_aliases(tmp_path)
         assert "t075" in aliases
 
@@ -505,12 +519,8 @@ class TestArchivedTaskAliases:
 class TestScanRoot:
     def test_scans_doc_tree_with_all_checks(self, tmp_path):
         (tmp_path / "doc").mkdir()
-        (tmp_path / "doc" / "a.md").write_text(
-            "# A\n\nAs Brunton 2022 showed, the result rho = 0.168 holds.\n"
-        )
-        (tmp_path / "doc" / "b.md").write_text(
-            "---\nrelated:\n  - task:t050\n---\n# B\n\nNo mention.\n"
-        )
+        (tmp_path / "doc" / "a.md").write_text("# A\n\nAs Brunton 2022 showed, the result rho = 0.168 holds.\n")
+        (tmp_path / "doc" / "b.md").write_text("---\nrelated:\n  - task:t050\n---\n# B\n\nNo mention.\n")
         result = scan_root(tmp_path)
         assert result["counts"]["bare-author-year"] == 1
         assert result["counts"]["numeric-anchor"] >= 1
@@ -519,9 +529,7 @@ class TestScanRoot:
 
     def test_filters_by_check(self, tmp_path):
         (tmp_path / "doc").mkdir()
-        (tmp_path / "doc" / "a.md").write_text(
-            "# A\n\nBrunton 2022 and rho = 0.168.\n"
-        )
+        (tmp_path / "doc" / "a.md").write_text("# A\n\nBrunton 2022 and rho = 0.168.\n")
         result = scan_root(tmp_path, checks=["bare-author-year"])
         assert "numeric-anchor" not in result["counts"]
         assert result["counts"]["bare-author-year"] == 1
@@ -593,9 +601,7 @@ class TestUnsupportedCitationSyntax:
             encoding="utf-8",
         )
         result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
-        assert [(h.line, h.col, h.match) for h in result["hits"]] == [
-            (3, 17, "Smith2020")
-        ]
+        assert [(h.line, h.col, h.match) for h in result["hits"]] == [(3, 17, "Smith2020")]
 
     def test_supported_citation_not_flagged(self, tmp_path):
         (tmp_path / "doc").mkdir()
@@ -650,5 +656,20 @@ class TestUnsupportedCitationSyntax:
             "The CPET table reports VO2@VT and Work@peak on day 2.\n",
             encoding="utf-8",
         )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_scoped_npm_packages_are_not_citation_syntax(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "The UI uses @testing-library/react and @react-three/fiber.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_metric_at_token_is_not_citation_syntax(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text("Retrieval reports P'@k for each run.\n", encoding="utf-8")
         result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
         assert result["counts"].get("unsupported-citation-syntax", 0) == 0

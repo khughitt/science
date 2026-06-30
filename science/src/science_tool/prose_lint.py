@@ -61,25 +61,53 @@ def severity_for(check: str, *, strict: bool) -> str:
 
 # Capture: (Authorname) (Year), where Authorname starts with uppercase and is
 # 3+ chars (excludes "I 2022", "A 2022"). Year is 1900-2099.
-_BARE_AUTHOR_YEAR_RE = re.compile(
-    r"\b([A-Z][A-Za-z]{2,}(?:\s(?:and|&)\s[A-Z][A-Za-z]{2,})?)\s(19\d\d|20\d\d)\b"
-)
+_BARE_AUTHOR_YEAR_RE = re.compile(r"\b([A-Z][A-Za-z]{2,}(?:\s(?:and|&)\s[A-Z][A-Za-z]{2,})?)\s(19\d\d|20\d\d)\b")
 # Anchor: `[@key]` immediately following or preceding the match (within 30 chars)
 _NEARBY_BIBTEX_RE = re.compile(r"\[@[A-Za-z][A-Za-z0-9_-]*\]")
 # An adjacent `[[WikiLink]]` (the project's citation convention) also anchors a
 # mention, mirroring `[@key]`.
 _NEARBY_WIKILINK_RE = re.compile(r"\[\[[^\]\n]+\]\]")
+_TRAILING_CITATION_RE = re.compile(r"\s*(?:\[[^\]\n]*@[^\]\n]*\]|\[\[[^\]\n]+\]\])")
 # Calendar words that match the <Capitalized> <Year> shape but are dates
 # ("May 2026", "Summer 2024"), not author-year citations.
 _DATE_WORDS: frozenset[str] = frozenset(
     {
-        "january", "february", "march", "april", "may", "june", "july",
-        "august", "september", "october", "november", "december",
-        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept",
-        "oct", "nov", "dec",
-        "spring", "summer", "fall", "autumn", "winter",
-        "monday", "tuesday", "wednesday", "thursday", "friday",
-        "saturday", "sunday",
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "sept",
+        "oct",
+        "nov",
+        "dec",
+        "spring",
+        "summer",
+        "fall",
+        "autumn",
+        "winter",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
     }
 )
 # Common non-author leading tokens that match the <Capitalized> <Year> shape in
@@ -87,10 +115,33 @@ _DATE_WORDS: frozenset[str] = frozenset(
 # not author-year citations.
 _LEADING_STOPWORDS: frozenset[str] = frozenset(
     {
-        "the", "this", "these", "those", "that",
-        "done", "resolved", "fixed", "closed", "merged", "completed",
-        "backfilled", "published", "updated", "added", "created", "removed",
-        "in", "by", "on", "at", "see", "per", "via", "note", "since", "as",
+        "the",
+        "this",
+        "these",
+        "those",
+        "that",
+        "done",
+        "resolved",
+        "fixed",
+        "closed",
+        "merged",
+        "completed",
+        "backfilled",
+        "published",
+        "updated",
+        "added",
+        "created",
+        "removed",
+        "in",
+        "by",
+        "on",
+        "at",
+        "see",
+        "per",
+        "via",
+        "note",
+        "since",
+        "as",
     }
 )
 # Year immediately followed by `-NN` (the month/day of an ISO date like
@@ -121,6 +172,7 @@ _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
 # `[[h006-regime-sequence]]` wiki-links are the toolchain's linking convention;
 # their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
 _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
+_CANONICAL_ID_SPAN_RE = re.compile(r"\b[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*\b")
 _CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
 _KNOWN_CELL_LINE_SHORT_FORMS: frozenset[str] = frozenset({"H929", "H1112", "H1634"})
 
@@ -130,6 +182,11 @@ def _mask_wikilinks(line: str) -> str:
     return _WIKILINK_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
 
 
+def _mask_canonical_id_spans(line: str) -> str:
+    """Blank out namespaced canonical IDs, preserving columns for other matches."""
+    return _CANONICAL_ID_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
+
+
 def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
     window = line[max(0, match.start() - 40) : min(len(line), match.end() + 40)]
     return bool(_CELL_LINE_CONTEXT_RE.search(window))
@@ -137,9 +194,25 @@ def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
 
 def _is_cell_line_short_form(line: str, match: re.Match[str]) -> bool:
     short = match.group(0)
-    return short in _KNOWN_CELL_LINE_SHORT_FORMS or (
-        match.group(1).isupper() and _is_cell_line_context(line, match)
-    )
+    return short in _KNOWN_CELL_LINE_SHORT_FORMS or (match.group(1).isupper() and _is_cell_line_context(line, match))
+
+
+def _is_non_reference_h1_context(line: str, match: re.Match[str]) -> bool:
+    if match.group(0) != "H1":
+        return False
+    window = line[max(0, match.start() - 30) : min(len(line), match.end() + 30)].lower()
+    return "heading" in window or "homology" in window
+
+
+def _is_local_discussion_label(line: str, match: re.Match[str]) -> bool:
+    if match.group(1) != "D" or len(match.group(2)) != 1:
+        return False
+    if match.start() > 0 and line[match.start() - 1] in {"/", "§"}:
+        return True
+    if match.end() < len(line) and line[match.end()] == "/":
+        return True
+    preceding = line[max(0, match.start() - 16) : match.start()]
+    return bool(re.search(r"(?:\b(?:task|tasks|domain|domains|section|appendix)\s|§)\s*$", preceding, re.IGNORECASE))
 
 
 def _utf8_byte_col(line: str, char_index: int) -> int:
@@ -192,14 +265,12 @@ def detect_bare_author_year(
             if leading_token in _DATE_WORDS or leading_token in _LEADING_STOPWORDS:
                 continue
             if bib_surnames is not None:
-                surnames = {
-                    tok.lower()
-                    for tok in match.group(1).split()
-                    if tok.lower() not in {"and", "&"}
-                }
+                surnames = {tok.lower() for tok in match.group(1).split() if tok.lower() not in {"and", "&"}}
                 if surnames.isdisjoint(bib_surnames):
                     continue
             if _ISO_DATE_TAIL_RE.match(line, match.end()):
+                continue
+            if _TRAILING_CITATION_RE.match(line[match.end() :]):
                 continue
             window_start = max(0, match.start() - 30)
             window_end = min(len(line), match.end() + 30)
@@ -252,7 +323,7 @@ def detect_short_form_ids(
             continue
         if _TASK_HEADING_RE.match(raw_line):
             continue
-        line = _mask_wikilinks(strip_inline_code(raw_line))
+        line = _mask_canonical_id_spans(_mask_wikilinks(strip_inline_code(raw_line)))
         for match in _SHORT_FORM_RE.finditer(line):
             # Skip if preceded by `<kind>:` — already canonical.
             preceding = line[max(0, match.start() - 20) : match.start()]
@@ -262,6 +333,10 @@ def detect_short_form_ids(
             if deny and short in deny:
                 continue
             if _is_cell_line_short_form(line, match):
+                continue
+            if _is_non_reference_h1_context(line, match):
+                continue
+            if _is_local_discussion_label(line, match):
                 continue
             if resolver and (short in resolver or short.lower() in resolver):
                 continue
@@ -370,7 +445,8 @@ _CROSS_REFERENCE_RE = re.compile(
 def _mask_numeric_identifier_spans(line: str) -> str:
     """Blank identifier spans, preserving columns for remaining numeric claims."""
     line = _DOI_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
-    return _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    line = _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    return _mask_canonical_id_spans(line)
 
 
 def detect_numeric_anchor(
@@ -470,12 +546,12 @@ def _paper_note_has_source_context(path: Path, frontmatter: dict) -> bool:
     source_refs = frontmatter.get("source_refs")
     if isinstance(source_refs, list) and any(isinstance(ref, str) and ref.strip() for ref in source_refs):
         return True
-    return any(isinstance(frontmatter.get(key), str) and frontmatter[key].strip() for key in ("doi", "pmid", "url", "bibkey"))
+    return any(
+        isinstance(frontmatter.get(key), str) and frontmatter[key].strip() for key in ("doi", "pmid", "url", "bibkey")
+    )
 
 
-def detect_unsupported_citation_syntax(
-    path: Path, *, strict: bool = False
-) -> list[LintIssue]:
+def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> list[LintIssue]:
     """Flag `@key` tokens outside a recognized `[@key]` block.
 
     Emits one finding per unsupported token so authors are warned before export.
@@ -504,7 +580,7 @@ def detect_unsupported_citation_syntax(
                 continue
             if _span_contains(supported_spans, match.start()):
                 continue
-            if not _is_bare_citation_candidate(raw_line, match.start()):
+            if not _is_bare_citation_candidate(raw_line, match):
                 continue
             token = match.group(1)
             issues.append(
@@ -528,9 +604,7 @@ def detect_unsupported_citation_syntax(
 _INLINE_CODE_SPAN_RE = re.compile(r"`[^`]*`")
 _SUPPORTED_CITATION_BLOCK_RE = re.compile(r"\[\s*@[^\]]*\]")
 _SUPPORTED_CITATION_ITEM_RE = re.compile(r"\s*@([A-Za-z][A-Za-z0-9_:.-]*)")
-_UNSUPPORTED_CITATION_TOKEN_RE = re.compile(
-    r"@([A-Za-z][A-Za-z0-9_:-]*(?:\.[A-Za-z0-9_:-]+)*)"
-)
+_UNSUPPORTED_CITATION_TOKEN_RE = re.compile(r"@([A-Za-z][A-Za-z0-9_:-]*(?:\.[A-Za-z0-9_:-]+)*)")
 
 
 def _inline_code_spans(line: str) -> list[tuple[int, int]]:
@@ -541,7 +615,12 @@ def _span_contains(spans: list[tuple[int, int]], index: int) -> bool:
     return any(start <= index < end for start, end in spans)
 
 
-def _is_bare_citation_candidate(line: str, at_index: int) -> bool:
+def _is_bare_citation_candidate(line: str, match: re.Match[str]) -> bool:
+    at_index = match.start()
+    if match.end() < len(line) and line[match.end()] == "/":
+        return False
+    if at_index > 0 and line[at_index - 1] == "'":
+        return False
     if at_index <= 0:
         return True
     return not line[at_index - 1].isalnum()
@@ -634,9 +713,7 @@ def build_short_form_resolver(root: Path) -> dict[str, str] | None:
 
         sources = load_project_sources(root.resolve())
     except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on graph-load issues
-        logger.warning(
-            "short-form-ids resolver unavailable (%s); falling back to deny-list only", exc
-        )
+        logger.warning("short-form-ids resolver unavailable (%s); falling back to deny-list only", exc)
         return None
     alias_map = build_alias_map(sources.entities, sources.manual_aliases)
     for alias, canonical in _archived_task_aliases(root.resolve()).items():
@@ -682,9 +759,7 @@ def scan_root(
             elif check == "frontmatter-inline-gap":
                 hits.extend(detector(path, strict=strict, alias_map=resolver))
             elif check == "bare-author-year":
-                hits.extend(
-                    detector(path, strict=strict, deny=bare_author_year_deny, bib_surnames=bib_surnames)
-                )
+                hits.extend(detector(path, strict=strict, deny=bare_author_year_deny, bib_surnames=bib_surnames))
             else:
                 hits.extend(detector(path, strict=strict))
     counts: dict[str, int] = {}
