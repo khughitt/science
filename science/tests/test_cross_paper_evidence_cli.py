@@ -231,6 +231,30 @@ def test_cross_paper_evidence_summary_units_count_collapsed_assertions_not_edge_
     assert payload["summary"]["units"] == 2
 
 
+def test_cross_paper_evidence_empty_units_still_reports_faults(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition_entity(tmp_path, "claim", ["paper:A2020"])
+    _paper_with_promoted(tmp_path, "A2020", stance="asserted", slug="ghost")
+
+    table_result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "table"],
+    )
+
+    assert table_result.exit_code == 0, table_result.output
+    assert "No derived cross-paper literature evidence found." in table_result.output
+    assert "FAULTS (" in table_result.output
+
+    json_result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert json_result.exit_code == 0, json_result.output
+    payload = json.loads(json_result.output)
+    assert payload["summary"]["faults_by_reason"] == {"stale-proposition": 1}
+
+
 def test_cli_single_ref_json_lists_units(tmp_path):
     _scaffold(tmp_path)
     result = CliRunner().invoke(

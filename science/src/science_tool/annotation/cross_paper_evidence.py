@@ -145,10 +145,9 @@ def load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]
     return proposition_source_refs_map(load_project_sources(project_root).entities)
 
 
-def _belief_for_proposition(collapsed: list[LiteratureAssertion], proposition_ref: str) -> dict:
+def _belief_for_units(ref_units: list[LiteratureAssertion], proposition_ref: str) -> dict:
     from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 
-    ref_units = [assertion for assertion in collapsed if assertion.proposition_ref == proposition_ref]
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
@@ -173,6 +172,9 @@ def build_cross_paper_evidence_report(
     refs = load_proposition_source_refs(project_root)
     assertions, faults = scan_literature_assertions(project_root, refs)
     collapsed = collapse_assertions(assertions)
+    units_by_ref: dict[str, list[LiteratureAssertion]] = {}
+    for assertion in collapsed:
+        units_by_ref.setdefault(assertion.proposition_ref, []).append(assertion)
     fault_rows = [
         {
             "sidecar": fault.sidecar,
@@ -184,6 +186,7 @@ def build_cross_paper_evidence_report(
     ]
 
     if proposition_ref is not None:
+        ref_units = units_by_ref.get(proposition_ref, [])
         units = [
             {
                 "paper": assertion.paper_ref,
@@ -193,20 +196,19 @@ def build_cross_paper_evidence_report(
                 "strength": STANCE_EMIT[assertion.stance][2],
                 "independence_group": f"literature-{assertion.paper_ref}",
             }
-            for assertion in collapsed
-            if assertion.proposition_ref == proposition_ref
+            for assertion in ref_units
         ]
         units.sort(key=lambda item: (item["paper"], item["stance"]))
         return {
             "proposition": proposition_ref,
             "units": units,
-            "belief": _belief_for_proposition(collapsed, proposition_ref),
+            "belief": _belief_for_units(ref_units, proposition_ref),
             "faults": fault_rows,
         }
 
     proposition_reports = []
     for ref in sorted(refs):
-        ref_units = [assertion for assertion in collapsed if assertion.proposition_ref == ref]
+        ref_units = units_by_ref.get(ref, [])
         supporting_papers = {
             assertion.paper_ref
             for assertion in ref_units
@@ -223,7 +225,7 @@ def build_cross_paper_evidence_report(
                 "unit_count": len(ref_units),
                 "supporting_papers": len(supporting_papers),
                 "disputing_papers": len(disputing_papers),
-                "belief": _belief_for_proposition(collapsed, ref),
+                "belief": _belief_for_units(ref_units, ref),
             }
         )
 
