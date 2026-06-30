@@ -60,17 +60,20 @@ those derived layers.
 
 The pass:
 
-1. **Enumerate promoted-statement assertions.** For each paper `.anno.trig` sidecar,
-   read annotations and keep only those that are **proposition assertions promoted to a
-   proposition** — i.e. `annotation_type == "proposition"` **and**
-   `promoted_to` is set and `promoted_to.startswith("proposition:")` (resolves the
-   scope question below). Annotations of type `question`/`hypothesis` (4b) legitimately
-   carry `promoted_to = "question:…"` / `"hypothesis:…"` and are **skipped** silently —
-   they are valid promotions, simply not literature evidence *for a proposition*.
-   Each kept annotation yields a `(proposition, paper, stance)` triple. This is a
-   bounded sidecar read that reuses the existing `read_sidecar` I/O. (The
-   `.source.md`/`.anno.trig` sidecars already live inside entity roots; the markdown
-   storage adapter already knows about `.source.md`.)
+1. **Enumerate active promoted-statement assertions.** For each paper `.anno.trig`
+   sidecar, read annotations and keep only those that are **active proposition
+   assertions promoted to a proposition** — i.e. `annotation_type == "proposition"`,
+   `status in {"open", "ack"}`, and `promoted_to` is set and
+   `promoted_to.startswith("proposition:")` (resolves the scope question below).
+   Inactive promoted annotations (`fixed`, `dismissed`, `superseded`) are **skipped**:
+   their backlink remains useful history, but they no longer contribute belief.
+   Annotations of type `question`/`hypothesis` (4b) legitimately carry
+   `promoted_to = "question:…"` / `"hypothesis:…"` and are **skipped** silently — they
+   are valid promotions, simply not literature evidence *for a proposition*. Each kept
+   annotation yields a `(proposition, paper, stance)` triple. This is a bounded sidecar
+   read that reuses the existing `read_sidecar` I/O. (The `.source.md`/`.anno.trig`
+   sidecars already live inside entity roots; the markdown storage adapter already
+   knows about `.source.md`.)
 
    **Scope rule (closed).** Only `annotation_type == "proposition"` annotations whose
    `promoted_to` targets a `proposition:` count. This keeps future relation/entity
@@ -79,15 +82,18 @@ The pass:
    corruption and is an error (§6) — distinct from the benign skip of a
    question/hypothesis annotation.
 
-2. **Resolve the owning paper (ownership contract).** The `paper:<citekey>` for an
-   assertion is resolved **from the owning sidecar via the P1 `TextSourceAdapter`
-   contract** — `resolve_adapter(sidecar_markdown_path).source_ref(...)` — the *same*
-   mechanism 4a used to compute the `paper_ref` it accrued onto the proposition's
-   `source_refs`. This is the single source of truth for the paper id; it guarantees
-   the derived `wasDerivedFrom = paper:<citekey>` and `independence_group =
-   literature-paper:<citekey>` match what 4a recorded, with no second, divergent
-   convention. (A sidecar whose adapter cannot resolve a source ref is an error, not a
-   silent skip — §6.)
+2. **Resolve and verify the owning paper (ownership contract).** The candidate
+   `paper:<citekey>` for an assertion is resolved **from the owning sidecar via the P1
+   `TextSourceAdapter` contract** —
+   `resolve_adapter(sidecar_markdown_path).source_ref(...)`. That is the default 4a
+   path, but 4a also allowed an explicit `--paper-ref`, so Phase 4d must verify rather
+   than blindly trust the adapter-derived id: the derived `paper:<citekey>` must appear
+   in the target proposition's `source_refs` alongside the annotation ref. If it does
+   not, the scanner reports an ownership mismatch (§6) instead of emitting evidence
+   under the wrong paper. This keeps `wasDerivedFrom = paper:<citekey>` and
+   `independence_group = literature-paper:<citekey>` aligned with the proposition
+   provenance that promotion actually recorded. (A sidecar whose adapter cannot
+   resolve a source ref is an error, not a silent skip — §6.)
 
 3. **Collapse per `(proposition, paper, stance)`.** Multiple annotations from the
    same paper restating the *same proposition with the same stance* count once — a
@@ -212,6 +218,17 @@ skips). Note these are distinct from the **benign skip** of a `question`/`hypoth
   is corruption).
 - A sidecar whose `TextSourceAdapter` cannot resolve a `source_ref` (paper id
   unresolvable — §3 step 2).
+- A kept assertion whose adapter-derived `paper:<citekey>` is not present in the target
+  proposition's `source_refs` (**ownership mismatch**). This can happen only if the
+  original promotion used an explicit `--paper-ref` that diverges from the sidecar's
+  adapter-derived owner, or if proposition provenance was edited afterward. In either
+  case, deriving literature evidence under the adapter id would misattribute
+  independence, so strict mode fails loud.
+
+Inactive promoted annotations are not errors: `fixed`, `dismissed`, and `superseded`
+proposition annotations are skipped because the annotation lifecycle has withdrawn them
+from the active assertion set. The project-wide diagnostic may report them as skipped
+rows for visibility, but they never emit virtual evidence.
 
 ## 7. Non-goals (deferred to Phase 4e or later)
 
@@ -231,15 +248,20 @@ skips). Note these are distinct from the **benign skip** of a `question`/`hypoth
 - **Unit:** stance→edge/metadata mapping; the `(proposition, paper, stance)` collapse
   (same paper + same stance → one unit; same paper + mixed stance → two units sharing
   a group); deterministic full-SHA-256 URI derivation; paper-id resolution via the
-  `TextSourceAdapter` contract matches 4a's accrued `paper:<citekey>`.
+  `TextSourceAdapter` contract is accepted only when the target proposition's
+  `source_refs` also contain that `paper:<citekey>`.
 - **Scope filter:** a `question`/`hypothesis`-typed annotation (4b output) is **skipped,
   not errored**; only `proposition`-typed annotations targeting `proposition:` are
   derived.
+- **Lifecycle filter:** `open`/`ack` promoted proposition annotations derive evidence;
+  `fixed`/`dismissed`/`superseded` promoted proposition annotations are skipped and do
+  not affect belief.
 - **Error scanner (both modes):** stale `proposition:x` target, a `proposition`-typed
   annotation targeting a non-`proposition:` ref, invalid `stance`, and an
-  adapter-unresolvable sidecar each appear in the accumulated list; strict mode raises
-  one aggregate `CrossPaperEvidenceError` naming **all** of them (not fail-on-first);
-  report mode returns the same list without raising.
+  adapter-unresolvable sidecar, and a paper ownership mismatch each appear in the
+  accumulated list; strict mode raises one aggregate `CrossPaperEvidenceError` naming
+  **all** of them (not fail-on-first); report mode returns the same list without
+  raising.
 - **Ordering:** virtual `cito:supports`/`disputes` edges are present in the `sci:bearsOn`
   closure (proves the pass runs before `_derive_bears_on_layer`, not only feeding
   `collect_evidence_units`).
