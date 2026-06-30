@@ -161,6 +161,13 @@ def _write_paper_sidecar(root: Path, citekey: str, anns: list[Annotation]) -> No
     anno_io.write_sidecar(anno_io.sidecar_for_markdown(md), anno_io.Sidecar(annotations=tuple(anns)))
 
 
+def _write_sidecar_for_markdown(root: Path, relpath: str, anns: list[Annotation]) -> None:
+    md = root / relpath
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Body.\n", encoding="utf-8")
+    anno_io.write_sidecar(anno_io.sidecar_for_markdown(md), anno_io.Sidecar(annotations=tuple(anns)))
+
+
 def test_scan_happy_path_collects_active_proposition_assertions(tmp_path: Path):
     _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
     refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
@@ -246,6 +253,16 @@ def test_scan_faults_on_invalid_stance(tmp_path: Path):
     _, faults = scan_literature_assertions(tmp_path, refs)
 
     assert [f.reason for f in faults] == ["invalid-stance"]
+
+
+def test_scan_faults_on_adapter_unresolvable(tmp_path: Path):
+    _write_sidecar_for_markdown(tmp_path, "entities/notes/claim.md", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"annotation:entities/notes/claim#a-1"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert [f.reason for f in faults] == ["adapter-unresolvable"]
 
 
 def test_scan_faults_on_malformed_json_body_without_raising(tmp_path: Path):
