@@ -546,6 +546,9 @@ class BenchmarkTestSummary(TypedDict):
     draft_needed_rows: int
     entities_with_test_plans: int
     entities_without_test_plans: int
+    source_counts: dict[PrioritySource, int]
+    fallback_rows: int
+    fallback_row_ratio: float
     top_facets: list[FacetCountRow]
 
 
@@ -2188,17 +2191,18 @@ def _rows_for_gap_candidate(
     ]
 
 
-def _benchmark_test_source_rank(source: PrioritySource) -> int:
-    return {
+def _benchmark_test_source_sort_key(source: PrioritySource) -> int:
+    order = {
         "opportunity-relative": 0,
         "gap-candidate": 1,
         "gap-fallback": 2,
-    }[source]
+    }
+    return order[source]
 
 
 def _merge_benchmark_test_rows(left: BenchmarkTestRow, right: BenchmarkTestRow) -> BenchmarkTestRow:
-    left_rank = _benchmark_test_source_rank(left["priority_source"])
-    right_rank = _benchmark_test_source_rank(right["priority_source"])
+    left_rank = _benchmark_test_source_sort_key(left["priority_source"])
+    right_rank = _benchmark_test_source_sort_key(right["priority_source"])
     if right_rank < left_rank or (right_rank == left_rank and right["priority_score"] > left["priority_score"]):
         merged = dict(right)
     else:
@@ -2220,6 +2224,14 @@ def _dedupe_benchmark_test_rows(rows: list[BenchmarkTestRow]) -> list[BenchmarkT
 def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int) -> BenchmarkTestSummary:
     concrete_rows = sum(1 for row in rows if row["test_plan_state"] == "concrete")
     entities_with_test_plans = {row["entity_id"] for row in rows}
+    source_counts: dict[PrioritySource, int] = {
+        "opportunity-relative": 0,
+        "gap-candidate": 0,
+        "gap-fallback": 0,
+    }
+    for row in rows:
+        source_counts[row["priority_source"]] += 1
+    fallback_rows = source_counts["gap-fallback"]
     facet_counts = Counter(facet for row in rows for facet in row["matched_facets"])
     top_facets = [
         {"facet": facet, "count": count}
@@ -2232,6 +2244,9 @@ def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int
         "draft_needed_rows": len(rows) - concrete_rows,
         "entities_with_test_plans": len(entities_with_test_plans),
         "entities_without_test_plans": max(entities_total - len(entities_with_test_plans), 0),
+        "source_counts": source_counts,
+        "fallback_rows": fallback_rows,
+        "fallback_row_ratio": (fallback_rows / len(rows)) if rows else 0.0,
         "top_facets": top_facets,
     }
 
@@ -2284,9 +2299,21 @@ def _benchmark_test_state_sort_key(state: TestPlanState) -> int:
     return order[state]
 
 
-def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, str, str, str]:
+def _benchmark_test_readiness_sort_key(readiness: ReadinessLabel) -> int:
+    order = {
+        "runnable": 0,
+        "stage-needed": 1,
+        "metadata-only": 2,
+        "blocked": 3,
+    }
+    return order[readiness]
+
+
+def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, int, int, str, str, str]:
     return (
         _benchmark_test_state_sort_key(row["test_plan_state"]),
+        _benchmark_test_source_sort_key(row["priority_source"]),
+        _benchmark_test_readiness_sort_key(row["readiness_label"]),
         -row["priority_score"],
         row["entity_id"],
         row["benchmark_id"],

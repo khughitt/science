@@ -802,6 +802,169 @@ benchmark:
     assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
 
 
+def test_benchmark_tests_report_sorts_by_state_source_readiness_before_score(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0042-spatial",
+        """
+id: hypothesis:0042-spatial
+type: hypothesis
+title: Spatial perturbation hypothesis
+""",
+        body="Spatial perturbation response should be benchmarked.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0043-generic",
+        """
+id: hypothesis:0043-generic
+type: hypothesis
+title: Generic fallback benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "matched-metadata",
+        """
+id: dataset:matched-metadata
+type: dataset
+title: Matched Metadata
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: matched
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "matched-runnable",
+        """
+id: dataset:matched-runnable
+type: dataset
+title: Matched Runnable
+dataset_class: deposit
+local_path: data/matched-runnable
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: matched
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "fallback-high-score",
+        """
+id: dataset:fallback-high-score
+type: dataset
+title: Fallback High Score
+dataset_class: deposit
+local_path: data/fallback-high-score
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  limitations: [well curated]
+  tasks:
+    - id: fallback
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+
+    rows = benchmark_tests_report(tmp_path)["benchmark_tests"]
+
+    ordered = [(row["benchmark_id"], row["priority_source"], row["readiness_label"]) for row in rows]
+    assert ordered[:2] == [
+        ("dataset:matched-runnable", "opportunity-relative", "runnable"),
+        ("dataset:matched-metadata", "opportunity-relative", "metadata-only"),
+    ]
+    assert any(row["priority_source"] == "gap-fallback" for row in rows)
+    assert all(row["priority_source"] != "gap-fallback" for row in rows[:2])
+
+
+def test_benchmark_tests_report_summary_counts_sources_and_fallback_ratio(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0043-generic",
+        """
+id: hypothesis:0043-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+dataset_class: deposit
+local_path: data/generic
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    summary = benchmark_tests_report(tmp_path)["summary"]
+
+    assert summary["source_counts"] == {
+        "opportunity-relative": 0,
+        "gap-candidate": 0,
+        "gap-fallback": 1,
+    }
+    assert summary["fallback_rows"] == 1
+    assert summary["fallback_row_ratio"] == 1.0
+
+
 def test_benchmark_tests_report_excludes_fallback_rows(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
