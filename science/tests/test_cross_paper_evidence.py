@@ -1,4 +1,7 @@
 import hashlib
+import json as _json
+from datetime import datetime, timezone
+from pathlib import Path
 
 from rdflib import URIRef
 from science_model.reasoning import (
@@ -21,6 +24,16 @@ from science_tool.annotation.cross_paper_evidence import (
     STANCE_EMIT,
     collapse_assertions,
     lit_assertion_uri,
+    scan_literature_assertions,
+)
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.model import (
+    Annotation,
+    Motivation,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.graph.io import PROJECT_NS
 
@@ -105,3 +118,182 @@ def test_cross_paper_evidence_error_lists_all_faults():
     assert "ann-1" in text and "ann-2" in text
     assert "A.anno.trig" in text and "B.anno.trig" in text
     assert "proposition:x missing" in text and "stance 'maybe'" in text
+
+
+_CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
+_ANN_REF = "annotation:entities/papers/Smith2020.source#a-1"
+
+
+def _ann(
+    frag: str,
+    *,
+    stance: str,
+    atype: str = "proposition",
+    status: Status = Status.OPEN,
+    promoted_to: str | None = "proposition:p",
+) -> Annotation:
+    body = _json.dumps({"section": "abstract", "stance": stance})
+    non_open = status is not Status.OPEN
+    return Annotation(
+        id=frag,
+        target=SpecificResource(
+            source="x.source.md",
+            selector=TextQuoteSelector(exact=frag, prefix="", suffix=""),
+        ),
+        bodies=(TextualBody(value=body, format="application/json"),),
+        motivation=Motivation.CLASSIFYING,
+        annotation_type=atype,
+        source="llm-annot:m:paper-annotate-v1",
+        status=status,
+        creator="paper-annotate",
+        created=_CREATED,
+        content_hash="0" * 64,
+        modified=_CREATED if non_open else None,
+        modified_by="curator" if non_open else None,
+        promoted_to=promoted_to,
+    )
+
+
+def _write_paper_sidecar(root: Path, citekey: str, anns: list[Annotation]) -> None:
+    md = root / "entities" / "papers" / f"{citekey}.source.md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Body.\n", encoding="utf-8")
+    anno_io.write_sidecar(anno_io.sidecar_for_markdown(md), anno_io.Sidecar(annotations=tuple(anns)))
+
+
+def test_scan_happy_path_collects_active_proposition_assertions(tmp_path: Path):
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert faults == []
+    assert len(assertions) == 1
+    a = assertions[0]
+    assert (a.proposition_ref, a.paper_ref, a.stance) == (
+        "proposition:p",
+        "paper:Smith2020",
+        "asserted",
+    )
+
+
+def test_scan_skips_question_and_hypothesis_typed_annotations(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [
+            _ann("q-1", stance="asserted", atype="question", promoted_to="question:q"),
+            _ann("h-1", stance="asserted", atype="hypothesis", promoted_to="hypothesis:h"),
+        ],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert faults == []
+
+
+def test_scan_skips_inactive_and_open_stance(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [
+            _ann("f-1", stance="asserted", status=Status.FIXED),
+            _ann("o-1", stance="open"),
+            _ann("u-1", stance="asserted", promoted_to=None),
+        ],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert faults == []
+
+
+def test_scan_faults_on_non_proposition_target_for_proposition_typed(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [_ann("a-1", stance="asserted", promoted_to="question:q")],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert [f.reason for f in faults] == ["non-proposition-target"]
+
+
+def test_scan_faults_on_stale_proposition(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [_ann("a-1", stance="asserted", promoted_to="proposition:gone")],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    _, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert [f.reason for f in faults] == ["stale-proposition"]
+
+
+def test_scan_faults_on_invalid_stance(tmp_path: Path):
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="maybe")])
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    _, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert [f.reason for f in faults] == ["invalid-stance"]
+
+
+def test_scan_inactive_with_corrupt_target_is_skipped_not_errored(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [_ann("a-1", stance="asserted", status=Status.DISMISSED, promoted_to="question:q")],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert faults == []
+
+
+def test_scan_faults_on_ownership_mismatch_paper_absent(tmp_path: Path):
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"paper:Other2019", _ANN_REF})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert [f.reason for f in faults] == ["ownership-mismatch"]
+
+
+def test_scan_faults_on_ownership_mismatch_annotation_absent(tmp_path: Path):
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert [f.reason for f in faults] == ["ownership-mismatch"]
+
+
+def test_scan_accumulates_multiple_faults(tmp_path: Path):
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [
+            _ann("a-1", stance="maybe"),
+            _ann("a-2", stance="asserted", promoted_to="proposition:gone"),
+        ],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+
+    _, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert {f.reason for f in faults} == {"invalid-stance", "stale-proposition"}
+    assert len(faults) == 2
