@@ -5,6 +5,7 @@ import json
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF
@@ -168,8 +169,9 @@ def build_cross_paper_evidence_report(
     project_root: Path,
     *,
     proposition_ref: str | None = None,
+    proposition_source_refs: Mapping[str, frozenset[str]] | None = None,
 ) -> dict:
-    refs = load_proposition_source_refs(project_root)
+    refs = dict(proposition_source_refs) if proposition_source_refs is not None else load_proposition_source_refs(project_root)
     assertions, faults = scan_literature_assertions(project_root, refs)
     collapsed = collapse_assertions(assertions)
     units_by_ref: dict[str, list[LiteratureAssertion]] = {}

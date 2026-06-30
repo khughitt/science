@@ -19,7 +19,10 @@ import yaml as _yaml
 from science_model.contracts.inventory_common import InventoryWarning
 from science_model.entities import Entity
 
-from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
+from science_tool.annotation.cross_paper_evidence import (
+    build_cross_paper_evidence_report,
+    proposition_source_refs_map,
+)
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
@@ -1791,13 +1794,16 @@ def _cross_paper_empty_state(summary: dict[str, object]) -> str:
 
 
 def _collect_cross_paper_evidence(context: HealthContext) -> CrossPaperEvidenceHealthReport:
-    report = build_cross_paper_evidence_report(context.project_root)
+    report = build_cross_paper_evidence_report(
+        context.project_root,
+        proposition_source_refs=proposition_source_refs_map(_context_sources(context).entities),
+    )
     summary = cast("dict[str, object]", report["summary"])
     findings: list[CrossPaperEvidenceFinding] = [
         {
             "code": f"cross_paper_evidence.{row['reason']}",
             "severity": "error",
-            "sidecar": row["sidecar"],
+            "sidecar": _project_relative_sidecar(context.project_root, row["sidecar"]),
             "annotation": row["annotation"],
             "reason": row["reason"],
             "detail": row["detail"],
@@ -1811,6 +1817,14 @@ def _collect_cross_paper_evidence(context: HealthContext) -> CrossPaperEvidenceH
         "findings": findings,
         "propositions": cast("list[dict[str, object]]", report["propositions"]),
     }
+
+
+def _project_relative_sidecar(project_root: Path, sidecar: str) -> str:
+    path = Path(sidecar)
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return sidecar
 
 
 def _collect_managed_artifacts(context: HealthContext) -> list[dict]:
@@ -1934,7 +1948,7 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
     HealthCheck(
         name="cross_paper_evidence",
         description="Report derived cross-paper literature evidence and scanner faults.",
-        requires_sources=False,
+        requires_sources=True,
         run=_collect_cross_paper_evidence,
     ),
     HealthCheck(

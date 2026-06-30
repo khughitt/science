@@ -523,7 +523,7 @@ class TestBuildHealthReport:
             {
                 "code": "cross_paper_evidence.stale-proposition",
                 "severity": "error",
-                "sidecar": str(tmp_path / "entities" / "papers" / "A2020.source.anno.trig"),
+                "sidecar": "entities/papers/A2020.source.anno.trig",
                 "annotation": "A2020-1",
                 "reason": "stale-proposition",
                 "detail": "proposition:ghost not found",
@@ -557,7 +557,13 @@ class TestBuildHealthReport:
                 "unit_count": 2,
                 "supporting_papers": 2,
                 "disputing_papers": 0,
-                "belief": cross_paper["propositions"][0]["belief"],
+                "belief": {
+                    "belief_magnitude": "supported",
+                    "contested": False,
+                    "contested_groups": [],
+                    "support_units": 2,
+                    "dispute_units": 0,
+                },
             }
         ]
         assert report["total_issues"] == 0
@@ -769,6 +775,7 @@ health:
         timing_names = [row["name"] for row in report["_meta"]["timings"]]
         assert "load_project_sources" not in timing_names
         assert "unregistered_ref_kinds" not in timing_names
+        assert "cross_paper_evidence" not in timing_names
         assert "archive_lag" in timing_names
         assert report["unregistered_ref_kinds"] == []
 
@@ -1122,7 +1129,7 @@ class TestHealthCLI:
         assert "Project is clean" not in result.output
         assert "Cross-paper evidence" in result.output
         assert "stale-proposition" in result.output
-        assert "proposition:ghost not found" in result.output
+        assert "Next:" in result.output
 
     def test_json_output_validate_check_uses_runner_without_subprocess(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -5073,7 +5073,6 @@ def health_command(
         cpe_table.add_column("Sidecar", overflow="fold")
         cpe_table.add_column("Annotation", no_wrap=True)
         cpe_table.add_column("Detail", overflow="fold")
-        fault_lines: list[str] = []
         for row in cross_paper_findings:
             sidecar = str(row.get("sidecar", ""))
             if sidecar:
@@ -5090,9 +5089,8 @@ def health_command(
                 annotation,
                 detail,
             )
-            fault_lines.append(f"- {reason} {sidecar}#{annotation}: {detail}")
         console.print(cpe_table)
-        console.print("\n".join(fault_lines))
+        console.print("\n[bold]Next:[/bold] fix stale promoted_to refs or proposition source_refs, then rerun health.")
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
