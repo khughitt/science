@@ -1,10 +1,10 @@
 {
-  "file_count": 186,
+  "file_count": 180,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 111,
+  "thread_count": 106,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -2329,33 +2329,6 @@
       "thread_id": "sub-article-annotation-phase1"
     },
     {
-      "earliest_file_date": "2026-06-07",
-      "files": [
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md",
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-07",
-      "normalized_slug": "substrate-3a-entities-retirement-visibility",
-      "raw_slugs": {
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md": "substrate-3a-entities-retirement-visibility-design",
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md": "substrate-3a-entities-retirement-visibility-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md"
-        ],
-        "implementation-plan": [
-          "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-design.md": "design",
-        "docs/plans/2026-06-07-substrate-3a-entities-retirement-visibility-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "substrate-3a-entities-retirement-visibility"
-    },
-    {
       "earliest_file_date": "2026-06-08",
       "files": [
         "docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md",
@@ -2493,48 +2466,6 @@
     {
       "earliest_file_date": "2026-06-07",
       "files": [
-        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-07",
-      "normalized_slug": "substrate-dataset-promotion-members-gate",
-      "raw_slugs": {
-        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md": "substrate-dataset-promotion-members-gate-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-07-substrate-dataset-promotion-members-gate-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "substrate-dataset-promotion-members-gate"
-    },
-    {
-      "earliest_file_date": "2026-06-07",
-      "files": [
-        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-07",
-      "normalized_slug": "substrate-dataset-reconciliation-2b",
-      "raw_slugs": {
-        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md": "substrate-dataset-reconciliation-2b-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-07-substrate-dataset-reconciliation-2b-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "substrate-dataset-reconciliation-2b"
-    },
-    {
-      "earliest_file_date": "2026-06-07",
-      "files": [
         "docs/plans/2026-06-07-substrate-dataset-reconciliation-2c-implementation-plan.md"
       ],
       "latest_file_date": "2026-06-07",
@@ -2598,27 +2529,6 @@
     {
       "earliest_file_date": "2026-06-07",
       "files": [
-        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-07",
-      "normalized_slug": "substrate-orphan-datapackage-owners",
-      "raw_slugs": {
-        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md": "substrate-orphan-datapackage-owners-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-07-substrate-orphan-datapackage-owners-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "substrate-orphan-datapackage-owners"
-    },
-    {
-      "earliest_file_date": "2026-06-07",
-      "files": [
         "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md"
       ],
       "latest_file_date": "2026-06-07",
@@ -2636,27 +2546,6 @@
         "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "substrate-scope-aware-loading"
-    },
-    {
-      "earliest_file_date": "2026-06-07",
-      "files": [
-        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-07",
-      "normalized_slug": "substrate-scoped-ref-resolution",
-      "raw_slugs": {
-        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md": "substrate-scoped-ref-resolution-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-07-substrate-scoped-ref-resolution-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "substrate-scoped-ref-resolution"
     },
     {
       "earliest_file_date": "2026-06-27",
