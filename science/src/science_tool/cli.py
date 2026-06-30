@@ -6736,11 +6736,10 @@ def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path |
 
     path = output_path if output_path.is_absolute() else root / output_path
     resolved = path.resolve()
-    if not output_path.is_absolute():
-        try:
-            resolved.relative_to(root)
-        except ValueError as exc:
-            raise click.ClickException(f"--output must stay under project root: {output_path}") from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise click.ClickException(f"--output must stay under project root: {output_path}") from exc
     return resolved
 
 
