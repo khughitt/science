@@ -390,3 +390,51 @@ def test_scan_accumulates_multiple_faults(tmp_path: Path):
 
     assert {f.reason for f in faults} == {"invalid-stance", "stale-proposition"}
     assert len(faults) == 2
+
+
+def test_scan_literature_assertions_carries_statement_context(tmp_path: Path):
+    body = _json.dumps(
+        {
+            "section": "results",
+            "stance": "asserted",
+            "subject": "BRCA1 loss",
+            "object": "genomic instability",
+            "subject_concept": "https://identifiers.org/ncbigene:672",
+            "object_concept": "concept:genomic-instability",
+        }
+    )
+    ann = _ann("a-1", stance="asserted")
+    rich_ann = Annotation(
+        id=ann.id,
+        target=SpecificResource(
+            source=ann.target.source,
+            selector=TextQuoteSelector(
+                exact="BRCA1 loss increases genomic instability",
+                prefix="",
+                suffix="",
+            ),
+        ),
+        bodies=(TextualBody(value=body, format="application/json"),),
+        motivation=ann.motivation,
+        annotation_type=ann.annotation_type,
+        source=ann.source,
+        status=ann.status,
+        creator=ann.creator,
+        created=ann.created,
+        content_hash=ann.content_hash,
+        promoted_to=ann.promoted_to,
+    )
+    _write_paper_sidecar(tmp_path, "Smith2020", [rich_ann])
+    refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert faults == []
+    assert len(assertions) == 1
+    assertion = assertions[0]
+    assert assertion.statement_exact == "BRCA1 loss increases genomic instability"
+    assert assertion.section == "results"
+    assert assertion.subject == "BRCA1 loss"
+    assert assertion.object == "genomic instability"
+    assert assertion.subject_concept == "https://identifiers.org/ncbigene:672"
+    assert assertion.object_concept == "concept:genomic-instability"

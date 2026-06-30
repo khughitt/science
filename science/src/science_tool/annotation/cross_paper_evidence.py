@@ -30,6 +30,12 @@ class LiteratureAssertion:
     annotation_id: str
     sidecar: str
     annotation_ref: str
+    statement_exact: str = ""
+    section: str = ""
+    subject: str | None = None
+    object: str | None = None
+    subject_concept: str | None = None
+    object_concept: str | None = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +266,29 @@ def _statement_stance(ann) -> str:
     return ""
 
 
+def _statement_context(ann) -> dict[str, str | None]:
+    for body in ann.bodies:
+        if isinstance(body, TextualBody) and body.format == "application/json":
+            try:
+                data = json.loads(body.value)
+            except json.JSONDecodeError:
+                return {}
+            if not isinstance(data, dict):
+                return {}
+            return {
+                "section": str(data.get("section", "")),
+                "subject": data.get("subject") if isinstance(data.get("subject"), str) else None,
+                "object": data.get("object") if isinstance(data.get("object"), str) else None,
+                "subject_concept": (
+                    data.get("subject_concept") if isinstance(data.get("subject_concept"), str) else None
+                ),
+                "object_concept": (
+                    data.get("object_concept") if isinstance(data.get("object_concept"), str) else None
+                ),
+            }
+    return {}
+
+
 def _resolve_paper_ref(sidecar_path: Path) -> str | None:
     try:
         md = markdown_for_sidecar(sidecar_path)
@@ -351,6 +380,7 @@ def scan_literature_assertions(
                 )
                 continue
 
+            context = _statement_context(ann)
             assertions.append(
                 LiteratureAssertion(
                     proposition_ref=ann.promoted_to,
@@ -359,6 +389,12 @@ def scan_literature_assertions(
                     annotation_id=ann.id,
                     sidecar=sidecar_ref,
                     annotation_ref=ann_ref,
+                    statement_exact=ann.target.selector.exact,
+                    section=str(context.get("section") or ""),
+                    subject=context.get("subject"),
+                    object=context.get("object"),
+                    subject_concept=context.get("subject_concept"),
+                    object_concept=context.get("object_concept"),
                 )
             )
 
