@@ -7,6 +7,7 @@ Bar for entries: each doc should describe a pattern observed in two or more down
 ## Index
 
 - [`code-task-backlinks.md`](code-task-backlinks.md) — sanctioned patterns for linking code/notebooks back to tasks, questions, hypotheses, and interpretations.
+- [`data-boundary.md`](data-boundary.md) — tracked source records vs ignored payload data, `science data audit`, conservative fixes, and `data_policy:` overrides.
 - [`pipeline-qa-checkpoints.md`](pipeline-qa-checkpoints.md) — concrete shape for a pipeline data-QA step (structural vs distribution severity, config-driven bounds including shared registry/enum validation, markdown report, fail-early on structural).
 - [`reproducible-manifest-dates.md`](reproducible-manifest-dates.md) — workflow-run / derived-dataset manifest `created`/`updated` must derive from run identity (run-slug date / `--produced-at` / commit time), not regeneration wall-clock, so manifests stay date-honest and byte-reproducible.
 - [`validate.md`](validate.md) — `science validate` CLI reference, including Python sidecar and output contracts.

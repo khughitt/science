@@ -106,11 +106,10 @@ incentives steer curation toward it" — not a one-off filter on the scan output
 ### fb-2026-06-28-004 — data/ ignore boundary orphans durable evidence records
 **target:** module:data_worktree · **project:** natural-systems
 
-Deferred to its own effort. A full design already exists at
-`docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md` with open
-questions (evidence-path convention shape, single source of truth for the
-policy + size threshold, optional validate-time warn). Multi-part (convention +
-size-guard pre-commit hook + `science data audit`), not a quick fix.
+Resolved by the data-boundary convention and `science data audit`; see
+`docs/conventions/data-boundary.md`. Remaining follow-ups are longer-tail:
+size-guard pre-commit hook, validate-time ignored-provenance warnings, health
+summaries, scaffold and `.gitignore` deltas, and downstream sweeps.
 
 ---
 

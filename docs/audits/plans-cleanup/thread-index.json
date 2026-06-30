@@ -1,10 +1,10 @@
 {
-  "file_count": 131,
+  "file_count": 128,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 78,
+  "thread_count": 76,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -505,33 +505,6 @@
       "thread_id": "contextual-structural-roles"
     },
     {
-      "earliest_file_date": "2026-06-28",
-      "files": [
-        "docs/plans/2026-06-28-data-audit-design.md",
-        "docs/plans/2026-06-28-data-audit-plan.md"
-      ],
-      "latest_file_date": "2026-06-28",
-      "normalized_slug": "data-audit",
-      "raw_slugs": {
-        "docs/plans/2026-06-28-data-audit-design.md": "data-audit-design",
-        "docs/plans/2026-06-28-data-audit-plan.md": "data-audit-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-28-data-audit-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-28-data-audit-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-28-data-audit-design.md": "design",
-        "docs/plans/2026-06-28-data-audit-plan.md": "plan"
-      },
-      "thread_id": "data-audit"
-    },
-    {
       "earliest_file_date": "2026-06-10",
       "files": [
         "docs/plans/2026-06-10-data-driven-discovery-improvements.md"
@@ -1001,27 +974,6 @@
         "docs/plans/2026-06-08-epistemic-edges-plan.md": "plan"
       },
       "thread_id": "epistemic-edges"
-    },
-    {
-      "earliest_file_date": "2026-06-28",
-      "files": [
-        "docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md"
-      ],
-      "latest_file_date": "2026-06-28",
-      "normalized_slug": "feedback-data-evidence-tracking-boundary",
-      "raw_slugs": {
-        "docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md": "feedback-data-evidence-tracking-boundary"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md": null
-      },
-      "thread_id": "feedback-data-evidence-tracking-boundary"
     },
     {
       "earliest_file_date": "2026-06-27",

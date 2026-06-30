@@ -42,9 +42,10 @@ Serialize is git-faithful:
 - `--out` must resolve outside the project root.
 - The archive top-level directory is the safe project id from `science.yaml`.
 
-The command runs the data-boundary audit before writing the archive. It blocks
-on payload-boundary violations: stranded records, leaked payloads, and tracked
-payloads under data roots. Generic audit flags do not block serialization.
+The command runs the [data-boundary audit](../conventions/data-boundary.md)
+before writing the archive. It blocks on payload-boundary violations: stranded
+records, leaked payloads, and tracked payloads under data roots. Generic audit
+flags do not block serialization.
 
 `--force` bypasses only those payload-boundary violations. It does not bypass
 missing or untracked `science.yaml`, dirty source, missing `HEAD`, invalid

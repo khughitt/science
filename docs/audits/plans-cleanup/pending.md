@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `77`
+- Pending thread count: `75`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -311,22 +311,6 @@
   - Durable docs do not yet explain the semantic boundary: membership role is frame-relative bundle plumbing, not a proposition role or causal structural role.
   - docs/user-guide/epistemic-model.md only gives high-level weakest-link bundle belief and does not describe rival/background exclusion or the BundleMembership node.
 
-## data-audit
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-28-data-audit-design.md`
-  - `docs/plans/2026-06-28-data-audit-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until the data boundary, data_policy configuration, science data audit workflow, and deferred follow-ons are documented outside active plans
-    - `docs/plans/2026-06-28-data-audit-design.md`
-    - `docs/plans/2026-06-28-data-audit-plan.md`
-- remaining_gaps:
-  - No durable non-plan convention page was found for the data boundary, data_policy configuration, or science data audit command.
-  - The design explicitly defers size-guard hooks, validate-time ignored-provenance warnings, health checks, .gitignore/scaffold deltas, and downstream sweeps.
-
 ## data-driven-discovery-improvements
 
 - status: `incomplete`
@@ -607,20 +591,6 @@
   - MM30 legacy edges.yaml corpus migration is not present in this repo review and remains a downstream migration task.
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
-
-## feedback-data-evidence-tracking-boundary
-
-- status: `superseded_delete`
-- recommended_action: `delete`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md`
-- pending_actions:
-  - `deferred`: review status superseded_delete, but deletion depends on first creating the data-audit/data-boundary durable checkpoint and cleaning stale pointers
-    - `docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md`
-- remaining_gaps:
-  - Delete after the data-audit migration checkpoint exists so the origin, resolved boundary decision, and deferred follow-ons are not lost.
-  - docs/plans/2026-06-28-downstream-feedback-fixes.md still points fb-004 at this feedback note, so that stale pointer may need cleanup when deleting.
 
 ## feedback-from-recent
 

@@ -4,7 +4,7 @@
 Only one automatic move direction: a stranded RECORD out of ignored data/ into
 tracked results/. Leaked payloads and anything ambiguous → FLAG (never moved).
 End state of a performed move: the target exists under results/ and is staged; the
-source is gone; nothing is committed. See docs/plans/2026-06-28-data-audit-design.md.
+source is gone; nothing is committed. See docs/conventions/data-boundary.md.
 """
 
 from __future__ import annotations
