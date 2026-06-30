@@ -87,3 +87,79 @@ def test_add_with_commons_related_ref_does_not_crash(tmp_path: Path) -> None:
     )
     assert res.exit_code == 0, res.output
     assert (tmp_path / "entities" / "datasets" / "linked.md").exists()
+
+
+def _write_entity(tmp_path: Path, rel: str, frontmatter: str, body: str = "# Body\n") -> Path:
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{frontmatter}---\n\n{body}", encoding="utf-8")
+    return path
+
+
+def _link(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["dataset", "link", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+    )
+
+
+def test_dataset_link_adds_dataset_to_question_datasets(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "entities/datasets/my-set.md",
+        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+    )
+    target = _write_entity(
+        tmp_path,
+        "entities/questions/q.md",
+        'id: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets: []\n',
+        body="# Q\n\nBody stays.\n",
+    )
+
+    res = _link(tmp_path, "my-set", "question:q")
+
+    assert res.exit_code == 0, res.output
+    text = target.read_text(encoding="utf-8")
+    assert "datasets:\n- dataset:my-set\n" in text
+    assert "# Q\n\nBody stays.\n" in text
+    assert "linked dataset:my-set -> question:q" in res.output
+
+
+def test_dataset_link_is_idempotent(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "entities/datasets/my-set.md",
+        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+    )
+    target = _write_entity(
+        tmp_path,
+        "entities/hypotheses/h.md",
+        'id: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\ndatasets:\n  - dataset:my-set\n',
+    )
+
+    res = _link(tmp_path, "dataset:my-set", "hypothesis:h")
+
+    assert res.exit_code == 0, res.output
+    text = target.read_text(encoding="utf-8")
+    assert text.count("dataset:my-set") == 1
+    assert "already linked dataset:my-set -> hypothesis:h" in res.output
+
+
+def test_dataset_link_rejects_non_question_hypothesis_target(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "entities/datasets/my-set.md",
+        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+    )
+    _write_entity(
+        tmp_path,
+        "entities/papers/Paper2026.md",
+        'id: "paper:Paper2026"\ntype: "paper"\ntitle: "Paper"\n',
+    )
+
+    res = _link(tmp_path, "my-set", "paper:Paper2026")
+
+    assert res.exit_code == 1
+    assert "question or hypothesis" in res.output

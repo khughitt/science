@@ -60,6 +60,7 @@ _DOI_RE = re.compile(r"\b(?:doi:\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^
 # (``12345``) without context is too ambiguous to flag, so we require the
 # ``PMID`` prefix.
 _PMID_REF_RE = re.compile(r"\bPMID[:\s]+(\d{6,9})\b", re.IGNORECASE)
+_UNCATALOGUED_CANDIDATE_ROW_RE = re.compile(r"^\s*\|.*\|\s*(?:missing|peripheral|monitor)\s*\|", re.IGNORECASE)
 # BibTeX field values: ``doi = {…}`` / ``doi = "…"`` (whitespace tolerant).
 _BIB_DOI_FIELD_RE = re.compile(r"^\s*doi\s*=\s*[{\"]([^}\"]+)[}\"]", re.IGNORECASE | re.MULTILINE)
 _BIB_PMID_FIELD_RE = re.compile(r"^\s*pmid\s*=\s*[{\"]?(\d+)[}\"]?", re.IGNORECASE | re.MULTILINE)
@@ -673,6 +674,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
             # Skip headings and frontmatter for hypothesis checks
             if _is_heading_line(scan_line):
                 continue
+            skip_line_doi_pmid_check = skip_doi_pmid_check or bool(_UNCATALOGUED_CANDIDATE_ROW_RE.match(scan_line))
 
             # --- Task ID references ---
             if not skip_task_check and task_ids:
@@ -696,7 +698,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                     )
 
             # --- DOI references ---
-            if not skip_doi_pmid_check and doi_corpus:
+            if not skip_line_doi_pmid_check and doi_corpus:
                 for m in _DOI_RE.finditer(scan_line):
                     doi = _normalize_doi_token(m.group(1))
                     if doi in doi_corpus:
@@ -713,7 +715,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                     )
 
             # --- PMID references ---
-            if not skip_doi_pmid_check and pmid_corpus:
+            if not skip_line_doi_pmid_check and pmid_corpus:
                 for m in _PMID_REF_RE.finditer(scan_line):
                     pmid = m.group(1)
                     if pmid in pmid_corpus:

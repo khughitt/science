@@ -53,6 +53,25 @@ def test_catalog_datasets_connect_warns_about_legacy_metadata_backfill() -> None
     assert "role: \"training\"" in text
 
 
+def test_catalog_datasets_documents_dataset_link_helper_and_deposit_landing_method() -> None:
+    text = _read("commands/catalog-datasets.md")
+
+    assert "science dataset reconcile-links --format json" in text
+    assert "science dataset reconcile-links --fix" in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "idempotent" in text
+    assert "landing-confirmed" in text
+    assert "deposit" in text
+    assert "reject default `deposit` rows" not in text
+
+
+def test_plan_pipeline_respects_project_plan_numbering_convention() -> None:
+    text = _read("commands/plan-pipeline.md")
+
+    assert "Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems" in text
+    assert "entities/plans/<NNNN>-<slug>.md" in text
+
+
 def test_task_command_docs_use_aspects_for_task_creation() -> None:
     for path in ("commands/tasks.md", "commands/review-tasks.md"):
         text = _read(path)

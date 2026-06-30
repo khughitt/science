@@ -31,7 +31,7 @@ _ALLOWED_CADENCES = {
     "annual",
     "versioned-releases",
 }
-_DEPOSIT_METHODS = {"", "retrieved", "credential-confirmed"}
+_DEPOSIT_METHODS = {"", "retrieved", "credential-confirmed", "landing-confirmed"}
 _REFERENCE_METHODS = {"", "credential-confirmed", "landing-confirmed", "metadata-confirmed"}
 _POINTER_METHODS = {"", "landing-confirmed", "metadata-confirmed"}
 

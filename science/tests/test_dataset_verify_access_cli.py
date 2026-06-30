@@ -73,6 +73,17 @@ def test_cli_verify_access_accepts_dataset_class(tmp_path: Path) -> None:
     assert "runtime=reference-only" in res.output
 
 
+def test_cli_verify_access_accepts_deposit_landing_confirmed(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    res = _run(tmp_path, "foo", "--class", "deposit", "--method", "landing-confirmed")
+
+    assert res.exit_code == 0, res.output
+    text = (tmp_path / "entities" / "datasets" / "foo.md").read_text(encoding="utf-8")
+    assert "dataset_class: deposit" in text
+    assert "verification_method: landing-confirmed" in text
+
+
 def test_cli_verify_access_missing_method_errors(tmp_path: Path) -> None:
     _legacy(tmp_path)
     res = _run(tmp_path, "foo", "--level", "public", "--license", "CC0-1.0")

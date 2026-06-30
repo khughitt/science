@@ -1146,6 +1146,48 @@ def test_doi_pmid_check_skipped_in_doc_searches_by_default() -> None:
         assert [i for i in issues if i.ref_type in ("doi", "pmid")] == []
 
 
+def test_doi_pmid_check_skipped_in_entities_searches_by_default() -> None:
+    """Layout-v3 search entities are also discovery logs, not citation sites."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "entities" / "searches").mkdir(parents=True, exist_ok=True)
+        (root / "entities" / "searches" / "0007-survey.md").write_text(
+            "---\nid: search:0007-survey\ntype: search\ntitle: Survey\n---\n"
+            "# Survey\nCandidate found: PMID: 99999999 / DOI: 10.9999/fake.123 (not adopted).\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type in ("doi", "pmid")] == []
+
+
+def test_doi_pmid_check_skips_uncatalogued_reading_queue_rows() -> None:
+    """Rows explicitly marked missing/peripheral/monitor are candidates, not bib claims."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "entities" / "plans").mkdir(parents=True, exist_ok=True)
+        (root / "entities" / "plans" / "0084-reading.md").write_text(
+            "---\nid: plan:0084-reading\ntype: plan\ntitle: Reading\n---\n"
+            "| source | status | identifier |\n"
+            "|---|---|---|\n"
+            "| candidate A | missing | DOI: 10.9999/missing.123 |\n"
+            "| candidate B | peripheral | PMID: 99999999 |\n"
+            "| candidate C | monitor | https://doi.org/10.9999/monitor.123 |\n"
+        )
+
+        issues = check_refs(root)
+
+        assert [i for i in issues if i.ref_type in ("doi", "pmid")] == []
+
+
 def test_doi_pmid_exempt_dirs_is_configurable() -> None:
     """A project can override the exempt-dir list; dropping doc/searches re-enables
     the check there."""

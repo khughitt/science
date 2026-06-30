@@ -28,7 +28,7 @@ For brevity, the examples below write just `science <command>` — **always expa
 
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
-- **MUST** write the plan to `entities/plans/YYYY-MM-DD-<slug>.md` (suffix omitted for design/implementation modes; `-pipeline-plan.md` suffix permitted but no longer required).
+- **MUST** write the plan to the project's plan filename convention. Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems; in those projects, use `entities/plans/<NNNN>-<slug>.md` with the next unused sequence number. Date-prefixed plans are only appropriate when the project already uses date-prefixed plan entity stems.
 - **MUST** check whether methodological readiness is already documented by an analysis-plan file under `entities/plans/*-analysis-plan.md` (a `type: plan` entity with `plan_kind: analysis-plan`, referenced as `plan:<stem>`). If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `/science:plan-analysis` before finalizing the pipeline plan.
 - **SHOULD** include frontmatter linking the plan to its hypotheses / questions / decisions / tasks via `related: [hypothesis:..., rq:..., decision:..., plan:..., task:..., paper:...]`. For pure upstream design notes (in the science repo itself), a `Parent design / Predecessor / Status / Depends on` header block is an acceptable alternative to frontmatter.
 - **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
@@ -210,13 +210,13 @@ a `workflow` entity:
 
 ### Step 4: Write the plan
 
-Save to `entities/plans/YYYY-MM-DD-<slug>.md`. The plan shape is dictated by the chosen mode (see Plan Modes above). The frontmatter is the same across modes.
+Save to the project-appropriate plan path: `entities/plans/<NNNN>-<slug>.md` for numeric-plan projects, or `entities/plans/YYYY-MM-DD-<slug>.md` for date-stem projects. Check existing `entities/plans/` filenames before writing; a validator that treats the leading number as the plan number will see every date-stemmed 2026 plan as duplicate `2026`. The plan shape is dictated by the chosen mode (see Plan Modes above). The frontmatter is the same across modes.
 
 **Frontmatter (project-level plans):**
 
 ```yaml
 ---
-id: "plan:YYYY-MM-DD-<slug>"
+id: "plan:<stem>"
 type: "plan"
 title: "<short title>"
 status: "active"   # active | draft | merged | archived

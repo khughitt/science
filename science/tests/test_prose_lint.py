@@ -367,6 +367,10 @@ class TestNumericAnchor:
         path = _write(tmp_path, "## 3.2 Methods\n\nText.\n")
         assert detect_numeric_anchor(path) == []
 
+    def test_no_flag_in_bold_structural_task_label(self, tmp_path):
+        path = _write(tmp_path, "**Wave 3 Batch 4.10 (completed March 13, 2026)**\n\nText.\n")
+        assert detect_numeric_anchor(path) == []
+
     def test_no_flag_in_markdown_table_row(self, tmp_path):
         path = _write(
             tmp_path,

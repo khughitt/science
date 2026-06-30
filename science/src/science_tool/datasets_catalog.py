@@ -8,6 +8,7 @@ docs/plans/2026-06-21-dataset-catalog-cli-design.md.
 from __future__ import annotations
 
 import os
+import re
 from datetime import date
 from pathlib import Path
 
@@ -169,6 +170,160 @@ def _append_verification_log(body: str, line: str) -> str:
     return f"{trimmed}\n\n{_VERIFY_LOG_HEADING}\n\n{line}\n"
 
 
+def _render_entity(frontmatter: dict, body: str) -> str:
+    front = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    return f"---\n{front}---\n\n{body.strip()}\n"
+
+
+def _iter_local_entities(project_root: Path):
+    for path in sorted((project_root / "entities").glob("**/*.md")):
+        parsed = parse_frontmatter(path)
+        if parsed is None:
+            continue
+        fm, body = parsed
+        entity_id = fm.get("id")
+        if isinstance(entity_id, str) and entity_id:
+            yield path, fm, body
+
+
+def _load_entity_by_id(project_root: Path, entity_id: str) -> tuple[Path, dict, str] | None:
+    for path, fm, body in _iter_local_entities(project_root):
+        if fm.get("id") == entity_id:
+            return path, fm, body
+    return None
+
+
+def _dataset_match_key(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _dataset_resolution_index(project_root: Path) -> dict[str, tuple[str, str] | None]:
+    index: dict[str, tuple[str, str] | None] = {}
+    for path, fm, _body in _iter_local_entities(project_root):
+        if (fm.get("kind") or fm.get("type")) != "dataset":
+            continue
+        dataset_id = fm.get("id")
+        if not isinstance(dataset_id, str) or not dataset_id.startswith("dataset:"):
+            continue
+        slug = dataset_id.split(":", 1)[1]
+        candidates: list[tuple[object, str]] = [(slug, "slug")]
+        title = fm.get("title")
+        if title:
+            candidates.append((title, "title"))
+        accessions = fm.get("accessions")
+        if isinstance(accessions, list):
+            candidates.extend((item, "accession") for item in accessions if isinstance(item, str) and item)
+        for value, reason in candidates:
+            key = _dataset_match_key(value)
+            if not key:
+                continue
+            next_value = (dataset_id, reason)
+            existing = index.get(key)
+            if existing is not None and existing[0] == dataset_id:
+                continue
+            if key in index and existing != next_value:
+                index[key] = None
+            else:
+                index[key] = next_value
+    return index
+
+
+def reconcile_dataset_links(project_root: Path, *, fix: bool = False) -> list[dict[str, str]]:
+    """Find Q/H free-text ``datasets:`` entries that resolve to local datasets."""
+    index = _dataset_resolution_index(project_root)
+    rows: list[dict[str, str]] = []
+    rewrites: list[tuple[Path, dict, str]] = []
+    for path, fm, body in _iter_local_entities(project_root):
+        entity_kind = fm.get("kind") or fm.get("type")
+        if entity_kind not in {"question", "hypothesis"}:
+            continue
+        entity_id = fm.get("id")
+        if not isinstance(entity_id, str):
+            continue
+        raw_datasets = fm.get("datasets")
+        if not isinstance(raw_datasets, list):
+            continue
+        changed = False
+        next_datasets: list[object] = []
+        for entry in raw_datasets:
+            if not isinstance(entry, str) or entry.startswith("dataset:"):
+                next_datasets.append(entry)
+                continue
+            resolved = index.get(_dataset_match_key(entry))
+            if resolved is None:
+                next_datasets.append(entry)
+                continue
+            dataset_id, reason = resolved
+            rows.append(
+                {
+                    "file": path.relative_to(project_root).as_posix(),
+                    "entity_id": entity_id,
+                    "entry": entry,
+                    "resolved_dataset": dataset_id,
+                    "reason": reason,
+                }
+            )
+            next_datasets.append(dataset_id if fix else entry)
+            changed = changed or fix
+        if changed:
+            fm["datasets"] = next_datasets
+            rewrites.append((path, fm, body))
+
+    for path, fm, body in rewrites:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            tmp.write_text(_render_entity(fm, body), encoding="utf-8")
+            os.replace(tmp, path)
+        finally:
+            if tmp.exists():
+                tmp.unlink()
+    return rows
+
+
+def link_dataset_to_target(project_root: Path, dataset_ref: str, target_ref: str) -> tuple[str, str, Path, bool]:
+    """Append a dataset id to a question/hypothesis entity's ``datasets:`` list.
+
+    Returns (dataset_id, target_ref, target_path, changed). The operation is
+    idempotent and preserves the target body while normalizing frontmatter YAML.
+    """
+    _slug, _dataset_path, dataset_fm, _dataset_body = _load_local_dataset(project_root, dataset_ref)
+    dataset_id = dataset_fm.get("id")
+    if not isinstance(dataset_id, str) or not dataset_id.startswith("dataset:"):
+        raise EntityCommandError(f"{dataset_ref!r} is not a dataset entity")
+
+    if not (target_ref.startswith("question:") or target_ref.startswith("hypothesis:")):
+        raise EntityCommandError("dataset link target must be a question or hypothesis ref")
+    loaded = _load_entity_by_id(project_root, target_ref)
+    if loaded is None:
+        raise EntityCommandError(f"no such target entity {target_ref!r}")
+    target_path, target_fm, target_body = loaded
+    target_kind = target_fm.get("kind") or target_fm.get("type")
+    if target_kind not in {"question", "hypothesis"}:
+        raise EntityCommandError("dataset link target must be a question or hypothesis entity")
+
+    raw_datasets = target_fm.get("datasets")
+    if raw_datasets is None:
+        datasets: list[str] = []
+    elif isinstance(raw_datasets, list) and all(isinstance(item, str) for item in raw_datasets):
+        datasets = list(raw_datasets)
+    else:
+        raise EntityCommandError(f"{target_ref}: datasets must be a list of dataset ids")
+
+    if dataset_id in datasets:
+        return dataset_id, target_ref, target_path, False
+
+    target_fm["datasets"] = [*datasets, dataset_id]
+    tmp = target_path.with_suffix(target_path.suffix + ".tmp")
+    text = _render_entity(target_fm, target_body)
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, target_path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return dataset_id, target_ref, target_path, True
+
+
 def verify_access(
     project_root: Path,
     ref: str,
@@ -255,7 +410,7 @@ def verify_access(
                 "(retrieved|credential-confirmed|landing-confirmed|metadata-confirmed)."
             )
         allowed_methods = {
-            "deposit": {"retrieved", "credential-confirmed"},
+            "deposit": {"retrieved", "credential-confirmed", "landing-confirmed"},
             "reference": {"credential-confirmed", "landing-confirmed", "metadata-confirmed"},
             "pointer": {"landing-confirmed", "metadata-confirmed"},
         }[effective_class]
