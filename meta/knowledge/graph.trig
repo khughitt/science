@@ -11,6 +11,8 @@
 @prefix dcat: <http://www.w3.org/ns/dcat#> .
 
 <http://example.org/project/graph/knowledge> {
+    <http://example.org/project/annotation/entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
+    <http://example.org/project/annotation/entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
     <http://example.org/project/bears-on-edge/0146c753d9e72e40> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/ed0fd99ce0d2a3eb> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
@@ -82,6 +84,10 @@
     <http://example.org/project/bears-on-edge/08511d6d7bc24bde> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/06bb3a2dceb454da> ;
         sci:bearsOnTarget <http://example.org/project/paper/gong2024> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/0872db2bce925e78> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/f5e11c8eb622ddc55d0c525b36e07305ac396ec6b418f332a80920a475a24fae> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/0873e4fbb7204223> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e2134fe382aa2b8d> ;
@@ -458,6 +464,10 @@
     <http://example.org/project/bears-on-edge/36b2e7828d33565d> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/d0436c2423de4302> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/37c4d6264791ada8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/2cb09de6cc569f41> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/38d74c44a7364b40> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/15cff83a6b7b2335> ;
@@ -859,6 +869,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/468baa6e6581b587> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/6ab7d9260e437032> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/d9a30e1b41346cdc> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/6ac28067af71583b> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/d6b4cfa02b477e10> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -947,6 +961,10 @@
         sci:bearsOnSource <http://example.org/project/paper/jin2025> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/757e61ba09b21095> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/764dcc64d6219aba> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/b2544826dbef5626> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -1022,6 +1040,10 @@
     <http://example.org/project/bears-on-edge/7fb20aa6d260e5c5> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/707763b7070beeb6> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/80204da34974f205> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/paper/klugkist2023> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/805590833c5b8f03> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/majumdar2022> ;
@@ -1451,6 +1473,10 @@
         sci:bearsOnSource <http://example.org/project/task/t027> ;
         sci:bearsOnTarget <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/bb7b4b5ded68f892> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/376814ac7028eca8> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/bbe6e8834e85414e> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e9a7c181412bc394> ;
         sci:bearsOnTarget <http://example.org/project/paper/wan2025> ;
@@ -1671,6 +1697,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/a548cea58faa6a97> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/d1ecc200ed3fef21> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/d33dd61954042cd1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t039> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
@@ -1711,6 +1741,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/ca0742e4eaee1904> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/d7ab448dbdf3e245> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/d7b29c0b91e35d44> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e365efffe3101555> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -1734,6 +1768,10 @@
     <http://example.org/project/bears-on-edge/da7199a3f6658ddd> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/aitken2024> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/da9aa37220ec69f1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/daf4a4c34594261a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/653c587a1d1e6d17> ;
@@ -1802,6 +1840,10 @@
     <http://example.org/project/bears-on-edge/e3482dd034c28e0f> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/09ec5a6fc59135b4> ;
         sci:bearsOnTarget <http://example.org/project/paper/yu2026> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/e44021487b67bf8e> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/paper/vanlissa2024> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/e481113430475c1b> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source/entities_interpretations_0001-simulator-2026-04-24.md> ;
@@ -2155,6 +2197,12 @@
         a sci:CodeFile ;
         skos:prefLabel "t034_validator/loader.py" ;
         schema:identifier "code-file:t034_validator/loader.py" .
+    <http://example.org/project/evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        cito:supports <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:EvidenceLine .
+    <http://example.org/project/evidence-line/lit-assertion/f5e11c8eb622ddc55d0c525b36e07305ac396ec6b418f332a80920a475a24fae> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        cito:supports <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
+        a sci:EvidenceLine .
     <http://example.org/project/hypothesis/0001-stochastic-revisiting> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "proposed" ;
@@ -2732,7 +2780,8 @@
         skos:prefLabel "Evaluating AI Agents in Biological Discovery" ;
         dcat:downloadURL <https://www.youtube.com/watch?v=BCugR49h3ts> ;
         schema:identifier "paper:Johri2026" .
-    <http://example.org/project/paper/klugkist2023> sci:bearsOn <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
+    <http://example.org/project/paper/klugkist2023> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses>,
+            <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
@@ -2954,7 +3003,8 @@
             prov:Entity ;
         skos:prefLabel "Bayesian statistics and modelling" ;
         schema:identifier "paper:vandeSchoot2021" .
-    <http://example.org/project/paper/vanlissa2024> sci:bearsOn <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
+    <http://example.org/project/paper/vanlissa2024> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses>,
+            <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
@@ -3105,6 +3155,16 @@
         skos:prefLabel "Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis of Multiple Exposures and Outcomes" ;
         skos:related <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         schema:identifier "paper:Zuber2025" .
+    <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> sci:freshnessState "fresh" ;
+        sci:profile "core" ;
+        sci:projectStatus "active" ;
+        sci:scope "project" ;
+        a sci:Proposition ;
+        skos:prefLabel "Conceptual-replication evidence can be aggregated over informative hypotheses" ;
+        skos:related <http://example.org/project/question/0009-mcda-bayesian-interoperability>,
+            <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis>,
+            <http://example.org/project/topic/bayesian-methods-continuous-belief> ;
+        schema:identifier "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses" .
     <http://example.org/project/question/0001-bioinformatics-generalizability> sci:freshnessState "fresh" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
@@ -3354,11 +3414,13 @@
             <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening>,
             <http://example.org/project/paper/thijssen2017>,
             <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> .
+    <http://example.org/project/source-snapshot/2cb09de6cc569f41> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
     <http://example.org/project/source-snapshot/2f5802732fecd4f9> sci:bearsOn <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> .
     <http://example.org/project/source-snapshot/3689053cf11f414d> sci:bearsOn <http://example.org/project/question/0009-mcda-bayesian-interoperability> .
     <http://example.org/project/source-snapshot/36b07c197f068d3e> sci:bearsOn <http://example.org/project/paper/cerullo2023>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/376814ac7028eca8> sci:bearsOn <http://example.org/project/paper/vanlissa2024>,
+            <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/37c4a47155c5fc2d> sci:bearsOn <http://example.org/project/paper/hackenberger2020>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
@@ -3508,6 +3570,7 @@
     <http://example.org/project/source-snapshot/d8545cd2f6f33cc9> sci:bearsOn <http://example.org/project/paper/srinivasan2024>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/d9a30e1b41346cdc> sci:bearsOn <http://example.org/project/paper/klugkist2023>,
+            <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/da25983235d45823> sci:bearsOn <http://example.org/project/hypothesis/0006-adaptive-project-topology-improves-research-fit> .
     <http://example.org/project/source-snapshot/da7eb7f9b115054e> sci:bearsOn <http://example.org/project/question/0006-source-dependence-detection> .
@@ -3564,6 +3627,7 @@
     <http://example.org/project/source/entities_interpretations_0002-l1-patch-prototype-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0002-l1-patch-prototype-2026-06-01> .
     <http://example.org/project/source/entities_interpretations_0003-t066-latent-correction-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0003-t066-latent-correction-2026-06-01> .
     <http://example.org/project/source/entities_interpretations_0004-t067-patch-federation-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> .
+    <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
     <http://example.org/project/source/entities_questions_0001-bioinformatics-generalizability.md> sci:bearsOn <http://example.org/project/question/0001-bioinformatics-generalizability> .
     <http://example.org/project/source/entities_questions_0002-evidence-payload-schema.md> sci:bearsOn <http://example.org/project/question/0002-evidence-payload-schema> .
     <http://example.org/project/source/entities_questions_0003-causal-synthesis-guardrails.md> sci:bearsOn <http://example.org/project/question/0003-causal-synthesis-guardrails> .
@@ -4495,11 +4559,23 @@
     <http://example.org/project/code-file/t034_validator/__init__.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator___init__.py> .
     <http://example.org/project/code-file/t034_validator/__main__.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator___main__.py> .
     <http://example.org/project/code-file/t034_validator/loader.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator_loader.py> .
+    <http://example.org/project/evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e> sci:evidenceIndependence "independent" ;
+        sci:evidenceRole "proxy_support" ;
+        sci:evidenceStrength "moderate" ;
+        sci:evidenceType "literature" ;
+        sci:independenceGroup "literature-paper:Klugkist2023" ;
+        prov:wasDerivedFrom <http://example.org/project/paper/klugkist2023> .
+    <http://example.org/project/evidence-line/lit-assertion/f5e11c8eb622ddc55d0c525b36e07305ac396ec6b418f332a80920a475a24fae> sci:evidenceIndependence "independent" ;
+        sci:evidenceRole "proxy_support" ;
+        sci:evidenceStrength "moderate" ;
+        sci:evidenceType "literature" ;
+        sci:independenceGroup "literature-paper:VanLissa2024" ;
+        prov:wasDerivedFrom <http://example.org/project/paper/vanlissa2024> .
     <http://example.org/project/graph_revision> a prov:Entity ;
-        schema:dateModified "2026-06-26T12:10:18+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+        schema:dateModified "2026-06-30T13:21:15+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
         schema:name "graph-revision" ;
-        schema:sha256 "5c0f741c70943af5be1c6ad54e72801ce0fffc64e2c758d4a8d41edfb9928b99" ;
-        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"6babce772eaf1e47b2cfc1df1845254479af54b459cb838e0341cc473d93251f\"},\"CLAUDE.md\":{\"mtime_ns\":1776995988800669311,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"doc/plans/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"51e46b8fda9ce22575ab7c4ff420545b005c99b568bdca71becdef5f8cbc73c4\"},\"doc/plans/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"19f5e94dc45d1109b0d82f943ad9f8c81dbd8ab64a4ba84840863238474376e0\"},\"doc/plans/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"2af61a2ad41760cdc82bdedd84d7f40c55dc6c2367172884ea96dae771780a4f\"},\"doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1781978375286801246,\"sha256\":\"d86cbb25555d78510c43849e8223e0a7b601c6cda2b0f74342f9ade9454ee143\"},\"doc/plans/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1781978375286984029,\"sha256\":\"3d3c9ac90ad99ebb6fb2fd2cc62f5c203277c33e76b4089cc32f639b38f5e87f\"},\"doc/plans/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1781978375287164708,\"sha256\":\"e0df6eea6a8b676868644acff2107add9726bcc20f4df79dbccd72c127345d27\"},\"doc/plans/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1781978375287385201,\"sha256\":\"5f53d517b1497e78521e169b10e7a93300b023fb920c0d8f306cc45a2e1540de\"},\"doc/plans/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1781978375287573404,\"sha256\":\"3aef76b0be469ba8c76e8a3f40de43187aa164aff250aafb355149e444c9cfd4\"},\"doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1781978375287755997,\"sha256\":\"52601c62cf41ea36f829c45b69360d1971895a3f667f12c6d20f3db3d2a52fa5\"},\"doc/plans/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1781978375288016956,\"sha256\":\"4e698cef4d8f0e868312580472e1b462ec456677f0514232eeb91d1f5dfdfa05\"},\"doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1778123578787445360,\"sha256\":\"0ddb7840e3a17497d81644a61bafd5e7005fe1a7ecfcd83a941558a87d98b6b3\"},\"doc/plans/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1781978375288270321,\"sha256\":\"0247d0413224d7ae90bf4dda3fd7d05472c51453bc60a46681307e5fe00470d4\"},\"doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1778320743663461650,\"sha256\":\"e8c252a2b452b07af9ab0801ee9b2bbac71e646adc7ddd2c62f40bd1f7275f13\"},\"doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1781978375288450840,\"sha256\":\"3a6077e785eb00e2f452cc38983a78d9408efed3fdb6d35261dad7d835dda96e\"},\"doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1778319388986536298,\"sha256\":\"ec473666d548cc62f7cdb8ce9ac9c024d299f1ad379b48a2339a248845ed8b64\"},\"doc/plans/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1781978375288648711,\"sha256\":\"285b13a35b8e58e5ba8d937d1142676de5107ae612573254ec33237dbad0468f\"},\"doc/plans/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1781978375288820673,\"sha256\":\"8dbf2b23b12e2d00b1670493d188e6dbd7db9b6fc94d56a7dfc948d3260fbf1f\"},\"doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1781978375288974201,\"sha256\":\"067bf818b9b2364b4faae11f26df1052d087af43264486fbf07f4e952dd4c528\"},\"doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1778155696434556455,\"sha256\":\"667951bfb4b5b72f59db991e6346fde61e220b62bde68987cca91fc852b2f657\"},\"doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1781978375289150361,\"sha256\":\"2d1031d793e472e592029c173a4a4981423fc47ffa3bd150d13fb0ff180b7d74\"},\"doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1781978375289369773,\"sha256\":\"115b256fe1f1b8cde8d5935d1f01ff5ff80910eae90b63f88f54407ffa341ae5\"},\"doc/plans/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1781981272734603287,\"sha256\":\"ec1f16fbb1e01ecd8597c2000e8d5e8d68bd87ea93dcef68a0ab5438bd4b2fc1\"},\"doc/plans/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1781978375289748002,\"sha256\":\"fdf5529f35046ef13a6568c4f41082075daea92f285db4dcd268e04830c4e6c4\"},\"doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1781978375289914655,\"sha256\":\"7a22220d456d90b91aaeb5e2031bc8bca354fd70ccee6c23169f516b2513296b\"},\"doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1781981272734603287,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1781978375291040115,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0caa0677399891a74199124ffac98a5a87c9eb664cb98bc52961bc900a675d69\"},\"src/.gitkeep\":{\"mtime_ns\":1776996015722667356,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1780153231143867959,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/__pycache__/__init__.cpython-312.pyc\":{\"mtime_ns\":1778163897000000000,\"sha256\":\"99ad1b23cf4da45dfd0650b5d950d657d72b786640b09c82d5c11aa22c326075\"},\"src/h01_simulator/__pycache__/__init__.cpython-313.pyc\":{\"mtime_ns\":1780306032527106775,\"sha256\":\"a9b7bb47ceca284c6ea878cf5d0b6eb007df05cde7bb93bad6fc01a578ed9c00\"},\"src/h01_simulator/__pycache__/__init__.cpython-314.pyc\":{\"mtime_ns\":1777069886000000000,\"sha256\":\"8b1e9a6211f9ac7e6fdd925d636f20ecc2bad51490bd07fd60ad8a1b69311297\"},\"src/h01_simulator/__pycache__/cli.cpython-313.pyc\":{\"mtime_ns\":1777069744000000000,\"sha256\":\"0df4bdc72af0ff98c2db05018261d12041149d237ffa0e350de6beb6e85b1689\"},\"src/h01_simulator/__pycache__/config.cpython-312.pyc\":{\"mtime_ns\":1778163897000000000,\"sha256\":\"d5297ed1721c0477ca664ff72aaa88b33bcf232c7c03396793b7231f6451822c\"},\"src/h01_simulator/__pycache__/config.cpython-313.pyc\":{\"mtime_ns\":1780306032658872531,\"sha256\":\"dd299d0d2931644a6061f336545173a630e4c3487b83f710db4cc3e03b0b17f4\"},\"src/h01_simulator/__pycache__/metrics.cpython-312.pyc\":{\"mtime_ns\":1778163897000000000,\"sha256\":\"83623586241fa1b5e7a631a98557ec3916123cc9b9fc0900b01e89387ad315b9\"},\"src/h01_simulator/__pycache__/metrics.cpython-313.pyc\":{\"mtime_ns\":1780306032661387266,\"sha256\":\"6006b87626fd4974b8669014207eb5094164ec10f70d47bdae58dfb2c3ccb8fa\"},\"src/h01_simulator/__pycache__/model.cpython-312.pyc\":{\"mtime_ns\":1778163899000000000,\"sha256\":\"3903429fc999a4fab69bf63789e8ad37e2b706e54d978b9d6073b3e80c2292cc\"},\"src/h01_simulator/__pycache__/model.cpython-313.pyc\":{\"mtime_ns\":1780306032662359569,\"sha256\":\"dcf95dadb4133908f53d09b5072459af1891ce109264a4b9e12d4ff495c2a445\"},\"src/h01_simulator/__pycache__/policies.cpython-312.pyc\":{\"mtime_ns\":1778163897000000000,\"sha256\":\"dc0aa7552a1f56001c3de8d95ed75b90046eca617ac1005d80e82bdd401fbba4\"},\"src/h01_simulator/__pycache__/policies.cpython-313.pyc\":{\"mtime_ns\":1780306032663820478,\"sha256\":\"b2d6e11e5ad6f0b2fb2fda2086a55d26e0c5880682b36d518c374278d43dcf56\"},\"src/h01_simulator/__pycache__/sweep.cpython-312.pyc\":{\"mtime_ns\":1778163897000000000,\"sha256\":\"1408da8372eb11c00c0787f486730701a6f52af526281e8f0917f42557f7fc88\"},\"src/h01_simulator/__pycache__/sweep.cpython-313.pyc\":{\"mtime_ns\":1780306032529979652,\"sha256\":\"5ac1fdc0d235d698b2e74c77e0f91dcda229166e5b34ffa73bc635a6e79c0e8a\"},\"src/h01_simulator/__pycache__/sweep.cpython-314.pyc\":{\"mtime_ns\":1777069886000000000,\"sha256\":\"6d49bb03fe169a7a8d32f410cd6ab867d5c36d3f395487a97a3d3e4c8e8ecc34\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1780153274380869571,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1780153239632868275,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1780153247867868583,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1780153254574868833,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1780153260792869064,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1780153266677869284,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1780153283008397026,\"sha256\":\"465faa0b15a56d9167d5da76cb05c2fe11970f5143ec6f5508dcf5043b98c6f9\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1780153299835870520,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/__pycache__/__init__.cpython-313.pyc\":{\"mtime_ns\":1780153889882232255,\"sha256\":\"03faf7677d2257efd6a1aa81719e1bb63804fbe14e4ee2be94fe7c391a08f0d9\"},\"src/t034_validator/__pycache__/__main__.cpython-313.pyc\":{\"mtime_ns\":1778321873000000000,\"sha256\":\"9dce5d35c83660b0966e104261ad41e4ebd4bad02720ab806c40105cf6c7939c\"},\"src/t034_validator/__pycache__/loader.cpython-313.pyc\":{\"mtime_ns\":1780153889885084283,\"sha256\":\"0bd78123dbf4787dc7212e9c5e64cf808d6b7a9d3cc2a13e26dc7bbb6620fa1a\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1780153292864870260,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/.tasks.lock\":{\"mtime_ns\":1782475818610927813,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"tasks/active.md\":{\"mtime_ns\":1782475818615828681,\"sha256\":\"694e4766274ea82eb06e01a9c2141409e1b3d92f97daecab031b0b53f5b27890\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"496cf90b9f4d86e6877e1d0bc90b9750ccb0c03865921d52f46be27e427effad\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1782007530177087445,\"sha256\":\"e80b303b46bce3e175b4935dd9060fc0c2f880b0f427eeb1497e821bd068a385\"}}" .
+        schema:sha256 "b222123409a9ab9ee90e7e8618823ff969f23ae2a39d5c759c3352d4a15c7ba5" ;
+        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1782825286821585267,\"sha256\":\"6babce772eaf1e47b2cfc1df1845254479af54b459cb838e0341cc473d93251f\"},\"CLAUDE.md\":{\"mtime_ns\":1782825286821585267,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"doc/plans/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1782825286821925996,\"sha256\":\"51e46b8fda9ce22575ab7c4ff420545b005c99b568bdca71becdef5f8cbc73c4\"},\"doc/plans/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1782825286822163391,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"19f5e94dc45d1109b0d82f943ad9f8c81dbd8ab64a4ba84840863238474376e0\"},\"doc/plans/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"2af61a2ad41760cdc82bdedd84d7f40c55dc6c2367172884ea96dae771780a4f\"},\"doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"d86cbb25555d78510c43849e8223e0a7b601c6cda2b0f74342f9ade9454ee143\"},\"doc/plans/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"3d3c9ac90ad99ebb6fb2fd2cc62f5c203277c33e76b4089cc32f639b38f5e87f\"},\"doc/plans/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"e0df6eea6a8b676868644acff2107add9726bcc20f4df79dbccd72c127345d27\"},\"doc/plans/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"5f53d517b1497e78521e169b10e7a93300b023fb920c0d8f306cc45a2e1540de\"},\"doc/plans/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"3aef76b0be469ba8c76e8a3f40de43187aa164aff250aafb355149e444c9cfd4\"},\"doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"52601c62cf41ea36f829c45b69360d1971895a3f667f12c6d20f3db3d2a52fa5\"},\"doc/plans/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"4e698cef4d8f0e868312580472e1b462ec456677f0514232eeb91d1f5dfdfa05\"},\"doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"0ddb7840e3a17497d81644a61bafd5e7005fe1a7ecfcd83a941558a87d98b6b3\"},\"doc/plans/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"0247d0413224d7ae90bf4dda3fd7d05472c51453bc60a46681307e5fe00470d4\"},\"doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"e8c252a2b452b07af9ab0801ee9b2bbac71e646adc7ddd2c62f40bd1f7275f13\"},\"doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"3a6077e785eb00e2f452cc38983a78d9408efed3fdb6d35261dad7d835dda96e\"},\"doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"ec473666d548cc62f7cdb8ce9ac9c024d299f1ad379b48a2339a248845ed8b64\"},\"doc/plans/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"285b13a35b8e58e5ba8d937d1142676de5107ae612573254ec33237dbad0468f\"},\"doc/plans/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"8dbf2b23b12e2d00b1670493d188e6dbd7db9b6fc94d56a7dfc948d3260fbf1f\"},\"doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"067bf818b9b2364b4faae11f26df1052d087af43264486fbf07f4e952dd4c528\"},\"doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1782825286822328060,\"sha256\":\"667951bfb4b5b72f59db991e6346fde61e220b62bde68987cca91fc852b2f657\"},\"doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"2d1031d793e472e592029c173a4a4981423fc47ffa3bd150d13fb0ff180b7d74\"},\"doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"115b256fe1f1b8cde8d5935d1f01ff5ff80910eae90b63f88f54407ffa341ae5\"},\"doc/plans/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"ec1f16fbb1e01ecd8597c2000e8d5e8d68bd87ea93dcef68a0ab5438bd4b2fc1\"},\"doc/plans/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"fdf5529f35046ef13a6568c4f41082075daea92f285db4dcd268e04830c4e6c4\"},\"doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"7a22220d456d90b91aaeb5e2031bc8bca354fd70ccee6c23169f516b2513296b\"},\"doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1782825286823212183,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1782825286832132113,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1782825286832199650,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1782825286890338943,\"sha256\":\"0caa0677399891a74199124ffac98a5a87c9eb664cb98bc52961bc900a675d69\"},\"src/.gitkeep\":{\"mtime_ns\":1782825286890338943,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1782825286891270219,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1782825286891337806,\"sha256\":\"465faa0b15a56d9167d5da76cb05c2fe11970f5143ec6f5508dcf5043b98c6f9\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1782825286891738217,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/__pycache__/__init__.cpython-313.pyc\":{\"mtime_ns\":1782825675960213018,\"sha256\":\"81c381e10f3b3f7ff3e29bdd75e5fbbf087176dcbbb292ade3b82b4636da989a\"},\"src/t034_validator/__pycache__/loader.cpython-313.pyc\":{\"mtime_ns\":1782825675961979090,\"sha256\":\"8bf0a738c24fa3060b592f5b1213c918601b4260671fc9c7d4c3afc7e1cb3538\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1782825286891738217,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1782825286891738217,\"sha256\":\"0c1173a8a3c3c858613f3db3b71fcd65de0d0d17f55891177381b546cd5c5ab7\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1782825286892230380,\"sha256\":\"e13ed3821098f54011848f57b3682af1224b412fd23106aa268c3e8f5873db42\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1782825286892388716,\"sha256\":\"e80b303b46bce3e175b4935dd9060fc0c2f880b0f427eeb1497e821bd068a385\"}}" .
     <http://example.org/project/hypothesis/0001-stochastic-revisiting> prov:wasDerivedFrom <http://example.org/project/source/entities_hypotheses_0001-stochastic-revisiting.md> .
     <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> prov:wasDerivedFrom <http://example.org/project/paper/allen2017>,
             <http://example.org/project/paper/alnajjar2026>,
@@ -4659,6 +4735,11 @@
     <http://example.org/project/paper/zhao2012> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zhao2012.md> .
     <http://example.org/project/paper/zheng2024> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zheng2024.md> .
     <http://example.org/project/paper/zuber2025> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zuber2025.md> .
+    <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> prov:wasDerivedFrom <http://example.org/project/annotation/entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation>,
+            <http://example.org/project/annotation/entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation>,
+            <http://example.org/project/paper/klugkist2023>,
+            <http://example.org/project/paper/vanlissa2024>,
+            <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> .
     <http://example.org/project/question/0001-bioinformatics-generalizability> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0001-bioinformatics-generalizability.md> .
     <http://example.org/project/question/0002-evidence-payload-schema> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0002-evidence-payload-schema.md> .
     <http://example.org/project/question/0003-causal-synthesis-guardrails> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0003-causal-synthesis-guardrails.md> .
@@ -4739,6 +4820,9 @@
     <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e> sci:sourcePath "entities/papers/Thijssen2017.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "7bd439279af90fef6e3ad896bf89a11a6d8aa58a35730ddd91a9577d9df3fe7b" .
+    <http://example.org/project/source-snapshot/2cb09de6cc569f41> sci:sourcePath "entities/propositions/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "42cc663e5ce3c0d0967c615949cfe3aab8901aafcdb57250ec971f47defe47e6" .
     <http://example.org/project/source-snapshot/2f5802732fecd4f9> sci:sourcePath "entities/questions/0011-graph-valued-synthesis-artifacts.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "3daa7bf3b389f6b3686a52f9074f0d3c8137fcd531f50e360543030ed5a6b924" .
@@ -5136,6 +5220,8 @@
         schema:identifier "entities/papers/Zheng2024.md" .
     <http://example.org/project/source/entities_papers_zuber2025.md> a prov:Entity ;
         schema:identifier "entities/papers/Zuber2025.md" .
+    <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> a prov:Entity ;
+        schema:identifier "entities/propositions/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md" .
     <http://example.org/project/source/entities_questions_0001-bioinformatics-generalizability.md> a prov:Entity ;
         schema:identifier "entities/questions/0001-bioinformatics-generalizability.md" .
     <http://example.org/project/source/entities_questions_0002-evidence-payload-schema.md> a prov:Entity ;

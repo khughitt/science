@@ -1,0 +1,35 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:bes-informative-hypothesis-aggregation a oa:Annotation ;
+    oa:hasTarget       [
+      oa:hasSource <Klugkist2023.source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "Klugkist and Volker introduce Bayesian evidence synthesis (BES) as a way to combine Bayes factors for informative hypotheses across multiple studies that address a common theory but may use different designs, measurements, parameters, or statistical models [@Klugkist2023]." ;
+        oa:prefix  "## Key Contribution\n\n" ;
+        oa:suffix  "\n\nThe paper clarifies that BES answers a different question"
+      ]
+    ] ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "application/json" ;
+      rdf:value        "{\"section\": \"key-contribution\", \"stance\": \"asserted\"}"
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "proposition" ;
+    sci:source         "manual:phase4d-smoke" ;
+    sci:status         "open" ;
+    sci:contentHash    "sha256:2927ee1d2a479dd0f4588a9efb5576774ca2a9b87e3595b4b65b404fc0013b9c" ;
+    sci:promotedTo     "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses" ;
+    sci:matchText      "Klugkist and Volker introduce Bayesian evidence synthesis (BES) as a way to combine Bayes factors for informative hypotheses across multiple studies that address a common theory but may use different designs, measurements, parameters, or statistical models [@Klugkist2023]." ;
+    dc:creator         "curator" ;
+    dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
+
+}

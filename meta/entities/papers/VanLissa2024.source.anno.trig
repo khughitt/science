@@ -1,0 +1,35 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:pbf-informative-hypothesis-aggregation a oa:Annotation ;
+    oa:hasTarget       [
+      oa:hasSource <VanLissa2024.source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "Van Lissa, Clapper, and Kuiper present the product Bayes factor (PBF) as a practical method for aggregating support for an informative hypothesis across heterogeneous conceptual replication studies [@VanLissa2024]." ;
+        oa:prefix  "## Key Contribution\n\n" ;
+        oa:suffix  "\nThe tutorial contribution is a user-facing implementation"
+      ]
+    ] ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "application/json" ;
+      rdf:value        "{\"section\": \"key-contribution\", \"stance\": \"asserted\"}"
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "proposition" ;
+    sci:source         "manual:phase4d-smoke" ;
+    sci:status         "open" ;
+    sci:contentHash    "sha256:58902da35dc5b5c795a0483c2d244b7b99cf10dbfa3a271e1735c4551ca76683" ;
+    sci:promotedTo     "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses" ;
+    sci:matchText      "Van Lissa, Clapper, and Kuiper present the product Bayes factor (PBF) as a practical method for aggregating support for an informative hypothesis across heterogeneous conceptual replication studies [@VanLissa2024]." ;
+    dc:creator         "curator" ;
+    dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
+
+}
