@@ -1,7 +1,39 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `32`
+- Pending thread count: `41`
+
+## authored-confidence
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-authored-confidence-design.md`
+  - `docs/plans/2026-06-16-authored-confidence-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until authored-confidence gate and ceiling semantics are documented
+    - `docs/plans/2026-06-16-authored-confidence-design.md`
+    - `docs/plans/2026-06-16-authored-confidence-plan.md`
+- remaining_gaps:
+  - Durable user docs only list expert_judgment as an evidence type; they do not explain confidence as a gate, authored-only ceiling, authored_capped, or excluded_authored_confidence.
+  - Implementation comments still reference Spec 5/Slice B plan docs as rationale.
+
+## belief-policy-keystone
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-belief-policy-keystone-design.md`
+  - `docs/plans/2026-06-16-belief-policy-keystone-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until belief policy identity/versioning contract is documented
+    - `docs/plans/2026-06-16-belief-policy-keystone-design.md`
+    - `docs/plans/2026-06-16-belief-policy-keystone-plan.md`
+- remaining_gaps:
+  - Durable docs mention belief states and snapshots but not policy identity, versioning, comparability, or how future policy changes affect reproducibility.
+  - Plan rationale remains the clearest explanation of the BeliefPolicy boundary versus belief_scalar CONFIG_VERSION.
 
 ## bundle-belief-rollup
 
@@ -69,6 +101,22 @@
   - Root plans still contain stale/transition wording, especially doc/datasets versus current entities/datasets/data dataset homes after adapter layout work.
   - Durable user docs mention paper dataset_usage but do not fully document evidence-line dataset_usage, belief_eligible staging, overlap curation, and B2 commitment versus candidate behavior.
 
+## dataset-qa-seam
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-dataset-qa-seam-design.md`
+  - `docs/plans/2026-06-16-dataset-qa-seam-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset QA graph stamping and belief cap semantics are documented
+    - `docs/plans/2026-06-16-dataset-qa-seam-design.md`
+    - `docs/plans/2026-06-16-dataset-qa-seam-plan.md`
+- remaining_gaps:
+  - Durable docs do not describe DatasetEntity.qa_report, report-hash audit semantics, qaFailedDataset stamping, or qa_dataset_capped belief behavior.
+  - No user-facing doc explains that the seam consumes persisted science datasets qa reports and does not rerun QA during graph build.
+
 ## dataset-sub-cohort-lineage
 
 - status: `implemented_needs_durable_docs`
@@ -83,6 +131,22 @@
     - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md`
 - remaining_gaps:
   - Migrate sub-cohort semantics and B2 ancestor-vs-sibling behavior into durable docs before deleting the active plan pair.
+
+## datasets-qa-reachability
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-datasets-qa-reachability-design.md`
+  - `docs/plans/2026-06-16-datasets-qa-reachability-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until science datasets qa command and report contract are documented
+    - `docs/plans/2026-06-16-datasets-qa-reachability-design.md`
+    - `docs/plans/2026-06-16-datasets-qa-reachability-plan.md`
+- remaining_gaps:
+  - No durable user-guide page documents science datasets qa usage, exit codes, report layout, or the relationship between transient QA runs and persisted qa_report.json consumed by graph build.
+  - docs/conventions/pipeline-qa-checkpoints.md documents workflow QA reports, not this datapackage command contract.
 
 ## entity-consolidation-and-archive
 
@@ -142,6 +206,37 @@
 - remaining_gaps:
   - Durable docs do not fully explain entities/_archive, archive-index.jsonl, archive freeze/reconciliation, or index-only graph resolution.
   - P3 code now includes P4 additive fields consolidated_into and digest_insight in ArchiveRow; preserve phase boundary when moving files.
+
+## entity-consolidation-p4-consolidate-apply
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md`
+  - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until consolidate scaffold/apply operational contract is documented
+    - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md`
+    - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md`
+- remaining_gaps:
+  - No durable user/migration doc found for the mutating workflow: scaffold, fill digest, apply, rollback/partial-failure recovery, unarchive limitations, and archive-index fields.
+  - P5 docs mention cluster-digests consumption, not the P4 authoring/operator contract.
+
+## entity-consolidation-p5-tier4-substitution
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md`
+  - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until cluster-digests JSON and bridge semantics are documented
+    - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md`
+    - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md`
+- remaining_gaps:
+  - Durable docs mention the support surface and bridge behavior, but not the JSON contract, --deep index-only semantics, member_to_digest alias/same_as behavior, or scaffolded-but-unapplied archived=false semantics.
 
 ## entity-organization-and-naming-implementation-plan3
 
@@ -342,6 +437,51 @@
 - remaining_gaps:
   - No durable non-plan doc fully records the schema-to-check mapping, compile errors, merge semantics, YAML timestamp rule, or tabular program contract.
   - docs/conventions/pipeline-qa-checkpoints.md documents the older config-driven QA convention and science_qa generally, but not the schema compiler as the current contract.
+
+## source-compiler-adapter-policy-keystone
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md`
+  - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until the source compiler adapter-policy rationale is checkpointed
+    - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md`
+    - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md`
+- remaining_gaps:
+  - No non-plan durable checkpoint records why adapter policy hooks exist, why owner scope remains centralized, or which adapter quirks are intentionally preserved.
+
+## source-compiler-phase-split
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-source-compiler-phase-split-design.md`
+  - `docs/plans/2026-06-15-source-compiler-phase-split-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until compiler phase boundaries and audit/materialize contract are checkpointed
+    - `docs/plans/2026-06-15-source-compiler-phase-split-design.md`
+    - `docs/plans/2026-06-15-source-compiler-phase-split-plan.md`
+- remaining_gaps:
+  - No durable non-plan compiler checkpoint records the phase boundary contract, materialize-only preflight rule, audit hard-gate, and pure build path.
+
+## source-compiler-snapshot-freshness
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md`
+  - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until SourceSnapshot and SourceChange semantics are checkpointed
+    - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md`
+    - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md`
+- remaining_gaps:
+  - No non-plan durable checkpoint captures SourceSnapshot semantics, current-only SourceChange policy, unchanged rebuild churn guard, and deferred remote/aggregate snapshot fill-outs.
 
 ## substrate-3b-entities-retirement-apply
 
