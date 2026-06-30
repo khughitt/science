@@ -1,10 +1,10 @@
 {
-  "file_count": 79,
+  "file_count": 73,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 49,
+  "thread_count": 45,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -130,33 +130,6 @@
       "thread_id": "benchmark-grounded-model-assessment"
     },
     {
-      "earliest_file_date": "2026-06-11",
-      "files": [
-        "docs/plans/2026-06-11-bundle-belief-rollup-design.md",
-        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md"
-      ],
-      "latest_file_date": "2026-06-11",
-      "normalized_slug": "bundle-belief-rollup",
-      "raw_slugs": {
-        "docs/plans/2026-06-11-bundle-belief-rollup-design.md": "bundle-belief-rollup-design",
-        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md": "bundle-belief-rollup-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-11-bundle-belief-rollup-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-11-bundle-belief-rollup-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-11-bundle-belief-rollup-design.md": "design",
-        "docs/plans/2026-06-11-bundle-belief-rollup-plan.md": "plan"
-      },
-      "thread_id": "bundle-belief-rollup"
-    },
-    {
       "earliest_file_date": "2026-05-31",
       "files": [
         "docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md"
@@ -178,27 +151,6 @@
       "thread_id": "c4c-rsid-variant-label"
     },
     {
-      "earliest_file_date": "2026-06-19",
-      "files": [
-        "docs/plans/2026-06-19-contextual-structural-roles-design.md"
-      ],
-      "latest_file_date": "2026-06-19",
-      "normalized_slug": "contextual-structural-roles",
-      "raw_slugs": {
-        "docs/plans/2026-06-19-contextual-structural-roles-design.md": "contextual-structural-roles-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-19-contextual-structural-roles-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-19-contextual-structural-roles-design.md": "design"
-      },
-      "thread_id": "contextual-structural-roles"
-    },
-    {
       "earliest_file_date": "2026-06-10",
       "files": [
         "docs/plans/2026-06-10-data-driven-discovery-improvements.md"
@@ -218,33 +170,6 @@
         "docs/plans/2026-06-10-data-driven-discovery-improvements.md": null
       },
       "thread_id": "data-driven-discovery-improvements"
-    },
-    {
-      "earliest_file_date": "2026-06-19",
-      "files": [
-        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md",
-        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-19",
-      "normalized_slug": "discusses-membership-surfaces",
-      "raw_slugs": {
-        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md": "discusses-membership-surfaces-design",
-        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md": "discusses-membership-surfaces-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-19-discusses-membership-surfaces-design.md"
-        ],
-        "implementation-plan": [
-          "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-19-discusses-membership-surfaces-design.md": "design",
-        "docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "discusses-membership-surfaces"
     },
     {
       "earliest_file_date": "2026-06-28",
@@ -581,27 +506,6 @@
         "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "implementation"
       },
       "thread_id": "m1-epistemic-drift-detection"
-    },
-    {
-      "earliest_file_date": "2026-06-19",
-      "files": [
-        "docs/plans/2026-06-19-membership-roles-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-19",
-      "normalized_slug": "membership-roles",
-      "raw_slugs": {
-        "docs/plans/2026-06-19-membership-roles-implementation-plan.md": "membership-roles-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-19-membership-roles-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-19-membership-roles-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "membership-roles"
     },
     {
       "earliest_file_date": "2026-06-06",

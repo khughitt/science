@@ -276,9 +276,71 @@ A hypothesis is an organizing conjecture. It may contain several propositions
 whose evidence differs. A hypothesis should not be treated as supported merely
 because it was written down or because one member proposition looks promising.
 
-For mechanisms and proposition bundles, Science uses weakest-link rollups where
-appropriate: the bundle is only as strong as its least-supported required
-member. Refutation propagates as a cap, not as a separate positive belief state.
+Hypotheses and mechanisms are proposition bundles. Their `composition_rule`
+declares how member propositions compose:
+
+| Rule | Use |
+|---|---|
+| `conjunctive` | Hypothesis default. Core subclaims jointly assert the conjecture. |
+| `all_steps` | Mechanism default. Every core step must hold. |
+| `evidence_union` | Reserved name; not implemented. |
+| `faceted_support` | Reserved name; not implemented. |
+
+The implemented rules currently share weakest-link behavior: the bundle is only
+as strong as its least-supported core member. Ties are deterministic, and the
+reported bottleneck members explain which core propositions set the bundle's
+belief. Refutation propagates as a cap, not as a separate positive belief
+state. Contested and unresolved members are reported separately.
+
+Bundle belief is about truth of the bundle. Linked-evidence coverage and
+neighborhood coverage are separate questions; a bundle can be well connected
+without all core subclaims being well supported.
+
+If a hypothesis has no resolved member propositions and no authored
+`composition_rule`, Science falls back to direct evidence on the hypothesis
+itself. An authored bundle rule, a mechanism with zero members, or a bundle
+whose only members are non-core fails loudly because there is no conjunction to
+roll up.
+
+### Bundle Membership Roles
+
+Bundle membership roles describe how one proposition participates in one
+hypothesis or mechanism frame. They are frame-relative plumbing for bundle
+belief and coverage; they are not proposition roles, evidence roles, or causal
+roles such as mediator, confounder, or collider.
+
+The vocabulary is closed:
+
+| Role | Meaning |
+|---|---|
+| `core` | Enters the bundle-belief conjunction. Bare `discusses:` entries mean `core`. |
+| `rival` | A competing proposition inside the bundle neighborhood. Excluded from bundle belief. |
+| `background` | Context for the bundle neighborhood. Excluded from bundle belief. |
+
+Proposition frontmatter can declare membership with `discusses:`:
+
+```yaml
+discusses:
+  - hypothesis:h1
+  - frame: hypothesis:h1
+    role: rival
+```
+
+`sci:hasProposition` mechanism steps are always core. If a proposition is both a
+mechanism step and a `discusses:` member of the same frame, the mechanism step
+wins for bundle belief.
+
+`knowledge/sources/local/relations.yaml` can also author membership with
+`predicate: cito:discusses` and `role: core|rival|background`. A `role:` is
+valid only when the subject is a proposition and the object is a live hypothesis
+or mechanism. Other `cito:discusses` links, such as `paper -> question`,
+`paper -> hypothesis`, or `proposition -> topic`, remain plain structural links
+and do not create membership roles.
+
+For graph-level experiments, `science graph add proposition --bridge-between`
+accepts `--bridge-role core|rival|background`. Direct graph additions are still
+ephemeral; use proposition source files or `relations.yaml` for durable project
+knowledge.
 
 ## Optional Layered-Claim Metadata
 

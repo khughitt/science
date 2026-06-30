@@ -317,6 +317,12 @@ entity when a project uses that narrative layer. Use `related:`,
 `source_refs:`, and structured relation fields to connect the chain rather than
 hand-editing generated graph state.
 
+For proposition bundle membership, prefer `discusses:` on proposition sources or
+`knowledge/sources/local/relations.yaml` entries with
+`predicate: cito:discusses` and `role: core|rival|background`. The `role:` field
+is valid only for proposition-to-live-hypothesis/mechanism membership edges. See
+[Bundle Membership Roles](epistemic-model.md#bundle-membership-roles).
+
 The old graph-only composition commands (`science graph add finding`,
 `science graph add story`, and `science graph add paper`) are exploratory
 helpers that write directly to `knowledge/graph.trig`. Those graph edits are
@@ -733,13 +739,13 @@ Epistemic entities carry, organize, or evaluate uncertain knowledge.
 - `discussion` - Structured critical discussion of a hypothesis, question, or topic.
 - `evidence-line` - A single, independence-tagged line of evidence that supports or disputes a proposition.
 - `finding` - Unit of learned knowledge: propositions grounded by observations from an analysis.
-- `hypothesis` - Testable project hypothesis.
+- `hypothesis` - Testable project hypothesis; see bundle belief and membership roles in `epistemic-model.md`.
 - `inquiry` - A scoped research inquiry (boundary + estimand over the knowledge graph).
 - `interpretation` - One analysis session's narrative and its findings.
-- `mechanism` - Named explanatory structure linking multiple typed entities and propositions.
+- `mechanism` - Named explanatory structure linking multiple typed entities and propositions; `hasProposition` steps are core bundle members.
 - `observation` - Concrete empirical fact anchored to specific data.
 - `patch-definition` - Authored patch profile asserting a belief membership over the graph.
-- `proposition` - Truth-apt statement - the fundamental epistemic unit.
+- `proposition` - Truth-apt statement - the fundamental epistemic unit; can enter hypothesis/mechanism bundles as `core`, `rival`, or `background`.
 - `question` - Open or resolved project question.
 - `report` - Standalone written report over project knowledge.
 - `research-question` - The project's single guiding research question.

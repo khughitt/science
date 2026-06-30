@@ -60,15 +60,14 @@ def emit_discusses_membership(
     Always emits the plain (prop, cito:discusses, frame) triple, plus a
     non-truth-apt BundleMembership node carrying the role. Precondition guard:
     the frame must be a bundle (hypothesis/mechanism) — callers route only
-    membership edges here; non-bundle discusses keeps the generic path (design
-    §0.1, §3.4).
+    membership edges here; non-bundle discusses keeps the generic path.
     """
     frame_kind = frame_cid.split(":", 1)[0]
     if frame_kind not in ("hypothesis", "mechanism"):
         raise ValueError(
             f"{prop_cid} discusses {frame_cid!r}, which is a {frame_kind!r}, not a "
             "bundle (hypothesis/mechanism); membership roles are only valid on bundle "
-            "frames (spec §5)."
+            "frames."
         )
     knowledge.add((prop_uri, CITO_NS.discusses, frame_uri))
     node = membership_uri_for(prop_cid, frame_cid)

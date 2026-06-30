@@ -1272,7 +1272,7 @@ def _add_authored_relation(
             f"relation {relation.subject} cito:discusses {relation.object}: role "
             f"{relation.role!r} set, but this is not a proposition→live-bundle membership "
             "(subject must be a proposition and object a live hypothesis/mechanism); "
-            "membership roles are only valid on membership edges (design §4)."
+            "membership roles are only valid on membership edges."
         )
     else:
         graph.add((subject_uri, predicate_uri, object_uri))

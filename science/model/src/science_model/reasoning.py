@@ -162,7 +162,7 @@ class CompositionRule(StrEnum):
     `all_steps`/`conjunctive` share the v1 weakest-link implementation but keep
     distinct names to preserve authored intent. `evidence_union`/`faceted_support`
     are RESERVED — declared so the names are stable, but not implemented in v1
-    (see docs/plans/2026-06-11-bundle-belief-rollup-design.md §4).
+    (see docs/user-guide/epistemic-model.md).
     """
 
     ALL_STEPS = "all_steps"            # mechanism default — every step must hold

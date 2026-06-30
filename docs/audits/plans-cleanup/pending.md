@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `48`
+- Pending thread count: `44`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -82,23 +82,6 @@
   - No cross-project success analysis tying benchmark outcomes to project practices was found; gap calibration summarizes report quality and candidate/fallback behavior rather than benchmark outcome success.
   - No consolidated durable reference page under docs/ describes the current benchmark catalog/opportunities/gaps/tests contract independent of active plans.
 
-## bundle-belief-rollup
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-11-bundle-belief-rollup-design.md`
-  - `docs/plans/2026-06-11-bundle-belief-rollup-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until bundle belief semantics, composition_rule, membership-role gating, and snapshot fields are documented
-    - `docs/plans/2026-06-11-bundle-belief-rollup-design.md`
-    - `docs/plans/2026-06-11-bundle-belief-rollup-plan.md`
-- remaining_gaps:
-  - Low-level durable contract is not fully migrated: model/graph code still cites docs/plans/2026-06-11-bundle-belief-rollup-design.md.
-  - Original member-enumeration semantics are partially superseded by membership_role/core_members gating, so the active plan is no longer reliable as current truth.
-  - No docs/proposition-and-evidence-model.md exists despite the plan claiming the canonical proposition model should be updated.
-
 ## c4c-rsid-variant-label
 
 - status: `incomplete`
@@ -116,20 +99,6 @@
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
 
-## contextual-structural-roles
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-19-contextual-structural-roles-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until membership-role semantics and causal-role boundary are documented
-    - `docs/plans/2026-06-19-contextual-structural-roles-design.md`
-- remaining_gaps:
-  - Durable docs do not yet explain the semantic boundary: membership role is frame-relative bundle plumbing, not a proposition role or causal structural role.
-  - docs/user-guide/epistemic-model.md only gives high-level weakest-link bundle belief and does not describe rival/background exclusion or the BundleMembership node.
-
 ## data-driven-discovery-improvements
 
 - status: `incomplete`
@@ -144,22 +113,6 @@
   - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
-
-## discusses-membership-surfaces
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-19-discusses-membership-surfaces-design.md`
-  - `docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until discusses membership surfaces and validation contract are documented
-    - `docs/plans/2026-06-19-discusses-membership-surfaces-design.md`
-    - `docs/plans/2026-06-19-discusses-membership-surfaces-implementation-plan.md`
-- remaining_gaps:
-  - Durable docs/templates mention frontmatter object-form discusses, but do not document relations.yaml role, --bridge-role, the proposition-to-bundle subtype rule, or the non-membership cito:discusses cases.
-  - Validation messages still cite design section numbers, so the plan is acting as accidental rationale.
 
 ## entity-consolidation-and-archive
 
@@ -358,20 +311,6 @@
     - `docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md`
 - remaining_gaps:
   - M1 behavior is implemented and tested, but durable user-facing docs outside the command/skill source do not explain open_question_debt, graph attention-rank, or the artifact-required review contract.
-
-## membership-roles
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-19-membership-roles-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until final membership-role vocabulary, syntax, and roll-up contract are documented
-    - `docs/plans/2026-06-19-membership-roles-implementation-plan.md`
-- remaining_gaps:
-  - The original plan is stale as an implementation guide because BundleMembership emission moved into graph/io.py and relations.yaml/bridge support was added later.
-  - Durable user docs lack the complete current contract for role vocabulary, default core behavior, frontmatter syntax, roll-up gating, and surface parity.
 
 ## migration-robustness
 
