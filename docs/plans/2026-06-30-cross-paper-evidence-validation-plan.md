@@ -267,6 +267,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from rdflib import RDF, Dataset, Literal, URIRef
 from rdflib.namespace import PROV
 
@@ -349,29 +350,7 @@ def _statement_annotation(
 def _write_paper_source_sidecar(root: Path, annotations: list[Annotation]) -> None:
     md = root / "entities" / "papers" / "Smith2020.source.md"
     md.parent.mkdir(parents=True, exist_ok=True)
-    md.write_text(
-        "\n".join(
-            [
-                "---",
-                "type: paper",
-                "title: Source excerpts for Smith2020",
-                "status: active",
-                "created: '2026-06-30'",
-                "updated: '2026-06-30'",
-                "id: paper:Smith2020.source",
-                "ontology_terms: []",
-                "paper_ref: paper:Smith2020",
-                "source_kind: curated-summary-excerpt",
-                "---",
-                "",
-                "# Source excerpts for Smith2020",
-                "",
-                "Body.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    md.write_text("Body.\n", encoding="utf-8")
     anno_io.write_sidecar(
         anno_io.sidecar_for_markdown(md),
         anno_io.Sidecar(annotations=tuple(annotations)),
@@ -401,11 +380,11 @@ def test_unstanced_4d_ownership_mismatch_does_not_cover_paper_ref(tmp_path: Path
     _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
 
-    assert len(results) == 1
-    assert results[0].path == prop
-    assert results[0].rule == "evidence.unstanced"
-    assert "paper:Smith2020" in results[0].message
+    assert len(unstanced) == 1
+    assert unstanced[0].path == prop
+    assert "paper:Smith2020" in unstanced[0].message
 
 
 def test_unstanced_4d_faulted_assertion_does_not_cover_refs(tmp_path: Path) -> None:
@@ -422,16 +401,28 @@ def test_unstanced_4d_faulted_assertion_does_not_cover_refs(tmp_path: Path) -> N
     assert any(_ANN_REF in message for message in messages)
 
 
-def test_unstanced_4d_open_stance_remains_unstanced(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("annotation", "case_id"),
+    [
+        (_statement_annotation("a-1", stance="open"), "open-stance"),
+        (_statement_annotation("a-1", promoted_to=None), "unpromoted"),
+        (_statement_annotation("a-1", status=Status.FIXED), "inactive"),
+    ],
+)
+def test_unstanced_4d_silent_skips_remain_unstanced(
+    tmp_path: Path,
+    annotation: Annotation,
+    case_id: str,
+) -> None:
     from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
 
     _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
-    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="open")])
+    _write_paper_source_sidecar(tmp_path, [annotation])
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
     messages = [r.message for r in results if r.rule == "evidence.unstanced"]
-    assert len(messages) == 2
+    assert len(messages) == 2, case_id
     assert any("paper:Smith2020" in message for message in messages)
     assert any(_ANN_REF in message for message in messages)
 ```
@@ -450,7 +441,7 @@ rtk uv run --frozen pytest \
   tests/validate/test_checks_evidence_lines.py::test_unstanced_valid_4d_literature_refs_are_counted_as_coverage \
   tests/validate/test_checks_evidence_lines.py::test_unstanced_4d_ownership_mismatch_does_not_cover_paper_ref \
   tests/validate/test_checks_evidence_lines.py::test_unstanced_4d_faulted_assertion_does_not_cover_refs \
-  tests/validate/test_checks_evidence_lines.py::test_unstanced_4d_open_stance_remains_unstanced \
+  tests/validate/test_checks_evidence_lines.py::test_unstanced_4d_silent_skips_remain_unstanced \
   -q
 ```
 
@@ -558,8 +549,11 @@ Expected:
 
 - `"status": "ok"`
 - `"faults": 0`
-- `"contested": 1`
 - `"total_issues": 0`
+
+The current smoke corpus reports `"contested": 1`; treat that as informational rather
+than a hard gate, because the count can legitimately increase as more real-corpus 4d
+smoke propositions are added.
 
 - [ ] **Step 2: Run full meta validation**
 
