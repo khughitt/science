@@ -73,10 +73,12 @@ def lit_assertion_uri(proposition_ref: str, paper_ref: str, stance: str) -> URIR
 
 def collapse_assertions(assertions: list[LiteratureAssertion]) -> list[LiteratureAssertion]:
     by_key: dict[tuple[str, str, str], LiteratureAssertion] = {}
-    for assertion in assertions:
+    for assertion in sorted(
+        assertions,
+        key=lambda a: (a.proposition_ref, a.paper_ref, a.stance, a.annotation_id, a.sidecar),
+    ):
         key = (assertion.proposition_ref, assertion.paper_ref, assertion.stance)
-        existing = by_key.get(key)
-        if existing is None or assertion.annotation_id < existing.annotation_id:
+        if key not in by_key:
             by_key[key] = assertion
 
     return [by_key[key] for key in sorted(by_key)]

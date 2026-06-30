@@ -1,14 +1,22 @@
 import hashlib
 
 from rdflib import URIRef
-from science_model.reasoning import EvidenceRole, EvidenceStance, EvidenceStrength
+from science_model.reasoning import (
+    EvidenceRole,
+    EvidenceStance,
+    EvidenceStrength,
+    EvidenceType,
+    IndependenceTag,
+)
 
 from science_tool.annotation.cross_paper_evidence import (
     ACTIVE_STATUSES,
     AssertionFault,
     CrossPaperEvidenceError,
     DERIVED_STANCES,
+    INDEPENDENT,
     KNOWN_STANCES,
+    LITERATURE_TYPE,
     LiteratureAssertion,
     STANCE_EMIT,
     collapse_assertions,
@@ -51,6 +59,8 @@ def test_stance_emit_table_uses_real_enum_values():
     assert set(STANCE_EMIT) == DERIVED_STANCES
     assert ACTIVE_STATUSES == frozenset({"open", "ack"})
     assert KNOWN_STANCES == DERIVED_STANCES | {"open"}
+    assert LITERATURE_TYPE == EvidenceType.LITERATURE.value
+    assert INDEPENDENT == IndependenceTag.INDEPENDENT.value
 
 
 def test_collapse_dedupes_same_proposition_paper_stance_keeps_one():
@@ -74,6 +84,13 @@ def test_collapse_is_order_independent_and_deterministic():
     a2 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
     assert collapse_assertions([a1, a2]) == collapse_assertions([a2, a1])
     assert collapse_assertions([a1, a2])[0].annotation_id == "ann-1"
+
+
+def test_collapse_uses_sidecar_as_final_deterministic_tiebreaker():
+    a1 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "B.anno.trig")
+    a2 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
+    assert collapse_assertions([a1, a2]) == collapse_assertions([a2, a1])
+    assert collapse_assertions([a1, a2])[0].sidecar == "A.anno.trig"
 
 
 def test_cross_paper_evidence_error_lists_all_faults():
