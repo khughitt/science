@@ -350,9 +350,13 @@ def _write_paper_sidecar(root: Path, citekey: str, anns):
     anno_io.write_sidecar(anno_io.sidecar_for_markdown(md), anno_io.Sidecar(annotations=tuple(anns)))
 
 
+# The annotation ref 4a accrues for a-1 in Smith2020's sidecar:
+_ANN_REF = "annotation:entities/papers/Smith2020.source#a-1"
+
+
 def test_scan_happy_path_collects_active_proposition_assertions(tmp_path):
     _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
-    refs = {"proposition:p": frozenset({"paper:Smith2020", "annotation:a-1"})}
+    refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
     assertions, faults = scan_literature_assertions(tmp_path, refs)
     assert faults == []
     assert len(assertions) == 1
@@ -415,10 +419,33 @@ def test_scan_faults_on_invalid_stance(tmp_path):
     assert [f.reason for f in faults] == ["invalid-stance"]
 
 
-def test_scan_faults_on_ownership_mismatch(tmp_path):
-    # paper resolves to paper:Smith2020 but the proposition's source_refs omit it
+def test_scan_inactive_with_corrupt_target_is_skipped_not_errored(tmp_path):
+    # Lifecycle check precedes promoted_to corruption checks: an inactive proposition
+    # annotation pointing at a non-proposition target is OUT of scope, not a fault.
+    _write_paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [_ann("a-1", stance="asserted", status=Status.DISMISSED, promoted_to="question:q")],
+    )
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+    assert assertions == [] and faults == []
+
+
+def test_scan_faults_on_ownership_mismatch_paper_absent(tmp_path):
+    # annotation ref present, but the resolved paper ref is not in source_refs
     _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
-    refs = {"proposition:p": frozenset({"paper:Other2019", "annotation:a-1"})}
+    refs = {"proposition:p": frozenset({"paper:Other2019", _ANN_REF})}
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+    assert assertions == []
+    assert [f.reason for f in faults] == ["ownership-mismatch"]
+
+
+def test_scan_faults_on_ownership_mismatch_annotation_absent(tmp_path):
+    # paper ref present, but THIS annotation's ref is not on the proposition — a different
+    # annotation citing the same paper must not derive evidence for it.
+    _write_paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", stance="asserted")])
+    refs = {"proposition:p": frozenset({"paper:Smith2020"})}  # no annotation ref
     assertions, faults = scan_literature_assertions(tmp_path, refs)
     assert assertions == []
     assert [f.reason for f in faults] == ["ownership-mismatch"]
@@ -451,7 +478,7 @@ from pathlib import Path
 
 from science_tool.annotation.io import markdown_for_sidecar
 from science_tool.annotation.model import Status, TextualBody
-from science_tool.annotation.query import iter_sidecars
+from science_tool.annotation.query import entity_relpath_for_sidecar, iter_sidecars
 from science_tool.annotation.text_source_adapter import TextSourceAdapterError, resolve_adapter
 
 
@@ -494,11 +521,14 @@ def scan_literature_assertions(
                 continue  # question/hypothesis (4b) etc. — not our concern
             if ann.promoted_to is None:
                 continue  # unpromoted proposition annotation
+            # Lifecycle check FIRST: an inactive backlink (fixed/dismissed/superseded) is
+            # out of the active assertion set entirely — skipped, never scrutinized for
+            # promoted_to corruption (design §3/§6).
+            if str(ann.status) not in ACTIVE_STATUSES:
+                continue
             if not ann.promoted_to.startswith(_PROP_PREFIX):
                 faults.append(AssertionFault(sref, ann.id, "non-proposition-target", ann.promoted_to))
                 continue
-            if str(ann.status) not in ACTIVE_STATUSES:
-                continue  # fixed/dismissed/superseded — history, no belief
             if ann.promoted_to not in proposition_source_refs:
                 faults.append(
                     AssertionFault(sref, ann.id, "stale-proposition", f"{ann.promoted_to} not found")
@@ -518,11 +548,16 @@ def scan_literature_assertions(
                     AssertionFault(sref, ann.id, "adapter-unresolvable", "no text source adapter")
                 )
                 continue
-            if paper_ref not in proposition_source_refs[ann.promoted_to]:
+            # Ownership: BOTH the paper ref AND this annotation's ref must be on the target
+            # proposition's source_refs — the precise link 4a accrued. The paper ref alone
+            # would let any annotation citing the same paper derive evidence (design §3 step 2).
+            prop_refs = proposition_source_refs[ann.promoted_to]
+            ann_ref = f"annotation:{entity_relpath_for_sidecar(sidecar_path, project_root)}#{ann.id}"
+            if paper_ref not in prop_refs or ann_ref not in prop_refs:
                 faults.append(
                     AssertionFault(
                         sref, ann.id, "ownership-mismatch",
-                        f"{paper_ref} absent from {ann.promoted_to} source_refs",
+                        f"{paper_ref} and/or {ann_ref} absent from {ann.promoted_to} source_refs",
                     )
                 )
                 continue
@@ -533,7 +568,7 @@ def scan_literature_assertions(
     return assertions, faults
 ```
 
-Note: `str(ann.status)` works because `Status` is a `StrEnum` (`str(Status.OPEN) == "open"`).
+Notes: `str(ann.status)` works because `Status` is a `StrEnum` (`str(Status.OPEN) == "open"`). `entity_relpath_for_sidecar(<root>/entities/papers/Smith2020.source.anno.trig, <root>)` → `"entities/papers/Smith2020.source"`, so the annotation ref is `annotation:entities/papers/Smith2020.source#<ann.id>` — exactly what 4a's `_annotation_ref` accrues.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -676,6 +711,18 @@ def test_derive_emits_when_clean(tmp_path):
     derive_literature_evidence(ds, tmp_path, {"proposition:p": frozenset({"paper:Smith2020"})})
     line = lit_assertion_uri("proposition:p", "paper:Smith2020", "asserted")
     assert (line, RDF.type, SCI_NS.EvidenceLine) in knowledge
+
+
+def test_proposition_source_refs_map_filters_by_kind():
+    from types import SimpleNamespace
+
+    from science_tool.annotation.cross_paper_evidence import proposition_source_refs_map
+
+    ents = [
+        SimpleNamespace(canonical_id="proposition:p", kind="proposition", source_refs=["paper:A"]),
+        SimpleNamespace(canonical_id="hypothesis:h", kind="hypothesis", source_refs=["paper:B"]),
+    ]
+    assert proposition_source_refs_map(ents) == {"proposition:p": frozenset({"paper:A"})}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -725,6 +772,16 @@ def derive_literature_evidence(
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
     emit_literature_evidence(knowledge, provenance, collapse_assertions(assertions))
+
+
+def proposition_source_refs_map(entities) -> dict[str, frozenset[str]]:
+    """proposition_ref -> source_refs, from a ProjectSources.entities list.
+
+    Shared by the materialize pass (Task 4 passes `sources.entities`) and the diagnostic
+    report (Task 5 passes `load_project_sources(root).entities`) so the two paths never
+    diverge on proposition owners.
+    """
+    return {e.canonical_id: frozenset(e.source_refs) for e in entities if e.kind == "proposition"}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -817,9 +874,17 @@ def _paper_with_promoted(root, citekey, *, stance, slug="claim"):
     )
 
 
+def _ann_ref(citekey):
+    # mirrors 4a's accrued annotation ref: entity_relpath_for_sidecar + "#" + ann.id
+    return f"annotation:entities/papers/{citekey}.source#{citekey}-1"
+
+
 def _scaffold_three_papers(root):
     _manifest(root)
-    _proposition_entity(root, "claim", ["paper:A2020", "paper:B2021", "paper:C2022"])
+    papers = ["A2020", "B2021", "C2022"]
+    # ownership requires BOTH the paper ref AND the annotation ref on the proposition
+    source_refs = [f"paper:{c}" for c in papers] + [_ann_ref(c) for c in papers]
+    _proposition_entity(root, "claim", source_refs)
     _paper_with_promoted(root, "A2020", stance="asserted")
     _paper_with_promoted(root, "B2021", stance="asserted")
     _paper_with_promoted(root, "C2022", stance="negated")
@@ -870,6 +935,26 @@ def test_e2e_stale_promoted_to_fails_build(tmp_path):
     from science_tool.annotation.cross_paper_evidence import CrossPaperEvidenceError
     with pytest.raises(CrossPaperEvidenceError):
         materialize_graph(tmp_path, strict=False)
+
+
+def test_same_paper_mixed_stance_yields_contested_group():
+    # The design's key fork: one paper asserting AND negating the same proposition shares
+    # one independence_group -> a real contested_group (not two corroborations).
+    from science_tool.annotation.cross_paper_evidence import (
+        LiteratureAssertion, emit_literature_evidence,
+    )
+    from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+    from science_tool.graph.io import entity_uri_for_ref
+
+    ds, knowledge, provenance = _named_graphs()
+    sup = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "s")
+    dis = LiteratureAssertion("proposition:p", "paper:A", "negated", "ann-2", "s")
+    emit_literature_evidence(knowledge, provenance, [sup, dis])
+    belief = aggregate_belief(
+        collect_evidence_units(knowledge, provenance, [entity_uri_for_ref("proposition:p")])
+    )
+    assert belief.contested is True
+    assert belief.contested_groups == {"literature-paper:A"}
 ```
 
 Notes for the implementer:
@@ -893,14 +978,16 @@ In `science/src/science_tool/graph/materialize.py`, inside `_derive_phase`, inse
     # statement annotations BEFORE bears_on derivation, so the virtual cito edges
     # enter the bears_on closure (not only collect_evidence_units). Function-scoped
     # import keeps graph/ free of a module-level annotation dependency (layering).
-    from science_tool.annotation.cross_paper_evidence import derive_literature_evidence
+    from science_tool.annotation.cross_paper_evidence import (
+        derive_literature_evidence,
+        proposition_source_refs_map,
+    )
 
-    proposition_source_refs = {
-        entity.canonical_id: frozenset(entity.source_refs)
-        for entity in sources.entities
-        if entity.kind == "proposition"
-    }
-    derive_literature_evidence(dataset, Path(sources.project_root), proposition_source_refs)
+    derive_literature_evidence(
+        dataset,
+        Path(sources.project_root),
+        proposition_source_refs_map(sources.entities),
+    )
 
     _derive_bears_on_layer(
         dataset,
@@ -940,8 +1027,9 @@ git commit -m "feat(4d): derive cross-paper evidence in materialize before bears
 
 **Interfaces:**
 - Produces:
-  - `load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]` — read every `entities/propositions/*` entity's `source_refs` from the tree (report-mode counterpart to materialize's `sources.entities` build).
-  - `build_cross_paper_evidence_report(project_root: Path, *, proposition_ref: str | None) -> dict` — scanner-only (never raises); JSON-serializable payload.
+  - `proposition_source_refs_map(entities) -> dict[str, frozenset[str]]` — shared by **both** the materialize pass (Task 4 passes `sources.entities`) and the report (passes `load_project_sources(root).entities`), so the two paths never diverge on proposition owners.
+  - `load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]` — report-mode build via `load_project_sources(project_root).entities` → `proposition_source_refs_map`.
+  - `build_cross_paper_evidence_report(project_root: Path, *, proposition_ref: str | None) -> dict` — scanner-only (never raises); JSON-serializable. The per-`--source` payload includes a `"belief"` block (`belief_magnitude`, `contested`, `contested_groups`) computed by emitting the proposition's derived units into an in-memory graph and running `collect_evidence_units` → `aggregate_belief`.
   - CLI: `science annotate cross-paper-evidence [--source proposition:<slug>] [--root PATH] [--format table|json]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -955,13 +1043,17 @@ from click.testing import CliRunner
 
 from science_tool.annotation.cli import annotate_group
 from tests.test_cross_paper_evidence_materialize import (  # reuse the scaffold helpers
-    _paper_with_promoted, _proposition_entity, _manifest,
+    _ann_ref, _manifest, _paper_with_promoted, _proposition_entity,
 )
 
 
 def _scaffold(root):
     _manifest(root)
-    _proposition_entity(root, "claim", ["paper:A2020", "paper:B2021"])
+    _proposition_entity(
+        root,
+        "claim",
+        ["paper:A2020", "paper:B2021", _ann_ref("A2020"), _ann_ref("B2021")],
+    )
     _paper_with_promoted(root, "A2020", stance="asserted")
     _paper_with_promoted(root, "B2021", stance="negated")
 
@@ -990,6 +1082,10 @@ def test_cli_single_ref_json_lists_units(tmp_path):
     payload = json.loads(result.output)
     units = {(u["paper"], u["stance"]) for u in payload["units"]}
     assert units == {("paper:A2020", "asserted"), ("paper:B2021", "negated")}
+    # different-paper support + dispute -> contested, but NOT a shared-group contested_group
+    assert payload["belief"]["contested"] is True
+    assert payload["belief"]["contested_groups"] == []
+    assert payload["belief"]["belief_magnitude"] != "unbacked"
 
 
 def test_cli_reports_faults_without_raising(tmp_path):
@@ -1031,17 +1127,40 @@ Expected: FAIL — no such command `cross-paper-evidence`.
 Append to `science/src/science_tool/annotation/cross_paper_evidence.py`:
 
 ```python
-def load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]:
-    """Read every proposition entity's source_refs from the tree (report-mode build)."""
-    from science_tool.entities import _load_markdown_entities
+# proposition_source_refs_map(...) is defined in Task 3 (with derive_literature_evidence);
+# do NOT redefine it here — just import/use it.
 
-    out: dict[str, frozenset[str]] = {}
-    for record in _load_markdown_entities(project_root, kind="proposition"):
-        fm = record["frontmatter"]
-        ref = fm.get("id")
-        if isinstance(ref, str):
-            out[ref] = frozenset(fm.get("source_refs") or [])
-    return out
+
+def load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]:
+    """Report-mode build via the SAME loader materialize uses (load_project_sources)."""
+    from science_tool.graph.sources import load_project_sources
+
+    return proposition_source_refs_map(load_project_sources(project_root).entities)
+
+
+def _belief_for_proposition(collapsed: list[LiteratureAssertion], proposition_ref: str) -> dict:
+    """Belief verdict from the proposition's derived literature units alone.
+
+    Emits the virtual lines into an in-memory graph and runs the SAME belief path, so
+    the diagnostic reports magnitude / contested / contested_group without depending on
+    a built `graph.trig`. (Reflects cross-paper literature evidence only — authored
+    evidence-lines are out of this diagnostic's scope.)
+    """
+    from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+
+    ref_units = [a for a in collapsed if a.proposition_ref == proposition_ref]
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    provenance = ds.graph(PROJECT_NS["graph/provenance"])
+    emit_literature_evidence(knowledge, provenance, ref_units)
+    belief = aggregate_belief(
+        collect_evidence_units(knowledge, provenance, [entity_uri_for_ref(proposition_ref)])
+    )
+    return {
+        "belief_magnitude": belief.magnitude.value,
+        "contested": belief.contested,
+        "contested_groups": sorted(belief.contested_groups),
+    }
 
 
 def build_cross_paper_evidence_report(
@@ -1063,16 +1182,19 @@ def build_cross_paper_evidence_report(
             if a.proposition_ref == proposition_ref
         ]
         units.sort(key=lambda u: (u["paper"], u["stance"]))
-        return {"proposition": proposition_ref, "units": units, "faults": fault_rows}
+        return {
+            "proposition": proposition_ref,
+            "units": units,
+            "belief": _belief_for_proposition(collapsed, proposition_ref),
+            "faults": fault_rows,
+        }
 
     by_prop: dict[str, dict[str, int]] = {}
     for a in collapsed:
         edge = STANCE_EMIT[a.stance][0]
         bucket = by_prop.setdefault(a.proposition_ref, {"supporting_papers": 0, "disputing_papers": 0})
         bucket["supporting_papers" if edge == "supports" else "disputing_papers"] += 1
-    propositions = [
-        {"proposition": ref, **counts} for ref, counts in sorted(by_prop.items())
-    ]
+    propositions = [{"proposition": ref, **counts} for ref, counts in sorted(by_prop.items())]
     return {"propositions": propositions, "faults": fault_rows}
 ```
 
@@ -1100,7 +1222,12 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
         return
 
     if source_ref is not None:
-        click.echo(f"cross-paper evidence for {source_ref}: {len(payload['units'])} unit(s)")
+        b = payload["belief"]
+        click.echo(
+            f"cross-paper evidence for {source_ref}: {len(payload['units'])} unit(s); "
+            f"belief={b['belief_magnitude']} contested={b['contested']} "
+            f"contested_groups={len(b['contested_groups'])}"
+        )
         for u in payload["units"]:
             click.echo(f"  {u['edge']:8s} {u['paper']} ({u['stance']})")
     else:
