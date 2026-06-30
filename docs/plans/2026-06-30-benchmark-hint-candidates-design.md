@@ -90,12 +90,17 @@ Then it should project over:
 - `evidence_report.term_categories.domain_candidate_terms`;
 - `evidence_report.term_categories.project_local_terms`;
 - `evidence_report.term_categories.workflow_or_modeling_terms`;
-- `evidence_report.entities`;
-- existing `FACET_HINT_TERMS` and `FACET_HINT_PHRASES`.
+- existing `FACET_HINT_TERMS`, only when `--include-existing` is set.
 
 The command must not re-tokenize project text or benchmark facets. The evidence
 report remains the single source of truth for which terms surfaced and which
 entities exemplify them.
+
+The evidence report currently exposes the top 10 terms per category. V1 accepts
+that cap instead of adding a wider evidence-report API. Therefore this command
+is a curated view over the visible evidence terms, not a complete inventory of
+every unmapped token. `--min-count` filters within those capped category lists;
+it does not request more terms from `gaps_report()`.
 
 ## Candidate Rows
 
@@ -125,10 +130,15 @@ Fields:
 
 - `term`: normalized token from the evidence report.
 - `count`: number of entities where the term appears in the relevant evidence
-  bucket.
+  bucket. For evidence-derived categories this is an entity count because
+  `_unmapped_high_value_terms()` emits each term at most once per entity. For
+  `existing-hint` rows, `count` is `null` because existing hint terms are
+  enumerated from `FACET_HINT_TERMS`, not observed in the evidence buckets.
 - `category`: one of `domain-candidate`, `project-local`,
   `workflow-or-modeling`, or `existing-hint`.
 - `current_hint`: the facet currently mapped by `FACET_HINT_TERMS`, if present.
+  It is expected to be non-null only for `existing-hint` rows in v1, because
+  evidence-derived rows exclude already-mapped hint terms upstream.
 - `suggested_action`: one of:
   - `review-for-hint`: plausible unmapped domain term;
   - `project-local-or-alias`: likely project-local vocabulary;
@@ -138,6 +148,7 @@ Fields:
     facet is a good fit.
 - `suggested_facets`: conservative deterministic guesses, if any.
 - `example_entities`: entity ids supplied by the underlying evidence term row.
+  For `existing-hint` rows this is an empty list in v1.
 - `reason_notes`: short deterministic explanations.
 
 For v1, `suggested_facets` should be conservative. It may be empty. The command
@@ -147,8 +158,11 @@ should not infer a facet merely because a term is frequent.
 
 Classification is deterministic and deliberately modest:
 
-1. Terms already present in `FACET_HINT_TERMS` become `existing-hint` rows and
-   are hidden by default unless `--include-existing` is set.
+1. Terms already present in `FACET_HINT_TERMS` are excluded upstream from the
+   evidence categories. When `--include-existing` is set, enumerate them
+   directly from `FACET_HINT_TERMS` as `existing-hint` rows with
+   `count: null`, `example_entities: []`, `current_hint` populated, and
+   `suggested_action: already-mapped`. They are hidden by default.
 2. Terms from `project_local_terms` become `project-local` rows with
    `suggested_action: project-local-or-alias`. They are hidden from the default
    table but included in JSON summary counts.
@@ -162,9 +176,13 @@ Classification is deterministic and deliberately modest:
    YAML `decision` field to `needs-new-facet-vocab`; the command should not make
    that decision automatically in v1.
 
-When a term appears in multiple categories, use the same precedence already used
-by evidence categorization: project-local, then workflow/modeling, then domain.
-The command should not create a second categorization policy.
+The evidence report already emits disjoint categories using project-local,
+workflow/modeling, then domain precedence. The command should read those lists
+as-is and should not create a second categorization policy.
+
+`FACET_HINT_PHRASES` is intentionally out of scope for v1 rows. It is a
+multi-token phrase surface, while this command reviews single normalized terms.
+Phrase-level candidates can be designed later if needed.
 
 ## Summary
 
@@ -174,11 +192,13 @@ JSON payload shape:
 {
   "project_root": "~/d/cancer/cancer-types/multiple-myeloma",
   "summary": {
-    "candidate_terms": 42,
-    "domain_candidate_terms": 31,
+    "candidate_terms": 18,
+    "domain_candidate_terms": 10,
     "project_local_terms": 6,
-    "workflow_or_modeling_terms": 3,
-    "existing_hint_terms": 2,
+    "workflow_or_modeling_terms": 2,
+    "existing_hint_terms": 0,
+    "term_bucket_cap": 10,
+    "truncation_notice": "evidence categories are capped at top 10 terms per bucket",
     "fallback_only_gap_rows": 448,
     "entity_specific_gap_rows": 47
   },
@@ -191,6 +211,12 @@ JSON payload shape:
 `fallback_only_gap_rows` and `entity_specific_gap_rows` should come from the
 existing gap row `candidate_mode` counts. They explain why hint review is
 needed, but they should not influence matching or scoring.
+
+`candidate_terms` is the number of rows emitted after category visibility and
+`--min-count` filtering. The per-category summary counts are counts of emitted
+rows, not uncapped corpus totals. `term_bucket_cap` documents the evidence
+source cap so consumers do not mistake the report for a complete term
+inventory.
 
 ## Table Output
 
@@ -234,8 +260,10 @@ project_root: ~/d/cancer/cancer-types/multiple-myeloma
 generated_at: "2026-06-30"
 source_command: "science benchmark hint-candidates --commons --domain biology --write-review-file"
 summary:
-  candidate_terms: 42
-  domain_candidate_terms: 31
+  candidate_terms: 18
+  domain_candidate_terms: 10
+  term_bucket_cap: 10
+  truncation_notice: evidence categories are capped at top 10 terms per bucket
 candidates:
   - term: cytogenetic
     count: 19
@@ -259,6 +287,10 @@ Generated fields provide context. Human-editable fields are:
 The command should not consume this YAML in v1. Applying accepted decisions to
 the actual hint lexicon is a later, separate design.
 
+Tests should inject or freeze the date used for `generated_at` and the default
+filename. The implementation should not rely on the wall clock directly in
+tests.
+
 ## Error Handling
 
 - Unknown `--format` values are handled by Click.
@@ -277,11 +309,15 @@ Implementation should add focused tests for:
 - Default rows include domain candidate terms and exclude project-local,
   workflow/modeling, and existing hints unless requested.
 - JSON includes summary counts, row fields, and `commons_notice`.
+- Summary and review artifact document the top-10-per-category evidence cap.
+- Existing hint rows, when included, have `count: null`, no example entities,
+  and populated `current_hint`.
 - `--write-review-file` writes the expected YAML path under
   `docs/audits/benchmark-hint-candidates/`.
 - `--output` requires `--write-review-file`.
 - Existing output path fails without overwrite behavior.
 - Table output includes actionable terms and prints a clear no-results message.
+- Date-dependent output uses a deterministic date seam in tests.
 
 ## Success Criteria
 
