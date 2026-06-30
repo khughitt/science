@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `79`
+- Pending thread count: `77`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -787,37 +787,6 @@
 - remaining_gaps:
   - Large parts of the overview remain target-state rather than implementation reality.
   - Separate shipped invariants from aspirational subsystem backlog before cleanup.
-
-## project-serialize
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-29-project-serialize-design.md`
-  - `docs/plans/2026-06-29-project-serialize-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until project serialize schema, payload inventory, force semantics, privacy stance, and data-audit interaction are documented outside active plans
-    - `docs/plans/2026-06-29-project-serialize-design.md`
-    - `docs/plans/2026-06-29-project-serialize-plan.md`
-- remaining_gaps:
-  - No durable user/workflow doc was found for science project serialize, the science-project-serialized schema, payload inventory, force semantics, privacy stance, or data-audit interaction.
-
-## project-verify
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-29-project-verify-design.md`
-  - `docs/plans/2026-06-29-project-verify-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until project verify self-check, against-checkout comparison, extraction, JSON verdicts, exit codes, and git_tracked mismatch behavior are documented outside active plans
-    - `docs/plans/2026-06-29-project-verify-design.md`
-    - `docs/plans/2026-06-29-project-verify-plan.md`
-- remaining_gaps:
-  - No durable user/workflow doc was found for science project verify, self-check versus --against behavior, extraction, JSON verdict shape, warnings, or exit codes.
-  - Implementation differs from the design: verify treats payload git_tracked mismatches as differ, while the design said git_tracked was informational. The shipped behavior is tested and should be checkpointed explicitly.
 
 ## proposition-cross-paper-evidence-phase4d
 

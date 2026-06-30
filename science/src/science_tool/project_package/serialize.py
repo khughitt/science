@@ -2,7 +2,7 @@
 
 Source files (entities + results, no data/ payloads) + a manifest that
 hash-inventories the excluded payloads. See
-docs/plans/2026-06-29-project-serialize-design.md.
+docs/user-guide/project-packaging.md.
 """
 
 from __future__ import annotations

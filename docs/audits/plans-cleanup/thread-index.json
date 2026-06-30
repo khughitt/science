@@ -1,10 +1,10 @@
 {
-  "file_count": 135,
+  "file_count": 131,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 80,
+  "thread_count": 78,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1295,60 +1295,6 @@
         "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md": "design"
       },
       "thread_id": "patchwork-kernel-architecture"
-    },
-    {
-      "earliest_file_date": "2026-06-29",
-      "files": [
-        "docs/plans/2026-06-29-project-serialize-design.md",
-        "docs/plans/2026-06-29-project-serialize-plan.md"
-      ],
-      "latest_file_date": "2026-06-29",
-      "normalized_slug": "project-serialize",
-      "raw_slugs": {
-        "docs/plans/2026-06-29-project-serialize-design.md": "project-serialize-design",
-        "docs/plans/2026-06-29-project-serialize-plan.md": "project-serialize-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-29-project-serialize-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-29-project-serialize-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-29-project-serialize-design.md": "design",
-        "docs/plans/2026-06-29-project-serialize-plan.md": "plan"
-      },
-      "thread_id": "project-serialize"
-    },
-    {
-      "earliest_file_date": "2026-06-29",
-      "files": [
-        "docs/plans/2026-06-29-project-verify-design.md",
-        "docs/plans/2026-06-29-project-verify-plan.md"
-      ],
-      "latest_file_date": "2026-06-29",
-      "normalized_slug": "project-verify",
-      "raw_slugs": {
-        "docs/plans/2026-06-29-project-verify-design.md": "project-verify-design",
-        "docs/plans/2026-06-29-project-verify-plan.md": "project-verify-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-29-project-verify-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-29-project-verify-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-29-project-verify-design.md": "design",
-        "docs/plans/2026-06-29-project-verify-plan.md": "plan"
-      },
-      "thread_id": "project-verify"
     },
     {
       "earliest_file_date": "2026-06-30",
