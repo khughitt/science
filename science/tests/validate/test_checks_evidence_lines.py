@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from rdflib import RDF, Dataset, Literal, URIRef
 from rdflib.namespace import PROV
 
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.model import (
+    Annotation,
+    Motivation,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
+)
 from science_tool.graph.io import CITO_NS, SCI_NS
 from science_tool.graph.store import PROJECT_NS, _graph_uri
 from science_tool.validate import Severity, ValidateContext
@@ -44,6 +56,78 @@ def _write(root: Path, rel: str, body: str) -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(body, encoding="utf-8")
     return p
+
+
+_CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
+_ANN_REF = "annotation:entities/papers/Smith2020.source#a-1"
+
+
+def _write_proposition_with_refs(root: Path, refs: list[str]) -> Path:
+    refs_yaml = "\n".join(f"  - {ref}" for ref in refs)
+    return _write(
+        root,
+        "entities/propositions/p1.md",
+        "\n".join(
+            [
+                "---",
+                "type: proposition",
+                "title: P1",
+                "status: active",
+                "created: '2026-06-30'",
+                "updated: '2026-06-30'",
+                "id: proposition:p1",
+                "ontology_terms: []",
+                "source_refs:",
+                refs_yaml,
+                "---",
+                "",
+                "Claim.",
+                "",
+            ]
+        ),
+    )
+
+
+def _statement_annotation(
+    annotation_id: str = "a-1",
+    *,
+    stance: str = "asserted",
+    promoted_to: str | None = "proposition:p1",
+    status: Status = Status.OPEN,
+) -> Annotation:
+    non_open = status is not Status.OPEN
+    return Annotation(
+        id=annotation_id,
+        target=SpecificResource(
+            source="Smith2020.source.md",
+            selector=TextQuoteSelector(exact=annotation_id, prefix="", suffix=""),
+        ),
+        bodies=(
+            TextualBody(
+                value=json.dumps({"section": "abstract", "stance": stance}),
+                format="application/json",
+            ),
+        ),
+        motivation=Motivation.CLASSIFYING,
+        annotation_type="proposition",
+        source="manual:validation-test",
+        status=status,
+        creator="curator",
+        created=_CREATED,
+        modified=_CREATED if non_open else None,
+        modified_by="curator" if non_open else None,
+        promoted_to=promoted_to,
+    )
+
+
+def _write_paper_source_sidecar(root: Path, annotations: list[Annotation]) -> None:
+    md = root / "entities" / "papers" / "Smith2020.source.md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Body.\n", encoding="utf-8")
+    anno_io.write_sidecar(
+        anno_io.sidecar_for_markdown(md),
+        anno_io.Sidecar(annotations=tuple(annotations)),
+    )
 
 
 def test_belief_graph_loader_reuses_parsed_dataset_for_context(
@@ -210,6 +294,106 @@ def test_unstanced_cite_prefix_source_ref_is_skipped(tmp_path: Path) -> None:
 
     # cite: refs are skipped — no warning
     assert results == []
+
+
+def test_unstanced_valid_4d_literature_refs_are_counted_as_coverage(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
+    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    assert [r for r in results if r.rule == "evidence.unstanced"] == []
+
+
+def test_unstanced_4d_coverage_does_not_load_unrelated_invalid_entities(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
+    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
+    _write(
+        tmp_path,
+        "entities/evidence-lines/bad.md",
+        "\n".join(
+            [
+                "---",
+                "id: evidence-line:bad",
+                "type: evidence-line",
+                "title: Bad",
+                "status: active",
+                "created: '2026-06-30'",
+                "updated: '2026-06-30'",
+                "stance: supports",
+                "target: proposition:other",
+                "source: paper:Other2020",
+                "evidence_role: bogus",
+                "---",
+                "",
+                "Invalid for the source loader, but unrelated to proposition:p1.",
+                "",
+            ]
+        ),
+    )
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
+    assert unstanced == []
+
+
+def test_unstanced_4d_ownership_mismatch_does_not_cover_paper_ref(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    prop = _write_proposition_with_refs(tmp_path, ["paper:Smith2020"])
+    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
+
+    assert len(unstanced) == 1
+    assert unstanced[0].path == prop
+    assert "paper:Smith2020" in unstanced[0].message
+
+
+def test_unstanced_4d_faulted_assertion_does_not_cover_refs(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
+    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="maybe")])
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    messages = [r.message for r in results if r.rule == "evidence.unstanced"]
+    assert len(messages) == 2
+    assert any("paper:Smith2020" in message for message in messages)
+    assert any(_ANN_REF in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    ("annotation", "case_id"),
+    [
+        (_statement_annotation("a-1", stance="open"), "open-stance"),
+        (_statement_annotation("a-1", promoted_to=None), "unpromoted"),
+        (_statement_annotation("a-1", status=Status.FIXED), "inactive"),
+    ],
+)
+def test_unstanced_4d_silent_skips_remain_unstanced(
+    tmp_path: Path,
+    annotation: Annotation,
+    case_id: str,
+) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
+    _write_paper_source_sidecar(tmp_path, [annotation])
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    messages = [r.message for r in results if r.rule == "evidence.unstanced"]
+    assert len(messages) == 2, case_id
+    assert any("paper:Smith2020" in message for message in messages)
+    assert any(_ANN_REF in message for message in messages)
 
 
 # ---------------------------------------------------------------------------

@@ -38,11 +38,12 @@ _ANN_REF = "annotation:entities/papers/Smith2020.source#a-1"
 
 def _assertion(stance: str) -> LiteratureAssertion:
     return LiteratureAssertion(
-        "proposition:p",
-        "paper:Smith2020",
-        stance,
-        "a-1",
-        "entities/papers/Smith2020.source.anno.trig",
+        proposition_ref="proposition:p",
+        paper_ref="paper:Smith2020",
+        stance=stance,
+        annotation_id="a-1",
+        sidecar="entities/papers/Smith2020.source.anno.trig",
+        annotation_ref=_ANN_REF,
     )
 
 
@@ -328,8 +329,22 @@ def test_e2e_stale_promoted_to_fails_build(tmp_path: Path) -> None:
 
 def test_same_paper_mixed_stance_yields_contested_group() -> None:
     _, knowledge, provenance = _graphs()
-    support = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "s")
-    dispute = LiteratureAssertion("proposition:p", "paper:A", "negated", "ann-2", "s")
+    support = LiteratureAssertion(
+        proposition_ref="proposition:p",
+        paper_ref="paper:A",
+        stance="asserted",
+        annotation_id="ann-1",
+        sidecar="s",
+        annotation_ref="annotation:entities/papers/A.source#ann-1",
+    )
+    dispute = LiteratureAssertion(
+        proposition_ref="proposition:p",
+        paper_ref="paper:A",
+        stance="negated",
+        annotation_id="ann-2",
+        sidecar="s",
+        annotation_ref="annotation:entities/papers/A.source#ann-2",
+    )
 
     emit_literature_evidence(knowledge, provenance, [support, dispute])
 

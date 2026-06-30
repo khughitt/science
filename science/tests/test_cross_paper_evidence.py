@@ -76,32 +76,51 @@ def test_stance_emit_table_uses_real_enum_values():
     assert INDEPENDENT == IndependenceTag.INDEPENDENT.value
 
 
+def _lit_assertion(
+    *,
+    proposition_ref: str = "proposition:p",
+    paper_ref: str = "paper:A",
+    stance: str = "asserted",
+    annotation_id: str = "ann-1",
+    sidecar: str = "A.anno.trig",
+) -> LiteratureAssertion:
+    citekey = paper_ref.split(":", 1)[1]
+    return LiteratureAssertion(
+        proposition_ref=proposition_ref,
+        paper_ref=paper_ref,
+        stance=stance,
+        annotation_id=annotation_id,
+        sidecar=sidecar,
+        annotation_ref=f"annotation:entities/papers/{citekey}.source#{annotation_id}",
+    )
+
+
 def test_collapse_dedupes_same_proposition_paper_stance_keeps_one():
-    a1 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
-    a2 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-2", "A.anno.trig")
+    a1 = _lit_assertion(annotation_id="ann-1")
+    a2 = _lit_assertion(annotation_id="ann-2")
     out = collapse_assertions([a1, a2])
     assert len(out) == 1
     assert out[0].proposition_ref == "proposition:p"
 
 
 def test_collapse_keeps_both_stances_for_same_paper():
-    sup = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
-    dis = LiteratureAssertion("proposition:p", "paper:A", "negated", "ann-2", "A.anno.trig")
+    sup = _lit_assertion(stance="asserted", annotation_id="ann-1")
+    dis = _lit_assertion(stance="negated", annotation_id="ann-2")
     out = collapse_assertions([sup, dis])
     keys = {(x.paper_ref, x.stance) for x in out}
     assert keys == {("paper:A", "asserted"), ("paper:A", "negated")}
 
 
 def test_collapse_is_order_independent_and_deterministic():
-    a1 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-9", "A.anno.trig")
-    a2 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
+    a1 = _lit_assertion(annotation_id="ann-9")
+    a2 = _lit_assertion(annotation_id="ann-1")
     assert collapse_assertions([a1, a2]) == collapse_assertions([a2, a1])
     assert collapse_assertions([a1, a2])[0].annotation_id == "ann-1"
 
 
 def test_collapse_uses_sidecar_as_final_deterministic_tiebreaker():
-    a1 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "B.anno.trig")
-    a2 = LiteratureAssertion("proposition:p", "paper:A", "asserted", "ann-1", "A.anno.trig")
+    a1 = _lit_assertion(annotation_id="ann-1", sidecar="B.anno.trig")
+    a2 = _lit_assertion(annotation_id="ann-1", sidecar="A.anno.trig")
     assert collapse_assertions([a1, a2]) == collapse_assertions([a2, a1])
     assert collapse_assertions([a1, a2])[0].sidecar == "A.anno.trig"
 
@@ -182,6 +201,7 @@ def test_scan_happy_path_collects_active_proposition_assertions(tmp_path: Path):
         "paper:Smith2020",
         "asserted",
     )
+    assert a.annotation_ref == _ANN_REF
 
 
 def test_scan_ignores_sidecars_outside_project_entity_roots(tmp_path: Path):
