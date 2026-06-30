@@ -708,7 +708,15 @@ def test_derive_emits_when_clean(tmp_path):
 
     ds = Dataset()
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
-    derive_literature_evidence(ds, tmp_path, {"proposition:p": frozenset({"paper:Smith2020"})})
+    derive_literature_evidence(
+        ds,
+        tmp_path,
+        {
+            "proposition:p": frozenset(
+                {"paper:Smith2020", "annotation:entities/papers/Smith2020.source#a-1"}
+            )
+        },
+    )
     line = lit_assertion_uri("proposition:p", "paper:Smith2020", "asserted")
     assert (line, RDF.type, SCI_NS.EvidenceLine) in knowledge
 
@@ -787,7 +795,7 @@ def proposition_source_refs_map(entities) -> dict[str, frozenset[str]]:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_cross_paper_evidence_materialize.py -q`
-Expected: PASS (5 passed).
+Expected: PASS (6 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -898,7 +906,7 @@ def test_e2e_two_papers_assert_one_disputes_is_contested(tmp_path):
     assert result.support_units == 2
     assert result.dispute_units == 1
     assert result.contested is True
-    assert result.belief_magnitude != "unbacked"
+    assert result.belief_magnitude == "supported"
 
 
 def test_e2e_behavior_neutral_when_no_promoted_statements(tmp_path):
@@ -958,7 +966,7 @@ def test_same_paper_mixed_stance_yields_contested_group():
 ```
 
 Notes for the implementer:
-- `test_e2e_two_papers_assert_one_disputes_is_contested` asserts the **structural** invariants that are certain (2 supports, 1 dispute, contested). After it passes, **add one assertion pinning the exact `belief_magnitude`** to whatever the engine returns (run once, read `result.belief_magnitude`, hard-code it). It must be a grounded value (not `"unbacked"`); literature-only support cannot be `"well_supported"` (no `direct_test`).
+- `test_e2e_two_papers_assert_one_disputes_is_contested` asserts both the **structural** invariants (2 supports, 1 dispute, contested) and the exact literature-only magnitude (`"supported"`). If the engine returns a different value, investigate the reducer or policy change rather than weakening this assertion. Literature-only support cannot be `"well_supported"` (no `direct_test`).
 - If `materialize_graph(strict=False)` performs structural validation that rejects the hand-authored minimal entities (e.g. missing required frontmatter), add the minimal required fields the validator demands — do not weaken the validator. Run with `-x` and read the error; the proposition/paper frontmatter above mirrors `tests/test_belief_e2e.py` conventions but the validator is the source of truth.
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1029,7 +1037,7 @@ git commit -m "feat(4d): derive cross-paper evidence in materialize before bears
 - Produces:
   - `proposition_source_refs_map(entities) -> dict[str, frozenset[str]]` — shared by **both** the materialize pass (Task 4 passes `sources.entities`) and the report (passes `load_project_sources(root).entities`), so the two paths never diverge on proposition owners.
   - `load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]` — report-mode build via `load_project_sources(project_root).entities` → `proposition_source_refs_map`.
-  - `build_cross_paper_evidence_report(project_root: Path, *, proposition_ref: str | None) -> dict` — scanner-only (never raises); JSON-serializable. The per-`--source` payload includes a `"belief"` block (`belief_magnitude`, `contested`, `contested_groups`) computed by emitting the proposition's derived units into an in-memory graph and running `collect_evidence_units` → `aggregate_belief`.
+  - `build_cross_paper_evidence_report(project_root: Path, *, proposition_ref: str | None) -> dict` — scanner-only (never raises); JSON-serializable. The per-`--source` payload includes unit rows with `paper`, `stance`, `edge`, `role`, `strength`, and `independence_group`, plus a `"belief"` block (`belief_magnitude`, `contested`, `contested_groups`, `support_units`, `dispute_units`) computed by emitting the proposition's derived units into an in-memory graph and running `collect_evidence_units` → `aggregate_belief`.
   - CLI: `science annotate cross-paper-evidence [--source proposition:<slug>] [--root PATH] [--format table|json]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1041,9 +1049,10 @@ import json
 
 from click.testing import CliRunner
 
+from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
 from tests.test_cross_paper_evidence_materialize import (  # reuse the scaffold helpers
-    _ann_ref, _manifest, _paper_with_promoted, _proposition_entity,
+    _ann_ref, _manifest, _paper_with_promoted, _promoted_ann, _proposition_entity,
 )
 
 
@@ -1072,20 +1081,71 @@ def test_cli_project_wide_json_lists_assertions(tmp_path):
     assert props["proposition:claim"]["disputing_papers"] == 1
 
 
+def test_cli_project_wide_counts_same_paper_support_stances_once(tmp_path):
+    _manifest(tmp_path)
+    _proposition_entity(
+        tmp_path,
+        "claim",
+        [
+            "paper:A2020",
+            _ann_ref("A2020"),
+            "annotation:entities/papers/A2020.source#A2020-2",
+        ],
+    )
+    _paper_with_promoted(tmp_path, "A2020", stance="asserted")
+    md = tmp_path / "entities" / "papers" / "A2020.source.md"
+    anno_io.write_sidecar(
+        anno_io.sidecar_for_markdown(md),
+        anno_io.Sidecar(
+            annotations=(
+                _promoted_ann("A2020-1", stance="asserted"),
+                _promoted_ann("A2020-2", stance="hypothesized"),
+            )
+        ),
+    )
+
+    result = CliRunner().invoke(
+        annotate_group, ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    props = {p["proposition"]: p for p in payload["propositions"]}
+    # Two support stances from one paper are two assertion units, but one supporting paper.
+    assert props["proposition:claim"]["supporting_papers"] == 1
+    assert props["proposition:claim"]["disputing_papers"] == 0
+
+
 def test_cli_single_ref_json_lists_units(tmp_path):
     _scaffold(tmp_path)
     result = CliRunner().invoke(
         annotate_group,
-        ["cross-paper-evidence", "--source", "proposition:claim", "--root", str(tmp_path), "--format", "json"],
+        [
+            "cross-paper-evidence",
+            "--source",
+            "proposition:claim",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     units = {(u["paper"], u["stance"]) for u in payload["units"]}
     assert units == {("paper:A2020", "asserted"), ("paper:B2021", "negated")}
+    by_stance = {u["stance"]: u for u in payload["units"]}
+    assert by_stance["asserted"]["role"] == "proxy_support"
+    assert by_stance["asserted"]["strength"] == "moderate"
+    assert by_stance["asserted"]["independence_group"] == "literature-paper:A2020"
+    assert by_stance["negated"]["role"] == "proxy_support"
+    assert by_stance["negated"]["strength"] == "moderate"
+    assert by_stance["negated"]["independence_group"] == "literature-paper:B2021"
     # different-paper support + dispute -> contested, but NOT a shared-group contested_group
     assert payload["belief"]["contested"] is True
     assert payload["belief"]["contested_groups"] == []
-    assert payload["belief"]["belief_magnitude"] != "unbacked"
+    assert payload["belief"]["support_units"] == 1
+    assert payload["belief"]["dispute_units"] == 1
+    assert payload["belief"]["belief_magnitude"] == "fragile"
 
 
 def test_cli_reports_faults_without_raising(tmp_path):
@@ -1160,6 +1220,8 @@ def _belief_for_proposition(collapsed: list[LiteratureAssertion], proposition_re
         "belief_magnitude": belief.magnitude.value,
         "contested": belief.contested,
         "contested_groups": sorted(belief.contested_groups),
+        "support_units": len(belief.support_units),
+        "dispute_units": len(belief.dispute_units),
     }
 
 
@@ -1177,7 +1239,14 @@ def build_cross_paper_evidence_report(
 
     if proposition_ref is not None:
         units = [
-            {"paper": a.paper_ref, "stance": a.stance, "edge": STANCE_EMIT[a.stance][0]}
+            {
+                "paper": a.paper_ref,
+                "stance": a.stance,
+                "edge": STANCE_EMIT[a.stance][0],
+                "role": STANCE_EMIT[a.stance][1],
+                "strength": STANCE_EMIT[a.stance][2],
+                "independence_group": f"literature-{a.paper_ref}",
+            }
             for a in collapsed
             if a.proposition_ref == proposition_ref
         ]
@@ -1190,9 +1259,16 @@ def build_cross_paper_evidence_report(
         }
 
     by_prop: dict[str, dict[str, int]] = {}
+    counted: set[tuple[str, str, str]] = set()
     for a in collapsed:
         edge = STANCE_EMIT[a.stance][0]
-        bucket = by_prop.setdefault(a.proposition_ref, {"supporting_papers": 0, "disputing_papers": 0})
+        count_key = (a.proposition_ref, a.paper_ref, edge)
+        if count_key in counted:
+            continue
+        counted.add(count_key)
+        bucket = by_prop.setdefault(
+            a.proposition_ref, {"supporting_papers": 0, "disputing_papers": 0}
+        )
         bucket["supporting_papers" if edge == "supports" else "disputing_papers"] += 1
     propositions = [{"proposition": ref, **counts} for ref, counts in sorted(by_prop.items())]
     return {"propositions": propositions, "faults": fault_rows}
@@ -1229,7 +1305,10 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
             f"contested_groups={len(b['contested_groups'])}"
         )
         for u in payload["units"]:
-            click.echo(f"  {u['edge']:8s} {u['paper']} ({u['stance']})")
+            click.echo(
+                f"  {u['edge']:8s} {u['paper']} "
+                f"({u['stance']}; {u['role']}/{u['strength']})"
+            )
     else:
         for p in payload["propositions"]:
             click.echo(
@@ -1246,7 +1325,7 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_cross_paper_evidence_cli.py -q`
-Expected: PASS (5 passed).
+Expected: PASS (6 passed).
 
 - [ ] **Step 5: Confirm the command is registered**
 
