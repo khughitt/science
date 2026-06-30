@@ -49,22 +49,53 @@ belief engine**:
 
 ## 3. Architecture — virtual evidence lines, derived at materialize time
 
-A new derivation pass in `graph/materialize.py`, running after propositions and
-provenance are loaded, alongside the existing `derive_*` passes:
+A new derivation pass in `graph/materialize.py`. **Ordering is load-bearing: the pass
+runs inside `_derive_phase`, after the emit phase has loaded propositions + provenance
+and after `emit_source_snapshots`, but *before* `_derive_bears_on_layer`.** The virtual
+`cito:supports`/`disputes` edges must exist before the bears-on derivation so they
+participate in `sci:bearsOn` closure and the freshness/closure consumers that read it —
+not only in `collect_evidence_units` (which reads the cito edges directly). Emitting the
+pass after `_derive_bears_on_layer` would silently exclude the virtual evidence from
+those derived layers.
+
+The pass:
 
 1. **Enumerate promoted-statement assertions.** For each paper `.anno.trig` sidecar,
-   read annotations whose `promoted_to` is set. Each yields a
-   `(proposition, paper, stance)` triple. This is a bounded sidecar read that reuses
-   the existing `read_sidecar` I/O; only annotations with a `promoted_to` backlink
-   participate. (The `.source.md`/`.anno.trig` sidecars already live inside entity
-   roots; the markdown storage adapter already knows about `.source.md`.)
-2. **Collapse per `(proposition, paper, stance)`.** Multiple annotations from the
+   read annotations and keep only those that are **proposition assertions promoted to a
+   proposition** — i.e. `annotation_type == "proposition"` **and**
+   `promoted_to` is set and `promoted_to.startswith("proposition:")` (resolves the
+   scope question below). Annotations of type `question`/`hypothesis` (4b) legitimately
+   carry `promoted_to = "question:…"` / `"hypothesis:…"` and are **skipped** silently —
+   they are valid promotions, simply not literature evidence *for a proposition*.
+   Each kept annotation yields a `(proposition, paper, stance)` triple. This is a
+   bounded sidecar read that reuses the existing `read_sidecar` I/O. (The
+   `.source.md`/`.anno.trig` sidecars already live inside entity roots; the markdown
+   storage adapter already knows about `.source.md`.)
+
+   **Scope rule (closed).** Only `annotation_type == "proposition"` annotations whose
+   `promoted_to` targets a `proposition:` count. This keeps future relation/entity
+   annotation types from accidentally becoming literature evidence. A *proposition*-type
+   annotation whose `promoted_to` points at a **non-`proposition:`** target is a
+   corruption and is an error (§6) — distinct from the benign skip of a
+   question/hypothesis annotation.
+
+2. **Resolve the owning paper (ownership contract).** The `paper:<citekey>` for an
+   assertion is resolved **from the owning sidecar via the P1 `TextSourceAdapter`
+   contract** — `resolve_adapter(sidecar_markdown_path).source_ref(...)` — the *same*
+   mechanism 4a used to compute the `paper_ref` it accrued onto the proposition's
+   `source_refs`. This is the single source of truth for the paper id; it guarantees
+   the derived `wasDerivedFrom = paper:<citekey>` and `independence_group =
+   literature-paper:<citekey>` match what 4a recorded, with no second, divergent
+   convention. (A sidecar whose adapter cannot resolve a source ref is an error, not a
+   silent skip — §6.)
+
+3. **Collapse per `(proposition, paper, stance)`.** Multiple annotations from the
    same paper restating the *same proposition with the same stance* count once — a
    single paper cannot inflate corroboration by restating. Crucially the collapse key
    includes **stance**, so a paper that both asserts *and* negates the same
    proposition is **not** silently reduced to one winning stance (see §4 same-paper
    mixed stance).
-3. **Emit a virtual `sci:EvidenceLine` node** per surviving assertion, plus a
+4. **Emit a virtual `sci:EvidenceLine` node** per surviving assertion, plus a
    `cito:supports` / `cito:disputes` edge to the proposition, with explicit provenance
    metadata (§4 table). These virtual lines feed `collect_evidence_units` →
    `aggregate_belief` exactly like authored lines.
@@ -76,10 +107,13 @@ pollute `entities/evidence-lines/`, and add write/idempotency/dedup burden that
 re-derivation already obviates.
 
 **Deterministic, collision-proof IDs.** The virtual line URI is
-`evidence-line:lit-assertion/<hash(proposition, paper, stance)>`, materialized
-**URI-only** (never written to `entities/evidence-lines/`) and clearly namespaced
-apart from authored lines. The same assertion derives the same URI on every build,
-so de-duplication across rebuilds and across multiple targets is automatic
+`evidence-line:lit-assertion/<digest>`, where `<digest>` is the **full SHA-256 hex**
+of the canonical NUL-joined key `f"{proposition}\0{paper}\0{stance}"` (the proposition
+ref, paper citekey, and stance token, each in its canonical string form). The full
+digest is used — no truncation, so no collision policy is needed. The URI is
+materialized **URI-only** (never written to `entities/evidence-lines/`) and clearly
+namespaced apart from authored lines. The same assertion derives the same URI on every
+build, so de-duplication across rebuilds and across multiple targets is automatic
 (`collect_evidence_units` de-dupes lines by URI).
 
 ## 4. Stance → edge & evidence metadata
@@ -115,7 +149,7 @@ to *each* proposition's reduction — there is no cross-proposition interference
 - **Same-paper mixed stance** (the explicit semantic fork). The collapse key includes
   stance, so a paper with both an `asserted` and a `negated` annotation on the same
   proposition emits **both** a support and a dispute unit, sharing one
-  `independence_group=literature-paper:<id>`. The reducer then sees a single real
+  `independence_group=literature-paper:<citekey>`. The reducer then sees a single real
   group holding both a support winner and a dispute winner → it records a genuine
   **`contested_group`**, and does **not** count the paper as two independent
   corroborations. No silent winner-pick; the diagnostic (§5) reports the intra-paper
@@ -143,21 +177,41 @@ science annotate cross-paper-evidence <proposition-ref> [--format table|json]
   role/strength), the resulting belief magnitude, the `contested` flag, and any
   intra-paper mixed-stance `contested_group` flags.
 - **Project-wide (no ref):** lists every proposition that gained literature belief,
-  and every **stale `promoted_to`** error (§6).
+  and every derivation error (§6) in **report mode** — without raising.
 
 This is a diagnostic/reporting surface, not an authoring workflow.
 
-## 6. Error handling — fail loud
+## 6. Error handling — fail loud, via one shared scanner
 
 `promoted_to` is now an **epistemic input**, not just UI metadata, so derivation
-fails loud rather than silently dropping evidence:
+fails loud rather than silently dropping evidence. To reconcile "derivation raises"
+(§3) with "the diagnostic lists all errors" (§5), both go through **one scanner with
+two modes**:
 
-- A sidecar `promoted_to=proposition:x` where `x` does not resolve to an existing
-  entity → raise during derivation (a project-wide diagnostic enumerates all such
-  stale references).
-- A `promoted_to` pointing at a non-`proposition` entity → raise.
-- An annotation with `promoted_to` set but an unknown/invalid `stance` → raise
-  (stance is a closed vocabulary; an out-of-vocab value is a corruption, not a skip).
+- The scanner walks every candidate assertion and accumulates **all** offending
+  records `(sidecar, annotation_id, reason)` — it does not stop at the first.
+- **Materialize (strict mode):** if the accumulated list is non-empty, the derivation
+  raises a single aggregate `CrossPaperEvidenceError` enumerating every offending
+  record. The graph build fails loud, and the message names all problems at once (not
+  fail-on-first).
+- **Diagnostic (report mode):** `science annotate cross-paper-evidence` (no ref) runs
+  the same scanner and prints the accumulated list **without raising**, so an operator
+  can see and fix every stale/corrupt reference before the next build.
+
+The offending conditions (all are corruptions of an epistemic input, never silent
+skips). Note these are distinct from the **benign skip** of a `question`/`hypothesis`-
+*typed* annotation, which is valid 4b output and never an error:
+
+- A kept `proposition`-typed annotation whose `promoted_to = proposition:x` does not
+  resolve to an existing entity (**stale ref**).
+- A `proposition`-typed annotation whose `promoted_to` points at a **non-`proposition:`**
+  target (e.g. `question:…` on a `proposition`-typed annotation) — a factoring
+  corruption, distinct from a question/hypothesis-typed annotation legitimately
+  targeting its own kind.
+- A kept assertion with an unknown/invalid `stance` (closed vocabulary; out-of-vocab
+  is corruption).
+- A sidecar whose `TextSourceAdapter` cannot resolve a `source_ref` (paper id
+  unresolvable — §3 step 2).
 
 ## 7. Non-goals (deferred to Phase 4e or later)
 
@@ -176,8 +230,19 @@ fails loud rather than silently dropping evidence:
 
 - **Unit:** stance→edge/metadata mapping; the `(proposition, paper, stance)` collapse
   (same paper + same stance → one unit; same paper + mixed stance → two units sharing
-  a group); deterministic URI derivation; stale-`promoted_to` fail-loud; non-`proposition`
-  target fail-loud; invalid-stance fail-loud.
+  a group); deterministic full-SHA-256 URI derivation; paper-id resolution via the
+  `TextSourceAdapter` contract matches 4a's accrued `paper:<citekey>`.
+- **Scope filter:** a `question`/`hypothesis`-typed annotation (4b output) is **skipped,
+  not errored**; only `proposition`-typed annotations targeting `proposition:` are
+  derived.
+- **Error scanner (both modes):** stale `proposition:x` target, a `proposition`-typed
+  annotation targeting a non-`proposition:` ref, invalid `stance`, and an
+  adapter-unresolvable sidecar each appear in the accumulated list; strict mode raises
+  one aggregate `CrossPaperEvidenceError` naming **all** of them (not fail-on-first);
+  report mode returns the same list without raising.
+- **Ordering:** virtual `cito:supports`/`disputes` edges are present in the `sci:bearsOn`
+  closure (proves the pass runs before `_derive_bears_on_layer`, not only feeding
+  `collect_evidence_units`).
 - **Belief integration:** different-paper support+dispute → `contested=True` without a
   `contested_group`; same-paper mixed stance → a real `contested_group`; literature-only
   support capped below `well_supported`.
