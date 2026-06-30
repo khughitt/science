@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `55`
+- Pending thread count: `57`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -63,6 +63,22 @@
 - remaining_gaps:
   - Durable docs mention belief states and snapshots but not policy identity, versioning, comparability, or how future policy changes affect reproducibility.
   - Plan rationale remains the clearest explanation of the BeliefPolicy boundary versus belief_scalar CONFIG_VERSION.
+
+## belief-profile
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-23-belief-profile-design.md`
+  - `docs/plans/2026-06-23-belief-profile-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until belief profile CLI contract is documented outside active plans
+    - `docs/plans/2026-06-23-belief-profile-design.md`
+    - `docs/plans/2026-06-23-belief-profile-implementation-plan.md`
+- remaining_gaps:
+  - No durable non-plan documentation was found for the CLI contract, output fields, labels, filters, scalar behavior, or non-goals.
+  - The plan files currently carry useful user-facing contract details, so deleting them without a checkpoint would lose the only discovered narrative documentation.
 
 ## bundle-belief-rollup
 
@@ -637,6 +653,23 @@
   - Plan still says to remove surfaces that are currently live and tested: entities migrate/entity_layout_migration and graph migrate-paper-datasets/paper_dataset_migration.
   - Manifest guard still references the restored command at science/src/science_tool/validate/checks/manifest.py.
   - Triage needed to decide whether this plan should be split into completed cleanup notes plus explicit supersession by later migration plans.
+
+## science-citations-and-references
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-23-science-citations-and-references-design.md`
+  - `docs/plans/2026-06-23-science-citations-and-references-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until science.references and Labnote citation contract are checkpointed in durable docs
+    - `docs/plans/2026-06-23-science-citations-and-references-design.md`
+    - `docs/plans/2026-06-23-science-citations-and-references-plan.md`
+- remaining_gaps:
+  - No durable science-side user/convention doc was found for the science.references contract, references/index.json package resource, citation grammar v1, fail-closed export behavior, or consumer expectations.
+  - The plan files carry locked design decisions such as exporting all bibliography records, app export owning references/index.json, and normal exports rejecting unresolved citations.
+  - The old plan text is now too broad as active implementation guidance because the functionality spans science and Labnote and later Labnote export specs have absorbed part of the contract.
 
 ## source-compiler-adapter-policy-keystone
 
