@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `65`
+- Pending thread count: `76`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -94,6 +94,111 @@
   - No consolidated durable user-guide/reference page was found for benchmark metadata schema, science benchmark list JSON shape, validation rules, and commons benchmark behavior.
   - Later benchmark opportunities, gaps, and tests plans extend this foundation, so deletion should wait until the durable benchmark checkpoint covers the shared contract.
 
+## benchmark-fallback-diagnostics
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-fallback-diagnostics-design.md`
+  - `docs/plans/2026-06-28-benchmark-fallback-diagnostics-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until fallback reason diagnostics, concentration warnings, and summary fields are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-fallback-diagnostics-design.md`
+    - `docs/plans/2026-06-28-benchmark-fallback-diagnostics-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark report reference doc was found for fallback reason semantics, concentration warnings, JSON fields, or table rendering.
+  - The plan remains useful until the benchmark report checkpoint captures fallback diagnostics alongside gaps, calibration, and tests.
+
+## benchmark-fallback-selection
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-fallback-selection-design.md`
+  - `docs/plans/2026-06-28-benchmark-fallback-selection-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until fallback selection policy, selected reason notes, and quality-tier rotation are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-fallback-selection-design.md`
+    - `docs/plans/2026-06-28-benchmark-fallback-selection-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for fallback selection policy, selected:* diagnostics, quality-tier rotation, or aggregate summary fields.
+
+## benchmark-gap-calibration-batch
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-gap-calibration-batch-design.md`
+  - `docs/plans/2026-06-28-benchmark-gap-calibration-batch-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until benchmark gap-calibration CLI, aggregate JSON shape, project-label semantics, and commons behavior are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-gap-calibration-batch-design.md`
+    - `docs/plans/2026-06-28-benchmark-gap-calibration-batch-implementation-plan.md`
+- remaining_gaps:
+  - No durable docs were found for benchmark gap-calibration CLI syntax, JSON aggregate shape, table sections, project-label semantics, or commons degradation behavior.
+
+## benchmark-gap-calibration-summary
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-gap-calibration-summary-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until benchmark gaps calibration-summary fields and table/JSON contract are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-gap-calibration-summary-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for calibration-summary fields, definitions, or table/JSON contract.
+
+## benchmark-gap-calibration-v2
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-gap-calibration-v2-design.md`
+  - `docs/plans/2026-06-28-benchmark-gap-calibration-v2-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until v2 benchmark gap candidate semantics, scoring caveats, evidence fields, and calibration interpretation are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-gap-calibration-v2-design.md`
+    - `docs/plans/2026-06-28-benchmark-gap-calibration-v2-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for the v2 candidate semantics, scoring caveats, evidence fields, or calibration interpretation.
+
+## benchmark-gap-evidence-extraction
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-gap-evidence-extraction-design.md`
+  - `docs/plans/2026-06-28-benchmark-gap-evidence-extraction-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until benchmark gap evidence-report fields and fallback-only explanations are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-gap-evidence-extraction-design.md`
+    - `docs/plans/2026-06-28-benchmark-gap-evidence-extraction-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for evidence-report fields, interpretation of fallback-only explanations, or how the evidence report relates to calibration output.
+
+## benchmark-gaps
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-gaps-design.md`
+  - `docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until current benchmark gaps command usage, filters, JSON contract, candidate semantics, fallback semantics, calibration, and evidence reports are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-gaps-design.md`
+    - `docs/plans/2026-06-28-benchmark-gaps-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for benchmark gaps command usage, JSON contract, filters, candidate semantics, fallback semantics, calibration, or evidence reports.
+  - The original v1 candidate semantics in this plan are partly stale after calibration v2; durable docs should capture the live v2 contract before deleting.
+
 ## benchmark-grounded-model-assessment
 
 - status: `incomplete`
@@ -126,6 +231,21 @@
 - remaining_gaps:
   - No durable reference page under docs/ was found for benchmark opportunities JSON, scoring caveats, calibration output, row ordering, commons behavior, and non-graph semantics.
   - The plan pair remains the most complete explanation of the opportunity report semantics until a durable benchmark guide/checkpoint exists.
+
+## benchmark-tests-v0
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-benchmark-tests-v0-design.md`
+  - `docs/plans/2026-06-28-benchmark-tests-v0-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until benchmark tests JSON contract, row semantics, priority_source values, readiness labels, filters, and non-goals are documented outside active plans
+    - `docs/plans/2026-06-28-benchmark-tests-v0-design.md`
+    - `docs/plans/2026-06-28-benchmark-tests-v0-implementation-plan.md`
+- remaining_gaps:
+  - No durable benchmark reference doc was found for benchmark tests JSON contract, row semantics, priority_source values, readiness labels, filters, or non-goals around automatic belief-test creation.
 
 ## bundle-belief-rollup
 
@@ -190,6 +310,22 @@
 - remaining_gaps:
   - Durable docs do not yet explain the semantic boundary: membership role is frame-relative bundle plumbing, not a proposition role or causal structural role.
   - docs/user-guide/epistemic-model.md only gives high-level weakest-link bundle belief and does not describe rival/background exclusion or the BundleMembership node.
+
+## data-audit
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-data-audit-design.md`
+  - `docs/plans/2026-06-28-data-audit-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until the data boundary, data_policy configuration, science data audit workflow, and deferred follow-ons are documented outside active plans
+    - `docs/plans/2026-06-28-data-audit-design.md`
+    - `docs/plans/2026-06-28-data-audit-plan.md`
+- remaining_gaps:
+  - No durable non-plan convention page was found for the data boundary, data_policy configuration, or science data audit command.
+  - The design explicitly defers size-guard hooks, validate-time ignored-provenance warnings, health checks, .gitignore/scaffold deltas, and downstream sweeps.
 
 ## data-driven-discovery-improvements
 
@@ -472,6 +608,20 @@
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
 
+## feedback-data-evidence-tracking-boundary
+
+- status: `superseded_delete`
+- recommended_action: `delete`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md`
+- pending_actions:
+  - `deferred`: review status superseded_delete, but deletion depends on first creating the data-audit/data-boundary durable checkpoint and cleaning stale pointers
+    - `docs/plans/2026-06-28-feedback-data-evidence-tracking-boundary.md`
+- remaining_gaps:
+  - Delete after the data-audit migration checkpoint exists so the origin, resolved boundary decision, and deferred follow-ons are not lost.
+  - docs/plans/2026-06-28-downstream-feedback-fixes.md still points fb-004 at this feedback note, so that stale pointer may need cleanup when deleting.
+
 ## feedback-from-recent
 
 - status: `implemented_needs_durable_docs`
@@ -576,6 +726,22 @@
 - remaining_gaps:
   - The original plan is stale as an implementation guide because BundleMembership emission moved into graph/io.py and relations.yaml/bridge support was added later.
   - Durable user docs lack the complete current contract for role vocabulary, default core behavior, frontmatter syntax, roll-up gating, and surface parity.
+
+## methodology-feedback
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-28-methodology-feedback-design.md`
+  - `docs/plans/2026-06-28-methodology-feedback-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until feedback concern taxonomy, methodology lens filtering, triage semantics, and report grouping are documented outside active plans
+    - `docs/plans/2026-06-28-methodology-feedback-design.md`
+    - `docs/plans/2026-06-28-methodology-feedback-plan.md`
+- remaining_gaps:
+  - No durable user-guide/process doc was found for the feedback concern taxonomy, methodology lens filtering, report grouping, or triage semantics outside command/skill docs and tests.
+  - No command-doc test was found specifically asserting commands/post-mortem.md or the interpret-results handoff text.
 
 ## migration-robustness
 
