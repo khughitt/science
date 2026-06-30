@@ -29,5 +29,6 @@ project state.
 | Interpret results | `/science:interpret-results` | `science-interpret-results` | source-authored interpretations |
 | Build/update graph | `/science:create-graph`, `/science:update-graph` | `science-create-graph`, `science-update-graph` | `science graph build` |
 | Validate health | `/science:health` | `science-health` | `science validate`, `science health` |
+| File feedback / inspect telemetry | `/science:post-mortem` | `science-post-mortem` | `science feedback ...`, `science telemetry ...` |
 | Package or verify a project | workflow-guided | workflow-guided | `science project serialize`, `science project verify` |
 | Sync projects | `/science:sync` | `science-sync` | `science peers list`, `science sync status`, `science sync run` |

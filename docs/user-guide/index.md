@@ -13,7 +13,7 @@ derived graph state, validation, agent workflows, and cross-project work.
 1. Start with [Introduction](introduction.md) and [Science Model](science-model.md).
 2. Learn [Project Layout](project-layout.md) and [Entities](entities.md).
 3. Learn the [Epistemic Model](epistemic-model.md) and [Evidence Lines](evidence-lines.md).
-4. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Agent Workflows](agent-workflows.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
+4. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Agent Workflows](agent-workflows.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
 
 ## Chapters
 
@@ -29,6 +29,7 @@ derived graph state, validation, agent workflows, and cross-project work.
 | [Big-Picture Synthesis](big-picture-synthesis.md) | Generated synthesis reports, question resolution, and topic-coverage knowledge gaps. |
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
 | [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
+| [Feedback And Telemetry](feedback-and-telemetry.md) | Feedback entries, concern taxonomy, local telemetry, redaction, reporting, pruning, and telemetry-assisted triage. |
 | [Project Packaging](project-packaging.md) | Deterministic project bundles, manifest payload inventories, verification, extraction, and exit-code semantics. |
 | [Cross-Project Work](cross-project-work.md) | Peers, sync, project collections, and federated Science projects. |
 

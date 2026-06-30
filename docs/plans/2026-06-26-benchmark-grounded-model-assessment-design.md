@@ -6,7 +6,6 @@ status: "proposed"
 created: "2026-06-26"
 updated: "2026-06-27"
 related:
-  - "plan:2026-06-26-feedback-telemetry-adaptation-design"
   - "plan:2026-06-21-catalog-datasets-design"
   - "plan:2026-05-31-belief-profile-design"
 ---
@@ -459,6 +458,9 @@ dataset catalog. A benchmark that cannot be accessed or staged should not be
 recommended for immediate belief testing without an acquisition step.
 
 ## Integration with feedback and telemetry
+
+The current local feedback and telemetry behavior is documented in
+`docs/user-guide/feedback-and-telemetry.md`.
 
 Telemetry should eventually answer:
 

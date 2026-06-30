@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `75`
+- Pending thread count: `70`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -592,37 +592,6 @@
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
 
-## feedback-from-recent
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-27-feedback-from-recent-design.md`
-  - `docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until feedback add --from-recent and broader telemetry lifecycle docs are captured outside active plans
-    - `docs/plans/2026-06-27-feedback-from-recent-design.md`
-    - `docs/plans/2026-06-27-feedback-from-recent-implementation-plan.md`
-- remaining_gaps:
-  - No durable non-plan user/operator doc was found for science feedback add --from-recent.
-  - The CLI help documents newest eligible selection but not the full indexed selection contract.
-  - The broader telemetry lifecycle docs are still missing for storage, redaction, opt-out, reporting, export, prune, validation summaries, feedback triage telemetry, and feedback-from-recent.
-
-## feedback-telemetry-adaptation
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until telemetry/adaptation contract and deferred skill-note scope are documented outside active plans
-    - `docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md`
-- remaining_gaps:
-  - No durable non-plan user/operator doc was found for telemetry storage, redaction, opt-out, report/export/prune, validation-summary events, feedback triage telemetry, or feedback add --from-recent.
-  - No science telemetry note helper was found; the broad design treated skill note events as optional/high-value workflow instrumentation, and later telemetry-v1.5 explicitly deferred skill note events.
-
 ## infer-schema-scaffold
 
 - status: `implemented_needs_durable_docs`
@@ -696,22 +665,6 @@
 - remaining_gaps:
   - The original plan is stale as an implementation guide because BundleMembership emission moved into graph/io.py and relations.yaml/bridge support was added later.
   - Durable user docs lack the complete current contract for role vocabulary, default core behavior, frontmatter syntax, roll-up gating, and surface parity.
-
-## methodology-feedback
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-28-methodology-feedback-design.md`
-  - `docs/plans/2026-06-28-methodology-feedback-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until feedback concern taxonomy, methodology lens filtering, triage semantics, and report grouping are documented outside active plans
-    - `docs/plans/2026-06-28-methodology-feedback-design.md`
-    - `docs/plans/2026-06-28-methodology-feedback-plan.md`
-- remaining_gaps:
-  - No durable user-guide/process doc was found for the feedback concern taxonomy, methodology lens filtering, report grouping, or triage semantics outside command/skill docs and tests.
-  - No command-doc test was found specifically asserting commands/post-mortem.md or the interpret-results handoff text.
 
 ## migration-robustness
 
@@ -1097,36 +1050,6 @@
     - `docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md`
 - remaining_gaps:
   - Durable user docs mention owner scopes generally but do not explain bare-ref ambiguity, scoped reference syntax, or the materialize/audit behavior users see.
-
-## telemetry-core
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-27-telemetry-core-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until telemetry event schema, local storage, redaction, opt-out, report/export/prune, and retention behavior are documented outside active plans
-    - `docs/plans/2026-06-27-telemetry-core-implementation-plan.md`
-- remaining_gaps:
-  - No durable user/developer doc was found for telemetry event schema, environment variables, local storage, retention/export behavior, or privacy/redaction guarantees.
-  - The plan still carries the clearest explanation of the telemetry core contract until durable telemetry docs exist.
-
-## telemetry-v1.5
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-27-telemetry-v1.5-design.md`
-  - `docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until validation summaries, feedback triage telemetry, privacy boundaries, and exit-code regression rationale are documented outside active plans
-    - `docs/plans/2026-06-27-telemetry-v1.5-design.md`
-    - `docs/plans/2026-06-27-telemetry-v1.5-implementation-plan.md`
-- remaining_gaps:
-  - No durable doc was found for validation_summary schema, aggregate-only privacy boundary, feedback triage --with-telemetry matching/window semantics, or the Click exit-code regression rationale.
-  - feedback add --from-recent is implemented in current code even though this v1.5 plan explicitly deferred it; durable telemetry docs should reconcile the shipped v1.5 plus feedback-from-recent surface.
 
 ## typed-dataset-schema
 
