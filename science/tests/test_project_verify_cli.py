@@ -65,6 +65,17 @@ def test_cli_verify_against_missing_payload_exit_3(tmp_path: Path):
     assert result.exit_code == 3, result.output
 
 
+def test_cli_verify_against_payload_inventory_os_error_exit_4(tmp_path: Path):
+    project, bundle = _bundle(tmp_path)
+    (project / "data" / "processed" / "x.parquet").unlink()
+    (project / "data" / "processed").rmdir()
+    (project / "data" / "processed").write_text("not a directory\n", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["project", "verify", str(bundle), "--against", str(project)])
+
+    assert result.exit_code == 4, result.output
+
+
 def test_cli_verify_against_differ_exit_1(tmp_path: Path):
     project, bundle = _bundle(tmp_path)
     (project / "data" / "processed" / "x.parquet").write_bytes(b"CHANGED")

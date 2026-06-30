@@ -332,8 +332,9 @@ def _compare_payloads(bundle: LoadedBundle, root: Path) -> PayloadCompare:
     tracked = _tracked_set(root)
     try:
         actual_payloads = payload_inventory(root, DEFAULT_DATA_DIRS, tracked)
-    except PayloadError as exc:
-        raise VerifyError(f"payload inventory failed for --against root {root}: {exc}") from exc
+    except (PayloadError, OSError) as exc:
+        data_dirs = ", ".join(path.as_posix() for path in DEFAULT_DATA_DIRS)
+        raise VerifyError(f"payload inventory failed for --against root {root} data dirs [{data_dirs}]: {exc}") from exc
 
     expected = {record.path: record for record in bundle.manifest.payloads}
     actual = {record["path"]: record for record in actual_payloads}
@@ -347,7 +348,11 @@ def _compare_payloads(bundle: LoadedBundle, root: Path) -> PayloadCompare:
         if actual_record is None:
             missing.append(path)
             continue
-        if actual_record["sha256"] == expected_record.sha256 and actual_record["bytes"] == expected_record.bytes:
+        if (
+            actual_record["sha256"] == expected_record.sha256
+            and actual_record["bytes"] == expected_record.bytes
+            and actual_record["git_tracked"] == expected_record.git_tracked
+        ):
             ok += 1
         else:
             differ.append(path)

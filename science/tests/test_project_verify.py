@@ -352,6 +352,23 @@ def test_against_payload_differs(tmp_path: Path):
     )
 
 
+def test_against_payload_git_tracking_differs(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    subprocess.run(["git", "add", "-f", "data/processed/x.parquet"], cwd=proj, check=True)
+
+    result = _against_result(bundle, proj)
+    verdict = verify_project(bundle, against=proj)
+
+    assert result.payloads == PayloadCompare(
+        ok=0,
+        differ=["data/processed/x.parquet"],
+        missing=[],
+        extra=[],
+    )
+    assert verdict.exit_code == 1
+    assert verdict.status == "differ"
+
+
 def test_against_payload_extra_is_non_fatal(tmp_path: Path):
     proj, bundle = _make_bundle(tmp_path)
     target = tmp_path / "target"
@@ -586,6 +603,16 @@ def test_verify_project_missing_payload_is_exit_3(tmp_path: Path):
 
     assert result.exit_code == 3
     assert result.status == "missing"
+
+
+def test_verify_project_wraps_payload_inventory_os_error(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    (proj / "data" / "processed" / "x.parquet").unlink()
+    (proj / "data" / "processed").rmdir()
+    (proj / "data" / "processed").write_text("not a directory\n", encoding="utf-8")
+
+    with pytest.raises(VerifyError, match="payload inventory failed.*data/processed"):
+        verify_project(bundle, against=proj)
 
 
 def test_verify_project_differ_dominates_missing(tmp_path: Path):
