@@ -6697,6 +6697,208 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     return ", ".join(candidate["benchmark_id"] for candidate in candidates[:3])
 
 
+def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
+    count = row["count"]
+    return "-" if count is None else str(count)
+
+
+def _hint_candidate_table_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [row for row in rows if row["category"] == "domain-candidate"]
+
+
+def _benchmark_hint_candidates_today() -> date:
+    return date.today()
+
+
+def _display_project_path(path: Path) -> str:
+    resolved = path.resolve()
+    home = Path.home().resolve()
+    try:
+        return "~/" + str(resolved.relative_to(home))
+    except ValueError:
+        return str(resolved)
+
+
+def _default_hint_candidates_review_path(project_root: Path, generated: date) -> Path:
+    return (
+        project_root
+        / "docs"
+        / "audits"
+        / "benchmark-hint-candidates"
+        / f"{generated.isoformat()}-{project_root.name}.yaml"
+    )
+
+
+def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    root = project_root.resolve()
+    if output_path is None:
+        return _default_hint_candidates_review_path(root, generated)
+
+    path = output_path if output_path.is_absolute() else root / output_path
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise click.ClickException(f"--output must stay under project root: {output_path}") from exc
+    return resolved
+
+
+def _hint_candidates_source_command(
+    *,
+    include_commons: bool,
+    domain: str | None,
+    min_count: int,
+    include_existing: bool,
+    output_format: str,
+) -> str:
+    # Best-effort context string for review artifacts, not an exact shell history record.
+    parts = ["science", "benchmark", "hint-candidates"]
+    if include_commons:
+        parts.append("--commons")
+    if domain is not None:
+        parts.extend(["--domain", domain])
+    if min_count != 1:
+        parts.extend(["--min-count", str(min_count)])
+    if include_existing:
+        parts.append("--include-existing")
+    if output_format != "table":
+        parts.extend(["--format", output_format])
+    parts.append("--write-review-file")
+    return " ".join(parts)
+
+
+def _write_hint_candidates_review_file(
+    *,
+    payload: Mapping[str, Any],
+    project_root: Path,
+    output_path: Path | None,
+    generated: date,
+    source_command: str,
+) -> Path:
+    path = _resolve_hint_candidates_output_path(project_root, output_path, generated)
+    if path.exists():
+        raise click.ClickException(f"review file already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "project": project_root.name,
+        "project_root": _display_project_path(project_root),
+        "generated_at": generated.isoformat(),
+        "source_command": source_command,
+        "summary": payload["summary"],
+        "candidates": [
+            {
+                **row,
+                "decision": "pending",
+                "reviewer_notes": "",
+            }
+            for row in payload["hint_candidates"]
+        ],
+    }
+    path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+@benchmark_group.command("hint-candidates")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count.")
+@click.option("--include-existing", is_flag=True, help="Include terms already mapped by the benchmark hint lexicon.")
+@click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=True, dir_okay=False),
+    help="Review artifact path. Relative paths are resolved under the project root.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_hint_candidates(
+    domain: str | None,
+    include_commons: bool,
+    min_count: int,
+    include_existing: bool,
+    write_review_file: bool,
+    output_path: Path | None,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report candidate terms for benchmark facet hint review."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    if output_path is not None and not write_review_file:
+        raise click.ClickException("--output requires --write-review-file")
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    generated = _benchmark_hint_candidates_today()
+    try:
+        payload = benchmark_hint_candidates_report(
+            root,
+            include_commons=include_commons,
+            domain=domain,
+            min_count=min_count,
+            include_existing=include_existing,
+        )
+        if write_review_file:
+            review_path = _write_hint_candidates_review_file(
+                payload=payload,
+                project_root=root,
+                output_path=output_path,
+                generated=generated,
+                source_command=_hint_candidates_source_command(
+                    include_commons=include_commons,
+                    domain=domain,
+                    min_count=min_count,
+                    include_existing=include_existing,
+                    output_format=output_format,
+                ),
+            )
+            payload = {**payload, "review_file": str(review_path)}
+            click.echo(f"wrote benchmark hint candidate review file: {review_path}", err=True)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = _hint_candidate_table_rows(payload["hint_candidates"])
+    if not rows:
+        click.echo("No benchmark hint candidates.")
+        return
+
+    table = Table(title="Benchmark Hint Candidates", show_header=True, header_style="bold")
+    for col in ("term", "count", "action", "suggested facets", "examples"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        table.add_row(
+            row["term"],
+            _format_hint_candidate_count(row),
+            row["suggested_action"],
+            ", ".join(row["suggested_facets"]) or "-",
+            ", ".join(row["example_entities"]) or "-",
+        )
+    Console(width=200).print(table)
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")

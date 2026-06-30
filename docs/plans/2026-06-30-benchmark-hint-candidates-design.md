@@ -71,6 +71,9 @@ Options:
   `--write-review-file`; otherwise it should fail early with a Click error.
 
 Default behavior is read-only. The only write path is `--write-review-file`.
+When a review file is written, table and JSON modes should both emit the
+resolved path to stderr, matching the existing benchmark commands' stderr
+notice pattern for side-channel operational information.
 
 ## Data Flow
 
@@ -120,7 +123,8 @@ JSON row shape:
     "hypothesis:0002-cytogenetic-distinct-entities"
   ],
   "reason_notes": [
-    "frequent-unmapped-domain-term",
+    "unmapped-domain-term",
+    "frequent-term",
     "fallback-heavy-project"
   ]
 }
@@ -139,20 +143,23 @@ Fields:
 - `current_hint`: the facet currently mapped by `FACET_HINT_TERMS`, if present.
   It is expected to be non-null only for `existing-hint` rows in v1, because
   evidence-derived rows exclude already-mapped hint terms upstream.
-- `suggested_action`: one of:
+- `suggested_action`: the command emits one of:
   - `review-for-hint`: plausible unmapped domain term;
   - `project-local-or-alias`: likely project-local vocabulary;
   - `not-a-benchmark-facet`: workflow/modeling vocabulary or otherwise generic;
-  - `already-mapped`: term already has a hint mapping;
-  - `needs-new-facet-vocab`: term appears domain-relevant but no existing hint
-    facet is a good fit.
-- `suggested_facets`: conservative deterministic guesses, if any.
+  - `already-mapped`: term already has a hint mapping.
+  - `needs-new-facet-vocab` is NOT a value the command ever assigns. It exists
+    only as a reviewer choice for the YAML `decision` field (see classification
+    rule 5). `suggested_action` carries at most the four values above.
+- `suggested_facets`: always an empty list in v1. The field is reserved for a
+  future deterministic facet-suggestion mechanism. The command must not infer a
+  facet merely because a term is frequent, and v1 ships no inference rule, so the
+  list is unconditionally empty.
 - `example_entities`: entity ids supplied by the underlying evidence term row.
-  For `existing-hint` rows this is an empty list in v1.
-- `reason_notes`: short deterministic explanations.
-
-For v1, `suggested_facets` should be conservative. It may be empty. The command
-should not infer a facet merely because a term is frequent.
+  The evidence report caps this at the first 3 example entities per term
+  (`_top_unmapped_terms()`), so this list is bounded at 3 and is not exhaustive.
+  For `existing-hint` rows it is an empty list in v1.
+- `reason_notes`: short deterministic explanation tokens (see Reason Notes).
 
 ## Classification Rules
 
@@ -183,6 +190,27 @@ as-is and should not create a second categorization policy.
 `FACET_HINT_PHRASES` is intentionally out of scope for v1 rows. It is a
 multi-token phrase surface, while this command reviews single normalized terms.
 Phrase-level candidates can be designed later if needed.
+
+## Reason Notes
+
+`reason_notes` must be deterministic and table-driven. V1 defines a small, fixed
+token vocabulary; each token is emitted only when its condition holds, evaluated
+in a stable order so the list is reproducible for a given evidence report.
+
+| token | condition |
+| --- | --- |
+| `unmapped-domain-term` | row `category` is `domain-candidate`. |
+| `project-local-term` | row `category` is `project-local`. |
+| `workflow-or-modeling-term` | row `category` is `workflow-or-modeling`. |
+| `already-mapped-term` | row `category` is `existing-hint`. |
+| `frequent-term` | `count` is not null and `count >= FREQUENT_TERM_COUNT` (default 3). |
+| `fallback-heavy-project` | `summary.fallback_only_gap_rows > summary.entity_specific_gap_rows`. |
+
+`FREQUENT_TERM_COUNT` is a named module constant, not an inline literal. The
+`fallback-heavy-project` token is a project-level signal, so when it applies it
+is appended to every emitted row's `reason_notes`; it is context, not a
+per-term property. No other tokens are emitted in v1. Adding a token requires
+adding a row to this table and a test.
 
 ## Summary
 
@@ -224,8 +252,8 @@ Default table should show only actionable domain candidates:
 
 ```text
 term          count  action           suggested facets  examples
-cytogenetic   19    review-for-hint   -                 hypothesis:...
 expression    21    review-for-hint   -                 question:...
+cytogenetic   19    review-for-hint   -                 hypothesis:...
 ```
 
 Project-local, workflow/modeling, and existing-hint rows are available in JSON
@@ -276,7 +304,9 @@ candidates:
     example_entities:
       - hypothesis:0002-cytogenetic-distinct-entities
     reason_notes:
-      - frequent-unmapped-domain-term
+      - unmapped-domain-term
+      - frequent-term
+      - fallback-heavy-project
 ```
 
 Generated fields provide context. Human-editable fields are:
@@ -286,6 +316,10 @@ Generated fields provide context. Human-editable fields are:
 
 The command should not consume this YAML in v1. Applying accepted decisions to
 the actual hint lexicon is a later, separate design.
+
+`source_command` is a best-effort reconstruction for reviewer context, not a
+byte-for-byte shell history record. It may omit environment-derived defaults and
+path overrides such as `--project-root` or `--output`.
 
 Tests should inject or freeze the date used for `generated_at` and the default
 filename. The implementation should not rely on the wall clock directly in
@@ -312,8 +346,14 @@ Implementation should add focused tests for:
 - Summary and review artifact document the top-10-per-category evidence cap.
 - Existing hint rows, when included, have `count: null`, no example entities,
   and populated `current_hint`.
+- `reason_notes` are emitted deterministically per the Reason Notes table,
+  including the `frequent-term` threshold and the project-level
+  `fallback-heavy-project` token.
+- `suggested_facets` is always empty and `suggested_action` never emits
+  `needs-new-facet-vocab`.
 - `--write-review-file` writes the expected YAML path under
-  `docs/audits/benchmark-hint-candidates/`.
+  `docs/audits/benchmark-hint-candidates/` and prints the resolved path to
+  stderr.
 - `--output` requires `--write-review-file`.
 - Existing output path fails without overwrite behavior.
 - Table output includes actionable terms and prints a clear no-results message.

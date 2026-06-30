@@ -2678,6 +2678,181 @@ benchmark:
     assert evidence["lexicon_candidates"] == evidence["summary"]["top_unmapped_project_terms"]
 
 
+def test_hint_candidates_report_projects_evidence_categories_and_reason_notes(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import (
+        HINT_CANDIDATE_TRUNCATION_NOTICE,
+        TERM_BUCKET_CAP,
+        benchmark_hint_candidates_report,
+    )
+
+    project_root = tmp_path / "cbioportal-project"
+    project_root.mkdir()
+    for index in range(3):
+        _write_entity(
+            project_root,
+            "hypotheses",
+            f"005{index}-alpha",
+            f"""
+id: hypothesis:005{index}-alpha
+type: hypothesis
+title: Cytogenetic lesion model {index}
+""",
+            body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
+        )
+    _write_dataset(
+        project_root,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    payload = benchmark_hint_candidates_report(project_root)
+
+    rows = payload["hint_candidates"]
+    by_term = {row["term"]: row for row in rows}
+    assert {"cytogenetic", "lesion", "mutation"} <= set(by_term)
+    assert by_term["cytogenetic"]["count"] == 3
+    assert by_term["cytogenetic"]["category"] == "domain-candidate"
+    assert by_term["cytogenetic"]["current_hint"] is None
+    assert by_term["cytogenetic"]["suggested_action"] == "review-for-hint"
+    assert by_term["cytogenetic"]["suggested_facets"] == []
+    assert by_term["cytogenetic"]["reason_notes"] == [
+        "unmapped-domain-term",
+        "frequent-term",
+        "fallback-heavy-project",
+    ]
+    assert "cbioportal" in {row["term"] for row in rows if row["category"] == "project-local"}
+    assert {"catalog", "models"} <= {row["term"] for row in rows if row["category"] == "workflow-or-modeling"}
+    assert payload["summary"]["domain_candidate_terms"] >= 3
+    assert payload["summary"]["project_local_terms"] >= 1
+    assert payload["summary"]["workflow_or_modeling_terms"] >= 2
+    assert payload["summary"]["existing_hint_terms"] == 0
+    assert payload["summary"]["term_bucket_cap"] == TERM_BUCKET_CAP
+    assert payload["summary"]["truncation_notice"] == HINT_CANDIDATE_TRUNCATION_NOTICE
+    assert payload["summary"]["fallback_only_gap_rows"] == 3
+    assert payload["summary"]["entity_specific_gap_rows"] == 0
+    assert payload["review_file"] is None
+
+
+def test_hint_candidates_report_filters_min_count_within_capped_evidence_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    for index in range(2):
+        _write_entity(
+            tmp_path,
+            "hypotheses",
+            f"006{index}-alpha",
+            f"""
+id: hypothesis:006{index}-alpha
+type: hypothesis
+title: Cytogenetic signal {index}
+""",
+            body="Cytogenetic lesion evidence should be reviewed.",
+        )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0069-beta",
+        """
+id: hypothesis:0069-beta
+type: hypothesis
+title: Rare signal
+""",
+        body="Epigenetic marker evidence should be reviewed.",
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path, min_count=2)
+
+    terms = {row["term"] for row in payload["hint_candidates"]}
+    assert "cytogenetic" in terms
+    assert "lesion" in terms
+    assert "epigenetic" not in terms
+    assert "marker" not in terms
+
+
+def test_hint_candidates_report_does_not_leak_existing_hints_from_project_local_terms(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    project_root = tmp_path / "proteomics"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0070-local",
+        """
+id: hypothesis:0070-local
+type: hypothesis
+title: Local proteomics term
+""",
+        body="Unmapped cytogenetic evidence should be reviewed.",
+    )
+
+    default_payload = benchmark_hint_candidates_report(project_root)
+    default_terms = {row["term"] for row in default_payload["hint_candidates"]}
+    assert "proteomics" not in default_terms
+
+    include_payload = benchmark_hint_candidates_report(project_root, include_existing=True)
+    proteomics_rows = [row for row in include_payload["hint_candidates"] if row["term"] == "proteomics"]
+    assert len(proteomics_rows) == 1
+    assert proteomics_rows[0]["category"] == "existing-hint"
+    assert proteomics_rows[0]["count"] is None
+    assert proteomics_rows[0]["current_hint"] == "proteomics"
+    assert proteomics_rows[0]["example_entities"] == []
+
+
+def test_hint_candidates_report_existing_hints_are_directly_enumerated_when_requested(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import FACET_HINT_TERMS, benchmark_hint_candidates_report
+
+    payload = benchmark_hint_candidates_report(tmp_path, include_existing=True, min_count=99)
+
+    rows = [row for row in payload["hint_candidates"] if row["category"] == "existing-hint"]
+    by_term = {row["term"]: row for row in rows}
+    assert set(by_term) == set(FACET_HINT_TERMS)
+    assert by_term["drug"]["count"] is None
+    assert by_term["drug"]["current_hint"] == "perturbation"
+    assert by_term["drug"]["suggested_action"] == "already-mapped"
+    assert by_term["drug"]["suggested_facets"] == []
+    assert by_term["drug"]["example_entities"] == []
+    assert by_term["drug"]["reason_notes"] == ["already-mapped-term"]
+    assert payload["summary"]["existing_hint_terms"] == len(FACET_HINT_TERMS)
+
+
+def test_hint_candidates_report_rejects_invalid_min_count(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    with pytest.raises(ValueError, match="min_count must be at least 1"):
+        benchmark_hint_candidates_report(tmp_path, min_count=0)
+
+
+def test_hint_candidate_rows_from_evidence_rejects_missing_term_categories() -> None:
+    from science_tool.benchmark_opportunities import _hint_candidate_rows_from_evidence
+
+    with pytest.raises(ValueError, match="benchmark gap evidence report must include term_categories"):
+        _hint_candidate_rows_from_evidence(
+            {"enabled": True},
+            min_count=1,
+            include_existing=False,
+            fallback_heavy=False,
+        )
+
+
 def test_evidence_workflow_terms_are_not_already_excluded_upstream() -> None:
     from science_tool.benchmark_opportunities import (
         FACET_HINT_TERMS,

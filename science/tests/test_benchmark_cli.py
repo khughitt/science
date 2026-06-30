@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
+import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main as science_cli
@@ -55,6 +57,18 @@ def _invoke_gaps(tmp_path: Path, *args: str):
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
     )
+
+
+def _invoke_hint_candidates(tmp_path: Path, *args: str):
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "hint-candidates", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+    if result.exit_code == 0 and "--format" in args and args[args.index("--format") + 1] == "json":
+        result.output_bytes = result.stdout_bytes
+    return result
 
 
 def _invoke_tests(tmp_path: Path, *args: str):
@@ -549,6 +563,189 @@ benchmark:
     assert result.exit_code == 0
     assert "fallback-only" in result.output
     assert "+2 fallback" in result.output
+
+
+def test_benchmark_hint_candidates_cli_json_and_commons_notice(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0070-alpha",
+        """
+id: hypothesis:0070-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    assert "notice: commons benchmarks unavailable" in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["commons_notice"] is not None
+    assert payload["review_file"] is None
+    assert payload["summary"]["term_bucket_cap"] == 10
+    assert payload["summary"]["truncation_notice"] == "evidence categories are capped at top 10 terms per bucket"
+    assert {row["term"] for row in payload["hint_candidates"]} >= {"cytogenetic", "lesion", "mutation"}
+    assert all(row["suggested_facets"] == [] for row in payload["hint_candidates"])
+    assert all(row["suggested_action"] != "needs-new-facet-vocab" for row in payload["hint_candidates"])
+
+
+def test_benchmark_hint_candidates_cli_table_shows_only_domain_candidates(tmp_path: Path) -> None:
+    project_root = tmp_path / "cbioportal-project"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0071-alpha",
+        """
+id: hypothesis:0071-alpha
+type: hypothesis
+title: Cytogenetic project model
+""",
+        body="Cytogenetic lesion evidence should be benchmarked against project catalog models.",
+    )
+
+    result = _invoke_hint_candidates(project_root)
+
+    assert result.exit_code == 0
+    assert "Benchmark Hint Candidates" in result.output
+    assert "cytogenetic" in result.output
+    assert "review-for-hint" in result.output
+    assert "catalog" not in result.output
+    assert "cbioportal" not in result.output
+
+
+def test_benchmark_hint_candidates_cli_include_existing_json(tmp_path: Path) -> None:
+    result = _invoke_hint_candidates(tmp_path, "--include-existing", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    existing = [row for row in payload["hint_candidates"] if row["category"] == "existing-hint"]
+    assert existing
+    by_term = {row["term"]: row for row in existing}
+    assert by_term["drug"]["count"] is None
+    assert by_term["drug"]["current_hint"] == "perturbation"
+    assert by_term["drug"]["example_entities"] == []
+    assert by_term["drug"]["reason_notes"] == ["already-mapped-term"]
+
+
+def test_benchmark_hint_candidates_cli_output_requires_write_flag(tmp_path: Path) -> None:
+    result = _invoke_hint_candidates(tmp_path, "--output", "docs/audits/benchmark-hint-candidates/custom.yaml")
+
+    assert result.exit_code != 0
+    assert "--output requires --write-review-file" in result.output
+
+
+def test_benchmark_hint_candidates_cli_writes_default_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0072-alpha",
+        """
+id: hypothesis:0072-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    assert review_path.is_file()
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    assert written["project"] == tmp_path.name
+    assert written["generated_at"] == "2026-06-30"
+    assert written["source_command"].startswith("science benchmark hint-candidates")
+    assert written["summary"]["term_bucket_cap"] == 10
+    assert written["candidates"][0]["decision"] == "pending"
+    assert written["candidates"][0]["reviewer_notes"] == ""
+    assert written["candidates"][0]["suggested_facets"] == []
+
+
+def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0073-alpha",
+        """
+id: hypothesis:0073-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "docs/audits/benchmark-hint-candidates/custom.yaml",
+    )
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
+    assert review_path.is_file()
+    assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
+
+
+def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    output_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
+    output_path.parent.mkdir(parents=True)
+    output_path.write_text("existing: true\n", encoding="utf-8")
+
+    result = _invoke_hint_candidates(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "docs/audits/benchmark-hint-candidates/custom.yaml",
+    )
+
+    assert result.exit_code != 0
+    assert "review file already exists" in result.output
+    assert output_path.read_text(encoding="utf-8") == "existing: true\n"
+
+
+def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", "../outside.yaml")
+
+    assert result.exit_code != 0
+    assert "--output must stay under project root" in result.output
+    assert not (tmp_path.parent / "outside.yaml").exists()
+
+
+def test_benchmark_hint_candidates_cli_rejects_absolute_output_outside_project_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    outside_path = tmp_path.parent / "outside-absolute.yaml"
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", str(outside_path))
+
+    assert result.exit_code != 0
+    assert "--output must stay under project root" in result.output
+    assert not outside_path.exists()
+
+
+def test_benchmark_hint_candidates_cli_table_empty_state(tmp_path: Path) -> None:
+    result = _invoke_hint_candidates(tmp_path)
+
+    assert result.exit_code == 0
+    assert "No benchmark hint candidates." in result.output
 
 
 def test_benchmark_tests_cli_json_output(tmp_path: Path) -> None:
