@@ -152,6 +152,15 @@ Evidence does not prove propositions outright. Evidence lines support or dispute
 propositions, and the belief machinery derives the current state from eligible
 evidence.
 
+Promoted paper statements can also contribute belief through derived literature
+evidence. During graph materialization, active paper-sidecar annotations that
+promote a `proposition` statement to an existing proposition are projected as
+virtual literature evidence lines before the `bears_on` layer is derived. The
+proposition remains the belief-bearing entity; the paper statement is only a
+derived support or dispute unit with provenance back to the paper. See
+`docs/user-guide/evidence-lines.md` for the exact stance, independence, and
+ceiling rules.
+
 ### Relational Propositions
 
 A truth-apt graph edge is represented as a `proposition` with relational fields,

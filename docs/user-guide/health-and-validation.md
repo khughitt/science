@@ -30,6 +30,18 @@ not rebuild the artifact implicitly. Regenerate that derived state with:
 science annotate build-prose-health --write
 ```
 
+Derived cross-paper literature evidence can be inspected without writing files:
+
+```bash
+science annotate cross-paper-evidence
+science annotate cross-paper-evidence --source proposition:<slug> --format json
+```
+
+The project-wide form reports every proposition that gains derived literature
+support or dispute, plus all derivation faults. The `--source` form reports the
+derived units for one proposition and computes the literature-only belief
+summary through the same belief reducer used for evidence summaries.
+
 Projects may mark a validation warning as reviewed in `science.yaml` when the
 warning is an intentional, documented residual risk rather than an unresolved
 defect. Accepted warnings are omitted from `science validate` output/counts and

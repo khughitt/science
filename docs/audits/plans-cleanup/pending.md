@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `8`
+- Pending thread count: `7`
 
 ## benchmark-grounded-model-assessment
 
@@ -93,22 +93,6 @@
 - remaining_gaps:
   - Large parts of the overview remain target-state rather than implementation reality.
   - Separate shipped invariants from aspirational subsystem backlog before cleanup.
-
-## proposition-cross-paper-evidence-phase4d
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md`
-  - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until derived cross-paper literature evidence scanning, materialize behavior, diagnostic command, fault semantics, belief effect, and non-goals are documented outside active plans
-    - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md`
-    - `docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md`
-- remaining_gaps:
-  - No durable user or developer doc was found for the derived literature evidence scanner, materialize-time behavior, diagnostic command, fault semantics, belief effect, or non-goals.
-  - docs/conventions/annotation-tokens.md still mentions cross-paper evidence as future work, so durable docs should replace that stale forward-looking note.
 
 ## remove-v3-migration-code
 

@@ -1,10 +1,10 @@
 {
-  "file_count": 10,
+  "file_count": 8,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 8,
+  "thread_count": 7,
   "threads": [
     {
       "earliest_file_date": "2026-06-26",
@@ -131,33 +131,6 @@
         "docs/plans/2026-06-14-patchwork-kernel-architecture-design.md": "design"
       },
       "thread_id": "patchwork-kernel-architecture"
-    },
-    {
-      "earliest_file_date": "2026-06-30",
-      "files": [
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md",
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md"
-      ],
-      "latest_file_date": "2026-06-30",
-      "normalized_slug": "proposition-cross-paper-evidence-phase4d",
-      "raw_slugs": {
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "proposition-cross-paper-evidence-phase4d-design",
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md": "proposition-cross-paper-evidence-phase4d-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "design",
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md": "plan"
-      },
-      "thread_id": "proposition-cross-paper-evidence-phase4d"
     },
     {
       "earliest_file_date": "2026-06-20",

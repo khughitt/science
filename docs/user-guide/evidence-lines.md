@@ -100,6 +100,47 @@ Multiple lines from the same cohort, instrument, source, or analysis family are
 not independent just because they are written as separate files. Use the same
 `independence_group` when support should be discounted as shared.
 
+## Derived Literature Evidence
+
+Some literature evidence is derived during graph materialization rather than
+authored as files under `entities/evidence-lines/`. When active statement
+annotations from papers have been promoted to the same `proposition:<slug>`,
+Science derives virtual `sci:EvidenceLine` nodes from the promoted annotation
+provenance. These nodes are URI-only, deterministic, and rebuildable from the
+paper sidecars; do not create matching authored evidence-line files for them.
+
+Only active `proposition` annotations with `promoted_to: proposition:<slug>`
+participate. `question` and `hypothesis` promotions are valid but are not
+literature evidence for a proposition. `fixed`, `dismissed`, and `superseded`
+annotations are retained as history but do not contribute belief.
+
+The stance mapping is:
+
+| Statement stance | Derived edge | Evidence role | Strength |
+|---|---|---|---|
+| `asserted` | `cito:supports` | `proxy_support` | `moderate` |
+| `negated` | `cito:disputes` | `proxy_support` | `moderate` |
+| `hypothesized` | `cito:supports` | `background_constraint` | `weak` |
+| `open` | skipped | - | - |
+
+Derived literature evidence uses `evidence_type: literature` and
+`independence: independent`. The `independence_group` is keyed by paper, so
+multiple same-paper statements with the same proposition and stance collapse to
+one unit. If the same paper both supports and disputes a proposition, both units
+are retained in the same group, and belief aggregation records that group as
+contested instead of silently choosing a winner.
+
+Literature corroboration can move a proposition from speculative or fragile to
+supported, but it cannot by itself make a proposition `well_supported`. That
+state requires qualifying direct-test evidence, not only repeated statements in
+papers.
+
+This derived layer does not reconcile separately minted propositions that may
+be paraphrases of the same claim, does not infer citation-graph independence
+between papers, does not persist generated evidence-line files, and does not
+grade strength from article section names. Those remain separate curation or
+modeling problems.
+
 ## Dataset Usage
 
 Empirical evidence lines should name the datasets they use with
