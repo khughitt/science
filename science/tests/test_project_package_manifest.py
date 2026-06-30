@@ -13,9 +13,7 @@ _SHA = "a" * 64
 
 def _valid() -> dict:
     files = [{"path": "science.yaml", "sha256": _SHA, "bytes": 3}]
-    payloads = [
-        {"path": "data/raw/x.bin", "sha256": _SHA, "bytes": 1, "git_tracked": False}
-    ]
+    payloads = [{"path": "data/raw/x.bin", "sha256": _SHA, "bytes": 1, "git_tracked": False}]
     dv = content_version("0", data_version_chunks(files, payloads))
     return {
         "schema_version": SCHEMA_VERSION,
@@ -104,8 +102,7 @@ def test_data_version_chunks_are_canonical_and_ordered():
     assert chunks == [
         b'{"bytes": 1, "path": "a", "sha256": "%s"}' % _SHA.encode(),
         b'{"bytes": 2, "path": "b", "sha256": "%s"}' % _SHA.encode(),
-        b'{"bytes": 9, "git_tracked": true, "path": "p", "sha256": "%s"}'
-        % _SHA.encode(),
+        b'{"bytes": 9, "git_tracked": true, "path": "p", "sha256": "%s"}' % _SHA.encode(),
     ]
 
 

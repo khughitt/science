@@ -25,12 +25,7 @@ class ProjectInfo(BaseModel):
     @field_validator("id")
     @classmethod
     def _safe_id(cls, value: str) -> str:
-        if (
-            value in ("", ".", "..")
-            or "/" in value
-            or "\\" in value
-            or not _SAFE_PROJECT_ID_RE.match(value)
-        ):
+        if value in ("", ".", "..") or "/" in value or "\\" in value or not _SAFE_PROJECT_ID_RE.match(value):
             raise ValueError(f"unsafe project id: {value!r}")
         return value
 

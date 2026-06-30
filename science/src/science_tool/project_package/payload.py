@@ -45,11 +45,13 @@ def _walk_payload_dir(
         elif entry.is_file(follow_symlinks=True):
             data = path.read_bytes()  # follows symlink to hydrated content
             rel = path.relative_to(project_root).as_posix()
-            payloads.append({
-                "path": rel,
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "bytes": len(data),
-                "git_tracked": rel in tracked_set,
-            })
+            payloads.append(
+                {
+                    "path": rel,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                    "git_tracked": rel in tracked_set,
+                }
+            )
         else:
             raise PayloadError(f"non-regular file under data dir: {entry.path}")
