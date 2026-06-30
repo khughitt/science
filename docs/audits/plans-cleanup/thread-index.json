@@ -1,10 +1,10 @@
 {
-  "file_count": 87,
+  "file_count": 79,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 53,
+  "thread_count": 49,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -510,33 +510,6 @@
     {
       "earliest_file_date": "2026-06-14",
       "files": [
-        "docs/plans/2026-06-14-infer-schema-scaffold-design.md",
-        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "infer-schema-scaffold",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-infer-schema-scaffold-design.md": "infer-schema-scaffold-design",
-        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md": "infer-schema-scaffold-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-14-infer-schema-scaffold-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-14-infer-schema-scaffold-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-infer-schema-scaffold-design.md": "design",
-        "docs/plans/2026-06-14-infer-schema-scaffold-plan.md": "plan"
-      },
-      "thread_id": "infer-schema-scaffold"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
         "docs/plans/2026-06-14-kind-descriptor-model-registry-design.md",
         "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md"
       ],
@@ -860,60 +833,6 @@
         "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md": "plan"
       },
       "thread_id": "prose-epistemics-pilot-improvements"
-    },
-    {
-      "earliest_file_date": "2026-06-13",
-      "files": [
-        "docs/plans/2026-06-13-qa-check-library-design.md",
-        "docs/plans/2026-06-13-qa-check-library-plan.md"
-      ],
-      "latest_file_date": "2026-06-13",
-      "normalized_slug": "qa-check-library",
-      "raw_slugs": {
-        "docs/plans/2026-06-13-qa-check-library-design.md": "qa-check-library-design",
-        "docs/plans/2026-06-13-qa-check-library-plan.md": "qa-check-library-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-13-qa-check-library-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-13-qa-check-library-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-13-qa-check-library-design.md": "design",
-        "docs/plans/2026-06-13-qa-check-library-plan.md": "plan"
-      },
-      "thread_id": "qa-check-library"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-qa-schema-compiler-design.md",
-        "docs/plans/2026-06-14-qa-schema-compiler-plan.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "qa-schema-compiler",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-qa-schema-compiler-design.md": "qa-schema-compiler-design",
-        "docs/plans/2026-06-14-qa-schema-compiler-plan.md": "qa-schema-compiler-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-14-qa-schema-compiler-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-14-qa-schema-compiler-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-qa-schema-compiler-design.md": "design",
-        "docs/plans/2026-06-14-qa-schema-compiler-plan.md": "plan"
-      },
-      "thread_id": "qa-schema-compiler"
     },
     {
       "earliest_file_date": "2026-06-20",
@@ -1268,33 +1187,6 @@
         "docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "substrate-scope-aware-loading"
-    },
-    {
-      "earliest_file_date": "2026-06-13",
-      "files": [
-        "docs/plans/2026-06-13-typed-dataset-schema-design.md",
-        "docs/plans/2026-06-13-typed-dataset-schema-plan.md"
-      ],
-      "latest_file_date": "2026-06-13",
-      "normalized_slug": "typed-dataset-schema",
-      "raw_slugs": {
-        "docs/plans/2026-06-13-typed-dataset-schema-design.md": "typed-dataset-schema-design",
-        "docs/plans/2026-06-13-typed-dataset-schema-plan.md": "typed-dataset-schema-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-13-typed-dataset-schema-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-13-typed-dataset-schema-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-13-typed-dataset-schema-design.md": "design",
-        "docs/plans/2026-06-13-typed-dataset-schema-plan.md": "plan"
-      },
-      "thread_id": "typed-dataset-schema"
     },
     {
       "earliest_file_date": "2026-06-16",

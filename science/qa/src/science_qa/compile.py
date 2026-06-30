@@ -3,7 +3,7 @@
 Plain-dict only (no pydantic): the on-disk Table Schema + its `qa:` extension are the
 single source of truth, read at run time. Native constraints map to structural checks;
 the `qa:` extension maps to distribution checks. See
-docs/plans/2026-06-14-qa-schema-compiler-design.md.
+docs/conventions/pipeline-qa-checkpoints.md.
 """
 
 from __future__ import annotations

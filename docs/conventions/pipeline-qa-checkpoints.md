@@ -147,11 +147,12 @@ gate's failure never touches the report.
 
 ## Reference implementation
 
-The `science-qa` distribution (`science/qa/`, command `python -m science_qa run`) executes this
-exact `qa:` schema — `unique_key`, `required_complete`, `categoricals` (`allowed` / `allowed_from`),
-`exclusive_flags`, `ranges`, `missing_sentinels` — and applies the structural/distribution severity
-split above. Modality packs (e.g. `packs: [scrna]`) add domain checks the declarative config cannot
-express. The convention remains the contract; the runner is one implementation of it.
+The `science-qa` distribution (`science/qa/`, command `python -m science_qa run`) executes the
+structural/distribution severity split above. It accepts either a traditional `qa:` run-knobs file
+with `--config ... --table ...`, or a schema-driven datapackage resource with
+`--datapackage ... --resource ...`. Datapackage mode compiles the resource's typed Table Schema into
+the generic `tabular` program; optional run-knobs overlay operational choices such as soft ranges,
+polarity, project-local checks, aspect parameters, and program choice.
 
 The runner also formalizes the "analyst decides at model time" step for distribution flags: it
 emits `qa_report.json` (an immutable flag ledger) and scaffolds an analyst-owned
@@ -162,14 +163,34 @@ strict gate's output set and reference it as a manifest resource (`qa_dispositio
 ### Composable aspects & programs (baseline library + project extensions)
 
 `science_qa` composes checks as **aspects** (`general`, `tabular`, `numeric-column`,
-`gene-expression-qc-table`, `scrna-qc-table`, `project-local`) into a named **program** selected
-by `qa.program` (e.g. `scrna-qc-table`). The program is the *baseline library* of type-appropriate
-checks; project-specific, bug-driven checks remain valuable and are added via `qa.project_local`
-(an append-only extension point) plus the parameterized families (`ranges`, `categoricals`, …).
-The check list is therefore **baseline library + project extensions**, not bug-driven-only. Breadth
-is reported as a coverage block in `qa_report.json` (executable denominator + `ran`/`empty`/`blocked`/
-`not-applicable` per invocation + declared-but-unconfigured families); see
-`~/d/science/docs/plans/2026-06-13-qa-check-library-design.md`.
+`gene-expression-qc-table`, `scrna-qc-table`, `project-local`) into a named **program**. A program is
+an ordered baseline library of type-appropriate checks bound to a substrate, currently a pandas
+table. The shipped programs are:
+
+| Program | Use |
+| --- | --- |
+| `tabular` | Generic table QA: general, tabular, and numeric-column aspects. This is the default for schema-driven datapackage QA. |
+| `scrna-qc-table` | Post-QC single-cell table QA: the generic table aspects plus gene-expression and scRNA gates. |
+
+Aspects are flat named check sets, and programs compose them; there is no inherited pack layer.
+`project-local` is the append-only extension point for project-specific bug-driven checks.
+Parameterized families such as `ranges`, `categoricals`, `unique_key`, `exclusive_flags`,
+`polarity`, `missing_sentinels`, and schema-derived `bounds` expand from config or typed resource
+schemas. Required checks run unconditionally for the program, using documented defaults or failing
+early when the program/substrate contract is invalid.
+
+Breadth is reported as a coverage block in `qa_report.json`: each invocation records `ran`, `empty`,
+`blocked`, or `not-applicable`, and declared-but-unconfigured families are listed separately. Coverage
+is advisory; structural flags remain the build-fatal gate.
+
+Typed resource schemas are the preferred source of truth for ordinary datapackage QA. Native
+Frictionless declarations map to structural checks: field types, required fields, uniqueness,
+primary keys, unique keys, hard bounds, enum domains, missing sentinels, and single-column
+foreign-key categoricals. The Science `qa:` extension is small and distribution-oriented:
+field-level `low_variance` and `zero_fraction`, plus table-level `exclusive_flags`. Composite
+foreign keys are rejected rather than weakened to per-column checks. `science datasets infer-schema`
+can scaffold only the safe `fields[].name` and `fields[].type` portion from a produced table; keys,
+constraints, foreign keys, and `qa:` declarations remain authored decisions.
 
 ## See also
 

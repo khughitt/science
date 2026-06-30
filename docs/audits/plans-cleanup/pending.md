@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `52`
+- Pending thread count: `48`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -314,21 +314,6 @@
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
 
-## infer-schema-scaffold
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-14-infer-schema-scaffold-design.md`
-  - `docs/plans/2026-06-14-infer-schema-scaffold-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until infer-schema command contract and safety rules are documented
-    - `docs/plans/2026-06-14-infer-schema-scaffold-design.md`
-    - `docs/plans/2026-06-14-infer-schema-scaffold-plan.md`
-- remaining_gaps:
-  - Migrate the command contract and safety rules into durable docs before deleting the plan pair.
-
 ## kind-descriptor-model-registry
 
 - status: `implemented_needs_durable_docs`
@@ -526,38 +511,6 @@
   - Durable non-plan docs still only briefly mention prose-derived reports and prose-source; they do not describe the raw validation CLI, batch promotion plan schema, project-relative path policy, revision_manifest_excludes, or operational annotation-ref behavior.
   - Existing cleanup records for P2/P3/P4 already mark migration checkpoints as needed; this improvement plan expands the same as-built prose-epistemics contract that should be documented together.
   - The offline-agent pilot validates one source only; larger natural-systems decomposition quality remains future campaign work.
-
-## qa-check-library
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-13-qa-check-library-design.md`
-  - `docs/plans/2026-06-13-qa-check-library-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until QA aspect/program semantics replace stale modality-pack docs
-    - `docs/plans/2026-06-13-qa-check-library-design.md`
-    - `docs/plans/2026-06-13-qa-check-library-plan.md`
-- remaining_gaps:
-  - docs/conventions/pipeline-qa-checkpoints.md still has stale pre-refactor wording about modality packs/packs:[scrna] and links back to this plan for details.
-  - Migrate locked QA-library semantics before deleting the plan files.
-
-## qa-schema-compiler
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-14-qa-schema-compiler-design.md`
-  - `docs/plans/2026-06-14-qa-schema-compiler-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until schema-to-QA compiler contract is documented
-    - `docs/plans/2026-06-14-qa-schema-compiler-design.md`
-    - `docs/plans/2026-06-14-qa-schema-compiler-plan.md`
-- remaining_gaps:
-  - No durable non-plan doc fully records the schema-to-check mapping, compile errors, merge semantics, YAML timestamp rule, or tabular program contract.
-  - docs/conventions/pipeline-qa-checkpoints.md documents the older config-driven QA convention and science_qa generally, but not the schema compiler as the current contract.
 
 ## remove-v3-migration-code
 
@@ -772,21 +725,6 @@
     - `docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md`
 - remaining_gaps:
   - Durable user docs mention owner scopes generally but do not explain bare-ref ambiguity, scoped reference syntax, or the materialize/audit behavior users see.
-
-## typed-dataset-schema
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-13-typed-dataset-schema-design.md`
-  - `docs/plans/2026-06-13-typed-dataset-schema-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset schema profile vocabulary and validate behavior are documented
-    - `docs/plans/2026-06-13-typed-dataset-schema-design.md`
-    - `docs/plans/2026-06-13-typed-dataset-schema-plan.md`
-- remaining_gaps:
-  - Add durable documentation for the profile vocabulary, qa: extension boundary, emitted schema, and datasets validate behavior.
 
 ## typed-evidence-vocabularies
 

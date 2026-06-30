@@ -4,7 +4,7 @@ Infers a resource's observed shape (field names + coarse Frictionless types) fro
 produced table. Emits a diff-vs-existing plus a human review report; with --write applies
 ONLY the names+types patch under strict guards. It never infers build-fatal invariants
 (constraints, keys, foreignKeys, qa) — those are recommended in the report, authored by a
-human. See docs/plans/2026-06-14-infer-schema-scaffold-design.md.
+human. See docs/user-guide/entities.md.
 """
 
 from __future__ import annotations

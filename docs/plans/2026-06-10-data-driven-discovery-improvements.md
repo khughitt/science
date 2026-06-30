@@ -93,8 +93,7 @@ biologist one-shots the analysis."
   readout: `qa_report.json` now carries a `coverage` block (executable denominator +
   `ran`/`empty`/`blocked`/`not-applicable` per invocation + declared-but-unconfigured families);
   `science qa-audit` surfaces a `breadth` column (`ran/denominator`). See
-  `docs/plans/2026-06-13-qa-check-library-design.md` and
-  `docs/plans/2026-06-13-qa-check-library-plan.md`.
+  `docs/conventions/pipeline-qa-checkpoints.md`.
 - **B3 — Flag no-iteration workflows. ✅ SHIPPED (2026-06-11).** *Gap:* a build→run-once→record→"truth"
   workflow is indistinguishable from a properly iterated one. *Sketch:* detect and flag analyses
   with zero recorded iterations / re-entries, surfacing them through the audit playbook. *Tier:*
@@ -183,8 +182,7 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
   (B1+B3 merged to local `main` 2026-06-11; `science-qa` toolkit + `science qa-audit`; see
   `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md` / `…-plan.md`).
   B2 merged 2026-06-13 as a composable check-library (aspects/programs) with breadth as a
-  program-derived coverage readout; see `docs/plans/2026-06-13-qa-check-library-design.md` and
-  `docs/plans/2026-06-13-qa-check-library-plan.md`.
+  program-derived coverage readout; see `docs/conventions/pipeline-qa-checkpoints.md`.
 - **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
   payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
   **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via

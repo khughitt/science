@@ -573,6 +573,65 @@ row per question or hypothesis. Coverage states are `covered-runnable`,
 `only-reference`, `only-pointer`, `only-gated`, `only-unverified`, and
 `no-candidate`.
 
+### Typed Resource Schemas
+
+Runtime datapackages can give each tabular resource a typed Frictionless Table
+Schema. Science treats that schema as the single source of truth for resource
+shape and machine-checkable QA inputs:
+
+```yaml
+resources:
+  - name: observations
+    path: observations.parquet
+    schema:
+      fields:
+        - name: sample_id
+          type: string
+          constraints: {required: true, unique: true}
+        - name: value
+          type: number
+          constraints: {minimum: 0}
+          qa: {low_variance: true, zero_fraction: true}
+      primaryKey: sample_id
+      missingValues: ["", "NA"]
+      qa:
+        exclusive_flags: [[case, control]]
+```
+
+Native Table Schema declarations are invariants: field `type`,
+`constraints.required`, `constraints.unique`, `primaryKey`, `uniqueKeys`,
+`foreignKeys`, bounds, enums, and `missingValues` describe data that must be
+true. The Science `qa:` extension is deliberately small and distribution
+oriented: field-level `low_variance` and `zero_fraction`, plus table-level
+`exclusive_flags`.
+
+The schema profile is model-owned in `science_tool.datasets.schema`; the
+committed JSON Schema is generated from those Pydantic models rather than
+hand-maintained. `science datasets validate --path <datapackage>` checks a
+descriptor or package directory through that profile, confirms resource files
+exist, and checks declared tabular `schema.fields[]` against the observed table
+names and coarse types. A descriptor that is missing, malformed, empty, stale,
+or points at absent data fails early instead of warning-and-passing.
+
+Use `science datasets infer-schema` to bootstrap the names-and-types portion of
+a resource schema from an existing table:
+
+```bash
+science datasets infer-schema <datapackage-dir-or-file> --resource <name>
+science datasets infer-schema <datapackage-dir-or-file> --resource <name> --write
+science datasets infer-schema <datapackage-dir-or-file> --resource <name> --emit-suggestions suggestions.yaml
+science datasets infer-schema <datapackage-dir-or-file> --resource <name> --format json
+```
+
+The command is read-only by default. It resolves resources by name first and by
+path second, refuses ambiguous matches, reads Parquet types from Arrow metadata,
+and samples CSV/TSV resources for coarse type inference. With `--write`, it
+applies only safe `fields[].name` and `fields[].type` edits, preserves authored
+constraints and QA metadata, refuses authored type conflicts, validates the
+whole package before writing, and atomically re-renders the descriptor in its
+own JSON/YAML format. It never writes constraints, keys, foreign keys, or
+`qa:` declarations; those appear only as human review recommendations.
+
 ### Dataset QA
 
 Use the plural `science datasets qa` command for package-level, schema-driven
@@ -591,7 +650,21 @@ The command accepts a package directory or a descriptor named
 `datapackage.json`, `datapackage.yaml`, or `datapackage.yml`. With
 `--report-dir`, it persists `qa_report.json`, `qa_report.md`, and per-resource
 report subdirectories. Text output renders one non-`not-applicable` resource
-line followed by a package summary.
+line followed by a package summary. Resource outcomes are `ok`, `fail`,
+`blocked`, `skipped`, or `not-applicable`: non-tabular resources are
+not-applicable, tabular resources without schemas are skipped, missing data
+files are blocked, and evaluated resources fail when any structural QA flag is
+emitted.
+
+The QA runner compiles each resource's typed schema into the generic `tabular`
+program unless run-knobs select another program. Schema-derived invariants
+compile to structural checks: required fields, unique keys, expected types,
+hard bounds, enums, missing sentinels, and single-column foreign-key
+categoricals. Composite foreign keys are rejected rather than weakened to
+per-column checks. A run-knobs file passed with `--config` overlays operational
+settings such as soft ranges, polarity, project-local checks, aspect
+parameters, and program choice; contract fields are merged with schema-derived
+values so authors can tighten a specific run without forking the descriptor.
 
 Exit codes are:
 
