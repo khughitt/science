@@ -138,6 +138,92 @@ def proposition_source_refs_map(entities) -> dict[str, frozenset[str]]:
     }
 
 
+def load_proposition_source_refs(project_root: Path) -> dict[str, frozenset[str]]:
+    from science_tool.graph.sources import load_project_sources
+
+    return proposition_source_refs_map(load_project_sources(project_root).entities)
+
+
+def _belief_for_proposition(collapsed: list[LiteratureAssertion], proposition_ref: str) -> dict:
+    from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+
+    ref_units = [assertion for assertion in collapsed if assertion.proposition_ref == proposition_ref]
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    emit_literature_evidence(knowledge, provenance, ref_units)
+    belief = aggregate_belief(
+        collect_evidence_units(knowledge, provenance, [entity_uri_for_ref(proposition_ref)])
+    )
+    return {
+        "belief_magnitude": belief.magnitude.value,
+        "contested": belief.contested,
+        "contested_groups": sorted(belief.contested_groups),
+        "support_units": len(belief.support_units),
+        "dispute_units": len(belief.dispute_units),
+    }
+
+
+def build_cross_paper_evidence_report(
+    project_root: Path,
+    *,
+    proposition_ref: str | None = None,
+) -> dict:
+    refs = load_proposition_source_refs(project_root)
+    assertions, faults = scan_literature_assertions(project_root, refs)
+    collapsed = collapse_assertions(assertions)
+    fault_rows = [
+        {
+            "sidecar": fault.sidecar,
+            "annotation": fault.annotation_id,
+            "reason": fault.reason,
+            "detail": fault.detail,
+        }
+        for fault in sorted(faults, key=lambda item: (item.sidecar, item.annotation_id, item.reason))
+    ]
+
+    if proposition_ref is not None:
+        units = [
+            {
+                "paper": assertion.paper_ref,
+                "stance": assertion.stance,
+                "edge": STANCE_EMIT[assertion.stance][0],
+                "role": STANCE_EMIT[assertion.stance][1],
+                "strength": STANCE_EMIT[assertion.stance][2],
+                "independence_group": f"literature-{assertion.paper_ref}",
+            }
+            for assertion in collapsed
+            if assertion.proposition_ref == proposition_ref
+        ]
+        units.sort(key=lambda item: (item["paper"], item["stance"]))
+        return {
+            "proposition": proposition_ref,
+            "units": units,
+            "belief": _belief_for_proposition(collapsed, proposition_ref),
+            "faults": fault_rows,
+        }
+
+    by_prop: dict[str, dict[str, int]] = {}
+    counted: set[tuple[str, str, str]] = set()
+    for assertion in collapsed:
+        edge = STANCE_EMIT[assertion.stance][0]
+        count_key = (assertion.proposition_ref, assertion.paper_ref, edge)
+        if count_key in counted:
+            continue
+        counted.add(count_key)
+        bucket = by_prop.setdefault(
+            assertion.proposition_ref,
+            {"supporting_papers": 0, "disputing_papers": 0},
+        )
+        bucket["supporting_papers" if edge == "supports" else "disputing_papers"] += 1
+
+    propositions = [
+        {"proposition": ref, **counts}
+        for ref, counts in sorted(by_prop.items())
+    ]
+    return {"propositions": propositions, "faults": fault_rows}
+
+
 def _statement_stance(ann) -> str:
     for body in ann.bodies:
         if isinstance(body, TextualBody) and body.format == "application/json":

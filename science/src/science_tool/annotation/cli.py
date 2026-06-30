@@ -438,6 +438,58 @@ def ground_prose_decomposition_cmd(
         click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
 
 
+@annotate_group.command("cross-paper-evidence")
+@click.option(
+    "--source",
+    "source_ref",
+    default=None,
+    help="proposition:<slug> to inspect; omit for project-wide",
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str) -> None:
+    """Diagnose derived cross-paper literature evidence."""
+    from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
+
+    if source_ref is not None and not source_ref.startswith("proposition:"):
+        raise click.ClickException("--source must use proposition:<slug>")
+
+    project_root = (root or Path.cwd()).resolve()
+    payload = build_cross_paper_evidence_report(project_root, proposition_ref=source_ref)
+
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    if source_ref is not None:
+        belief = payload["belief"]
+        click.echo(
+            f"cross-paper evidence for {source_ref}: {len(payload['units'])} unit(s); "
+            f"belief={belief['belief_magnitude']} contested={belief['contested']} "
+            f"contested_groups={len(belief['contested_groups'])}"
+        )
+        for unit in payload["units"]:
+            click.echo(
+                f"  {unit['edge']:8s} {unit['paper']} "
+                f"({unit['stance']}; {unit['role']}/{unit['strength']})"
+            )
+    else:
+        for proposition in payload["propositions"]:
+            click.echo(
+                f"{proposition['proposition']}: "
+                f"+{proposition['supporting_papers']} / "
+                f"-{proposition['disputing_papers']} paper(s)"
+            )
+
+    if payload["faults"]:
+        click.echo(f"FAULTS ({len(payload['faults'])}):")
+        for fault in payload["faults"]:
+            click.echo(
+                f"  {fault['sidecar']} [{fault['annotation']}] "
+                f"{fault['reason']}: {fault['detail']}"
+            )
+
+
 @annotate_group.command("build-prose-health")
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option(
