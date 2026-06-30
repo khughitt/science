@@ -1245,6 +1245,41 @@ benchmark:
     assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:generic"
 
 
+def test_stoplist_blocks_model_token_only_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-model",
+        """
+id: hypothesis:0001-model
+type: hypothesis
+title: Model hypothesis
+status: active
+""",
+        body="The only shared benchmark term is model.",
+    )
+    _write_dataset(
+        tmp_path,
+        "model-facet",
+        """
+id: dataset:model-facet
+type: dataset
+title: Model Facet
+benchmark:
+  domains: [biology]
+  modalities: [model]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    assert payload["matched_opportunities"] == []
+
+
 def test_broad_domain_facet_is_not_scored_as_opportunity_match(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 
@@ -2651,7 +2686,7 @@ def test_evidence_workflow_terms_are_not_already_excluded_upstream() -> None:
     )
 
     assert _WORKFLOW_OR_MODELING_TERMS
-    assert not (_WORKFLOW_OR_MODELING_TERMS & _UNMAPPED_TERM_EXCLUSIONS)
+    assert not ((_WORKFLOW_OR_MODELING_TERMS - {"model"}) & _UNMAPPED_TERM_EXCLUSIONS)
     assert not (_WORKFLOW_OR_MODELING_TERMS & set(FACET_HINT_TERMS))
 
 
@@ -2682,6 +2717,34 @@ def test_term_categories_are_disjoint_and_project_local_uses_leaf_not_ancestors(
     assert not (project_terms & workflow_terms)
     assert not (project_terms & domain_terms)
     assert not (workflow_terms & domain_terms)
+
+
+def test_project_local_tokens_ignore_same_as_and_source_refs(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _project_local_tokens, load_project_entities
+
+    project_root = tmp_path / "local-project"
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0045-local-term",
+        """
+id: hypothesis:0045-local-term
+type: hypothesis
+title: Local term hypothesis
+same_as:
+  - externalalias
+source_refs:
+  - externalalias
+""",
+    )
+
+    tokens = _project_local_tokens(project_root, load_project_entities(project_root))
+
+    assert "local" in tokens
+    assert "project" in tokens
+    assert "0045-local-term" in tokens
+    assert "hypothesis:0045-local-term" in tokens
+    assert "externalalias" not in tokens
 
 
 def test_gaps_report_evidence_report_distinguishes_entity_specific_candidates(tmp_path: Path) -> None:

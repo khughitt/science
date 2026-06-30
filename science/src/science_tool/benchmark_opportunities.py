@@ -131,6 +131,7 @@ _STOP_TOKENS = {
     "data",
     "dataset",
     "evidence",
+    "model",
     "result",
     "response",
 }
@@ -856,7 +857,7 @@ def _as_string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str) and item]
 
 
-def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset[str]:
+def _entity_id_only_tokens(entity_id: str, kind: str) -> frozenset[str]:
     tokens = {entity_id.lower()}
     local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
     tokens.add(local.lower())
@@ -874,6 +875,11 @@ def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset
         if suffix:
             tokens.add(f"{shortform}{number}{suffix}".lower())
             tokens.add(f"{kind}:{shortform}{number}{suffix}".lower())
+    return frozenset(tokens)
+
+
+def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset[str]:
+    tokens = set(_entity_id_only_tokens(entity_id, kind))
     for field in ("same_as", "source_refs"):
         tokens.update(value.lower() for value in _as_string_list(fm.get(field)))
     return frozenset(tokens)
@@ -1289,7 +1295,7 @@ def _project_local_tokens(project_root: Path, entities: list[ProjectBenchmarkEnt
     tokens: set[str] = set()
     tokens.update(_tokens_from_label(project_root.resolve().name))
     for entity in entities:
-        tokens.update(entity.id_tokens)
+        tokens.update(_entity_id_only_tokens(entity.id, entity.kind))
     return tokens
 
 
