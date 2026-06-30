@@ -176,14 +176,21 @@ health. One new **read-only diagnostic** command is the window into this otherwi
 invisible derived state:
 
 ```
-science annotate cross-paper-evidence <proposition-ref> [--format table|json]
+science annotate cross-paper-evidence [--source proposition:<slug>] [--root PATH] [--format table|json]
 ```
 
-- **With a proposition ref:** lists the derived units (paper, stance, edge,
+The `--source` option (optional) mirrors the sibling `ground-prose-decomposition`
+command's surface for consistency across the `annotate` group; omitting it gives the
+project-wide view.
+
+- **With `--source proposition:<slug>`:** lists the derived units (paper, stance, edge,
   role/strength), the resulting belief magnitude, the `contested` flag, and any
-  intra-paper mixed-stance `contested_group` flags.
-- **Project-wide (no ref):** lists every proposition that gained literature belief,
-  and every derivation error (§6) in **report mode** — without raising.
+  intra-paper mixed-stance `contested_group` flags. The belief verdict is computed by
+  emitting the proposition's derived virtual lines into an in-memory graph and running
+  the same `collect_evidence_units` → `aggregate_belief` path (no dependence on a built
+  `graph.trig`).
+- **Without `--source` (project-wide):** lists every proposition that gained literature
+  belief, and every derivation error (§6) in **report mode** — without raising.
 
 This is a diagnostic/reporting surface, not an authoring workflow.
 

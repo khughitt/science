@@ -309,6 +309,20 @@ def _derive_phase(
     if source_snapshots is not None:
         emit_source_snapshots(dataset, source_snapshots)
 
+    # Phase 4d (Half A): derive virtual literature evidence-lines from promoted
+    # statement annotations before bears_on derivation, so the virtual cito edges
+    # participate in closure while keeping graph/ free of module-level annotation imports.
+    from science_tool.annotation.cross_paper_evidence import (
+        derive_literature_evidence,
+        proposition_source_refs_map,
+    )
+
+    derive_literature_evidence(
+        dataset,
+        Path(sources.project_root),
+        proposition_source_refs_map(sources.entities),
+    )
+
     _derive_bears_on_layer(
         dataset,
         kind_class=emit.kind_class,
