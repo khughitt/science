@@ -87,6 +87,16 @@ science big-picture cluster-digests --project-root .
 science big-picture validate --project-root .
 ```
 
+`cluster-digests` reports live synthesis entities with `report_kind:
+cluster-digest`. These digests are the big-picture substitute for archived
+member families: the digest stays live and may bridge questions, hypotheses,
+interpretations, tasks, and other synthesis records through normal `related:`
+frontmatter. With `--deep`, the command resolves each member through the active
+archive index and returns index-only member summaries. It does not rehydrate
+archived Markdown. A scaffolded-but-unapplied digest has members with
+`archived: false`, and only applied archive rows populate the `member_to_digest`
+map used for member-id, alias, and `same_as` redirection.
+
 The generation workflow precomputes project summaries, question resolution,
 attention samples, uncertainty, graph neighborhoods, and topic gaps, then writes
 the synthesis entity files. A full run writes all hypothesis syntheses, emergent

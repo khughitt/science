@@ -23,6 +23,12 @@ Inquiry graphs are also derived views. The graph-backed inquiry source is a
 patch-membership layer. Use `science inquiry show` and `science inquiry
 validate` to read the compiled view.
 
+Archived entity references resolve from `entities/_archive/archive-index.jsonl`.
+Graph materialization uses that active index to emit archived-entity stubs and
+`sci:consolidates` edges where consolidation rows exist. It does not rehydrate
+full archived Markdown into the live graph; edit or restore archived records
+through the archive workflow described in [Entities](entities.md).
+
 For local cleanup in a project that declares peers, use:
 
 ```bash

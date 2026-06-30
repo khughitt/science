@@ -1,10 +1,10 @@
 {
-  "file_count": 67,
+  "file_count": 57,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 42,
+  "thread_count": 36,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -110,156 +110,6 @@
         "docs/plans/2026-06-28-downstream-feedback-fixes.md": null
       },
       "thread_id": "downstream-feedback-fixes"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "entity-consolidation-and-archive",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md": "entity-consolidation-and-archive-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-entity-consolidation-and-archive-design.md": "design"
-      },
-      "thread_id": "entity-consolidation-and-archive"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "entity-consolidation-p1-visibility",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md": "entity-consolidation-p1-visibility-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md": "plan"
-      },
-      "thread_id": "entity-consolidation-p1-visibility"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md",
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "entity-consolidation-p2-candidate-detector",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md": "entity-consolidation-p2-candidate-detector-design",
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md": "entity-consolidation-p2-candidate-detector-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md": "design",
-        "docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md": "plan"
-      },
-      "thread_id": "entity-consolidation-p2-candidate-detector"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md",
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "entity-consolidation-p3-archive",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md": "entity-consolidation-p3-archive-design",
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md": "entity-consolidation-p3-archive-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md": "design",
-        "docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md": "plan"
-      },
-      "thread_id": "entity-consolidation-p3-archive"
-    },
-    {
-      "earliest_file_date": "2026-06-16",
-      "files": [
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md",
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md"
-      ],
-      "latest_file_date": "2026-06-16",
-      "normalized_slug": "entity-consolidation-p4-consolidate-apply",
-      "raw_slugs": {
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md": "entity-consolidation-p4-consolidate-apply-design",
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md": "entity-consolidation-p4-consolidate-apply-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md": "design",
-        "docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md": "plan"
-      },
-      "thread_id": "entity-consolidation-p4-consolidate-apply"
-    },
-    {
-      "earliest_file_date": "2026-06-16",
-      "files": [
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md",
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md"
-      ],
-      "latest_file_date": "2026-06-16",
-      "normalized_slug": "entity-consolidation-p5-tier4-substitution",
-      "raw_slugs": {
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md": "entity-consolidation-p5-tier4-substitution-design",
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md": "entity-consolidation-p5-tier4-substitution-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md": "design",
-        "docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md": "plan"
-      },
-      "thread_id": "entity-consolidation-p5-tier4-substitution"
     },
     {
       "earliest_file_date": "2026-06-03",

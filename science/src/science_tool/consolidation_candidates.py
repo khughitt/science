@@ -4,8 +4,8 @@ Scans canonical ``entities/`` and reports two kinds of consolidation candidates 
 superseded-lineage (mechanical) and semantic clusters (dep-free heuristics) —
 each with surfaced evidence. Takes NO action. This is the decision-support
 surface for the future ``entities consolidate --apply``. See
-docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md
-(and the §7.1 tuning revision documenting the precision-first gating).
+docs/user-guide/entities.md for the current operator workflow and
+precision-first gating contract.
 """
 
 from __future__ import annotations

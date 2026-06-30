@@ -125,6 +125,149 @@ source entity file. The graph build step materializes those source records into
 `knowledge/graph.trig`; direct graph mutations are overwritten by the next
 materialization.
 
+## Entity Consolidation And Archive
+
+Science separates entity cleanup into two cases:
+
+| Case | Surface | Result |
+|---|---|---|
+| Linear supersession | `science entities mark-superseded` then `science entities archive` | Older entities are hidden or relocated, while references remain resolvable. |
+| Semantic consolidation | `science curate consolidation-candidates`, then `science entities consolidate scaffold/apply` | A live cluster-digest summarizes several members, and the members move into the archive. |
+
+Hidden status and archive location are different axes. `superseded` and
+`archived` entities are hidden from normal entity lists by default, but a hidden
+entity may still live under its original path. Archived files live under
+`entities/_archive/` and are skipped by normal source loading. Use
+`--include-hidden` to show hidden live records and `--include-archived` to include
+archived records in entity listing. `--include-archived` does not imply
+`--include-hidden`; use both when you need hidden archived rows in list output.
+
+### Supersession And Candidate Review
+
+`science entities mark-superseded` is report-then-apply. It detects linear
+`supersedes` chains, marks non-survivors as `superseded`, and leaves graph
+resolution intact. Run it without `--apply` first:
+
+```bash
+science entities mark-superseded --project-root .
+science entities mark-superseded --project-root . --apply
+```
+
+`science curate consolidation-candidates` is read-only decision support. It
+reports mechanical superseded lineage and heuristic semantic clusters, then
+exits without editing files:
+
+```bash
+science curate consolidation-candidates --project-root . --format json
+```
+
+Semantic cluster detection is intentionally precision-oriented. Structural
+families qualify on durable signals such as shared id stem or explicit `group`.
+Shared task families and single shared anchors are corroborating signals, not
+enough by themselves. Related-overlap clusters use entity-reference overlap,
+not free-text citation strings. Treat the report as a review queue, not an
+automatic consolidation plan.
+
+The detector defaults are tuned to avoid flooding review with topical but
+non-redundant clusters. A real-corpus tuning pass found high precision from
+`id-stem`, heavy noise from task-family and single-anchor signals, and large
+single-linkage blobs from loose related-overlap. The default related-overlap
+Jaccard threshold is therefore `0.7`, and oversized clusters above the default
+maximum size are suppressed rather than silently capped.
+
+### Archive Index
+
+`science entities archive` relocates hidden-status entities into
+`entities/_archive/` and appends one row per operation to
+`entities/_archive/archive-index.jsonl`:
+
+```bash
+science entities archive --project-root .
+science entities archive --project-root . --apply
+science entities unarchive interpretation:0001-old --project-root .
+science entities unarchive interpretation:0001-old --project-root . --apply
+```
+
+The default archive statuses are `superseded` and `archived`; pass `--status`
+to choose a narrower or custom set. Archive and unarchive are report-then-apply
+and never overwrite destination files. Archive moves each file first, appends the
+index row, and rolls the move back if appending fails. Unarchive restores the
+original path and appends an `unarchive` tombstone. The archive index is
+append-only; the active archive set is the last operation per id.
+
+Archive rows preserve `id`, `kind`, `title`, `aliases`, `same_as`, `status`,
+`superseded_by`, `original_path`, timestamps, and consolidation fields such as
+`consolidated_into` and `digest_insight` when present. Reference resolution uses
+the active archive index, not scans of archived Markdown files, so references to
+archived ids, aliases, and `same_as` tokens remain resolvable. `science validate`
+checks for active rows whose files are missing, archived files without active
+rows, and archive id/alias collisions with live or archived entries.
+
+Use archive-aware retrieval when you need to find old material:
+
+```bash
+science search "old finding" --archived --project-root . --format json
+science entity list --include-archived --include-hidden
+```
+
+Archived entities are frozen for tool-mediated edits. If an edit command targets
+an archived id or alias, Science tells you to unarchive, edit, then re-archive.
+Raw filesystem edits under `entities/_archive/` are outside that tool contract.
+
+### Cluster Digests
+
+Semantic consolidation creates a live `synthesis` entity with
+`report_kind: cluster-digest`. The digest carries one authored relation per
+member:
+
+```yaml
+report_kind: cluster-digest
+relations:
+  - predicate: sci:consolidates
+    target: finding:0001-old
+```
+
+Create the digest first, review and fill in its body, then apply the
+consolidation:
+
+```bash
+science entities consolidate scaffold \
+  --project-root . \
+  --into synthesis:0001-digest \
+  --members finding:0001-old,finding:0002-old \
+  --title "Digest of old findings"
+
+science entities consolidate apply synthesis:0001-digest --project-root .
+science entities consolidate apply synthesis:0001-digest --project-root . --apply
+```
+
+`scaffold` validates that every member is live, that no member is the digest
+itself, that members are unique, and that the digest id does not collide with an
+active archived id or alias. It refuses kinds whose closed status vocabulary
+lacks `archived`. If the create-then-rewrite validation fails, the new digest
+file is removed.
+
+`apply` validates that the digest is a `cluster-digest` with
+`sci:consolidates` relations, then processes members one at a time. For each
+member, it snapshots bytes, writes `status: archived` and `consolidated_into`,
+relocates the file through the archive machinery, and appends an archive-index
+row with `reason: consolidated` and `digest_insight`. A failure restores the
+current member's original bytes. Earlier members in the same run remain archived
+if they already succeeded; recovery is explicit with `science entities
+unarchive`, manual digest adjustment, or a rerun after repair.
+
+The digest remains live. Archived members are represented in the index by
+`consolidated_into`, and the archive index is the source for alias and `same_as`
+redirection to the digest. A scaffolded-but-unapplied digest has live members;
+those members are not redirected until `apply --apply` archives them.
+
+As-built boundaries are intentionally narrow. Science does not auto-patch
+project manifests during consolidation, does not write a separate `cluster_id`
+field when `consolidated_into` names the digest, and does not rematerialize full
+archived Markdown into the live graph. `--include-archived` is a recall surface
+for listing and search, while normal source loading and graph builds continue to
+skip `entities/_archive/`.
+
 ## Entity Loading And Storage Adapters
 
 Science loads authored entities through one model family, not through separate

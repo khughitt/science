@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `41`
+- Pending thread count: `35`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -65,96 +65,6 @@
   - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
-
-## entity-consolidation-and-archive
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-entity-consolidation-and-archive-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until as-built archive/consolidation workflow and invariants are documented
-    - `docs/plans/2026-06-15-entity-consolidation-and-archive-design.md`
-- remaining_gaps:
-  - Durable user docs mention entity list flags and registry basics but do not fully document archive/consolidation workflows, invariants, or as-built deviations now captured only in the plan.
-  - Migrate the as-built contract before removing from active plans.
-
-## entity-consolidation-p1-visibility
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until mark-superseded and default-hidden semantics are documented
-    - `docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md`
-- remaining_gaps:
-  - mark-superseded and default-hidden semantics are not clearly documented in durable user/process docs beyond CLI surface references.
-
-## entity-consolidation-p2-candidate-detector
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md`
-  - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until consolidation-candidate command and tuning semantics are documented
-    - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md`
-    - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md`
-- remaining_gaps:
-  - The detector command and tuning semantics are not documented in durable user/process docs.
-  - The design includes real-corpus tuning results that should be preserved outside active plans if future tuning matters.
-
-## entity-consolidation-p3-archive
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md`
-  - `docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until archive index, freeze, reconciliation, and graph-resolution contract are documented
-    - `docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md`
-    - `docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md`
-- remaining_gaps:
-  - Durable docs do not fully explain entities/_archive, archive-index.jsonl, archive freeze/reconciliation, or index-only graph resolution.
-  - P3 code now includes P4 additive fields consolidated_into and digest_insight in ArchiveRow; preserve phase boundary when moving files.
-
-## entity-consolidation-p4-consolidate-apply
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md`
-  - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until consolidate scaffold/apply operational contract is documented
-    - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md`
-    - `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-plan.md`
-- remaining_gaps:
-  - No durable user/migration doc found for the mutating workflow: scaffold, fill digest, apply, rollback/partial-failure recovery, unarchive limitations, and archive-index fields.
-  - P5 docs mention cluster-digests consumption, not the P4 authoring/operator contract.
-
-## entity-consolidation-p5-tier4-substitution
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md`
-  - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until cluster-digests JSON and bridge semantics are documented
-    - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-design.md`
-    - `docs/plans/2026-06-16-entity-consolidation-p5-tier4-substitution-plan.md`
-- remaining_gaps:
-  - Durable docs mention the support surface and bridge behavior, but not the JSON contract, --deep index-only semantics, member_to_digest alias/same_as behavior, or scaffolded-but-unapplied archived=false semantics.
 
 ## entity-organization-and-naming-implementation-plan3
 
