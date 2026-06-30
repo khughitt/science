@@ -1,7 +1,24 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `18`
+- Pending thread count: `20`
+
+## bundle-belief-rollup
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-11-bundle-belief-rollup-design.md`
+  - `docs/plans/2026-06-11-bundle-belief-rollup-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until bundle belief semantics, composition_rule, membership-role gating, and snapshot fields are documented
+    - `docs/plans/2026-06-11-bundle-belief-rollup-design.md`
+    - `docs/plans/2026-06-11-bundle-belief-rollup-plan.md`
+- remaining_gaps:
+  - Low-level durable contract is not fully migrated: model/graph code still cites docs/plans/2026-06-11-bundle-belief-rollup-design.md.
+  - Original member-enumeration semantics are partially superseded by membership_role/core_members gating, so the active plan is no longer reliable as current truth.
+  - No docs/proposition-and-evidence-model.md exists despite the plan claiming the canonical proposition model should be updated.
 
 ## c4c-rsid-variant-label
 
@@ -19,6 +36,21 @@
   - datapackage hash refresh
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
+
+## data-driven-discovery-improvements
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-06-10-data-driven-discovery-improvements.md`
+- pending_actions:
+  - `deferred`: review status incomplete; retain umbrella until open evidence-tier, robustness, reproducibility, provenance, and bias-memory items are split or re-homed
+    - `docs/plans/2026-06-10-data-driven-discovery-improvements.md`
+- remaining_gaps:
+  - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
+  - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
+  - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
 
 ## dataset-evidence-flow
 

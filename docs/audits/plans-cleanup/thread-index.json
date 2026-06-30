@@ -1,10 +1,10 @@
 {
-  "file_count": 181,
+  "file_count": 179,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 106,
+  "thread_count": 105,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -2000,33 +2000,6 @@
         "docs/plans/2026-06-14-qa-schema-compiler-plan.md": "plan"
       },
       "thread_id": "qa-schema-compiler"
-    },
-    {
-      "earliest_file_date": "2026-06-11",
-      "files": [
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md",
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md"
-      ],
-      "latest_file_date": "2026-06-11",
-      "normalized_slug": "qa-toolkit-and-iteration-audit",
-      "raw_slugs": {
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md": "qa-toolkit-and-iteration-audit-design",
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md": "qa-toolkit-and-iteration-audit-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md": "design",
-        "docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-plan.md": "plan"
-      },
-      "thread_id": "qa-toolkit-and-iteration-audit"
     },
     {
       "earliest_file_date": "2026-06-20",
