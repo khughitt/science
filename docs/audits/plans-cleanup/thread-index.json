@@ -1,10 +1,10 @@
 {
-  "file_count": 57,
+  "file_count": 51,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 36,
+  "thread_count": 33,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -560,87 +560,6 @@
         "docs/plans/2026-06-23-science-citations-and-references-plan.md": "plan"
       },
       "thread_id": "science-citations-and-references"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md",
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "source-compiler-adapter-policy-keystone",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md": "source-compiler-adapter-policy-keystone-design",
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md": "source-compiler-adapter-policy-keystone-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md": "design",
-        "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md": "plan"
-      },
-      "thread_id": "source-compiler-adapter-policy-keystone"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-source-compiler-phase-split-design.md",
-        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "source-compiler-phase-split",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-source-compiler-phase-split-design.md": "source-compiler-phase-split-design",
-        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md": "source-compiler-phase-split-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-source-compiler-phase-split-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-source-compiler-phase-split-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-source-compiler-phase-split-design.md": "design",
-        "docs/plans/2026-06-15-source-compiler-phase-split-plan.md": "plan"
-      },
-      "thread_id": "source-compiler-phase-split"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md",
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "source-compiler-snapshot-freshness",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md": "source-compiler-snapshot-freshness-design",
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "source-compiler-snapshot-freshness-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md": "design",
-        "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "plan"
-      },
-      "thread_id": "source-compiler-snapshot-freshness"
     },
     {
       "earliest_file_date": "2026-06-08",

@@ -302,6 +302,25 @@ that record to the registry. They do not decide dataset semantics, task state,
 or domain-entity validity. Those rules live on the resolved entity schema and
 on validation checks.
 
+Adapter-specific load policy is declared on the adapter, not hard-coded in the
+source-load loop. The shared policy surface includes:
+
+| Policy Hook | Purpose |
+|---|---|
+| `participation_mode` | Whether records are owners, borrowers, or external references in the identity table. |
+| `should_defer(already_owned=...)` | Whether this record yields to an already-loaded owner instead of declaring another owner. |
+| `skip_core_on_missing_identity` | Allows Markdown frontmatter without identity fields to be skipped with a diagnostic rather than crashing schema validation. |
+| `source_document(ref, raw)` | Captures Markdown frontmatter/body for annotation and source-text consumers. |
+| `on_owner_declared(...)` | Captures row-level metadata, currently used by aggregate rows for triage and migration reports. |
+| `deferred_dataset_datapackage(...)` | Lets a deferring datapackage keep package-resource metadata available after a Markdown or aggregate owner wins. |
+
+This policy surface keeps adapter quirks close to the adapter. For example,
+bibliography and CURIE-reference adapters act as external references and defer
+to existing owners; datapackage records are owner-shaped but defer when a
+project source already owns the dataset id; aggregate rows emit row metadata for
+retirement triage; Markdown records are the only records that capture a source
+document body.
+
 Current project source loading uses these adapter families:
 
 | Adapter | Source surface | Role |
@@ -324,6 +343,25 @@ bibliography references and datapackages with an existing entity owner, may
 contribute supporting metadata without claiming a second owner. Cross-project
 commons and overlay declarations are tracked separately so reference resolution
 can distinguish local owners, shared owners, and borrowers.
+
+Graph build uses the same compiled source model for audit and materialization:
+
+```text
+Load -> Audit -> Emit -> Derive -> Write
+```
+
+`science graph audit` stops after Load and Audit. It reports unresolved or
+ambiguous references without running the materialize-only project-root preflight,
+without deriving graph layers, and without writing `knowledge/graph.trig`.
+`science graph build` runs the full sequence and hard-gates on audit failures
+before emitting or writing the graph. The materialize-only preflight still blocks
+strict builds on legacy unmigrated data-package owners; it is intentionally
+outside the audit-only path.
+
+The public in-memory build helper consumes a `ProjectSources` object and returns
+an RDF dataset without touching the filesystem. That pure path is used by
+diagnostic and freshness checks that need to compare expected graph state without
+writing generated files.
 
 ## Domain Ontology Catalogs
 

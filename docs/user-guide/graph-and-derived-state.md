@@ -39,6 +39,28 @@ This refreshes `knowledge/graph.trig` and leaves `knowledge/composite.trig` unto
 Use the default `science graph build` when you intentionally want to refresh the
 peer-composed graph.
 
+### Source Snapshots
+
+Graph build records source-observation provenance for loaded Markdown-backed
+entities. Each observed file gets a `sci:SourceSnapshot` node in the provenance
+graph with its project-relative `sourcePath` and raw-file SHA-256. The snapshot
+also bears on the entity it backs, so source changes participate in derived
+freshness through the same dependency layer as other graph causes.
+Aggregate rows, datapackages, remote APIs, DOI records, Zenodo records, and
+dataset manifests are not source-snapshotted yet.
+
+The first build establishes a baseline and emits no `sci:SourceChange`. On later
+builds, a changed content hash mints a `sci:SourceChange` event with the new
+hash and `observedOn` date, linked from the snapshot via
+`sci:latestSourceChange`. If the content hash is unchanged, the prior snapshot
+and latest-change event are carried forward unchanged; rebuilds should not churn
+the observed date.
+
+Only the current/latest source-change event is persisted for each source.
+Science does not keep a full source-change event log in the graph. Source
+snapshots are emitted even when freshness-state derivation is disabled, so the
+baseline remains continuous if freshness checks are re-enabled later.
+
 ## Dashboard Summaries
 
 Dashboard summaries are compact readings of the current graph: unresolved

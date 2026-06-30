@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `35`
+- Pending thread count: `32`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -346,51 +346,6 @@
   - No durable science-side user/convention doc was found for the science.references contract, references/index.json package resource, citation grammar v1, fail-closed export behavior, or consumer expectations.
   - The plan files carry locked design decisions such as exporting all bibliography records, app export owning references/index.json, and normal exports rejecting unresolved citations.
   - The old plan text is now too broad as active implementation guidance because the functionality spans science and Labnote and later Labnote export specs have absorbed part of the contract.
-
-## source-compiler-adapter-policy-keystone
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md`
-  - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until the source compiler adapter-policy rationale is checkpointed
-    - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md`
-    - `docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-plan.md`
-- remaining_gaps:
-  - No non-plan durable checkpoint records why adapter policy hooks exist, why owner scope remains centralized, or which adapter quirks are intentionally preserved.
-
-## source-compiler-phase-split
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-source-compiler-phase-split-design.md`
-  - `docs/plans/2026-06-15-source-compiler-phase-split-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until compiler phase boundaries and audit/materialize contract are checkpointed
-    - `docs/plans/2026-06-15-source-compiler-phase-split-design.md`
-    - `docs/plans/2026-06-15-source-compiler-phase-split-plan.md`
-- remaining_gaps:
-  - No durable non-plan compiler checkpoint records the phase boundary contract, materialize-only preflight rule, audit hard-gate, and pure build path.
-
-## source-compiler-snapshot-freshness
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md`
-  - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until SourceSnapshot and SourceChange semantics are checkpointed
-    - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-design.md`
-    - `docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md`
-- remaining_gaps:
-  - No non-plan durable checkpoint captures SourceSnapshot semantics, current-only SourceChange policy, unchanged rebuild churn guard, and deferred remote/aggregate snapshot fill-outs.
 
 ## substrate-3b-entities-retirement-apply
 
