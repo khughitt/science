@@ -1,12 +1,14 @@
 import hashlib
 
 from rdflib import URIRef
+from science_model.reasoning import EvidenceRole, EvidenceStance, EvidenceStrength
 
 from science_tool.annotation.cross_paper_evidence import (
     ACTIVE_STATUSES,
     AssertionFault,
     CrossPaperEvidenceError,
     DERIVED_STANCES,
+    KNOWN_STANCES,
     LiteratureAssertion,
     STANCE_EMIT,
     collapse_assertions,
@@ -31,11 +33,24 @@ def test_lit_assertion_uri_is_deterministic_and_stance_sensitive():
 
 
 def test_stance_emit_table_uses_real_enum_values():
-    assert STANCE_EMIT["asserted"] == ("supports", "proxy_support", "moderate")
-    assert STANCE_EMIT["negated"] == ("disputes", "proxy_support", "moderate")
-    assert STANCE_EMIT["hypothesized"] == ("supports", "background_constraint", "weak")
+    assert STANCE_EMIT["asserted"] == (
+        EvidenceStance.SUPPORTS.value,
+        EvidenceRole.PROXY_SUPPORT.value,
+        EvidenceStrength.MODERATE.value,
+    )
+    assert STANCE_EMIT["negated"] == (
+        EvidenceStance.DISPUTES.value,
+        EvidenceRole.PROXY_SUPPORT.value,
+        EvidenceStrength.MODERATE.value,
+    )
+    assert STANCE_EMIT["hypothesized"] == (
+        EvidenceStance.SUPPORTS.value,
+        EvidenceRole.BACKGROUND_CONSTRAINT.value,
+        EvidenceStrength.WEAK.value,
+    )
     assert set(STANCE_EMIT) == DERIVED_STANCES
     assert ACTIVE_STATUSES == frozenset({"open", "ack"})
+    assert KNOWN_STANCES == DERIVED_STANCES | {"open"}
 
 
 def test_collapse_dedupes_same_proposition_paper_stance_keeps_one():
@@ -71,3 +86,5 @@ def test_cross_paper_evidence_error_lists_all_faults():
     text = str(err)
     assert "stale-proposition" in text and "invalid-stance" in text
     assert "ann-1" in text and "ann-2" in text
+    assert "A.anno.trig" in text and "B.anno.trig" in text
+    assert "proposition:x missing" in text and "stance 'maybe'" in text
