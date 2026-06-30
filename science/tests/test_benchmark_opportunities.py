@@ -2588,6 +2588,102 @@ benchmark:
     assert evidence["lexicon_candidates"][0]["term"] == "clone"
 
 
+def test_gaps_report_evidence_report_categorizes_unmapped_terms_without_redefining_lexicon_candidates(
+    tmp_path: Path,
+) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    project_root = tmp_path / "cbioportal-project"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0044-cytogenetic-model",
+        """
+id: hypothesis:0044-cytogenetic-model
+type: hypothesis
+title: cBioPortal cytogenetic lesion model
+""",
+        body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
+    )
+    _write_dataset(
+        project_root,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    evidence = gaps_report(project_root, evidence_report=True)["evidence_report"]
+
+    categories = evidence["term_categories"]
+    domain_terms = {row["term"] for row in categories["domain_candidate_terms"]}
+    project_terms = {row["term"] for row in categories["project_local_terms"]}
+    workflow_terms = {row["term"] for row in categories["workflow_or_modeling_terms"]}
+    assert {"cytogenetic", "lesion", "mutation"} <= domain_terms
+    assert "cbioportal" in project_terms
+    assert {"catalog", "models"} <= workflow_terms
+    assert evidence["summary"]["top_domain_candidate_terms"][0]["term"] in domain_terms
+    assert evidence["lexicon_candidates"] == evidence["summary"]["top_unmapped_project_terms"]
+
+
+def test_evidence_workflow_terms_are_not_already_excluded_upstream() -> None:
+    from science_tool.benchmark_opportunities import (
+        FACET_HINT_TERMS,
+        _UNMAPPED_TERM_EXCLUSIONS,
+        _WORKFLOW_OR_MODELING_TERMS,
+    )
+
+    assert _WORKFLOW_OR_MODELING_TERMS
+    assert not (_WORKFLOW_OR_MODELING_TERMS & _UNMAPPED_TERM_EXCLUSIONS)
+    assert not (_WORKFLOW_OR_MODELING_TERMS & set(FACET_HINT_TERMS))
+
+
+def test_term_categories_are_disjoint_and_project_local_uses_leaf_not_ancestors(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _project_local_tokens, _term_categories
+
+    project_root = tmp_path / "cancer" / "cancer-types" / "multiple-myeloma"
+    project_root.mkdir(parents=True)
+    categories = _term_categories(
+        {
+            "hypothesis:0001-project": [
+                "cancer",
+                "multiple",
+                "myeloma",
+                "project",
+                "mutation",
+            ]
+        },
+        project_local_tokens=_project_local_tokens(project_root, []),
+    )
+
+    project_terms = {row["term"] for row in categories["project_local_terms"]}
+    workflow_terms = {row["term"] for row in categories["workflow_or_modeling_terms"]}
+    domain_terms = {row["term"] for row in categories["domain_candidate_terms"]}
+    assert {"multiple", "myeloma"} <= project_terms
+    assert "project" in workflow_terms
+    assert {"cancer", "mutation"} <= domain_terms
+    assert not (project_terms & workflow_terms)
+    assert not (project_terms & domain_terms)
+    assert not (workflow_terms & domain_terms)
+
+
 def test_gaps_report_evidence_report_distinguishes_entity_specific_candidates(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 

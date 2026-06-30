@@ -131,7 +131,6 @@ _STOP_TOKENS = {
     "data",
     "dataset",
     "evidence",
-    "model",
     "result",
     "response",
 }
@@ -469,6 +468,16 @@ class TermCountRow(TypedDict):
     example_entities: list[str]
 
 
+TermCategory = Literal["domain_candidate_terms", "project_local_terms", "workflow_or_modeling_terms", "other_terms"]
+
+
+class EvidenceTermCategories(TypedDict):
+    domain_candidate_terms: list[TermCountRow]
+    project_local_terms: list[TermCountRow]
+    workflow_or_modeling_terms: list[TermCountRow]
+    other_terms: list[TermCountRow]
+
+
 class EvidenceEntityRow(TypedDict):
     candidate_mode: CandidateMode
     tokens: list[str]
@@ -484,6 +493,7 @@ class EvidenceSummary(TypedDict):
     entities_with_no_facet_hints: int
     entities_with_fallback_only_candidates: int
     top_unmapped_project_terms: list[TermCountRow]
+    top_domain_candidate_terms: list[TermCountRow]
 
 
 class EvidenceReport(TypedDict):
@@ -491,6 +501,7 @@ class EvidenceReport(TypedDict):
     summary: NotRequired[EvidenceSummary]
     entities: NotRequired[dict[str, EvidenceEntityRow]]
     lexicon_candidates: NotRequired[list[TermCountRow]]
+    term_categories: NotRequired[EvidenceTermCategories]
 
 
 class BenchmarkGapReport(TypedDict):
@@ -1256,6 +1267,32 @@ def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: l
     )
 
 
+_WORKFLOW_OR_MODELING_TERMS = frozenset(
+    {
+        "catalog",
+        "model",
+        "models",
+        "project",
+    }
+)
+
+
+def _tokens_from_label(value: str) -> set[str]:
+    return {
+        token
+        for token in re.split(r"[^A-Za-z0-9]+", value.lower())
+        if token and len(token) > 1
+    }
+
+
+def _project_local_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> set[str]:
+    tokens: set[str] = set()
+    tokens.update(_tokens_from_label(project_root.resolve().name))
+    for entity in entities:
+        tokens.update(entity.id_tokens)
+    return tokens
+
+
 def _why_no_specific_candidate(row: BenchmarkGapRow, mode: CandidateMode) -> list[str]:
     reasons: list[str] = []
     if row["gap_level"] == "weak":
@@ -1285,9 +1322,36 @@ def _top_unmapped_terms(by_entity: dict[str, list[str]], *, top: int = 10) -> li
     ]
 
 
+def _term_rows_for_terms(by_entity: dict[str, list[str]], terms: set[str], *, top: int = 10) -> list[TermCountRow]:
+    filtered = {
+        entity_id: [term for term in entity_terms if term in terms]
+        for entity_id, entity_terms in by_entity.items()
+    }
+    return _top_unmapped_terms(filtered, top=top)
+
+
+def _term_categories(
+    by_entity: dict[str, list[str]],
+    *,
+    project_local_tokens: set[str],
+    top: int = 10,
+) -> EvidenceTermCategories:
+    all_terms = {term for terms in by_entity.values() for term in terms}
+    project_terms = all_terms & project_local_tokens
+    workflow_terms = (all_terms & _WORKFLOW_OR_MODELING_TERMS) - project_terms
+    domain_terms = all_terms - project_terms - workflow_terms
+    return {
+        "domain_candidate_terms": _term_rows_for_terms(by_entity, domain_terms, top=top),
+        "project_local_terms": _term_rows_for_terms(by_entity, project_terms, top=top),
+        "workflow_or_modeling_terms": _term_rows_for_terms(by_entity, workflow_terms, top=top),
+        "other_terms": [],
+    }
+
+
 def _gap_evidence_report(
     rows: list[BenchmarkGapRow],
     *,
+    project_root: Path,
     entities: list[ProjectBenchmarkEntity],
     matched: dict[str, list[OpportunityRow]],
     enabled: bool,
@@ -1323,6 +1387,10 @@ def _gap_evidence_report(
         }
 
     top_terms = _top_unmapped_terms(unmapped_by_entity)
+    categories = _term_categories(
+        unmapped_by_entity,
+        project_local_tokens=_project_local_tokens(project_root, entities),
+    )
     return {
         "enabled": True,
         "summary": {
@@ -1330,9 +1398,11 @@ def _gap_evidence_report(
             "entities_with_no_facet_hints": no_hints,
             "entities_with_fallback_only_candidates": fallback_only,
             "top_unmapped_project_terms": top_terms,
+            "top_domain_candidate_terms": categories["domain_candidate_terms"],
         },
         "entities": evidence_entities,
         "lexicon_candidates": top_terms,
+        "term_categories": categories,
     }
 
 
@@ -2576,6 +2646,7 @@ def gaps_report(
         "calibration": calibration,
         "evidence_report": _gap_evidence_report(
             rows,
+            project_root=project_root,
             entities=analysis.entities,
             matched=matched,
             enabled=evidence_report,
