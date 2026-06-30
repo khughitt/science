@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `13`
+- Pending thread count: `18`
 
 ## c4c-rsid-variant-label
 
@@ -143,6 +143,89 @@
     - `docs/plans/2026-06-06-migration-robustness-plan.md`
 - remaining_gaps:
   - No durable migration guide/checkpoint was found that records the current dry-run report contract, structural-vs-prose blocking model, and skip+warn manifest behavior outside these plans and tests.
+
+## substrate-3b-entities-retirement-apply
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md`
+  - `docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until aggregate retirement workflow, v3 gate, crash recovery, and Phase 4 expanded scope are checkpointed
+    - `docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-design.md`
+    - `docs/plans/2026-06-08-substrate-3b-entities-retirement-apply-implementation-plan.md`
+- remaining_gaps:
+  - Durable docs do not yet document the triage-aggregate retirement workflow, flags, v3 gate, crash-recovery marker, or current Phase 4 expanded scope.
+  - The design's terms.yaml-untouched firewall is stale after later Phase 4a work.
+
+## substrate-3c-decision-log-promotion
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md`
+  - `docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until decision owner promotion and generated decision-view behavior are documented
+    - `docs/plans/2026-06-08-substrate-3c-decision-log-promotion-design.md`
+    - `docs/plans/2026-06-08-substrate-3c-decision-log-promotion-implementation-plan.md`
+- remaining_gaps:
+  - No durable user or migration doc explains decision owner shape, --promote-decisions, generate-decisions, generated-view semantics, or the opaque-body parser contract.
+  - The original constraint that decision stays out of the graph core registry is superseded by later kind-descriptor work; current core profile registers decision directly.
+
+## substrate-4a-terms-coined-promotion
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md`
+  - `docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until terms.yaml promotion and aggregate retirement phase rationale are checkpointed
+    - `docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-design.md`
+    - `docs/plans/2026-06-08-substrate-4a-terms-coined-promotion-implementation-plan.md`
+- remaining_gaps:
+  - No durable migration checkpoint records 4a completion and terms.yaml retirement behavior.
+  - docs/user-guide/entities.md documents terms.yaml as a lightweight semantic surface but not the promotion executor, --promote-coined retirement path, or historical phase rationale.
+  - Live downstream/MM30 migration evidence was not verified in this repo review.
+
+## substrate-4b-bibliography-external-reference
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md`
+  - `docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until bibliography external-reference authority and retirement semantics are documented
+    - `docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-design.md`
+    - `docs/plans/2026-06-08-substrate-4b-bibliography-external-reference-implementation-plan.md`
+- remaining_gaps:
+  - No durable migration checkpoint records the bibliography external-reference authority and retirement semantics as completed.
+  - docs/user-guide/entities.md mentions bib/curie-ref adapters and cite/paper references but does not fully document that bib rows are external-reference nodes rather than owners, or how --retire-external-refs retires aggregate stubs.
+  - Bib-vs-commons precedence is plausible from identity_table-before-commons loading, but no dedicated precedence test was identified.
+
+## substrate-4c-ambiguous-adjudication
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md`
+  - `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until CURIE external refs, triage buckets, migration semantics, and v3 aggregate-retirement gate are documented
+    - `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md`
+    - `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-implementation-plan.md`
+- remaining_gaps:
+  - No code gap found for the 4c scope.
+  - Durable docs do not yet capture external_refs.yaml schema, CURIE migration semantics, aggregate triage bucket meanings, method/topic slug promotion consequences, question-deferred handling, or the layout_version >= 3 aggregate-retirement gate.
+  - The implementation plan is stale as operational guidance because later adapter-policy work moved AggregateRowMeta and deferral behavior behind adapter hooks.
 
 ## substrate-dataset-reconciliation-2c
 

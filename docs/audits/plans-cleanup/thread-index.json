@@ -1,5 +1,5 @@
 {
-  "file_count": 180,
+  "file_count": 181,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
@@ -1665,21 +1665,27 @@
     {
       "earliest_file_date": "2026-06-30",
       "files": [
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md"
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md",
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md"
       ],
       "latest_file_date": "2026-06-30",
       "normalized_slug": "proposition-cross-paper-evidence-phase4d",
       "raw_slugs": {
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "proposition-cross-paper-evidence-phase4d-design"
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "proposition-cross-paper-evidence-phase4d-design",
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md": "proposition-cross-paper-evidence-phase4d-plan"
       },
       "related_threads": [],
       "role_files": {
         "design": [
           "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md"
+        ],
+        "plan": [
+          "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md"
         ]
       },
       "stripped_roles": {
-        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "design"
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-design.md": "design",
+        "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md": "plan"
       },
       "thread_id": "proposition-cross-paper-evidence-phase4d"
     },
