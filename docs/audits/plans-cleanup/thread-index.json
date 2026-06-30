@@ -1,10 +1,10 @@
 {
-  "file_count": 141,
+  "file_count": 139,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 84,
+  "thread_count": 83,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -755,33 +755,6 @@
         "docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md": "plan"
       },
       "thread_id": "dataset-sub-cohort-lineage"
-    },
-    {
-      "earliest_file_date": "2026-06-24",
-      "files": [
-        "docs/plans/2026-06-24-dataset-verify-access-design.md",
-        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-24",
-      "normalized_slug": "dataset-verify-access",
-      "raw_slugs": {
-        "docs/plans/2026-06-24-dataset-verify-access-design.md": "dataset-verify-access-design",
-        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md": "dataset-verify-access-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-24-dataset-verify-access-design.md"
-        ],
-        "implementation-plan": [
-          "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-24-dataset-verify-access-design.md": "design",
-        "docs/plans/2026-06-24-dataset-verify-access-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "dataset-verify-access"
     },
     {
       "earliest_file_date": "2026-06-16",

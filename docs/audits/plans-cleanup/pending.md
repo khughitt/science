@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `57`
+- Pending thread count: `58`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -207,6 +207,23 @@
 - remaining_gaps:
   - Durable docs do not describe DatasetEntity.qa_report, report-hash audit semantics, qaFailedDataset stamping, or qa_dataset_capped belief behavior.
   - No user-facing doc explains that the seam consumes persisted science datasets qa reports and does not rerun QA during graph build.
+
+## dataset-reach-authoring-surfaces
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md`
+  - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset-prioritization reach surfaces are checkpointed and later plan citations are repointed
+    - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md`
+    - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md`
+- remaining_gaps:
+  - The implementation and tests are complete, but the full reach contract and rationale are still split across active plans, command docs, and code comments rather than one stable non-plan dataset-prioritization reference.
+  - commands/catalog-datasets.md still cites docs/plans/2026-06-21-catalog-datasets-design.md as its design anchor, and the catalog-datasets cleanup record already calls for a dataset-prioritization migration checkpoint.
+  - docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md still cites plan:2026-06-24-dataset-reach-authoring-surfaces-design, so deleting this thread without a checkpoint or citation repoint would remove referenced context.
 
 ## dataset-sub-cohort-lineage
 
