@@ -254,18 +254,6 @@ def build_cross_paper_evidence_report(
     return {"summary": summary, "faults": fault_rows, "propositions": proposition_reports}
 
 
-def _statement_stance(ann) -> str:
-    for body in ann.bodies:
-        if isinstance(body, TextualBody) and body.format == "application/json":
-            try:
-                data = json.loads(body.value)
-            except json.JSONDecodeError:
-                return ""
-            if isinstance(data, dict):
-                return str(data.get("stance", ""))
-    return ""
-
-
 def _statement_context(ann) -> dict[str, str | None]:
     for body in ann.bodies:
         if isinstance(body, TextualBody) and body.format == "application/json":
@@ -276,6 +264,7 @@ def _statement_context(ann) -> dict[str, str | None]:
             if not isinstance(data, dict):
                 return {}
             return {
+                "stance": str(data.get("stance", "")),
                 "section": str(data.get("section", "")),
                 "subject": data.get("subject") if isinstance(data.get("subject"), str) else None,
                 "object": data.get("object") if isinstance(data.get("object"), str) else None,
@@ -349,7 +338,8 @@ def scan_literature_assertions(
                 )
                 continue
 
-            stance = _statement_stance(ann)
+            context = _statement_context(ann)
+            stance = str(context.get("stance") or "")
             if stance == "open":
                 continue
             if stance not in DERIVED_STANCES:
@@ -380,7 +370,6 @@ def scan_literature_assertions(
                 )
                 continue
 
-            context = _statement_context(ann)
             assertions.append(
                 LiteratureAssertion(
                     proposition_ref=ann.promoted_to,
