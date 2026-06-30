@@ -21,6 +21,8 @@ from science_tool.project_package.verify import (
     load_bundle,
     preflight_against,
     preflight_extract,
+    verdict_json,
+    verify_project,
 )
 import science_tool.project_package.verify as verify
 
@@ -545,3 +547,148 @@ def test_extract_mid_write_error_leaves_existing_dest_untouched(tmp_path: Path, 
     assert dest.exists() and dest.is_dir()
     assert list(dest.iterdir()) == []
     assert list(tmp_path.glob(".verify-extract-*")) == []
+
+
+def test_verify_project_self_check_only_is_clean(tmp_path: Path):
+    _, bundle = _make_bundle(tmp_path)
+
+    result = verify_project(bundle)
+
+    assert result.exit_code == 0
+    assert result.status == "clean"
+    assert result.bundle_schema_version == "science-project-serialized.v1"
+    assert result.project_id == "demo"
+    assert result.file_count == 2
+    assert result.against is None
+    assert result.warnings == []
+    assert result.extracted_to is None
+
+
+def test_verify_project_round_trip_against_clean(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+
+    result = verify_project(bundle, against=target)
+
+    assert result.exit_code == 0
+    assert result.status == "clean"
+    assert result.against == _against_result(bundle, target)
+
+
+def test_verify_project_missing_payload_is_exit_3(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "data" / "processed" / "x.parquet").unlink()
+
+    result = verify_project(bundle, against=target)
+
+    assert result.exit_code == 3
+    assert result.status == "missing"
+
+
+def test_verify_project_differ_dominates_missing(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    (target / "science.yaml").write_text("id: demo\nname: Changed\n", encoding="utf-8")
+    (target / "data" / "processed" / "x.parquet").unlink()
+
+    result = verify_project(bundle, against=target)
+
+    assert result.exit_code == 1
+    assert result.status == "differ"
+
+
+def test_verify_project_preflight_runs_before_compare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    extract = tmp_path / "out"
+    extract.mkdir()
+    (extract / "preexisting").write_text("x", encoding="utf-8")
+
+    def fail_if_compared(*args: object, **kwargs: object) -> AgainstResult:
+        raise AssertionError("compare should not run after extract preflight failure")
+
+    monkeypatch.setattr(verify, "compare_against", fail_if_compared)
+
+    with pytest.raises(VerifyError, match="not empty"):
+        verify_project(bundle, against=target, extract=extract)
+
+
+def test_verify_project_extract_and_against_combine(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    extract = tmp_path / "out"
+
+    result = verify_project(bundle, against=target, extract=extract)
+
+    assert result.exit_code == 0
+    assert result.status == "clean"
+    assert result.against == _against_result(bundle, target)
+    assert result.extracted_to == extract
+    assert (extract / "demo" / "science.yaml").is_file()
+
+
+def test_force_built_bundle_warns(tmp_path: Path):
+    project = tmp_path / "forced"
+    project.mkdir()
+    (project / "science.yaml").write_text("id: demo\nname: Demo\n", encoding="utf-8")
+    (project / "data" / "processed" / "exp").mkdir(parents=True)
+    (project / "data" / "processed" / "exp" / "RESULTS.md").write_text("# results\n", encoding="utf-8")
+    _init_repo(project)
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "forced"], cwd=project, check=True)
+    bundle = tmp_path / "forced.tar.gz"
+    serialize_project(project, bundle, force=True)
+
+    result = verify_project(bundle)
+
+    assert result.warnings
+    assert "--force" in result.warnings[0]
+
+
+def test_verdict_json_shape(tmp_path: Path):
+    proj, bundle = _make_bundle(tmp_path)
+    target = tmp_path / "target"
+    _copy_checkout(proj, target)
+    result = verify_project(bundle, against=target)
+
+    payload = verdict_json(result)
+
+    assert payload == {
+        "version": 1,
+        "bundle_schema_version": "science-project-serialized.v1",
+        "exit_code": 0,
+        "status": "clean",
+        "self_check": {
+            "passed": True,
+            "project_id": "demo",
+            "file_count": 2,
+            "data_version": result.data_version,
+        },
+        "against": {
+            "root": str(target),
+            "commit": {
+                "bundle": result.against.commit.bundle,
+                "head": result.against.commit.head,
+                "match": True,
+            },
+            "source": {
+                "total": 2,
+                "match": 2,
+                "differ": [],
+                "absent": [],
+            },
+            "payloads": {
+                "ok": 1,
+                "differ": [],
+                "missing": [],
+                "extra": [],
+            },
+        },
+        "warnings": [],
+    }

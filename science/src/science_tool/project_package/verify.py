@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 import tempfile
 import zlib
+from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,6 +73,19 @@ class AgainstResult:
     payloads: PayloadCompare
 
 
+@dataclass(frozen=True)
+class VerifyResult:
+    exit_code: int
+    status: str
+    bundle_schema_version: str
+    project_id: str
+    file_count: int
+    data_version: str
+    against: AgainstResult | None
+    warnings: list[str]
+    extracted_to: Path | None
+
+
 def load_bundle(bundle_path: Path) -> LoadedBundle:
     """Load and integrity-check a gzip+tar project bundle."""
     if not bundle_path.exists():
@@ -115,6 +129,61 @@ def load_bundle(bundle_path: Path) -> LoadedBundle:
     )
 
 
+def verify_project(
+    bundle_path: Path,
+    *,
+    against: Path | None = None,
+    extract: Path | None = None,
+) -> VerifyResult:
+    """Run bundle self-check, optional checkout comparison, and optional extraction."""
+    bundle = load_bundle(bundle_path)
+    warnings = []
+    if bundle.manifest.boundary_audit.forced:
+        warnings.append("bundle was built with --force; review force-built boundary audit before trusting it")
+
+    if against is not None:
+        head = preflight_against(against)
+        if extract is not None:
+            preflight_extract(extract)
+        against_result = compare_against(bundle, against, head)
+    else:
+        if extract is not None:
+            preflight_extract(extract)
+        against_result = None
+
+    extracted_to = extract_bundle(bundle, extract) if extract is not None else None
+    exit_code, status = _verdict(against_result)
+    return VerifyResult(
+        exit_code=exit_code,
+        status=status,
+        bundle_schema_version=bundle.manifest.schema_version,
+        project_id=bundle.project_id,
+        file_count=len(bundle.manifest.files),
+        data_version=bundle.manifest.data_version,
+        against=against_result,
+        warnings=warnings,
+        extracted_to=extracted_to,
+    )
+
+
+def verdict_json(result: VerifyResult) -> dict[str, object]:
+    """Return the stable machine-readable verification verdict."""
+    return {
+        "version": 1,
+        "bundle_schema_version": result.bundle_schema_version,
+        "exit_code": result.exit_code,
+        "status": result.status,
+        "self_check": {
+            "passed": True,
+            "project_id": result.project_id,
+            "file_count": result.file_count,
+            "data_version": result.data_version,
+        },
+        "against": asdict(result.against) if result.against is not None else None,
+        "warnings": list(result.warnings),
+    }
+
+
 def preflight_against(root: Path) -> str:
     """Validate a target checkout and return its HEAD commit."""
     root = root.expanduser()
@@ -144,6 +213,16 @@ def preflight_against(root: Path) -> str:
         ).stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         raise VerifyError(f"--against root has no HEAD commit: {root}") from exc
+
+
+def _verdict(against: AgainstResult | None) -> tuple[int, str]:
+    if against is None:
+        return 0, "clean"
+    if not against.commit.match or against.source.differ or against.source.absent or against.payloads.differ:
+        return 1, "differ"
+    if against.payloads.missing:
+        return 3, "missing"
+    return 0, "clean"
 
 
 def preflight_extract(dest: Path) -> None:
