@@ -647,8 +647,7 @@ def test_force_built_bundle_warns(tmp_path: Path):
 
     result = verify_project(bundle)
 
-    assert result.warnings
-    assert "--force" in result.warnings[0]
+    assert result.warnings == ["bundle built with --force; payload boundary was not clean at serialize time"]
 
 
 def test_verdict_json_shape(tmp_path: Path):
@@ -666,8 +665,7 @@ def test_verdict_json_shape(tmp_path: Path):
         "status": "clean",
         "self_check": {
             "passed": True,
-            "project_id": "demo",
-            "file_count": 2,
+            "files": 2,
             "data_version": result.data_version,
         },
         "against": {
@@ -692,3 +690,5 @@ def test_verdict_json_shape(tmp_path: Path):
         },
         "warnings": [],
     }
+    assert "file_count" not in payload["self_check"]
+    assert set(payload["against"]) == {"root", "commit", "source", "payloads"}

@@ -9,7 +9,6 @@ import subprocess
 import tarfile
 import tempfile
 import zlib
-from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,7 +138,7 @@ def verify_project(
     bundle = load_bundle(bundle_path)
     warnings = []
     if bundle.manifest.boundary_audit.forced:
-        warnings.append("bundle was built with --force; review force-built boundary audit before trusting it")
+        warnings.append("bundle built with --force; payload boundary was not clean at serialize time")
 
     if against is not None:
         head = preflight_against(against)
@@ -175,12 +174,36 @@ def verdict_json(result: VerifyResult) -> dict[str, object]:
         "status": result.status,
         "self_check": {
             "passed": True,
-            "project_id": result.project_id,
-            "file_count": result.file_count,
+            "files": result.file_count,
             "data_version": result.data_version,
         },
-        "against": asdict(result.against) if result.against is not None else None,
+        "against": _against_json(result.against),
         "warnings": list(result.warnings),
+    }
+
+
+def _against_json(against: AgainstResult | None) -> dict[str, object] | None:
+    if against is None:
+        return None
+    return {
+        "root": against.root,
+        "commit": {
+            "bundle": against.commit.bundle,
+            "head": against.commit.head,
+            "match": against.commit.match,
+        },
+        "source": {
+            "total": against.source.total,
+            "match": against.source.match,
+            "differ": list(against.source.differ),
+            "absent": list(against.source.absent),
+        },
+        "payloads": {
+            "ok": against.payloads.ok,
+            "differ": list(against.payloads.differ),
+            "missing": list(against.payloads.missing),
+            "extra": list(against.payloads.extra),
+        },
     }
 
 
