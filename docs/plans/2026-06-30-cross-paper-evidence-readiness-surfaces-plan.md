@@ -114,18 +114,21 @@ git commit -m "fix(4d): scope cross-paper sidecar scan to entity roots"
 
 **Problem:** On `meta/`, table output is empty. That is technically correct but not
 actionable; users cannot distinguish "no propositions", "no sidecars", and "no derived
-units".
+units". The current project-wide report also differs from the single-proposition report:
+project-wide proposition rows only contain `proposition`, `supporting_papers`, and
+`disputing_papers`; they do not contain `units` or `belief`.
 
-**Desired behavior:** JSON reports include summary counts. Table output prints a short
-empty-state line when there is nothing to display.
+**Desired behavior:** First define a stable project-wide report contract that carries the
+data needed by CLI and health surfaces, then add summary counts. Table output prints a
+short empty-state line when there is nothing to display.
 
-- [ ] **Step 1: Write failing CLI tests**
+- [ ] **Step 1: Write failing CLI tests for the project-wide contract**
 
 Extend `science/tests/test_cross_paper_evidence_cli.py`:
 
 ```python
 def test_cross_paper_evidence_json_includes_summary_for_empty_project(tmp_path: Path):
-    _write_manifest(tmp_path)
+    _manifest(tmp_path)
 
     result = CliRunner().invoke(
         annotate_group,
@@ -139,12 +142,13 @@ def test_cross_paper_evidence_json_includes_summary_for_empty_project(tmp_path: 
         "propositions_with_units": 0,
         "units": 0,
         "faults": 0,
+        "faults_by_reason": {},
         "contested": 0,
     }
 
 
 def test_cross_paper_evidence_table_reports_empty_project(tmp_path: Path):
-    _write_manifest(tmp_path)
+    _manifest(tmp_path)
 
     result = CliRunner().invoke(
         annotate_group,
@@ -153,30 +157,130 @@ def test_cross_paper_evidence_table_reports_empty_project(tmp_path: Path):
 
     assert result.exit_code == 0, result.output
     assert "No proposition entities found." in result.output
+
+
+def test_cross_paper_evidence_project_wide_rows_include_units_and_belief(tmp_path: Path):
+    _scaffold(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    row = {p["proposition"]: p for p in payload["propositions"]}["proposition:claim"]
+    assert row["unit_count"] == 2
+    assert row["supporting_papers"] == 1
+    assert row["disputing_papers"] == 1
+    assert row["belief"]["contested"] is True
+    assert payload["summary"]["propositions"] == 1
+    assert payload["summary"]["propositions_with_units"] == 1
+    assert payload["summary"]["units"] == 2
+    assert payload["summary"]["contested"] == 1
 ```
 
-Use the existing manifest helper in that test file, or add a minimal helper if the file
-does not already expose one.
+Also update the existing project-wide JSON tests to tolerate the richer rows. Keep the
+existing `supporting_papers` / `disputing_papers` assertions; they remain part of the
+contract.
 
-- [ ] **Step 2: Add summary fields**
+- [ ] **Step 2: Write the same-paper support-stances unit-count regression**
 
-In `build_cross_paper_evidence_report`, compute:
+The existing project-wide report counts papers per edge, so one paper with both
+`asserted` and `hypothesized` contributes one supporting paper but **two** collapsed
+literature units. Pin that distinction:
 
 ```python
+def test_cross_paper_evidence_summary_units_count_collapsed_assertions_not_edge_counts(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition_entity(
+        tmp_path,
+        "claim",
+        [
+            "paper:A2020",
+            _ann_ref("A2020"),
+            "annotation:entities/papers/A2020.source#A2020-2",
+        ],
+    )
+    _paper_with_promoted(tmp_path, "A2020", stance="asserted")
+    md = tmp_path / "entities" / "papers" / "A2020.source.md"
+    anno_io.write_sidecar(
+        anno_io.sidecar_for_markdown(md),
+        anno_io.Sidecar(
+            annotations=(
+                _promoted_ann("A2020-1", stance="asserted"),
+                _promoted_ann("A2020-2", stance="hypothesized"),
+            )
+        ),
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    row = {p["proposition"]: p for p in payload["propositions"]}["proposition:claim"]
+    assert row["supporting_papers"] == 1
+    assert row["unit_count"] == 2
+    assert payload["summary"]["units"] == 2
+```
+
+Use the existing `_manifest` helper in `science/tests/test_cross_paper_evidence_cli.py`.
+
+- [ ] **Step 3: Add a project-wide report contract**
+
+In `build_cross_paper_evidence_report`, keep the single-`proposition_ref` branch as-is.
+For the project-wide branch, build rows for **every proposition ref in `refs`**, not only
+propositions that already have literature units. Each row should have:
+
+```python
+{
+    "proposition": ref,
+    "unit_count": len(ref_units),
+    "supporting_papers": len(supporting_papers),
+    "disputing_papers": len(disputing_papers),
+    "belief": _belief_for_proposition(collapsed, ref),
+}
+```
+
+Where:
+
+- `ref_units = [a for a in collapsed if a.proposition_ref == ref]`
+- `supporting_papers` is the set of `paper_ref` values from `ref_units` whose emitted
+  edge is `"supports"`.
+- `disputing_papers` is the set of `paper_ref` values from `ref_units` whose emitted
+  edge is `"disputes"`.
+
+The project-wide `contested` count must come from
+`row["belief"]["contested"]`, not from a hand-rolled support/dispute rule. That reuses
+the reducer and keeps health semantics aligned with belief.
+
+- [ ] **Step 4: Add summary fields**
+
+In `build_cross_paper_evidence_report`, compute summary from the real data shapes:
+
+```python
+from collections import Counter
+
+faults_by_reason = Counter(row["reason"] for row in fault_rows)
 summary = {
     "propositions": len(proposition_reports),
-    "propositions_with_units": sum(1 for p in proposition_reports if p["units"]),
-    "units": sum(len(p["units"]) for p in proposition_reports),
+    "propositions_with_units": sum(1 for row in proposition_reports if row["unit_count"] > 0),
+    "units": len(collapsed),
     "faults": len(faults),
-    "contested": sum(1 for p in proposition_reports if p["belief"]["contested"]),
+    "faults_by_reason": dict(sorted(faults_by_reason.items())),
+    "contested": sum(1 for row in proposition_reports if row["belief"]["contested"]),
 }
 ```
 
 Return `{"summary": summary, "faults": ..., "propositions": ...}`.
 
-- [ ] **Step 3: Render table empty states**
+- [ ] **Step 5: Render table empty states**
 
-In `cross_paper_evidence_cmd`, table mode should print exactly one of:
+In `cross_paper_evidence_cmd`, project-wide table mode should print an empty-state line
+before the existing fault block when there are no rows or units:
 
 ```text
 No proposition entities found.
@@ -184,9 +288,10 @@ No derived cross-paper literature evidence found.
 ```
 
 Use the first when `summary["propositions"] == 0`; use the second when propositions
-exist but `summary["units"] == 0` and there are no faults.
+exist but `summary["units"] == 0`. Faults may coexist with either empty state; keep the
+existing `FAULTS (...)` block after the empty-state line so corruption remains visible.
 
-- [ ] **Step 4: Verify**
+- [ ] **Step 6: Verify**
 
 Run:
 
@@ -195,7 +300,7 @@ cd science
 uv run --frozen pytest tests/test_cross_paper_evidence_cli.py -q
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add science/src/science_tool/annotation/cross_paper_evidence.py science/src/science_tool/annotation/cli.py science/tests/test_cross_paper_evidence_cli.py
@@ -280,7 +385,9 @@ Add tests to `science/tests/test_health.py`. The tests must assert:
 - [ ] **Step 3: Implement through `build_cross_paper_evidence_report`**
 
 The health/validation layer should call the same report builder used by the CLI. Do not
-duplicate scan/collapse/belief logic.
+duplicate scan/collapse/belief logic. Use `report["summary"]["faults_by_reason"]` for
+reason-level fault counts and `report["summary"]["contested"]` for contested proposition
+counts.
 
 - [ ] **Step 4: Verify**
 
