@@ -54,7 +54,7 @@ def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     return result
 
 
-def _proposition_source_refs_from_frontmatter(propositions: list[tuple[Path, dict]]) -> dict[str, set[str]]:
+def _proposition_source_refs_from_frontmatter(propositions: list[tuple[Path, dict]]) -> dict[str, frozenset[str]]:
     proposition_refs: dict[str, set[str]] = {}
     for _path, fm in propositions:
         prop_id = fm.get("id")
@@ -64,7 +64,7 @@ def _proposition_source_refs_from_frontmatter(propositions: list[tuple[Path, dic
         if not isinstance(source_refs, list):
             source_refs = [source_refs]
         proposition_refs[str(prop_id)] = {str(ref) for ref in source_refs}
-    return proposition_refs
+    return {prop_id: frozenset(source_refs) for prop_id, source_refs in proposition_refs.items()}
 
 
 def _derived_literature_coverage(ctx: ValidateContext, propositions: list[tuple[Path, dict]]) -> set[tuple[str, str]]:
