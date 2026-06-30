@@ -1,10 +1,10 @@
 {
-  "file_count": 152,
+  "file_count": 145,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 90,
+  "thread_count": 86,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -530,33 +530,6 @@
         "docs/plans/2026-06-19-contextual-structural-roles-design.md": "design"
       },
       "thread_id": "contextual-structural-roles"
-    },
-    {
-      "earliest_file_date": "2026-06-17",
-      "files": [
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md",
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md"
-      ],
-      "latest_file_date": "2026-06-17",
-      "normalized_slug": "curate-canonical-entity-inventory",
-      "raw_slugs": {
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md": "curate-canonical-entity-inventory-design",
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md": "curate-canonical-entity-inventory-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md": "design",
-        "docs/plans/2026-06-17-curate-canonical-entity-inventory-plan.md": "plan"
-      },
-      "thread_id": "curate-canonical-entity-inventory"
     },
     {
       "earliest_file_date": "2026-06-28",
@@ -1657,54 +1630,6 @@
       "thread_id": "prose-epistemics-pilot-improvements"
     },
     {
-      "earliest_file_date": "2026-06-17",
-      "files": [
-        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md"
-      ],
-      "latest_file_date": "2026-06-17",
-      "normalized_slug": "prose-epistemics-umbrella",
-      "raw_slugs": {
-        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md": "prose-epistemics-umbrella-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-17-prose-epistemics-umbrella-design.md": "design"
-      },
-      "thread_id": "prose-epistemics-umbrella"
-    },
-    {
-      "earliest_file_date": "2026-06-16",
-      "files": [
-        "docs/plans/2026-06-16-prose-grounding-spike-design.md",
-        "docs/plans/2026-06-17-prose-grounding-spike-findings.md"
-      ],
-      "latest_file_date": "2026-06-17",
-      "normalized_slug": "prose-grounding-spike",
-      "raw_slugs": {
-        "docs/plans/2026-06-16-prose-grounding-spike-design.md": "prose-grounding-spike-design",
-        "docs/plans/2026-06-17-prose-grounding-spike-findings.md": "prose-grounding-spike-findings"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-16-prose-grounding-spike-design.md"
-        ],
-        "findings": [
-          "docs/plans/2026-06-17-prose-grounding-spike-findings.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-16-prose-grounding-spike-design.md": "design",
-        "docs/plans/2026-06-17-prose-grounding-spike-findings.md": "findings"
-      },
-      "thread_id": "prose-grounding-spike"
-    },
-    {
       "earliest_file_date": "2026-06-13",
       "files": [
         "docs/plans/2026-06-13-qa-check-library-design.md",
@@ -1892,33 +1817,6 @@
         "docs/plans/2026-06-15-source-compiler-snapshot-freshness-plan.md": "plan"
       },
       "thread_id": "source-compiler-snapshot-freshness"
-    },
-    {
-      "earliest_file_date": "2026-06-16",
-      "files": [
-        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md",
-        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md"
-      ],
-      "latest_file_date": "2026-06-16",
-      "normalized_slug": "statement-promotion-phase4b",
-      "raw_slugs": {
-        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md": "statement-promotion-phase4b-design",
-        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "statement-promotion-phase4b-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-16-statement-promotion-phase4b-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-16-statement-promotion-phase4b-design.md": "design",
-        "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "plan"
-      },
-      "thread_id": "statement-promotion-phase4b"
     },
     {
       "earliest_file_date": "2026-06-08",

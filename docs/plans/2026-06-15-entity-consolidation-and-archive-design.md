@@ -494,8 +494,9 @@ shipped phases P1–P5 realize the four design phases.
    entity stays visible for curation). `curate/inventory.py` is registered in the
    entity-scan guard's `ENTITY_SCANNERS`. This was the last consumer reading the
    retired layout. Tasks/knowledge-source/agents_md/emergent-threads surfaces and
-   the `science curate inventory` JSON contract are unchanged. See
-   `docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md`.
+   the `science curate inventory` JSON contract are unchanged. The shipped
+   contract is covered by `science/tests/test_curate_inventory.py` and
+   `science/tests/test_entity_scan_guard.py`.
 
 4. **G3 — `--include-archived` is on `entities list` only (accepted scope vs §4
    Tier 1).** Archived-content recall is via `science search --archived` and

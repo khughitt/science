@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `41`
+- Pending thread count: `43`
 
 ## authored-confidence
 
@@ -406,6 +406,19 @@
   - Large parts of the overview remain target-state rather than implementation reality.
   - Separate shipped invariants from aspirational subsystem backlog before cleanup.
 
+## prose-epistemics-p1-source-adapter
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until TextSourceAdapter contract and P1/P2 boundary are documented
+    - `docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md`
+- remaining_gaps:
+  - No durable non-plan doc found that explains the TextSourceAdapter contract, P1/P2 boundary, and why regenerable is declared but not implemented in P1.
+
 ## qa-check-library
 
 - status: `implemented_needs_durable_docs`
@@ -632,3 +645,20 @@
     - `docs/plans/2026-06-13-typed-dataset-schema-plan.md`
 - remaining_gaps:
   - Add durable documentation for the profile vocabulary, qa: extension boundary, emitted schema, and datasets validate behavior.
+
+## typed-evidence-vocabularies
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-16-typed-evidence-vocabularies-design.md`
+  - `docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until typed evidence vocabulary and rank reconciliation contract is documented
+    - `docs/plans/2026-06-16-typed-evidence-vocabularies-design.md`
+    - `docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md`
+- remaining_gaps:
+  - The plan's intended durable taxonomy target docs/proposition-and-evidence-model.md does not exist in this worktree.
+  - docs/user-guide/evidence-lines.md captures authored evidence types and negative_result, but not the developer-facing SSOT contract: model enum ownership, suffix canonicalization policy, graph-reader degrade-to-rank-0 behavior, and rank reconciliation invariants.
+  - Implementation differs slightly from the design wording by keying rank tables on canonical string values from EvidenceType rather than enum members directly; tests/reconciliation preserve behavior, but a checkpoint should state this accepted implementation shape.
