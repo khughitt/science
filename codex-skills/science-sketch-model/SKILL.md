@@ -156,7 +156,9 @@ duplicate inquiry identity. If a legacy prose inquiry exists at
 `entities/inquiries/<slug>.md`, treat it as context and migrate the graph-backed
 parts into `entities/patches/<slug>.md` when a queryable inquiry graph is needed.
 
-- Read the existing file and preserve its slug, focal target, and status.
+- Read the existing file and preserve its existing slug and frontmatter,
+  including focal target and status.
+- Register the existing inquiry before adding graph nodes or edges.
 - If migrating from a legacy prose inquiry, do not delete the prose note unless
   the user explicitly asks; create the graph-backed source as the durable
   compiled-inquiry surface.
