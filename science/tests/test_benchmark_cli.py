@@ -633,6 +633,13 @@ def test_benchmark_hint_candidates_cli_output_requires_write_flag(tmp_path: Path
     assert "--output requires --write-review-file" in result.output
 
 
+def test_benchmark_hint_candidates_cli_write_review_file_not_implemented(tmp_path: Path) -> None:
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file")
+
+    assert result.exit_code != 0
+    assert "--write-review-file is not implemented yet" in result.output
+
+
 def test_benchmark_hint_candidates_cli_table_empty_state(tmp_path: Path) -> None:
     result = _invoke_hint_candidates(tmp_path)
 

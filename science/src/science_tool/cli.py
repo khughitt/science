@@ -6750,6 +6750,8 @@ def benchmark_hint_candidates(
 
     if output_path is not None and not write_review_file:
         raise click.ClickException("--output requires --write-review-file")
+    if write_review_file:
+        raise click.ClickException("--write-review-file is not implemented yet")
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
