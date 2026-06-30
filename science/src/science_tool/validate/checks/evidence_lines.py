@@ -54,6 +54,28 @@ def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     return result
 
 
+def _derived_literature_coverage(ctx: ValidateContext) -> set[tuple[str, str]]:
+    """Return proposition source_refs covered by clean Phase 4d literature assertions."""
+    entities_root = ctx.project_root / "entities"
+    if not entities_root.is_dir() or not any(entities_root.rglob("*.anno.trig")):
+        return set()
+
+    from science_tool.annotation.cross_paper_evidence import (
+        proposition_source_refs_map,
+        scan_literature_assertions,
+    )
+
+    sources = ctx.project_sources(strict_core_schema=False, strict_identity=False)
+    proposition_refs = proposition_source_refs_map(sources.entities)
+    assertions, _faults = scan_literature_assertions(ctx.project_root, proposition_refs)
+
+    covered: set[tuple[str, str]] = set()
+    for assertion in assertions:
+        covered.add((assertion.proposition_ref, assertion.paper_ref))
+        covered.add((assertion.proposition_ref, assertion.annotation_ref))
+    return covered
+
+
 # ---------------------------------------------------------------------------
 # Check 1: evidence.unstanced (WARN)
 #   (a) Missing stance or empty/missing target on an evidence-line file.
@@ -93,6 +115,7 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
         source = fm.get("source", "")
         if target and source:
             covered.add((str(target), str(source)))
+    covered.update(_derived_literature_coverage(ctx))
 
     prop_dir = ctx.project_root / resolve_path_policy("proposition").root
     prop_paths: list[Path] = sorted(prop_dir.glob("*.md")) if prop_dir.is_dir() else []
