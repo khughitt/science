@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
+import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main as science_cli
@@ -58,12 +60,15 @@ def _invoke_gaps(tmp_path: Path, *args: str):
 
 
 def _invoke_hint_candidates(tmp_path: Path, *args: str):
-    return CliRunner().invoke(
+    result = CliRunner().invoke(
         science_cli,
         ["benchmark", "hint-candidates", *args],
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
     )
+    if result.exit_code == 0 and "--format" in args and args[args.index("--format") + 1] == "json":
+        result.output_bytes = result.stdout_bytes
+    return result
 
 
 def _invoke_tests(tmp_path: Path, *args: str):
@@ -633,11 +638,82 @@ def test_benchmark_hint_candidates_cli_output_requires_write_flag(tmp_path: Path
     assert "--output requires --write-review-file" in result.output
 
 
-def test_benchmark_hint_candidates_cli_write_review_file_not_implemented(tmp_path: Path) -> None:
-    result = _invoke_hint_candidates(tmp_path, "--write-review-file")
+def test_benchmark_hint_candidates_cli_writes_default_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0072-alpha",
+        """
+id: hypothesis:0072-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    assert review_path.is_file()
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    assert written["project"] == tmp_path.name
+    assert written["generated_at"] == "2026-06-30"
+    assert written["source_command"].startswith("science benchmark hint-candidates")
+    assert written["summary"]["term_bucket_cap"] == 10
+    assert written["candidates"][0]["decision"] == "pending"
+    assert written["candidates"][0]["reviewer_notes"] == ""
+    assert written["candidates"][0]["suggested_facets"] == []
+
+
+def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0073-alpha",
+        """
+id: hypothesis:0073-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "docs/audits/benchmark-hint-candidates/custom.yaml",
+    )
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
+    assert review_path.is_file()
+    assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
+
+
+def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    output_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
+    output_path.parent.mkdir(parents=True)
+    output_path.write_text("existing: true\n", encoding="utf-8")
+
+    result = _invoke_hint_candidates(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "docs/audits/benchmark-hint-candidates/custom.yaml",
+    )
 
     assert result.exit_code != 0
-    assert "--write-review-file is not implemented yet" in result.output
+    assert "review file already exists" in result.output
+    assert output_path.read_text(encoding="utf-8") == "existing: true\n"
 
 
 def test_benchmark_hint_candidates_cli_table_empty_state(tmp_path: Path) -> None:

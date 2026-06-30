@@ -6706,6 +6706,90 @@ def _hint_candidate_table_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[st
     return [row for row in rows if row["category"] == "domain-candidate"]
 
 
+def _benchmark_hint_candidates_today() -> date:
+    return date.today()
+
+
+def _display_project_path(path: Path) -> str:
+    resolved = path.resolve()
+    home = Path.home().resolve()
+    try:
+        return "~/" + str(resolved.relative_to(home))
+    except ValueError:
+        return str(resolved)
+
+
+def _default_hint_candidates_review_path(project_root: Path, generated: date) -> Path:
+    return (
+        project_root
+        / "docs"
+        / "audits"
+        / "benchmark-hint-candidates"
+        / f"{generated.isoformat()}-{project_root.name}.yaml"
+    )
+
+
+def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    if output_path is None:
+        return _default_hint_candidates_review_path(project_root, generated)
+    return output_path if output_path.is_absolute() else project_root / output_path
+
+
+def _hint_candidates_source_command(
+    *,
+    include_commons: bool,
+    domain: str | None,
+    min_count: int,
+    include_existing: bool,
+    output_format: str,
+) -> str:
+    # Best-effort context string for review artifacts, not an exact shell history record.
+    parts = ["science", "benchmark", "hint-candidates"]
+    if include_commons:
+        parts.append("--commons")
+    if domain is not None:
+        parts.extend(["--domain", domain])
+    if min_count != 1:
+        parts.extend(["--min-count", str(min_count)])
+    if include_existing:
+        parts.append("--include-existing")
+    if output_format != "table":
+        parts.extend(["--format", output_format])
+    parts.append("--write-review-file")
+    return " ".join(parts)
+
+
+def _write_hint_candidates_review_file(
+    *,
+    payload: Mapping[str, Any],
+    project_root: Path,
+    output_path: Path | None,
+    generated: date,
+    source_command: str,
+) -> Path:
+    path = _resolve_hint_candidates_output_path(project_root, output_path, generated)
+    if path.exists():
+        raise click.ClickException(f"review file already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "project": project_root.name,
+        "project_root": _display_project_path(project_root),
+        "generated_at": generated.isoformat(),
+        "source_command": source_command,
+        "summary": payload["summary"],
+        "candidates": [
+            {
+                **row,
+                "decision": "pending",
+                "reviewer_notes": "",
+            }
+            for row in payload["hint_candidates"]
+        ],
+    }
+    path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path
+
+
 @benchmark_group.command("hint-candidates")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
@@ -6750,10 +6834,9 @@ def benchmark_hint_candidates(
 
     if output_path is not None and not write_review_file:
         raise click.ClickException("--output requires --write-review-file")
-    if write_review_file:
-        raise click.ClickException("--write-review-file is not implemented yet")
 
     root = project_root.resolve() if project_root else _project_root_from_env()
+    generated = _benchmark_hint_candidates_today()
     try:
         payload = benchmark_hint_candidates_report(
             root,
@@ -6762,6 +6845,22 @@ def benchmark_hint_candidates(
             min_count=min_count,
             include_existing=include_existing,
         )
+        if write_review_file:
+            review_path = _write_hint_candidates_review_file(
+                payload=payload,
+                project_root=root,
+                output_path=output_path,
+                generated=generated,
+                source_command=_hint_candidates_source_command(
+                    include_commons=include_commons,
+                    domain=domain,
+                    min_count=min_count,
+                    include_existing=include_existing,
+                    output_format=output_format,
+                ),
+            )
+            payload = {**payload, "review_file": str(review_path)}
+            click.echo(f"wrote benchmark hint candidate review file: {review_path}", err=True)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
