@@ -17,7 +17,7 @@
 - **Git:** `rtk git add ...` / `rtk git commit ...`. **No `Co-Authored-By` trailers.**
 - **`science_model` must NEVER import `science_tool`.** This slice adds code to `science_model` (`reasoning.py`, `entities.py`) that depends on nothing in `science_tool`. The tool→model direction (`belief_weights` importing `reasoning`) is allowed and is how the reconciliation works.
 - **Lint hygiene:** only import what you use (avoid F401). Run ruff on touched files before each commit.
-- **Design reference:** `docs/plans/2026-06-16-typed-evidence-vocabularies-design.md`. Builds on `docs/plans/2026-06-16-authored-confidence-design.md` (Slice B) and `docs/plans/2026-06-16-belief-policy-keystone-design.md` (Slice A).
+- **Design reference:** `docs/plans/2026-06-16-typed-evidence-vocabularies-design.md`. Builds on the implemented belief-policy and authored-assertion contracts documented in `docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
 
 ## File Structure
 

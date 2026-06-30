@@ -44,6 +44,42 @@ Common evidence types:
 understood as a result pattern. The line's `stance`, role, and scope should say
 what the null or negative result does to the target proposition.
 
+## Authored Assertions
+
+`expert_judgment` is the evidence type for authored assertions. In the belief
+engine, an authored assertion is recognized only by normalized `evidence_type:
+expert_judgment`; dataset usage is not inspected for that purpose. By authoring
+convention, empirical lines use `empirical_data_evidence` or `empirical_data`
+and carry `dataset_usage`, while authored assertions are dataset-less structured
+judgments.
+
+Authored assertions enter belief through a confidence gate:
+
+```yaml
+evidence_type: expert_judgment
+confidence: 0.9
+```
+
+`confidence` must be present, numeric, and in `[0, 1]`. The default belief
+policy admits authored assertions when `confidence >= 0.5`. Confidence is a
+gate, not a weight: a passing assertion contributes one support or dispute unit;
+`0.9` does not count more than `0.6`. Missing, out-of-range, or below-threshold
+confidence does not count in belief aggregation and is reported as excluded
+authored confidence.
+
+Authored assertions can corroborate empirical evidence, but authored-only
+support is capped by policy. Under the default policy, support made only of
+authored assertions cannot exceed `fragile`, and the result records
+`authored_capped` when that ceiling lowers the computed magnitude. Authored
+disputes follow the same discipline: they may make a proposition contested, but
+they are not qualifying direct tests and cannot act as decisive refutations.
+
+Validation treats authored assertions differently from empirical scored lines.
+An authored assertion with valid confidence does not need ordinary
+role/strength scoring to be considered belief-admissible; an authored assertion
+with missing or invalid confidence is a warning because it cannot pass the
+belief gate.
+
 ## Independence
 
 Multiple lines from the same cohort, instrument, source, or analysis family are

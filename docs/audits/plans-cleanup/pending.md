@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `44`
+- Pending thread count: `41`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -16,54 +16,6 @@
 - remaining_gaps:
   - Live code/test comments still cite docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md.
   - The plan includes migration-deviation notes useful as a compact historical checkpoint, but current user-facing layout knowledge is already durable.
-
-## authored-confidence
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-authored-confidence-design.md`
-  - `docs/plans/2026-06-16-authored-confidence-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until authored-confidence gate and ceiling semantics are documented
-    - `docs/plans/2026-06-16-authored-confidence-design.md`
-    - `docs/plans/2026-06-16-authored-confidence-plan.md`
-- remaining_gaps:
-  - Durable user docs only list expert_judgment as an evidence type; they do not explain confidence as a gate, authored-only ceiling, authored_capped, or excluded_authored_confidence.
-  - Implementation comments still reference Spec 5/Slice B plan docs as rationale.
-
-## belief-policy-keystone
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-belief-policy-keystone-design.md`
-  - `docs/plans/2026-06-16-belief-policy-keystone-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until belief policy identity/versioning contract is documented
-    - `docs/plans/2026-06-16-belief-policy-keystone-design.md`
-    - `docs/plans/2026-06-16-belief-policy-keystone-plan.md`
-- remaining_gaps:
-  - Durable docs mention belief states and snapshots but not policy identity, versioning, comparability, or how future policy changes affect reproducibility.
-  - Plan rationale remains the clearest explanation of the BeliefPolicy boundary versus belief_scalar CONFIG_VERSION.
-
-## belief-profile
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-23-belief-profile-design.md`
-  - `docs/plans/2026-06-23-belief-profile-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until belief profile CLI contract is documented outside active plans
-    - `docs/plans/2026-06-23-belief-profile-design.md`
-    - `docs/plans/2026-06-23-belief-profile-implementation-plan.md`
-- remaining_gaps:
-  - No durable non-plan documentation was found for the CLI contract, output fields, labels, filters, scalar behavior, or non-goals.
-  - The plan files currently carry useful user-facing contract details, so deleting them without a checkpoint would lose the only discovered narrative documentation.
 
 ## benchmark-grounded-model-assessment
 

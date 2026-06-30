@@ -1,7 +1,11 @@
 # Typed Evidence Vocabularies — Design (patchwork kernel Spec 5)
 
 **Status:** approved (design review 2026-06-16).
-**Builds on:** the BeliefPolicy keystone (Spec 5 Slice A) and Authored-Confidence-as-Input (Slice B). See `docs/plans/2026-06-16-belief-policy-keystone-design.md` and `docs/plans/2026-06-16-authored-confidence-design.md`. Kernel context: `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md` §Spec 5 ("type evidence vocabularies").
+**Builds on:** the implemented belief-policy and authored-assertion contracts
+documented in `docs/user-guide/epistemic-model.md` and
+`docs/user-guide/evidence-lines.md`. Kernel context:
+`docs/plans/2026-06-14-patchwork-kernel-architecture-design.md` §Spec 5
+("type evidence vocabularies").
 
 ## Goal
 

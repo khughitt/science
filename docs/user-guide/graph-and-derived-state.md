@@ -129,6 +129,82 @@ regenerate the snapshot or rebuild the graph rather than editing
 `knowledge/belief-snapshots.jsonl`. Use snapshots at review milestones when you
 want to preserve the state of support, dispute, fragility, and contestation.
 
+Snapshot rows include the policy identity that produced the belief state:
+`policy_id` and `policy_version`. They also record cap and ceiling flags such as
+`capped_by_refutation`, `authored_capped`, and `qa_dataset_capped` where
+applicable. Snapshot de-duplication includes policy identity, scalar enablement,
+scalar config version, claim, date, and input hashes, so a later policy version
+can produce a new reproducible row even when the evidence inputs are unchanged.
+
+Rows from older projects that predate explicit belief-policy fields are read as
+`core-default` policy version `1`; older rows without cap fields are read with
+those caps set to `false`.
+
+## Belief Profile
+
+`science belief profile` lists a read-only epistemic profile for belief-bearing
+entities. It reuses the same graph and belief machinery as snapshots and does
+not persist new RDF or source metadata.
+
+```bash
+science belief profile
+science belief profile --format json
+science belief profile --kind proposition
+science belief profile --label fragile --label no_empirical_data
+science belief profile --all
+```
+
+Supported kinds are `proposition`, `hypothesis`, and `mechanism`. `--kind` and
+`--label` are repeatable; repeated labels use AND semantics. `--all` includes
+supported belief-bearing entities even when their profile is otherwise empty or
+speculative. Without `--all`, rows are included when they have support, dispute,
+diagnostic evidence, resolved bundle membership, active cap flags, or materialized
+freshness states that require review.
+
+JSON output emits one row per entity with this shape:
+
+```json
+{
+  "entity": "proposition:example",
+  "kind": "proposition",
+  "label": "Short label or text",
+  "belief_state": "fragile",
+  "contested": false,
+  "epistemic_labels": ["fragile", "single_source", "no_empirical_data"],
+  "evidence": {
+    "support_count": 1,
+    "dispute_count": 0,
+    "diagnostic_count": 0,
+    "source_count": 1,
+    "evidence_types": ["expert_judgment"],
+    "has_empirical_data": false
+  },
+  "caps": {
+    "authored_capped": false,
+    "qa_dataset_capped": false,
+    "capped_by_refutation": false
+  },
+  "freshness_state": null,
+  "belief_scalar": null
+}
+```
+
+`belief_state`, `contested`, and the cap fields are derived from the current
+belief result. Evidence counts summarize the units seen by the belief engine.
+For bundle rows, `diagnostic_count` is `null` because bundles do not have a
+bundle-level diagnostics field. `freshness_state` reflects the materialized
+literal when present; missing freshness stays `null`.
+
+Profile labels are derived readings, not authored truth. The v1 label set is:
+`speculative`, `fragile`, `supported`, `well_supported`, `contested`,
+`single_source`, `no_empirical_data`, `authored_only`, `literature_only`,
+`empirical_data_backed`, `authored_capped`, `qa_dataset_capped`,
+`capped_by_refutation`, `stale`, and `needs_review`.
+
+When the existing belief scalar feature is enabled, `belief_scalar` contains the
+current scalar projection fields. When scalar output is disabled, it is `null`;
+the profile command does not invent a fallback score.
+
 ## Prose-Derived Reports
 
 When a project uses prose epistemics, decomposition, grounding, and prose health

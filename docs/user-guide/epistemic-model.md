@@ -167,6 +167,35 @@ evidence.
 
 Use these as readings of the record, not as manually assigned labels to chase.
 
+## Belief Policy
+
+Belief aggregation is controlled by an explicit, versioned policy. The current
+built-in policy is `DEFAULT_BELIEF_POLICY`, with `policy_id: core-default` and
+`policy_version: 1`. It gathers the ordinal evidence rank tables, the
+curation-step penalty, reduction vocabulary, magnitude thresholds, refutation-cap
+conditions, authored-assertion gates, and dataset-QA ceiling into one immutable
+object.
+
+The default policy preserves the core belief math: evidence lines are reduced by
+independence group and quality, clean support determines the ordinal magnitude,
+and decisive whole-claim refutations can cap stronger support to `fragile`.
+Callers may pass an explicit policy to the belief engine, but persisted belief
+records and bundle rollups must remain policy-comparable. Science refuses to
+roll up bundle members computed under mixed `(policy_id, policy_version)` pairs
+rather than silently combining results with different semantics.
+
+Policy identity is persisted with belief outputs. Belief snapshot rows include
+`policy_id` and `policy_version`, and snapshot de-duplication treats those fields
+as part of the identity of a reproducible row. Patch RDF summaries also stamp the
+default belief policy identity alongside the derived belief magnitude. Older
+snapshot rows that predate explicit policies are read as `core-default` version
+`1`, which is the policy that produced them.
+
+The belief policy is separate from the optional log-odds scalar projection. The
+scalar has its own configuration version and remains a derived projection over
+the ordinal result; policy version and scalar config version should not be
+treated as interchangeable.
+
 ## Verdict Tokens And Atomic Decomposition
 
 Interpretations use a compact verdict line for fast scanning:
