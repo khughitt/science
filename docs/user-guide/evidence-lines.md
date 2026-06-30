@@ -44,6 +44,20 @@ Common evidence types:
 understood as a result pattern. The line's `stance`, role, and scope should say
 what the null or negative result does to the target proposition.
 
+The typed evidence vocabulary is owned by the model enum. The canonical stored
+tokens are `empirical_data`, `benchmark`, `simulation`, `literature`,
+`expert_judgment`, and `negative_result`. Authoring may still use the historical
+`_evidence` suffix for compatibility, such as `empirical_data_evidence` or
+`expert_judgment_evidence`; Science strips that suffix at the model boundary
+and stores the canonical member.
+
+Unknown evidence types fail when parsed as authored evidence-line entities. Some
+graph readers still read arbitrary literals from materialized graphs; those
+readers use the same suffix normalizer but degrade unknown tokens to rank 0
+rather than raising. Rank tables are reconciled against the model vocabulary:
+`negative_result` is a valid but unranked member, while diagnostic roles remain
+valid but unranked evidence roles.
+
 ## Authored Assertions
 
 `expert_judgment` is the evidence type for authored assertions. In the belief
@@ -119,6 +133,25 @@ on ancestor/descendant datasets in a sub-cohort lineage, can become a
 `shared-source` commitment. Partial or unknown overlap, validation-only,
 citation-only, sibling sub-cohorts, virtual rows, and indirect bears-on paths
 remain candidate warnings for review.
+
+## Quantitative Results
+
+An evidence line may carry a structured `quantitative_result` when a fitted
+model or analysis produced effect-size or posterior information:
+
+```yaml
+quantitative_result:
+  beta: 0.41
+  hdi: [0.2, 0.6]
+  prob_sign: 0.98
+  fit_task: task:fit-example-model
+  model: logistic_regression
+```
+
+This is evidence substance, not an authored belief state. Eligible quantitative
+results can inform scalar belief projections, while the ordinary stance,
+strength, independence, role, and dataset grounding fields still determine
+whether the line is admissible.
 
 ## Worked Example
 

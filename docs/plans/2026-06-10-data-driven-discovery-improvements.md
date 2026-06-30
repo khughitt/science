@@ -14,20 +14,21 @@ Representation Hypothesis** (different modalities converging on a shared latent 
 joint evidence). The talk is an *unrefereed* source on ongoing work: its specific results
 are hints to verify, but its framing maps cleanly onto Science's existing machinery.
 
-**Baseline (assumed *after* these facets land — not all are in the repo yet).** This roadmap
-builds *on top of* two framework facets and does not re-propose what they deliver. Their
-status differs, and the gating is load-bearing for any spin-out:
+**Baseline (updated 2026-06-30).** This roadmap builds *on top of* two framework
+facets and does not re-propose what they deliver. Their status differs, and the
+gating is load-bearing for any spin-out:
 - `docs/user-guide/evidence-lines.md` and `docs/user-guide/entities.md` — `dataset_usage` / `overlap`, dataset-entity
   origin invariants, and the A1/A2/B1/B2 dataset-**independence** machinery (same-vs-distinct
   dataset collapse). This independence machinery is **already merged** — **evidence
   *independence* is built**, so the new Theme A work is *strength tiering* and *cross-modality
   reward*, not independence.
-- `2026-06-08-epistemic-edges-plan.md` — relational propositions, the evidence-line
-  `quantitative_result`, and the `belief_eligible` staging marker. **Not yet in the repo**
-  (verified 2026-06-10: zero `belief_eligible` / `quantitative_result` occurrences under
-  `science/`); this facet is still HELD on the v3-substrate gate and *defines* that work
-  rather than providing it. **Theme A (A1/A2) is gated on these fields landing** — a spin-out
-  must not start from fields/behavior that do not exist yet.
+- `docs/user-guide/epistemic-model.md`, `docs/user-guide/evidence-lines.md`, and
+  `docs/user-guide/graph-and-derived-state.md` — relational propositions, derived
+  edge status, evidence-line `quantitative_result`, and the `belief_eligible`
+  staging marker are now implemented and documented. Theme A is no longer
+  blocked on those fields existing, but it still needs its own design because
+  evidence-tier weighting and cross-modality rewards are new belief-policy
+  semantics.
 
 **How to read each entry.** `talk observation → gap in Science today → sketch of the change
 → readiness tier → dependencies`.
@@ -44,11 +45,10 @@ ER-status, survival); concordance was highly variable, so a single-source signal
   single analyzed dataset, and corroboration across many as differing mostly by count, not by
   *kind* of support. *Sketch:* make source-tier an explicit, belief-weighting-relevant
   attribute — `paper-hint < single-dataset < multi-dataset < multi-modal` — layered on the
-  `dataset_usage` / `belief_eligible` fields. The user's long-standing stance ("papers we
+  existing `dataset_usage` / `belief_eligible` fields. The user's long-standing stance ("papers we
   haven't analyzed are hints; data we analyzed is better; multiple experiments better still")
-  becomes a first-class, queryable axis. *Tier:* **Gated** (extends the epistemic-edges
-  evidence model). *Deps:* **`belief_eligible` / `quantitative_result` must land first**
-  (epistemic-edges); then dataset-evidence-flow.
+  becomes a first-class, queryable axis. *Tier:* **Near-term design** (extends the evidence
+  model and belief policy). *Deps:* dataset-evidence-flow and a dedicated belief-policy design.
 - **A2 — Reward cross-modality corroboration.** *Gap:* nothing currently *rewards* the same
   conclusion arriving from orthogonal modalities; the independence engine collapses
   *same-source* duplicates but doesn't *up-weight* genuinely orthogonal agreement. *Sketch:*
@@ -173,7 +173,7 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
 | **✅ Shipped** | B1, B3, B2 | B1+B3 merged to local `main` 2026-06-11 (`science-qa` toolkit + `science qa-audit`); B2 merged 2026-06-13 (composable check-library, aspects/programs, breadth coverage) |
 | **Near-term (unblocked)** | B4, D1, F2 | Skill / doc / convention changes; no substrate dependency |
 | **Mid** | C1, D2, E2 | New mechanisms, scoped |
-| **Gated** | A1, A2 | Need `belief_eligible` / `quantitative_result` from epistemic-edges (not in repo yet) |
+| **Near-term design** | A1, A2 | Substrate fields now exist; still needs a dedicated belief-policy design for evidence tiering and cross-modality rewards |
 | **Exploratory** | C2, E1, F1 | Deeper provenance/methodology; design-heavy |
 
 ## Recommended first spin-out
@@ -184,9 +184,9 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
   B2 merged 2026-06-13 as a composable check-library (aspects/programs) with breadth as a
   program-derived coverage readout; see `docs/conventions/pipeline-qa-checkpoints.md`.
 - **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
-  payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
-  **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via
-  epistemic-edges. Best second, or queue it behind that facet.
+  payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic).
+  The substrate fields have landed; the next step is a focused design for the tier axis,
+  cross-modality reward, and belief-policy compatibility.
 
 ## Cross-cutting principle
 

@@ -6,7 +6,8 @@
 (`docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`, lines 151–164:
 "Patch subsumes inquiry-like epistemic neighborhoods"). Builds directly on the
 shipped Patch Contract keystone
-(`docs/plans/2026-06-14-patch-contract-keystone-design.md`, SHIPPED `0b15c7ec`).
+(`docs/audits/plans-cleanup/2026-06-08-epistemic-model-checkpoint.md`, with
+operator-facing behavior in `docs/user-guide/graph-and-derived-state.md`).
 The keystone deliberately deferred inquiry subsumption and shaped
 `PatchDefinition.focal` to later absorb inquiry's focal/target structure; this is
 that follow-on.

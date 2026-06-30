@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.13, Pydantic v2, rdflib, Click, pytest, uv workspace.
 
-**Design:** `~/d/science/docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md`. Builds on the shipped Patch Contract keystone (`~/d/science/docs/plans/2026-06-14-patch-contract-keystone-design.md`).
+**Design:** `~/d/science/docs/plans/2026-06-14-inquiry-patch-profile-subsumption-design.md`. Builds on the shipped Patch Contract keystone now summarized in `~/d/science/docs/audits/plans-cleanup/2026-06-08-epistemic-model-checkpoint.md` and `~/d/science/docs/user-guide/graph-and-derived-state.md`.
 
 ---
 

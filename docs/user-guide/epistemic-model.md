@@ -152,6 +152,50 @@ Evidence does not prove propositions outright. Evidence lines support or dispute
 propositions, and the belief machinery derives the current state from eligible
 evidence.
 
+### Relational Propositions
+
+A truth-apt graph edge is represented as a `proposition` with relational fields,
+not as a separate edge store linked to a proposition. The proposition is the
+belief-bearing unit and, when rendered as a graph edge, its canonical IRI is also
+the reified edge-node IRI. Belief, evidence, and rendering therefore address the
+same assertion.
+
+Relational propositions factor the assertion into orthogonal axes:
+
+| Field | Purpose |
+|---|---|
+| `subject` | Existing entity ref for the source endpoint. |
+| `predicate` | Sign-free relation kind such as `affects`, `regulates`, `associates_with`, `binds`, `is_proxy_for`, `subtype_of`, or `part_of`. |
+| `object` | Existing entity ref for the target endpoint. |
+| `polarity` | `positive`, `negative`, `unsigned`, or `not_applicable`; this is the sign carrier. |
+| `claim_layer` | What kind of claim is being made. |
+| `identification_strength` | Identification leverage: `none`, `structural`, `observational`, `longitudinal`, `interventional`, or `analogical`. |
+
+Predicates are deliberately sign-free. Sign-meaningful predicates require
+`positive`, `negative`, or `unsigned`; sign-less predicates require
+`not_applicable`. Multiple propositions may share a subject/object pair when
+they make different claims.
+
+### Proposition Edges And Plumbing
+
+A proposition-edge is truth-apt and belief-bearing, including a
+`claim_layer: structural_claim` assertion when the structure itself is under
+claim. Plumbing edges are different: containment, grouping, patch membership,
+and measurement-model wiring organize the graph but do not carry belief.
+
+Rendered causal edges use derived visual channels rather than authored
+`edge_status`. `derived_edge_status` is a lossy compatibility projection over
+canonical state:
+
+1. `eliminated` when a refutation cap has fired.
+2. `unknown` when there is no grounding evidence.
+3. `structural` for grounded `structural_claim` propositions.
+4. `supported` for `supported` or `well_supported` belief.
+5. `tentative` for the remaining grounded cases.
+
+`contested`, polarity, identification strength, claim layer, and scalar belief
+remain separate channels. Do not author `edge_status` as scientific truth.
+
 ## Belief Vocabulary
 
 | Term | Meaning |

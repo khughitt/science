@@ -8,6 +8,14 @@
           "docs/plans/2026-05-31-bio-reference-graph-design.md"
         ]
       }
+    ],
+    "downstream-feedback-fixes": [
+      {
+        "thread_id": "downstream-feedback-fixes-2026-06-28",
+        "files": [
+          "docs/plans/2026-06-28-downstream-feedback-fixes.md"
+        ]
+      }
     ]
   },
   "related_threads": {}

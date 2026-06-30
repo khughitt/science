@@ -1,10 +1,10 @@
 {
-  "file_count": 18,
+  "file_count": 10,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 13,
+  "thread_count": 8,
   "threads": [
     {
       "earliest_file_date": "2026-06-26",
@@ -88,28 +88,7 @@
       "stripped_roles": {
         "docs/plans/2026-06-28-downstream-feedback-fixes.md": null
       },
-      "thread_id": "downstream-feedback-fixes"
-    },
-    {
-      "earliest_file_date": "2026-06-08",
-      "files": [
-        "docs/plans/2026-06-08-epistemic-data-model-design.md"
-      ],
-      "latest_file_date": "2026-06-08",
-      "normalized_slug": "epistemic-data-model",
-      "raw_slugs": {
-        "docs/plans/2026-06-08-epistemic-data-model-design.md": "epistemic-data-model-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-08-epistemic-data-model-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-08-epistemic-data-model-design.md": "design"
-      },
-      "thread_id": "epistemic-data-model"
+      "thread_id": "downstream-feedback-fixes-2026-06-28"
     },
     {
       "earliest_file_date": "2026-06-04",
@@ -131,81 +110,6 @@
         "docs/plans/2026-06-04-epistemic-drift-detection-design.md": "design"
       },
       "thread_id": "epistemic-drift-detection"
-    },
-    {
-      "earliest_file_date": "2026-06-08",
-      "files": [
-        "docs/plans/2026-06-08-epistemic-edges-design.md",
-        "docs/plans/2026-06-08-epistemic-edges-plan.md"
-      ],
-      "latest_file_date": "2026-06-08",
-      "normalized_slug": "epistemic-edges",
-      "raw_slugs": {
-        "docs/plans/2026-06-08-epistemic-edges-design.md": "epistemic-edges-design",
-        "docs/plans/2026-06-08-epistemic-edges-plan.md": "epistemic-edges-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-08-epistemic-edges-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-08-epistemic-edges-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-08-epistemic-edges-design.md": "design",
-        "docs/plans/2026-06-08-epistemic-edges-plan.md": "plan"
-      },
-      "thread_id": "epistemic-edges"
-    },
-    {
-      "earliest_file_date": "2026-06-04",
-      "files": [
-        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md"
-      ],
-      "latest_file_date": "2026-06-04",
-      "normalized_slug": "m1-epistemic-drift-detection",
-      "raw_slugs": {
-        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "m1-epistemic-drift-detection-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-04-m1-epistemic-drift-detection-implementation.md": "implementation"
-      },
-      "thread_id": "m1-epistemic-drift-detection"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-patch-contract-keystone-design.md",
-        "docs/plans/2026-06-14-patch-contract-keystone-plan.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "patch-contract-keystone",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-patch-contract-keystone-design.md": "patch-contract-keystone-design",
-        "docs/plans/2026-06-14-patch-contract-keystone-plan.md": "patch-contract-keystone-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-14-patch-contract-keystone-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-14-patch-contract-keystone-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-patch-contract-keystone-design.md": "design",
-        "docs/plans/2026-06-14-patch-contract-keystone-plan.md": "plan"
-      },
-      "thread_id": "patch-contract-keystone"
     },
     {
       "earliest_file_date": "2026-06-14",
@@ -281,33 +185,6 @@
         "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "remove-v3-migration-code"
-    },
-    {
-      "earliest_file_date": "2026-06-16",
-      "files": [
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md",
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md"
-      ],
-      "latest_file_date": "2026-06-16",
-      "normalized_slug": "typed-evidence-vocabularies",
-      "raw_slugs": {
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md": "typed-evidence-vocabularies-design",
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md": "typed-evidence-vocabularies-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-design.md": "design",
-        "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md": "plan"
-      },
-      "thread_id": "typed-evidence-vocabularies"
     }
   ]
 }

@@ -23,6 +23,29 @@ Inquiry graphs are also derived views. The graph-backed inquiry source is a
 patch-membership layer. Use `science inquiry show` and `science inquiry
 validate` to read the compiled view.
 
+Patch definitions are authored intent, not authored member lists. A
+`patch-definition` names a focal entity, local scope, derivation policy, seeds,
+and excludes. `science graph build` derives membership after the `bears_on`
+closure is available, emits reified `sci:PatchMembership` records into patch
+named graphs, and generates `sci:hasMember` / `sci:inPatch` convenience edges
+from those records. The membership node is authoritative; orphan convenience
+edges fail validation.
+
+The v1 patch policy is `local-closure-v1`. It uses local project scope, a
+depth-bounded `sci:bearsOn` neighborhood based on precomputed
+`sci:bearsOnDepth`, and one-hop direct relations over `cito:discusses`,
+`cito:supports`, and `cito:disputes`. Non-local scopes, snapshot publication,
+patch maturity levels, latent/ontology glue, and remote commons neighborhoods
+are deferred.
+
+Patch diagnostics read the same derived state and do not write a second graph
+artifact:
+
+```bash
+science patch explain <patch-definition-id>
+science patch check
+```
+
 Archived entity references resolve from `entities/_archive/archive-index.jsonl`.
 Graph materialization uses that active index to emit archived-entity stubs and
 `sci:consolidates` edges where consolidation rows exist. It does not rehydrate
@@ -258,3 +281,20 @@ artifact rather than parsing P2/P3 storage internals.
 
 For the full framework contract, command list, and artifact details, see the
 [prose epistemics checkpoint](../audits/plans-cleanup/2026-06-17-prose-epistemics-checkpoint.md).
+
+## Patch Workbenches
+
+`<patch>.workbench.yaml` is an editable normalized projection over proposition
+and evidence-line entities. It is useful for graph-shaped authoring, but the
+entity layer remains the durable epistemic store.
+
+Compile lifts rows into entities: id-less relational rows receive proposition
+IDs, inline evidence stubs become evidence-line entities, and empirical stubs
+without `dataset_usage` are staged with `belief_eligible: false`. A check
+normalizes the committed workbench against a scratch graph and fails on drift;
+it does not treat the workbench as a second source of epistemic truth.
+
+Do not put authored belief, authored `edge_status`, row-level
+`quantitative_result`, or persistent embedded support arrays in a workbench.
+`quantitative_result` belongs inside an evidence stub and then on the generated
+evidence-line entity.

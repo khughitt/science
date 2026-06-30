@@ -56,6 +56,25 @@ Freshness and `needs-review` are attention surfaces, not hard gates. They help
 you decide which entities deserve another look after upstream evidence,
 datasets, code, or propositions change.
 
+`science graph attention-rank` provides a deterministic review queue over the
+materialized graph. It uses the same attention scoring substrate as
+`attention-sample`, but sorts candidates by derived weight instead of sampling
+them. The open-question-debt component raises attention for epistemic entities
+connected to active, partially answered, or deferred questions through
+`skos:related` links or shared theme membership. This deliberately does not use
+`bears_on`, because unanswered scoping questions often sit outside the stronger
+dependency layer.
+
+```bash
+science graph attention-rank
+science graph attention-rank --kind proposition --limit 20
+```
+
+`science entity review` requires a review artifact through `--note`. A review
+should record what was inspected and what changed, not merely bump a timestamp.
+Programmatic callers can still use the lower-level review function without the
+CLI artifact guard when they are preserving existing metadata.
+
 ## Honest Warning States
 
 A warning is not automatically a failure. If evidence is weak, indirect,
