@@ -2,10 +2,9 @@
 
 score(d) = readiness_weight(d) × (1 + reach(d)) × leverage_tilt(d)
 
-Design: docs/plans/2026-06-21-catalog-datasets-design.md.
 Readiness reuses the canonical DatasetEntity.readiness(); leverage reuses the
 computed _claim_summary_data signals; reach merges a frontmatter path (no graph
-needed) with a graph dataset_usage path.
+needed) with a graph dataset_usage path. See docs/user-guide/entities.md.
 """
 
 from __future__ import annotations

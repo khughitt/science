@@ -17,7 +17,7 @@ are hints to verify, but its framing maps cleanly onto Science's existing machin
 **Baseline (assumed *after* these facets land — not all are in the repo yet).** This roadmap
 builds *on top of* two framework facets and does not re-propose what they deliver. Their
 status differs, and the gating is load-bearing for any spin-out:
-- `2026-06-08-dataset-evidence-flow-plan.md` — `dataset_usage` / `overlap`, dataset-entity
+- `docs/user-guide/evidence-lines.md` and `docs/user-guide/entities.md` — `dataset_usage` / `overlap`, dataset-entity
   origin invariants, and the A1/A2/B1/B2 dataset-**independence** machinery (same-vs-distinct
   dataset collapse). This independence machinery is **already merged** — **evidence
   *independence* is built**, so the new Theme A work is *strength tiering* and *cross-modality

@@ -71,7 +71,7 @@ Before executing any research command:
    fall back to:
    `uv run --with <science-plugin-root>/science science <command>`
 
-> This command is the front half of the dataset arc (design: `~/d/science/docs/plans/2026-06-21-catalog-datasets-design.md`). Operationalization is `plan-pipeline`; commons promotion is deferred and gated on `access.verified`.
+> This command is the front half of the dataset arc. Current dataset lifecycle, reach, QA, and prioritization semantics are documented in `~/d/science/docs/user-guide/entities.md`. Operationalization is `plan-pipeline`; commons promotion is deferred and gated on `access.verified`.
 
 Catalog datasets for the user input.
 If no argument is provided, run the full gap-driven loop against the project's active questions and hypotheses.

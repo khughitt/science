@@ -6,7 +6,6 @@ status: "proposed"
 created: "2026-06-26"
 updated: "2026-06-27"
 related:
-  - "plan:2026-06-21-catalog-datasets-design"
   - "plan:2026-05-31-belief-profile-design"
 ---
 

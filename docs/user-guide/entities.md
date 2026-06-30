@@ -407,7 +407,7 @@ The split is intentional:
 
 | Surface | Owns |
 |---|---|
-| Dataset entity | `id`, `type`, `title`, `status`, `origin`, `dataset_class`, `tier`, `license`, `update_cadence`, `ontology_terms`, `access`, `derivation`, lineage, `consumed_by`, and human prose. |
+| Dataset entity | `id`, `type`, `title`, `status`, `origin`, `dataset_class`, `tier`, `license`, `update_cadence`, `ontology_terms`, `access`, `derivation`, lineage, `qa_report`, `consumed_by`, and human prose. |
 | Runtime datapackage | Resource names, paths, hashes, byte counts, formats, schemas, and other file-level package details. |
 
 Dataset entities use `profiles: ["science-pkg-entity-1.0"]`. Do not put
@@ -536,6 +536,101 @@ Runtime state is derived from the entity:
 | `blocked-access` | Access is gated, unverified, or exception-gated. |
 | `reference-only` | The record is a reference-class dataset. |
 | `pointer-only` | The record is a pointer-class dataset. |
+
+### Prioritization And Reach
+
+`science dataset prioritize` ranks local dataset records as:
+
+```text
+readiness_weight * (1 + reach) * leverage_tilt
+```
+
+Readiness comes from the dataset entity's access, origin, derivation, and
+runtime pointer state. Reach is the number of question or hypothesis targets the
+dataset connects to. Leverage tilt is available when a fresh graph is loaded and
+uses proposition summary signals such as contested, single-source, no-empirical,
+and risk score.
+
+Reach is intentionally authorable without a graph, then enriched by the graph:
+
+| Surface | Meaning for reach |
+|---|---|
+| Dataset `related:` | Dataset lists a `question:*` or `hypothesis:*` it informs. |
+| Q/H `related:` | A question or hypothesis lists a `dataset:*` back-edge. |
+| Q/H `datasets:` | A question or hypothesis directly names needed or relevant datasets. |
+| Consumer `dataset_usage` plus `related:` | A paper or other consumer names datasets and is related to Q/H records. |
+| Evidence-line `dataset_usage` plus proposition reach | An evidence line uses a dataset and supports/disputes a proposition that reaches Q/H records. |
+
+These paths are a union. Do not duplicate edges only to satisfy prioritization:
+use Q/H `datasets:` for direct dataset needs, dataset `related:` when the
+dataset file is the active editing surface, and `dataset_usage` where a paper,
+evidence line, workflow-derived row, or virtual row records actual use.
+
+`science dataset prioritize --coverage --format json` inverts the view to one
+row per question or hypothesis. Coverage states are `covered-runnable`,
+`covered-unstaged`, `covered-reference`, `covered-pointer`, `blocked-access`,
+`unverified`, and `no-candidate`. Gap reasons include `unstaged-deposit`,
+`only-reference`, `only-pointer`, `only-gated`, `only-unverified`, and
+`no-candidate`.
+
+### Dataset QA
+
+Use the plural `science datasets qa` command for package-level, schema-driven
+QA over tabular resources:
+
+```bash
+science datasets qa <datapackage-dir-or-file>
+science datasets qa <datapackage-dir-or-file> --resource <name>
+science datasets qa <datapackage-dir-or-file> --report-dir <dir>
+science datasets qa <datapackage-dir-or-file> --config <runknobs.yaml>
+science datasets qa <datapackage-dir-or-file> --format json
+science datasets qa <datapackage-dir-or-file> --no-strict
+```
+
+The command accepts a package directory or a descriptor named
+`datapackage.json`, `datapackage.yaml`, or `datapackage.yml`. With
+`--report-dir`, it persists `qa_report.json`, `qa_report.md`, and per-resource
+report subdirectories. Text output renders one non-`not-applicable` resource
+line followed by a package summary.
+
+Exit codes are:
+
+| Code | Meaning |
+|---|---|
+| `0` | No build-fatal structural package failure, or `--no-strict` was used for local inspection. |
+| `1` | A structural package failure fired and strict mode is active. |
+| `2` | Bad input, such as missing descriptor, unknown resource, unreadable data, or compile/runner error. |
+
+To feed QA into graph and belief behavior, set a dataset entity's `qa_report` to
+the project-root-relative path of the persisted `qa_report.json`. Graph build
+does not rerun QA. It reads each opted-in report, requires
+`package_structural_failed` to be a JSON boolean, hashes the report, and emits:
+
+- `sci:qaStructuralFailed`
+- `sci:qaReport`
+- `sci:qaReportHash`
+- `sci:qaFailedResource` for failed resources
+
+For empirical evidence lines that rest on structurally failed dependence
+datasets, graph build also emits `sci:qaFailedDataset`. Belief aggregation uses
+that provenance to apply the QA dataset ceiling; QA-clean support can still
+carry the belief if it is sufficient without the failed dataset.
+
+### Sub-Cohort Lineage
+
+Datasets can declare cohort lineage with `parent_dataset` and optional
+`siblings`. Graph build materializes `parent_dataset` as a child-to-parent
+`sci:subCohortOf` edge. Dataset-derived independence uses that lineage when
+deciding whether two empirical evidence lines are truly independent.
+
+When two full-overlap dependence uses refer to the same dataset or an
+ancestor/descendant pair in the same lineage, Science emits a commitment:
+`DatasetIndependenceCommitment`, `shared-source`, and a
+`dataset-derived:*` independence group. Sibling sub-cohorts under the same root
+are not committed as the same source; they remain candidate warnings because
+they may overlap but are not guaranteed to be duplicate evidence. Partial,
+unknown, validation-only, citation-only, indirect, and virtual-row paths also
+stay candidate-level.
 
 `science dataset reconcile` checks the narrow duplication channel between the
 entity and runtime package: `license`, `update_cadence`, and

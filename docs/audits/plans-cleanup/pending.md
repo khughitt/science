@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `60`
+- Pending thread count: `52`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -32,21 +32,6 @@
 - remaining_gaps:
   - Durable user docs only list expert_judgment as an evidence type; they do not explain confidence as a gate, authored-only ceiling, authored_capped, or excluded_authored_confidence.
   - Implementation comments still reference Spec 5/Slice B plan docs as rationale.
-
-## bears-on-multihop-reach
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-22-bears-on-multihop-reach.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset-prioritization reach rationale is checkpointed and later plan citations are repointed
-    - `docs/plans/2026-06-22-bears-on-multihop-reach.md`
-- remaining_gaps:
-  - The behavior is implemented and tested, but the explanatory contract is still mostly in plan files and the code docstring rather than a stable non-plan dataset-prioritize reference.
-  - docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md still cites plan:2026-06-22-bears-on-multihop-reach, so deleting this plan without a checkpoint or citation repoint would remove context.
-  - The parent catalog-datasets thread is already pending a migration checkpoint for dataset prioritization rationale; this small plan should be folded into that checkpoint rather than kept as active work.
 
 ## belief-policy-keystone
 
@@ -131,22 +116,6 @@
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
 
-## catalog-datasets
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-21-catalog-datasets-design.md`
-  - `docs/plans/2026-06-21-catalog-datasets-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset prioritization workflow rationale is checkpointed and live citations are repointed
-    - `docs/plans/2026-06-21-catalog-datasets-design.md`
-    - `docs/plans/2026-06-21-catalog-datasets-plan.md`
-- remaining_gaps:
-  - commands/catalog-datasets.md and science/src/science_tool/dataset_prioritize.py still cite the plan as the design anchor.
-  - The original design is partially stale: later plans added verify-access, Q/H datasets: reach, reference/pointer classes, coverage reasons, and commons-promotion guidance.
-
 ## contextual-structural-roles
 
 - status: `implemented_needs_durable_docs`
@@ -175,103 +144,6 @@
   - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
-
-## dataset-catalog-cli
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-21-dataset-catalog-cli-design.md`
-  - `docs/plans/2026-06-21-dataset-catalog-cli-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset catalog CLI rationale is checkpointed and live citations are repointed
-    - `docs/plans/2026-06-21-dataset-catalog-cli-design.md`
-    - `docs/plans/2026-06-21-dataset-catalog-cli-plan.md`
-- remaining_gaps:
-  - science/src/science_tool/datasets_catalog.py and science/src/science_tool/validate/checks/dataset_acquisition.py still cite the plan.
-  - Some original details are stale after layout v3 and triage-pack changes: doc/datasets became entities/datasets, dataset_class exists, and verify-access owns coupled access edits.
-
-## dataset-evidence-flow
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-08-dataset-evidence-flow-design.md`
-  - `docs/plans/2026-06-08-dataset-evidence-flow-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until evidence-line dataset_usage, belief_eligible staging, overlap curation, and B2 independence behavior are documented
-    - `docs/plans/2026-06-08-dataset-evidence-flow-design.md`
-    - `docs/plans/2026-06-08-dataset-evidence-flow-plan.md`
-- remaining_gaps:
-  - MM30 task-to-dataset resolution table and population of staged evidence-lines are out of this repo and not verified here.
-  - Root plans still contain stale/transition wording, especially doc/datasets versus current entities/datasets/data dataset homes after adapter layout work.
-  - Durable user docs mention paper dataset_usage but do not fully document evidence-line dataset_usage, belief_eligible staging, overlap curation, and B2 commitment versus candidate behavior.
-
-## dataset-qa-seam
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-dataset-qa-seam-design.md`
-  - `docs/plans/2026-06-16-dataset-qa-seam-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset QA graph stamping and belief cap semantics are documented
-    - `docs/plans/2026-06-16-dataset-qa-seam-design.md`
-    - `docs/plans/2026-06-16-dataset-qa-seam-plan.md`
-- remaining_gaps:
-  - Durable docs do not describe DatasetEntity.qa_report, report-hash audit semantics, qaFailedDataset stamping, or qa_dataset_capped belief behavior.
-  - No user-facing doc explains that the seam consumes persisted science datasets qa reports and does not rerun QA during graph build.
-
-## dataset-reach-authoring-surfaces
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md`
-  - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset-prioritization reach surfaces are checkpointed and later plan citations are repointed
-    - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-design.md`
-    - `docs/plans/2026-06-24-dataset-reach-authoring-surfaces-implementation-plan.md`
-- remaining_gaps:
-  - The implementation and tests are complete, but the full reach contract and rationale are still split across active plans, command docs, and code comments rather than one stable non-plan dataset-prioritization reference.
-  - commands/catalog-datasets.md still cites docs/plans/2026-06-21-catalog-datasets-design.md as its design anchor, and the catalog-datasets cleanup record already calls for a dataset-prioritization migration checkpoint.
-  - docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md still cites plan:2026-06-24-dataset-reach-authoring-surfaces-design, so deleting this thread without a checkpoint or citation repoint would remove referenced context.
-
-## dataset-sub-cohort-lineage
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md`
-  - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until sub-cohort lineage and B2 ancestor-vs-sibling semantics are documented
-    - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md`
-    - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md`
-- remaining_gaps:
-  - Migrate sub-cohort semantics and B2 ancestor-vs-sibling behavior into durable docs before deleting the active plan pair.
-
-## datasets-qa-reachability
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-16-datasets-qa-reachability-design.md`
-  - `docs/plans/2026-06-16-datasets-qa-reachability-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until science datasets qa command and report contract are documented
-    - `docs/plans/2026-06-16-datasets-qa-reachability-design.md`
-    - `docs/plans/2026-06-16-datasets-qa-reachability-plan.md`
-- remaining_gaps:
-  - No durable user-guide page documents science datasets qa usage, exit codes, report layout, or the relationship between transient QA runs and persisted qa_report.json consumed by graph build.
-  - docs/conventions/pipeline-qa-checkpoints.md documents workflow QA reports, not this datapackage command contract.
 
 ## discusses-membership-surfaces
 

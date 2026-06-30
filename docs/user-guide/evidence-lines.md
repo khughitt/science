@@ -50,6 +50,40 @@ Multiple lines from the same cohort, instrument, source, or analysis family are
 not independent just because they are written as separate files. Use the same
 `independence_group` when support should be discounted as shared.
 
+## Dataset Usage
+
+Empirical evidence lines should name the datasets they use with
+`dataset_usage`. Belief-eligible empirical lines without `dataset_usage` are
+validation errors. Use `belief_eligible: false` only as a staging marker for an
+empirical line that exists but should not emit `cito:supports`/`cito:disputes`
+or enter belief aggregation until dataset grounding is complete.
+
+```yaml
+dataset_usage:
+  - ref: dataset:gtex-v8
+    role: analyzed
+    overlap: full
+```
+
+`ref` must be a `dataset:<slug>` reference. Roles are:
+
+| Role | Interpretation |
+|---|---|
+| `analyzed` | The evidence depends directly on analysis of the dataset. |
+| `set_definition_source` | The dataset supplied a set or collection definition. |
+| `training` | The dataset trained or fit the model being evaluated. |
+| `upstream` | The dataset is an upstream input to a derived artifact. |
+| `validation_source` | The dataset was used for validation, not as the main dependence. |
+| `cited` | The dataset is cited context rather than a dependence. |
+
+`overlap` is `full`, `partial`, or `unknown`. Dependence roles
+(`analyzed`, `set_definition_source`, `training`, and `upstream`) contribute to
+dataset-derived independence. Full-overlap dependence on the same dataset, or
+on ancestor/descendant datasets in a sub-cohort lineage, can become a
+`shared-source` commitment. Partial or unknown overlap, validation-only,
+citation-only, sibling sub-cohorts, virtual rows, and indirect bears-on paths
+remain candidate warnings for review.
+
 ## Worked Example
 
 ```markdown
