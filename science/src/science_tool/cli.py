@@ -379,18 +379,13 @@ def data_group() -> None:
 
 
 @data_group.command("audit")
-@click.option(
-    "--project",
-    "project_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    envvar="SCIENCE_PROJECT_ROOT",
-    help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).",
-)
-@click.option(
-    "--fix", is_flag=True, default=False, help="Relocate stranded records data/ → results/ (stages, never commits)."
-)
-@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the machine-readable move report.")
+@click.option("--project", "project_path", type=click.Path(path_type=Path),
+              default=None, envvar="SCIENCE_PROJECT_ROOT",
+              help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
+@click.option("--fix", is_flag=True, default=False,
+              help="Relocate stranded records data/ → results/ (stages, never commits).")
+@click.option("--json", "as_json", is_flag=True, default=False,
+              help="Emit the machine-readable move report.")
 def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> None:
     """Report (and optionally fix) data/results/entities boundary violations."""
     project_path = project_path or Path.cwd()  # runtime default; honors the env var above
@@ -398,7 +393,6 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
         policy = resolve_data_policy(load_project_config(project_path))
     except FileNotFoundError:
         from science_tool.data_policy import DEFAULT_DATA_POLICY
-
         policy = DEFAULT_DATA_POLICY
     violations = audit_project(project_path, policy)
 
@@ -412,7 +406,8 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
             for o in outcomes:
                 mark = "moved" if o.performed else "FLAG"
                 tgt = o.violation.proposed_target or "-"
-                click.echo(f"  [{mark}] {o.violation.path} → {tgt}" + (f"  ({o.reason})" if o.reason else ""))
+                click.echo(f"  [{mark}] {o.violation.path} → {tgt}"
+                           + (f"  ({o.reason})" if o.reason else ""))
             click.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
         return
 
@@ -1219,7 +1214,9 @@ def evidence_line_group() -> None:
 @click.option(
     "--evidence-role",
     default=None,
-    type=click.Choice(["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]),
+    type=click.Choice(
+        ["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]
+    ),
 )
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--id", "entity_id")
@@ -1850,9 +1847,7 @@ def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, projec
     if output_format == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        rows: list[dict[str, str]] = [
-            {"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files
-        ]
+        rows: list[dict[str, str]] = [{"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files]
         rows.extend(
             {
                 "kind": "conflict",
@@ -4678,7 +4673,10 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     except SerializeError as exc:
         raise click.ClickException(str(exc)) from exc
     suffix = " [forced]" if result.forced else ""
-    click.echo(f"Serialized {result.file_count} file(s), {result.payload_count} payload(s){suffix} → {result.out_path}")
+    click.echo(
+        f"Serialized {result.file_count} file(s), {result.payload_count} payload(s)"
+        f"{suffix} → {result.out_path}"
+    )
 
 
 @project.command("verify")
@@ -5841,9 +5839,7 @@ def _get_feedback_dir() -> Path:
 @click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
 @click.option("--summary", required=True, help="One-line description")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option(
-    "--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens"
-)
+@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens")
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
@@ -6083,9 +6079,7 @@ def feedback_triage(
         ]
         if with_telemetry:
             columns.append(("telemetry_text", "Telemetry"))
-        table_rows = (
-            rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
-        )
+        table_rows = rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
         emit_query_rows(
             output_format=output_format,
             title="Feedback Triage",
@@ -6547,9 +6541,7 @@ def benchmark_gap_calibration(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option(
-    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
-)
+@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
 @click.option(
     "--source",
     "priority_source",
