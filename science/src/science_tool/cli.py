@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -6651,6 +6651,17 @@ def benchmark_tests(
     Console(width=200).print(table)
 
 
+def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
+    candidates = row["candidate_benchmarks"]
+    if not candidates:
+        return "-"
+    if row.get("candidate_mode") == "fallback-only":
+        first = candidates[0]["benchmark_id"]
+        remainder = len(candidates) - 1
+        return first if remainder <= 0 else f"{first} +{remainder} fallback"
+    return ", ".join(candidate["benchmark_id"] for candidate in candidates[:3])
+
+
 @benchmark_group.command("gaps")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
@@ -6728,17 +6739,17 @@ def benchmark_gaps(
         click.echo("No benchmark gaps.")
     else:
         table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
-        for col in ("entity", "level", "missing facets", "matches", "candidates", "reason"):
+        for col in ("entity", "level", "mode", "missing facets", "matches", "candidates", "reason"):
             table.add_column(col, overflow="fold", no_wrap=False)
         for row in rows:
             missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
-            candidates = ", ".join(candidate["benchmark_id"] for candidate in row["candidate_benchmarks"][:3]) or "-"
             table.add_row(
                 row["entity_id"],
                 row["gap_level"],
+                row["candidate_mode"],
                 missing,
                 str(len(row["current_matches"])),
-                candidates,
+                _format_gap_candidates_for_table(row),
                 row["reason"],
             )
         Console(width=200).print(table)

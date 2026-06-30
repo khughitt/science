@@ -507,6 +507,50 @@ benchmark:
     assert "fallback-only" in result.output
 
 
+def test_benchmark_gaps_cli_table_shows_candidate_mode_and_compacts_fallbacks(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-generic",
+        """
+id: hypothesis:0004-generic
+type: hypothesis
+title: Generic fallback benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    for slug in ("generic-a", "generic-b", "generic-c"):
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: {slug}
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    result = _invoke_gaps(tmp_path)
+
+    assert result.exit_code == 0
+    assert "fallback-only" in result.output
+    assert "+2 fallback" in result.output
+
+
 def test_benchmark_tests_cli_json_output(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
