@@ -376,6 +376,21 @@ contribute supporting metadata without claiming a second owner. Cross-project
 commons and overlay declarations are tracked separately so reference resolution
 can distinguish local owners, shared owners, and borrowers.
 
+Identity diagnostics use two strictness levels. Normal source loading is strict
+and raises early on duplicate ownership. Audit, validation, and migration paths
+that need to explain transitional project state load non-strictly, compile the
+same identity table, and report structured rows. A collision between two
+non-deprecated owners is a hard failure. A deprecated aggregate or datapackage
+owner shadowing one real owner is transitional debt: it is visible as a warning
+and should be retired, but it is not the same as two real owners claiming one
+identity.
+
+Bare references are valid only when the target has a single owner in the loaded
+identity table. If the same id is owned in multiple scopes, such as a local owner
+and a commons owner, graph audit reports `ambiguous_reference`. Use an explicit
+scope prefix such as `commons:topic:single-cell-foundation-models` when the
+intended owner is the shared commons entity.
+
 Graph build uses the same compiled source model for audit and materialization:
 
 ```text
@@ -509,6 +524,80 @@ files should use `paper:<bibkey>`. Health checks still surface legacy
 structured `article:` references so projects can remove them from source before
 the alias is retired. See [Refs Check](../conventions/refs-check.md) for the
 reference-checking and alias-retirement policy.
+
+`papers/references.bib` is an external-reference authority, not an entity owner
+store. It can synthesize lightweight paper or book records so `paper:` and
+`cite:` references resolve and minimal bibliography metadata can materialize,
+but it does not claim ownership over a project-authored literature note.
+
+CURIE-backed external references live in
+`knowledge/sources/<profile>/external_refs.yaml`:
+
+```yaml
+references:
+  - id: "gene:PHF19"
+    title: "PHF19"
+    primary_external_id:
+      source: "HGNC"
+      id: "HGNC:18350"
+      curie: "hgnc:18350"
+      provenance: "manual-curation"
+```
+
+Rows in this file are external references. They provide a durable authority for
+ontology or catalog identifiers and can materialize exact-match links, but they
+do not replace a project owner file when the project has one.
+
+## Aggregate Retirement
+
+Some older projects still contain aggregate entity rows in
+`knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, or single-type files
+such as `doc/observations/observations.yaml`. These are transitional source
+surfaces. New durable entities should be authored as owner files under
+`entities/`.
+
+Use `science entities triage-aggregate` to inventory aggregate rows:
+
+```bash
+science entities triage-aggregate --project-root <project>
+science entities triage-aggregate --project-root <project> --format json
+```
+
+The read-only report buckets rows by the compiled source model:
+
+| Bucket | Meaning |
+|---|---|
+| `shadow` | A non-aggregate owner for the same id already exists. |
+| `coined` | The row can promote to a first-class owner file. |
+| `decision-log` | The row is backed by a `core/decisions.md` decision section. |
+| `external-ref` | The row is backed by bibliography authority. |
+| `curie-external-ref` | The row has `primary_external_id` and can move to `external_refs.yaml`. |
+| `cruft` | An unreferenced migration artifact row. |
+| `referenced-orphan` | A migration artifact row still referenced by live entities. |
+| `question-deferred` | A question stub that needs epistemic authoring. |
+| `ambiguous` | A row that still needs a human identity decision. |
+
+Mutation requires `--apply` plus explicit bucket flags, and only runs for
+layout-version 3 projects:
+
+```bash
+science entities triage-aggregate --project-root <project> --promote-coined --apply
+science entities triage-aggregate --project-root <project> --promote-decisions --apply
+science entities triage-aggregate --project-root <project> --retire-external-refs --apply
+science entities triage-aggregate --project-root <project> --migrate-curie-refs --apply
+science entities triage-aggregate --project-root <project> --delete-shadow --delete-cruft --apply
+```
+
+Promotion is id-preserving and path-policy aware. A non-conforming or unsafe id
+is rejected rather than silently renamed. Shadow deletion is safe only when a
+real owner exists. Referenced or ambiguous rows stay for human triage.
+
+Decision owners are authoritative after promotion. Render the derived decision
+log view with:
+
+```bash
+science entities generate-decisions --project-root <project> --write
+```
 
 ## Compositional Research Outputs
 

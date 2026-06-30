@@ -71,9 +71,9 @@ Their design intent feeds the facet migrations; they are superseded as standalon
 
 ### 1.4 Out of scope (separate layer)
 The identity/storage **substrate** — identity table, adapters, TriG compilation, `layout_version`
-v2→v3 migration — keeps its own in-flight docs (`2026-06-06-…-substrate-design.md`,
-`2026-06-07-substrate-*`). This spec **assumes** the v3 destination state (§7) and reads the
-*compiled model*, never raw disk.
+v2→v3 migration — is summarized in
+`docs/audits/plans-cleanup/2026-06-06-substrate-migration-checkpoint.md`. This spec **assumes**
+the v3 destination state (§7) and reads the *compiled model*, never raw disk.
 
 ---
 
