@@ -1,7 +1,21 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `51`
+- Pending thread count: `54`
+
+## adapter-entity-layout-and-overlay-root
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until layout-v3 migration deviations and plan citations are checkpointed
+    - `docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md`
+- remaining_gaps:
+  - Live code/test comments still cite docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md.
+  - The plan includes migration-deviation notes useful as a compact historical checkpoint, but current user-facing layout knowledge is already durable.
 
 ## authored-confidence
 
@@ -69,6 +83,22 @@
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
 
+## catalog-datasets
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-21-catalog-datasets-design.md`
+  - `docs/plans/2026-06-21-catalog-datasets-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset prioritization workflow rationale is checkpointed and live citations are repointed
+    - `docs/plans/2026-06-21-catalog-datasets-design.md`
+    - `docs/plans/2026-06-21-catalog-datasets-plan.md`
+- remaining_gaps:
+  - commands/catalog-datasets.md and science/src/science_tool/dataset_prioritize.py still cite the plan as the design anchor.
+  - The original design is partially stale: later plans added verify-access, Q/H datasets: reach, reference/pointer classes, coverage reasons, and commons-promotion guidance.
+
 ## contextual-structural-roles
 
 - status: `implemented_needs_durable_docs`
@@ -97,6 +127,22 @@
   - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
   - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
   - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
+
+## dataset-catalog-cli
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-21-dataset-catalog-cli-design.md`
+  - `docs/plans/2026-06-21-dataset-catalog-cli-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset catalog CLI rationale is checkpointed and live citations are repointed
+    - `docs/plans/2026-06-21-dataset-catalog-cli-design.md`
+    - `docs/plans/2026-06-21-dataset-catalog-cli-plan.md`
+- remaining_gaps:
+  - science/src/science_tool/datasets_catalog.py and science/src/science_tool/validate/checks/dataset_acquisition.py still cite the plan.
+  - Some original details are stale after layout v3 and triage-pack changes: doc/datasets became entities/datasets, dataset_class exists, and verify-access owns coupled access edits.
 
 ## dataset-evidence-flow
 
