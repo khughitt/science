@@ -8,6 +8,8 @@ from typing import Any, Literal, Mapping
 
 import yaml
 
+from science_tool.entity_scan import iter_entity_markdown
+
 ConflictReason = Literal[
     "malformed-frontmatter",
     "malformed-datasets",
@@ -225,20 +227,27 @@ def _usage_defect(entry: Any) -> str | None:
 
 def _source_scan(project_root: Path) -> _SourceScan:
     files: set[Path] = set()
+    entities_root = project_root / "entities"
     paper_roots: set[Path] = {
-        project_root / "entities" / "papers",
+        entities_root / "papers",
         project_root / "doc" / "papers",
         project_root / "doc" / "background" / "papers",
         *_declared_paper_roots(project_root),
     }
     load_conflict: PaperDatasetMigrationConflict | None = None
 
-    for root in (project_root / "entities", project_root / "research" / "packages"):
-        if root.is_dir():
-            files.update(path for path in root.rglob("*.md") if path.is_file())
+    files.update(iter_entity_markdown(entities_root))
+    research_packages_root = project_root / "research" / "packages"
+    if research_packages_root.is_dir():
+        files.update(path for path in research_packages_root.rglob("*.md") if path.is_file())
     for root in list(paper_roots):
         if root.is_dir():
-            files.update(path for path in root.rglob("*.md") if path.is_file())
+            try:
+                root.relative_to(entities_root)
+            except ValueError:
+                files.update(path for path in root.rglob("*.md") if path.is_file())
+            else:
+                files.update(iter_entity_markdown(root))
 
     try:
         from science_tool.graph.sources import load_project_sources

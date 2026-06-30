@@ -32,6 +32,7 @@ ALLOWLIST: set[str] = {
     "graph/health.py",                      # health/datasets/runs roots
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots
+    "graph/paper_dataset_migration.py",     # research/packages/doc paper roots (entities branch routed)
     "entity_layout_migration.py",           # legacy doc/specs scan for v2->v3 migration
     "validate/checks/id_prefixes.py",       # doc/specs legacy roots (line 52)
     "validate/checks/entity_conformance.py",  # _LEGACY_ROOTS (line 89)
@@ -55,6 +56,7 @@ ENTITY_SCANNERS: set[str] = {
     "validate/checks/entity_conformance.py",
     "validate/checks/hypotheses.py",
     "big_picture/validator.py",
+    "graph/paper_dataset_migration.py",
     "entities.py",
 }
 
