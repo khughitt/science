@@ -236,7 +236,12 @@ def discover_plan_files(
 ) -> tuple[list[PlanFile], list[str]]:
     files: list[PlanFile] = []
     non_conforming: list[str] = []
-    for path in sorted(plans_dir.glob("*.md")):
+    candidate_paths = [
+        path
+        for suffix in ("*.md", "*.txt")
+        for path in plans_dir.glob(suffix)
+    ]
+    for path in sorted(candidate_paths):
         try:
             files.append(parse_plan_file(path, repo_root))
         except ValueError:
@@ -588,6 +593,8 @@ def write_pending_report(
             lines.extend(f"  - {gap}" for gap in review["remaining_gaps"])
         lines.append("")
 
+    if lines and lines[-1] == "":
+        lines.pop()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines) + "\n")
     print(f"wrote {output_path.relative_to(repo_root)}")
@@ -597,6 +604,7 @@ def write_pending_report(
 def run_self_test() -> None:
     test_normalize_slug()
     test_apply_overrides_splits_thread()
+    test_discover_plan_files_includes_text_plans()
     test_batch_selection_uses_latest_before()
     test_validate_allows_deferred_then_terminal_removed_thread()
     test_validate_allows_migration_checkpoint_then_terminal_removed_thread()
@@ -604,7 +612,7 @@ def run_self_test() -> None:
     test_validate_rejects_action_disallowed_by_latest_status()
     test_validate_rejects_action_files_outside_review()
     test_pending_report_terminal_action_resolves_prior_pending()
-    print("self-test passed (9 groups)")
+    print("self-test passed (10 groups)")
 
 
 def test_normalize_slug() -> None:
@@ -688,6 +696,24 @@ def test_apply_overrides_splits_thread() -> None:
         pass
     else:
         raise AssertionError("expected unknown-file split to fail")
+
+
+def test_discover_plan_files_includes_text_plans() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        plans_dir = root / "docs" / "plans"
+        plans_dir.mkdir(parents=True)
+        (plans_dir / "2026-04-01-markdown-plan.md").write_text("# Markdown\n")
+        (plans_dir / "2026-04-02-text-plan.txt").write_text("text output\n")
+        files, non_conforming = discover_plan_files(plans_dir, root)
+        paths = [plan_file.path for plan_file in files]
+        if paths != [
+            "docs/plans/2026-04-01-markdown-plan.md",
+            "docs/plans/2026-04-02-text-plan.txt",
+        ]:
+            raise AssertionError(f"unexpected discovered plan files: {paths}")
+        if non_conforming:
+            raise AssertionError(f"unexpected non-conforming files: {non_conforming}")
 
 
 def test_batch_selection_uses_latest_before() -> None:
@@ -1089,6 +1115,8 @@ def test_pending_report_terminal_action_resolves_prior_pending() -> None:
         text = output_path.read_text()
         if "resolved-thread" in text:
             raise AssertionError("terminal action should remove thread from pending report")
+        if text.endswith("\n\n"):
+            raise AssertionError("pending report should not end with a blank line")
 
 
 if __name__ == "__main__":
