@@ -1,10 +1,10 @@
 {
-  "file_count": 169,
+  "file_count": 158,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 99,
+  "thread_count": 93,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1399,60 +1399,6 @@
       "thread_id": "natural-systems-prose-epistemics-application"
     },
     {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md",
-        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "paper-annotate-phase3a",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md": "paper-annotate-phase3a-design",
-        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md": "paper-annotate-phase3a-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-paper-annotate-phase3a-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-paper-annotate-phase3a-design.md": "design",
-        "docs/plans/2026-06-15-paper-annotate-phase3a-plan.md": "plan"
-      },
-      "thread_id": "paper-annotate-phase3a"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
-        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md",
-        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "paper-annotate-phase3b",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md": "paper-annotate-phase3b-design",
-        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md": "paper-annotate-phase3b-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-paper-annotate-phase3b-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-paper-annotate-phase3b-design.md": "design",
-        "docs/plans/2026-06-15-paper-annotate-phase3b-plan.md": "plan"
-      },
-      "thread_id": "paper-annotate-phase3b"
-    },
-    {
       "earliest_file_date": "2026-06-14",
       "files": [
         "docs/plans/2026-06-14-patch-contract-keystone-design.md",
@@ -1788,33 +1734,6 @@
     {
       "earliest_file_date": "2026-06-15",
       "files": [
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md",
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md"
-      ],
-      "latest_file_date": "2026-06-15",
-      "normalized_slug": "pubtator-seeder-phase2a",
-      "raw_slugs": {
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md": "pubtator-seeder-phase2a-design",
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md": "pubtator-seeder-phase2a-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md": "design",
-        "docs/plans/2026-06-15-pubtator-seeder-phase2a-plan.md": "plan"
-      },
-      "thread_id": "pubtator-seeder-phase2a"
-    },
-    {
-      "earliest_file_date": "2026-06-15",
-      "files": [
         "docs/plans/2026-06-15-pubtator-seeder-phase2b-design.md",
         "docs/plans/2026-06-15-pubtator-seeder-phase2b-plan.md"
       ],
@@ -1919,39 +1838,6 @@
         "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "remove-v3-migration-code"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-schema-adoption-campaign-design.md",
-        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md",
-        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "schema-adoption-campaign",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-schema-adoption-campaign-design.md": "schema-adoption-campaign-design",
-        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md": "schema-adoption-campaign-manifest",
-        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md": "schema-adoption-campaign-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-14-schema-adoption-campaign-design.md"
-        ],
-        "manifest": [
-          "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-14-schema-adoption-campaign-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-schema-adoption-campaign-design.md": "design",
-        "docs/plans/2026-06-14-schema-adoption-campaign-manifest.md": "manifest",
-        "docs/plans/2026-06-14-schema-adoption-campaign-plan.md": "plan"
-      },
-      "thread_id": "schema-adoption-campaign"
     },
     {
       "earliest_file_date": "2026-06-23",
@@ -2114,48 +2000,6 @@
         "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "plan"
       },
       "thread_id": "statement-promotion-phase4b"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-sub-article-annotation-spec.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "sub-article-annotation",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-sub-article-annotation-spec.md": "sub-article-annotation-spec"
-      },
-      "related_threads": [],
-      "role_files": {
-        "spec": [
-          "docs/plans/2026-06-14-sub-article-annotation-spec.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-sub-article-annotation-spec.md": "spec"
-      },
-      "thread_id": "sub-article-annotation"
-    },
-    {
-      "earliest_file_date": "2026-06-14",
-      "files": [
-        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md"
-      ],
-      "latest_file_date": "2026-06-14",
-      "normalized_slug": "sub-article-annotation-phase1",
-      "raw_slugs": {
-        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md": "sub-article-annotation-phase1-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-14-sub-article-annotation-phase1-plan.md": "plan"
-      },
-      "thread_id": "sub-article-annotation-phase1"
     },
     {
       "earliest_file_date": "2026-06-08",

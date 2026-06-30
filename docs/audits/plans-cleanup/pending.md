@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `26`
+- Pending thread count: `32`
 
 ## bundle-belief-rollup
 
@@ -84,6 +84,65 @@
 - remaining_gaps:
   - Migrate sub-cohort semantics and B2 ancestor-vs-sibling behavior into durable docs before deleting the active plan pair.
 
+## entity-consolidation-and-archive
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-entity-consolidation-and-archive-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until as-built archive/consolidation workflow and invariants are documented
+    - `docs/plans/2026-06-15-entity-consolidation-and-archive-design.md`
+- remaining_gaps:
+  - Durable user docs mention entity list flags and registry basics but do not fully document archive/consolidation workflows, invariants, or as-built deviations now captured only in the plan.
+  - Migrate the as-built contract before removing from active plans.
+
+## entity-consolidation-p1-visibility
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until mark-superseded and default-hidden semantics are documented
+    - `docs/plans/2026-06-15-entity-consolidation-p1-visibility-plan.md`
+- remaining_gaps:
+  - mark-superseded and default-hidden semantics are not clearly documented in durable user/process docs beyond CLI surface references.
+
+## entity-consolidation-p2-candidate-detector
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md`
+  - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until consolidation-candidate command and tuning semantics are documented
+    - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-design.md`
+    - `docs/plans/2026-06-15-entity-consolidation-p2-candidate-detector-plan.md`
+- remaining_gaps:
+  - The detector command and tuning semantics are not documented in durable user/process docs.
+  - The design includes real-corpus tuning results that should be preserved outside active plans if future tuning matters.
+
+## entity-consolidation-p3-archive
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md`
+  - `docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until archive index, freeze, reconciliation, and graph-resolution contract are documented
+    - `docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md`
+    - `docs/plans/2026-06-15-entity-consolidation-p3-archive-plan.md`
+- remaining_gaps:
+  - Durable docs do not fully explain entities/_archive, archive-index.jsonl, archive freeze/reconciliation, or index-only graph resolution.
+  - P3 code now includes P4 additive fields consolidated_into and digest_insight in ArchiveRow; preserve phase boundary when moving files.
+
 ## entity-organization-and-naming-implementation-plan3
 
 - status: `implemented_needs_durable_docs`
@@ -161,6 +220,22 @@
     - `docs/plans/2026-06-14-infer-schema-scaffold-plan.md`
 - remaining_gaps:
   - Migrate the command contract and safety rules into durable docs before deleting the plan pair.
+
+## kind-descriptor-model-registry
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-14-kind-descriptor-model-registry-design.md`
+  - `docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until CORE_PROFILE source-of-truth decision and CORE_KINDS removal are documented
+    - `docs/plans/2026-06-14-kind-descriptor-model-registry-design.md`
+    - `docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md`
+- remaining_gaps:
+  - The architectural decision that CORE_PROFILE is the source of truth and CORE_KINDS was removed is still mostly in plans/test names, not in durable docs.
+  - Later adapter work changed the exact strategy typing boundary, so the design is not an exact as-built spec.
 
 ## local-kind-layout-migration
 
@@ -251,6 +326,22 @@
 - remaining_gaps:
   - docs/conventions/pipeline-qa-checkpoints.md still has stale pre-refactor wording about modality packs/packs:[scrna] and links back to this plan for details.
   - Migrate locked QA-library semantics before deleting the plan files.
+
+## qa-schema-compiler
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-14-qa-schema-compiler-design.md`
+  - `docs/plans/2026-06-14-qa-schema-compiler-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until schema-to-QA compiler contract is documented
+    - `docs/plans/2026-06-14-qa-schema-compiler-design.md`
+    - `docs/plans/2026-06-14-qa-schema-compiler-plan.md`
+- remaining_gaps:
+  - No durable non-plan doc fully records the schema-to-check mapping, compile errors, merge semantics, YAML timestamp rule, or tabular program contract.
+  - docs/conventions/pipeline-qa-checkpoints.md documents the older config-driven QA convention and science_qa generally, but not the schema compiler as the current contract.
 
 ## substrate-3b-entities-retirement-apply
 
