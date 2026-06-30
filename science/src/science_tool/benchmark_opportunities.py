@@ -62,6 +62,9 @@ BENCHMARK_GAP_HINT_FACETS = (
 )
 BENCHMARK_GAP_HINT_FACET_SET = frozenset(BENCHMARK_GAP_HINT_FACETS)
 BROAD_NON_SCOREABLE_FACETS = frozenset({"biology", "cancer", "varies"})
+TERM_BUCKET_CAP = 10
+FREQUENT_TERM_COUNT = 3
+HINT_CANDIDATE_TRUNCATION_NOTICE = "evidence categories are capped at top 10 terms per bucket"
 ENTITY_SUPPRESSED_TOKENS = frozenset(
     {
         "claim",
@@ -510,6 +513,41 @@ class BenchmarkGapReport(TypedDict):
     summary: BenchmarkGapSummary
     calibration: GapCalibrationPayload
     evidence_report: EvidenceReport
+    commons_notice: str | None
+
+
+HintCandidateCategory = Literal["domain-candidate", "project-local", "workflow-or-modeling", "existing-hint"]
+HintCandidateAction = Literal["review-for-hint", "project-local-or-alias", "not-a-benchmark-facet", "already-mapped"]
+
+
+class HintCandidateRow(TypedDict):
+    term: str
+    count: int | None
+    category: HintCandidateCategory
+    current_hint: str | None
+    suggested_action: HintCandidateAction
+    suggested_facets: list[str]
+    example_entities: list[str]
+    reason_notes: list[str]
+
+
+class HintCandidateSummary(TypedDict):
+    candidate_terms: int
+    domain_candidate_terms: int
+    project_local_terms: int
+    workflow_or_modeling_terms: int
+    existing_hint_terms: int
+    term_bucket_cap: int
+    truncation_notice: str
+    fallback_only_gap_rows: int
+    entity_specific_gap_rows: int
+
+
+class HintCandidatesReport(TypedDict):
+    project_root: str
+    summary: HintCandidateSummary
+    hint_candidates: list[HintCandidateRow]
+    review_file: str | None
     commons_notice: str | None
 
 
@@ -1340,7 +1378,7 @@ def _term_categories(
     by_entity: dict[str, list[str]],
     *,
     project_local_tokens: set[str],
-    top: int = 10,
+    top: int = TERM_BUCKET_CAP,
 ) -> EvidenceTermCategories:
     all_terms = {term for terms in by_entity.values() for term in terms}
     project_terms = all_terms & project_local_tokens
@@ -1351,6 +1389,136 @@ def _term_categories(
         "project_local_terms": _term_rows_for_terms(by_entity, project_terms, top=top),
         "workflow_or_modeling_terms": _term_rows_for_terms(by_entity, workflow_terms, top=top),
         "other_terms": [],
+    }
+
+
+def _hint_candidate_reason_notes(
+    *,
+    category: HintCandidateCategory,
+    count: int | None,
+    fallback_heavy: bool,
+) -> list[str]:
+    notes: list[str] = []
+    if category == "domain-candidate":
+        notes.append("unmapped-domain-term")
+    elif category == "project-local":
+        notes.append("project-local-term")
+    elif category == "workflow-or-modeling":
+        notes.append("workflow-or-modeling-term")
+    elif category == "existing-hint":
+        notes.append("already-mapped-term")
+    if count is not None and count >= FREQUENT_TERM_COUNT:
+        notes.append("frequent-term")
+    if fallback_heavy:
+        notes.append("fallback-heavy-project")
+    return notes
+
+
+def _hint_candidate_from_term_row(
+    row: TermCountRow,
+    *,
+    category: HintCandidateCategory,
+    fallback_heavy: bool,
+) -> HintCandidateRow:
+    if category == "domain-candidate":
+        action: HintCandidateAction = "review-for-hint"
+    elif category == "project-local":
+        action = "project-local-or-alias"
+    elif category == "workflow-or-modeling":
+        action = "not-a-benchmark-facet"
+    else:
+        action = "already-mapped"
+    count = row["count"]
+    return {
+        "term": row["term"],
+        "count": count,
+        "category": category,
+        "current_hint": None,
+        "suggested_action": action,
+        "suggested_facets": [],
+        "example_entities": list(row["example_entities"]),
+        "reason_notes": _hint_candidate_reason_notes(
+            category=category,
+            count=count,
+            fallback_heavy=fallback_heavy,
+        ),
+    }
+
+
+def _existing_hint_candidate_rows(*, fallback_heavy: bool) -> list[HintCandidateRow]:
+    return [
+        {
+            "term": term,
+            "count": None,
+            "category": "existing-hint",
+            "current_hint": facet,
+            "suggested_action": "already-mapped",
+            "suggested_facets": [],
+            "example_entities": [],
+            "reason_notes": _hint_candidate_reason_notes(
+                category="existing-hint",
+                count=None,
+                fallback_heavy=fallback_heavy,
+            ),
+        }
+        for term, facet in sorted(FACET_HINT_TERMS.items())
+    ]
+
+
+def _hint_candidate_sort_key(row: HintCandidateRow) -> tuple[int, int, str]:
+    category_order: dict[HintCandidateCategory, int] = {
+        "domain-candidate": 0,
+        "project-local": 1,
+        "workflow-or-modeling": 2,
+        "existing-hint": 3,
+    }
+    count = row["count"] if row["count"] is not None else -1
+    return (category_order[row["category"]], -count, row["term"])
+
+
+def _hint_candidate_rows_from_evidence(
+    evidence: EvidenceReport,
+    *,
+    min_count: int,
+    include_existing: bool,
+    fallback_heavy: bool,
+) -> list[HintCandidateRow]:
+    if not evidence["enabled"]:
+        raise ValueError("benchmark gap evidence report must be enabled")
+    categories = evidence["term_categories"]
+    rows: list[HintCandidateRow] = []
+    category_sources: tuple[tuple[TermCategory, HintCandidateCategory], ...] = (
+        ("domain_candidate_terms", "domain-candidate"),
+        ("project_local_terms", "project-local"),
+        ("workflow_or_modeling_terms", "workflow-or-modeling"),
+    )
+    for source_key, category in category_sources:
+        for term_row in categories[source_key]:
+            if term_row["count"] >= min_count:
+                rows.append(
+                    _hint_candidate_from_term_row(
+                        term_row,
+                        category=category,
+                        fallback_heavy=fallback_heavy,
+                    )
+                )
+    if include_existing:
+        rows.extend(_existing_hint_candidate_rows(fallback_heavy=fallback_heavy))
+    rows.sort(key=_hint_candidate_sort_key)
+    return rows
+
+
+def _hint_candidate_summary(rows: list[HintCandidateRow], gap_summary: BenchmarkGapSummary) -> HintCandidateSummary:
+    return {
+        "candidate_terms": len(rows),
+        "domain_candidate_terms": sum(1 for row in rows if row["category"] == "domain-candidate"),
+        "project_local_terms": sum(1 for row in rows if row["category"] == "project-local"),
+        "workflow_or_modeling_terms": sum(1 for row in rows if row["category"] == "workflow-or-modeling"),
+        "existing_hint_terms": sum(1 for row in rows if row["category"] == "existing-hint"),
+        "term_bucket_cap": TERM_BUCKET_CAP,
+        "truncation_notice": HINT_CANDIDATE_TRUNCATION_NOTICE,
+        "fallback_only_gap_rows": gap_summary["gap_candidate_mode_counts"]["fallback-only"],
+        "entity_specific_gap_rows": gap_summary["gap_candidate_mode_counts"]["entity-specific"],
     }
 
 
@@ -1393,9 +1561,14 @@ def _gap_evidence_report(
         }
 
     top_terms = _top_unmapped_terms(unmapped_by_entity)
+    project_local_tokens = _project_local_tokens(project_root, entities)
+    project_context_tokens = _tokens_from_label(project_root.resolve().name) - _WORKFLOW_OR_MODELING_TERMS
+    categorized_terms_by_entity = {
+        entity_id: [*terms, *project_context_tokens] for entity_id, terms in unmapped_by_entity.items()
+    }
     categories = _term_categories(
-        unmapped_by_entity,
-        project_local_tokens=_project_local_tokens(project_root, entities),
+        categorized_terms_by_entity,
+        project_local_tokens=project_local_tokens,
     )
     return {
         "enabled": True,
@@ -2658,4 +2831,42 @@ def gaps_report(
             enabled=evidence_report,
         ),
         "commons_notice": opportunity["commons_notice"],
+    }
+
+
+def benchmark_hint_candidates_report(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    domain: str | None = None,
+    min_count: int = 1,
+    include_existing: bool = False,
+    review_file: str | None = None,
+) -> HintCandidatesReport:
+    if min_count < 1:
+        raise ValueError("min_count must be at least 1")
+
+    gap_payload = gaps_report(
+        project_root,
+        include_commons=include_commons,
+        domain=domain,
+        evidence_report=True,
+    )
+    gap_summary = gap_payload["summary"]
+    fallback_heavy = (
+        gap_summary["gap_candidate_mode_counts"]["fallback-only"]
+        > gap_summary["gap_candidate_mode_counts"]["entity-specific"]
+    )
+    rows = _hint_candidate_rows_from_evidence(
+        gap_payload["evidence_report"],
+        min_count=min_count,
+        include_existing=include_existing,
+        fallback_heavy=fallback_heavy,
+    )
+    return {
+        "project_root": str(project_root),
+        "summary": _hint_candidate_summary(rows, gap_summary),
+        "hint_candidates": rows,
+        "review_file": review_file,
+        "commons_notice": gap_payload["commons_notice"],
     }
