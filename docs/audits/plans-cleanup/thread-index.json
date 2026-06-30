@@ -1,10 +1,10 @@
 {
-  "file_count": 137,
+  "file_count": 135,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 81,
+  "thread_count": 80,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -482,33 +482,6 @@
         "docs/plans/2026-06-21-catalog-datasets-plan.md": "plan"
       },
       "thread_id": "catalog-datasets"
-    },
-    {
-      "earliest_file_date": "2026-06-29",
-      "files": [
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-design.md",
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-plan.md"
-      ],
-      "latest_file_date": "2026-06-29",
-      "normalized_slug": "commons-born-dataset-lifecycle",
-      "raw_slugs": {
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-design.md": "commons-born-dataset-lifecycle-design",
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-plan.md": "commons-born-dataset-lifecycle-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-29-commons-born-dataset-lifecycle-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-29-commons-born-dataset-lifecycle-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-design.md": "design",
-        "docs/plans/2026-06-29-commons-born-dataset-lifecycle-plan.md": "plan"
-      },
-      "thread_id": "commons-born-dataset-lifecycle"
     },
     {
       "earliest_file_date": "2026-06-19",
