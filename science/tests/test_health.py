@@ -531,6 +531,27 @@ class TestBuildHealthReport:
         ]
         assert report["total_issues"] == 1
 
+    def test_cross_paper_evidence_malformed_sidecar_is_health_finding(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        _write_cross_paper_manifest(tmp_path)
+        md = tmp_path / "entities" / "papers" / "Bad2020.source.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text("Results show the claim.\n", encoding="utf-8")
+        anno_io.sidecar_for_markdown(md).write_text("not valid trig\n", encoding="utf-8")
+
+        report = build_health_report(tmp_path, checks={"cross_paper_evidence"})
+
+        cross_paper = report["cross_paper_evidence"]
+        assert cross_paper["status"] == "fail"
+        assert cross_paper["empty_state"] == "no_propositions"
+        assert cross_paper["summary"]["faults_by_reason"] == {"sidecar-parse-error": 1}
+        assert cross_paper["findings"][0]["code"] == "cross_paper_evidence.sidecar-parse-error"
+        assert cross_paper["findings"][0]["sidecar"] == "entities/papers/Bad2020.source.anno.trig"
+        assert cross_paper["findings"][0]["annotation"] == ""
+        assert cross_paper["findings"][0]["detail"]
+        assert report["total_issues"] == 1
+
     def test_cross_paper_evidence_reports_derived_unit_counts(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 

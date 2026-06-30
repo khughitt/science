@@ -13,7 +13,11 @@ from science_model.reasoning import EvidenceRole, EvidenceStance, EvidenceStreng
 
 from science_tool.annotation.io import markdown_for_sidecar
 from science_tool.annotation.model import TextualBody
-from science_tool.annotation.query import entity_relpath_for_sidecar, iter_sidecars
+from science_tool.annotation.query import (
+    SidecarParseError,
+    entity_relpath_for_sidecar,
+    read_sidecar_strict,
+)
 from science_tool.annotation.text_source_adapter import TextSourceAdapterError, resolve_adapter
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 
@@ -263,10 +267,10 @@ def _resolve_paper_ref(sidecar_path: Path) -> str | None:
         return None
 
 
-def _iter_project_annotation_sidecars(project_root: Path):
+def _iter_project_annotation_sidecar_paths(project_root: Path):
     entities_root = project_root / "entities"
     if entities_root.is_dir():
-        yield from iter_sidecars(entities_root)
+        yield from sorted(entities_root.rglob("*.anno.trig"))
 
 
 def scan_literature_assertions(
@@ -276,8 +280,20 @@ def scan_literature_assertions(
     assertions: list[LiteratureAssertion] = []
     faults: list[AssertionFault] = []
 
-    for sidecar_path, sidecar in _iter_project_annotation_sidecars(project_root):
+    for sidecar_path in _iter_project_annotation_sidecar_paths(project_root):
         sidecar_ref = str(sidecar_path)
+        try:
+            sidecar = read_sidecar_strict(sidecar_path)
+        except SidecarParseError as exc:
+            faults.append(
+                AssertionFault(
+                    sidecar_ref,
+                    "",
+                    "sidecar-parse-error",
+                    f"{type(exc.cause).__name__}: {exc.cause}",
+                )
+            )
+            continue
         paper_ref: str | None = None
         paper_resolved = False
         for ann in sidecar.annotations:

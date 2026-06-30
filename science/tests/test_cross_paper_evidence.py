@@ -199,6 +199,23 @@ def test_scan_ignores_sidecars_outside_project_entity_roots(tmp_path: Path):
     assert [(a.paper_ref, a.stance) for a in assertions] == [("paper:Smith2020", "asserted")]
 
 
+def test_scan_reports_malformed_in_scope_sidecar_as_fault(tmp_path: Path):
+    md = tmp_path / "entities" / "papers" / "Bad2020.source.md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Body.\n", encoding="utf-8")
+    sidecar = anno_io.sidecar_for_markdown(md)
+    sidecar.write_text("not valid trig\n", encoding="utf-8")
+
+    assertions, faults = scan_literature_assertions(tmp_path, {})
+
+    assert assertions == []
+    assert len(faults) == 1
+    assert faults[0].sidecar == str(sidecar)
+    assert faults[0].annotation_id == ""
+    assert faults[0].reason == "sidecar-parse-error"
+    assert faults[0].detail
+
+
 def test_scan_skips_question_and_hypothesis_typed_annotations(tmp_path: Path):
     _write_paper_sidecar(
         tmp_path,
