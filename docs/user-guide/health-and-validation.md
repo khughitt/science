@@ -22,6 +22,14 @@ schema errors, broken references, invalid frontmatter, and convention problems.
 `science health` aggregates diagnostics across graph migration, references,
 aspects, evidence coverage, identity policy, and related hygiene.
 
+When a project uses prose epistemics, `science health` also reads
+`data/prose-health/prose-health.json`. It reports prose-health findings but does
+not rebuild the artifact implicitly. Regenerate that derived state with:
+
+```bash
+science annotate build-prose-health --write
+```
+
 Projects may mark a validation warning as reviewed in `science.yaml` when the
 warning is an intentional, documented residual risk rather than an unresolved
 defect. Accepted warnings are omitted from `science validate` output/counts and

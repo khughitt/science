@@ -1,10 +1,10 @@
 {
-  "file_count": 27,
+  "file_count": 18,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 18,
+  "thread_count": 13,
   "threads": [
     {
       "earliest_file_date": "2026-06-26",
@@ -254,135 +254,6 @@
         "docs/plans/2026-06-30-proposition-cross-paper-evidence-phase4d-plan.md": "plan"
       },
       "thread_id": "proposition-cross-paper-evidence-phase4d"
-    },
-    {
-      "earliest_file_date": "2026-06-17",
-      "files": [
-        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md"
-      ],
-      "latest_file_date": "2026-06-17",
-      "normalized_slug": "prose-epistemics-p1-source-adapter",
-      "raw_slugs": {
-        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md": "prose-epistemics-p1-source-adapter-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md": "plan"
-      },
-      "thread_id": "prose-epistemics-p1-source-adapter"
-    },
-    {
-      "earliest_file_date": "2026-06-18",
-      "files": [
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md",
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md"
-      ],
-      "latest_file_date": "2026-06-18",
-      "normalized_slug": "prose-epistemics-p2-internal-prose",
-      "raw_slugs": {
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md": "prose-epistemics-p2-internal-prose-design",
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md": "prose-epistemics-p2-internal-prose-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md": "design",
-        "docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md": "plan"
-      },
-      "thread_id": "prose-epistemics-p2-internal-prose"
-    },
-    {
-      "earliest_file_date": "2026-06-18",
-      "files": [
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md",
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md"
-      ],
-      "latest_file_date": "2026-06-18",
-      "normalized_slug": "prose-epistemics-p3-domain-grounding",
-      "raw_slugs": {
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md": "prose-epistemics-p3-domain-grounding-design",
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md": "prose-epistemics-p3-domain-grounding-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md": "design",
-        "docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md": "plan"
-      },
-      "thread_id": "prose-epistemics-p3-domain-grounding"
-    },
-    {
-      "earliest_file_date": "2026-06-18",
-      "files": [
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md",
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md"
-      ],
-      "latest_file_date": "2026-06-18",
-      "normalized_slug": "prose-epistemics-p4-health-coverage",
-      "raw_slugs": {
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md": "prose-epistemics-p4-health-coverage-design",
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md": "prose-epistemics-p4-health-coverage-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md": "design",
-        "docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md": "plan"
-      },
-      "thread_id": "prose-epistemics-p4-health-coverage"
-    },
-    {
-      "earliest_file_date": "2026-06-19",
-      "files": [
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md",
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md"
-      ],
-      "latest_file_date": "2026-06-19",
-      "normalized_slug": "prose-epistemics-pilot-improvements",
-      "raw_slugs": {
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md": "prose-epistemics-pilot-improvements-design",
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md": "prose-epistemics-pilot-improvements-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md": "design",
-        "docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md": "plan"
-      },
-      "thread_id": "prose-epistemics-pilot-improvements"
     },
     {
       "earliest_file_date": "2026-06-20",

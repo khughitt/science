@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `17`
+- Pending thread count: `12`
 
 ## benchmark-grounded-model-assessment
 
@@ -158,84 +158,6 @@
 - remaining_gaps:
   - No durable user or developer doc was found for the derived literature evidence scanner, materialize-time behavior, diagnostic command, fault semantics, belief effect, or non-goals.
   - docs/conventions/annotation-tokens.md still mentions cross-paper evidence as future work, so durable docs should replace that stale forward-looking note.
-
-## prose-epistemics-p1-source-adapter
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until TextSourceAdapter contract and P1/P2 boundary are documented
-    - `docs/plans/2026-06-17-prose-epistemics-p1-source-adapter-plan.md`
-- remaining_gaps:
-  - No durable non-plan doc found that explains the TextSourceAdapter contract, P1/P2 boundary, and why regenerable is declared but not implemented in P1.
-
-## prose-epistemics-p2-internal-prose
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md`
-  - `docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until P2 prose decomposition artifact, storage, stale, locator, and operator contracts are documented
-    - `docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md`
-    - `docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-plan.md`
-- remaining_gaps:
-  - Durable docs only briefly mention prose-derived reports in docs/user-guide/graph-and-derived-state.md and list prose-source in docs/user-guide/entities.md; they do not document the P2 artifact schema, storage paths, fingerprint identity, stale semantics, locator resolver contract, or operator commands.
-  - Later pilot-improvements work adds pre-ingest validation and batch promotion, so the original P2 plan is not the full as-built operator contract.
-
-## prose-epistemics-p3-domain-grounding
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md`
-  - `docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until grounding kernel and prose grounding artifact contracts are documented
-    - `docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md`
-    - `docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-plan.md`
-- remaining_gaps:
-  - No durable non-plan doc explains the grounding kernel contract, default supported floor, status semantics, P2 fingerprint join invariant, grounding artifact schema, or timestamp-churn policy.
-  - Natural-systems application docs consume the framework but are still plans, not durable science framework docs.
-
-## prose-epistemics-p4-health-coverage
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md`
-  - `docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until prose health manifest, artifact, coverage, findings, and health reader contracts are documented
-    - `docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-design.md`
-    - `docs/plans/2026-06-18-prose-epistemics-p4-health-coverage-plan.md`
-- remaining_gaps:
-  - Durable docs do not describe data/prose-health/manifest.json, data/prose-health/prose-health.json, source-state precedence, coverage ratios, finding codes, or the science health prose_epistemics behavior beyond a short derived-state mention.
-  - The plan remains the clearest source for downstream consumer contract details, so deletion would lose useful operational knowledge.
-
-## prose-epistemics-pilot-improvements
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md`
-  - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until prose-epistemics framework hardening contract is documented
-    - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-design.md`
-    - `docs/plans/2026-06-19-prose-epistemics-pilot-improvements-plan.md`
-- remaining_gaps:
-  - Durable non-plan docs still only briefly mention prose-derived reports and prose-source; they do not describe the raw validation CLI, batch promotion plan schema, project-relative path policy, revision_manifest_excludes, or operational annotation-ref behavior.
-  - Existing cleanup records for P2/P3/P4 already mark migration checkpoints as needed; this improvement plan expands the same as-built prose-epistemics contract that should be documented together.
-  - The offline-agent pilot validates one source only; larger natural-systems decomposition quality remains future campaign work.
 
 ## remove-v3-migration-code
 

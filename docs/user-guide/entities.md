@@ -1079,7 +1079,7 @@ project machinery.
 - `paper` - External literature note for a read, searched, or summarized paper.
 - `plan` - An authored implementation or analysis plan.
 - `pre-registration` - Pre-registered analysis plan stating expectations before analysis.
-- `prose-source` - Authored internal Markdown prose used as an operational evidence source.
+- `prose-source` - Authored internal Markdown prose used as an operational evidence source; see prose-derived reports in [Graph And Derived State](graph-and-derived-state.md).
 - `research-package` - Composed research package bundling analysis results and provenance.
 - `search` - A literature or dataset search and its recorded results.
 - `spec` - A design or implementation specification.

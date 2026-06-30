@@ -239,3 +239,22 @@ When a project uses prose epistemics, decomposition, grounding, and prose health
 artifacts are also derived state. They summarize how much authored prose has
 been decomposed, promoted, and grounded. They do not replace the source
 Markdown, propositions, or evidence lines.
+
+Internal Markdown prose enters the graph through `prose-source:<slug>` source
+records and validated decomposition artifacts under
+`data/prose-decompositions/<slug>/`. Promotion records provenance with both the
+source ref and an `annotation:data/prose-decompositions/...#<unit_id>` ref.
+
+Grounding is a read model over promoted units and the current graph. It writes
+latest reports under `data/prose-grounding/<slug>/grounding.json`; rows can be
+`grounded`, `below_floor`, `unbacked`, `unpromoted`, `skipped`, or `stale`.
+The grounding floor and belief-policy identity travel with the report.
+
+Project-level prose health is the downstream consumer contract. It reads
+`data/prose-health/manifest.json` plus decomposition and grounding artifacts,
+then writes `data/prose-health/prose-health.json` with promotion, grounding,
+and strict-grounding coverage. Downstream renderers should consume this P4
+artifact rather than parsing P2/P3 storage internals.
+
+For the full framework contract, command list, and artifact details, see the
+[prose epistemics checkpoint](../audits/plans-cleanup/2026-06-17-prose-epistemics-checkpoint.md).
