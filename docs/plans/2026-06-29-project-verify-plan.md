@@ -236,7 +236,8 @@ git commit -m "refactor(project-package): extract payload_inventory walk into pa
 - Produces:
   - `SCHEMA_VERSION = "science-project-serialized.v1"`.
   - `SerializedManifest` (pydantic, `extra="forbid"` on every model) with fields `schema_version: str`, `project: ProjectInfo`, `data_version: str`, `provenance: Provenance`, `boundary_audit: BoundaryAudit`, `files: list[FileRecord]`, `payloads: list[PayloadRecord]`. `ProjectInfo(id,label,summary|None)`, `Provenance(git_commit,tool)`, `BoundaryAudit(passed,forced)`, `FileRecord(path,sha256,bytes)`, `PayloadRecord(path,sha256,bytes,git_tracked)`.
-  - `data_version_chunks(files: Iterable[Mapping], payloads: Iterable[Mapping]) -> list[bytes]` — canonical record chunks (per file `{path,sha256,bytes}` sorted-keys; per payload `{path,sha256,bytes,git_tracked}` sorted-keys), in given order.
+  - The model rejects duplicate paths **and unsorted manifest order**: `files[]` and `payloads[]` must each be sorted ascending by `path`, matching serialize's deterministic writer order and the verify design's `data_version` recompute contract.
+  - `data_version_chunks(files: Iterable[Mapping], payloads: Iterable[Mapping]) -> list[bytes]` — canonical record chunks (per file `{path,sha256,bytes}` sorted-keys; per payload `{path,sha256,bytes,git_tracked}` sorted-keys), in the already-validated manifest order.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -288,6 +289,14 @@ def test_valid_manifest_parses():
     lambda d: d["files"][0].update(bytes=-1),
     lambda d: d["files"].append(dict(d["files"][0])),       # duplicate files path
     lambda d: d["payloads"].append(dict(d["payloads"][0])), # duplicate payloads path
+    lambda d: d["files"].extend([
+        {"path": "z.md", "sha256": _SHA, "bytes": 1},
+        {"path": "a.md", "sha256": _SHA, "bytes": 1},
+    ]),                                                      # unsorted files path
+    lambda d: d["payloads"].extend([
+        {"path": "data/raw/z.bin", "sha256": _SHA, "bytes": 1, "git_tracked": False},
+        {"path": "data/raw/a.bin", "sha256": _SHA, "bytes": 1, "git_tracked": False},
+    ]),                                                      # unsorted payloads path
     lambda d: d["project"].update(unexpected="x"),          # extra field on nested model
     lambda d: d.update(unexpected="x"),                     # extra field on root model
 ])
@@ -299,13 +308,13 @@ def test_strict_rules_reject(mutate):
 
 
 def test_data_version_chunks_are_canonical_and_ordered():
-    files = [{"path": "b", "sha256": _SHA, "bytes": 2},
-             {"path": "a", "sha256": _SHA, "bytes": 1}]
+    files = [{"path": "a", "sha256": _SHA, "bytes": 1},
+             {"path": "b", "sha256": _SHA, "bytes": 2}]
     payloads = [{"path": "p", "sha256": _SHA, "bytes": 9, "git_tracked": True}]
     chunks = data_version_chunks(files, payloads)
     assert chunks == [
-        b'{"bytes": 2, "path": "b", "sha256": "%s"}' % _SHA.encode(),
         b'{"bytes": 1, "path": "a", "sha256": "%s"}' % _SHA.encode(),
+        b'{"bytes": 2, "path": "b", "sha256": "%s"}' % _SHA.encode(),
         b'{"bytes": 9, "git_tracked": true, "path": "p", "sha256": "%s"}' % _SHA.encode(),
     ]
 ```
@@ -415,11 +424,13 @@ class SerializedManifest(_Strict):
         return v
 
     @model_validator(mode="after")
-    def _unique_paths(self) -> "SerializedManifest":
+    def _unique_sorted_paths(self) -> "SerializedManifest":
         for label, rows in (("files", self.files), ("payloads", self.payloads)):
             paths = [r.path for r in rows]
             if len(paths) != len(set(paths)):
                 raise ValueError(f"duplicate path in {label}")
+            if paths != sorted(paths):
+                raise ValueError(f"{label} must be sorted by path")
         return self
 
 
@@ -430,7 +441,8 @@ def data_version_chunks(
 
     Per file: ``{path,sha256,bytes}``; per payload: ``{path,sha256,bytes,
     git_tracked}`` — each ``json.dumps(..., sort_keys=True)``, in the order
-    given (manifest order). Folded separator-free by ``content_version``.
+    given (validated sorted manifest order). Folded separator-free by
+    ``content_version``.
     """
     chunks: list[bytes] = []
     for fr in files:
@@ -1223,6 +1235,30 @@ def test_preflight_extract_file_target_is_operational(tmp_path: Path):
     dest.write_text("i am a file", encoding="utf-8")
     with pytest.raises(VerifyError):
         preflight_extract(dest)
+
+
+def test_extract_mid_write_error_leaves_existing_dest_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, bundle = _make_bundle(tmp_path)
+    loaded = load_bundle(bundle)
+    dest = tmp_path / "out"
+    dest.mkdir()
+
+    original_write_bytes = Path.write_bytes
+
+    def flaky_write_bytes(self: Path, data: bytes) -> int:
+        if self.name == "science.yaml":
+            raise OSError("simulated write failure")
+        return original_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", flaky_write_bytes)
+
+    with pytest.raises(VerifyError):
+        extract_bundle(loaded, dest)
+
+    assert dest.exists() and dest.is_dir()
+    assert list(dest.iterdir()) == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1782,7 +1818,7 @@ Expected: no findings.
 
 ## Self-Review (filled in by plan author)
 
-**Spec coverage:** self-check (Task 3) ✓; strict `SerializedManifest` incl. `extra="forbid"`, duplicate-path, safe id/path, sha/bytes shape (Task 2) ✓; behavior-neutral `payload.py` + `manifest.py` extractions (Tasks 1–2) ✓; `--against` all three dimensions incl. missing≠differ/extra-non-fatal (Tasks 4, 6) ✓; exit precedence 2→4→1→3→0 (Task 6 `_verdict` + Task 7 mapping) ✓; preflight-before-compare (Task 6) ✓; atomic `--extract` (Task 5) ✓; pure-JSON stdout + `version:1` + `bundle_schema_version` + `warnings[]` (Tasks 6–7) ✓; `--against` no envvar (Task 7) ✓; round-trip + the three extra cases (prefix-mismatch, duplicate path, symlink/hardlink member) (Tasks 2–3) ✓; `--force` warning (Task 6) ✓.
+**Spec coverage:** self-check (Task 3) ✓; strict `SerializedManifest` incl. `extra="forbid"`, duplicate-path, sorted manifest order, safe id/path, sha/bytes shape (Task 2) ✓; behavior-neutral `payload.py` + `manifest.py` extractions (Tasks 1–2) ✓; `--against` all three dimensions incl. missing≠differ/extra-non-fatal (Tasks 4, 6) ✓; exit precedence 2→4→1→3→0 (Task 6 `_verdict` + Task 7 mapping) ✓; preflight-before-compare (Task 6) ✓; atomic `--extract` incl. mid-write failure leaving the target untouched (Task 5) ✓; pure-JSON stdout + `version:1` + `bundle_schema_version` + `warnings[]` (Tasks 6–7) ✓; `--against` no envvar (Task 7) ✓; round-trip + the three extra cases (prefix-mismatch, duplicate path, symlink/hardlink member) (Tasks 2–3) ✓; `--force` warning (Task 6) ✓.
 
 **Type consistency:** `LoadedBundle`/`AgainstResult`/`VerifyResult` field names and the `compare_against(bundle, root, head)` / `preflight_against(root)->str` / `extract_bundle(bundle, dest)->Path` signatures are used identically across Tasks 3–7. The JSON shape in Task 6 matches the design's example and the CLI test in Task 7.
 
