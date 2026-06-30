@@ -2811,6 +2811,18 @@ def test_hint_candidates_report_rejects_invalid_min_count(tmp_path: Path) -> Non
         benchmark_hint_candidates_report(tmp_path, min_count=0)
 
 
+def test_hint_candidate_rows_from_evidence_rejects_missing_term_categories() -> None:
+    from science_tool.benchmark_opportunities import _hint_candidate_rows_from_evidence
+
+    with pytest.raises(ValueError, match="benchmark gap evidence report must include term_categories"):
+        _hint_candidate_rows_from_evidence(
+            {"enabled": True},
+            min_count=1,
+            include_existing=False,
+            fallback_heavy=False,
+        )
+
+
 def test_evidence_workflow_terms_are_not_already_excluded_upstream() -> None:
     from science_tool.benchmark_opportunities import (
         FACET_HINT_TERMS,

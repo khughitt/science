@@ -1485,7 +1485,9 @@ def _hint_candidate_rows_from_evidence(
 ) -> list[HintCandidateRow]:
     if not evidence["enabled"]:
         raise ValueError("benchmark gap evidence report must be enabled")
-    categories = evidence["term_categories"]
+    categories = evidence.get("term_categories")
+    if categories is None:
+        raise ValueError("benchmark gap evidence report must include term_categories")
     rows: list[HintCandidateRow] = []
     category_sources: tuple[tuple[TermCategory, HintCandidateCategory], ...] = (
         ("domain_candidate_terms", "domain-candidate"),
