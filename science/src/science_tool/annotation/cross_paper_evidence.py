@@ -5,14 +5,15 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from rdflib import URIRef
+from rdflib import Dataset, Literal, URIRef
+from rdflib.namespace import PROV, RDF
 from science_model.reasoning import EvidenceRole, EvidenceStance, EvidenceStrength, EvidenceType, IndependenceTag
 
 from science_tool.annotation.io import markdown_for_sidecar
 from science_tool.annotation.model import TextualBody
 from science_tool.annotation.query import entity_relpath_for_sidecar, iter_sidecars
 from science_tool.annotation.text_source_adapter import TextSourceAdapterError, resolve_adapter
-from science_tool.graph.io import PROJECT_NS
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,52 @@ def collapse_assertions(assertions: list[LiteratureAssertion]) -> list[Literatur
             by_key[key] = assertion
 
     return [by_key[key] for key in sorted(by_key)]
+
+
+def emit_literature_evidence(knowledge, provenance, assertions: list[LiteratureAssertion]) -> None:
+    for assertion in assertions:
+        stance, role, strength = STANCE_EMIT[assertion.stance]
+        line_uri = lit_assertion_uri(
+            assertion.proposition_ref,
+            assertion.paper_ref,
+            assertion.stance,
+        )
+        proposition_uri = entity_uri_for_ref(assertion.proposition_ref)
+        paper_uri = entity_uri_for_ref(assertion.paper_ref)
+        predicate = CITO_NS.supports if stance == EvidenceStance.SUPPORTS.value else CITO_NS.disputes
+
+        knowledge.add((line_uri, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line_uri, predicate, proposition_uri))
+        provenance.add((line_uri, SCI_NS.evidenceType, Literal(LITERATURE_TYPE)))
+        provenance.add((line_uri, SCI_NS.evidenceRole, Literal(role)))
+        provenance.add((line_uri, SCI_NS.evidenceStrength, Literal(strength)))
+        provenance.add((line_uri, SCI_NS.evidenceIndependence, Literal(INDEPENDENT)))
+        provenance.add((line_uri, SCI_NS.independenceGroup, Literal(f"literature-{assertion.paper_ref}")))
+        provenance.add((line_uri, PROV.wasDerivedFrom, paper_uri))
+
+
+def derive_literature_evidence(
+    dataset: Dataset,
+    project_root: Path,
+    proposition_source_refs: dict[str, frozenset[str]],
+) -> None:
+    assertions, faults = scan_literature_assertions(project_root, proposition_source_refs)
+    if faults:
+        raise CrossPaperEvidenceError(tuple(faults))
+
+    emit_literature_evidence(
+        dataset.graph(PROJECT_NS["graph/knowledge"]),
+        dataset.graph(PROJECT_NS["graph/provenance"]),
+        collapse_assertions(assertions),
+    )
+
+
+def proposition_source_refs_map(entities) -> dict[str, frozenset[str]]:
+    return {
+        entity.canonical_id: frozenset(entity.source_refs)
+        for entity in entities
+        if entity.kind == "proposition"
+    }
 
 
 def _statement_stance(ann) -> str:
