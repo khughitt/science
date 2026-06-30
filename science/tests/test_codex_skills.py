@@ -176,6 +176,24 @@ def test_catalog_datasets_generated_skill_warns_about_legacy_metadata_backfill(t
     assert "role: \"training\"" in text
 
 
+def test_catalog_datasets_generated_skill_documents_dataset_link_helper(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+
+    assert "science dataset reconcile-links --format json" in text
+    assert "science dataset reconcile-links --fix" in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "idempotent" in text
+
+
+def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+
+    assert "Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems" in text
+    assert "entities/plans/<NNNN>-<slug>.md" in text
+
+
 def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     for skill_name in ("science-tasks", "science-review-tasks"):

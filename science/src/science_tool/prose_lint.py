@@ -440,6 +440,10 @@ _CROSS_REFERENCE_RE = re.compile(
     r"\.?\s*\d+(?:\.\d+)*(?:[-–]\d+(?:\.\d+)*)?",
     re.IGNORECASE,
 )
+_BOLD_STRUCTURAL_LABEL_RE = re.compile(
+    r"^\s*(?:\*\*|__)(?=[^*_]*(?:Task|Batch|Wave)\b)[^*_]+(?:\*\*|__)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _mask_numeric_identifier_spans(line: str) -> str:
@@ -504,6 +508,8 @@ def detect_numeric_anchor(
             continue
         if _HEADER_OR_LIST_RE.match(raw_line):
             in_list_item = bool(_LIST_RE.match(raw_line))
+            continue
+        if _BOLD_STRUCTURAL_LABEL_RE.match(raw_line):
             continue
         if in_list_item and raw_line.startswith((" ", "\t")):
             continue

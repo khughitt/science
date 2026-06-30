@@ -47,6 +47,20 @@ Identify questions and hypotheses that have no accessible dataset.
 science dataset prioritize --format json
 ```
 
+Run the resolvability linter before treating `no-candidate` coverage rows as true gaps:
+
+```bash
+science dataset reconcile-links --format json
+```
+
+If it reports free-text `datasets:` entries that resolve to existing dataset entities, run:
+
+```bash
+science dataset reconcile-links --fix
+```
+
+Then rerun the prioritizer. This separates connection debt (for example `Boiarsky2022` or `GSE136410` labels in Q/H `datasets:`) from true dataset gaps.
+
 Also export the inverse coverage view:
 
 ```bash
@@ -113,7 +127,7 @@ For **each candidate** dataset (status `candidate`, `access.verified: false`), c
      --source-url "<landing/accession URL>" \
      --note "GEO landing page and file list confirmed public; no login required."
    ```
-   `--method` is **required** (enum `retrieved|credential-confirmed|landing-confirmed|metadata-confirmed` — use `retrieved` for downloadable deposits, `credential-confirmed` only when a valid login/credential was needed, and `landing-confirmed`/`metadata-confirmed` for reference or pointer records; no free text). Use `--class reference|pointer` when verifying a reference or pointer row; those classes require `--source-url` and reject `retrieved`. `landing-confirmed` and `metadata-confirmed` reject default `deposit` rows. `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting access readiness state, prioritizer weight, and runtime state.
+   `--method` is **required** (enum `retrieved|credential-confirmed|landing-confirmed|metadata-confirmed` — use `retrieved` for deposits whose files were actually pulled or staged, `landing-confirmed` for a deposit whose landing page/file list was confirmed but not yet retrieved, `credential-confirmed` only when a valid login/credential was needed, and `metadata-confirmed` for reference or pointer records; no free text). Use `--class reference|pointer` when verifying a reference or pointer row; those classes require `--source-url` and reject `retrieved`. `metadata-confirmed` rejects default `deposit` rows. `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting access readiness state, prioritizer weight, and runtime state.
 
 **Branch B — requires credentials the project does not hold** (controlled, DUA-gated, commercial):
 
@@ -146,6 +160,12 @@ Wire datasets to the questions and hypotheses they inform.
 **Legacy metadata backfill.** When connecting or backfilling legacy dataset entities, do not add `origin: external` by itself; set `license:` at the same time (`unknown` is acceptable when the license genuinely cannot be determined), preferably by running `science dataset verify-access` so `origin` / `license` / `access` move together. If the row has `source_class: derived` and `origin: external`, also add `dataset_usage` provenance with `role: "upstream"` or `role: "training"` for the input dataset(s); otherwise validation will warn that independence cannot be derived.
 
 **Prefer Q/H `datasets:` for direct dataset needs.** In each question or hypothesis entity, add the dataset IDs it needs or is informed by:
+
+```bash
+science dataset link <dataset-ref> <question-or-hypothesis-ref>
+```
+
+The helper is validated and idempotent: it resolves `dataset:<slug>` (or a bare slug), requires a `question:` or `hypothesis:` target, appends the dataset id to the target entity's `datasets:` list, and leaves an existing link unchanged. Use this instead of hand-editing many Q/H files when backfilling connections.
 
 ```yaml
 datasets:

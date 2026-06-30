@@ -7447,6 +7447,65 @@ def dataset_verify_access(
         )
 
 
+@dataset_group.command("link")
+@click.argument("dataset_ref")
+@click.argument("target_ref")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_link(dataset_ref: str, target_ref: str, project_root: Path | None) -> None:
+    """Append a dataset id to a question/hypothesis datasets: list."""
+    from science_tool.datasets_catalog import link_dataset_to_target
+    from science_tool.entities import EntityCommandError
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        dataset_id, target_id, dest, changed = link_dataset_to_target(root, dataset_ref, target_ref)
+    except EntityCommandError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+
+    rel = dest.relative_to(root)
+    prefix = "linked" if changed else "already linked"
+    click.echo(f"{prefix} {dataset_id} -> {target_id} ({rel})")
+
+
+@dataset_group.command("reconcile-links")
+@click.option("--fix", is_flag=True, help="Rewrite resolvable free-text datasets: entries to dataset:<slug> ids")
+@click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None) -> None:
+    """Report or fix Q/H free-text datasets: entries that resolve to dataset ids."""
+    import json as _json
+
+    from science_tool.datasets_catalog import reconcile_dataset_links
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    rows = reconcile_dataset_links(root, fix=fix)
+    if output_format == "json":
+        click.echo(_json.dumps({"rows": rows}, indent=2))
+    elif rows:
+        for row in rows:
+            action = "fixed" if fix else "would fix"
+            click.echo(
+                f"{action}: {row['file']} {row['entity_id']} datasets entry "
+                f"{row['entry']!r} -> {row['resolved_dataset']} ({row['reason']})"
+            )
+    else:
+        click.echo("no resolvable free-text dataset links")
+
+    if rows and not fix:
+        raise click.exceptions.Exit(1)
+
+
 def _resolve_dataset_or_exit(root: Path, ref: str):
     from science_tool.datasets_catalog import resolve_dataset
 

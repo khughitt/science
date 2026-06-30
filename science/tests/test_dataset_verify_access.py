@@ -106,6 +106,16 @@ def test_verify_access_sets_dataset_class_when_requested(tmp_path: Path) -> None
     assert fm["access"]["source_url"] == "https://example.org/foo"
 
 
+def test_verify_access_accepts_deposit_landing_confirmed(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    verify_access(tmp_path, "foo", dataset_class="deposit", method="landing-confirmed", today=DATE)
+
+    fm, _body = _read(tmp_path / "entities" / "datasets" / "foo.md")
+    assert fm["dataset_class"] == "deposit"
+    assert fm["access"]["verification_method"] == "landing-confirmed"
+
+
 def test_verify_access_rejects_method_class_mismatch(tmp_path: Path) -> None:
     _legacy(tmp_path, license="MIT")
 
@@ -118,9 +128,6 @@ def test_verify_access_rejects_method_class_mismatch(tmp_path: Path) -> None:
             source_url="https://example.org/foo",
             today=DATE,
         )
-
-    with pytest.raises(EntityCommandError, match="landing-confirmed"):
-        verify_access(tmp_path, "foo", dataset_class="deposit", method="landing-confirmed", today=DATE)
 
 
 def test_verify_access_reference_requires_source_url(tmp_path: Path) -> None:

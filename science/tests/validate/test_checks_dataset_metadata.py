@@ -161,8 +161,8 @@ def test_reference_retrieved_method_warns() -> None:
     )
 
 
-def test_deposit_landing_confirmed_method_warns() -> None:
-    assert (Severity.WARN, "dataset.method-class-mismatch") in _rules(
+def test_deposit_landing_confirmed_method_is_valid() -> None:
+    assert (Severity.WARN, "dataset.method-class-mismatch") not in _rules(
         [
             _ds(
                 origin="external",

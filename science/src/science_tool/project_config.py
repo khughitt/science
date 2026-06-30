@@ -95,7 +95,12 @@ class EntityIndexSource(StrEnum):
 # literature-discovery logs full of candidate identifiers the project has
 # surveyed but not adopted. All are exempt from the DOI/PMID broken-ref check by
 # default; a project may override via `refs.doi_pmid_exempt_dirs`.
-DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = ("doc/papers", "doc/searches", "entities/papers")
+DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = (
+    "doc/papers",
+    "doc/searches",
+    "entities/papers",
+    "entities/searches",
+)
 
 
 class RefsConfig(BaseModel):
