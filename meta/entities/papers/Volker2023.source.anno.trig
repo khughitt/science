@@ -1,0 +1,34 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:bes-not-data-pooling a oa:Annotation ;
+    oa:hasTarget       [
+      oa:hasSource <Volker2023.source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis." ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "application/json" ;
+      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"negated\"}"
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "proposition" ;
+    sci:source         "manual:phase4d-contested-smoke" ;
+    sci:status         "open" ;
+    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:matchText      "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis." ;
+    dc:creator         "curator" ;
+    dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
+
+}

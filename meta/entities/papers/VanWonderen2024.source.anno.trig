@@ -1,0 +1,58 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:bes-not-pooling-underpowered a oa:Annotation ;
+    oa:hasTarget       [
+      oa:hasSource <VanWonderen2024.source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative." ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "application/json" ;
+      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"negated\"}"
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "proposition" ;
+    sci:source         "manual:phase4d-contested-smoke" ;
+    sci:status         "open" ;
+    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:matchText      "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative." ;
+    dc:creator         "curator" ;
+    dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
+
+  anno:bes-similar-meta-analysis a oa:Annotation ;
+    oa:hasTarget       [
+      oa:hasSource <VanWonderen2024.source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies." ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "application/json" ;
+      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"asserted\"}"
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "proposition" ;
+    sci:source         "manual:phase4d-contested-smoke" ;
+    sci:status         "open" ;
+    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:matchText      "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies." ;
+    dc:creator         "curator" ;
+    dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
+
+}
