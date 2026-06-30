@@ -434,6 +434,9 @@ class GapCalibrationPayload(TypedDict):
     candidate_evidence: NotRequired[list[GapCandidateEvidence]]
 
 
+CandidateMode = Literal["entity-specific", "fallback-only", "none"]
+
+
 class BenchmarkGapRow(TypedDict):
     entity_id: str
     entity_title: str
@@ -442,6 +445,7 @@ class BenchmarkGapRow(TypedDict):
     missing_signal_types: list[str]
     current_matches: list[GapCurrentMatchRow]
     candidate_benchmarks: list[GapCandidateBenchmarkRow]
+    candidate_mode: CandidateMode
     suggested_search_facets: list[str]
     reason: str
 
@@ -452,9 +456,11 @@ class BenchmarkGapSummary(TypedDict):
     uncovered_entities: int
     weakly_covered_entities: int
     missing_facet_entities: int
-
-
-CandidateMode = Literal["entity-specific", "fallback-only", "none"]
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    fallback_candidate_ratio: float
+    gap_candidate_mode_counts: dict[CandidateMode, int]
 
 
 class TermCountRow(TypedDict):
@@ -1200,6 +1206,39 @@ def _candidate_mode(candidates: list[GapCandidateBenchmarkRow]) -> CandidateMode
     return "none"
 
 
+class GapCandidateCounts(TypedDict):
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    fallback_candidate_ratio: float
+    gap_candidate_mode_counts: dict[CandidateMode, int]
+
+
+def _gap_candidate_counts(rows: list[BenchmarkGapRow]) -> GapCandidateCounts:
+    candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
+    entity_specific_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
+    ]
+    fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
+    mode_counts: dict[CandidateMode, int] = {
+        "entity-specific": 0,
+        "fallback-only": 0,
+        "none": 0,
+    }
+    for row in rows:
+        mode_counts[row["candidate_mode"]] += 1
+    candidate_total = len(candidates)
+    return {
+        "candidate_rows": candidate_total,
+        "entity_specific_candidate_rows": len(entity_specific_candidates),
+        "fallback_candidate_rows": len(fallback_candidates),
+        "fallback_candidate_ratio": (len(fallback_candidates) / candidate_total) if candidate_total else 0.0,
+        "gap_candidate_mode_counts": mode_counts,
+    }
+
+
 def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: list[str]) -> list[str]:
     excluded = set(_UNMAPPED_TERM_EXCLUSIONS)
     excluded.update(_phrase_tokens())
@@ -1262,7 +1301,7 @@ def _gap_evidence_report(
         entity = entity_by_id.get(row["entity_id"])
         if entity is None:
             continue
-        mode = _candidate_mode(row["candidate_benchmarks"])
+        mode = row["candidate_mode"]
         if mode == "fallback-only":
             fallback_only += 1
         if not row["suggested_search_facets"]:
@@ -1516,6 +1555,7 @@ def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkG
         "uncovered_entities": sum(1 for row in rows if row["gap_level"] == "uncovered"),
         "weakly_covered_entities": sum(1 for row in rows if row["gap_level"] == "weak"),
         "missing_facet_entities": sum(1 for row in rows if row["gap_level"] == "missing-facet"),
+        **_gap_candidate_counts(rows),
     }
 
 
@@ -1565,12 +1605,8 @@ def _has_fallback_concentration(counter: Counter[str], *, total: int) -> bool:
 
 def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> GapCalibrationSummary:
     rows = report["benchmark_gaps"]
+    counts = _gap_candidate_counts(rows)
     candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
-    entity_specific_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
-    ]
     fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
     scores = [candidate["candidate_score"] for candidate in candidates]
     suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
@@ -1591,9 +1627,9 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
     return {
         "gap_rows": len(rows),
         "rows_with_suggested_facets": sum(1 for row in rows if row["suggested_search_facets"]),
-        "candidate_rows": len(candidates),
-        "entity_specific_candidate_rows": len(entity_specific_candidates),
-        "fallback_candidate_rows": len(fallback_candidates),
+        "candidate_rows": counts["candidate_rows"],
+        "entity_specific_candidate_rows": counts["entity_specific_candidate_rows"],
+        "fallback_candidate_rows": counts["fallback_candidate_rows"],
         "score_min": min(scores) if scores else None,
         "score_median": _median_score(scores),
         "score_max": max(scores) if scores else None,
@@ -2476,6 +2512,14 @@ def gaps_report(
         if normalized_facet is not None and normalized_facet not in suggested_facets:
             continue
 
+        candidates = _candidate_rows(
+            current_entity_id,
+            analysis.contexts,
+            current_matches,
+            missing_facets,
+            hint_facets,
+            candidate_score_index,
+        )
         rows.append(
             {
                 "entity_id": current_entity_id,
@@ -2484,14 +2528,8 @@ def gaps_report(
                 "missing_modalities": missing_modalities,
                 "missing_signal_types": missing_signal_types,
                 "current_matches": _current_match_rows(current_matches),
-                "candidate_benchmarks": _candidate_rows(
-                    current_entity_id,
-                    analysis.contexts,
-                    current_matches,
-                    missing_facets,
-                    hint_facets,
-                    candidate_score_index,
-                ),
+                "candidate_benchmarks": candidates,
+                "candidate_mode": _candidate_mode(candidates),
                 "suggested_search_facets": suggested_facets,
                 "reason": reason,
             }

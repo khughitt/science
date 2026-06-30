@@ -1931,12 +1931,30 @@ benchmark:
 
     payload = gaps_report(tmp_path)
 
-    assert payload["summary"] == {
+    assert {
+        key: payload["summary"][key]
+        for key in (
+            "entities_total",
+            "entities_with_gaps",
+            "uncovered_entities",
+            "weakly_covered_entities",
+            "missing_facet_entities",
+        )
+    } == {
         "entities_total": 1,
         "entities_with_gaps": 1,
         "uncovered_entities": 1,
         "weakly_covered_entities": 0,
         "missing_facet_entities": 0,
+    }
+    assert payload["summary"]["candidate_rows"] == 1
+    assert payload["summary"]["entity_specific_candidate_rows"] == 0
+    assert payload["summary"]["fallback_candidate_rows"] == 1
+    assert payload["summary"]["fallback_candidate_ratio"] == 1.0
+    assert payload["summary"]["gap_candidate_mode_counts"] == {
+        "entity-specific": 0,
+        "fallback-only": 1,
+        "none": 0,
     }
     row = payload["benchmark_gaps"][0]
     assert row["entity_id"] == "hypothesis:0001-unmapped"
@@ -3015,6 +3033,99 @@ benchmark:
         {"benchmark_id": "dataset:sciplex", "count": 1, "share": 0.5},
     ]
     assert summary["fallback_concentration_warning"] is True
+
+
+def test_gaps_report_summary_includes_actionability_candidate_counts(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gap_calibration_summary, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0040-drug-screen",
+        """
+id: hypothesis:0040-drug-screen
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0041-generic",
+        """
+id: hypothesis:0041-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    report = gaps_report(tmp_path)
+
+    rows = {row["entity_id"]: row for row in report["benchmark_gaps"]}
+    assert rows["hypothesis:0040-drug-screen"]["candidate_mode"] == "entity-specific"
+    assert rows["hypothesis:0041-generic"]["candidate_mode"] == "fallback-only"
+    assert report["summary"]["candidate_rows"] == 3
+    assert report["summary"]["entity_specific_candidate_rows"] == 1
+    assert report["summary"]["fallback_candidate_rows"] == 2
+    assert report["summary"]["fallback_candidate_ratio"] == pytest.approx(2 / 3)
+    assert report["summary"]["gap_candidate_mode_counts"] == {
+        "entity-specific": 1,
+        "fallback-only": 1,
+        "none": 0,
+    }
+
+    calibration = gap_calibration_summary(report)
+    assert calibration["candidate_rows"] == report["summary"]["candidate_rows"]
+    assert calibration["entity_specific_candidate_rows"] == report["summary"]["entity_specific_candidate_rows"]
+    assert calibration["fallback_candidate_rows"] == report["summary"]["fallback_candidate_rows"]
 
 
 def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> None:
