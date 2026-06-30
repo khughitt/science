@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `20`
+- Pending thread count: `26`
 
 ## bundle-belief-rollup
 
@@ -69,6 +69,21 @@
   - Root plans still contain stale/transition wording, especially doc/datasets versus current entities/datasets/data dataset homes after adapter layout work.
   - Durable user docs mention paper dataset_usage but do not fully document evidence-line dataset_usage, belief_eligible staging, overlap curation, and B2 commitment versus candidate behavior.
 
+## dataset-sub-cohort-lineage
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md`
+  - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until sub-cohort lineage and B2 ancestor-vs-sibling semantics are documented
+    - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md`
+    - `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md`
+- remaining_gaps:
+  - Migrate sub-cohort semantics and B2 ancestor-vs-sibling behavior into durable docs before deleting the active plan pair.
+
 ## entity-organization-and-naming-implementation-plan3
 
 - status: `implemented_needs_durable_docs`
@@ -132,6 +147,21 @@
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
 
+## infer-schema-scaffold
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-14-infer-schema-scaffold-design.md`
+  - `docs/plans/2026-06-14-infer-schema-scaffold-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until infer-schema command contract and safety rules are documented
+    - `docs/plans/2026-06-14-infer-schema-scaffold-design.md`
+    - `docs/plans/2026-06-14-infer-schema-scaffold-plan.md`
+- remaining_gaps:
+  - Migrate the command contract and safety rules into durable docs before deleting the plan pair.
+
 ## local-kind-layout-migration
 
 - status: `implemented_needs_durable_docs`
@@ -175,6 +205,52 @@
     - `docs/plans/2026-06-06-migration-robustness-plan.md`
 - remaining_gaps:
   - No durable migration guide/checkpoint was found that records the current dry-run report contract, structural-vs-prose blocking model, and skip+warn manifest behavior outside these plans and tests.
+
+## patch-contract-keystone
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-14-patch-contract-keystone-design.md`
+  - `docs/plans/2026-06-14-patch-contract-keystone-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until patch membership contract, predicates, and CLI diagnostics are documented
+    - `docs/plans/2026-06-14-patch-contract-keystone-design.md`
+    - `docs/plans/2026-06-14-patch-contract-keystone-plan.md`
+- remaining_gaps:
+  - Original design deferrals remain: PatchSnapshot, remote/commons scopes, maturity L0-L4, and latent/ontology glue.
+  - Durable docs mention patch-definition and inquiry profiles but do not capture the full patch membership contract, predicates, or CLI diagnostics.
+
+## patchwork-kernel-architecture
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; retain umbrella until shipped invariants and aspirational patchwork backlog are separated
+    - `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`
+- remaining_gaps:
+  - Large parts of the overview remain target-state rather than implementation reality.
+  - Separate shipped invariants from aspirational subsystem backlog before cleanup.
+
+## qa-check-library
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-13-qa-check-library-design.md`
+  - `docs/plans/2026-06-13-qa-check-library-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until QA aspect/program semantics replace stale modality-pack docs
+    - `docs/plans/2026-06-13-qa-check-library-design.md`
+    - `docs/plans/2026-06-13-qa-check-library-plan.md`
+- remaining_gaps:
+  - docs/conventions/pipeline-qa-checkpoints.md still has stale pre-refactor wording about modality packs/packs:[scrna] and links back to this plan for details.
+  - Migrate locked QA-library semantics before deleting the plan files.
 
 ## substrate-3b-entities-retirement-apply
 
@@ -310,3 +386,18 @@
     - `docs/plans/2026-06-07-substrate-scope-aware-loading-implementation-plan.md`
 - remaining_gaps:
   - Durable user docs mention owner scopes generally but do not explain bare-ref ambiguity, scoped reference syntax, or the materialize/audit behavior users see.
+
+## typed-dataset-schema
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-13-typed-dataset-schema-design.md`
+  - `docs/plans/2026-06-13-typed-dataset-schema-plan.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until dataset schema profile vocabulary and validate behavior are documented
+    - `docs/plans/2026-06-13-typed-dataset-schema-design.md`
+    - `docs/plans/2026-06-13-typed-dataset-schema-plan.md`
+- remaining_gaps:
+  - Add durable documentation for the profile vocabulary, qa: extension boundary, emitted schema, and datasets validate behavior.
