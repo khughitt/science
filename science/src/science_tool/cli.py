@@ -6730,9 +6730,18 @@ def _default_hint_candidates_review_path(project_root: Path, generated: date) ->
 
 
 def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    root = project_root.resolve()
     if output_path is None:
-        return _default_hint_candidates_review_path(project_root, generated)
-    return output_path if output_path.is_absolute() else project_root / output_path
+        return _default_hint_candidates_review_path(root, generated)
+
+    path = output_path if output_path.is_absolute() else root / output_path
+    resolved = path.resolve()
+    if not output_path.is_absolute():
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise click.ClickException(f"--output must stay under project root: {output_path}") from exc
+    return resolved
 
 
 def _hint_candidates_source_command(

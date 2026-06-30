@@ -716,6 +716,18 @@ def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Pa
     assert output_path.read_text(encoding="utf-8") == "existing: true\n"
 
 
+def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", "../outside.yaml")
+
+    assert result.exit_code != 0
+    assert "--output must stay under project root" in result.output
+    assert not (tmp_path.parent / "outside.yaml").exists()
+
+
 def test_benchmark_hint_candidates_cli_table_empty_state(tmp_path: Path) -> None:
     result = _invoke_hint_candidates(tmp_path)
 
