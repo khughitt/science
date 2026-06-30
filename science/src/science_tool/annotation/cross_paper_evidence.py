@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -203,25 +204,39 @@ def build_cross_paper_evidence_report(
             "faults": fault_rows,
         }
 
-    by_prop: dict[str, dict[str, int]] = {}
-    counted: set[tuple[str, str, str]] = set()
-    for assertion in collapsed:
-        edge = STANCE_EMIT[assertion.stance][0]
-        count_key = (assertion.proposition_ref, assertion.paper_ref, edge)
-        if count_key in counted:
-            continue
-        counted.add(count_key)
-        bucket = by_prop.setdefault(
-            assertion.proposition_ref,
-            {"supporting_papers": 0, "disputing_papers": 0},
+    proposition_reports = []
+    for ref in sorted(refs):
+        ref_units = [assertion for assertion in collapsed if assertion.proposition_ref == ref]
+        supporting_papers = {
+            assertion.paper_ref
+            for assertion in ref_units
+            if STANCE_EMIT[assertion.stance][0] == "supports"
+        }
+        disputing_papers = {
+            assertion.paper_ref
+            for assertion in ref_units
+            if STANCE_EMIT[assertion.stance][0] == "disputes"
+        }
+        proposition_reports.append(
+            {
+                "proposition": ref,
+                "unit_count": len(ref_units),
+                "supporting_papers": len(supporting_papers),
+                "disputing_papers": len(disputing_papers),
+                "belief": _belief_for_proposition(collapsed, ref),
+            }
         )
-        bucket["supporting_papers" if edge == "supports" else "disputing_papers"] += 1
 
-    propositions = [
-        {"proposition": ref, **counts}
-        for ref, counts in sorted(by_prop.items())
-    ]
-    return {"propositions": propositions, "faults": fault_rows}
+    faults_by_reason = Counter(row["reason"] for row in fault_rows)
+    summary = {
+        "propositions": len(proposition_reports),
+        "propositions_with_units": sum(1 for row in proposition_reports if row["unit_count"] > 0),
+        "units": len(collapsed),
+        "faults": len(faults),
+        "faults_by_reason": dict(sorted(faults_by_reason.items())),
+        "contested": sum(1 for row in proposition_reports if row["belief"]["contested"]),
+    }
+    return {"summary": summary, "faults": fault_rows, "propositions": proposition_reports}
 
 
 def _statement_stance(ann) -> str:

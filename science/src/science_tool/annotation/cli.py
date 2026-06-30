@@ -474,12 +474,18 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
                 f"({unit['stance']}; {unit['role']}/{unit['strength']})"
             )
     else:
-        for proposition in payload["propositions"]:
-            click.echo(
-                f"{proposition['proposition']}: "
-                f"+{proposition['supporting_papers']} / "
-                f"-{proposition['disputing_papers']} paper(s)"
-            )
+        summary = payload["summary"]
+        if summary["propositions"] == 0:
+            click.echo("No proposition entities found.")
+        elif summary["units"] == 0:
+            click.echo("No derived cross-paper literature evidence found.")
+        else:
+            for proposition in payload["propositions"]:
+                click.echo(
+                    f"{proposition['proposition']}: "
+                    f"+{proposition['supporting_papers']} / "
+                    f"-{proposition['disputing_papers']} paper(s)"
+                )
 
     if payload["faults"]:
         click.echo(f"FAULTS ({len(payload['faults'])}):")

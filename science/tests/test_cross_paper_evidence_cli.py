@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -137,6 +138,97 @@ def test_cli_project_wide_counts_same_paper_support_stances_once(tmp_path):
     props = {p["proposition"]: p for p in payload["propositions"]}
     assert props["proposition:claim"]["supporting_papers"] == 1
     assert props["proposition:claim"]["disputing_papers"] == 0
+
+
+def test_cross_paper_evidence_json_includes_summary_for_empty_project(tmp_path: Path):
+    _manifest(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"] == {
+        "propositions": 0,
+        "propositions_with_units": 0,
+        "units": 0,
+        "faults": 0,
+        "faults_by_reason": {},
+        "contested": 0,
+    }
+
+
+def test_cross_paper_evidence_table_reports_empty_project(tmp_path: Path):
+    _manifest(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "table"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "No proposition entities found." in result.output
+
+
+def test_cross_paper_evidence_project_wide_rows_include_units_and_belief(tmp_path: Path):
+    _scaffold(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    row = {p["proposition"]: p for p in payload["propositions"]}["proposition:claim"]
+    assert row["unit_count"] == 2
+    assert row["supporting_papers"] == 1
+    assert row["disputing_papers"] == 1
+    assert row["belief"]["contested"] is True
+    assert payload["summary"]["propositions"] == 1
+    assert payload["summary"]["propositions_with_units"] == 1
+    assert payload["summary"]["units"] == 2
+    assert payload["summary"]["contested"] == 1
+
+
+def test_cross_paper_evidence_summary_units_count_collapsed_assertions_not_edge_counts(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition_entity(
+        tmp_path,
+        "claim",
+        [
+            "paper:A2020",
+            _ann_ref("A2020"),
+            "annotation:entities/papers/A2020.source#A2020-2",
+        ],
+    )
+    _paper_with_promoted(tmp_path, "A2020", stance="asserted")
+    md = tmp_path / "entities" / "papers" / "A2020.source.md"
+    anno_io.write_sidecar(
+        anno_io.sidecar_for_markdown(md),
+        anno_io.Sidecar(
+            annotations=(
+                _promoted_ann("A2020-1", stance="asserted"),
+                _promoted_ann("A2020-2", stance="hypothesized"),
+            )
+        ),
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["cross-paper-evidence", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    row = {p["proposition"]: p for p in payload["propositions"]}["proposition:claim"]
+    assert row["supporting_papers"] == 1
+    assert row["unit_count"] == 2
+    assert payload["summary"]["units"] == 2
 
 
 def test_cli_single_ref_json_lists_units(tmp_path):
