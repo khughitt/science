@@ -1,10 +1,10 @@
 {
-  "file_count": 29,
+  "file_count": 27,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 19,
+  "thread_count": 18,
   "threads": [
     {
       "earliest_file_date": "2026-06-26",
@@ -410,33 +410,6 @@
         "docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "remove-v3-migration-code"
-    },
-    {
-      "earliest_file_date": "2026-06-23",
-      "files": [
-        "docs/plans/2026-06-23-science-citations-and-references-design.md",
-        "docs/plans/2026-06-23-science-citations-and-references-plan.md"
-      ],
-      "latest_file_date": "2026-06-23",
-      "normalized_slug": "science-citations-and-references",
-      "raw_slugs": {
-        "docs/plans/2026-06-23-science-citations-and-references-design.md": "science-citations-and-references-design",
-        "docs/plans/2026-06-23-science-citations-and-references-plan.md": "science-citations-and-references-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-23-science-citations-and-references-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-23-science-citations-and-references-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-23-science-citations-and-references-design.md": "design",
-        "docs/plans/2026-06-23-science-citations-and-references-plan.md": "plan"
-      },
-      "thread_id": "science-citations-and-references"
     },
     {
       "earliest_file_date": "2026-06-16",

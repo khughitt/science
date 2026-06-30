@@ -56,6 +56,21 @@ Because serialize ships all selected git-tracked source files without
 sensitivity filtering, restricted material must not be tracked. Public-safe
 scrubbing and publication profiles are separate future workflows.
 
+## Labnote App Export
+
+`science labnote export --project-root <root> --out <dir>` writes a public app
+package for Labnote. This export is separate from deterministic project
+serialization: it filters to public entities, emits app-view descriptors, and
+writes JSON bundles that Labnote can load directly.
+
+The export includes `references/index.json`, a `science.references` bundle
+derived from `papers/references.bib`, and registers it in `manifest.json` as a
+public JSON bundle named `references`. Public Markdown bodies and
+`source_refs: ["cite:<bibkey>"]` values must resolve against the bibliography.
+Unknown citekeys and unsupported citation syntax fail closed during export. See
+[Citations And Reference Bundles](../conventions/citations-and-references.md)
+for the reference-record contract and v1 Markdown citation grammar.
+
 ## Bundle Manifest
 
 Serialized bundles use the schema version

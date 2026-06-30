@@ -529,6 +529,10 @@ reference-checking and alias-retirement policy.
 store. It can synthesize lightweight paper or book records so `paper:` and
 `cite:` references resolve and minimal bibliography metadata can materialize,
 but it does not claim ownership over a project-authored literature note.
+For app-facing citation rendering, Science exports a separate
+`science.references` bundle from the same bibliography authority. See
+[Citations And Reference Bundles](../conventions/citations-and-references.md)
+for the normalized record shape, citation grammar, and Labnote package contract.
 
 CURIE-backed external references live in
 `knowledge/sources/<profile>/external_refs.yaml`:

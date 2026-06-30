@@ -90,6 +90,13 @@ CLI. To clean up a project, edit remaining structured `article:` references to
 `paper:`, run `science refs check --include-body`, and inspect
 `science graph health` for `legacy_structured_literature_prefixes`.
 
+Inline Markdown citations for app export use the narrow v1 citation grammar
+documented in [Citations And Reference Bundles](citations-and-references.md).
+That export-time check is complementary to `science refs check`: `refs check`
+answers whether project references resolve, while the app exporter answers
+whether public Markdown can be rendered as numeric citations from
+`references/index.json`.
+
 The legacy alias can be retired only after:
 
 - tracked projects no longer report structured `article:` findings;
