@@ -98,21 +98,20 @@ be reviewed together:
   "propositions": ["proposition:a", "proposition:b"],
   "priority": "high",
   "splittable": false,
+  "review_coverage_required": true,
   "signals": {
     "title_token_jaccard": 0.82,
     "same_subject": true,
     "same_object": true,
     "predicate_compatible": true,
     "polarity_compatible": true,
-    "shared_source_papers": [],
-    "literature_support_overlap": []
+    "shared_source_papers": []
   },
   "explanation": [
     "same subject/object",
     "compatible predicate/polarity",
     "high title token overlap"
-  ],
-  "recommended_review": "agent"
+  ]
 }
 ```
 
@@ -136,12 +135,16 @@ Each factorization disagreement is keyed to one proposition:
       "paper": "paper:A",
       "annotation": "annotation:...#s1",
       "stance": "asserted",
+      "section": "results",
       "subject": "...",
       "object": "...",
+      "subject_concept": null,
+      "object_concept": null,
       "exact": "..."
     }
   ],
-  "disagreement": ["object differs", "stance mix requires review"]
+  "disagreement": ["object differs", "stance mix requires review"],
+  "recommended_action": "factorization_needs_resynthesis"
 }
 ```
 
@@ -156,6 +159,7 @@ state, validated by Python but not applied in Half A:
   "judgments": [
     {
       "candidate_id": "reconcile:same-claim/<sha256>",
+      "judgment_id": "reconcile:judgment/<sha256>",
       "lane": "same_claim",
       "decision": "same_claim",
       "canonical_proposition": "proposition:a",
@@ -172,6 +176,7 @@ For factorization diagnostics:
 ```json
 {
   "candidate_id": "reconcile:factorization/<sha256>",
+  "judgment_id": "reconcile:judgment/<sha256>",
   "lane": "factorization_disagreement",
   "decision": "factorization_needs_resynthesis",
   "proposition": "proposition:x",
@@ -186,6 +191,9 @@ Closed decision vocabulary:
 - `related_but_distinct`;
 - `conflict_or_negation`;
 - `factorization_needs_resynthesis`;
+- `stance_review_needed`;
+- `split_possible`;
+- `insufficient_hints`;
 - `needs_human`.
 
 Closed confidence vocabulary:
@@ -196,6 +204,9 @@ Closed confidence vocabulary:
 
 Candidate reports are derived and disposable. Reviewed judgments are durable curation
 handoff state, but they are not evidence lines and do not affect belief in Half A.
+The `llm-review:<model>:proposition-reconcile-v1` source convention is new in 4e,
+modeled on 4c's `llm-synth:<model>:proposition-synthesize-v1` pattern but validated
+by a separate 4e validator.
 
 ## 3. Candidate generation
 
@@ -230,6 +241,16 @@ Lexical signals:
 - shared high-information tokens after stopword removal;
 - optional later embedding similarity, but no embedding dependency in Half A.
 
+Predicate compatibility is intentionally small and tied to the existing model enum:
+
+- exact predicate equality is compatible;
+- two predicates in `SIGN_MEANINGFUL_PREDICATES` (`affects`, `regulates`,
+  `associates_with`) are weakly compatible when subject/object match and polarity is
+  compatible;
+- sign-less predicates are compatible only by exact predicate equality. In particular,
+  `subtype_of` and `part_of` are not interchangeable, and `induces_state` /
+  `transitions_to` are not treated as a family in Half A.
+
 Compatibility rules:
 
 - same polarity or one side `unsigned` is compatible;
@@ -241,15 +262,30 @@ Compatibility rules:
 
 Grouping:
 
-- build candidate edges between propositions;
+- build candidate edges between propositions from explicit blocking buckets, not a full
+  project-wide pairwise sweep. Initial bucket keys are normalized
+  `(subject, predicate, object)`, normalized `(subject, object)`, source paper, and
+  high-information title tokens;
 - connected components become review groups;
 - `candidate_id = reconcile:same-claim/<sha256>` over sorted proposition refs plus
   candidate lane;
 - pair candidates are `splittable: false`; groups of three or more are
   `splittable: true` so review can mark only a subset as `same_claim` when the
   connected component joined through a weaker bridge;
+- same-claim `candidate_id` canonical key:
+  `same_claim\0<ref1>\0<ref2>...`, where refs are sorted canonical ids and the digest
+  is the full SHA-256 hex;
+- durable `judgment_id` canonical key:
+  `<lane>\0<decision>\0<sorted judged member refs or proposition ref>`. For
+  same-claim judgments, the judged member set is the member set the reviewer actually
+  ruled on, not necessarily the full generated component;
+- splittable components require coverage: every member in the generated component must
+  appear in at least one reviewed judgment for that `candidate_id`, even if the decision
+  is `related_but_distinct` or `needs_human`. This avoids silent fall-through for
+  excluded members;
 - very large components become `component-too-large` faults with member ids instead of
-  unreadable scaffold payloads.
+  unreadable scaffold payloads. Half A uses `MAX_RECONCILIATION_COMPONENT_SIZE = 25`;
+  larger components are reported and skipped from scaffold generation.
 
 ### Lane B: factorization disagreement
 
@@ -271,6 +307,9 @@ action:
 - `stance_review_needed`;
 - `split_possible`;
 - `insufficient_hints`.
+
+These recommended actions are also valid reviewed decisions for Lane B, so the reviewer
+can preserve the distinction surfaced by the generator.
 
 ### Priority
 
@@ -310,11 +349,22 @@ Python validates reviewed files with fail-loud semantics:
 
 - top-level `source` must match
   `^llm-review:[A-Za-z0-9._-]+:proposition-reconcile-v1$`;
-- every `candidate_id` must exist in the current generated candidate set;
+- every `candidate_id` must exist in the current generated candidate set, except that a
+  same-claim judgment over a splittable subset may remain valid when its judged
+  `members` are still a subset of the current component and still satisfy at least one
+  current candidate edge among themselves. Churn in excluded members does not
+  invalidate the subset judgment;
+- `judgment_id` must equal the deterministic hash for the lane, decision, and judged
+  member/proposition set;
 - `lane` must match the candidate's lane;
 - `decision` must be from the closed vocabulary;
+- `same_claim` is valid only for Lane A; Lane B accepts
+  `factorization_needs_resynthesis`, `stance_review_needed`, `split_possible`,
+  `insufficient_hints`, or `needs_human`;
 - `members` must be exactly the candidate group, or a subset only when the candidate group
   was explicitly marked splittable;
+- for a splittable same-claim group, the reviewed file must cover every generated member
+  through at least one judgment for that candidate id;
 - `canonical_proposition` is required for `same_claim` and must be one of `members`;
 - `canonical_proposition` is forbidden for non-merge decisions;
 - factorization decisions must name the single proposition in the candidate;
@@ -322,14 +372,20 @@ Python validates reviewed files with fail-loud semantics:
 - `rationale` is required and non-empty.
 
 Validation writes nothing to proposition files. It only confirms that the reviewed
-artifact is coherent and current. If candidates have changed since the review was
-generated, stale `candidate_id`s fail, forcing regeneration/review rather than silently
-accepting obsolete judgments.
+artifact is coherent and current. Non-splittable stale `candidate_id`s fail, forcing
+regeneration/review rather than silently accepting obsolete judgments. Splittable subset
+judgments are durable over the member set actually ruled on, so unrelated membership
+churn in the larger component does not invalidate the review.
 
 ## 5. Integration points
 
 - Reuse `scan_literature_assertions` from 4d for active promoted statement provenance and
-  stance. Do not re-parse sidecars separately.
+  stance. Do not re-parse sidecars separately. To make Lane B buildable, 4e extends the
+  shared 4d `LiteratureAssertion` dataclass with behavior-neutral appended fields:
+  `statement_exact`, `section`, `subject`, `object`, `subject_concept`, and
+  `object_concept`. The scanner already has the annotation in hand; it should parse the
+  statement JSON once into this richer assertion record instead of having reconciliation
+  re-open sidecars with a second parser.
 - Reuse proposition loading via `load_project_sources` / `PropositionEntity` so candidate
   generation sees the same canonical ids and source refs as materialize/validate.
 - Reuse 4c synthesis fields as structured comparison signals; do not add new proposition
@@ -341,8 +397,11 @@ accepting obsolete judgments.
 science annotate reconcile-propositions --all --format table|json|scaffold
 science annotate reconcile-propositions --proposition proposition:<id> --format json|scaffold
 science annotate reconcile-propositions --source entities/papers/<paper>.source.md --format json|scaffold
-science annotate reconcile-propositions validate --input path/to/review.json
+science annotate validate-proposition-reconciliation --input path/to/review.json
 ```
+
+The validation command is a flat `annotate` sibling, not a nested subcommand, matching the
+existing `validate-prose-decomposition-artifact` convention.
 
 ## 6. Error handling
 
