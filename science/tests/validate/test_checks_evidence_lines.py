@@ -307,6 +307,41 @@ def test_unstanced_valid_4d_literature_refs_are_counted_as_coverage(tmp_path: Pa
     assert [r for r in results if r.rule == "evidence.unstanced"] == []
 
 
+def test_unstanced_4d_coverage_does_not_load_unrelated_invalid_entities(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write_proposition_with_refs(tmp_path, ["paper:Smith2020", _ANN_REF])
+    _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
+    _write(
+        tmp_path,
+        "entities/evidence-lines/bad.md",
+        "\n".join(
+            [
+                "---",
+                "id: evidence-line:bad",
+                "type: evidence-line",
+                "title: Bad",
+                "status: active",
+                "created: '2026-06-30'",
+                "updated: '2026-06-30'",
+                "stance: supports",
+                "target: proposition:other",
+                "source: paper:Other2020",
+                "evidence_role: bogus",
+                "---",
+                "",
+                "Invalid for the source loader, but unrelated to proposition:p1.",
+                "",
+            ]
+        ),
+    )
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
+    assert unstanced == []
+
+
 def test_unstanced_4d_ownership_mismatch_does_not_cover_paper_ref(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
 

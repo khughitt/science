@@ -54,19 +54,28 @@ def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     return result
 
 
-def _derived_literature_coverage(ctx: ValidateContext) -> set[tuple[str, str]]:
+def _proposition_source_refs_from_frontmatter(propositions: list[tuple[Path, dict]]) -> dict[str, set[str]]:
+    proposition_refs: dict[str, set[str]] = {}
+    for _path, fm in propositions:
+        prop_id = fm.get("id")
+        if not prop_id:
+            continue
+        source_refs = fm.get("source_refs") or []
+        if not isinstance(source_refs, list):
+            source_refs = [source_refs]
+        proposition_refs[str(prop_id)] = {str(ref) for ref in source_refs}
+    return proposition_refs
+
+
+def _derived_literature_coverage(ctx: ValidateContext, propositions: list[tuple[Path, dict]]) -> set[tuple[str, str]]:
     """Return proposition source_refs covered by clean Phase 4d literature assertions."""
     entities_root = ctx.project_root / "entities"
     if not entities_root.is_dir() or not any(entities_root.rglob("*.anno.trig")):
         return set()
 
-    from science_tool.annotation.cross_paper_evidence import (
-        proposition_source_refs_map,
-        scan_literature_assertions,
-    )
+    from science_tool.annotation.cross_paper_evidence import scan_literature_assertions
 
-    sources = ctx.project_sources(strict_core_schema=False, strict_identity=False)
-    proposition_refs = proposition_source_refs_map(sources.entities)
+    proposition_refs = _proposition_source_refs_from_frontmatter(propositions)
     assertions, _faults = scan_literature_assertions(ctx.project_root, proposition_refs)
 
     covered: set[tuple[str, str]] = set()
@@ -85,6 +94,9 @@ def _derived_literature_coverage(ctx: ValidateContext) -> set[tuple[str, str]]:
 @Check(section="evidence lines", order=23)
 def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
     lines = _ev_lines(ctx)
+    prop_dir = ctx.project_root / resolve_path_policy("proposition").root
+    prop_paths: list[Path] = sorted(prop_dir.glob("*.md")) if prop_dir.is_dir() else []
+    propositions = [(prop_path, ctx.frontmatter(prop_path)) for prop_path in prop_paths]
 
     # Sub-case (a): missing stance or missing/empty target.
     for path, fm in lines:
@@ -115,12 +127,9 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
         source = fm.get("source", "")
         if target and source:
             covered.add((str(target), str(source)))
-    covered.update(_derived_literature_coverage(ctx))
+    covered.update(_derived_literature_coverage(ctx, propositions))
 
-    prop_dir = ctx.project_root / resolve_path_policy("proposition").root
-    prop_paths: list[Path] = sorted(prop_dir.glob("*.md")) if prop_dir.is_dir() else []
-    for prop_path in prop_paths:
-        pfm = ctx.frontmatter(prop_path)
+    for prop_path, pfm in propositions:
         prop_id = pfm.get("id", "")
         source_refs = pfm.get("source_refs") or []
         if not isinstance(source_refs, list):
