@@ -434,6 +434,9 @@ class GapCalibrationPayload(TypedDict):
     candidate_evidence: NotRequired[list[GapCandidateEvidence]]
 
 
+CandidateMode = Literal["entity-specific", "fallback-only", "none"]
+
+
 class BenchmarkGapRow(TypedDict):
     entity_id: str
     entity_title: str
@@ -442,6 +445,7 @@ class BenchmarkGapRow(TypedDict):
     missing_signal_types: list[str]
     current_matches: list[GapCurrentMatchRow]
     candidate_benchmarks: list[GapCandidateBenchmarkRow]
+    candidate_mode: CandidateMode
     suggested_search_facets: list[str]
     reason: str
 
@@ -452,15 +456,27 @@ class BenchmarkGapSummary(TypedDict):
     uncovered_entities: int
     weakly_covered_entities: int
     missing_facet_entities: int
-
-
-CandidateMode = Literal["entity-specific", "fallback-only", "none"]
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    fallback_candidate_ratio: float
+    gap_candidate_mode_counts: dict[CandidateMode, int]
 
 
 class TermCountRow(TypedDict):
     term: str
     count: int
     example_entities: list[str]
+
+
+TermCategory = Literal["domain_candidate_terms", "project_local_terms", "workflow_or_modeling_terms", "other_terms"]
+
+
+class EvidenceTermCategories(TypedDict):
+    domain_candidate_terms: list[TermCountRow]
+    project_local_terms: list[TermCountRow]
+    workflow_or_modeling_terms: list[TermCountRow]
+    other_terms: list[TermCountRow]
 
 
 class EvidenceEntityRow(TypedDict):
@@ -478,6 +494,7 @@ class EvidenceSummary(TypedDict):
     entities_with_no_facet_hints: int
     entities_with_fallback_only_candidates: int
     top_unmapped_project_terms: list[TermCountRow]
+    top_domain_candidate_terms: list[TermCountRow]
 
 
 class EvidenceReport(TypedDict):
@@ -485,6 +502,7 @@ class EvidenceReport(TypedDict):
     summary: NotRequired[EvidenceSummary]
     entities: NotRequired[dict[str, EvidenceEntityRow]]
     lexicon_candidates: NotRequired[list[TermCountRow]]
+    term_categories: NotRequired[EvidenceTermCategories]
 
 
 class BenchmarkGapReport(TypedDict):
@@ -540,6 +558,9 @@ class BenchmarkTestSummary(TypedDict):
     draft_needed_rows: int
     entities_with_test_plans: int
     entities_without_test_plans: int
+    source_counts: dict[PrioritySource, int]
+    fallback_rows: int
+    fallback_row_ratio: float
     top_facets: list[FacetCountRow]
 
 
@@ -836,7 +857,7 @@ def _as_string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str) and item]
 
 
-def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset[str]:
+def _entity_id_only_tokens(entity_id: str, kind: str) -> frozenset[str]:
     tokens = {entity_id.lower()}
     local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
     tokens.add(local.lower())
@@ -854,6 +875,11 @@ def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset
         if suffix:
             tokens.add(f"{shortform}{number}{suffix}".lower())
             tokens.add(f"{kind}:{shortform}{number}{suffix}".lower())
+    return frozenset(tokens)
+
+
+def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset[str]:
+    tokens = set(_entity_id_only_tokens(entity_id, kind))
     for field in ("same_as", "source_refs"):
         tokens.update(value.lower() for value in _as_string_list(fm.get(field)))
     return frozenset(tokens)
@@ -1200,6 +1226,39 @@ def _candidate_mode(candidates: list[GapCandidateBenchmarkRow]) -> CandidateMode
     return "none"
 
 
+class GapCandidateCounts(TypedDict):
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    fallback_candidate_ratio: float
+    gap_candidate_mode_counts: dict[CandidateMode, int]
+
+
+def _gap_candidate_counts(rows: list[BenchmarkGapRow]) -> GapCandidateCounts:
+    candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
+    entity_specific_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
+    ]
+    fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
+    mode_counts: dict[CandidateMode, int] = {
+        "entity-specific": 0,
+        "fallback-only": 0,
+        "none": 0,
+    }
+    for row in rows:
+        mode_counts[row["candidate_mode"]] += 1
+    candidate_total = len(candidates)
+    return {
+        "candidate_rows": candidate_total,
+        "entity_specific_candidate_rows": len(entity_specific_candidates),
+        "fallback_candidate_rows": len(fallback_candidates),
+        "fallback_candidate_ratio": (len(fallback_candidates) / candidate_total) if candidate_total else 0.0,
+        "gap_candidate_mode_counts": mode_counts,
+    }
+
+
 def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: list[str]) -> list[str]:
     excluded = set(_UNMAPPED_TERM_EXCLUSIONS)
     excluded.update(_phrase_tokens())
@@ -1212,6 +1271,32 @@ def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: l
         for token in entity.tokens
         if token not in excluded and ":" not in token and not re.fullmatch(r"\d+.*", token)
     )
+
+
+_WORKFLOW_OR_MODELING_TERMS = frozenset(
+    {
+        "catalog",
+        "model",
+        "models",
+        "project",
+    }
+)
+
+
+def _tokens_from_label(value: str) -> set[str]:
+    return {
+        token
+        for token in re.split(r"[^A-Za-z0-9]+", value.lower())
+        if token and len(token) > 1
+    }
+
+
+def _project_local_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> set[str]:
+    tokens: set[str] = set()
+    tokens.update(_tokens_from_label(project_root.resolve().name))
+    for entity in entities:
+        tokens.update(_entity_id_only_tokens(entity.id, entity.kind))
+    return tokens
 
 
 def _why_no_specific_candidate(row: BenchmarkGapRow, mode: CandidateMode) -> list[str]:
@@ -1243,9 +1328,36 @@ def _top_unmapped_terms(by_entity: dict[str, list[str]], *, top: int = 10) -> li
     ]
 
 
+def _term_rows_for_terms(by_entity: dict[str, list[str]], terms: set[str], *, top: int = 10) -> list[TermCountRow]:
+    filtered = {
+        entity_id: [term for term in entity_terms if term in terms]
+        for entity_id, entity_terms in by_entity.items()
+    }
+    return _top_unmapped_terms(filtered, top=top)
+
+
+def _term_categories(
+    by_entity: dict[str, list[str]],
+    *,
+    project_local_tokens: set[str],
+    top: int = 10,
+) -> EvidenceTermCategories:
+    all_terms = {term for terms in by_entity.values() for term in terms}
+    project_terms = all_terms & project_local_tokens
+    workflow_terms = (all_terms & _WORKFLOW_OR_MODELING_TERMS) - project_terms
+    domain_terms = all_terms - project_terms - workflow_terms
+    return {
+        "domain_candidate_terms": _term_rows_for_terms(by_entity, domain_terms, top=top),
+        "project_local_terms": _term_rows_for_terms(by_entity, project_terms, top=top),
+        "workflow_or_modeling_terms": _term_rows_for_terms(by_entity, workflow_terms, top=top),
+        "other_terms": [],
+    }
+
+
 def _gap_evidence_report(
     rows: list[BenchmarkGapRow],
     *,
+    project_root: Path,
     entities: list[ProjectBenchmarkEntity],
     matched: dict[str, list[OpportunityRow]],
     enabled: bool,
@@ -1262,7 +1374,7 @@ def _gap_evidence_report(
         entity = entity_by_id.get(row["entity_id"])
         if entity is None:
             continue
-        mode = _candidate_mode(row["candidate_benchmarks"])
+        mode = row["candidate_mode"]
         if mode == "fallback-only":
             fallback_only += 1
         if not row["suggested_search_facets"]:
@@ -1281,6 +1393,10 @@ def _gap_evidence_report(
         }
 
     top_terms = _top_unmapped_terms(unmapped_by_entity)
+    categories = _term_categories(
+        unmapped_by_entity,
+        project_local_tokens=_project_local_tokens(project_root, entities),
+    )
     return {
         "enabled": True,
         "summary": {
@@ -1288,9 +1404,11 @@ def _gap_evidence_report(
             "entities_with_no_facet_hints": no_hints,
             "entities_with_fallback_only_candidates": fallback_only,
             "top_unmapped_project_terms": top_terms,
+            "top_domain_candidate_terms": categories["domain_candidate_terms"],
         },
         "entities": evidence_entities,
         "lexicon_candidates": top_terms,
+        "term_categories": categories,
     }
 
 
@@ -1516,6 +1634,7 @@ def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkG
         "uncovered_entities": sum(1 for row in rows if row["gap_level"] == "uncovered"),
         "weakly_covered_entities": sum(1 for row in rows if row["gap_level"] == "weak"),
         "missing_facet_entities": sum(1 for row in rows if row["gap_level"] == "missing-facet"),
+        **_gap_candidate_counts(rows),
     }
 
 
@@ -1565,12 +1684,8 @@ def _has_fallback_concentration(counter: Counter[str], *, total: int) -> bool:
 
 def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> GapCalibrationSummary:
     rows = report["benchmark_gaps"]
+    counts = _gap_candidate_counts(rows)
     candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
-    entity_specific_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
-    ]
     fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
     scores = [candidate["candidate_score"] for candidate in candidates]
     suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
@@ -1591,9 +1706,9 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
     return {
         "gap_rows": len(rows),
         "rows_with_suggested_facets": sum(1 for row in rows if row["suggested_search_facets"]),
-        "candidate_rows": len(candidates),
-        "entity_specific_candidate_rows": len(entity_specific_candidates),
-        "fallback_candidate_rows": len(fallback_candidates),
+        "candidate_rows": counts["candidate_rows"],
+        "entity_specific_candidate_rows": counts["entity_specific_candidate_rows"],
+        "fallback_candidate_rows": counts["fallback_candidate_rows"],
         "score_min": min(scores) if scores else None,
         "score_median": _median_score(scores),
         "score_max": max(scores) if scores else None,
@@ -2152,17 +2267,18 @@ def _rows_for_gap_candidate(
     ]
 
 
-def _benchmark_test_source_rank(source: PrioritySource) -> int:
-    return {
+def _benchmark_test_source_sort_key(source: PrioritySource) -> int:
+    order = {
         "opportunity-relative": 0,
         "gap-candidate": 1,
         "gap-fallback": 2,
-    }[source]
+    }
+    return order[source]
 
 
 def _merge_benchmark_test_rows(left: BenchmarkTestRow, right: BenchmarkTestRow) -> BenchmarkTestRow:
-    left_rank = _benchmark_test_source_rank(left["priority_source"])
-    right_rank = _benchmark_test_source_rank(right["priority_source"])
+    left_rank = _benchmark_test_source_sort_key(left["priority_source"])
+    right_rank = _benchmark_test_source_sort_key(right["priority_source"])
     if right_rank < left_rank or (right_rank == left_rank and right["priority_score"] > left["priority_score"]):
         merged = dict(right)
     else:
@@ -2184,6 +2300,14 @@ def _dedupe_benchmark_test_rows(rows: list[BenchmarkTestRow]) -> list[BenchmarkT
 def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int) -> BenchmarkTestSummary:
     concrete_rows = sum(1 for row in rows if row["test_plan_state"] == "concrete")
     entities_with_test_plans = {row["entity_id"] for row in rows}
+    source_counts: dict[PrioritySource, int] = {
+        "opportunity-relative": 0,
+        "gap-candidate": 0,
+        "gap-fallback": 0,
+    }
+    for row in rows:
+        source_counts[row["priority_source"]] += 1
+    fallback_rows = source_counts["gap-fallback"]
     facet_counts = Counter(facet for row in rows for facet in row["matched_facets"])
     top_facets = [
         {"facet": facet, "count": count}
@@ -2196,6 +2320,9 @@ def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int
         "draft_needed_rows": len(rows) - concrete_rows,
         "entities_with_test_plans": len(entities_with_test_plans),
         "entities_without_test_plans": max(entities_total - len(entities_with_test_plans), 0),
+        "source_counts": source_counts,
+        "fallback_rows": fallback_rows,
+        "fallback_row_ratio": (fallback_rows / len(rows)) if rows else 0.0,
         "top_facets": top_facets,
     }
 
@@ -2248,9 +2375,21 @@ def _benchmark_test_state_sort_key(state: TestPlanState) -> int:
     return order[state]
 
 
-def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, str, str, str]:
+def _benchmark_test_readiness_sort_key(readiness: ReadinessLabel) -> int:
+    order = {
+        "runnable": 0,
+        "stage-needed": 1,
+        "metadata-only": 2,
+        "blocked": 3,
+    }
+    return order[readiness]
+
+
+def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, int, int, str, str, str]:
     return (
         _benchmark_test_state_sort_key(row["test_plan_state"]),
+        _benchmark_test_source_sort_key(row["priority_source"]),
+        _benchmark_test_readiness_sort_key(row["readiness_label"]),
         -row["priority_score"],
         row["entity_id"],
         row["benchmark_id"],
@@ -2476,6 +2615,14 @@ def gaps_report(
         if normalized_facet is not None and normalized_facet not in suggested_facets:
             continue
 
+        candidates = _candidate_rows(
+            current_entity_id,
+            analysis.contexts,
+            current_matches,
+            missing_facets,
+            hint_facets,
+            candidate_score_index,
+        )
         rows.append(
             {
                 "entity_id": current_entity_id,
@@ -2484,14 +2631,8 @@ def gaps_report(
                 "missing_modalities": missing_modalities,
                 "missing_signal_types": missing_signal_types,
                 "current_matches": _current_match_rows(current_matches),
-                "candidate_benchmarks": _candidate_rows(
-                    current_entity_id,
-                    analysis.contexts,
-                    current_matches,
-                    missing_facets,
-                    hint_facets,
-                    candidate_score_index,
-                ),
+                "candidate_benchmarks": candidates,
+                "candidate_mode": _candidate_mode(candidates),
                 "suggested_search_facets": suggested_facets,
                 "reason": reason,
             }
@@ -2511,6 +2652,7 @@ def gaps_report(
         "calibration": calibration,
         "evidence_report": _gap_evidence_report(
             rows,
+            project_root=project_root,
             entities=analysis.entities,
             matched=matched,
             enabled=evidence_report,

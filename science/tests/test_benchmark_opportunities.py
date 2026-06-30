@@ -802,6 +802,169 @@ benchmark:
     assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
 
 
+def test_benchmark_tests_report_sorts_by_state_source_readiness_before_score(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0042-spatial",
+        """
+id: hypothesis:0042-spatial
+type: hypothesis
+title: Spatial perturbation hypothesis
+""",
+        body="Spatial perturbation response should be benchmarked.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0043-generic",
+        """
+id: hypothesis:0043-generic
+type: hypothesis
+title: Generic fallback benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "matched-metadata",
+        """
+id: dataset:matched-metadata
+type: dataset
+title: Matched Metadata
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: matched
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "matched-runnable",
+        """
+id: dataset:matched-runnable
+type: dataset
+title: Matched Runnable
+dataset_class: deposit
+local_path: data/matched-runnable
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: matched
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "fallback-high-score",
+        """
+id: dataset:fallback-high-score
+type: dataset
+title: Fallback High Score
+dataset_class: deposit
+local_path: data/fallback-high-score
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  limitations: [well curated]
+  tasks:
+    - id: fallback
+      prediction_target: response
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: response
+""",
+    )
+
+    rows = benchmark_tests_report(tmp_path)["benchmark_tests"]
+
+    ordered = [(row["benchmark_id"], row["priority_source"], row["readiness_label"]) for row in rows]
+    assert ordered[:2] == [
+        ("dataset:matched-runnable", "opportunity-relative", "runnable"),
+        ("dataset:matched-metadata", "opportunity-relative", "metadata-only"),
+    ]
+    assert any(row["priority_source"] == "gap-fallback" for row in rows)
+    assert all(row["priority_source"] != "gap-fallback" for row in rows[:2])
+
+
+def test_benchmark_tests_report_summary_counts_sources_and_fallback_ratio(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0043-generic",
+        """
+id: hypothesis:0043-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+dataset_class: deposit
+local_path: data/generic
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    summary = benchmark_tests_report(tmp_path)["summary"]
+
+    assert summary["source_counts"] == {
+        "opportunity-relative": 0,
+        "gap-candidate": 0,
+        "gap-fallback": 1,
+    }
+    assert summary["fallback_rows"] == 1
+    assert summary["fallback_row_ratio"] == 1.0
+
+
 def test_benchmark_tests_report_excludes_fallback_rows(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
@@ -1080,6 +1243,41 @@ benchmark:
     assert payload["matched_opportunities"] == []
     assert payload["unmapped_project_entities"][0]["entity_id"] == "hypothesis:0001-model"
     assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:generic"
+
+
+def test_stoplist_blocks_model_token_only_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-model",
+        """
+id: hypothesis:0001-model
+type: hypothesis
+title: Model hypothesis
+status: active
+""",
+        body="The only shared benchmark term is model.",
+    )
+    _write_dataset(
+        tmp_path,
+        "model-facet",
+        """
+id: dataset:model-facet
+type: dataset
+title: Model Facet
+benchmark:
+  domains: [biology]
+  modalities: [model]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    assert payload["matched_opportunities"] == []
 
 
 def test_broad_domain_facet_is_not_scored_as_opportunity_match(tmp_path: Path) -> None:
@@ -1931,12 +2129,30 @@ benchmark:
 
     payload = gaps_report(tmp_path)
 
-    assert payload["summary"] == {
+    assert {
+        key: payload["summary"][key]
+        for key in (
+            "entities_total",
+            "entities_with_gaps",
+            "uncovered_entities",
+            "weakly_covered_entities",
+            "missing_facet_entities",
+        )
+    } == {
         "entities_total": 1,
         "entities_with_gaps": 1,
         "uncovered_entities": 1,
         "weakly_covered_entities": 0,
         "missing_facet_entities": 0,
+    }
+    assert payload["summary"]["candidate_rows"] == 1
+    assert payload["summary"]["entity_specific_candidate_rows"] == 0
+    assert payload["summary"]["fallback_candidate_rows"] == 1
+    assert payload["summary"]["fallback_candidate_ratio"] == 1.0
+    assert payload["summary"]["gap_candidate_mode_counts"] == {
+        "entity-specific": 0,
+        "fallback-only": 1,
+        "none": 0,
     }
     row = payload["benchmark_gaps"][0]
     assert row["entity_id"] == "hypothesis:0001-unmapped"
@@ -2405,6 +2621,130 @@ benchmark:
     assert "only-fallback-candidates" in row["why_no_specific_candidate"]
     assert evidence["summary"]["entities_with_fallback_only_candidates"] == 1
     assert evidence["lexicon_candidates"][0]["term"] == "clone"
+
+
+def test_gaps_report_evidence_report_categorizes_unmapped_terms_without_redefining_lexicon_candidates(
+    tmp_path: Path,
+) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    project_root = tmp_path / "cbioportal-project"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0044-cytogenetic-model",
+        """
+id: hypothesis:0044-cytogenetic-model
+type: hypothesis
+title: cBioPortal cytogenetic lesion model
+""",
+        body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
+    )
+    _write_dataset(
+        project_root,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    evidence = gaps_report(project_root, evidence_report=True)["evidence_report"]
+
+    categories = evidence["term_categories"]
+    domain_terms = {row["term"] for row in categories["domain_candidate_terms"]}
+    project_terms = {row["term"] for row in categories["project_local_terms"]}
+    workflow_terms = {row["term"] for row in categories["workflow_or_modeling_terms"]}
+    assert {"cytogenetic", "lesion", "mutation"} <= domain_terms
+    assert "cbioportal" in project_terms
+    assert {"catalog", "models"} <= workflow_terms
+    assert evidence["summary"]["top_domain_candidate_terms"][0]["term"] in domain_terms
+    assert evidence["lexicon_candidates"] == evidence["summary"]["top_unmapped_project_terms"]
+
+
+def test_evidence_workflow_terms_are_not_already_excluded_upstream() -> None:
+    from science_tool.benchmark_opportunities import (
+        FACET_HINT_TERMS,
+        _UNMAPPED_TERM_EXCLUSIONS,
+        _WORKFLOW_OR_MODELING_TERMS,
+    )
+
+    assert _WORKFLOW_OR_MODELING_TERMS
+    assert not ((_WORKFLOW_OR_MODELING_TERMS - {"model"}) & _UNMAPPED_TERM_EXCLUSIONS)
+    assert not (_WORKFLOW_OR_MODELING_TERMS & set(FACET_HINT_TERMS))
+
+
+def test_term_categories_are_disjoint_and_project_local_uses_leaf_not_ancestors(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _project_local_tokens, _term_categories
+
+    project_root = tmp_path / "cancer" / "cancer-types" / "multiple-myeloma"
+    project_root.mkdir(parents=True)
+    categories = _term_categories(
+        {
+            "hypothesis:0001-project": [
+                "cancer",
+                "multiple",
+                "myeloma",
+                "project",
+                "mutation",
+            ]
+        },
+        project_local_tokens=_project_local_tokens(project_root, []),
+    )
+
+    project_terms = {row["term"] for row in categories["project_local_terms"]}
+    workflow_terms = {row["term"] for row in categories["workflow_or_modeling_terms"]}
+    domain_terms = {row["term"] for row in categories["domain_candidate_terms"]}
+    assert {"multiple", "myeloma"} <= project_terms
+    assert "project" in workflow_terms
+    assert {"cancer", "mutation"} <= domain_terms
+    assert not (project_terms & workflow_terms)
+    assert not (project_terms & domain_terms)
+    assert not (workflow_terms & domain_terms)
+
+
+def test_project_local_tokens_ignore_same_as_and_source_refs(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _project_local_tokens, load_project_entities
+
+    project_root = tmp_path / "local-project"
+    _write_entity(
+        project_root,
+        "hypotheses",
+        "0045-local-term",
+        """
+id: hypothesis:0045-local-term
+type: hypothesis
+title: Local term hypothesis
+same_as:
+  - externalalias
+source_refs:
+  - externalalias
+""",
+    )
+
+    tokens = _project_local_tokens(project_root, load_project_entities(project_root))
+
+    assert "local" in tokens
+    assert "project" in tokens
+    assert "0045-local-term" in tokens
+    assert "hypothesis:0045-local-term" in tokens
+    assert "externalalias" not in tokens
 
 
 def test_gaps_report_evidence_report_distinguishes_entity_specific_candidates(tmp_path: Path) -> None:
@@ -3015,6 +3355,99 @@ benchmark:
         {"benchmark_id": "dataset:sciplex", "count": 1, "share": 0.5},
     ]
     assert summary["fallback_concentration_warning"] is True
+
+
+def test_gaps_report_summary_includes_actionability_candidate_counts(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gap_calibration_summary, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0040-drug-screen",
+        """
+id: hypothesis:0040-drug-screen
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0041-generic",
+        """
+id: hypothesis:0041-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic Benchmark
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    report = gaps_report(tmp_path)
+
+    rows = {row["entity_id"]: row for row in report["benchmark_gaps"]}
+    assert rows["hypothesis:0040-drug-screen"]["candidate_mode"] == "entity-specific"
+    assert rows["hypothesis:0041-generic"]["candidate_mode"] == "fallback-only"
+    assert report["summary"]["candidate_rows"] == 3
+    assert report["summary"]["entity_specific_candidate_rows"] == 1
+    assert report["summary"]["fallback_candidate_rows"] == 2
+    assert report["summary"]["fallback_candidate_ratio"] == pytest.approx(2 / 3)
+    assert report["summary"]["gap_candidate_mode_counts"] == {
+        "entity-specific": 1,
+        "fallback-only": 1,
+        "none": 0,
+    }
+
+    calibration = gap_calibration_summary(report)
+    assert calibration["candidate_rows"] == report["summary"]["candidate_rows"]
+    assert calibration["entity_specific_candidate_rows"] == report["summary"]["entity_specific_candidate_rows"]
+    assert calibration["fallback_candidate_rows"] == report["summary"]["fallback_candidate_rows"]
 
 
 def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> None:
