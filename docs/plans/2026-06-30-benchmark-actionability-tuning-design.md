@@ -229,10 +229,13 @@ Use structural checks and shared token hygiene where possible. Avoid embedding
 specific active project names in library code.
 
 - `project_local_terms`: tokens structurally derived from the current project,
-  including normalized project-root path segments, project root stem tokens, and
-  entity-id stems. The implementation may also consume an existing project
-  metadata field for aliases if one is already available, but v1 should not add
-  a new config surface only for this report.
+  specifically the tokens of the project-root **leaf** directory name plus
+  entity-id stems. Only the leaf directory is used, not ancestor path segments,
+  so a domain term that happens to appear in a parent directory (e.g. `cancer`
+  in `~/d/cancer/...`) is not misclassified as project-local. The implementation
+  may also consume an existing project metadata field for aliases if one is
+  already available, but v1 should not add a new config surface only for this
+  report.
 - `workflow_or_modeling_terms`: generic terms that are useful for project prose
   but poor benchmark facets. Before adding a new list, audit overlap with
   `_UNMAPPED_TERM_EXCLUSIONS`, `_STOP_TOKENS`, `_phrase_tokens()`, and
@@ -246,8 +249,23 @@ specific active project names in library code.
   intentionally retained but should not be lexicon-ranked. It is included as an
   intentionally inert forward-compatibility slot.
 
+The four emitted categories are disjoint. When a token would qualify for more
+than one set (e.g. `project` is both a leaf-derived project-local token and a
+workflow/modeling term), `project_local_terms` takes precedence, then
+`workflow_or_modeling_terms`, then `domain_candidate_terms`.
+
 These rules are intentionally conservative. The purpose is to improve ranking
 hygiene, not to decide that every domain candidate should become a facet hint.
+
+**Known limitation (accepted for v1):** because project-local detection is
+leaf-directory + entity-id only, a project *nickname* that appears in neither
+(e.g. `mm30` for `multiple-myeloma`, or `pais`) will not be classified
+project-local and will surface as a domain candidate. This is the deliberate
+tradeoff over the rejected alternative of hardcoding active project slugs:
+leaking a few nicknames into the domain list is preferable to swallowing
+legitimate domain terms. Expect to see such nicknames among domain candidates
+in the calibration output; that is the categorizer working as designed, not a
+regression.
 
 ## Error Handling
 
