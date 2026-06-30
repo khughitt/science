@@ -1,10 +1,10 @@
 {
-  "file_count": 139,
+  "file_count": 137,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 83,
+  "thread_count": 81,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -605,48 +605,6 @@
         "docs/plans/2026-06-21-dataset-catalog-cli-plan.md": "plan"
       },
       "thread_id": "dataset-catalog-cli"
-    },
-    {
-      "earliest_file_date": "2026-06-26",
-      "files": [
-        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-06-26",
-      "normalized_slug": "dataset-catalog-phase1",
-      "raw_slugs": {
-        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md": "dataset-catalog-phase1-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-26-dataset-catalog-phase1-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "dataset-catalog-phase1"
-    },
-    {
-      "earliest_file_date": "2026-06-26",
-      "files": [
-        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md"
-      ],
-      "latest_file_date": "2026-06-26",
-      "normalized_slug": "dataset-catalog-triage-pack",
-      "raw_slugs": {
-        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md": "dataset-catalog-triage-pack-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-26-dataset-catalog-triage-pack-design.md": "design"
-      },
-      "thread_id": "dataset-catalog-triage-pack"
     },
     {
       "earliest_file_date": "2026-06-08",

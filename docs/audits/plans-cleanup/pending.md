@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `58`
+- Pending thread count: `60`
 
 ## adapter-entity-layout-and-overlay-root
 
@@ -79,6 +79,23 @@
 - remaining_gaps:
   - No durable non-plan documentation was found for the CLI contract, output fields, labels, filters, scalar behavior, or non-goals.
   - The plan files currently carry useful user-facing contract details, so deleting them without a checkpoint would lose the only discovered narrative documentation.
+
+## benchmark-grounded-model-assessment
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; v1 and read-only projections are implemented, but graph edges, formal belief-test authoring, benchmark outcomes, and cross-project outcome analysis remain roadmap items
+    - `docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
+- remaining_gaps:
+  - No formal authored plan_kind: belief-test schema or durable template was found; current science benchmark tests is a read-only projection.
+  - No structured benchmark result/outcome model was found that can update propositions or evidence.
+  - No graph-aware benchmark-to-belief typed edges were found; v1 related_beliefs remains free text and opportunity/gap matching is report logic, not graph semantics.
+  - No cross-project success analysis tying benchmark outcomes to project practices was found; gap calibration summarizes report quality and candidate/fallback behavior rather than benchmark outcome success.
+  - No consolidated durable reference page under docs/ describes the current benchmark catalog/opportunities/gaps/tests contract independent of active plans.
 
 ## bundle-belief-rollup
 
@@ -424,6 +441,20 @@
   - MM30 legacy edges.yaml corpus migration is not present in this repo review and remains a downstream migration task.
   - Durable docs do not fully explain relational proposition fields, workbench compile/check, staged empirical evidence, or derived_edge_status; much of the contract lives in plans/tests.
   - The plan header still says held until v3/planning only, which is stale now that v3 and framework implementation have landed.
+
+## feedback-telemetry-adaptation
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until telemetry/adaptation contract and deferred skill-note scope are documented outside active plans
+    - `docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md`
+- remaining_gaps:
+  - No durable non-plan user/operator doc was found for telemetry storage, redaction, opt-out, report/export/prune, validation-summary events, feedback triage telemetry, or feedback add --from-recent.
+  - No science telemetry note helper was found; the broad design treated skill note events as optional/high-value workflow instrumentation, and later telemetry-v1.5 explicitly deferred skill note events.
 
 ## infer-schema-scaffold
 
