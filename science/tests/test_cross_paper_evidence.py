@@ -248,6 +248,30 @@ def test_scan_faults_on_invalid_stance(tmp_path: Path):
     assert [f.reason for f in faults] == ["invalid-stance"]
 
 
+def test_scan_faults_on_malformed_json_body_without_raising(tmp_path: Path):
+    ann = _ann("a-1", stance="asserted")
+    bad_ann = Annotation(
+        id=ann.id,
+        target=ann.target,
+        bodies=(TextualBody(value="{", format="application/json"),),
+        motivation=ann.motivation,
+        annotation_type=ann.annotation_type,
+        source=ann.source,
+        status=ann.status,
+        creator=ann.creator,
+        created=ann.created,
+        content_hash=ann.content_hash,
+        promoted_to=ann.promoted_to,
+    )
+    _write_paper_sidecar(tmp_path, "Smith2020", [bad_ann])
+    refs = {"proposition:p": frozenset({"paper:Smith2020", _ANN_REF})}
+
+    assertions, faults = scan_literature_assertions(tmp_path, refs)
+
+    assert assertions == []
+    assert [f.reason for f in faults] == ["invalid-stance"]
+
+
 def test_scan_inactive_with_corrupt_target_is_skipped_not_errored(tmp_path: Path):
     _write_paper_sidecar(
         tmp_path,

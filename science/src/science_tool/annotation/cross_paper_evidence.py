@@ -94,7 +94,10 @@ def collapse_assertions(assertions: list[LiteratureAssertion]) -> list[Literatur
 def _statement_stance(ann) -> str:
     for body in ann.bodies:
         if isinstance(body, TextualBody) and body.format == "application/json":
-            data = json.loads(body.value)
+            try:
+                data = json.loads(body.value)
+            except json.JSONDecodeError:
+                return ""
             if isinstance(data, dict):
                 return str(data.get("stance", ""))
     return ""
