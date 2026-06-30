@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `50`
+- Pending thread count: `51`
 
 ## authored-confidence
 
@@ -559,6 +559,23 @@
 - remaining_gaps:
   - No durable non-plan doc fully records the schema-to-check mapping, compile errors, merge semantics, YAML timestamp rule, or tabular program contract.
   - docs/conventions/pipeline-qa-checkpoints.md documents the older config-driven QA convention and science_qa generally, but not the schema compiler as the current contract.
+
+## remove-v3-migration-code
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-06-20-remove-v3-migration-code-design.md`
+  - `docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md`
+- pending_actions:
+  - `deferred`: review status incomplete; later work intentionally restored migration surfaces, so this needs triage rather than deletion
+    - `docs/plans/2026-06-20-remove-v3-migration-code-design.md`
+    - `docs/plans/2026-06-20-remove-v3-migration-code-implementation-plan.md`
+- remaining_gaps:
+  - Plan still says to remove surfaces that are currently live and tested: entities migrate/entity_layout_migration and graph migrate-paper-datasets/paper_dataset_migration.
+  - Manifest guard still references the restored command at science/src/science_tool/validate/checks/manifest.py.
+  - Triage needed to decide whether this plan should be split into completed cleanup notes plus explicit supersession by later migration plans.
 
 ## source-compiler-adapter-policy-keystone
 

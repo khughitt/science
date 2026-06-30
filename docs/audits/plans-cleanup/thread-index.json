@@ -1,10 +1,10 @@
 {
-  "file_count": 143,
+  "file_count": 141,
   "generated_at": "2026-06-30T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 85,
+  "thread_count": 84,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -2111,33 +2111,6 @@
         "docs/plans/2026-06-16-typed-evidence-vocabularies-plan.md": "plan"
       },
       "thread_id": "typed-evidence-vocabularies"
-    },
-    {
-      "earliest_file_date": "2026-06-20",
-      "files": [
-        "docs/plans/2026-06-20-user-guide-restructure-design.md",
-        "docs/plans/2026-06-20-user-guide-restructure-plan.md"
-      ],
-      "latest_file_date": "2026-06-20",
-      "normalized_slug": "user-guide-restructure",
-      "raw_slugs": {
-        "docs/plans/2026-06-20-user-guide-restructure-design.md": "user-guide-restructure-design",
-        "docs/plans/2026-06-20-user-guide-restructure-plan.md": "user-guide-restructure-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-06-20-user-guide-restructure-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-06-20-user-guide-restructure-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-06-20-user-guide-restructure-design.md": "design",
-        "docs/plans/2026-06-20-user-guide-restructure-plan.md": "plan"
-      },
-      "thread_id": "user-guide-restructure"
     }
   ]
 }
