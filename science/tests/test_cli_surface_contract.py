@@ -74,19 +74,7 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
     ),
 }
 
-_JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
-    "commons data resolve": "commons CLI uses legacy --json convenience flags",
-    "commons dataset init": "commons CLI uses legacy --json convenience flags",
-    "commons dataset status": "commons CLI uses legacy --json convenience flags",
-    "commons dataset validate": "commons CLI uses legacy --json convenience flags",
-    "commons find": "commons CLI uses legacy --json convenience flags",
-    "commons index rebuild": "commons CLI uses legacy --json convenience flags",
-    "commons member-payload": "commons CLI uses legacy --json convenience flags",
-    "commons reference-graph resolve-member": "commons CLI uses legacy --json convenience flags",
-    "commons reference-graph scaffold-member": "commons CLI uses legacy --json convenience flags",
-    "commons show": "commons CLI uses legacy --json convenience flags",
-    "commons validate": "commons CLI uses legacy --json convenience flags",
-}
+_JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {}
 
 _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
     "dag audit",

@@ -40,6 +40,30 @@ def test_dataset_init_creates_package(tmp_path: Path, monkeypatch) -> None:
     assert (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").is_file()
 
 
+def test_dataset_init_accepts_format_json(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "dbsnp-human",
+            "--date",
+            "2026-06-29",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["slug"] == "dbsnp-human"
+    assert payload["dataset_dir"] == "datasets/dbsnp-human"
+
+
 def test_dataset_init_human_output_names_next_steps(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "commons"
     (root / "datasets").mkdir(parents=True)
@@ -115,6 +139,26 @@ def test_dataset_status_json_reports_unbuilt_scaffold(tmp_path: Path, monkeypatc
     assert payload["output_dir"] == str(tmp_path / "data" / "dbsnp-human")
 
 
+def test_dataset_status_accepts_format_json(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    init = runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+    assert init.exit_code == 0, init.output
+
+    result = runner.invoke(commons_group, ["dataset", "status", "dbsnp-human", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["slug"] == "dbsnp-human"
+    assert payload["exists"] is True
+
+
 def test_dataset_status_human_does_not_fail_for_missing_payloads(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "commons"
     (root / "datasets").mkdir(parents=True)
@@ -163,6 +207,24 @@ def test_dataset_validate_json_accepts_unbuilt_scaffold(tmp_path: Path, monkeypa
     runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
 
     result = runner.invoke(commons_group, ["dataset", "validate", "dbsnp-human", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["valid"] is True
+    assert payload["findings"] == []
+
+
+def test_dataset_validate_accepts_format_json(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg))
+    runner = CliRunner()
+    runner.invoke(commons_group, ["dataset", "init", "dbsnp-human", "--date", "2026-06-29"])
+
+    result = runner.invoke(commons_group, ["dataset", "validate", "dbsnp-human", "--format", "json"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)

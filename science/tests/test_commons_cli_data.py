@@ -77,6 +77,21 @@ def test_data_resolve_json_output(
     assert payload["resolved_path"] == str((tmp_path / "data" / _SLUG / _LOGICAL).resolve())
 
 
+def test_data_resolve_format_json_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path, monkeypatch)
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group, ["data", "resolve", f"dataset:{_SLUG}", _LOGICAL, "--format", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["dataset_id"] == f"dataset:{_SLUG}"
+    assert payload["logical_path"] == _LOGICAL
+    assert payload["source"] == "data_root"
+
+
 def test_data_resolve_not_found_exits_nonzero(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

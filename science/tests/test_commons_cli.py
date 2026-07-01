@@ -67,6 +67,23 @@ def test_index_rebuild_json(
     assert payload["duration_ms"] >= 0
 
 
+def test_index_rebuild_format_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shutil
+    fixtures = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(fixtures, root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["index", "rebuild", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["entities_indexed"] == 5
+    assert payload["errors"] == []
+
+
 def test_list_outputs_all_indexed_entities(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -218,6 +235,19 @@ def test_show_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "commons_metadata" in payload
 
 
+def test_show_format_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["show", "paper:Adams2025", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["canonical_id"] == "paper:Adams2025"
+    assert payload["frontmatter"]["bibkey"] == "Adams2025"
+
+
 def test_show_missing_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
@@ -332,6 +362,24 @@ def test_member_payload_json_resolves_reference_graph_member(
     assert payload["payload"]["incident_edges"][0]["predicate"] == "is_a"
 
 
+def test_member_payload_format_json_resolves_reference_graph_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["member-payload", "dataset:mondo-0005148", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["member_id"] == "dataset:mondo-0005148"
+    assert payload["payload"]["node"]["label"] == "multiple myeloma"
+
+
 def test_reference_graph_scaffold_member_json_dry_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -387,6 +435,40 @@ def test_reference_graph_scaffold_member_json_dry_run(
         "member_kind": "term",
         "label": "multiple myeloma",
     }
+
+
+def test_reference_graph_scaffold_member_format_json_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    target = root / "datasets" / "mondo-0005148-scaffold" / "entity.md"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        [
+            "reference-graph",
+            "scaffold-member",
+            "dataset:mondo-v1",
+            "MONDO:0005148",
+            "--slug",
+            "mondo-0005148-scaffold",
+            "--date",
+            "2026-06-28",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not target.exists()
+    payload = json.loads(result.output)
+    assert payload["applied"] is False
+    assert payload["canonical_id"] == "dataset:mondo-0005148-scaffold"
 
 
 def test_reference_graph_scaffold_member_apply_writes_valid_member(
@@ -453,6 +535,25 @@ def test_reference_graph_resolve_member_json(tmp_path: Path, monkeypatch: pytest
     assert payload["replaced_by"] == []
 
 
+def test_reference_graph_resolve_member_format_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["reference-graph", "resolve-member", "dataset:mondo-v1", "MONDO:0005148", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["registry_id"] == "dataset:mondo-v1"
+    assert payload["member_key"] == "MONDO:0005148"
+
+
 def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
@@ -486,6 +587,19 @@ def test_find_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     runner.invoke(commons_group, ["index", "rebuild"])
     result = runner.invoke(commons_group, ["find", "paper", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert isinstance(payload, list)
+    assert payload[0]["canonical_id"] == "paper:Adams2025"
+
+
+def test_find_format_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["find", "paper", "--format", "json"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert isinstance(payload, list)
@@ -612,6 +726,19 @@ def test_validate_json(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
     runner = CliRunner()
     result = runner.invoke(commons_group, ["validate", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["checked"] == 5
+    assert payload["errors"] == []
+
+
+def test_validate_format_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--format", "json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["checked"] == 5
