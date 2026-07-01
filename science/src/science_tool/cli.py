@@ -6720,9 +6720,11 @@ def _display_project_path(path: Path) -> str:
 
 
 def _default_hint_candidates_review_path(project_root: Path, generated: date) -> Path:
+    from science_tool.paths import resolve_paths
+
+    doc_dir = resolve_paths(project_root).doc_dir
     return (
-        project_root
-        / "docs"
+        doc_dir
         / "audits"
         / "benchmark-hint-candidates"
         / f"{generated.isoformat()}-{project_root.name}.yaml"
