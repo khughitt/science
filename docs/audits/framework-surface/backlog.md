@@ -64,6 +64,8 @@ summary link from
 
 ### B4. Audit Flag Drift
 
+**Status:** Addressed by [`flag-drift.md`](flag-drift.md).
+
 **Goal:** Find concrete option naming drift after the contract exists.
 
 **Output:** Findings table with command, current flags, desired contract, and

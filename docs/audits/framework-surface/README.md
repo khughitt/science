@@ -15,6 +15,8 @@ threads before any behavioral refactor.
   conventions, and process docs sit together.
 - [`framework-findings.md`](framework-findings.md) captures design debt and data
   model/API tightening opportunities.
+- [`flag-drift.md`](flag-drift.md) records concrete CLI option drift against the
+  CLI behavior convention.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary
