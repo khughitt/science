@@ -720,7 +720,7 @@ def _effective_repro_class(project_root: Path, ds_id: str, _seen: set[str] | Non
     if e is None:
         return "unknown", "missing entity"
     if e.origin == "derived" and isinstance(e.derivation, DerivationBlock):
-        upstream_classes = [_effective_repro_class(project_root, up, _seen) for up in e.derivation.inputs]
+        upstream_classes = [_effective_repro_class(project_root, up, set(_seen)) for up in e.derivation.inputs]
         return _weakest_class(upstream_classes)
     return reproducibility_class_for(_load_dataset_fm(project_root, ds_id))
 
@@ -784,15 +784,19 @@ collapses to `unknown` (masking the behavior under test). Mirror the repo's exis
 entities carry `datapackage:` and **must not** carry an `access:` block.
 
 ```python
-def _write_derived(root: Path, slug: str, upstream: str):
+def _write_derived(root: Path, slug: str, upstreams: str | list[str]):
     """Write a VALID origin:derived dataset (full DerivationBlock) + its workflow-run."""
+    upstream_slugs = [upstreams] if isinstance(upstreams, str) else upstreams
+    upstream_ids = [f"dataset:{upstream}" for upstream in upstream_slugs]
+    upstreams_yaml = "[" + ", ".join(f'"{upstream_id}"' for upstream_id in upstream_ids) + "]"
     ds = root / "entities" / "datasets"
     wr = root / "entities" / "workflow-runs"
     ds.mkdir(parents=True, exist_ok=True)
     wr.mkdir(parents=True, exist_ok=True)
-    (wr / "wf-r1.md").write_text(
-        '---\nid: "workflow-run:wf-r1"\ntype: "workflow-run"\ntitle: "WF r1"\n'
-        f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: ["dataset:{upstream}"]\n---\n',
+    run_slug = f"{slug}-r1"
+    (wr / f"{run_slug}.md").write_text(
+        f'---\nid: "workflow-run:{run_slug}"\ntype: "workflow-run"\ntitle: "WF {slug}"\n'
+        f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: {upstreams_yaml}\n---\n',
         encoding="utf-8",
     )
     (ds / f"{slug}.md").write_text(
@@ -800,11 +804,11 @@ def _write_derived(root: Path, slug: str, upstream: str):
         'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
         "derivation:\n"
         '  workflow: "workflow:wf"\n'
-        '  workflow_run: "workflow-run:wf-r1"\n'
+        f'  workflow_run: "workflow-run:{run_slug}"\n'
         '  git_commit: "abc"\n'
         '  config_snapshot: "c"\n'
         '  produced_at: "2026-04-19T00:00:00Z"\n'
-        f'  inputs: ["dataset:{upstream}"]\n---\n',
+        f"  inputs: {upstreams_yaml}\n---\n",
         encoding="utf-8",
     )
 
@@ -814,10 +818,23 @@ def test_derived_input_inherits_weakest_upstream(tmp_path):
     _write_derived(tmp_path, "derived_ok", "n3c")
     ok, halts, _ = check_reproducibility(tmp_path, ["dataset:derived_ok"], policy=BAR)
     assert ok is False and any("trust-based-output" in h for h in halts)
+
+
+def test_convergent_derived_graph_does_not_treat_shared_upstream_as_cycle(tmp_path):
+    _write_dataset(tmp_path, "n3c", N3C)
+    _write_derived(tmp_path, "branch_a", "n3c")
+    _write_derived(tmp_path, "branch_b", "n3c")
+    _write_derived(tmp_path, "merged", ["branch_a", "branch_b"])
+
+    ok, halts, _ = check_reproducibility(tmp_path, ["dataset:merged"], policy=BAR)
+
+    assert ok is False
+    assert any("trust-based-output" in h for h in halts)
+    assert not any("cycle" in h for h in halts)
 ```
 
 Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_plan_reproducibility_gate.py -v`
-Expected: PASS (7 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 6: Format, lint, commit**
 
