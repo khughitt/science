@@ -14,7 +14,7 @@
 
 This plan implements the next t037 research/development loop from:
 
-- Design contract: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Design contract: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 - Source synthesis: `meta/doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`
 - Source paper summaries: `Ding2025.md`, `Yu2026.md`, `Si2025.md`
 - Contract dependency: `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`
@@ -33,16 +33,16 @@ Those become follow-up tasks after the t037 v1.3 prototype loop is stable.
 
 Create:
 
-- `meta/doc/plans/2026-05-07-t037-pilot-extraction.md`
+- `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md`
   - Owns the authoring pressure-test for the v1.1 schema.
-- `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
+- `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
   - Standalone validator prototype for `agent-tool-operation` structural and reason-code rules.
-- `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md`
+- `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md`
   - Reports prototype coverage, test outcomes, and v1.3 patch candidates.
 
 Modify:
 
-- `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
   - Patch v1.1 -> v1.2 after pilot findings.
   - Patch v1.2 -> v1.3 after validator findings.
 
@@ -56,7 +56,7 @@ Optional if the task owner wants task bookkeeping in the same pass:
 ### Task 0: Verify or Apply the v1.1 Audit Baseline
 
 **Files:**
-- Modify if needed: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Modify if needed: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 - Read: `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`
 
 - [ ] **Step 1: Verify the design is labeled v1.1**
@@ -64,7 +64,7 @@ Optional if the task owner wants task bookkeeping in the same pass:
 Run:
 
 ```bash
-sed -n '1,8p' meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
+sed -n '1,8p' meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
 ```
 
 Expected: line 1 says `t037 draft v1.1`, and the status block starts with `**Status:** v1.1 draft (2026-05-07)`.
@@ -74,7 +74,7 @@ Expected: line 1 says `t037 draft v1.1`, and the status block starts with `**Sta
 Run:
 
 ```bash
-rg -n "pipeline-runner|absence-sensitive roles|direct capability calls|agent-source-unvalidated.*validation_status_detail: unvalidated|agent-evaluation.*does not declare `agent-source-unvalidated`|Registry-resolved validation view" meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
+rg -n "pipeline-runner|absence-sensitive roles|direct capability calls|agent-source-unvalidated.*validation_status_detail: unvalidated|agent-evaluation.*does not declare `agent-source-unvalidated`|Registry-resolved validation view" meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
 ```
 
 Expected: every pattern appears. These are the v1.1 audit baseline rules that Tasks 1-5 depend on:
@@ -115,8 +115,8 @@ Re-run Steps 1 and 2 after patching. Do not proceed to Task 1 until both pass.
 ### Task 1: Pilot Extraction Against v1.1
 
 **Files:**
-- Create: `meta/doc/plans/2026-05-07-t037-pilot-extraction.md`
-- Read: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Create: `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 - Read: `meta/doc/background/papers/Ding2025.md`
 - Read: `meta/doc/background/papers/Yu2026.md`
 - Read: `meta/doc/background/papers/Si2025.md`
@@ -126,8 +126,8 @@ Re-run Steps 1 and 2 after patching. Do not proceed to Task 1 until both pass.
 Run:
 
 ```bash
-sed -n '1,220p' meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
-sed -n '220,520p' meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
+sed -n '1,220p' meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
+sed -n '220,520p' meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
 sed -n '1,220p' meta/doc/background/papers/Ding2025.md
 sed -n '1,220p' meta/doc/background/papers/Yu2026.md
 sed -n '1,220p' meta/doc/background/papers/Si2025.md
@@ -138,12 +138,12 @@ Expected: all files render; no missing source file; t022 v2.3 supports the enum 
 
 - [ ] **Step 2: Create the pilot extraction document**
 
-Create `meta/doc/plans/2026-05-07-t037-pilot-extraction.md` with this structure:
+Create `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md` with this structure:
 
 ```markdown
 # t037 Pilot Extraction (3 operation/evaluation cases, v1.1)
 
-> **Status:** Pilot extraction (2026-05-07). Empirical pressure-test of `[t037]` v1.1 (`meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`).
+> **Status:** Pilot extraction (2026-05-07). Empirical pressure-test of `[t037]` v1.1 (`meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`).
 >
 > **Goal:** find gaps between the v1.1 agent/tool operation schema and what authors can actually populate from current project content. Surfaces ref-heaviness, registry-state ambiguity, reason-code decidability gaps, and worked-example drift.
 
@@ -269,22 +269,22 @@ Expected: validation exits 0. Existing warnings about `h05`, unverified-marker c
 ### Task 2: Patch Design to v1.2 From Pilot Findings
 
 **Files:**
-- Modify: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
-- Read: `meta/doc/plans/2026-05-07-t037-pilot-extraction.md`
+- Modify: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md`
 
 - [ ] **Step 1: Read the pilot's proposed patches**
 
 Run:
 
 ```bash
-rg -n "P-pilot-|Cross-case findings|Residual audit prompts" meta/doc/plans/2026-05-07-t037-pilot-extraction.md
+rg -n "P-pilot-|Cross-case findings|Residual audit prompts" meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md
 ```
 
 Expected: each proposed patch has a numbered identifier.
 
 - [ ] **Step 2: Update the design status block**
 
-Modify the top status block in `2026-05-07-t037-agent-tool-operations-extension-design.md` so the current line is `v1.2 draft (2026-05-07)` and names `meta/doc/plans/2026-05-07-t037-pilot-extraction.md` as the source of the patch set. Move the v1.1 audit text into a separate prior-history paragraph immediately below it. The v1.2 status paragraph must list every `P-pilot-*` patch from Task 1 in concrete prose.
+Modify the top status block in `2026-05-07-t037-agent-tool-operations-extension-design.md` so the current line is `v1.2 draft (2026-05-07)` and names `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md` as the source of the patch set. Move the v1.1 audit text into a separate prior-history paragraph immediately below it. The v1.2 status paragraph must list every `P-pilot-*` patch from Task 1 in concrete prose.
 
 - [ ] **Step 3: Apply each pilot patch in the owning section**
 
@@ -307,7 +307,7 @@ If two or more pilot findings are authoring conventions rather than schema field
 Run:
 
 ```bash
-rg -n "v1.1 draft|v1.1 design|v1.1 schema|P-pilot-|\\.\\.\\." meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
+rg -n "v1.1 draft|v1.1 design|v1.1 schema|P-pilot-|\\.\\.\\." meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
 ```
 
 Expected:
@@ -331,8 +331,8 @@ Expected: validation exits 0 with only pre-existing warnings.
 ### Task 3: Build the Standalone `agent-tool-operation` Validator Prototype
 
 **Files:**
-- Create: `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
-- Read: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Create: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 - Reference: `meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py`
 
 - [ ] **Step 1: Create the prototype file header and rule constants**
@@ -347,7 +347,7 @@ reason-code biconditional rules.
 
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 
-Run with: python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py
+Run with: python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py
 Exits 0 if all tests match expectations; nonzero otherwise.
 """
 from __future__ import annotations
@@ -535,7 +535,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py
+python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py
 ```
 
 Expected: all tests pass. If any test fails, patch the prototype or the v1.2 design rule before proceeding.
@@ -545,28 +545,28 @@ Expected: all tests pass. If any test fails, patch the prototype or the v1.2 des
 ### Task 4: Write Validator Prototype Findings
 
 **Files:**
-- Create: `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md`
-- Read: `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
-- Read: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Create: `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 
 - [ ] **Step 1: Run the prototype and capture result**
 
 Run:
 
 ```bash
-python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py
+python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py
 ```
 
 Expected: all tests pass.
 
 - [ ] **Step 2: Create the findings document**
 
-Create `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md` with:
+Create `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md` with:
 
 ```markdown
 # t037 v1.2 `agent-tool-operation` Validator Prototype - Findings
 
-> **Status:** Findings (2026-05-07). Companion to the validator script at `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`.
+> **Status:** Findings (2026-05-07). Companion to the validator script at `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`.
 >
 > **Goal:** prove that the load-bearing t037 operation-record rules are decidable from payload state plus a registry-resolved operation view.
 
@@ -614,22 +614,22 @@ Use patch identifiers `P-proto-1`, `P-proto-2`, and so on. Each item must name t
 ### Task 5: Patch Design to v1.3 From Prototype Findings
 
 **Files:**
-- Modify: `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
-- Read: `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md`
+- Modify: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- Read: `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md`
 
 - [ ] **Step 1: Read v1.3 candidates**
 
 Run:
 
 ```bash
-rg -n "v1.3 patch candidates|P-proto-[0-9]+|^[0-9]+\\." meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md
+rg -n "v1.3 patch candidates|P-proto-[0-9]+|^[0-9]+\\." meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md
 ```
 
 Expected: concrete patch candidates or explicit "no semantic changes" statement.
 
 - [ ] **Step 2: Update design status history**
 
-Patch the top status block so the current line is `v1.3 draft (2026-05-07)` and names `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md` as the source of the patch set. Keep separate prior-history paragraphs for v1.2 pilot patches and v1.1 audit patches. The v1.3 status paragraph must list every `P-proto-*` patch in concrete prose.
+Patch the top status block so the current line is `v1.3 draft (2026-05-07)` and names `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md` as the source of the patch set. Keep separate prior-history paragraphs for v1.2 pilot patches and v1.1 audit patches. The v1.3 status paragraph must list every `P-proto-*` patch in concrete prose.
 
 - [ ] **Step 3: Apply validator-driven rule changes**
 
@@ -647,7 +647,7 @@ Patch every section affected by the findings:
 Run:
 
 ```bash
-rg -n "v1.2 draft|v1.2 design|v1.1 draft|\\.\\.\\." meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md
+rg -n "v1.2 draft|v1.2 design|v1.1 draft|\\.\\.\\." meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md
 ```
 
 Expected: prior version labels appear only in status-history text; no literal `...`.
@@ -665,7 +665,7 @@ Expected: prior version labels appear only in status-history text; no literal `.
 Run:
 
 ```bash
-python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py
+python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py
 ```
 
 Expected: all tests pass.
@@ -691,11 +691,11 @@ git diff --stat
 
 Expected changed files:
 
-- `meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`
-- `meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md`
-- `meta/doc/plans/2026-05-07-t037-pilot-extraction.md`
-- `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
-- `meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md`
+- `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
+- `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md`
+- `meta/doc/plans/historical/2026-05-07-t037-pilot-extraction.md`
+- `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
+- `meta/doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md`
 - optional `meta/tasks/active.md`
 
 - [ ] **Step 4: Optional task note update**
@@ -719,7 +719,7 @@ If updating task notes, append a short status note for t037 in the task queue us
 
 ## Execution Options
 
-Plan complete and saved to `meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md`. Two execution options:
+Plan complete and saved to `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md`. Two execution options:
 
 1. **Subagent-Driven (recommended)** - dispatch a fresh subagent per task, review between tasks, fast iteration.
 2. **Inline Execution** - execute tasks in this session using executing-plans, batch execution with checkpoints.

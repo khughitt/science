@@ -5,7 +5,7 @@ reason-code biconditional rules.
 
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 
-Run with: python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py
+Run with: python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py
 Exits 0 if all tests match expectations; nonzero otherwise.
 """
 from __future__ import annotations

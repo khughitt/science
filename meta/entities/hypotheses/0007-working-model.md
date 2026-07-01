@@ -41,7 +41,7 @@ knowledge, evidence, and belief. The user-facing version now lives in
 framework's ordinary hypotheses (`h01`–`h06`) and questions (`q01`–`q14`) are
 *facets of*. It is a **model**, not a testable conjecture (`role: working-model`).
 Full design, prior-art reconciliation, and open forks:
-`doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` (the RFC).
+`doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` (the RFC).
 
 ## The model (one paragraph)
 

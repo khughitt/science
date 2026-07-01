@@ -1,6 +1,6 @@
 # t030 — Full Authoring-Cost Audit: Results (D2, D3, D4)
 
-> **Status.** Combined results document for the three remaining `[t030]` deliverables, computed from two independent blind LLM passes (`meta/doc/plans/2026-05-06-t030-llm-pass-1-output.md`, `meta/doc/plans/2026-05-06-t030-llm-pass-2-output.md`) over the locked 12-paper main sample. Field-pruning rules and aggregation methodology are specified in the sampling plan.
+> **Status.** Combined results document for the three remaining `[t030]` deliverables, computed from two independent blind LLM passes (`meta/doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md`, `meta/doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md`) over the locked 12-paper main sample. Field-pruning rules and aggregation methodology are specified in the sampling plan.
 
 ## Summary
 
@@ -48,7 +48,7 @@ Aggregated over 24 cells per field (12 papers × 2 blind passes). Where one pass
 
 ## D3 — Field-pruning recommendations to t022 (v2.1 → v2.2)
 
-Applying the field-pruning rules from `meta/doc/plans/2026-05-06-t030-full-sampling-plan-and-rubric.md`:
+Applying the field-pruning rules from `meta/doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md`:
 
 ### Action 1 — Move `target_artifact_ref` to typed extensions (P1)
 

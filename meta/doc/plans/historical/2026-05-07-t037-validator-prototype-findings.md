@@ -1,6 +1,6 @@
 # t037 v1.2 `agent-tool-operation` Validator Prototype - Findings
 
-> **Status:** Findings (2026-05-07). Companion to the validator script at `meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py`.
+> **Status:** Findings (2026-05-07). Companion to the validator script at `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`.
 >
 > **Goal:** prove that the load-bearing t037 operation-record rules are decidable from payload state plus a registry-resolved operation view, mirroring t034's three-slice discharge of the natural-systems "asserted vs verified" alignment commitment for `[t037]`.
 >
@@ -32,7 +32,7 @@ All ten enforce-able from a single payload plus the three registry view booleans
 
 ## Test outcome
 
-20/20 pass. `python meta/doc/plans/2026-05-07-t037-agent-tool-operation-validator-prototype.py` reports `20/20 tests passed`.
+20/20 pass. `python meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py` reports `20/20 tests passed`.
 
 | Test | Probe | Outcome |
 |---|---|---|

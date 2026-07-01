@@ -1,0 +1,157 @@
+{
+  "file_count": 7,
+  "generated_at": "2026-07-01T00:00:00Z",
+  "non_conforming_files": [],
+  "schema_version": 1,
+  "source_dir": "meta/doc/plans",
+  "thread_count": 7,
+  "threads": [
+    {
+      "earliest_file_date": "2026-05-17",
+      "files": [
+        "meta/doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md"
+      ],
+      "latest_file_date": "2026-05-17",
+      "normalized_slug": "adaptive-project-topology-and-bio-meta-next-steps",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md": "adaptive-project-topology-and-bio-meta-next-steps"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "meta/doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md": null
+      },
+      "thread_id": "adaptive-project-topology-and-bio-meta-next-steps"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "evidence-payload-core-and-extension-contract",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md": "evidence-payload-core-and-extension-contract"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md": null
+      },
+      "thread_id": "evidence-payload-core-and-extension-contract"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "t034-causal-graph-extension",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md": "t034-causal-graph-extension-design"
+      },
+      "related_threads": [],
+      "role_files": {
+        "design": [
+          "meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md": "design"
+      },
+      "thread_id": "t034-causal-graph-extension"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-t034-effective-codes-validator-findings.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "t034-effective-codes-validator",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-t034-effective-codes-validator-findings.md": "t034-effective-codes-validator-findings"
+      },
+      "related_threads": [],
+      "role_files": {
+        "findings": [
+          "meta/doc/plans/2026-05-06-t034-effective-codes-validator-findings.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-t034-effective-codes-validator-findings.md": "findings"
+      },
+      "thread_id": "t034-effective-codes-validator"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "t034-mr-graph-model-validator",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md": "t034-mr-graph-model-validator-findings"
+      },
+      "related_threads": [],
+      "role_files": {
+        "findings": [
+          "meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md": "findings"
+      },
+      "thread_id": "t034-mr-graph-model-validator"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-t034-pilot-extraction.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "t034-pilot-extraction",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-t034-pilot-extraction.md": "t034-pilot-extraction"
+      },
+      "related_threads": [],
+      "role_files": {
+        "primary": [
+          "meta/doc/plans/2026-05-06-t034-pilot-extraction.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-t034-pilot-extraction.md": null
+      },
+      "thread_id": "t034-pilot-extraction"
+    },
+    {
+      "earliest_file_date": "2026-05-06",
+      "files": [
+        "meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md"
+      ],
+      "latest_file_date": "2026-05-06",
+      "normalized_slug": "t034-validator-prototype",
+      "raw_slugs": {
+        "meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md": "t034-validator-prototype-findings"
+      },
+      "related_threads": [],
+      "role_files": {
+        "findings": [
+          "meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md"
+        ]
+      },
+      "stripped_roles": {
+        "meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md": "findings"
+      },
+      "thread_id": "t034-validator-prototype"
+    }
+  ]
+}

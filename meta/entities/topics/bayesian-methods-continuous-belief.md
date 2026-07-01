@@ -111,7 +111,7 @@ Three direct implications for `science-meta` and a fourth for H01 specifically.
    The project should not re-invent ad-hoc aggregation rules when the Bayesian framework already addresses them.
 
 4. **H01's simulator uses Bayesian machinery directly.**
-   The Beta-Bernoulli conjugate update in `doc/plans/2026-04-24-h01-simulator-spec.md` is the simplest possible instance of the framework described here; uncertainty-scaled revisiting via Thompson sampling is a direct Bayesian-bandit rule.
+   The Beta-Bernoulli conjugate update in `doc/plans/historical/2026-04-24-h01-simulator-spec.md` is the simplest possible instance of the framework described here; uncertainty-scaled revisiting via Thompson sampling is a direct Bayesian-bandit rule.
    Simulator results interpret more cleanly when the simulator is a clean Bayesian-bandit instance — which it is — rather than an ad-hoc scoring rule.
 
 ## Key References

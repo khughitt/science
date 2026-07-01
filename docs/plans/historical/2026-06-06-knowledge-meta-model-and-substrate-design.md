@@ -30,7 +30,7 @@ This is **one consolidated meta-model** in two layers:
 
 | Document | Role relative to this doc |
 |---|---|
-| `~/d/science/meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` (h00 RFC) | **Canonical source for Part A.** This doc consolidates and cites it; it does not supersede it. |
+| `~/d/science/meta/doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` (h00 RFC) | **Canonical source for Part A.** This doc consolidates and cites it; it does not supersede it. |
 | `~/d/science/meta/core/decisions.md` — D-003, D-005, D-006 | Settled decisions Part A rests on. Not reopened. |
 | `~/d/science/meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md` (t022) | Evidence payload contract (Part A §A5). Reused. |
 | `~/d/science/meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md` (t034) | Sole causal/edge-typing substrate (Part A §A3, §A8). Reused per D-005. |

@@ -174,7 +174,7 @@ from `src/` is idiomatic for the software profile already chosen in D-002.
 
 - **Date:** 2026-05-31
 - **Status:** active
-- **Resolves:** RFC §12.1 (`doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md`). Task `t064`.
+- **Resolves:** RFC §12.1 (`doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md`). Task `t064`.
 - **Decision:** **Reuse** t034 — not extend, not supersede — as the sole
   causal/edge-typing substrate (`graph_object_type`, the 10-role
   `epistemic_role` taxonomy, the Petersen-stage payload pipeline,

@@ -4,7 +4,7 @@ title: How should Science represent agent operations, tool graphs, KG transforma
   and graph evolution events?
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-01'
 id: question:0012-agent-tool-kg-operations
 ontology_terms: []
 datasets: []
@@ -56,15 +56,16 @@ This question asks how Science should represent agent operations, tool/skill gra
 ## Thoughts
 
 - Best current interpretation: add an operations layer with typed entities for `agent`, `tool`, `skill`, `tool_chain`, `execution_trace`, `kg_view`, and `graph_update_event`.
+- The `[t037]` design/prototype pass completed the `agent-tool-operation` contract: operation records are provenance payloads, not direct evidence; successful operation records cannot `strengthen-belief` directly; blocking operation codes propagate into downstream payloads through provenance references or co-loaded extensions.
 - Minimum fields should include agent role, model version, prompt/workflow reference, tool chain, I/O contract, safety policy, execution trace, KG source, KG filter objective, graph version, validation status, abstention reason, and evaluation protocol.
 - Derived contexts and filtered subgraphs should be first-class views, not silent replacements for source graphs.
-- The major uncertainty is scope: how much provenance belongs in every evidence payload versus a linked operation record.
+- The major uncertainty is implementation scope: the production registry, durable validator integration, `agent-evaluation` records, cross-payload propagation, and trace/frontmatter sidecars for project-local operation records are future work.
 
 ## Connections to Project
 
 - Related hypotheses: `hypothesis:0002-rich-evidence-payloads-improve-graph-calibration`, `hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting`.
 - Related tasks: `[t029]`, `[t033]`, `[t037]`, `[t038]`.
-- Required data or analyses: design operation-record schema, tool/skill graph schema, graph evolution event taxonomy, and project-local agent evaluation plan.
+- Required data or analyses: production operation-record registry and validator design, tool/skill graph schema, graph evolution event taxonomy, and project-local agent evaluation plan.
 - Priority level: high for any automated graph-building or tool-execution workflow.
 
 ## Related

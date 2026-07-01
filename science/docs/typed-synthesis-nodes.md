@@ -1,6 +1,6 @@
 # Typed Synthesis Nodes
 
-Typed synthesis nodes implement `meta/doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md`.
+Typed synthesis nodes implement `meta/doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md`.
 
 Near term, a synthesis node is an `EvidencePayload` whose `core.artifact_type` is a synthesis-family artifact type. There is no separate synthesis store. Every synthesis payload lists its family as the primary extension and also loads `synthesis-operation`.
 

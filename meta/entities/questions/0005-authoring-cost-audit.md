@@ -4,7 +4,7 @@ title: How much of the proposed evidence-payload schema can authors and agents r
   populate?
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-01'
 id: question:0005-authoring-cost-audit
 ontology_terms: []
 datasets: []
@@ -39,17 +39,17 @@ This question asks what fraction of the proposed t022 fields can be extracted fr
 
 ## Current Evidence
 
-- The Batch 1 and Batch 2 paper summaries already exist in `doc/background/papers/` and contain implicit values for many proposed fields.
-- No automated or semi-automated extraction has been attempted yet.
-- Field-level missingness has not been characterized for any subset.
-- Han et al. show that LLM-assisted extraction of priors and constraints is feasible with validation, but accuracy and effort are unmeasured for this project's schema [@Han2026].
+- The completed `[t030]` audit answered the first version of this question for the t022 v2 candidate schema. The narrow pass (`meta/doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md`) produced v2.1 patches: `claim_source_ref`, an explicit out-of-scope section, a `validation_status` pitfall note, and generic evidence-quality reason codes.
+- The full pass (`meta/doc/plans/historical/2026-05-06-t030-full-audit-results.md`) used a 12-paper main sample plus a 5-paper routing test. It produced v2.2 patches: remove `target_artifact_ref` from core, extend paper artifact enums, add `method-set`, add `framework-proposal`, make `uncertainty_summary` optional, and add proposition-cardinality and empty-list reason-code authoring rules.
+- The two blind LLM passes disagreed within one rubric point on roughly 25-40% of rubric-ambiguous fields, with systematic pass-1-higher-than-pass-2 calibration drift. This is evidence that agent-assisted extraction needs a clearer rubric and independent evaluation before it can be treated as stable.
+- Han et al. show that LLM-assisted extraction of priors and constraints is feasible with validation, but the local `[t030]` result shows model/rubric calibration remains a live risk for this project's schema [@Han2026].
 
 ## Thoughts
 
-- Best current approach: sample 10-20 existing summaries, attempt manual extraction against a candidate t022 field list, and record per-field success rate, ambiguity, and inferred-vs-stated status.
-- A second pass with an LLM extractor, scored against the manual pass, would give an early read on agent-assisted authoring.
-- Outputs should feed back into t022 as a field-pruning signal: any field with <X% extractability without unreasonable effort is a candidate for "optional" rather than "core".
+- The first t030-style sampling pass is complete; do not repeat it as if no local data exists.
 - The major remaining uncertainty is the quality bar: extractable does not mean correct, and a permissive coding may overestimate coverage.
+- The next useful increment is to run a true full-context human pass before any LLM output is visible, or to run a multi-model extraction audit that separates model-family calibration from rubric ambiguity.
+- Outputs from that follow-up should feed back into t022/t033 as agent-authoring policy, not reopen the completed t030 field-pruning pass.
 
 ## Connections to Project
 
