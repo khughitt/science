@@ -7,9 +7,12 @@
 
 ## Purpose — the invariant
 
-> A dataset declared as a **plan input** must not pass the data-access gate while its
-> reproducibility class is below the project's policy bar; an **unclassified** input fails
-> loud. The only escape is an explicit, dated, scoped, auditable **plan-level waiver**.
+> Under a **halting** transparency policy, a dataset declared as a **plan input** — or a
+> load-bearing external dataset in a derived input's upstream closure — must not pass the
+> data-access gate while its reproducibility class is below the policy bar, and an
+> **unclassified** input fails loud. The only escape is an explicit, dated, scoped, auditable
+> **plan-level waiver**. A `warn` policy is advisory mode: it surfaces the same findings without
+> blocking.
 
 Everything in this design serves that one sentence. The framework already answers "can *this
 project* access the data" (`access.verified`). It does **not** answer "can an *independent third
@@ -98,7 +101,9 @@ source"). `access.reproducibility` is complementary, not a replacement.
 
 A pure function living beside the existing `runtime_state_for()` classifier (in
 `science_tool/datasets/semantics.py`). It returns the derived class and the controls that pulled
-it down, so humans see the *reason*, not just the verdict.
+it down, so humans see the *reason*, not just the verdict. A dataset with **no
+`access.reproducibility` block at all** derives to `class: unknown` (existing records depend on
+this default).
 
 ### The class lattice
 
@@ -144,21 +149,24 @@ can be added without breaking the interface.
 ```yaml
 reproducibility_policy:
   bar: third-party-reproducible   # minimum acceptable KNOWN class for a declared plan input
-  unknown: halt                   # how to treat class:unknown inputs — halt | warn | pass
+  unknown: halt                   # how to treat class:unknown inputs — halt | warn (advisory)
   below_bar: halt                 # how to treat a known class below bar with no waiver — halt | warn
 ```
 
 ### Absent policy = opt-in (v1 rule)
 
-If a project declares **no** `reproducibility_policy`, the reproducibility gate is **not
-enforced** — zero ecosystem breakage. But the gate emits a single visible nudge whenever a plan
-has declared dataset inputs:
+"Absent policy" means **neither the project (`science.yaml`) nor the plan** declares a
+`reproducibility_policy`. In that case the reproducibility gate is **not enforced** — zero
+ecosystem breakage — but it emits a single visible nudge whenever a plan has declared dataset
+inputs:
 
 ```
 WARN reproducibility-policy-missing: plan has dataset inputs but no reproducibility_policy;
      reproducibility gate not enforced.
 ```
 
+A **plan-level** `reproducibility_policy` is sufficient to opt in even when `science.yaml` is
+silent; the effective policy is the plan's policy merged over the project's (plan fields win).
 New transparency-bound projects opt in immediately. A later version may flip project templates or
 the default to secure-by-default once datasets have broad classification coverage — but that is
 explicitly not v1.
@@ -180,7 +188,10 @@ reproducibility_policy:
 ```
 
 A waiver is scoped to one `dataset` + `accepted_class`, dated, and carries `rationale` +
-`mitigation`, so every escape is auditable.
+`mitigation`, so every escape is auditable. **Matching is exact:** a waiver applies only when the
+dataset id matches **and** the *currently derived* class equals `accepted_class`. If the derived
+class later changes — e.g. the access route worsens from `trust-based-output` to `insider-only`,
+or drops to `unknown` — the waiver no longer applies and the gate re-evaluates from scratch.
 
 ## Enforcement — the plan data-access gate
 
@@ -190,7 +201,7 @@ checks, and **only for datasets declared as plan inputs**.
 
 | Case | Gate result |
 |---|---|
-| no project `reproducibility_policy` | emit `reproducibility-policy-missing` WARN; do not enforce |
+| neither project nor plan `reproducibility_policy` | emit `reproducibility-policy-missing` WARN; do not enforce |
 | `class: unknown` | resolve by `policy.unknown` (default **HALT**) |
 | known class ≥ `bar` | PASS (surface class + gap_reason) |
 | known class < `bar`, no waiver | resolve by `policy.below_bar` (default **HALT**) |
@@ -198,7 +209,12 @@ checks, and **only for datasets declared as plan inputs**.
 | below-bar dataset only *discovered* (candidate/reference), not a declared input | WARN / list annotation, never plan HALT |
 
 The "declared plan input" scoping mirrors the existing gate, which already distinguishes
-`BoundaryIn` / data-acquisition inputs from incidental references.
+`BoundaryIn` / data-acquisition inputs from incidental references. **For derived inputs,
+reproducibility is enforced over the transitive external-input closure** — the same recursion the
+existing access gate already performs over `derivation.inputs` — so a plan cannot launder a
+`trust-based-output` or `unknown` external dataset through a derived intermediary. The effective
+class of a derived input is the **weakest class among its load-bearing external upstreams**
+(lowest on the lattice, or `unknown` if any upstream is unassessed).
 
 ## Docs & template (the only surfacing in v1)
 
@@ -220,11 +236,18 @@ The "declared plan input" scoping mirrors the existing gate, which already disti
 - below-bar **with** matching waiver → PASS-with-exception; below-bar **without** waiver → HALT.
 - absent policy → `reproducibility-policy-missing` WARN and no enforcement.
 - non-input discovery of a below-bar dataset → WARN only, never HALT.
+- **absent `access.reproducibility` block → `class: unknown`** (existing datasets depend on this).
+- **waiver matching:** passes only when dataset id matches **and** derived class equals
+  `accepted_class`; if the class worsens or changes, the waiver no longer applies (gate re-halts).
+- **derived-input closure:** a plan consuming a derived dataset whose external upstream is
+  `trust-based-output` / `unknown` halts (or warns) exactly as if that upstream were a direct input.
+- **plan-only opt-in:** a plan-level `reproducibility_policy` with `science.yaml` silent enforces
+  (no `reproducibility-policy-missing` nudge).
 
 ## Open questions (resolve during planning)
 
-- Exact `science.yaml` project-config surface for `reproducibility_policy` (the loader/model in
-  `science_tool/project_package/`), and where plan-frontmatter `reproducibility_policy` is parsed.
+- Wiring `reproducibility_policy` into the typed `science.yaml` loader
+  (`science_tool/project_config.py`), and where plan-frontmatter `reproducibility_policy` is parsed.
 - Whether the plan gate's "declared input" set is already available at the point enforcement runs,
   or must be threaded through.
 - Enum churn: confirm the three enum lists are complete enough for the current dataset corpus
