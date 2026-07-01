@@ -94,6 +94,12 @@ _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
 }
 
 _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
+    "dag audit",
+    "dag init",
+    "dag number",
+    "dag render",
+    "dag staleness",
+    "dag validate",
     "data audit",
     "entities audit-identifiers",
     "entities inventory",
