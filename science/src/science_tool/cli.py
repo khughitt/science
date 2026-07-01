@@ -384,10 +384,13 @@ def data_group() -> None:
               help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
 @click.option("--fix", is_flag=True, default=False,
               help="Relocate stranded records data/ → results/ (stages, never commits).")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True,
+              help="Output format. `--json` is kept as a convenience alias.")
 @click.option("--json", "as_json", is_flag=True, default=False,
               help="Emit the machine-readable move report.")
-def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> None:
+def data_audit_command(project_path: Path | None, fix: bool, output_format: str, as_json: bool) -> None:
     """Report (and optionally fix) data/results/entities boundary violations."""
+    emit_json = as_json or output_format == "json"
     project_path = project_path or Path.cwd()  # runtime default; honors the env var above
     try:
         policy = resolve_data_policy(load_project_config(project_path))
@@ -398,7 +401,7 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
 
     if fix:
         outcomes = apply_fixes(project_path, violations)
-        if as_json:
+        if emit_json:
             click.echo(render_json(violations, outcomes), nl=False)
         else:
             performed = sum(1 for o in outcomes if o.performed)
@@ -411,7 +414,7 @@ def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> N
             click.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
         return
 
-    if as_json:
+    if emit_json:
         click.echo(render_json(violations), nl=False)
     else:
         if not violations:

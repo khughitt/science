@@ -53,6 +53,16 @@ def test_audit_json_contract(tmp_path: Path):
     assert payload["violations"][0]["performed"] is False
 
 
+def test_audit_format_json_contract(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
+    res = _run(tmp_path, "--format", "json")
+    payload = json.loads(res.output)
+    assert payload["version"] == 1
+    assert payload["violations"][0]["target"] == "results/exp1/RESULTS.md"
+    assert payload["violations"][0]["performed"] is False
+
+
 def test_fix_moves_and_reports_performed(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
