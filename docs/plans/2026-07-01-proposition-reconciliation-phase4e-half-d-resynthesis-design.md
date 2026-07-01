@@ -55,6 +55,7 @@ Out of scope:
 - deleting proposition files;
 - moving proposition files into archive storage;
 - running graph materialization as an implicit side effect;
+- making live supersession frontmatter graph-visible;
 - authoring explicit relation records beyond proposition frontmatter lineage fields.
 
 ## 3. Design Choice
@@ -305,17 +306,26 @@ For the original proposition:
   `resynthesized_into` to the sorted replacement proposition ids, leave
   `superseded_by` unset to preserve the existing scalar `superseded_by` convention,
   preserve the body, and update `updated`;
+- `replace` leaves the original proposition's `source_refs` unchanged as historical
+  provenance for why the broad proposition existed. Current literature attribution is
+  determined by sidecar `promoted_to` values and replacement proposition `source_refs`,
+  not by the superseded original's retained historical refs.
 - `split_partial`: keep `status: active` and leave the original proposition
   `source_refs` unchanged. The original already owns retained annotations; moved
   annotations gain ownership on replacement proposition files.
 
-Half D does not add explicit relation records. The durable supersession record is
+Half D does not add graph-visible lineage. The durable supersession record is
 frontmatter on the original proposition. `superseded_by` remains the existing
 single-successor field used by Half C canonicalization; `resynthesized_into` is the
-Half D multi-successor field for factorized replacement. To avoid making that field
-write-only, Half D should also extend materialization to emit one `sci:supersededBy`
-triple per `resynthesized_into` target when the target resolves, matching the current
-`superseded_by` visibility pattern.
+Half D multi-successor field for factorized replacement. Current graph materialization
+emits `sci:supersededBy` only for archive-index rows, not live superseded entity
+frontmatter, so Half D must not claim that live `superseded_by` or
+`resynthesized_into` reaches the graph.
+
+Although `resynthesized_into` is not graph-visible in Half D, it is still a
+first-class frontmatter reference key. The implementation should register it with the
+same ref-rewrite/remove machinery that already handles `superseded_by`, so future
+renames/removals do not leave silent dangling successor refs.
 
 ## 9. Idempotency And No-Ops
 
@@ -352,9 +362,7 @@ Postflight rebuilds the relevant live views and checks:
   and paper refs;
 - a fresh cross-paper evidence scan attributes moved literature evidence to the new
   proposition refs, not the superseded broad proposition;
-- the original proposition has the expected final status and supersession fields;
-- materialization sees single-target `superseded_by` and multi-target
-  `resynthesized_into` as `sci:supersededBy` lineage.
+- the original proposition has the expected final status and supersession fields.
 
 The cross-paper evidence check should be scoped to the affected proposition refs rather
 than rebuilding unrelated reports. It can reuse the deterministic 4d scanner/report
@@ -379,9 +387,9 @@ Add two focused modules:
   - sidecar rewrite planner;
   - apply report;
   - postflight checks.
-- `science_tool.graph.materialize`
-  - recognize `resynthesized_into` frontmatter and emit one `sci:supersededBy`
-    triple per resolved successor.
+- `science_tool.entities`
+  - register `resynthesized_into` as a managed frontmatter reference key alongside
+    `superseded_by`.
 
 Half D should reuse existing helpers where possible:
 
@@ -390,7 +398,8 @@ Half D should reuse existing helpers where possible:
 - Half C sidecar scanning and final-text planning patterns;
 - entity rendering helpers for proposition frontmatter/body writes;
 - strict sidecar parsing and `entity_relpath_for_sidecar` for annotation refs;
-- materialization's existing `superseded_by` resolution pattern for lineage triples.
+- a shared replacement-proposition render/compare helper used by both validate and
+  apply, including the date-preservation comparison.
 
 This split keeps draft/review semantics separate from mutation and avoids turning
 `proposition_reconciliation_apply.py` into a general reconciliation executor.
@@ -450,6 +459,8 @@ Unit tests:
 - validator rejects conflicting existing replacement proposition files;
 - validator rejects unknown draft frontmatter keys via a Half D allowlist;
 - validator rejects incomplete `replace`;
+- validator rejects a stale `replace` draft when the live action input annotation set
+  has grown since scaffold and the new annotation is unassigned;
 - validator rejects `split_partial` with no moved annotation;
 - validator rejects rendered proposition records that fail existing proposition
   validation;
@@ -463,7 +474,7 @@ Unit tests:
 - apply resumes mixed sidecar state when some assignments are already at `to`;
 - second apply is a no-op;
 - preflight failure writes nothing;
-- materialize emits `sci:supersededBy` for every `resynthesized_into` target.
+- entity reference removal/rewrite treats `resynthesized_into` as a managed ref key.
 
 CLI tests:
 
@@ -491,6 +502,9 @@ Future work may add:
 - agent-assisted draft filling from hints and reviewer rationale;
 - richer claim-family suggestions from statement hints;
 - archive movement for long-settled superseded broad propositions;
+- graph-visible live supersession lineage for both `superseded_by` and
+  `resynthesized_into`, solved together by teaching materialization to read live raw
+  frontmatter lineage fields or by promoting them into typed entity rows;
 - explicit `sci:supersedes` relation authoring once relation conventions are pinned;
 - saved-draft signing or approval metadata beyond the source string.
 
