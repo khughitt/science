@@ -312,6 +312,38 @@ def test_same_claim_review_with_padded_lane_maps_to_canonicalization_action():
     assert plan.actions[0].kind == "canonicalize_propositions"
 
 
+def test_same_claim_review_with_padded_canonical_proposition_plans_stripped_ref():
+    report = _same_claim_report()
+    review = _same_claim_review(report)
+    review["judgments"][0]["canonical_proposition"] = " proposition:a "
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=review,
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.canonical_proposition == "proposition:a"
+    assert action.members == ("proposition:a", "proposition:b")
+    assert action.inputs["source_ref_moves"] == (
+        {
+            "from": "proposition:b",
+            "to": "proposition:a",
+            "source_refs": (
+                "annotation:entities/papers/B2021.source#b1",
+                "paper:B2021",
+            ),
+        },
+    )
+    assert action.inputs["archive_candidates"] == ("proposition:b",)
+
+
 def test_same_claim_needs_human_maps_to_blocked_human_review_action():
     report = _same_claim_report()
     candidate = report.same_claim_candidates[0]
@@ -349,6 +381,44 @@ def test_same_claim_needs_human_maps_to_blocked_human_review_action():
     assert action.decision == "needs_human"
     assert action.blockers == ({"reason": "needs_human", "detail": rationale},)
     assert action.writes == ()
+
+
+def test_same_claim_needs_human_with_padded_decision_maps_to_blocked_action():
+    report = _same_claim_report()
+    candidate = report.same_claim_candidates[0]
+    members = list(candidate.propositions)
+    rationale = "The candidate needs reviewer judgment before planning writes."
+    review = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id("same_claim", "needs_human", members),
+                "lane": "same_claim",
+                "decision": " needs_human ",
+                "members": members,
+                "rationale": rationale,
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=review,
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "needs_human_review"
+    assert action.status == "blocked"
+    assert action.decision == "needs_human"
+    assert action.blockers == ({"reason": "needs_human", "detail": rationale},)
 
 
 def test_review_incomplete_blocks_same_claim_canonicalization():
@@ -515,6 +585,38 @@ def test_stance_review_needed_maps_to_blocked_stance_review_action():
     action = plan.actions[0]
     assert action.kind == "review_annotation_stance"
     assert action.status == "blocked"
+    assert action.blockers == (
+        {
+            "reason": "stance_review_needed",
+            "detail": "This broad proposition bundles distinct claim families.",
+        },
+    )
+
+
+def test_factorization_with_padded_decision_maps_to_stripped_kind_and_status():
+    candidate = _factor_candidate(recommended_action="stance_review_needed")
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    review = _factor_review(candidate, decision="stance_review_needed")
+    review["judgments"][0]["decision"] = " stance_review_needed "
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization.json",
+                doc=review,
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "review_annotation_stance"
+    assert action.status == "blocked"
+    assert action.decision == "stance_review_needed"
     assert action.blockers == (
         {
             "reason": "stance_review_needed",

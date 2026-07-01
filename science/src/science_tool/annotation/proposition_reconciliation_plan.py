@@ -142,6 +142,10 @@ def _snapshot(report: ReconciliationReport, ref: str):
         raise ValueError(f"missing proposition snapshot for {ref}") from exc
 
 
+def _review_text(judgment: Mapping[str, Any], field: str) -> str:
+    return str(judgment[field]).strip()
+
+
 def _canonicalization_inputs(
     canonical: str,
     members: Sequence[str],
@@ -200,13 +204,15 @@ def _action_from_same_claim(
         raise TypeError("same-claim action requires SameClaimCandidate")
 
     judgment = resolved.judgment
-    decision = str(judgment["decision"])
-    rationale = str(judgment["rationale"])
-    judgment_id = str(judgment["judgment_id"])
+    decision = _review_text(judgment, "decision")
+    rationale = _review_text(judgment, "rationale")
+    judgment_id = _review_text(judgment, "judgment_id")
+    candidate_id = str(candidate.candidate_id).strip()
+    confidence = _review_text(judgment, "confidence")
     members = tuple(sorted(str(member) for member in judgment["members"]))
 
     if decision == "same_claim":
-        canonical = str(judgment["canonical_proposition"])
+        canonical = _review_text(judgment, "canonical_proposition")
         secondary_refs = tuple(ref for ref in members if ref != canonical)
         action_kind = "canonicalize_propositions"
         return ReconciliationAction(
@@ -219,9 +225,9 @@ def _action_from_same_claim(
             kind=action_kind,
             status="ready",
             decision=decision,
-            candidate_id=candidate.candidate_id,
+            candidate_id=candidate_id,
             judgment_id=judgment_id,
-            confidence=str(judgment["confidence"]),
+            confidence=confidence,
             rationale=rationale,
             source_review=source_path,
             review_source=resolved.review_source,
@@ -255,9 +261,9 @@ def _action_from_same_claim(
             kind=action_kind,
             status="blocked",
             decision=decision,
-            candidate_id=candidate.candidate_id,
+            candidate_id=candidate_id,
             judgment_id=judgment_id,
-            confidence=str(judgment["confidence"]),
+            confidence=confidence,
             rationale=rationale,
             source_review=source_path,
             review_source=resolved.review_source,
@@ -284,9 +290,9 @@ def _action_from_same_claim(
         kind=action_kind,
         status="advisory",
         decision=decision,
-        candidate_id=candidate.candidate_id,
+        candidate_id=candidate_id,
         judgment_id=judgment_id,
-        confidence=str(judgment["confidence"]),
+        confidence=confidence,
         rationale=rationale,
         source_review=source_path,
         review_source=resolved.review_source,
@@ -312,8 +318,8 @@ def _action_from_factorization(
         raise TypeError("factorization action requires FactorizationCandidate")
 
     judgment = resolved.judgment
-    decision = str(judgment["decision"])
-    rationale = str(judgment["rationale"])
+    decision = _review_text(judgment, "decision")
+    rationale = _review_text(judgment, "rationale")
     action_kind: str
     status: ActionStatus
     if decision == "factorization_needs_resynthesis":
@@ -337,15 +343,15 @@ def _action_from_factorization(
         blockers = ({"reason": decision, "detail": rationale},)
 
     proposition = candidate.proposition
-    judgment_id = str(judgment["judgment_id"])
+    judgment_id = _review_text(judgment, "judgment_id")
     return ReconciliationAction(
         action_id=reconciliation_action_id(action_kind, judgment_id, proposition),
         kind=action_kind,
         status=status,
         decision=decision,
-        candidate_id=str(judgment["candidate_id"]),
+        candidate_id=_review_text(judgment, "candidate_id"),
         judgment_id=judgment_id,
-        confidence=str(judgment["confidence"]),
+        confidence=_review_text(judgment, "confidence"),
         rationale=rationale,
         source_review=source_path,
         review_source=resolved.review_source,
@@ -362,7 +368,7 @@ def _action_from_resolved(
     resolved: ResolvedReviewJudgment,
     report: ReconciliationReport,
 ) -> ReconciliationAction:
-    lane = str(resolved.judgment["lane"]).strip()
+    lane = _review_text(resolved.judgment, "lane")
     if lane == LANE_FACTORIZATION:
         return _action_from_factorization(source_path, resolved)
     if lane == LANE_SAME_CLAIM:
@@ -387,7 +393,7 @@ def _apply_incomplete_review_blockers(
     incomplete: Sequence[Mapping[str, Any]],
 ) -> tuple[ReconciliationAction, ...]:
     missing_by_candidate = {
-        str(item["candidate_id"]): tuple(str(ref) for ref in item["missing"])
+        str(item["candidate_id"]).strip(): tuple(str(ref) for ref in item["missing"])
         for item in incomplete
     }
     blocked: list[ReconciliationAction] = []
