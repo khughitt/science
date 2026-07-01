@@ -40,6 +40,11 @@ Common evidence types:
 | `expert_judgment` | Structured expert assessment. |
 | `negative_result` | Valid compatibility token for a null or negative result; model the stance and scope carefully. |
 
+Benchmark evidence lines should come from actual benchmark evaluations or
+standardized comparisons. The current `science benchmark tests` command projects
+read-only candidate test rows; it does not author evidence lines or benchmark
+outcome records.
+
 `negative_result` is accepted for compatibility, but it is usually better
 understood as a result pattern. The line's `stance`, role, and scope should say
 what the null or negative result does to the target proposition.
@@ -99,6 +104,11 @@ belief gate.
 Multiple lines from the same cohort, instrument, source, or analysis family are
 not independent just because they are written as separate files. Use the same
 `independence_group` when support should be discounted as shared.
+
+Orthogonal modality is not independence by itself. If two modalities share
+patients, labels, derived annotations, preprocessing, or ground truth, record
+that dependence instead of counting the lines as independent only because their
+assays differ.
 
 ## Derived Literature Evidence
 

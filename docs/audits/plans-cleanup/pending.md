@@ -1,24 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `5`
-
-## benchmark-grounded-model-assessment
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; v1 and read-only projections are implemented, but graph edges, formal belief-test authoring, benchmark outcomes, and cross-project outcome analysis remain roadmap items
-    - `docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
-- remaining_gaps:
-  - No formal authored plan_kind: belief-test schema or durable template was found; current science benchmark tests is a read-only projection.
-  - No structured benchmark result/outcome model was found that can update propositions or evidence.
-  - No graph-aware benchmark-to-belief typed edges were found; v1 related_beliefs remains free text and opportunity/gap matching is report logic, not graph semantics.
-  - No cross-project success analysis tying benchmark outcomes to project practices was found; gap calibration summarizes report quality and candidate/fallback behavior rather than benchmark outcome success.
-  - No consolidated durable reference page under docs/ describes the current benchmark catalog/opportunities/gaps/tests contract independent of active plans.
+- Pending thread count: `2`
 
 ## c4c-rsid-variant-label
 
@@ -37,21 +20,6 @@
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
 
-## data-driven-discovery-improvements
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-10-data-driven-discovery-improvements.md`
-- pending_actions:
-  - `deferred`: review status incomplete; retain umbrella until open evidence-tier, robustness, reproducibility, provenance, and bias-memory items are split or re-homed
-    - `docs/plans/2026-06-10-data-driven-discovery-improvements.md`
-- remaining_gaps:
-  - A1 evidence-tier ladder and A2 cross-modality corroboration remain unimplemented despite substrate now existing.
-  - B4 adaptive pre-registration, C1/C2 robustness/model-comparison, D1/D2 reproducibility seed/rerun gates, E1/E2 provenance/faithfulness, and F1/F2 memory/bias additions are not closed by this thread.
-  - The umbrella mixes shipped, stale-gated, and speculative items in one file and should be split or re-homed before archival.
-
 ## epistemic-drift-detection
 
 - status: `incomplete`
@@ -66,17 +34,3 @@
   - M2 static operationalization and coverage validation are not present.
   - No operationalized_by schema/check or manifest adapter was found.
   - Decision-review path and broader M3 rubric/backstop remain design-level.
-
-## patchwork-kernel-architecture
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; retain umbrella until shipped invariants and aspirational patchwork backlog are separated
-    - `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`
-- remaining_gaps:
-  - Large parts of the overview remain target-state rather than implementation reality.
-  - Separate shipped invariants from aspirational subsystem backlog before cleanup.

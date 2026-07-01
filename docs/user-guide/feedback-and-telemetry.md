@@ -188,4 +188,6 @@ assumption was violated or an outcome contradicts a pre-registered expectation.
 There is no `science telemetry note` command today. Generated skills and command
 docs do not emit custom note events. Telemetry report does not yet include
 feedback lifecycle metrics such as time-to-address or commands frequently
-followed by feedback creation.
+followed by feedback creation. Telemetry also does not capture pre-execution
+tool-choice rationale or expected-output micro-predictions; record those in
+project notes, pre-registration, or methodology feedback when they matter.

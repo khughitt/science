@@ -3,7 +3,7 @@
 **Status:** Design / approved direction — pre-implementation
 **Created:** 2026-06-14
 **Origin:** Continues Spec 4 (Patch Contract) of the patchwork kernel architecture
-(`docs/plans/2026-06-14-patchwork-kernel-architecture-design.md`, lines 151–164:
+(`docs/plans/historical/2026-06-14-patchwork-kernel-architecture-design.md`, lines 151–164:
 "Patch subsumes inquiry-like epistemic neighborhoods"). Builds directly on the
 shipped Patch Contract keystone
 (`docs/audits/plans-cleanup/2026-06-08-epistemic-model-checkpoint.md`, with

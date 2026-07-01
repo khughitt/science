@@ -74,6 +74,21 @@ tasks as `dataset:<slug>#<task-id>`.
 | `benchmark.perturbation-context-missing` | warn | A perturbation benchmark task lacks `intervention` and `contexts`. |
 | `benchmark.timepoints-missing` | warn | A time-series benchmark task lacks `timepoints`. |
 
+## Benchmark Kinds
+
+`benchmark_kinds` is free text in v1, but these tokens are the stable starting
+vocabulary:
+
+| Kind | Use |
+|---|---|
+| `static-association` | Cross-sectional associations, classifications, or signatures. |
+| `perturbation-response` | Response to interventions such as CRISPR, drug, knockdown, stimulation, or environmental shift. |
+| `time-series` | Temporal dynamics, ordering, trajectories, or delayed effects. |
+| `longitudinal-cohort` | Patient or sample trajectories across repeated measurements. |
+| `cross-context-generalization` | Transfer across cohort, tissue, species, assay, or project context. |
+| `mechanism-discrimination` | Competing mechanisms that make different observable predictions. |
+| `calibration` | Calibration of scores, probabilities, or uncertainty estimates. |
+
 ## Catalog And Coverage
 
 Use:
@@ -238,3 +253,15 @@ should keep v1 cataloging descriptive:
 
 Do not use cataloging to create graph benchmark edges, belief-test plans,
 benchmark outcomes, or gap entities.
+
+## Not Implemented Yet
+
+The current benchmark system stops at descriptive metadata and read-only
+projections. These features remain future work:
+
+- authored `plan_kind: belief-test` schema and templates;
+- graph-aware benchmark-to-belief or benchmark-to-proposition edges;
+- structured benchmark result and outcome records;
+- workflow support that turns benchmark outcomes into evidence/proposition
+  updates;
+- cross-project success analysis over actual benchmark outcomes.

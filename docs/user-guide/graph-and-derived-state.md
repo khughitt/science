@@ -31,6 +31,13 @@ named graphs, and generates `sci:hasMember` / `sci:inPatch` convenience edges
 from those records. The membership node is authoritative; orphan convenience
 edges fail validation.
 
+Patch membership is relation-based, not a hard partition of the semantic graph.
+The same proposition or evidence line can belong to multiple patches without
+duplicating its triples or choosing a primary patch. Patch named graphs hold
+patch metadata, diagnostics, membership records, and patch-specific generated
+view triples; member proposition and evidence triples remain in their semantic
+graph layer.
+
 The v1 patch policy is `local-closure-v1`. It uses local project scope, a
 depth-bounded `sci:bearsOn` neighborhood based on precomputed
 `sci:bearsOnDepth`, and one-hop direct relations over `cito:discusses`,

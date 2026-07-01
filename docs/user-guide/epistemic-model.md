@@ -35,6 +35,10 @@ The queryable inquiry graph is derived state. Do not hand-edit
 `knowledge/graph.trig` to change an inquiry. Edit the source file, then run
 `science graph build`.
 
+`patch_type: inquiry` is the current source-first bridge for graph-backed
+inquiries. The compiled `sci:Inquiry` graph is a compatibility view over the
+patch-definition source path, not a second truth-owning inquiry store.
+
 ### Inquiry Patch Profiles
 
 The graph-backed inquiry path uses `patch-definition` because an inquiry is also
@@ -248,6 +252,12 @@ The belief policy is separate from the optional log-odds scalar projection. The
 scalar has its own configuration version and remains a derived projection over
 the ordinal result; policy version and scalar config version should not be
 treated as interchangeable.
+
+The current policy does not add a source-tier ladder or multi-modal
+corroboration bonus. Literature hints, analyzed empirical data, multiple
+datasets, and cross-modality evidence can be represented with evidence lines
+and dataset usage, but changing their relative belief impact requires a new
+explicit policy version.
 
 ## Verdict Tokens And Atomic Decomposition
 
