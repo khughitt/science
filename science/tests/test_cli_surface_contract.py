@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterator
 
 import click
@@ -178,3 +179,9 @@ def test_json_only_option_usage_is_intentionally_classified() -> None:
         "`--json`-only commands must be classified here before adding more."
     )
     assert all(reason.strip() for reason in _JSON_WITHOUT_FORMAT_ALLOWLIST.values())
+
+
+def test_extracted_telemetry_group_is_registered_from_split_module() -> None:
+    telemetry_cli = importlib.import_module("science_tool.telemetry_cli")
+
+    assert science_cli.commands["telemetry"] is telemetry_cli.telemetry_group
