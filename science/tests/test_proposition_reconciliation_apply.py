@@ -1,15 +1,34 @@
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
 import pytest
 
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.model import (
+    Annotation,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
+)
 from science_tool.annotation.proposition_reconciliation import judgment_id
 from science_tool.annotation.proposition_reconciliation_plan import (
     ReconciliationAction,
     ReconciliationActionPlan,
+    ReviewedReconciliationInput,
+    build_reconciliation_action_plan,
     reconciliation_action_id,
 )
 from science_tool.annotation.proposition_reconciliation_apply import (
     ReconciliationApplyError,
+    plan_canonicalization_apply,
     select_canonicalization_actions,
 )
+
+_CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
 
 
 def _action(
@@ -20,6 +39,7 @@ def _action(
     canonical: str | None = "proposition:a",
     members: tuple[str, ...] = ("proposition:a", "proposition:b"),
     blockers: tuple[dict, ...] = (),
+    inputs: dict | None = None,
 ) -> ReconciliationAction:
     judgment = judgment_id("same_claim", "same_claim", members)
     return ReconciliationAction(
@@ -36,7 +56,7 @@ def _action(
         review_source="llm-review:claude:proposition-reconcile-v1",
         canonical_proposition=canonical,
         members=members,
-        inputs={
+        inputs=inputs or {
             "source_ref_moves": (
                 {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},
             ),
@@ -50,6 +70,127 @@ def _action(
             "archive_candidates": ("proposition:b",),
         },
         blockers=blockers,
+    )
+
+
+def _manifest(root: Path) -> None:
+    (root / "science.yaml").write_text(
+        "name: test\nknowledge_profiles:\n  local: local\n",
+        encoding="utf-8",
+    )
+
+
+def _proposition(
+    root: Path,
+    slug: str,
+    title: str,
+    *,
+    source_refs: tuple[str, ...] = (),
+    status: str = "active",
+    superseded_by: str | None = None,
+    subject: str = "BRCA1 loss",
+    object_: str = "genomic instability",
+) -> None:
+    path = root / "entities" / "propositions" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    refs = "".join(f"  - {ref}\n" for ref in source_refs)
+    superseded = f"superseded_by: {superseded_by}\n" if superseded_by else ""
+    path.write_text(
+        "---\n"
+        f"id: proposition:{slug}\n"
+        "type: proposition\n"
+        f"title: {title}\n"
+        f"status: {status}\n"
+        f"{superseded}"
+        f"subject: {subject}\n"
+        "predicate: increases\n"
+        f"object: {object_}\n"
+        "polarity: positive\n"
+        "source_refs:\n"
+        f"{refs}"
+        "---\n\n"
+        "Claim.\n",
+        encoding="utf-8",
+    )
+
+
+def _ann(annotation_id: str, promoted_to: str) -> Annotation:
+    body = json.dumps({"section": "results", "stance": "asserted"})
+    return Annotation(
+        id=annotation_id,
+        target=SpecificResource(
+            source="x.source.md",
+            selector=TextQuoteSelector(exact=annotation_id, prefix="", suffix=""),
+        ),
+        bodies=(TextualBody(value=body, format="application/json"),),
+        motivation=Motivation.CLASSIFYING,
+        annotation_type="proposition",
+        source="llm-annot:m:paper-annotate-v1",
+        status=Status.OPEN,
+        creator="paper-annotate",
+        created=_CREATED,
+        content_hash="0" * 64,
+        promoted_to=promoted_to,
+    )
+
+
+def _paper_sidecar(root: Path, citekey: str, annotations: tuple[Annotation, ...]) -> Path:
+    md = root / "entities" / "papers" / f"{citekey}.source.md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("Results show the claim.\n", encoding="utf-8")
+    sidecar_path = anno_io.sidecar_for_markdown(md)
+    anno_io.write_sidecar(sidecar_path, Sidecar(annotations=annotations))
+    return sidecar_path
+
+
+def _review_doc_for_current_candidate(
+    root: Path,
+    canonical: str = "proposition:a",
+) -> dict:
+    from science_tool.annotation.proposition_reconciliation import build_reconciliation_report
+
+    report = build_reconciliation_report(root)
+    candidate = report.same_claim_candidates[0]
+    members = list(candidate.propositions)
+    return {
+        "report": report,
+        "review": {
+            "source": "llm-review:claude:proposition-reconcile-v1",
+            "judgments": [
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "judgment_id": judgment_id("same_claim", "same_claim", members),
+                    "lane": "same_claim",
+                    "decision": "same_claim",
+                    "canonical_proposition": canonical,
+                    "members": members,
+                    "rationale": "The propositions express the same claim.",
+                    "confidence": "high",
+                }
+            ],
+        },
+    }
+
+
+def _ready_plan(root: Path, review_doc: dict) -> ReconciliationActionPlan:
+    return build_reconciliation_action_plan(
+        review_doc["report"],
+        [
+            ReviewedReconciliationInput(
+                path=str(root / "reviews" / "same-claim.json"),
+                doc=review_doc["review"],
+            )
+        ],
+    )
+
+
+def _manual_ready_plan(
+    actions: tuple[ReconciliationAction, ...] | None = None,
+) -> ReconciliationActionPlan:
+    return ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=("review.json",),
+        actions=actions or (_action(),),
     )
 
 
@@ -387,3 +528,145 @@ def test_select_canonicalization_actions_rejects_empty_applicable_set():
 
     with pytest.raises(ReconciliationApplyError, match="no ready canonicalize_propositions actions"):
         select_canonicalization_actions(plan, requested_action_ids=())
+
+
+def test_plan_canonicalization_apply_uses_live_sidecar_backlinks_not_only_half_b_inputs(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021",),
+    )
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    action = _action(
+        inputs={
+            "source_ref_moves": (
+                {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B2021",)},
+            ),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "annotation_refs": (),
+                },
+            ),
+            "archive_candidates": ("proposition:b",),
+        }
+    )
+
+    preflight = plan_canonicalization_apply(tmp_path, _manual_ready_plan((action,)))
+
+    canonical_edit = next(edit for edit in preflight.file_edits if edit.path.name == "a.md")
+    assert "paper:B2021" in canonical_edit.final_text
+    assert "annotation:entities/papers/B2021.source#b1" in canonical_edit.final_text
+    assert preflight.expected_source_refs_by_canonical == {
+        "proposition:a": (
+            "annotation:entities/papers/B2021.source#b1",
+            "paper:B2021",
+        )
+    }
+    assert any(
+        diagnostic.get("reason") == "half_b_missing_live_backlink"
+        for diagnostic in preflight.diagnostics
+    )
+
+
+def test_plan_canonicalization_apply_merges_distinct_rewrites_in_same_sidecar(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+    _proposition(
+        tmp_path,
+        "c",
+        "TP53 loss increases genomic instability",
+        subject="TP53 loss",
+    )
+    _proposition(
+        tmp_path,
+        "d",
+        "Loss of TP53 raises genome instability",
+        subject="TP53 loss",
+    )
+    _paper_sidecar(
+        tmp_path,
+        "Shared",
+        (
+            _ann("b1", "proposition:b"),
+            _ann("d1", "proposition:d"),
+        ),
+    )
+    first = _action(
+        action_id="reconcile-action:first",
+        canonical="proposition:a",
+        members=("proposition:a", "proposition:b"),
+        inputs={
+            "source_ref_moves": (),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "annotation_refs": ("annotation:entities/papers/Shared.source#b1",),
+                },
+            ),
+            "archive_candidates": ("proposition:b",),
+        },
+    )
+    second = _action(
+        action_id="reconcile-action:second",
+        canonical="proposition:c",
+        members=("proposition:c", "proposition:d"),
+        inputs={
+            "source_ref_moves": (),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:d",
+                    "to": "proposition:c",
+                    "annotation_refs": ("annotation:entities/papers/Shared.source#d1",),
+                },
+            ),
+            "archive_candidates": ("proposition:d",),
+        },
+    )
+
+    preflight = plan_canonicalization_apply(tmp_path, _manual_ready_plan((first, second)))
+
+    sidecar_edits = [
+        edit for edit in preflight.file_edits if edit.path.name == "Shared.source.anno.trig"
+    ]
+    assert len(sidecar_edits) == 1
+    assert "proposition:a" in sidecar_edits[0].final_text
+    assert "proposition:c" in sidecar_edits[0].final_text
+    assert "proposition:b" not in sidecar_edits[0].final_text
+    assert "proposition:d" not in sidecar_edits[0].final_text
+
+
+def test_plan_canonicalization_apply_errors_when_duplicate_superseded_elsewhere(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        status="superseded",
+        superseded_by="proposition:other",
+    )
+    _paper_sidecar(tmp_path, "B", (_ann("b1", "proposition:b"),))
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="superseded_by proposition:other",
+    ):
+        plan_canonicalization_apply(tmp_path, _manual_ready_plan())
