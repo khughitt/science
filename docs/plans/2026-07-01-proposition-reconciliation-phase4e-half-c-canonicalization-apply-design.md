@@ -28,7 +28,7 @@ In scope:
 
 - applying ready `canonicalize_propositions` actions from reviewed `same_claim`
   judgments;
-- moving duplicate proposition `source_refs` onto the canonical proposition;
+- moving duplicate proposition provenance onto the canonical proposition;
 - rewriting annotation sidecar `promoted_to` backlinks from duplicates to the
   canonical proposition;
 - marking duplicate proposition files as superseded while preserving them for
@@ -108,19 +108,32 @@ Half C.
 For each selected `canonicalize_propositions` action with canonical proposition
 `A` and duplicate members `B...N`, apply these mechanical writes.
 
+Belief redirection is carried by the sidecar `promoted_to` rewrite. The canonical
+proposition `source_refs` update is still required, but it is the provenance and
+ownership side of the mutation: after backlinks move, Phase 4d assertion scanning
+must see both the paper ref and annotation ref on the canonical proposition.
+
 ### Canonical Proposition
 
-Append each duplicate proposition's `source_refs` to the canonical proposition's
-`source_refs`.
+Append duplicate provenance to the canonical proposition's `source_refs`.
 
 Rules:
 
 - preserve the canonical proposition body;
 - preserve all non-`source_refs` frontmatter fields except `updated`;
-- keep existing canonical `source_refs` in their current order;
-- append new refs in deterministic sorted order;
-- deduplicate by exact string identity;
+- append each duplicate proposition's existing `source_refs`;
+- append every paper ref and annotation ref discovered from inbound sidecar
+  backlinks that point at the duplicate, even if the duplicate frontmatter is
+  missing one of those refs;
+- use the same order, deduplication, and update semantics as
+  `append_entity_source_ref`: keep existing canonical refs in their current order,
+  append new refs deterministically, deduplicate by exact string identity, and
+  advance `updated` only on a real change;
 - update `updated` only when the canonical file content changes.
+
+The implementation may call `append_entity_source_ref` for the write path, or factor
+its merge behavior into a pure helper so preflight can compute final text before any
+write. It should not hand-roll incompatible source-ref ordering or dedup semantics.
 
 ### Duplicate Propositions
 
@@ -143,8 +156,18 @@ phase may add explicit supersession relations once that behavior is designed.
 
 ### Sidecar Backlinks
 
-For every annotation ref listed in `inputs.sidecar_backlink_rewrites`, load the
-referenced sidecar and rewrite only the matching annotation.
+The authoritative sidecar rewrite worklist is a fresh scan of all project sidecars
+for annotations whose `promoted_to` is one of the duplicate propositions. Do not rely
+only on `inputs.sidecar_backlink_rewrites[].annotation_refs`: Half B derives those
+refs from duplicate proposition `source_refs`, while Phase 4d belief attribution is
+driven by the sidecar annotation's actual `promoted_to` value.
+
+Half C should still compare the fresh inbound-backlink scan with
+`inputs.sidecar_backlink_rewrites[].annotation_refs` and report mismatches as
+preflight diagnostics. A backlink missing from duplicate `source_refs` is not allowed
+to remain invisible: either the canonical provenance update covers it from the fresh
+scan, or the scan cannot resolve its paper/annotation ownership and apply fails
+before writing.
 
 Rules:
 
@@ -154,7 +177,11 @@ Rules:
 - any other `promoted_to` value is a preflight error;
 - preserve status, creator, created, modified fields, bodies, selectors,
   `content_hash`, and all other annotation metadata;
-- preserve unrelated annotations in the same sidecar.
+- preserve unrelated annotations in the same sidecar;
+- when two selected actions touch different annotations in the same sidecar, merge
+  those rewrites into one final sidecar text;
+- hard-error only when two selected actions attempt incompatible rewrites of the
+  same annotation.
 
 ## 6. Preflight And Atomicity
 
@@ -166,18 +193,26 @@ Preflight is pure and must finish before any file is written:
 - resolve and validate selected actions;
 - resolve every proposition path and sidecar path;
 - verify every duplicate proposition exists;
-- verify every listed annotation ref resolves to exactly one sidecar annotation;
+- scan all project sidecars for inbound `promoted_to` backlinks to selected duplicate
+  propositions;
+- verify every inbound backlink resolves to exactly one sidecar annotation and a
+  corresponding paper ref;
+- compare the fresh inbound-backlink set with
+  `sidecar_backlink_rewrites[].annotation_refs` from the selected Half B actions and
+  include any mismatch in preflight diagnostics;
 - verify every backlink currently points either to its duplicate or already to the
   canonical proposition;
 - compute the final text for every touched file in memory;
-- detect path collisions or two selected actions attempting different final text for
-  the same file.
+- aggregate all planned rewrites by path before rendering final text;
+- detect true write conflicts: two selected actions attempting different final text
+  for the same proposition field, or different `promoted_to` targets for the same
+  annotation.
 
 If preflight fails, no files are written.
 
-The write phase writes only files whose final text differs from the current text,
-using existing atomic file replacement helpers. Files are written in deterministic
-path order.
+The write phase writes only files whose merged final text differs from the current
+text, using existing atomic file replacement helpers. Files are written in
+deterministic path order.
 
 Half C should fail loud on write-phase I/O errors. It should not claim full
 multi-file transaction rollback: per-file atomic replacement protects individual
@@ -205,6 +240,13 @@ Conflicting current state remains an error:
 - duplicate proposition is missing;
 - action membership has drifted and no longer validates through Half B.
 
+This idempotency depends on the current project loader behavior: superseded
+propositions remain visible to `load_project_sources`, so the rebuilt Half B plan can
+still resolve the reviewed action and confirm it as a no-op. If a future archive-tier
+movement or active-entity filter removes superseded propositions from that snapshot,
+Half C will need a separate applied-action audit trail or saved-plan validation path
+before such entities disappear from normal project loading.
+
 ## 8. Postflight Validation
 
 After writes, the command should rebuild enough project state to verify the applied
@@ -214,8 +256,10 @@ semantic effect:
 - selected duplicates have `superseded_by` set to the canonical proposition;
 - selected sidecar backlinks now point to the canonical proposition;
 - canonical proposition `source_refs` include all moved refs;
-- rebuilt cross-paper assertion scanning no longer attributes the moved sidecar
-  assertions to the duplicate propositions.
+- a fresh all-sidecar scan finds zero inbound `promoted_to` backlinks to the selected
+  duplicate propositions;
+- rebuilt cross-paper assertion scanning attributes the moved literature assertions
+  to the canonical proposition, not the duplicate propositions.
 
 If there is a narrow in-process validation entry point for proposition source refs
 and Phase 4d literature assertions, the command may run it. It should not
@@ -239,7 +283,7 @@ Suggested core types:
 
 - `ReconciliationApplySelection`: selected action ids, or all canonicalization
   actions;
-- `PlannedFileEdit`: path, before hash, after hash, reason;
+- `PlannedFileEdit`: path, before hash, after hash, final text, reason;
 - `ReconciliationApplyPlan`: selected actions plus pure computed file edits;
 - `ReconciliationApplyReport`: applied action ids, changed paths, no-op paths,
   refused actions/errors.
@@ -300,15 +344,21 @@ Unit tests:
 - refuses `resynthesize_proposition`;
 - refuses blocked/advisory actions;
 - refuses stale or missing action ids;
-- moves duplicate `source_refs` onto canonical with deterministic dedup;
-- rewrites only matching sidecar `promoted_to` backlinks;
+- moves duplicate and inbound-backlink provenance refs onto canonical with
+  deterministic dedup;
+- rewrites every all-sidecar-scanned inbound `promoted_to` backlink to the canonical
+  proposition;
+- reports a backlink that is present in a sidecar but absent from duplicate
+  `source_refs`, and still covers it when paper/annotation refs are resolvable;
 - marks duplicates `superseded` with `superseded_by`;
 - preserves unrelated sidecar annotations;
+- merges two independent annotation rewrites in one shared sidecar into one file edit;
+- rejects two actions that attempt different `promoted_to` targets for the same
+  annotation;
 - second apply is a no-op;
 - preflight failure writes nothing;
 - selected `--action` applies only that action;
-- write planning detects two selected actions that would produce conflicting text for
-  one path.
+- write planning carries final file text, not only before/after hashes.
 
 CLI tests:
 
