@@ -1,7 +1,7 @@
 """The science working model — a federated patchwork of epistemic neighborhoods.
 
 Reusable machinery for the ``h00`` working model (RFC: meta
-``doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md``),
+``doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md``),
 built on the :mod:`science_tool.graph.belief` primitives:
 
   * :mod:`~science_tool.model.patch` — the epistemic-neighborhood **patch** as a TriG

@@ -1,6 +1,6 @@
 # t037 Pilot Extraction (3 operation/evaluation cases, v1.1)
 
-> **Status:** Pilot extraction (2026-05-07). Empirical pressure-test of `[t037]` v1.1 (`meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md`).
+> **Status:** Pilot extraction (2026-05-07). Empirical pressure-test of `[t037]` v1.1 (`meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`).
 >
 > **Goal:** find gaps between the v1.1 agent/tool operation schema and what authors can actually populate from current project content. Surfaces ref-heaviness, registry-state ambiguity, reason-code decidability gaps, and worked-example drift.
 

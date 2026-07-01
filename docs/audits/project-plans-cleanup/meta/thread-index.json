@@ -1,10 +1,10 @@
 {
-  "file_count": 13,
+  "file_count": 7,
   "generated_at": "2026-07-01T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "meta/doc/plans",
-  "thread_count": 13,
+  "thread_count": 7,
   "threads": [
     {
       "earliest_file_date": "2026-05-17",
@@ -28,27 +28,6 @@
       "thread_id": "adaptive-project-topology-and-bio-meta-next-steps"
     },
     {
-      "earliest_file_date": "2026-05-31",
-      "files": [
-        "meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md"
-      ],
-      "latest_file_date": "2026-05-31",
-      "normalized_slug": "epistemic-causal-probabilistic-graph-model",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md": "epistemic-causal-probabilistic-graph-model-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md": "design"
-      },
-      "thread_id": "epistemic-causal-probabilistic-graph-model"
-    },
-    {
       "earliest_file_date": "2026-05-06",
       "files": [
         "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md"
@@ -68,27 +47,6 @@
         "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md": null
       },
       "thread_id": "evidence-payload-core-and-extension-contract"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "meta/doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "t023-typed-synthesis-nodes",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md": "t023-typed-synthesis-nodes-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "meta/doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md": "design"
-      },
-      "thread_id": "t023-typed-synthesis-nodes"
     },
     {
       "earliest_file_date": "2026-05-06",
@@ -194,90 +152,6 @@
         "meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md": "findings"
       },
       "thread_id": "t034-validator-prototype"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "t037-agent-tool-operations",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md": "t037-agent-tool-operations-implementation-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation-plan": [
-          "meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-implementation-plan.md": "implementation-plan"
-      },
-      "thread_id": "t037-agent-tool-operations"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "t037-agent-tool-operations-extension",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md": "t037-agent-tool-operations-extension-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-07-t037-agent-tool-operations-extension-design.md": "design"
-      },
-      "thread_id": "t037-agent-tool-operations-extension"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "meta/doc/plans/2026-05-07-t037-pilot-extraction.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "t037-pilot-extraction",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-07-t037-pilot-extraction.md": "t037-pilot-extraction"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "meta/doc/plans/2026-05-07-t037-pilot-extraction.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-07-t037-pilot-extraction.md": null
-      },
-      "thread_id": "t037-pilot-extraction"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "t037-validator-prototype",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md": "t037-validator-prototype-findings"
-      },
-      "related_threads": [],
-      "role_files": {
-        "findings": [
-          "meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-07-t037-validator-prototype-findings.md": "findings"
-      },
-      "thread_id": "t037-validator-prototype"
     }
   ]
 }
