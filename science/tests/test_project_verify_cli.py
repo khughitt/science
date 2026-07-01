@@ -97,6 +97,18 @@ def test_cli_verify_json_is_pure_json(tmp_path: Path):
     assert payload["version"] == 1
 
 
+def test_cli_verify_format_json_is_pure_json(tmp_path: Path):
+    project, bundle = _bundle(tmp_path)
+    (project / "data" / "processed" / "x.parquet").unlink()
+
+    result = CliRunner().invoke(main, ["project", "verify", str(bundle), "--against", str(project), "--format", "json"])
+
+    assert result.exit_code == 3
+    payload = json.loads(result.output)
+    assert payload["status"] == "missing"
+    assert payload["version"] == 1
+
+
 def test_cli_verify_extract(tmp_path: Path):
     _, bundle = _bundle(tmp_path)
     dest = tmp_path / "out"

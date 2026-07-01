@@ -89,7 +89,6 @@ _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
     "commons show": "commons CLI uses legacy --json convenience flags",
     "commons validate": "commons CLI uses legacy --json convenience flags",
     "data audit": "older machine-readable report flag; add --format if more output modes are introduced",
-    "project verify": "older machine-readable verdict flag; add --format if more output modes are introduced",
     "qa-audit": "older advisory report flag; add --format if more output modes are introduced",
 }
 

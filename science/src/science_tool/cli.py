@@ -4716,6 +4716,14 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     type=click.Path(file_okay=False, path_type=Path),
     help="Materialize the bundle's source tree into this empty or new directory.",
 )
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, default=False, help="Emit a JSON verdict.")
 @click.pass_context
 def project_verify(
@@ -4723,6 +4731,7 @@ def project_verify(
     bundle: Path,
     against_root: Path | None,
     extract_to: Path | None,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Verify a serialized project bundle."""
@@ -4733,16 +4742,18 @@ def project_verify(
         verify_project,
     )
 
+    emit_json = as_json or output_format == "json"
+
     try:
         result = verify_project(bundle, against=against_root, extract=extract_to)
     except BundleIntegrityError as exc:
-        _emit_verify_error(as_json, exit_code=2, status="integrity", message=str(exc))
+        _emit_verify_error(emit_json, exit_code=2, status="integrity", message=str(exc))
         ctx.exit(2)
     except VerifyError as exc:
-        _emit_verify_error(as_json, exit_code=4, status="operational", message=str(exc))
+        _emit_verify_error(emit_json, exit_code=4, status="operational", message=str(exc))
         ctx.exit(4)
 
-    if as_json:
+    if emit_json:
         click.echo(json.dumps(verdict_json(result), indent=2, sort_keys=True))
     else:
         _render_verify_human(result)
