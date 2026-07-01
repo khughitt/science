@@ -191,3 +191,9 @@ def test_extracted_feedback_group_is_registered_from_split_module() -> None:
     feedback_cli = importlib.import_module("science_tool.feedback_cli")
 
     assert science_cli.commands["feedback"] is feedback_cli.feedback_group
+
+
+def test_extracted_labnote_group_is_registered_from_split_module() -> None:
+    labnote_cli = importlib.import_module("science_tool.labnote_cli")
+
+    assert science_cli.commands["labnote"] is labnote_cli.labnote_group

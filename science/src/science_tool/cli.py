@@ -91,6 +91,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_tool.labnote_cli import labnote_group
 from science_tool.markers_cli import markers_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.patch.cli import patch_group
@@ -375,6 +376,7 @@ main.add_command(validate_cmd)
 main.add_command(patch_group)
 main.add_command(telemetry_group)
 main.add_command(feedback_group)
+main.add_command(labnote_group)
 
 
 @main.group("data")
@@ -428,38 +430,6 @@ def data_audit_command(project_path: Path | None, fix: bool, output_format: str,
             click.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
     if violations:
         raise SystemExit(1)
-
-
-@main.group("labnote")
-def labnote() -> None:
-    """Export Labnote app packages."""
-
-
-@labnote.command("export")
-@click.option(
-    "--project-root",
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True, exists=True),
-    default=Path("."),
-    show_default=True,
-    help="Science project root containing science.yaml.",
-)
-@click.option(
-    "--out",
-    "out_dir",
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-    required=True,
-    help="Output Labnote app package directory.",
-)
-def labnote_export(project_root: Path, out_dir: Path) -> None:
-    """Export a public Labnote app package from a Science project."""
-    from science_tool.labnote_export import export_labnote_package
-
-    try:
-        diagnostics = export_labnote_package(project_root=project_root, out_dir=out_dir)
-    except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
-        raise click.ClickException(str(exc)) from exc
-    warning_count = len(diagnostics.get("warnings", []))
-    click.echo(f"Exported Labnote package to {out_dir} ({warning_count} warning(s))")
 
 
 @main.group("entities")
