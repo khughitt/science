@@ -7,23 +7,71 @@ import click
 from science_tool.cli import main as science_cli
 
 
-_PROJECT_OPTION_ALLOWLIST: dict[str, str] = {
-    "benchmark gap-calibration": "multi-project label=path specs, not a project root selector",
-    "commons show": "named registered project overlay selector",
-    "commons validate": "named registered project overlay selector",
-    "dag audit": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "dag init": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "dag number": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "dag render": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "dag staleness": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "dag validate": "older DAG filesystem-root flag; prefer --project-root for new commands",
-    "data audit": "older filesystem-root flag; prefer --project-root for new commands",
-    "entities audit-identifiers": "older filesystem-root flag; prefer --project-root for new commands",
-    "entities inventory": "older filesystem-root flag; prefer --project-root for new commands",
-    "entities register-kind": "older filesystem-root flag; prefer --project-root for new commands",
-    "feedback add": "project name metadata, not a filesystem root",
-    "feedback list": "project name filter, not a filesystem root",
-    "feedback report": "project name filter, not a filesystem root",
+_PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
+    "benchmark gap-calibration": (
+        "multi-project label=path specs, not a project root selector",
+        "label=path",
+    ),
+    "commons show": (
+        "named registered project overlay selector",
+        "registered project",
+    ),
+    "commons validate": (
+        "named registered project overlay selector",
+        "registered project",
+    ),
+    "dag audit": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "dag init": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "dag number": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "dag render": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "dag staleness": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "dag validate": (
+        "older DAG filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "data audit": (
+        "older filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "entities audit-identifiers": (
+        "older filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "entities inventory": (
+        "older filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "entities register-kind": (
+        "older filesystem-root flag; prefer --project-root for new commands",
+        "project root",
+    ),
+    "feedback add": (
+        "project name metadata, not a filesystem root",
+        "project name",
+    ),
+    "feedback list": (
+        "project name filter, not a filesystem root",
+        "project name",
+    ),
+    "feedback report": (
+        "project name filter, not a filesystem root",
+        "project name",
+    ),
 }
 
 _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
@@ -65,6 +113,20 @@ def _commands_with_option(flag: str) -> list[str]:
     return sorted(paths)
 
 
+def _option_for_path(command_path: str, flag: str) -> click.Option:
+    path_parts = command_path.split()
+    command: click.Command = science_cli
+    for part in path_parts:
+        if not isinstance(command, click.Group):
+            raise AssertionError(f"{command_path!r} descends through non-group {part!r}")
+        command = command.commands[part]
+
+    for parameter in command.params:
+        if isinstance(parameter, click.Option) and flag in parameter.opts:
+            return parameter
+    raise AssertionError(f"{command_path!r} has no {flag} option")
+
+
 def _commands_with_option_without_option(flag: str, missing_flag: str) -> list[str]:
     paths: list[str] = []
     for path, command in _walk_commands(science_cli, ()):
@@ -87,7 +149,18 @@ def test_project_option_usage_is_intentionally_classified() -> None:
         "`--project` is ambiguous. Existing uses must be classified here; new "
         "project-root selectors should use `--project-root` instead."
     )
-    assert all(reason.strip() for reason in _PROJECT_OPTION_ALLOWLIST.values())
+    assert all(reason.strip() and help_phrase.strip() for reason, help_phrase in _PROJECT_OPTION_ALLOWLIST.values())
+
+
+def test_project_option_help_text_names_what_project_means() -> None:
+    unclear: list[str] = []
+    for command_path, (_, help_phrase) in sorted(_PROJECT_OPTION_ALLOWLIST.items()):
+        option = _option_for_path(command_path, "--project")
+        help_text = option.help or ""
+        if help_phrase.lower() not in help_text.lower():
+            unclear.append(f"{command_path}: expected {help_phrase!r} in help {help_text!r}")
+
+    assert not unclear
 
 
 def test_json_only_option_usage_is_intentionally_classified() -> None:

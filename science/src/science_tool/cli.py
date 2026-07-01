@@ -461,7 +461,13 @@ def entities_group() -> None:
 
 
 @entities_group.command("inventory")
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root to inventory (legacy alias; default: current working directory).",
+)
 @click.option("--format", "output_format", type=click.Choice(["json"]), default="json")
 @click.option("--output", type=click.Path(path_type=Path), default=None)
 def entities_inventory_command(
@@ -479,7 +485,13 @@ def entities_inventory_command(
 
 
 @entities_group.command("audit-identifiers")
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root to audit (legacy alias; default: current working directory).",
+)
 def entities_audit_identifiers_command(project_path: Path) -> None:
     click.echo(json.dumps(audit_identifiers(project_path), indent=2))
 
@@ -812,7 +824,13 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
 @entities_group.command("register-kind")
 @click.argument("kind")
 @click.option("--class", "entity_class", required=True)
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root whose local profile should be updated (legacy alias; default: current working directory).",
+)
 def entities_register_kind_command(kind: str, entity_class: str, project_path: Path) -> None:
     """Register a project-local entity kind in the local profile."""
     try:
@@ -5970,7 +5988,7 @@ def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int
 @click.option("--status", default="open", help="Filter by status (omit for 'open'; use 'all' for all statuses)")
 @click.option("--target", default=None, help="Filter by target (supports fnmatch globs)")
 @click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option("--project", default=None, help="Filter by project")
+@click.option("--project", default=None, help="Filter by project name")
 @click.option("--concern", default=None, help="Filter by concern (supports fnmatch globs, e.g. 'methodology:*')")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_list(
@@ -6233,7 +6251,7 @@ def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, 
 
 @feedback.command("report")
 @click.option("--status", default=None, help="Filter by status")
-@click.option("--project", default=None, help="Filter by project")
+@click.option("--project", default=None, help="Filter by project name")
 @click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
 def feedback_report(status: str | None, project: str | None, concern: str | None) -> None:
     """Generate a markdown report of feedback entries."""

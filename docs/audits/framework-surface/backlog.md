@@ -103,7 +103,9 @@ behavior.
   the registered top-level Click commands so new command families do not
   silently bypass classification.
 - `science/tests/test_cli_surface_contract.py` classifies every current
-  `--project` use so new project-root selectors prefer `--project-root`.
+  `--project` use, and checks its help text, so new project-root selectors
+  prefer `--project-root` and existing `--project` flags say what kind of
+  project value they accept.
 - `science/tests/test_cli_surface_contract.py` also classifies every current
   `--json`-only command so new multi-format commands prefer `--format`.
 

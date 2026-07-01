@@ -154,6 +154,8 @@ path. If multi-format output grows, add `--format` while preserving `--json`.
    with an allowlist for legacy/convenience aliases.
    **Status:** Added in `science/tests/test_cli_surface_contract.py`.
 3. Improve help text for the 16 `--project` users before adding aliases.
+   **Status:** Addressed by `science/tests/test_cli_surface_contract.py` and
+   help-text updates for the previously blank or ambiguous `--project` options.
 4. Add `--project-root` aliases for older filesystem-root commands only when the
    command family is already being touched.
 5. Keep command renames out of the first cleanup slice. The first implementation
