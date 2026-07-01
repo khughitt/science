@@ -66,6 +66,17 @@ def select_canonicalization_actions(
 
     by_id = {action.action_id: action for action in plan.actions}
     if requested_action_ids:
+        seen_requested_ids: set[str] = set()
+        duplicate_requested_ids: set[str] = set()
+        for action_id in requested_action_ids:
+            if action_id in seen_requested_ids:
+                duplicate_requested_ids.add(action_id)
+            seen_requested_ids.add(action_id)
+        if duplicate_requested_ids:
+            raise ReconciliationApplyError(
+                "duplicate reconciliation action request(s): "
+                f"{', '.join(sorted(duplicate_requested_ids))}"
+            )
         unknown = sorted(set(requested_action_ids) - set(by_id))
         if unknown:
             raise ReconciliationApplyError(
@@ -88,7 +99,19 @@ def select_canonicalization_actions(
                 f"{action.action_id} is resynthesize_proposition; "
                 "factorization resynthesis is not executable by Half C"
             )
-        if action.kind != "canonicalize_propositions" or action.status != "ready" or action.blockers:
+        if action.blockers:
+            blocker_messages = []
+            for blocker in action.blockers:
+                reason = blocker.get("reason", "unknown")
+                detail = blocker.get("detail", "")
+                message = str(reason)
+                if detail:
+                    message = f"{message}: {detail}"
+                blocker_messages.append(message)
+            raise ReconciliationApplyError(
+                f"{action.action_id} has blocker(s): {'; '.join(blocker_messages)}"
+            )
+        if action.kind != "canonicalize_propositions" or action.status != "ready":
             raise ReconciliationApplyError(
                 f"{action.action_id} is {action.status} {action.kind}, "
                 "not executable by Half C"
