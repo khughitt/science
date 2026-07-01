@@ -6686,6 +6686,171 @@ def benchmark_tests(
     Console(width=200).print(table)
 
 
+@benchmark_group.command("test-triage")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
+@click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
+@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--source",
+    "priority_source",
+    type=click.Choice(["opportunity-relative", "gap-candidate", "gap-fallback"]),
+    default=None,
+    help="Filter by benchmark test priority source.",
+)
+@click.option("--exclude-fallback", is_flag=True, help="Drop broad fallback benchmark rows.")
+@click.option(
+    "--readiness",
+    "readiness_label",
+    type=click.Choice(["runnable", "stage-needed", "metadata-only", "blocked"]),
+    default=None,
+    help="Filter by benchmark runtime/readiness label.",
+)
+@click.option("--runnable-only", is_flag=True, help="Shortcut for --readiness runnable.")
+@click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=True, dir_okay=False),
+    help="Review artifact path. Relative paths are resolved under the project root.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_test_triage(
+    domain: str | None,
+    entity_ref: str | None,
+    facet: str | None,
+    state: str | None,
+    priority_source: str | None,
+    exclude_fallback: bool,
+    readiness_label: str | None,
+    runnable_only: bool,
+    benchmark_ref: str | None,
+    include_commons: bool,
+    write_review_file: bool,
+    output_path: Path | None,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report benchmark test plans grouped for action triage."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import TestPlanState, benchmark_test_triage_report
+    from science_tool.entities import EntityCommandError, resolve_entity_ref
+
+    if output_path is not None and not write_review_file:
+        raise click.ClickException("--output requires --write-review-file")
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    entity_id: str | None = None
+    if entity_ref is not None:
+        try:
+            entity_id = resolve_entity_ref(root, entity_ref)
+        except EntityCommandError as exc:
+            raise click.ClickException(str(exc)) from exc
+    if runnable_only and readiness_label not in {None, "runnable"}:
+        raise click.ClickException(f"--runnable-only conflicts with --readiness {readiness_label}")
+
+    try:
+        payload = benchmark_test_triage_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            facet=facet,
+            state=cast("TestPlanState | None", state),
+            source=cast("Any", priority_source),
+            exclude_fallback=exclude_fallback,
+            readiness="runnable" if runnable_only else cast("Any", readiness_label),
+            benchmark_id=benchmark_ref,
+        )
+        if write_review_file:
+            generated = _benchmark_test_triage_today()
+            review_path = _write_test_triage_review_file(
+                payload=payload,
+                project_root=root,
+                output_path=output_path,
+                generated=generated,
+                source_command=_test_triage_source_command(
+                    include_commons=include_commons,
+                    domain=domain,
+                    entity_ref=entity_ref,
+                    facet=facet,
+                    state=state,
+                    priority_source=priority_source,
+                    exclude_fallback=exclude_fallback,
+                    readiness_label=readiness_label,
+                    runnable_only=runnable_only,
+                    benchmark_ref=benchmark_ref,
+                    output_format=output_format,
+                ),
+            )
+            payload["review_file"] = str(review_path)
+            click.echo(f"wrote benchmark test triage review file: {review_path}", err=True)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    visible_rows = 0
+    for bucket in ("run-now", "stage-next", "metadata-needed", "blocked-or-reference"):
+        bucket_rows = payload["buckets"][bucket][:10]
+        if not bucket_rows:
+            continue
+        table = Table(title=f"Benchmark Test Triage: {bucket}", show_header=True, header_style="bold")
+        for col in ("entity", "benchmark", "task", "readiness", "score", "facets", "needs"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in bucket_rows:
+            visible_rows += 1
+            table.add_row(
+                row["entity_id"],
+                row["benchmark_id"],
+                _format_test_triage_task(row),
+                row["readiness_label"],
+                str(row["priority_score"]),
+                _format_test_triage_facets(row),
+                _format_test_triage_needs(row),
+            )
+        Console(width=200).print(table)
+    fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
+    if fallback_count:
+        diagnostics = payload["fallback_diagnostics"]
+        table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
+        for col in ("rows", "top benchmarks", "top facets"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        table.add_row(
+            f"{fallback_count} fallback rows",
+            _format_count_rows(diagnostics["top_benchmarks"], key="benchmark_id"),
+            _format_count_rows(diagnostics["top_facets"], key="facet"),
+        )
+        Console(width=200).print(table)
+        visible_rows += 1
+    if not visible_rows:
+        click.echo("No benchmark test triage rows.")
+        return
+
+
 def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     candidates = row["candidate_benchmarks"]
     if not candidates:
@@ -6695,6 +6860,21 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
         remainder = len(candidates) - 1
         return first if remainder <= 0 else f"{first} +{remainder} fallback"
     return ", ".join(candidate["benchmark_id"] for candidate in candidates[:3])
+
+
+def _format_test_triage_task(row: Mapping[str, Any]) -> str:
+    task_id = row.get("task_id")
+    return str(task_id) if task_id else "-"
+
+
+def _format_test_triage_needs(row: Mapping[str, Any]) -> str:
+    needs = row.get("needs") or []
+    return ", ".join(str(need) for need in needs) if needs else "-"
+
+
+def _format_test_triage_facets(row: Mapping[str, Any]) -> str:
+    facets = row.get("matched_facets") or []
+    return ", ".join(str(facet) for facet in facets) if facets else "-"
 
 
 def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
@@ -6795,6 +6975,106 @@ def _write_hint_candidates_review_file(
             }
             for row in payload["hint_candidates"]
         ],
+    }
+    path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def _benchmark_test_triage_today() -> date:
+    return date.today()
+
+
+def _default_test_triage_review_path(project_root: Path, generated: date) -> Path:
+    from science_tool.paths import resolve_paths
+
+    doc_dir = resolve_paths(project_root).doc_dir
+    return (
+        doc_dir
+        / "audits"
+        / "benchmark-test-triage"
+        / f"{generated.isoformat()}-{project_root.name}.yaml"
+    )
+
+
+def _resolve_test_triage_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    root = project_root.resolve()
+    if output_path is None:
+        return _default_test_triage_review_path(root, generated)
+
+    path = output_path if output_path.is_absolute() else root / output_path
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise click.ClickException(f"--output must stay under project root: {output_path}") from exc
+    return resolved
+
+
+def _test_triage_source_command(
+    *,
+    include_commons: bool,
+    domain: str | None,
+    entity_ref: str | None,
+    facet: str | None,
+    state: str | None,
+    priority_source: str | None,
+    exclude_fallback: bool,
+    readiness_label: str | None,
+    runnable_only: bool,
+    benchmark_ref: str | None,
+    output_format: str,
+) -> str:
+    # Best-effort context string for review artifacts, not an exact shell history record.
+    parts = ["science", "benchmark", "test-triage"]
+    if include_commons:
+        parts.append("--commons")
+    if domain is not None:
+        parts.extend(["--domain", domain])
+    if entity_ref is not None:
+        parts.extend(["--entity", entity_ref])
+    if facet is not None:
+        parts.extend(["--facet", facet])
+    if state is not None:
+        parts.extend(["--state", state])
+    if priority_source is not None:
+        parts.extend(["--source", priority_source])
+    if exclude_fallback:
+        parts.append("--exclude-fallback")
+    if readiness_label is not None:
+        parts.extend(["--readiness", readiness_label])
+    if runnable_only:
+        parts.append("--runnable-only")
+    if benchmark_ref is not None:
+        parts.extend(["--benchmark", benchmark_ref])
+    if output_format != "table":
+        parts.extend(["--format", output_format])
+    parts.append("--write-review-file")
+    return " ".join(parts)
+
+
+def _write_test_triage_review_file(
+    *,
+    payload: Mapping[str, Any],
+    project_root: Path,
+    output_path: Path | None,
+    generated: date,
+    source_command: str,
+) -> Path:
+    path = _resolve_test_triage_output_path(project_root, output_path, generated)
+    if path.exists():
+        raise click.ClickException(f"review file already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "project": project_root.name,
+        "project_root": _display_project_path(project_root),
+        "generated_at": generated.isoformat(),
+        "review_file": str(path),
+        "source_command": source_command,
+        "filters": payload["filters"],
+        "summary": payload["summary"],
+        "buckets": payload["buckets"],
+        "fallback_diagnostics": payload["fallback_diagnostics"],
+        "commons_notice": payload["commons_notice"],
     }
     path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return path

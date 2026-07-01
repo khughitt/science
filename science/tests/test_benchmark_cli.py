@@ -80,6 +80,18 @@ def _invoke_tests(tmp_path: Path, *args: str):
     )
 
 
+def _invoke_test_triage(tmp_path: Path, *args: str):
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+    if result.exit_code == 0 and "--format" in args and args[args.index("--format") + 1] == "json":
+        result.output_bytes = result.stdout_bytes
+    return result
+
+
 def _write_corrupt_commons_registry(root: Path, frontmatter_json: str = "{not-json") -> None:
     root.mkdir()
     conn = sqlite3.connect(root / "registry.sqlite")
@@ -1096,3 +1108,208 @@ benchmark:
     payload = json.loads(result.stdout)
     assert payload["commons_notice"] is not None
     assert payload["benchmark_tests"]
+
+
+def test_benchmark_test_triage_cli_json_output(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0200-perturbation",
+        """
+id: hypothesis:0200-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["review_file"] is None
+    assert payload["summary"]["bucket_counts"]["run-now"] == 1
+    assert payload["buckets"]["run-now"][0]["benchmark_id"] == "dataset:sciplex3"
+    assert payload["buckets"]["run-now"][0]["review"] == {
+        "decision": "",
+        "owner": "",
+        "next_action": "",
+        "notes": "",
+    }
+    assert payload["filters"] == {}
+
+
+def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0201-spatial",
+        """
+id: hypothesis:0201-spatial
+type: hypothesis
+title: Spatial hypothesis
+""",
+        body="Microenvironment region needs spatial validation.",
+    )
+    _write_dataset(
+        tmp_path,
+        "hca-spatial",
+        """
+id: dataset:hca-spatial
+type: dataset
+title: HCA Spatial
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path)
+
+    assert result.exit_code == 0
+    assert "Benchmark Test Triage" in result.output
+    assert "metadata-needed" in result.output
+    assert "hypothesis:0201-spatial" in result.output
+    assert "dataset:hca-spatial" in result.output
+    assert "prediction-target" in result.output
+
+
+def test_benchmark_test_triage_cli_output_requires_write_flag(tmp_path: Path) -> None:
+    result = _invoke_test_triage(tmp_path, "--output", "doc/audits/benchmark-test-triage/custom.yaml")
+
+    assert result.exit_code != 0
+    assert "--output requires --write-review-file" in result.output
+
+
+def test_benchmark_test_triage_cli_runnable_only_conflicts_with_other_readiness(tmp_path: Path) -> None:
+    result = _invoke_test_triage(tmp_path, "--runnable-only", "--readiness", "stage-needed")
+
+    assert result.exit_code != 0
+    assert "--runnable-only conflicts with --readiness stage-needed" in result.output
+
+
+def test_benchmark_test_triage_cli_writes_default_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0202-perturbation",
+        """
+id: hypothesis:0202-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / f"2026-07-01-{tmp_path.name}.yaml"
+    assert review_path.is_file()
+    assert f"wrote benchmark test triage review file: {review_path}" in result.stderr
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    assert written["project"] == tmp_path.name
+    assert written["generated_at"] == "2026-07-01"
+    assert written["review_file"] == str(review_path)
+    assert written["source_command"].startswith("science benchmark test-triage")
+    assert written["summary"]["bucket_counts"]["run-now"] == 1
+    assert written["buckets"]["run-now"][0]["review"]["decision"] == ""
+    assert written["fallback_diagnostics"] == {"top_benchmarks": [], "top_facets": []}
+
+
+def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    output_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / "custom.yaml"
+    output_path.parent.mkdir(parents=True)
+    output_path.write_text("existing: true\n", encoding="utf-8")
+
+    result = _invoke_test_triage(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "doc/audits/benchmark-test-triage/custom.yaml",
+    )
+
+    assert result.exit_code != 0
+    assert "review file already exists" in result.output
+    assert output_path.read_text(encoding="utf-8") == "existing: true\n"
+
+
+def test_benchmark_test_triage_cli_rejects_output_outside_project_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+
+    relative_result = _invoke_test_triage(tmp_path, "--write-review-file", "--output", "../outside.yaml")
+    assert relative_result.exit_code != 0
+    assert "--output must stay under project root" in relative_result.output
+    assert not (tmp_path.parent / "outside.yaml").exists()
+
+    outside_path = tmp_path.parent / "outside-absolute.yaml"
+    absolute_result = _invoke_test_triage(tmp_path, "--write-review-file", "--output", str(outside_path))
+    assert absolute_result.exit_code != 0
+    assert "--output must stay under project root" in absolute_result.output
+    assert not outside_path.exists()
+
+
+def test_benchmark_test_triage_cli_json_and_commons_notice(tmp_path: Path) -> None:
+    result = _invoke_test_triage(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["commons_notice"] is not None
+    assert "notice: commons benchmarks unavailable" in result.stderr
