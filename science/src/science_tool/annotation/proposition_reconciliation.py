@@ -435,3 +435,161 @@ def build_factorization_disagreements(
             )
         )
     return tuple(out)
+
+
+def candidate_to_json(candidate: SameClaimCandidate) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate.candidate_id,
+        "propositions": list(candidate.propositions),
+        "priority": candidate.priority,
+        "splittable": candidate.splittable,
+        "flags": list(candidate.flags),
+        "signals": dict(candidate.signals),
+        "explanation": list(candidate.explanation),
+    }
+
+
+def factorization_to_json(candidate: FactorizationCandidate) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate.candidate_id,
+        "proposition": candidate.proposition,
+        "priority": candidate.priority,
+        "papers": list(candidate.papers),
+        "current": dict(candidate.current),
+        "observed_statement_hints": [
+            dict(item) for item in candidate.observed_statement_hints
+        ],
+        "disagreement": list(candidate.disagreement),
+        "recommended_action": candidate.recommended_action,
+    }
+
+
+def fault_to_json(fault: ReconciliationFault) -> dict[str, Any]:
+    return {
+        "reason": fault.reason,
+        "detail": fault.detail,
+        "members": list(fault.members),
+    }
+
+
+def report_to_json(report: ReconciliationReport) -> dict[str, Any]:
+    summary = {
+        "same_claim_candidates": len(report.same_claim_candidates),
+        "factorization_disagreements": len(report.factorization_disagreements),
+        "faults": len(report.faults),
+    }
+    summary.update(report.summary)
+    return {
+        "summary": summary,
+        "same_claim_candidates": [
+            candidate_to_json(item) for item in report.same_claim_candidates
+        ],
+        "factorization_disagreements": [
+            factorization_to_json(item) for item in report.factorization_disagreements
+        ],
+        "faults": [fault_to_json(item) for item in report.faults],
+    }
+
+
+def _enum_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    raw = getattr(value, "value", value)
+    return str(raw)
+
+
+def snapshot_from_entity(entity: Any) -> PropositionSnapshot:
+    source_refs = frozenset(str(ref) for ref in (getattr(entity, "source_refs", None) or []))
+    return PropositionSnapshot(
+        ref=str(entity.canonical_id),
+        title=str(getattr(entity, "title", "") or ""),
+        subject=getattr(entity, "subject", None),
+        predicate=_enum_value(getattr(entity, "predicate", None)),
+        object=getattr(entity, "object", None),
+        polarity=_enum_value(getattr(entity, "polarity", None)),
+        claim_layer=_enum_value(getattr(entity, "claim_layer", None)),
+        identification_strength=_enum_value(
+            getattr(entity, "identification_strength", None)
+        ),
+        source_refs=source_refs,
+        paper_refs=frozenset(ref for ref in source_refs if ref.startswith("paper:")),
+        annotation_refs=frozenset(ref for ref in source_refs if ref.startswith("annotation:")),
+    )
+
+
+def _scope_filter(
+    snapshots: Mapping[str, PropositionSnapshot],
+    assertions: Sequence[Any],
+    *,
+    proposition_ref: str | None,
+    source_sidecar: str | None,
+) -> tuple[dict[str, PropositionSnapshot], list[Any]]:
+    scoped_assertions = list(assertions)
+    scoped_refs: set[str] | None = None
+    if proposition_ref is not None:
+        scoped_refs = {proposition_ref}
+        scoped_assertions = [
+            assertion
+            for assertion in scoped_assertions
+            if assertion.proposition_ref == proposition_ref
+        ]
+    if source_sidecar is not None:
+        scoped_assertions = [
+            assertion for assertion in scoped_assertions if assertion.sidecar == source_sidecar
+        ]
+        source_refs = {assertion.proposition_ref for assertion in scoped_assertions}
+        scoped_refs = source_refs if scoped_refs is None else scoped_refs & source_refs
+    if scoped_refs is None:
+        return dict(snapshots), scoped_assertions
+    return {
+        ref: snapshots[ref]
+        for ref in sorted(scoped_refs)
+        if ref in snapshots
+    }, scoped_assertions
+
+
+def build_reconciliation_report(
+    project_root: Any,
+    *,
+    proposition_ref: str | None = None,
+    source_sidecar: str | None = None,
+) -> ReconciliationReport:
+    from pathlib import Path
+
+    from science_tool.annotation.cross_paper_evidence import (
+        load_proposition_source_refs,
+        scan_literature_assertions,
+    )
+    from science_tool.graph.sources import load_project_sources
+
+    root = Path(project_root).resolve()
+    sources = load_project_sources(root)
+    snapshots = {
+        str(entity.canonical_id): snapshot_from_entity(entity)
+        for entity in sources.entities
+        if getattr(entity, "kind", None) == "proposition"
+    }
+    assertions, scan_faults = scan_literature_assertions(
+        root, load_proposition_source_refs(root)
+    )
+    scoped_snapshots, scoped_assertions = _scope_filter(
+        snapshots,
+        assertions,
+        proposition_ref=proposition_ref,
+        source_sidecar=source_sidecar,
+    )
+    same = build_same_claim_candidates(list(scoped_snapshots.values()))
+    factors = build_factorization_disagreements(scoped_snapshots, scoped_assertions)
+    faults = [
+        ReconciliationFault(
+            fault.reason,
+            f"{fault.sidecar}:{fault.annotation_id} {fault.detail}",
+        )
+        for fault in scan_faults
+    ]
+    faults.extend(same.faults)
+    return ReconciliationReport(
+        same_claim_candidates=same.candidates,
+        factorization_disagreements=factors,
+        faults=tuple(faults),
+    )

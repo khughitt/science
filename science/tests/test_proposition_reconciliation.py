@@ -6,13 +6,16 @@ from science_tool.annotation.cross_paper_evidence import LiteratureAssertion
 from science_tool.annotation.proposition_reconciliation import (
     MAX_RECONCILIATION_COMPONENT_SIZE,
     PropositionSnapshot,
+    ReconciliationReport,
     build_factorization_disagreements,
     build_same_claim_candidates,
     candidate_id,
+    candidate_to_json,
     judgment_id,
     normalize_phrase,
     polarity_compatible,
     predicate_compatible,
+    report_to_json,
     title_tokens,
 )
 
@@ -256,3 +259,37 @@ def test_factorization_disagreement_detects_unfactored_multiple_useful_hints():
         "current proposition is unfactored despite useful statement hints"
         in candidates[0].disagreement
     )
+
+
+def test_candidate_to_json_keeps_stable_public_shape():
+    candidate = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+        ]
+    ).candidates[0]
+
+    payload = candidate_to_json(candidate)
+
+    assert payload["candidate_id"].startswith("reconcile:same-claim/")
+    assert payload["propositions"] == ["proposition:a", "proposition:b"]
+    assert payload["priority"] == "high"
+    assert payload["splittable"] is False
+    assert payload["flags"] == []
+    assert "pair_edges" not in payload
+
+
+def test_report_to_json_includes_summary_counts():
+    same = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+        ]
+    )
+    report = ReconciliationReport(same_claim_candidates=same.candidates, faults=same.faults)
+
+    payload = report_to_json(report)
+
+    assert payload["summary"]["same_claim_candidates"] == 1
+    assert payload["summary"]["factorization_disagreements"] == 0
+    assert payload["summary"]["faults"] == 0
