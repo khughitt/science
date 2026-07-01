@@ -1316,14 +1316,22 @@ def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: l
 _WORKFLOW_OR_MODELING_TERMS = frozenset(
     {
         "all",
+        "any",
+        "banner",
         "beyond",
         "catalog",
         "conjecture",
+        "current",
+        "demonstrates",
+        "details",
         "model",
         "models",
         "organizing",
         "our",
+        "over",
         "project",
+        "promoted",
+        "related",
         "shared",
     }
 )

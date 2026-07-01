@@ -2873,6 +2873,45 @@ title: Generic prose
     assert "shared" not in domain_terms
 
 
+def test_hint_candidates_report_routes_report_prose_terms_to_workflow_category(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0080-report-prose",
+        """
+id: hypothesis:0080-report-prose
+type: hypothesis
+title: Report prose
+""",
+        body=(
+            "Related details banner demonstrates promoted evidence. "
+            "Any current model over baseline should be reviewed."
+        ),
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path)
+    by_term = {row["term"]: row for row in payload["hint_candidates"]}
+    expected_terms = {
+        "any",
+        "banner",
+        "current",
+        "demonstrates",
+        "details",
+        "over",
+        "promoted",
+        "related",
+    }
+
+    assert expected_terms <= set(by_term)
+    for term in expected_terms:
+        assert by_term[term]["category"] == "workflow-or-modeling"
+
+    domain_terms = {row["term"] for row in payload["hint_candidates"] if row["category"] == "domain-candidate"}
+    assert not (expected_terms & domain_terms)
+
+
 def test_hint_candidates_report_classifies_project_identity_from_science_yaml(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
 
