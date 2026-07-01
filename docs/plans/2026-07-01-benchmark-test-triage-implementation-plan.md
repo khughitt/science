@@ -1087,36 +1087,35 @@ def benchmark_test_triage(
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
         )
+        if write_review_file:
+            generated = _benchmark_test_triage_today()
+            review_path = _write_test_triage_review_file(
+                payload=payload,
+                project_root=root,
+                output_path=output_path,
+                generated=generated,
+                source_command=_test_triage_source_command(
+                    include_commons=include_commons,
+                    domain=domain,
+                    entity_ref=entity_ref,
+                    facet=facet,
+                    state=state,
+                    priority_source=priority_source,
+                    exclude_fallback=exclude_fallback,
+                    readiness_label=readiness_label,
+                    runnable_only=runnable_only,
+                    benchmark_ref=benchmark_ref,
+                    output_format=output_format,
+                ),
+            )
+            payload["review_file"] = str(review_path)
+            click.echo(f"wrote benchmark test triage review file: {review_path}", err=True)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
     notice = payload["commons_notice"]
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
-
-    if write_review_file:
-        generated = _benchmark_test_triage_today()
-        review_path = _write_test_triage_review_file(
-            payload=payload,
-            project_root=root,
-            output_path=output_path,
-            generated=generated,
-            source_command=_test_triage_source_command(
-                include_commons=include_commons,
-                domain=domain,
-                entity_ref=entity_ref,
-                facet=facet,
-                state=state,
-                priority_source=priority_source,
-                exclude_fallback=exclude_fallback,
-                readiness_label=readiness_label,
-                runnable_only=runnable_only,
-                benchmark_ref=benchmark_ref,
-                output_format=output_format,
-            ),
-        )
-        payload["review_file"] = str(review_path)
-        click.echo(f"wrote benchmark test triage review file: {review_path}", err=True)
 
     if output_format == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
