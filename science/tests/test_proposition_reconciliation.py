@@ -1,5 +1,7 @@
 import hashlib
 
+import pytest
+
 from science_tool.annotation.proposition_reconciliation import (
     candidate_id,
     judgment_id,
@@ -15,6 +17,11 @@ def test_candidate_id_uses_full_sha256_of_lane_and_sorted_refs():
     assert candidate_id("same_claim", ["proposition:b", "proposition:a"]) == (
         f"reconcile:same-claim/{expected}"
     )
+
+
+def test_candidate_id_rejects_unknown_lane():
+    with pytest.raises(ValueError, match="unknown reconciliation lane"):
+        candidate_id("typo", ["proposition:a"])
 
 
 def test_judgment_id_uses_lane_decision_and_sorted_member_set():

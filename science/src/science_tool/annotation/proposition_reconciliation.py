@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -11,6 +12,10 @@ from science_model.reasoning import SIGN_MEANINGFUL_PREDICATES
 LANE_SAME_CLAIM = "same_claim"
 LANE_FACTORIZATION = "factorization_disagreement"
 MAX_RECONCILIATION_COMPONENT_SIZE = 25
+LANE_ID_TOKENS = {
+    LANE_SAME_CLAIM: "same-claim",
+    LANE_FACTORIZATION: "factorization",
+}
 
 DECISIONS = frozenset(
     {
@@ -80,7 +85,7 @@ class SameClaimCandidate:
     priority: Literal["high", "medium", "low"]
     splittable: bool
     flags: tuple[str, ...]
-    signals: dict[str, Any]
+    signals: Mapping[str, Any]
     explanation: tuple[str, ...]
     pair_edges: frozenset[tuple[str, str]] = frozenset()
 
@@ -91,8 +96,8 @@ class FactorizationCandidate:
     proposition: str
     priority: Literal["high", "medium", "low"]
     papers: tuple[str, ...]
-    current: dict[str, Any]
-    observed_statement_hints: tuple[dict[str, Any], ...]
+    current: Mapping[str, Any]
+    observed_statement_hints: tuple[Mapping[str, Any], ...]
     disagreement: tuple[str, ...]
     recommended_action: str
 
@@ -109,21 +114,24 @@ class ReconciliationReport:
     same_claim_candidates: tuple[SameClaimCandidate, ...] = ()
     factorization_disagreements: tuple[FactorizationCandidate, ...] = ()
     faults: tuple[ReconciliationFault, ...] = ()
-    summary: dict[str, Any] = field(default_factory=dict)
+    summary: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _digest(parts: list[str]) -> str:
     return hashlib.sha256("\0".join(parts).encode()).hexdigest()
 
 
-def candidate_id(lane: str, refs: list[str] | tuple[str, ...]) -> str:
+def candidate_id(lane: str, refs: Sequence[str]) -> str:
     sorted_refs = sorted(refs)
     digest = _digest([lane, *sorted_refs])
-    token = "same-claim" if lane == LANE_SAME_CLAIM else "factorization"
+    try:
+        token = LANE_ID_TOKENS[lane]
+    except KeyError as exc:
+        raise ValueError(f"unknown reconciliation lane: {lane!r}") from exc
     return f"reconcile:{token}/{digest}"
 
 
-def judgment_id(lane: str, decision: str, refs: list[str] | tuple[str, ...]) -> str:
+def judgment_id(lane: str, decision: str, refs: Sequence[str]) -> str:
     return f"reconcile:judgment/{_digest([lane, decision, *sorted(refs)])}"
 
 
