@@ -5,9 +5,9 @@ for a commons entity. This module discovers, parses, validates overlay files,
 checks overlay pins against the live canonical version, and merges them onto
 the canonical entity per the schema's `science:merge` policy.
 
-See docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md and
-docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md (overlays
-moved out of the prose-only doc/ tree into the dedicated overlays/ root).
+See docs/plans/historical/2026-05-13-multiproject-schema-and-shared-store-design.md
+and docs/user-guide/project-layout.md. Overlays moved out of the prose-only doc/
+tree into the dedicated overlays/ root.
 """
 
 from __future__ import annotations

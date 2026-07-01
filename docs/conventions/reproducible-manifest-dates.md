@@ -28,6 +28,10 @@ Never `date.today()` at write time for a field that is supposed to describe the 
 explicitly documented as non-reproducible and excluded from diff-based verification — do not overload
 `created` / `updated` with it.)
 
+Do not claim rerun reproducibility from stable manifest dates alone. A workflow
+is rerun-reproducible only after a same-seed rerun and diff check has actually
+been performed, or after the residual nondeterminism is explicitly documented.
+
 ## Worked defect (cancer-evolution)
 
 Both `cohort_assemble_t007` (cohort `datapackage.json`) and the `t007-gates` `run_datapackage` rule

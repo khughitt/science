@@ -1,8 +1,7 @@
 """Catalog commands for the singular `dataset` group: add / list / show / consumers.
 
 `dataset` has no path policy, so ids are synthesized directly (validate_slug +
-f-string) rather than via generate_entity_id. See
-docs/plans/2026-06-21-dataset-catalog-cli-design.md.
+f-string) rather than via generate_entity_id. See docs/user-guide/entities.md.
 """
 
 from __future__ import annotations

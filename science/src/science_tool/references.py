@@ -1,6 +1,8 @@
 """Reference-record contract: BibTeX normalization, display formatting, the
-citation-syntax grammar, and the app-export reference bundle (design doc
-2026-06-23-science-citations-and-references)."""
+citation-syntax grammar, and the app-export reference bundle.
+
+See docs/conventions/citations-and-references.md for the durable contract.
+"""
 
 from __future__ import annotations
 

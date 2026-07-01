@@ -4,8 +4,7 @@
 destination *filename* from the id's local part (rather than the file stem, as
 `slug`/`verbatim` do). This is what lets dataset/workflow owners move
 doc/<type>/data-<slug>.md -> entities/<kind>/<slug>.md with ZERO id/reference
-rewrites — see docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md
-Key decision 1.
+rewrites — see docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md.
 
 These tests exercise the strategy through a *local* kind so they do not depend on
 the Phase 2 core-profile wiring of `dataset`/`workflow`.

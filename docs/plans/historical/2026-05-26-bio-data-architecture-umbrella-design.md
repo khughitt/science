@@ -4,9 +4,10 @@ Date: 2026-05-26
 
 Status: historical umbrella rationale — Pillars A, B, D, E, the foundation substrate, C1/C2/C3/C4a/C4b,
 C4c-1 rsID input, and `bio.reference_graph` RG1/RG2/RG3/RG4/RG5 are implemented or archived to
-historical plans with durable code/docs/tests. Remaining active work is delegated to
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`: full dbSNP artifact build/operator smoke and
-later transcript/protein projection. This umbrella no longer tracks active implementation directly.
+historical plans with durable code/docs/tests. Remaining C4c operator/design backlog is checkpointed in
+`docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`, with the old C4c plan archived at
+`docs/plans/historical/2026-05-31-c4c-rsid-variant-label-plan.md`. This umbrella no longer tracks active
+implementation directly.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model

@@ -3,8 +3,9 @@
 Date: 2026-05-26
 
 Status: historical Pillar C rationale — C1/C2/C3/C4a/C4b and C4c-1 rsID input are implemented locally.
-Remaining active work is delegated to `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`: full
-dbSNP artifact build/operator smoke and later transcript/protein projection.
+Remaining C4c operator/design backlog is checkpointed in
+`docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`, with the old C4c plan archived at
+`docs/plans/historical/2026-05-31-c4c-rsid-variant-label-plan.md`.
 
 Related (builds on):
 - `docs/plans/historical/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
@@ -281,7 +282,8 @@ seqcol compatibility relations, including the C1 check-3 remedy) are merged loca
 The C4b implementation lives in `science/src/science_tool/commons/liftover.py`,
 `science/src/science_tool/commons/assembly_compatibility.py`, and
 `science/src/science_tool/validate/checks/identity_context.py`. C4c-1 rsID input is implemented
-locally in `~/d/science` and `~/d/science-commons` via
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; full dbSNP archive fetch/build, lockfile pinning,
-datapackage hash refresh, and resolver smoke against the real artifact remain operator-pending.
+locally in `~/d/science`; the old implementation plan is archived at
+`docs/plans/historical/2026-05-31-c4c-rsid-variant-label-plan.md`. Full dbSNP archive fetch/build,
+lockfile pinning, datapackage hash refresh, and resolver smoke against the real artifact remain
+operator-pending in `docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`.
 Transcript/protein projection inputs over pinned snapshots remain unplanned.

@@ -233,8 +233,29 @@ command + `llm-annot:<model>:paper-annotate-v1` source as statements — emitted
   backlink. Annotation `status` is untouched.
 - **Promote queue / idempotency:** active (`open`/`ack`) `proposition` annotations with no
   `sci:promotedTo` and no existing derived proposition. Re-running skips already-promoted rows.
-- **Out of scope (later slices):** question/hypothesis promotion (4b), factoring (4c),
-  cross-paper evidence (4d), embedding/paraphrase dedup, figurative promotion.
+- **Out of scope for 4a:** question/hypothesis promotion (4b), factoring (4c),
+  embedding/paraphrase dedup, figurative promotion.
+
+## Cross-paper proposition evidence (Phase 4d)
+
+Graph materialization derives literature evidence from active promoted
+`proposition` annotations. The derived nodes are virtual `sci:EvidenceLine`
+records, not files under `entities/evidence-lines/`, and are emitted before
+`bears_on` derivation so downstream closure sees the virtual `cito:supports`
+and `cito:disputes` edges.
+
+Only `annotation_type: proposition` records with active status and
+`promoted_to: proposition:<slug>` are candidates. `asserted` derives
+`cito:supports`, `negated` derives `cito:disputes`, `hypothesized` derives weak
+background support, and `open` is skipped. The derived line is literature
+evidence, has paper-keyed independence, and is traced to the owning
+`paper:<citekey>`.
+
+The scanner is strict for corrupt epistemic inputs. A proposition-typed
+annotation promoted to a non-proposition target, a stale proposition ref, an
+invalid stance, an unresolvable sidecar owner, or a paper/annotation provenance
+mismatch is a derivation fault. `science annotate cross-paper-evidence` reports
+those faults in read-only form for project triage.
 
 ## Question / hypothesis promotion (Phase 4b)
 

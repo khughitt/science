@@ -22,6 +22,26 @@ schema errors, broken references, invalid frontmatter, and convention problems.
 `science health` aggregates diagnostics across graph migration, references,
 aspects, evidence coverage, identity policy, and related hygiene.
 
+When a project uses prose epistemics, `science health` also reads
+`data/prose-health/prose-health.json`. It reports prose-health findings but does
+not rebuild the artifact implicitly. Regenerate that derived state with:
+
+```bash
+science annotate build-prose-health --write
+```
+
+Derived cross-paper literature evidence can be inspected without writing files:
+
+```bash
+science annotate cross-paper-evidence
+science annotate cross-paper-evidence --source proposition:<slug> --format json
+```
+
+The project-wide form reports every proposition that gains derived literature
+support or dispute, plus all derivation faults. The `--source` form reports the
+derived units for one proposition and computes the literature-only belief
+summary through the same belief reducer used for evidence summaries.
+
 Projects may mark a validation warning as reviewed in `science.yaml` when the
 warning is an intentional, documented residual risk rather than an unresolved
 defect. Accepted warnings are omitted from `science validate` output/counts and
@@ -47,6 +67,25 @@ the project has decided that the residual state is honest and useful to track.
 Freshness and `needs-review` are attention surfaces, not hard gates. They help
 you decide which entities deserve another look after upstream evidence,
 datasets, code, or propositions change.
+
+`science graph attention-rank` provides a deterministic review queue over the
+materialized graph. It uses the same attention scoring substrate as
+`attention-sample`, but sorts candidates by derived weight instead of sampling
+them. The open-question-debt component raises attention for epistemic entities
+connected to active, partially answered, or deferred questions through
+`skos:related` links or shared theme membership. This deliberately does not use
+`bears_on`, because unanswered scoping questions often sit outside the stronger
+dependency layer.
+
+```bash
+science graph attention-rank
+science graph attention-rank --kind proposition --limit 20
+```
+
+`science entity review` requires a review artifact through `--note`. A review
+should record what was inspected and what changed, not merely bump a timestamp.
+Programmatic callers can still use the lower-level review function without the
+CLI artifact guard when they are preserving existing metadata.
 
 ## Honest Warning States
 

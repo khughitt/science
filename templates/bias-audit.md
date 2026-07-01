@@ -94,6 +94,12 @@ MED severity + INFEASIBLE → acknowledge as limitation.
   positive results. Mark "not applicable" if the project doesn't involve
   literature review. -->
 
+### Agent Discovery Failure Traps
+
+- **Rating:** not detected / possible / likely / not applicable
+- **Evidence:** <!-- Check no external grounding, hard-question opt-out,
+  gene-set credulity, and tail-hiding aggregate metrics. -->
+
 ### Corpus Independence (Closure Check)
 
 - **Rating:** not detected / possible / likely / not applicable

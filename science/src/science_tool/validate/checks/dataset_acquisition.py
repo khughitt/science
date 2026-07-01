@@ -3,7 +3,7 @@
 Acquisition lifecycle lives on `status` (candidate = not yet acquired); the data
 pointer is `datapackage` OR `local_path` (the single-file escape hatch). Reads raw
 frontmatter like dataset_taxonomy, re-enforcing the rule with a friendly message.
-See docs/plans/2026-06-21-dataset-catalog-cli-design.md.
+See docs/user-guide/entities.md.
 """
 
 from __future__ import annotations

@@ -26,7 +26,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` with role `researc
 Read:
 
 1. `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md`
-2. `~/d/science/docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
+2. `~/d/science/docs/user-guide/benchmarking.md`
 3. `entities/datasets/`, if present
 4. `entities/questions/`, `entities/hypotheses/`, and `entities/propositions/`, if present
 

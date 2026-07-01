@@ -40,6 +40,28 @@ files were scattered under `doc/<type>/`. See
 `docs/user-guide/entities.md` for the entity model and source entity CLI
 contract.
 
+The v2-to-v3 migration path is still available for legacy projects through
+`science entities migrate`. A dry run plans moves, rewrites resolvable full-id
+references, and reports blockers without changing files. `--apply` performs the
+tracked moves, writes any synthesized frontmatter, runs the graph-audit-equivalent
+post-move check, and only then bumps `layout_version: 3`.
+
+Migration blockers are structural project-state problems, not every prose token.
+References in graph-audited fields block when they would be unresolved after the
+move. Leftover entity-looking tokens in prose bodies are reported as warnings, so
+examples, code snippets, wikilinks, cross-project mentions, and stale prose notes
+do not block a mechanical layout move. Files under a known legacy entity root
+that lack an explicit `id`, `type`, or `kind` are skipped with a warning instead
+of being silently treated as entities.
+
+Project-local markdown kinds declared in the active local profile participate in
+this migration. By default a local kind lives at `entities/<kind>/`, uses numeric
+filenames, defaults to `status: active`, and accepts an open status vocabulary.
+The profile may declare `home`, `strategy`, `default_status`, and `statuses` to
+override those defaults. Malformed local-kind declarations are skipped with
+warnings during migration and conformance checks, rather than aborting unrelated
+core-kind migration work.
+
 ## `science.yaml` And `pyproject.toml`
 
 `science.yaml` tells Science what kind of project this is and which knowledge

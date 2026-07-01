@@ -390,8 +390,8 @@ class Entity(BaseModel):
         if self.composition_rule in RESERVED_COMPOSITION_RULES:
             raise ValueError(
                 f"composition_rule {self.composition_rule.value!r} is reserved and not "
-                "implemented in v1 (see docs/plans/2026-06-11-bundle-belief-rollup-design.md "
-                "§4); use 'all_steps' or 'conjunctive'."
+                "implemented in v1 (see docs/user-guide/epistemic-model.md); "
+                "use 'all_steps' or 'conjunctive'."
             )
         return self
 

@@ -301,10 +301,10 @@ def load_project_sources(
     project_paths = resolve_paths(project_root)
     adapters: list[StorageAdapter] = [
         # The dataset/workflow/workflow-run/workflow-step family are now first-class
-        # entities/ kinds (home=entities/<kind>, strategy=id-local) — see
-        # docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md. They
-        # are discovered via the default entities/ root like every other owner kind;
+        # entities/ kinds (home=entities/<kind>, strategy=id-local). They are
+        # discovered via the default entities/ root like every other owner kind;
         # the legacy doc/ scan roots have been removed (owners no longer live there).
+        # See docs/user-guide/project-layout.md.
         MarkdownAdapter(
             scan_roots=["entities", "research/packages"],
             virtual_files=markdown_overrides,

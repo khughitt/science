@@ -74,7 +74,10 @@ Before executing any research command:
 Review load-bearing (epistemic) entities for drift between what they claim and what their
 evidence and operationalization actually support. Targets failure mode A
 (scope/operationalization drift) and the residue of B/C that static checks cannot
-adjudicate. See `docs/plans/2026-06-04-epistemic-drift-detection-design.md` and
+adjudicate. Current behavior and residual backlog are checkpointed in
+`docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`; the
+historical design is
+`docs/plans/historical/2026-06-04-epistemic-drift-detection-design.md`. See also
 `science-meta:question:15-claim-operationalization-drift`.
 
 Use the user input to scope the review to specific epistemic entities. If no scope is given,

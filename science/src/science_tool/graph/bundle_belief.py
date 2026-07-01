@@ -1,7 +1,7 @@
-"""Bundle belief roll-up (design doc 2026-06-11-bundle-belief-rollup-design.md).
+"""Bundle belief roll-up.
 
 A hypothesis/mechanism bundle's belief is derived from its member propositions
-under an explicit composition rule. v1 implements weakest-link only.
+under an explicit composition rule. See docs/user-guide/epistemic-model.md.
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def membership_role(knowledge, member: URIRef, frame: URIRef) -> MembershipRole:
 
 
 def core_members(knowledge, uri: URIRef) -> list[URIRef]:
-    """bundle_members filtered to CORE — the conjunction's membership set (spec §3.3).
+    """bundle_members filtered to CORE — the conjunction's membership set.
 
     Precedence: a member reached via forward sci:hasProposition is AUTHORITATIVELY
     core (a mechanism step is structurally core), regardless of any BundleMembership
@@ -188,7 +188,7 @@ def belief_for_entity(knowledge, provenance, uri, *, scalar_enabled: bool):
         # Defensive: the model layer already rejects these at parse; never silently fall back.
         raise NotImplementedError(
             f"composition_rule {authored_rule.value!r} is reserved and not implemented in v1 "
-            "(see docs/plans/2026-06-11-bundle-belief-rollup-design.md §4)."
+            "(see docs/user-guide/epistemic-model.md)."
         )
 
     kind = bundle_kind(knowledge, uri)

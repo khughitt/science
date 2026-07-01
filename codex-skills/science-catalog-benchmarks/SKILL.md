@@ -93,7 +93,7 @@ Follow `references/command-preamble.md` with role `research-assistant`.
 Read:
 
 1. `skills/data/SKILL.md`
-2. `~/d/science/docs/plans/2026-06-26-benchmark-grounded-model-assessment-design.md`
+2. `~/d/science/docs/user-guide/benchmarking.md`
 3. `entities/datasets/`, if present
 4. `entities/questions/`, `entities/hypotheses/`, and `entities/propositions/`, if present
 

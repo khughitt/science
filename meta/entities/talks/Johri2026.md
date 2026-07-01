@@ -72,9 +72,9 @@ A preprint is forthcoming.
 
 ## Relevance
 
-This talk is the grounding source for the data-driven discovery improvements umbrella
-(`~/d/science/docs/plans/2026-06-10-data-driven-discovery-improvements.md`, in the
-framework repo).
+This talk is the grounding source for the data-driven discovery improvements roadmap
+checkpoint (`~/d/science/docs/audits/plans-cleanup/2026-07-01-remaining-roadmap-checkpoint.md`,
+in the framework repo).
 It is an **unrefereed source** (a seminar on ongoing work): treat its specific claims as
 hints to verify, but its framing maps directly onto Science workstreams —
 

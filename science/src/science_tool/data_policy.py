@@ -3,7 +3,7 @@ PAYLOAD, or a FLAG (ambiguous — surfaced for an explicit human decision).
 
 This is the single place the COMMIT-vs-KEEP-IGNORED rule is expressed; the audit
 (and any future size-guard hook) consume `classify`. Pure and deterministic: no
-filesystem mutation, no git calls. See docs/plans/2026-06-28-data-audit-design.md.
+filesystem mutation, no git calls. See docs/conventions/data-boundary.md.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 
 Cross-checks each project file's (class × location × git-tracked) into violation
 quadrants and renders the stable `--json` contract. Read-only — the fixer lives in
-data_audit_fix.py. See docs/plans/2026-06-28-data-audit-design.md.
+data_audit_fix.py. See docs/conventions/data-boundary.md.
 """
 
 from __future__ import annotations

@@ -35,6 +35,10 @@ The queryable inquiry graph is derived state. Do not hand-edit
 `knowledge/graph.trig` to change an inquiry. Edit the source file, then run
 `science graph build`.
 
+`patch_type: inquiry` is the current source-first bridge for graph-backed
+inquiries. The compiled `sci:Inquiry` graph is a compatibility view over the
+patch-definition source path, not a second truth-owning inquiry store.
+
 ### Inquiry Patch Profiles
 
 The graph-backed inquiry path uses `patch-definition` because an inquiry is also
@@ -152,6 +156,59 @@ Evidence does not prove propositions outright. Evidence lines support or dispute
 propositions, and the belief machinery derives the current state from eligible
 evidence.
 
+Promoted paper statements can also contribute belief through derived literature
+evidence. During graph materialization, active paper-sidecar annotations that
+promote a `proposition` statement to an existing proposition are projected as
+virtual literature evidence lines before the `bears_on` layer is derived. The
+proposition remains the belief-bearing entity; the paper statement is only a
+derived support or dispute unit with provenance back to the paper. See
+`docs/user-guide/evidence-lines.md` for the exact stance, independence, and
+ceiling rules.
+
+### Relational Propositions
+
+A truth-apt graph edge is represented as a `proposition` with relational fields,
+not as a separate edge store linked to a proposition. The proposition is the
+belief-bearing unit and, when rendered as a graph edge, its canonical IRI is also
+the reified edge-node IRI. Belief, evidence, and rendering therefore address the
+same assertion.
+
+Relational propositions factor the assertion into orthogonal axes:
+
+| Field | Purpose |
+|---|---|
+| `subject` | Existing entity ref for the source endpoint. |
+| `predicate` | Sign-free relation kind such as `affects`, `regulates`, `associates_with`, `binds`, `is_proxy_for`, `subtype_of`, or `part_of`. |
+| `object` | Existing entity ref for the target endpoint. |
+| `polarity` | `positive`, `negative`, `unsigned`, or `not_applicable`; this is the sign carrier. |
+| `claim_layer` | What kind of claim is being made. |
+| `identification_strength` | Identification leverage: `none`, `structural`, `observational`, `longitudinal`, `interventional`, or `analogical`. |
+
+Predicates are deliberately sign-free. Sign-meaningful predicates require
+`positive`, `negative`, or `unsigned`; sign-less predicates require
+`not_applicable`. Multiple propositions may share a subject/object pair when
+they make different claims.
+
+### Proposition Edges And Plumbing
+
+A proposition-edge is truth-apt and belief-bearing, including a
+`claim_layer: structural_claim` assertion when the structure itself is under
+claim. Plumbing edges are different: containment, grouping, patch membership,
+and measurement-model wiring organize the graph but do not carry belief.
+
+Rendered causal edges use derived visual channels rather than authored
+`edge_status`. `derived_edge_status` is a lossy compatibility projection over
+canonical state:
+
+1. `eliminated` when a refutation cap has fired.
+2. `unknown` when there is no grounding evidence.
+3. `structural` for grounded `structural_claim` propositions.
+4. `supported` for `supported` or `well_supported` belief.
+5. `tentative` for the remaining grounded cases.
+
+`contested`, polarity, identification strength, claim layer, and scalar belief
+remain separate channels. Do not author `edge_status` as scientific truth.
+
 ## Belief Vocabulary
 
 | Term | Meaning |
@@ -166,6 +223,41 @@ evidence.
 | `uncertainty` | Remaining lack of warranted confidence. |
 
 Use these as readings of the record, not as manually assigned labels to chase.
+
+## Belief Policy
+
+Belief aggregation is controlled by an explicit, versioned policy. The current
+built-in policy is `DEFAULT_BELIEF_POLICY`, with `policy_id: core-default` and
+`policy_version: 1`. It gathers the ordinal evidence rank tables, the
+curation-step penalty, reduction vocabulary, magnitude thresholds, refutation-cap
+conditions, authored-assertion gates, and dataset-QA ceiling into one immutable
+object.
+
+The default policy preserves the core belief math: evidence lines are reduced by
+independence group and quality, clean support determines the ordinal magnitude,
+and decisive whole-claim refutations can cap stronger support to `fragile`.
+Callers may pass an explicit policy to the belief engine, but persisted belief
+records and bundle rollups must remain policy-comparable. Science refuses to
+roll up bundle members computed under mixed `(policy_id, policy_version)` pairs
+rather than silently combining results with different semantics.
+
+Policy identity is persisted with belief outputs. Belief snapshot rows include
+`policy_id` and `policy_version`, and snapshot de-duplication treats those fields
+as part of the identity of a reproducible row. Patch RDF summaries also stamp the
+default belief policy identity alongside the derived belief magnitude. Older
+snapshot rows that predate explicit policies are read as `core-default` version
+`1`, which is the policy that produced them.
+
+The belief policy is separate from the optional log-odds scalar projection. The
+scalar has its own configuration version and remains a derived projection over
+the ordinal result; policy version and scalar config version should not be
+treated as interchangeable.
+
+The current policy does not add a source-tier ladder or multi-modal
+corroboration bonus. Literature hints, analyzed empirical data, multiple
+datasets, and cross-modality evidence can be represented with evidence lines
+and dataset usage, but changing their relative belief impact requires a new
+explicit policy version.
 
 ## Verdict Tokens And Atomic Decomposition
 
@@ -276,9 +368,71 @@ A hypothesis is an organizing conjecture. It may contain several propositions
 whose evidence differs. A hypothesis should not be treated as supported merely
 because it was written down or because one member proposition looks promising.
 
-For mechanisms and proposition bundles, Science uses weakest-link rollups where
-appropriate: the bundle is only as strong as its least-supported required
-member. Refutation propagates as a cap, not as a separate positive belief state.
+Hypotheses and mechanisms are proposition bundles. Their `composition_rule`
+declares how member propositions compose:
+
+| Rule | Use |
+|---|---|
+| `conjunctive` | Hypothesis default. Core subclaims jointly assert the conjecture. |
+| `all_steps` | Mechanism default. Every core step must hold. |
+| `evidence_union` | Reserved name; not implemented. |
+| `faceted_support` | Reserved name; not implemented. |
+
+The implemented rules currently share weakest-link behavior: the bundle is only
+as strong as its least-supported core member. Ties are deterministic, and the
+reported bottleneck members explain which core propositions set the bundle's
+belief. Refutation propagates as a cap, not as a separate positive belief
+state. Contested and unresolved members are reported separately.
+
+Bundle belief is about truth of the bundle. Linked-evidence coverage and
+neighborhood coverage are separate questions; a bundle can be well connected
+without all core subclaims being well supported.
+
+If a hypothesis has no resolved member propositions and no authored
+`composition_rule`, Science falls back to direct evidence on the hypothesis
+itself. An authored bundle rule, a mechanism with zero members, or a bundle
+whose only members are non-core fails loudly because there is no conjunction to
+roll up.
+
+### Bundle Membership Roles
+
+Bundle membership roles describe how one proposition participates in one
+hypothesis or mechanism frame. They are frame-relative plumbing for bundle
+belief and coverage; they are not proposition roles, evidence roles, or causal
+roles such as mediator, confounder, or collider.
+
+The vocabulary is closed:
+
+| Role | Meaning |
+|---|---|
+| `core` | Enters the bundle-belief conjunction. Bare `discusses:` entries mean `core`. |
+| `rival` | A competing proposition inside the bundle neighborhood. Excluded from bundle belief. |
+| `background` | Context for the bundle neighborhood. Excluded from bundle belief. |
+
+Proposition frontmatter can declare membership with `discusses:`:
+
+```yaml
+discusses:
+  - hypothesis:h1
+  - frame: hypothesis:h1
+    role: rival
+```
+
+`sci:hasProposition` mechanism steps are always core. If a proposition is both a
+mechanism step and a `discusses:` member of the same frame, the mechanism step
+wins for bundle belief.
+
+`knowledge/sources/local/relations.yaml` can also author membership with
+`predicate: cito:discusses` and `role: core|rival|background`. A `role:` is
+valid only when the subject is a proposition and the object is a live hypothesis
+or mechanism. Other `cito:discusses` links, such as `paper -> question`,
+`paper -> hypothesis`, or `proposition -> topic`, remain plain structural links
+and do not create membership roles.
+
+For graph-level experiments, `science graph add proposition --bridge-between`
+accepts `--bridge-role core|rival|background`. Direct graph additions are still
+ephemeral; use proposition source files or `relations.yaml` for durable project
+knowledge.
 
 ## Optional Layered-Claim Metadata
 

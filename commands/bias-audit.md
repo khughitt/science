@@ -99,6 +99,12 @@ This makes mitigation recommendations actionable — HIGH severity + EASY to fix
 - Are null-result papers included in the review?
 - For in-progress experimental projects (not systematic literature review), focus on whether background literature searches for context/methods may be biased. Mark "not applicable" if no systematic literature review was conducted.
 
+**Agent discovery failure traps:**
+- No external grounding: did the analysis rely only on internal knowledge when literature, web, benchmark, or dataset checks were feasible?
+- Hard-question opt-out: did the agent avoid a difficult but important analysis step instead of decomposing it or recording a blocker?
+- Gene-set credulity: did an off-the-shelf gene set, pathway label, or familiar program become treated as evidence without independent grounding?
+- Tail-hiding metrics: did aggregate performance hide rare subtype, subgroup, or failure-tail behavior that a macro, per-class, or stratified metric would expose?
+
 **Corpus independence (closure check):**
 
 When the audit covers multiple artifacts at once — e.g. a hypothesis, an analysis, and an evaluation set — verify that the *audit corpus* is not a subset of the *audited corpus*. If the evidence under review derives its standard from one of the artifacts being audited, the audit can only ratify, never falsify.

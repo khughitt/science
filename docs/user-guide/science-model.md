@@ -45,6 +45,13 @@ Entities are grouped into broad classes:
 - **Reference:** concepts, variables, outcomes, topics, articles, and other
   referenced objects.
 
+The built-in core profile is the durable descriptor source for core entity-kind
+facts. Kind descriptors declare the category, entity class, optional markdown
+home and filename strategy, default and allowed statuses, shortform aliases, and
+template readiness. Tooling derives its kind maps from those descriptors so the
+model registry, graph loader, CLI paths, and validation checks do not maintain
+separate source-of-truth tables.
+
 ## Epistemic Neighborhoods
 
 Science's working model is a federated patchwork of small epistemic

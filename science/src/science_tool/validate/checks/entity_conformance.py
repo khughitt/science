@@ -211,7 +211,7 @@ def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
     OWNER) and never in the prose-only doc/ tree (where the OverlayAdapter, which
     reads only overlays/, can no longer see it). Both placements are flagged —
     WARN during the v2->v3 transition, ERROR at layout_version >= 3. See
-    docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md."""
+    docs/user-guide/project-layout.md."""
     for root_name in ("entities", "doc"):
         root = ctx.project_root / root_name
         if not root.is_dir():
