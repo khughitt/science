@@ -98,8 +98,33 @@ class ReconciliationApplyReport:
     written_paths: tuple[str, ...] = ()
 
 
-def apply_report_to_json(report: ReconciliationApplyReport) -> dict[str, Any]:
+def _report_path(path: str, *, project_root: Path | None) -> str:
+    parsed = Path(path)
+    if project_root is None or not parsed.is_absolute():
+        return parsed.as_posix()
+    try:
+        return parsed.resolve().relative_to(project_root).as_posix()
+    except ValueError:
+        return parsed.as_posix()
+
+
+def _report_paths(
+    paths: tuple[str, ...],
+    *,
+    project_root: Path | None,
+) -> list[str]:
+    return [_report_path(path, project_root=project_root) for path in paths]
+
+
+def apply_report_to_json(
+    report: ReconciliationApplyReport,
+    *,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    if project_root is not None:
+        project_root = project_root.resolve()
     return {
+        "schema_version": 1,
         "status": report.status,
         "summary": {
             "selected_actions": report.selected_actions,
@@ -108,9 +133,9 @@ def apply_report_to_json(report: ReconciliationApplyReport) -> dict[str, Any]:
             "diagnostics": len(report.diagnostics),
             "written_paths": len(report.written_paths),
         },
-        "changed_paths": list(report.changed_paths),
-        "noop_paths": list(report.noop_paths),
-        "written_paths": list(report.written_paths),
+        "changed_paths": _report_paths(report.changed_paths, project_root=project_root),
+        "noop_paths": _report_paths(report.noop_paths, project_root=project_root),
+        "written_paths": _report_paths(report.written_paths, project_root=project_root),
         "diagnostics": [dict(diagnostic) for diagnostic in report.diagnostics],
         "actions": [
             {
@@ -120,8 +145,14 @@ def apply_report_to_json(report: ReconciliationApplyReport) -> dict[str, Any]:
                 "members": list(action.members),
                 "duplicate_propositions": list(action.duplicate_propositions),
                 "status": action.status,
-                "changed_paths": list(action.changed_paths),
-                "noop_paths": list(action.noop_paths),
+                "changed_paths": _report_paths(
+                    action.changed_paths,
+                    project_root=project_root,
+                ),
+                "noop_paths": _report_paths(
+                    action.noop_paths,
+                    project_root=project_root,
+                ),
                 "diagnostics": [
                     dict(diagnostic) for diagnostic in action.diagnostics
                 ],

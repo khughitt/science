@@ -491,14 +491,67 @@ def test_apply_proposition_reconciliation_cli_applies_ready_canonicalization(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
     assert payload["status"] == "ok"
     assert payload["summary"]["selected_actions"] == 1
     assert len(payload["changed_paths"]) > 0
+    assert all(not path.startswith(str(tmp_path)) for path in payload["changed_paths"])
+    assert all(not path.startswith(str(tmp_path)) for path in payload["written_paths"])
+    assert any(
+        path.startswith("entities/propositions/") for path in payload["changed_paths"]
+    )
+    assert any(
+        path.startswith("entities/propositions/") for path in payload["written_paths"]
+    )
     duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
         encoding="utf-8"
     )
     assert "status: superseded" in duplicate_text
     assert "superseded_by: proposition:a" in duplicate_text
+
+
+def test_apply_proposition_reconciliation_cli_table_uses_relative_paths(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    generated = CliRunner().invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    candidate = json.loads(generated.output)["same_claim_candidates"][0]
+    review_path = tmp_path / "review.json"
+    review_path.write_text(
+        json.dumps(_review_for_candidate(candidate)),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "apply-proposition-reconciliation",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(review_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert str(tmp_path) not in result.output
+    assert "changed paths:" in result.output
+    assert "  entities/propositions/" in result.output
 
 
 def test_apply_proposition_reconciliation_cli_rejects_empty_review(tmp_path: Path):

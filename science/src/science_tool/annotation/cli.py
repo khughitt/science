@@ -745,7 +745,7 @@ def apply_proposition_reconciliation_cmd(
     ) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    payload = apply_report_to_json(apply_report)
+    payload = apply_report_to_json(apply_report, project_root=project_root)
     if fmt == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
