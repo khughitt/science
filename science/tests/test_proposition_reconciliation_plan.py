@@ -293,6 +293,64 @@ def test_same_claim_review_maps_to_canonicalization_action():
     assert action.writes == ()
 
 
+def test_same_claim_review_with_padded_lane_maps_to_canonicalization_action():
+    report = _same_claim_report()
+    review = _same_claim_review(report)
+    review["judgments"][0]["lane"] = "  same_claim  "
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=review,
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    assert plan.actions[0].kind == "canonicalize_propositions"
+
+
+def test_same_claim_needs_human_maps_to_blocked_human_review_action():
+    report = _same_claim_report()
+    candidate = report.same_claim_candidates[0]
+    members = list(candidate.propositions)
+    rationale = "The candidate needs reviewer judgment before planning writes."
+    review = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id("same_claim", "needs_human", members),
+                "lane": "same_claim",
+                "decision": "needs_human",
+                "members": members,
+                "rationale": rationale,
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=review,
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "needs_human_review"
+    assert action.status == "blocked"
+    assert action.decision == "needs_human"
+    assert action.blockers == ({"reason": "needs_human", "detail": rationale},)
+    assert action.writes == ()
+
+
 def test_review_incomplete_blocks_same_claim_canonicalization():
     snapshots = {
         "proposition:a": _same_claim_snapshot(

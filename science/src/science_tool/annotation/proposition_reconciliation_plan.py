@@ -243,6 +243,36 @@ def _action_from_same_claim(
             writes=(),
         )
 
+    if decision == "needs_human":
+        action_kind = "needs_human_review"
+        return ReconciliationAction(
+            action_id=reconciliation_action_id(
+                action_kind,
+                judgment_id,
+                candidate.candidate_id,
+                members,
+            ),
+            kind=action_kind,
+            status="blocked",
+            decision=decision,
+            candidate_id=candidate.candidate_id,
+            judgment_id=judgment_id,
+            confidence=str(judgment["confidence"]),
+            rationale=rationale,
+            source_review=source_path,
+            review_source=resolved.review_source,
+            members=members,
+            inputs={"members": members, "flags": tuple(candidate.flags)},
+            suggested_operations=(
+                {
+                    "kind": "request_human_review",
+                    "detail": "Route this same-claim judgment to a human reviewer.",
+                },
+            ),
+            blockers=({"reason": decision, "detail": rationale},),
+            writes=(),
+        )
+
     action_kind = "record_reconciliation_decision"
     return ReconciliationAction(
         action_id=reconciliation_action_id(
@@ -332,7 +362,7 @@ def _action_from_resolved(
     resolved: ResolvedReviewJudgment,
     report: ReconciliationReport,
 ) -> ReconciliationAction:
-    lane = resolved.judgment["lane"]
+    lane = str(resolved.judgment["lane"]).strip()
     if lane == LANE_FACTORIZATION:
         return _action_from_factorization(source_path, resolved)
     if lane == LANE_SAME_CLAIM:
