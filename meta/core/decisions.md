@@ -251,3 +251,45 @@ meta is where we *ask and research* questions about science; realized machinery 
 
 **Carry-forward (not blocking):**
 - `science_tool.model` graduating does **not** bless the provisional parts as final — the opinion view (default-next, RFC §12.3) and the correction thresholds (pending pan-disease `t070`) carry their status in module docstrings.
+
+## D-008: Adaptive topology is manual-first; `bio/meta` is substrate, not health lens
+
+- **Date:** 2026-07-01
+- **Status:** active
+- **Resolves:** Durable cleanup of the adaptive-topology planning thread. Tasks
+  `t054`, `t056`, and `t058`.
+- **Decision:** Adaptive project topology is a manual-first decision-support
+  workflow owned by `~/d/science/meta`, not an automatic project-creation or
+  archival mechanism. V1 recommendations rank candidate topology changes from
+  artifact-derived signals, then require human review for uncertainty,
+  novelty, actionability, coherence, false-positive risk, and provenance cost.
+  The `~/d/bio/meta` candidate is defined as a biological substrate-model
+  project: multiscale systems, state spaces, time and space, reachability, path
+  dependence, control regimes, perturbation response, observability, sampling,
+  and resolution. `~/d/health/meta` remains the applied health lens:
+  homeostasis, disease, intervention, health-state axes, family coordination,
+  and decisions about health child projects.
+
+**Why:**
+The same cross-project material can look like biological substrate, health
+world-model, or commons resource depending on context. Automatic topology
+changes would amplify that ambiguity. The durable operating model in
+`core/adaptive-project-topology.md` keeps the process inspectable: first record
+known topology harms, then run dry-run recommendations, then compare each
+candidate against the harms and provenance costs. The `bio/meta` brief in
+`core/bio-meta-scaffold-brief.md` provides a crisp candidate boundary without
+scaffolding the project prematurely.
+
+**Implications:**
+- Do not scaffold `~/d/bio/meta` until `t057` shows that a separate substrate
+  project reduces a concrete topology harm.
+- Do not move, delete, demote, merge, or archive projects from the topology
+  workflow without a reviewed migration note.
+- Demotion and merge recommendations must preserve stable IDs, graph nodes,
+  decisions, task history, paper-summary provenance, and parent/peer links.
+
+**Revisit if:**
+- The `t057` pilot finds that the `bio/meta` boundary duplicates
+  `~/d/health/meta` or fails to reduce known routing/duplication costs.
+- Dry-run recommendations are mostly obvious from ordinary task review, which
+  would weaken the case for a dedicated topology workflow.

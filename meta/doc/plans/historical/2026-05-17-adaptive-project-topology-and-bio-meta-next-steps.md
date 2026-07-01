@@ -1,6 +1,8 @@
 # Adaptive Project Topology And Bio Meta Next Steps
 
-> **Status:** Draft design spec for `[t053]` through `[t058]`.
+> **Status:** Historical design note. Active content was extracted on
+> 2026-07-01 into `meta/core/adaptive-project-topology.md` and
+> `meta/core/bio-meta-scaffold-brief.md`.
 > This is a Science/meta design note.
 > It intentionally separates the research-organization model from the proposed biological model in `~/d/bio/meta`.
 

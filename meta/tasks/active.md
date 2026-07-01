@@ -562,32 +562,18 @@ Deferred trajectory item from project-peers Decision 13
 
 ## [t053] Adaptive project topology task group
 - priority: P1
-- status: proposed
+- status: active
 - aspects: [software-development, hypothesis-testing]
+- related: [question:0014-adaptive-project-topology, hypothesis:0006-adaptive-project-topology-improves-research-fit, task:t057]
 - group: adaptive-project-topology
 - created: 2026-05-17
 
-Coordinate the meta-research work on evidence-responsive project topology: promotion of dense/high-uncertainty themes into projects, demotion or archival of stale branches, cross-project linking, and human approval gates. This is a Science/meta idea, distinct from the biological model proposed for ~/d/bio/meta.
+Coordinate the meta-research work on evidence-responsive project topology: promotion of dense/high-uncertainty themes into projects, demotion or archival of stale branches, cross-project linking, and human approval gates. This is a Science/meta idea, distinct from the biological model proposed for `~/d/bio/meta`.
 
-## [t054] Define adaptive topology signal metrics
-- priority: P2
-- status: proposed
-- aspects: [software-development, hypothesis-testing]
-- related: [task:t053]
-- group: adaptive-project-topology
-- created: 2026-05-17
-
-Define a v1 signal rubric for project/theme promotion and demotion, split into computable signals from existing artifacts and judgment-required prompts for human review. V1 should score only artifact-derived signals such as graph edges, task counts, commit recency, paper links, unresolved refs, and stale inputs; uncertainty, novelty, coherence, and false-positive risk should remain reviewer prompts until the pilot shows which can be operationalized.
-
-## [t056] Design topology-change recommendation workflow
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- related: [task:t053]
-- group: adaptive-project-topology
-- created: 2026-05-17
-
-Design a manual-first workflow that recommends promote, split, merge, demote, archive, create commons resource, or create synthesis task actions. Include reviewer/cadence, dry-run output, required evidence, human approval gates, audit logs, and a provenance contract for stable IDs, archived graph nodes, decisions, and task history.
+Durable operating model: `core/adaptive-project-topology.md`.
+The `bio/meta` candidate brief is `core/bio-meta-scaffold-brief.md`.
+Completed setup subtasks: `t054`, `t055`, `t056`, and `t058`.
+Remaining active work: run the `t057` pilot before scaffolding or applying topology changes.
 
 ## [t057] Pilot topology audit across Science, health, and cancer projects
 - priority: P2
@@ -597,17 +583,9 @@ Design a manual-first workflow that recommends promote, split, merge, demote, ar
 - group: adaptive-project-topology
 - created: 2026-05-17
 
-Write a baseline-of-harm note for current topology pain points, then apply the initial topology audit to Science, health-meta, cycles, cancer-evolution, pre-cancer, and pan-disease artifacts. Use the pilot to estimate false positives, identify missing signals, and decide whether ~/d/bio/meta is a clean manually promoted project candidate.
+Write a baseline-of-harm note for current topology pain points, then apply the initial topology audit to Science, health-meta, cycles, cancer-evolution, pre-cancer, and pan-disease artifacts. Use the pilot to estimate false positives, identify missing signals, and decide whether `~/d/bio/meta` is a clean manually promoted project candidate.
 
-## [t058] Prepare bio/meta scaffold brief as a topology case study
-- priority: P1
-- status: proposed
-- aspects: [hypothesis-testing]
-- related: [task:t053]
-- group: bio-meta-scaffold
-- created: 2026-05-17
-
-Write a concise project brief for ~/d/bio/meta as the first manually promoted biological meta-model project. The brief must explicitly settle the health/meta vs bio/meta boundary: bio/meta as substrate model for multiscale dynamics, observability, reachability, and time/space; health/meta as applied health lens for homeostasis, disease, intervention, and family coordination.
+Start from `core/adaptive-project-topology.md` and `core/bio-meta-scaffold-brief.md`; do not scaffold `~/d/bio/meta` until this pilot confirms that a separate biological substrate project reduces a concrete topology harm.
 
 ## [t059] Reconcile theme_kind enum sources across template, schema, and active profiles
 - priority: P2

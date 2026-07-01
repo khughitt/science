@@ -28,5 +28,6 @@ Moved to `meta/doc/plans/historical/`:
 - `2026-05-06-t034-mr-graph-model-validator-findings.md`
 - `2026-05-06-t034-mr-graph-model-validator-prototype.py`
 
-Remaining active meta plan threads after this checkpoint should be the t022
-contract reconciliation and adaptive topology follow-up.
+Remaining active meta plan threads after this checkpoint were the t022 contract
+reconciliation and adaptive topology follow-up. Both were later extracted into
+durable docs and moved to historical on 2026-07-01.
