@@ -106,8 +106,8 @@ behavior.
   `--project` use, and checks its help text, so new project-root selectors
   prefer `--project-root` and existing `--project` flags say what kind of
   project value they accept.
-- The same guard now requires `--project-root` aliases on older filesystem-root
-  `entities` commands once they are touched.
+- The same guard now requires `--project-root` aliases on touched older
+  filesystem-root commands.
 - `science/tests/test_cli_surface_contract.py` also classifies every current
   `--json`-only command so new multi-format commands prefer `--format`.
 

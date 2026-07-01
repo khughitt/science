@@ -379,7 +379,7 @@ def data_group() -> None:
 
 
 @data_group.command("audit")
-@click.option("--project", "project_path", type=click.Path(path_type=Path),
+@click.option("--project-root", "--project", "project_path", type=click.Path(path_type=Path),
               default=None, envvar="SCIENCE_PROJECT_ROOT",
               help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
 @click.option("--fix", is_flag=True, default=False,

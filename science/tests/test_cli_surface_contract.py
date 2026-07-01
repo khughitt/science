@@ -94,6 +94,7 @@ _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
 }
 
 _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
+    "data audit",
     "entities audit-identifiers",
     "entities inventory",
     "entities register-kind",
