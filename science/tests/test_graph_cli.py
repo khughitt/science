@@ -1102,7 +1102,7 @@ def test_doi_lookup_supports_json_format() -> None:
     runner = CliRunner()
 
     with patch(
-        "science_tool.cli.lookup_doi_metadata",
+        "science_tool.doi_cli.lookup_doi_metadata",
         return_value={
             "doi": "10.1038/s41586-023-06957-x",
             "title": "Example Paper",

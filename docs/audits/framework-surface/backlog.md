@@ -82,8 +82,8 @@ recommended action.
 ### B5. Extract One Root CLI Family
 
 **Status:** Started with `telemetry`, `feedback`, `labnote`, `search`, `data`,
-`distill`, and `book-split`: these command surfaces now live in focused modules
-and are registered from the root CLI.
+`distill`, `book-split`, and `doi`: these command surfaces now live in focused
+modules and are registered from the root CLI.
 
 **Goal:** Reduce `science/src/science_tool/cli.py` context load without changing
 behavior.

@@ -25,7 +25,7 @@ from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
 from science_tool.datasets.validate import validate_path
-from science_tool.doi import lookup_doi_metadata
+from science_tool.doi_cli import doi_group
 from science_tool.distill_cli import distill_group
 from science_tool.entities import (
     EntityCommandError,
@@ -349,6 +349,7 @@ main.add_command(search_command)
 main.add_command(data_group)
 main.add_command(distill_group)
 main.add_command(book_split_command)
+main.add_command(doi_group)
 
 
 @main.group("entities")
@@ -3802,27 +3803,6 @@ def _human_size(size_bytes: int) -> str:
             return f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} TB"
-
-
-@main.group()
-def doi() -> None:
-    """DOI metadata commands."""
-
-
-@doi.command("lookup")
-@click.argument("doi")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def doi_lookup(doi: str, output_format: str) -> None:
-    """Lookup DOI metadata via Crossref."""
-
-    metadata = lookup_doi_metadata(doi)
-    rows = [{"field": key, "value": str(value)} for key, value in metadata.items()]
-    emit_query_rows(
-        output_format=output_format,
-        title="DOI Lookup",
-        columns=[("field", "Field"), ("value", "Value")],
-        rows=rows,
-    )
 
 
 DEFAULT_TASKS_DIR = Path("tasks")

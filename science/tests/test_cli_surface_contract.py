@@ -221,3 +221,9 @@ def test_extracted_book_split_command_is_registered_from_split_module() -> None:
     book_split_cli = importlib.import_module("science_tool.book_split_cli")
 
     assert science_cli.commands["book-split"] is book_split_cli.book_split_command
+
+
+def test_extracted_doi_group_is_registered_from_split_module() -> None:
+    doi_cli = importlib.import_module("science_tool.doi_cli")
+
+    assert science_cli.commands["doi"] is doi_cli.doi_group
