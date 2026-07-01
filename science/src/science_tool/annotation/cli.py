@@ -496,6 +496,122 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
             )
 
 
+@annotate_group.command("reconcile-propositions")
+@click.option("--all", "all_scope", is_flag=True, default=False)
+@click.option("--proposition", "proposition_ref", default=None)
+@click.option(
+    "--source",
+    "source_md",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(("table", "json", "scaffold")),
+    default="table",
+)
+def reconcile_propositions_cmd(
+    all_scope: bool,
+    proposition_ref: str | None,
+    source_md: Path | None,
+    root: Path | None,
+    fmt: str,
+) -> None:
+    """Generate deterministic proposition reconciliation candidates."""
+    from science_tool.annotation.proposition_reconciliation import (
+        build_reconciliation_report,
+        report_to_json,
+    )
+
+    selected = sum(
+        1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item
+    )
+    if selected != 1:
+        raise click.ClickException("choose exactly one scope: --all, --proposition, or --source")
+    if proposition_ref is not None and not proposition_ref.startswith("proposition:"):
+        raise click.ClickException("--proposition must use proposition:<slug>")
+
+    project_root = (root or Path.cwd()).resolve()
+    source_sidecar = None
+    if source_md is not None:
+        source_path = source_md if source_md.is_absolute() else project_root / source_md
+        source_sidecar = str(sidecar_for_markdown(source_path))
+
+    report = build_reconciliation_report(
+        project_root,
+        proposition_ref=proposition_ref,
+        source_sidecar=source_sidecar,
+    )
+    payload = report_to_json(report)
+
+    if fmt in {"json", "scaffold"}:
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition reconciliation: "
+        f"same_claim={summary['same_claim_candidates']} "
+        f"factorization={summary['factorization_disagreements']} "
+        f"faults={summary['faults']}"
+    )
+    for item in payload["same_claim_candidates"]:
+        click.echo(
+            f"same_claim {item['priority']:6s} {','.join(item['propositions'])} "
+            f"flags={','.join(item['flags']) or '-'}"
+        )
+    for item in payload["factorization_disagreements"]:
+        click.echo(
+            f"factorization {item['priority']:6s} {item['proposition']} "
+            f"action={item['recommended_action']}"
+        )
+    if payload["faults"]:
+        click.echo(f"FAULTS ({len(payload['faults'])}):")
+        for fault in payload["faults"]:
+            click.echo(f"  {fault['reason']}: {fault['detail']}")
+
+
+@annotate_group.command("validate-proposition-reconciliation")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def validate_proposition_reconciliation_cmd(
+    input_path: Path, root: Path | None, fmt: str
+) -> None:
+    """Validate an agent-reviewed proposition reconciliation artifact."""
+    from science_tool.annotation.proposition_reconciliation import (
+        ReconciliationValidationError,
+        build_reconciliation_report,
+        validate_review_doc,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        doc = json.loads(input_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"--input is not valid JSON: {exc}") from exc
+    report = build_reconciliation_report(project_root)
+    try:
+        payload = validate_review_doc(doc, report)
+    except ReconciliationValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    click.echo(
+        f"proposition reconciliation review: {payload['status']} "
+        f"judgments={payload['judgments']} incomplete={len(payload['review_incomplete'])}"
+    )
+
+
 @annotate_group.command("build-prose-health")
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option(
