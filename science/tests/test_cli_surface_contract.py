@@ -197,3 +197,9 @@ def test_extracted_labnote_group_is_registered_from_split_module() -> None:
     labnote_cli = importlib.import_module("science_tool.labnote_cli")
 
     assert science_cli.commands["labnote"] is labnote_cli.labnote_group
+
+
+def test_extracted_search_command_is_registered_from_split_module() -> None:
+    search_cli = importlib.import_module("science_tool.search_cli")
+
+    assert science_cli.commands["search"] is search_cli.search_command
