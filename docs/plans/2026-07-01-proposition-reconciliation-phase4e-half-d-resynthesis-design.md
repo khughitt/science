@@ -54,8 +54,8 @@ Out of scope:
 - changing belief semantics;
 - deleting proposition files;
 - moving proposition files into archive storage;
-- materializing the graph as an implicit side effect;
-- authoring explicit `sci:supersedes` relations.
+- running graph materialization as an implicit side effect;
+- authoring explicit relation records beyond proposition frontmatter lineage fields.
 
 ## 3. Design Choice
 
@@ -83,7 +83,7 @@ Add three flat `annotate` commands.
 ```text
 science annotate scaffold-proposition-resynthesis \
   --input results/proposition-reconciliation/review.json \
-  --action reconcile-action:... \
+  [--action reconcile-action:...] \
   [--root .] \
   [--output results/proposition-reconciliation/resynthesis-draft.json] \
   [--format table|json]
@@ -91,8 +91,11 @@ science annotate scaffold-proposition-resynthesis \
 
 The scaffold command is read-only except for writing the optional output JSON. It
 rebuilds the current reconciliation report and Half B action plan from the review
-input, requires exactly one selected action, and requires that action to be ready and
-`kind == "resynthesize_proposition"`.
+input. If `--action` is provided, that action must exist, be ready, and have
+`kind == "resynthesize_proposition"`. If `--action` is omitted, the command may
+auto-select only when the rebuilt plan contains exactly one ready
+`resynthesize_proposition` action; otherwise it fails and asks the caller to pass
+`--action`.
 
 ```text
 science annotate validate-proposition-resynthesis \
@@ -188,7 +191,7 @@ driven only by:
 - `body`: reviewed markdown body content below the heading;
 - `frontmatter`: additional proposition frontmatter fields.
 
-The renderer owns canonical frontmatter ordering and dates. It may derive or override:
+The renderer owns canonical frontmatter ordering and dates. It derives:
 
 - `id`;
 - `type`;
@@ -196,12 +199,17 @@ The renderer owns canonical frontmatter ordering and dates. It may derive or ove
 - `status`;
 - `created`;
 - `updated`;
-- `source_refs`.
+- assignment-derived `source_refs`.
+
+Draft-provided `source_refs` are additive reviewed provenance. The planner unions
+them with assignment-derived paper and annotation refs, preserving deterministic
+ordering; it does not let draft `source_refs` replace derived assignment refs.
 
 Draft frontmatter may include proposition model fields such as `subject`, `predicate`,
 `object`, `polarity`, `claim_layer`, `identification_strength`, `related`, and
-`ontology_terms`. Unknown frontmatter keys should fail validation rather than being
-silently preserved.
+`ontology_terms`. Unknown frontmatter keys must fail a Half D validator allowlist.
+The project frontmatter loader drops unknown keys before model construction, so this
+cannot rely on `PropositionEntity` model loading alone.
 
 `annotation_assignments` is the authoritative annotation rewrite list. Each assignment
 names:
@@ -230,13 +238,16 @@ Boundary checks:
 - every assignment annotation is in the action's input annotation set;
 - every input annotation appears at most once in assignments;
 - every assignment `from` equals the draft's original proposition;
-- every live sidecar assignment currently points to `from`, unless it already points
-  to `to` and all other planned writes are no-ops;
+- every live sidecar assignment currently points to either `from` or its requested
+  `to`; `from` plans a rewrite, `to` is a no-op, and any third target is drift;
 - every assignment `to` is either a draft new proposition id or, for `split_partial`,
   the original proposition id;
 - `replace` assigns every action input annotation away from the original;
 - `split_partial` assigns at least one annotation to a new proposition;
-- every new proposition id is valid and does not already exist;
+- every new proposition id is valid;
+- a new proposition file path must not already exist, unless the existing file already
+  matches the draft under the replacement date-preservation rule and is therefore an
+  idempotent no-op;
 - new proposition ids are unique;
 - every new proposition has at least one assigned annotation or explicit source ref;
 - rendered new proposition files load through the existing entity/proposition model
@@ -247,6 +258,12 @@ The validator should derive assignment source refs for reporting rather than req
 draft authors to duplicate them. Draft-provided `source_refs` are allowed as additional
 reviewed provenance, but assigned annotation and paper refs are always added by the
 planner so the draft cannot drift from sidecar reality.
+
+Half D must also validate draft frontmatter keys directly against an explicit
+allowlist. Existing entity loading validates recognized values, but it does not reject
+unknown raw markdown keys. `superseded_by` and `resynthesized_into` are raw
+frontmatter lineage fields, not typed `PropositionEntity` fields; Half D owns their
+write-time and postflight checks.
 
 ## 8. Apply Semantics
 
@@ -266,7 +283,11 @@ For each replacement proposition:
 - derive and append assigned `paper:` and `annotation:` source refs;
 - preserve explicit reviewed related/source refs where valid;
 - set `status: active`;
-- set `created` and `updated` to the apply date.
+- when creating a new file, set `created` and `updated` to the apply date;
+- when the file already exists for an idempotent or resumed run, preserve existing
+  `created` and `updated` while comparing the non-date rendered content to the draft.
+  A date-only difference is not drift; body/frontmatter drift outside the preserved
+  date fields is a hard error.
 
 For each moved annotation assignment:
 
@@ -277,33 +298,42 @@ For each moved annotation assignment:
 
 For the original proposition:
 
-- `replace`: mark `status: superseded`, set `superseded_by` to the sorted replacement
+- `replace`: mark `status: superseded`, set `superseded_by` to the replacement
   proposition id when there is exactly one replacement, preserve the body, and update
   `updated`;
 - `replace` with multiple replacements: mark `status: superseded`, set
   `resynthesized_into` to the sorted replacement proposition ids, leave
   `superseded_by` unset to preserve the existing scalar `superseded_by` convention,
   preserve the body, and update `updated`;
-- `split_partial`: keep `status: active`; only update source refs if the planner
-  needs to add explicitly retained provenance.
+- `split_partial`: keep `status: active` and leave the original proposition
+  `source_refs` unchanged. The original already owns retained annotations; moved
+  annotations gain ownership on replacement proposition files.
 
-Half D does not add explicit `sci:supersedes` graph relations. The durable supersession
-record is frontmatter on the original proposition. `superseded_by` remains the
-existing single-successor field used by Half C canonicalization; `resynthesized_into`
-is the Half D multi-successor field for factorized replacement.
+Half D does not add explicit relation records. The durable supersession record is
+frontmatter on the original proposition. `superseded_by` remains the existing
+single-successor field used by Half C canonicalization; `resynthesized_into` is the
+Half D multi-successor field for factorized replacement. To avoid making that field
+write-only, Half D should also extend materialization to emit one `sci:supersededBy`
+triple per `resynthesized_into` target when the target resolves, matching the current
+`superseded_by` visibility pattern.
 
 ## 9. Idempotency And No-Ops
 
 Re-running apply with the same valid draft should converge:
 
 - already-created replacement proposition files with exactly matching rendered content
-  are no-ops;
+  after preserving their existing `created`/`updated` dates are no-ops;
 - sidecar annotations already pointing to their requested targets are no-ops;
 - an original proposition already marked with the expected `status`,
   `superseded_by`, and/or `resynthesized_into` is a no-op;
 - any drift from the reviewed draft, such as changed proposition body text or an
   assignment pointing to a third proposition, is a hard error rather than silently
   overwritten.
+
+The apply path is resumable after partial write failure as long as each already-written
+assignment is in its requested `to` state and each already-created replacement
+proposition still matches the draft under the date-preservation rule. Drift to a third
+target or edited replacement content still fails loud.
 
 This depends on the current project loader continuing to include superseded
 propositions in reconciliation snapshots. If future archive behavior filters
@@ -322,7 +352,14 @@ Postflight rebuilds the relevant live views and checks:
   and paper refs;
 - a fresh cross-paper evidence scan attributes moved literature evidence to the new
   proposition refs, not the superseded broad proposition;
-- the original proposition has the expected final status and supersession fields.
+- the original proposition has the expected final status and supersession fields;
+- materialization sees single-target `superseded_by` and multi-target
+  `resynthesized_into` as `sci:supersededBy` lineage.
+
+The cross-paper evidence check should be scoped to the affected proposition refs rather
+than rebuilding unrelated reports. It can reuse the deterministic 4d scanner/report
+path; sidecar ordering should not affect the assertion because refs and units are
+sorted before comparison.
 
 Postflight failure after writes should not claim atomic rollback. The report must
 include stage, written paths, and the failing invariant so the user can inspect and
@@ -342,6 +379,9 @@ Add two focused modules:
   - sidecar rewrite planner;
   - apply report;
   - postflight checks.
+- `science_tool.graph.materialize`
+  - recognize `resynthesized_into` frontmatter and emit one `sci:supersededBy`
+    triple per resolved successor.
 
 Half D should reuse existing helpers where possible:
 
@@ -349,7 +389,8 @@ Half D should reuse existing helpers where possible:
   resolution;
 - Half C sidecar scanning and final-text planning patterns;
 - entity rendering helpers for proposition frontmatter/body writes;
-- strict sidecar parsing and `entity_relpath_for_sidecar` for annotation refs.
+- strict sidecar parsing and `entity_relpath_for_sidecar` for annotation refs;
+- materialization's existing `superseded_by` resolution pattern for lineage triples.
 
 This split keeps draft/review semantics separate from mutation and avoids turning
 `proposition_reconciliation_apply.py` into a general reconciliation executor.
@@ -406,7 +447,8 @@ Unit tests:
 - validator rejects unknown annotation refs;
 - validator rejects duplicate annotation assignments;
 - validator rejects assignments to non-draft propositions;
-- validator rejects existing new proposition ids;
+- validator rejects conflicting existing replacement proposition files;
+- validator rejects unknown draft frontmatter keys via a Half D allowlist;
 - validator rejects incomplete `replace`;
 - validator rejects `split_partial` with no moved annotation;
 - validator rejects rendered proposition records that fail existing proposition
@@ -417,8 +459,11 @@ Unit tests:
 - apply keeps the original active for `split_partial`;
 - apply merges multiple rewrites in one sidecar;
 - apply rejects drift where an annotation now points to a third proposition;
+- apply preserves replacement `created`/`updated` dates on idempotent re-run;
+- apply resumes mixed sidecar state when some assignments are already at `to`;
 - second apply is a no-op;
-- preflight failure writes nothing.
+- preflight failure writes nothing;
+- materialize emits `sci:supersededBy` for every `resynthesized_into` target.
 
 CLI tests:
 
