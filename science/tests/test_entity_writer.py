@@ -41,11 +41,7 @@ def test_write_entity_file_places_custom_body(tmp_path: Path):
     text = dest.read_text(encoding="utf-8")
     assert "## Claim\n\nDemo claim." in text
     assert "id: proposition:demo-claim" in text or 'id: "proposition:demo-claim"' in text
-    assert (
-        "created: 2026-06-16" in text
-        or 'created: "2026-06-16"' in text
-        or "created: '2026-06-16'" in text
-    )
+    assert "created: 2026-06-16" in text or 'created: "2026-06-16"' in text or "created: '2026-06-16'" in text
 
 
 def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path: Path):
@@ -66,18 +62,11 @@ def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path:
         encoding="utf-8",
     )
 
-    assert (
-        append_entity_source_ref(dest, "annotation:papers/p.source#a-1", as_of=date(2026, 6, 16))
-        is True
-    )
+    assert append_entity_source_ref(dest, "annotation:papers/p.source#a-1", as_of=date(2026, 6, 16)) is True
     text = dest.read_text(encoding="utf-8")
     assert "Hand-authored prose." in text
     assert "annotation:papers/p.source#a-1" in text
-    assert (
-        "updated: 2026-06-16" in text
-        or 'updated: "2026-06-16"' in text
-        or "updated: '2026-06-16'" in text
-    )
+    assert "updated: 2026-06-16" in text or 'updated: "2026-06-16"' in text or "updated: '2026-06-16'" in text
 
 
 def test_append_entity_source_ref_noops_when_ref_exists(tmp_path: Path):
@@ -136,9 +125,7 @@ def test_render_entity_source_refs_computes_text_without_writing(tmp_path: Path)
     assert rendered.count("annotation:entities/papers/A.source#a1") == 1
     assert rendered.count("paper:A") == 1
     assert (
-        "updated: 2026-07-01" in rendered
-        or 'updated: "2026-07-01"' in rendered
-        or "updated: '2026-07-01'" in rendered
+        "updated: 2026-07-01" in rendered or 'updated: "2026-07-01"' in rendered or "updated: '2026-07-01'" in rendered
     )
 
 
@@ -221,9 +208,7 @@ def test_render_entity_frontmatter_updates_sets_supersession_without_writing(tmp
     assert "status: superseded" in rendered
     assert "superseded_by: proposition:canonical" in rendered
     assert (
-        "updated: 2026-07-01" in rendered
-        or 'updated: "2026-07-01"' in rendered
-        or "updated: '2026-07-01'" in rendered
+        "updated: 2026-07-01" in rendered or 'updated: "2026-07-01"' in rendered or "updated: '2026-07-01'" in rendered
     )
 
 

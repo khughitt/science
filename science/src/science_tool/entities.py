@@ -182,13 +182,11 @@ _NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND_DESCRIPTORS if ek.shortform}
-_DEFAULT_STATUS: dict[str, str] = {
-    ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status
-}
-_STATUS_VALUES: dict[str, frozenset[str]] = {
-    ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses
-}
-_EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset({"id", "type", "title", "status", "related", "source_refs", "created", "updated"})
+_DEFAULT_STATUS: dict[str, str] = {ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status}
+_STATUS_VALUES: dict[str, frozenset[str]] = {ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses}
+_EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset(
+    {"id", "type", "title", "status", "related", "source_refs", "created", "updated"}
+)
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 # Lifecycle states hidden from default view/consumer surfaces (consolidation P1).
@@ -1180,8 +1178,7 @@ def list_entities(
         # be evaluated against archived rows. Fail loud rather than silently include
         # unfiltered archived rows or silently drop them.
         raise EntityCommandError(
-            "--related cannot be combined with --include-archived "
-            "(the archive index does not carry relation data)"
+            "--related cannot be combined with --include-archived (the archive index does not carry relation data)"
         )
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)

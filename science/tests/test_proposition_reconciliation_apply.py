@@ -48,8 +48,7 @@ def _action(
 ) -> ReconciliationAction:
     judgment = judgment_id("same_claim", "same_claim", members)
     return ReconciliationAction(
-        action_id=action_id
-        or reconciliation_action_id(kind, judgment, canonical or members[0], members[1:]),
+        action_id=action_id or reconciliation_action_id(kind, judgment, canonical or members[0], members[1:]),
         kind=kind,
         status=status,
         decision="same_claim",
@@ -61,10 +60,9 @@ def _action(
         review_source="llm-review:claude:proposition-reconcile-v1",
         canonical_proposition=canonical,
         members=members,
-        inputs=inputs or {
-            "source_ref_moves": (
-                {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},
-            ),
+        inputs=inputs
+        or {
+            "source_ref_moves": ({"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},),
             "sidecar_backlink_rewrites": (
                 {
                     "from": "proposition:b",
@@ -203,9 +201,7 @@ def _manual_ready_plan(
 def test_select_canonicalization_actions_returns_all_ready_when_unfiltered():
     ready = _action()
     advisory = _action(kind="record_reconciliation_decision", status="advisory", canonical=None)
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(advisory, ready)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(advisory, ready))
 
     selected = select_canonicalization_actions(plan, requested_action_ids=())
 
@@ -284,17 +280,13 @@ def test_select_canonicalization_actions_rejects_requested_resynthesis_action():
         action_id="reconcile-action:resynthesize",
         canonical="proposition:a",
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(
         ReconciliationApplyError,
         match="resynthesize_proposition; factorization resynthesis is not executable",
     ):
-        select_canonicalization_actions(
-            plan, requested_action_ids=("reconcile-action:resynthesize",)
-        )
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:resynthesize",))
 
 
 def test_select_canonicalization_actions_rejects_requested_advisory_action():
@@ -304,18 +296,14 @@ def test_select_canonicalization_actions_rejects_requested_advisory_action():
         canonical=None,
         action_id="reconcile-action:advisory",
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(advisory,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(advisory,))
 
     with pytest.raises(ReconciliationApplyError, match="not executable by Half C"):
         select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:advisory",))
 
 
 def test_select_canonicalization_actions_rejects_unknown_requested_ids():
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(_action(),)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(_action(),))
 
     with pytest.raises(
         ReconciliationApplyError, match="unknown reconciliation action\\(s\\): reconcile-action:missing"
@@ -325,13 +313,9 @@ def test_select_canonicalization_actions_rejects_unknown_requested_ids():
 
 def test_select_canonicalization_actions_rejects_duplicate_requested_ids():
     action = _action(action_id="reconcile-action:deduplicate")
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
-    with pytest.raises(
-        ReconciliationApplyError, match="duplicate reconciliation action request\\(s\\):"
-    ):
+    with pytest.raises(ReconciliationApplyError, match="duplicate reconciliation action request\\(s\\):"):
         select_canonicalization_actions(
             plan,
             requested_action_ids=(
@@ -348,17 +332,13 @@ def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_reque
         canonical="proposition:c",
         members=("proposition:c", "proposition:d"),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(first, second)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(first, second))
 
     with pytest.raises(
         ReconciliationApplyError,
         match="duplicate reconciliation action id\\(s\\) in plan: reconcile-action:duplicate",
     ):
-        select_canonicalization_actions(
-            plan, requested_action_ids=("reconcile-action:duplicate",)
-        )
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:duplicate",))
 
 
 def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_unrequested_mode():
@@ -368,9 +348,7 @@ def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_unreq
         canonical="proposition:c",
         members=("proposition:c", "proposition:d"),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(first, second)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(first, second))
 
     with pytest.raises(
         ReconciliationApplyError,
@@ -381,14 +359,10 @@ def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_unreq
 
 def test_select_canonicalization_actions_rejects_requested_non_ready_action():
     action = _action(status="blocked", action_id="reconcile-action:not-ready")
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(ReconciliationApplyError, match="reconcile-action:not-ready is blocked"):
-        select_canonicalization_actions(
-            plan, requested_action_ids=("reconcile-action:not-ready",)
-        )
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:not-ready",))
 
 
 def test_select_canonicalization_actions_rejects_requested_action_with_blockers():
@@ -396,9 +370,7 @@ def test_select_canonicalization_actions_rejects_requested_action_with_blockers(
         action_id="reconcile-action:blocked",
         blockers=({"reason": "manual-review-required", "detail": "conflicting source refs"},),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(ReconciliationApplyError) as exc_info:
         select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:blocked",))
@@ -414,9 +386,7 @@ def test_select_canonicalization_actions_rejects_malformed_action_blocker():
         action_id="reconcile-action:blocked",
         blockers=({"detail": "missing reason"},),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(
         ReconciliationApplyError,
@@ -430,9 +400,7 @@ def test_select_canonicalization_actions_rejects_malformed_action_blocker_type()
         action_id="reconcile-action:blocked",
         blockers=("bad",),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(
         ReconciliationApplyError,
@@ -443,14 +411,10 @@ def test_select_canonicalization_actions_rejects_malformed_action_blocker_type()
 
 def test_select_canonicalization_actions_rejects_missing_canonical_proposition():
     action = _action(canonical=None, action_id="reconcile-action:no-canonical")
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(ReconciliationApplyError, match="has no canonical_proposition"):
-        select_canonicalization_actions(
-            plan, requested_action_ids=("reconcile-action:no-canonical",)
-        )
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:no-canonical",))
 
 
 def test_select_canonicalization_actions_rejects_too_few_members():
@@ -459,14 +423,10 @@ def test_select_canonicalization_actions_rejects_too_few_members():
         canonical="proposition:a",
         members=("proposition:a",),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(action,)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(action,))
 
     with pytest.raises(ReconciliationApplyError, match="has fewer than two members"):
-        select_canonicalization_actions(
-            plan, requested_action_ids=("reconcile-action:one-member",)
-        )
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:one-member",))
 
 
 def test_select_canonicalization_actions_rejects_overlapping_selected_members():
@@ -480,9 +440,7 @@ def test_select_canonicalization_actions_rejects_overlapping_selected_members():
         canonical="proposition:c",
         members=("proposition:b", "proposition:c"),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(first, second)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(first, second))
 
     with pytest.raises(ReconciliationApplyError, match="targeted by multiple selected actions"):
         select_canonicalization_actions(plan, requested_action_ids=())
@@ -495,9 +453,7 @@ def test_select_canonicalization_actions_sorts_requested_mode_by_action_id():
         canonical="proposition:c",
         members=("proposition:c", "proposition:d"),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(beta, alpha)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(beta, alpha))
 
     selected = select_canonicalization_actions(
         plan,
@@ -517,9 +473,7 @@ def test_select_canonicalization_actions_sorts_unrequested_mode_by_action_id():
         canonical="proposition:c",
         members=("proposition:c", "proposition:d"),
     )
-    plan = ReconciliationActionPlan(
-        schema_version=1, source_reviews=("review.json",), actions=(beta, alpha)
-    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=("review.json",), actions=(beta, alpha))
 
     selected = select_canonicalization_actions(plan, requested_action_ids=())
 
@@ -555,9 +509,7 @@ def test_plan_canonicalization_apply_uses_live_sidecar_backlinks_not_only_half_b
     _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
     action = _action(
         inputs={
-            "source_ref_moves": (
-                {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B2021",)},
-            ),
+            "source_ref_moves": ({"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B2021",)},),
             "sidecar_backlink_rewrites": (
                 {
                     "from": "proposition:b",
@@ -580,10 +532,7 @@ def test_plan_canonicalization_apply_uses_live_sidecar_backlinks_not_only_half_b
             "paper:B2021",
         )
     }
-    assert any(
-        diagnostic.get("reason") == "half_b_missing_live_backlink"
-        for diagnostic in preflight.diagnostics
-    )
+    assert any(diagnostic.get("reason") == "half_b_missing_live_backlink" for diagnostic in preflight.diagnostics)
 
 
 def test_plan_canonicalization_apply_merges_distinct_rewrites_in_same_sidecar(
@@ -647,9 +596,7 @@ def test_plan_canonicalization_apply_merges_distinct_rewrites_in_same_sidecar(
 
     preflight = plan_canonicalization_apply(tmp_path, _manual_ready_plan((first, second)))
 
-    sidecar_edits = [
-        edit for edit in preflight.file_edits if edit.path.name == "Shared.source.anno.trig"
-    ]
+    sidecar_edits = [edit for edit in preflight.file_edits if edit.path.name == "Shared.source.anno.trig"]
     assert len(sidecar_edits) == 1
     assert "proposition:a" in sidecar_edits[0].final_text
     assert "proposition:c" in sidecar_edits[0].final_text
@@ -713,9 +660,7 @@ def test_plan_canonicalization_apply_errors_when_half_b_ref_points_to_third_prop
     anno_io.write_sidecar(
         b_sidecar_path,
         Sidecar(
-            annotations=(
-                replace(b_sidecar.annotations[0], promoted_to="proposition:other"),
-            ),
+            annotations=(replace(b_sidecar.annotations[0], promoted_to="proposition:other"),),
             ledgers=b_sidecar.ledgers,
             shared_targets=b_sidecar.shared_targets,
         ),
@@ -752,12 +697,8 @@ def test_apply_canonicalization_rewrites_files_and_postflight_passes(tmp_path: P
     assert report.status == "ok"
     assert report.selected_actions == 1
     assert any(path.endswith("entities/propositions/a.md") for path in report.changed_paths)
-    assert "paper:B2021" in (tmp_path / "entities" / "propositions" / "a.md").read_text(
-        encoding="utf-8"
-    )
-    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
-        encoding="utf-8"
-    )
+    assert "paper:B2021" in (tmp_path / "entities" / "propositions" / "a.md").read_text(encoding="utf-8")
+    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(encoding="utf-8")
     assert "status: superseded" in duplicate_text
     assert "superseded_by: proposition:a" in duplicate_text
     b_sidecar = read_sidecar_strict(b_sidecar_path)
@@ -809,11 +750,9 @@ def test_apply_canonicalization_reattributes_cross_paper_evidence(tmp_path: Path
         "paper:A2020",
         "paper:B2021",
     }
-    assert after_a["belief"]["support_units"] >= 2
+    assert after_a["belief"]["support_units"] == 2
     assert after_b["units"] == []
-    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
-        encoding="utf-8"
-    )
+    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(encoding="utf-8")
     assert "status: superseded" in duplicate_text
     assert "superseded_by: proposition:a" in duplicate_text
 
@@ -861,13 +800,21 @@ def test_apply_canonicalization_accepts_sidecar_already_canonical_as_noop(
         },
     )
 
+    sidecar_path = tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    before_sidecar = sidecar_path.read_text(encoding="utf-8")
+
     report = apply_canonicalization_plan(tmp_path, _manual_ready_plan((action,)))
 
     assert report.status == "ok"
-    assert any(
-        diagnostic.get("reason") == "listed_backlink_already_canonical"
-        for diagnostic in report.diagnostics
-    )
+    assert sidecar_path.read_text(encoding="utf-8") == before_sidecar
+    assert any(str(path).endswith("B2021.source.anno.trig") for path in report.actions[0].noop_paths)
+    assert not any(str(path).endswith("B2021.source.anno.trig") for path in report.actions[0].changed_paths)
+    assert {
+        "reason": "listed_backlink_already_canonical",
+        "annotation_ref": "annotation:entities/papers/B2021.source#b1",
+        "duplicate": "proposition:b",
+        "canonical": "proposition:a",
+    } in [dict(diagnostic) for diagnostic in report.diagnostics]
 
 
 def test_apply_canonicalization_is_idempotent_on_second_run(tmp_path: Path):
@@ -1000,9 +947,7 @@ def test_postflight_checks_listed_already_canonical_sidecar_refs(
     )
     action = _action(
         inputs={
-            "source_ref_moves": (
-                {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},
-            ),
+            "source_ref_moves": ({"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},),
             "sidecar_backlink_rewrites": (
                 {
                     "from": "proposition:b",
@@ -1018,9 +963,7 @@ def test_postflight_checks_listed_already_canonical_sidecar_refs(
     )
     plan = _manual_ready_plan((action,))
     preflight = plan_canonicalization_apply(tmp_path, plan)
-    assert preflight.expected_annotation_targets[
-        "annotation:entities/papers/B.source#b2"
-    ] == "proposition:a"
+    assert preflight.expected_annotation_targets["annotation:entities/papers/B.source#b2"] == "proposition:a"
     assert any(
         diagnostic.get("reason") == "listed_backlink_already_canonical"
         and diagnostic.get("annotation_ref") == "annotation:entities/papers/B.source#b2"
@@ -1034,9 +977,7 @@ def test_postflight_checks_listed_already_canonical_sidecar_refs(
             return
         sidecar = read_sidecar_strict(path)
         annotations = tuple(
-            replace(annotation, promoted_to="proposition:other")
-            if annotation.id == "b2"
-            else annotation
+            replace(annotation, promoted_to="proposition:other") if annotation.id == "b2" else annotation
             for annotation in sidecar.annotations
         )
         original_atomic_write_text(

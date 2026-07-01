@@ -82,9 +82,7 @@ def _review_for_candidate(candidate: dict, canonical: str = "proposition:a") -> 
         "judgments": [
             {
                 "candidate_id": candidate["candidate_id"],
-                "judgment_id": judgment_id(
-                    "same_claim", "same_claim", candidate["propositions"]
-                ),
+                "judgment_id": judgment_id("same_claim", "same_claim", candidate["propositions"]),
                 "lane": "same_claim",
                 "decision": "same_claim",
                 "canonical_proposition": canonical,
@@ -102,9 +100,7 @@ def _related_but_distinct_review_for_candidate(candidate: dict) -> dict:
         "judgments": [
             {
                 "candidate_id": candidate["candidate_id"],
-                "judgment_id": judgment_id(
-                    "same_claim", "related_but_distinct", candidate["propositions"]
-                ),
+                "judgment_id": judgment_id("same_claim", "related_but_distinct", candidate["propositions"]),
                 "lane": "same_claim",
                 "decision": "related_but_distinct",
                 "members": candidate["propositions"],
@@ -164,9 +160,7 @@ def test_validate_proposition_reconciliation_cli(tmp_path: Path):
         "judgments": [
             {
                 "candidate_id": candidate["candidate_id"],
-                "judgment_id": judgment_id(
-                    "same_claim", "same_claim", candidate["propositions"]
-                ),
+                "judgment_id": judgment_id("same_claim", "same_claim", candidate["propositions"]),
                 "lane": "same_claim",
                 "decision": "same_claim",
                 "canonical_proposition": "proposition:a",
@@ -319,9 +313,7 @@ def test_plan_proposition_reconciliation_cli_accepts_repeated_input(tmp_path: Pa
     assert payload["source_reviews"] == [str(review_a), str(review_b)]
     assert payload["summary"]["blocked_actions"] == 2
     assert any(
-        blocker["reason"] == "action_conflict"
-        for action in payload["actions"]
-        for blocker in action["blockers"]
+        blocker["reason"] == "action_conflict" for action in payload["actions"] for blocker in action["blockers"]
     )
 
 
@@ -497,15 +489,9 @@ def test_apply_proposition_reconciliation_cli_applies_ready_canonicalization(
     assert len(payload["changed_paths"]) > 0
     assert all(not path.startswith(str(tmp_path)) for path in payload["changed_paths"])
     assert all(not path.startswith(str(tmp_path)) for path in payload["written_paths"])
-    assert any(
-        path.startswith("entities/propositions/") for path in payload["changed_paths"]
-    )
-    assert any(
-        path.startswith("entities/propositions/") for path in payload["written_paths"]
-    )
-    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
-        encoding="utf-8"
-    )
+    assert any(path.startswith("entities/propositions/") for path in payload["changed_paths"])
+    assert any(path.startswith("entities/propositions/") for path in payload["written_paths"])
+    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(encoding="utf-8")
     assert "status: superseded" in duplicate_text
     assert "superseded_by: proposition:a" in duplicate_text
 
