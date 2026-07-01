@@ -352,3 +352,86 @@ def build_same_claim_candidates(propositions: list[PropositionSnapshot]) -> Same
             )
         )
     return SameClaimBuildResult(tuple(candidates), tuple(faults))
+
+
+def _hint(assertion: Any) -> dict[str, Any]:
+    return {
+        "paper": assertion.paper_ref,
+        "annotation": assertion.annotation_ref,
+        "stance": assertion.stance,
+        "section": assertion.section,
+        "subject": assertion.subject,
+        "object": assertion.object,
+        "subject_concept": assertion.subject_concept,
+        "object_concept": assertion.object_concept,
+        "exact": assertion.statement_exact,
+    }
+
+
+def _distinct_normalized(values: Sequence[str | None]) -> set[str]:
+    return {normalized for value in values if (normalized := normalize_phrase(value))}
+
+
+def build_factorization_disagreements(
+    propositions: Mapping[str, PropositionSnapshot],
+    assertions: Sequence[Any],
+) -> tuple[FactorizationCandidate, ...]:
+    by_prop: dict[str, list[Any]] = {}
+    for assertion in assertions:
+        if assertion.proposition_ref in propositions:
+            by_prop.setdefault(assertion.proposition_ref, []).append(assertion)
+
+    out: list[FactorizationCandidate] = []
+    for prop_ref, prop_assertions in sorted(by_prop.items()):
+        if len(prop_assertions) < 2:
+            continue
+        prop = propositions[prop_ref]
+        stances = {assertion.stance for assertion in prop_assertions}
+        subjects = _distinct_normalized([assertion.subject for assertion in prop_assertions])
+        objects = _distinct_normalized([assertion.object for assertion in prop_assertions])
+        useful_hints = [
+            assertion for assertion in prop_assertions if assertion.subject or assertion.object
+        ]
+        disagreement: list[str] = []
+        recommended = ""
+        priority: Priority = "medium"
+        if "asserted" in stances and "negated" in stances:
+            disagreement.append("stance mix requires review")
+            recommended = "stance_review_needed"
+            priority = "high"
+        if len(subjects) > 1:
+            disagreement.append("subject differs")
+            recommended = recommended or "factorization_needs_resynthesis"
+        if len(objects) > 1:
+            disagreement.append("object differs")
+            recommended = recommended or "factorization_needs_resynthesis"
+        if useful_hints and not (prop.subject and prop.predicate and prop.object):
+            disagreement.append(
+                "current proposition is unfactored despite useful statement hints"
+            )
+            recommended = recommended or "factorization_needs_resynthesis"
+        if not disagreement and len(prop_assertions) > 1 and not useful_hints:
+            disagreement.append("multiple assertions have insufficient factorization hints")
+            recommended = "insufficient_hints"
+            priority = "low"
+        if not disagreement:
+            continue
+        out.append(
+            FactorizationCandidate(
+                candidate_id=candidate_id(LANE_FACTORIZATION, [prop_ref]),
+                proposition=prop_ref,
+                priority=priority,
+                papers=tuple(sorted({assertion.paper_ref for assertion in prop_assertions})),
+                current={
+                    "subject": prop.subject,
+                    "predicate": prop.predicate,
+                    "object": prop.object,
+                    "polarity": prop.polarity,
+                    "claim_layer": prop.claim_layer,
+                },
+                observed_statement_hints=tuple(_hint(assertion) for assertion in prop_assertions),
+                disagreement=tuple(disagreement),
+                recommended_action=recommended,
+            )
+        )
+    return tuple(out)

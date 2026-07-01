@@ -2,9 +2,11 @@ import hashlib
 
 import pytest
 
+from science_tool.annotation.cross_paper_evidence import LiteratureAssertion
 from science_tool.annotation.proposition_reconciliation import (
     MAX_RECONCILIATION_COMPONENT_SIZE,
     PropositionSnapshot,
+    build_factorization_disagreements,
     build_same_claim_candidates,
     candidate_id,
     judgment_id,
@@ -175,3 +177,82 @@ def test_large_component_faults_instead_of_scaffolding():
     assert report.candidates == ()
     assert len(report.faults) == 1
     assert report.faults[0].reason == "component-too-large"
+
+
+def _assertion(
+    frag: str,
+    *,
+    proposition_ref: str = "proposition:p",
+    paper_ref: str = "paper:A2020",
+    stance: str = "asserted",
+    subject: str | None = "BRCA1 loss",
+    object: str | None = "genomic instability",
+) -> LiteratureAssertion:
+    citekey = paper_ref.split(":", 1)[1]
+    return LiteratureAssertion(
+        proposition_ref=proposition_ref,
+        paper_ref=paper_ref,
+        stance=stance,
+        annotation_id=frag,
+        sidecar=f"{paper_ref}.anno.trig",
+        annotation_ref=f"annotation:entities/papers/{citekey}.source#{frag}",
+        statement_exact=f"{subject or 'claim'} -> {object or 'target'}",
+        section="results",
+        subject=subject,
+        object=object,
+    )
+
+
+def test_factorization_disagreement_detects_incompatible_objects():
+    prop = _prop("proposition:p", "BRCA1 loss affects genome stability")
+    candidates = build_factorization_disagreements(
+        {"proposition:p": prop},
+        [
+            _assertion("a1", object="genomic instability"),
+            _assertion("a2", paper_ref="paper:B2021", object="replication stress"),
+        ],
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.proposition == "proposition:p"
+    assert candidate.recommended_action == "factorization_needs_resynthesis"
+    assert "object differs" in candidate.disagreement
+    assert len(candidate.observed_statement_hints) == 2
+
+
+def test_factorization_disagreement_detects_mixed_stances():
+    prop = _prop("proposition:p", "BRCA1 loss affects genome stability")
+    candidates = build_factorization_disagreements(
+        {"proposition:p": prop},
+        [
+            _assertion("a1", stance="asserted"),
+            _assertion("a2", paper_ref="paper:B2021", stance="negated"),
+        ],
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].recommended_action == "stance_review_needed"
+    assert "stance mix requires review" in candidates[0].disagreement
+
+
+def test_factorization_disagreement_detects_unfactored_multiple_useful_hints():
+    prop = _prop(
+        "proposition:p",
+        "BRCA1 loss affects genome stability",
+        subject=None,
+        predicate=None,
+        object=None,
+        polarity=None,
+    )
+    candidates = build_factorization_disagreements(
+        {"proposition:p": prop},
+        [_assertion("a1"), _assertion("a2", paper_ref="paper:B2021")],
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].recommended_action == "factorization_needs_resynthesis"
+    assert (
+        "current proposition is unfactored despite useful statement hints"
+        in candidates[0].disagreement
+    )
