@@ -54,7 +54,11 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _format_issue(issue: Mapping[str, Any]) -> str:
+def _format_issue(issue: object, index: int) -> str:
+    if not isinstance(issue, Mapping):
+        raise ReconciliationApplyError(
+            f"action plan has malformed top-level error at index {index}"
+        )
     reason = issue.get("reason")
     if not isinstance(reason, str) or not reason:
         raise ReconciliationApplyError("action plan has malformed error entry: missing reason")
@@ -64,7 +68,9 @@ def _format_issue(issue: Mapping[str, Any]) -> str:
     return f"{reason}: {detail}"
 
 
-def _format_blocker(action_id: str, blocker: Mapping[str, Any], index: int) -> str:
+def _format_blocker(action_id: str, blocker: object, index: int) -> str:
+    if not isinstance(blocker, Mapping):
+        raise ReconciliationApplyError(f"{action_id} has malformed blocker at index {index}")
     reason = blocker.get("reason")
     if not isinstance(reason, str) or not reason:
         raise ReconciliationApplyError(f"{action_id} has malformed blocker at index {index}")
@@ -90,7 +96,9 @@ def select_canonicalization_actions(
     requested_action_ids: Sequence[str] = (),
 ) -> tuple[ReconciliationAction, ...]:
     if plan.errors:
-        error_messages = "; ".join(_format_issue(error) for error in plan.errors)
+        error_messages = "; ".join(
+            _format_issue(error, index) for index, error in enumerate(plan.errors)
+        )
         raise ReconciliationApplyError(
             "action plan has top-level errors; "
             f"{error_messages}; run plan-proposition-reconciliation first"

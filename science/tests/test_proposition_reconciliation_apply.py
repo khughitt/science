@@ -116,6 +116,21 @@ def test_select_canonicalization_actions_includes_plan_error_reason_and_detail()
     assert "too many" in message
 
 
+def test_select_canonicalization_actions_rejects_malformed_top_level_error_type():
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=("review.json",),
+        actions=(_action(),),
+        errors=("bad",),
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="action plan has malformed top-level error at index 0",
+    ):
+        select_canonicalization_actions(plan, requested_action_ids=())
+
+
 def test_select_canonicalization_actions_rejects_requested_resynthesis_action():
     action = _action(
         kind="resynthesize_proposition",
@@ -251,6 +266,22 @@ def test_select_canonicalization_actions_rejects_malformed_action_blocker():
     action = _action(
         action_id="reconcile-action:blocked",
         blockers=({"detail": "missing reason"},),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1, source_reviews=("review.json",), actions=(action,)
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="reconcile-action:blocked has malformed blocker at index 0",
+    ):
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:blocked",))
+
+
+def test_select_canonicalization_actions_rejects_malformed_action_blocker_type():
+    action = _action(
+        action_id="reconcile-action:blocked",
+        blockers=("bad",),
     )
     plan = ReconciliationActionPlan(
         schema_version=1, source_reviews=("review.json",), actions=(action,)
