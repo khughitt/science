@@ -63,6 +63,11 @@ class CanonicalizationPreflight:
     expected_source_refs_by_canonical: Mapping[str, tuple[str, ...]] = field(
         default_factory=dict
     )
+    expected_annotation_targets: Mapping[str, str] = field(default_factory=dict)
+    action_edit_paths_by_id: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
+    action_diagnostics_by_id: Mapping[str, tuple[Mapping[str, Any], ...]] = field(
+        default_factory=dict
+    )
     diagnostics: tuple[Mapping[str, Any], ...] = ()
 
 
@@ -108,6 +113,16 @@ def _changed_and_noop_paths(
     changed = tuple(_path_string(edit.path) for edit in edits if edit.changed)
     noop = tuple(_path_string(edit.path) for edit in edits if not edit.changed)
     return changed, noop
+
+
+def _changed_and_noop_paths_for_action(
+    edits: Sequence[PlannedFileEdit],
+    action_paths: Sequence[Path],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    relevant_paths = set(action_paths)
+    return _changed_and_noop_paths(
+        tuple(edit for edit in edits if edit.path in relevant_paths)
+    )
 
 
 def _edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
@@ -158,6 +173,13 @@ def _duplicate_to_canonical(actions: Sequence[ReconciliationAction]) -> dict[str
                 )
             mapping[member] = canonical
     return mapping
+
+
+def _action_duplicate_propositions(action: ReconciliationAction) -> set[str]:
+    canonical = action.canonical_proposition
+    if canonical is None:
+        raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
+    return {member for member in action.members if member != canonical}
 
 
 def scan_inbound_backlinks(
@@ -235,6 +257,61 @@ def _listed_sidecar_refs(
                     )
                 listed[annotation_ref] = duplicate
     return listed
+
+
+def _listed_sidecar_refs_by_action(
+    actions: Sequence[ReconciliationAction],
+) -> dict[str, set[str]]:
+    refs_by_action: dict[str, set[str]] = {}
+    for action in actions:
+        action_refs = refs_by_action.setdefault(action.action_id, set())
+        for row in action.inputs.get("sidecar_backlink_rewrites", ()):
+            if not isinstance(row, Mapping):
+                raise ReconciliationApplyError(
+                    f"{action.action_id} has malformed sidecar_backlink_rewrites row"
+                )
+            annotation_refs = row.get("annotation_refs", ())
+            if not isinstance(annotation_refs, Sequence) or isinstance(
+                annotation_refs, str
+            ):
+                raise ReconciliationApplyError(
+                    f"{action.action_id} has malformed annotation_refs"
+                )
+            for annotation_ref in annotation_refs:
+                if not isinstance(annotation_ref, str) or not annotation_ref:
+                    raise ReconciliationApplyError(
+                        f"{action.action_id} has malformed annotation_ref"
+                    )
+                action_refs.add(annotation_ref)
+    return refs_by_action
+
+
+def _diagnostics_by_action(
+    actions: Sequence[ReconciliationAction],
+    diagnostics: Sequence[Mapping[str, Any]],
+    listed_refs_by_action: Mapping[str, set[str]],
+) -> dict[str, tuple[Mapping[str, Any], ...]]:
+    by_action: dict[str, list[Mapping[str, Any]]] = {
+        action.action_id: [] for action in actions
+    }
+    for diagnostic in diagnostics:
+        diagnostic_duplicate = diagnostic.get("duplicate")
+        diagnostic_canonical = diagnostic.get("canonical")
+        diagnostic_annotation_ref = diagnostic.get("annotation_ref")
+        for action in actions:
+            canonical = action.canonical_proposition
+            duplicates = _action_duplicate_propositions(action)
+            if (
+                diagnostic_duplicate in duplicates
+                or diagnostic_canonical == canonical
+                or diagnostic_annotation_ref
+                in listed_refs_by_action.get(action.action_id, set())
+            ):
+                by_action[action.action_id].append(diagnostic)
+    return {
+        action_id: tuple(action_diagnostics)
+        for action_id, action_diagnostics in by_action.items()
+    }
 
 
 def _validate_listed_refs(
@@ -525,13 +602,20 @@ def plan_canonicalization_apply(
 
     edits: dict[Path, PlannedFileEdit] = {}
     expected_refs_by_canonical: dict[str, tuple[str, ...]] = {}
+    expected_annotation_targets = {
+        backlink.annotation_ref: backlink.canonical for backlink in live_backlinks
+    }
+    listed_refs_by_action = _listed_sidecar_refs_by_action(actions)
+    action_edit_paths_by_id: dict[str, tuple[Path, ...]] = {}
 
     for action in actions:
         canonical = action.canonical_proposition
         if canonical is None:
             raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
 
+        action_paths: set[Path] = set()
         canonical_location = _entity_location(project_root, canonical)
+        action_paths.add(canonical_location.path)
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
         final_text, _changed = render_entity_source_refs(
@@ -549,6 +633,7 @@ def plan_canonicalization_apply(
             if duplicate == canonical:
                 continue
             duplicate_location = _entity_location(project_root, duplicate)
+            action_paths.add(duplicate_location.path)
             frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
             existing_superseded_by = frontmatter.get("superseded_by")
             if (
@@ -569,6 +654,19 @@ def plan_canonicalization_apply(
                 "duplicate_supersession",
             )
 
+        action_duplicates = _action_duplicate_propositions(action)
+        action_paths.update(
+            backlink.sidecar_path
+            for backlink in live_backlinks
+            if backlink.duplicate in action_duplicates
+        )
+        for annotation_ref in listed_refs_by_action.get(action.action_id, set()):
+            indexed = live_annotation_index.get(annotation_ref)
+            if indexed is not None:
+                sidecar_path, _sidecar, _promoted_to = indexed
+                action_paths.add(sidecar_path)
+        action_edit_paths_by_id[action.action_id] = tuple(sorted(action_paths))
+
     for sidecar_path, final_text in _sidecar_final_texts(
         project_root,
         live_backlinks,
@@ -579,6 +677,13 @@ def plan_canonicalization_apply(
         actions=actions,
         file_edits=tuple(edits[path] for path in sorted(edits)),
         expected_source_refs_by_canonical=expected_refs_by_canonical,
+        expected_annotation_targets=expected_annotation_targets,
+        action_edit_paths_by_id=action_edit_paths_by_id,
+        action_diagnostics_by_id=_diagnostics_by_action(
+            actions,
+            diagnostics,
+            listed_refs_by_action,
+        ),
         diagnostics=tuple(diagnostics),
     )
 
@@ -587,6 +692,7 @@ def _postflight(
     project_root: Path,
     actions: Sequence[ReconciliationAction],
     expected_source_refs_by_canonical: Mapping[str, tuple[str, ...]],
+    expected_annotation_targets: Mapping[str, str],
 ) -> None:
     duplicate_to_canonical = _duplicate_to_canonical(actions)
     for duplicate, canonical in sorted(duplicate_to_canonical.items()):
@@ -607,6 +713,21 @@ def _postflight(
         raise ReconciliationApplyError(
             "duplicate promoted_to backlinks remain after write: " f"{refs}"
         )
+
+    live_annotation_index = _live_annotation_index(project_root)
+    for annotation_ref, expected_canonical in sorted(expected_annotation_targets.items()):
+        indexed = live_annotation_index.get(annotation_ref)
+        if indexed is None:
+            raise ReconciliationApplyError(
+                f"{annotation_ref} missing after write; expected promoted_to "
+                f"{expected_canonical!r}"
+            )
+        _sidecar_path, _sidecar, promoted_to = indexed
+        if promoted_to != expected_canonical:
+            raise ReconciliationApplyError(
+                f"{annotation_ref} postflight promoted_to mismatch: "
+                f"promoted_to={promoted_to!r}, expected {expected_canonical!r}"
+            )
 
     for canonical, expected_refs in sorted(expected_source_refs_by_canonical.items()):
         canonical_location = _entity_location(project_root, canonical)
@@ -679,6 +800,7 @@ def apply_canonicalization_plan(
             project_root,
             preflight.actions,
             preflight.expected_source_refs_by_canonical,
+            preflight.expected_annotation_targets,
         )
     except ReconciliationApplyError as exc:
         raise ReconciliationApplyError(
@@ -691,7 +813,14 @@ def apply_canonicalization_plan(
         changed_paths=changed_paths,
         noop_paths=noop_paths,
         actions=tuple(
-            _action_result(action, changed_paths, noop_paths, preflight.diagnostics)
+            _action_result(
+                action,
+                *_changed_and_noop_paths_for_action(
+                    preflight.file_edits,
+                    preflight.action_edit_paths_by_id.get(action.action_id, ()),
+                ),
+                preflight.action_diagnostics_by_id.get(action.action_id, ()),
+            )
             for action in preflight.actions
         ),
         diagnostics=preflight.diagnostics,
