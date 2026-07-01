@@ -655,7 +655,7 @@ title: Cytogenetic benchmark gap
     result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
 
     assert result.exit_code == 0
-    review_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    review_path = tmp_path / "doc" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
     assert review_path.is_file()
     payload = json.loads(result.output)
     assert payload["review_file"] == str(review_path)
@@ -667,6 +667,65 @@ title: Cytogenetic benchmark gap
     assert written["candidates"][0]["decision"] == "pending"
     assert written["candidates"][0]["reviewer_notes"] == ""
     assert written["candidates"][0]["suggested_facets"] == []
+
+
+def test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical_doc_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "docs").mkdir()
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0074-alpha",
+        """
+id: hypothesis:0074-alpha
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0, result.output
+    review_path = tmp_path / "doc" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    wrong_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    assert review_path.exists()
+    assert not wrong_path.exists()
+    assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
+
+
+def test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_only_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    (tmp_path / "docs").mkdir()
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0075-beta",
+        """
+id: hypothesis:0075-beta
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0, result.output
+    review_path = tmp_path / "doc" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    wrong_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    assert review_path.exists()
+    assert not wrong_path.exists()
+    assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
 
 
 def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(
