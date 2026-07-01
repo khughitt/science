@@ -293,16 +293,8 @@ def test_plan_proposition_reconciliation_cli_rejects_empty_review_even_with_vali
 
 def test_plan_proposition_reconciliation_cli_rejects_invalid_review(tmp_path: Path):
     _manifest(tmp_path)
-    empty_review = tmp_path / "empty-review.json"
-    empty_review.write_text(
-        json.dumps(
-            {
-                "source": "llm-review:claude:proposition-reconcile-v1",
-                "judgments": [],
-            }
-        ),
-        encoding="utf-8",
-    )
+    review_path = tmp_path / "review.json"
+    review_path.write_text("{not json", encoding="utf-8")
 
     result = CliRunner().invoke(
         annotate_group,
@@ -311,9 +303,10 @@ def test_plan_proposition_reconciliation_cli_rejects_invalid_review(tmp_path: Pa
             "--root",
             str(tmp_path),
             "--input",
-            str(empty_review),
+            str(review_path),
         ],
     )
 
     assert result.exit_code != 0
-    assert f"{empty_review} produced no judgments" in result.output
+    assert "is not valid JSON" in result.output
+    assert str(review_path) in result.output
