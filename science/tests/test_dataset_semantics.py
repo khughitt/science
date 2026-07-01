@@ -102,6 +102,14 @@ def test_custodian_run_is_insider_only_before_trust_based():
     assert cls == "insider-only"
 
 
+def test_insider_only_wins_the_genuine_race_with_trust_based():
+    # named-collaboration satisfies the insider-only rule; trusted-environment + aggregate-reviewed
+    # simultaneously satisfies the trust-based-output rule. insider-only must win because it is
+    # checked first. (This is the real ordering guard; the custodian-run case above never races.)
+    cls, _ = reproducibility_class_for(_fm("named-collaboration", "trusted-environment", "aggregate-reviewed"))
+    assert cls == "insider-only"
+
+
 def test_any_unknown_control_yields_unknown():
     cls, _ = reproducibility_class_for(_fm("public", "unknown", "full-dataset"))
     assert cls == "unknown"
