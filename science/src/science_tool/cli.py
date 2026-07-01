@@ -14,6 +14,7 @@ from science_model.reasoning import MembershipRole
 
 from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
+from science_tool.book_split_cli import book_split_command
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.commons import commons_group
@@ -347,6 +348,7 @@ main.add_command(labnote_group)
 main.add_command(search_command)
 main.add_command(data_group)
 main.add_command(distill_group)
+main.add_command(book_split_command)
 
 
 @main.group("entities")
@@ -5271,41 +5273,6 @@ def persist_source_cmd(
     except SourceTextError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Wrote {out}")
-
-
-@main.command("book-split")
-@click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option(
-    "--format",
-    "output_format",
-    type=click.Choice(["text", "json"]),
-    default="text",
-    show_default=True,
-    help="Output format. `--json` is kept as a convenience alias.",
-)
-@click.option("--json", "as_json", is_flag=True, help="Emit the chapter manifest as JSON.")
-def book_split_cmd(pdf: Path, output_format: str, as_json: bool) -> None:
-    """Extract a chapter manifest from a book PDF's outline/bookmarks.
-
-    Intended for the /review-books command: call this first; on a non-zero exit
-    with 'no outline', fall back to reading the book's table-of-contents pages.
-    """
-    import json as _json
-
-    from science_tool.book_split import BookSplitError, split_book
-
-    try:
-        chapters = split_book(pdf)
-    except BookSplitError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    payload = [c.to_dict() for c in chapters]
-    if as_json or output_format == "json":
-        click.echo(_json.dumps(payload, indent=2))
-    else:
-        for c in chapters:
-            part = f"  [{c.part}]" if c.part else ""
-            click.echo(f"{c.n:>3}. {c.title}  (pp. {c.start_page}-{c.end_page}){part}")
 
 
 @main.group("questions")
