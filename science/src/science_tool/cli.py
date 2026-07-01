@@ -5411,8 +5411,16 @@ def persist_source_cmd(
 
 @main.command("book-split")
 @click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit the chapter manifest as JSON.")
-def book_split_cmd(pdf: Path, as_json: bool) -> None:
+def book_split_cmd(pdf: Path, output_format: str, as_json: bool) -> None:
     """Extract a chapter manifest from a book PDF's outline/bookmarks.
 
     Intended for the /review-books command: call this first; on a non-zero exit
@@ -5428,7 +5436,7 @@ def book_split_cmd(pdf: Path, as_json: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
     payload = [c.to_dict() for c in chapters]
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(_json.dumps(payload, indent=2))
     else:
         for c in chapters:
@@ -5612,12 +5620,21 @@ def bib() -> None:
     help="Read the BibTeX entry from this file.",
 )
 @click.option("--replace", is_flag=True, help="Replace the existing entry if the key is already present.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def bib_add(
     project_root: Path,
     entry: str | None,
     entry_file: Path | None,
     replace: bool,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Atomically append a BibTeX entry to papers/references.bib.
@@ -5651,7 +5668,7 @@ def bib_add(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(_json.dumps({"key": result.key, "action": result.action, "path": str(result.path)}))
     else:
         click.echo(f"{result.action}: {result.key} ({result.path})")

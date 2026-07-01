@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from click.testing import CliRunner
 import pytest
 
 from science_tool.bibliography import (
@@ -11,6 +13,7 @@ from science_tool.bibliography import (
     load_bib_author_surnames,
     load_bib_keys,
 )
+from science_tool.cli import main
 
 SMITH = """\
 @article{Smith2024,
@@ -79,6 +82,21 @@ def test_add_existing_key_with_replace_swaps_block(tmp_path: Path) -> None:
     assert load_bib_keys(tmp_path) == {"Smith2024", "Jones2023"}  # Jones untouched
     # Only one Smith2024 block remains.
     assert text.count("@article{Smith2024,") == 1
+
+
+def test_bib_add_accepts_format_json(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        ["bib", "add", "--project-root", str(tmp_path), "--entry", SMITH, "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload == {
+        "action": "added",
+        "key": "Smith2024",
+        "path": str(tmp_path / "papers" / "references.bib"),
+    }
 
 
 def test_add_rejects_entry_without_key(tmp_path: Path) -> None:

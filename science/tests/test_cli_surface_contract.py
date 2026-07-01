@@ -75,8 +75,6 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
 }
 
 _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
-    "bib add": "single-purpose machine-readable add result; add --format if more output modes are introduced",
-    "book-split": "single-purpose chapter manifest output; add --format if more output modes are introduced",
     "commons data resolve": "commons CLI uses legacy --json convenience flags",
     "commons dataset init": "commons CLI uses legacy --json convenience flags",
     "commons dataset status": "commons CLI uses legacy --json convenience flags",
@@ -88,7 +86,6 @@ _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
     "commons reference-graph scaffold-member": "commons CLI uses legacy --json convenience flags",
     "commons show": "commons CLI uses legacy --json convenience flags",
     "commons validate": "commons CLI uses legacy --json convenience flags",
-    "qa-audit": "older advisory report flag; add --format if more output modes are introduced",
 }
 
 _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {

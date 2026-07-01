@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+from click.testing import CliRunner
 import yaml
 
+from science_tool.cli import main
 from science_tool.qa_audit.audit import audit_workflows, render_markdown
 
 
@@ -41,6 +43,23 @@ def test_missing_manifest_yields_error_row(tmp_path):
     _run(runs_dir, "r1", "wf-a", str(tmp_path / "nope" / "datapackage.yaml"))
     rows = audit_workflows(runs_dir=runs_dir, repo_root=tmp_path)
     assert rows[0]["engagement"] == "ERROR"
+
+
+def test_cli_accepts_format_json(tmp_path):
+    runs_dir = tmp_path / "entities" / "workflow-runs"
+    runs_dir.mkdir(parents=True)
+    manifest = _manifest_with_open_flag(tmp_path / "results" / "wf-a")
+    _run(runs_dir, "r1", "wf-a", str(manifest))
+
+    result = CliRunner().invoke(
+        main,
+        ["qa-audit", "--runs-dir", str(runs_dir), "--repo-root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    assert rows[0]["workflow"] == "wf-a"
+    assert rows[0]["engagement"] == "IGNORED"
 
 
 def test_render_markdown_has_header_and_rows(tmp_path):

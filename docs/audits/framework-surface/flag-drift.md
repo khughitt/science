@@ -153,8 +153,8 @@ path. If multi-format output grows, add `--format` while preserving `--json`.
 2. Add a test or lint for new commands that expose `--json` without `--format`,
    with an allowlist for legacy/convenience aliases.
    **Status:** Added in `science/tests/test_cli_surface_contract.py`.
-   `project verify` and `data audit` now accept `--format json` while preserving
-   `--json`.
+   `project verify`, `data audit`, `qa-audit`, `book-split`, and `bib add` now
+   accept `--format json` while preserving `--json`.
 3. Improve help text for the 16 `--project` users before adding aliases.
    **Status:** Addressed by `science/tests/test_cli_surface_contract.py` and
    help-text updates for the previously blank or ambiguous `--project` options.
