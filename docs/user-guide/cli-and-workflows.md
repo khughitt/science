@@ -52,10 +52,11 @@ knowledge, and generated-write commands for materialization or reports.
 | `questions`, `hypotheses`, `propositions`, `evidence-lines`, `discussions`, `interpretations` | Canonical | Source-write / Read-only | Typed wrappers for common entity kinds. Prefer them when they expose kind-specific options. |
 | `graph` | Derived-state | Mixed | Build, validate, query, import, export, and inspect graph-derived state. |
 | `graph add` | Exploratory | Generated-write | Direct graph mutation. Avoid for durable project knowledge because graph builds can overwrite these writes. |
+| `dag` | Derived-state | Mixed | Render, number, validate, and audit DAG views. This is an older family-local surface and uses `--project` for project roots. |
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
 | `patch` | Derived-state | Read-only | Explain or check derived patch membership. |
-| `validate`, `health`, `refs`, `prose`, `markers` | Canonical | Mixed | Project health, references, prose linting, and annotation-token checks. |
+| `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |
 | `feedback`, `telemetry` | Specialized | Source-write / Read-only | Agent feedback records and local operational telemetry. |
 | `benchmark` | Specialized | Read-only | Benchmark metadata reports, opportunities, gaps, and test triage. |

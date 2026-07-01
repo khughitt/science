@@ -80,3 +80,5 @@ The first docs slice from this audit now lives in
 [`../../user-guide/cli-and-workflows.md`](../../user-guide/cli-and-workflows.md).
 It adds the command taxonomy, write classes, dataset command distinction,
 source-authored vs graph-authored guidance, and shared CLI behavior notes.
+The taxonomy is now guarded by `science/tests/test_user_guide_docs.py`, which
+checks the guide against the registered top-level Click commands.

@@ -97,6 +97,11 @@ behavior.
 
 ### B6. Normalize One Command Pattern
 
+**Status:** Started with a CLI workflow-map coverage guard in
+`science/tests/test_user_guide_docs.py`. The guard checks the durable taxonomy
+against the registered top-level Click commands so new command families do not
+silently bypass classification.
+
 **Goal:** Make one repeated behavior consistent across a few commands.
 
 **Best candidates:**
