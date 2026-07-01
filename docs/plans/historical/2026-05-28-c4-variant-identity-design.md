@@ -2,9 +2,11 @@
 
 Date: 2026-05-28
 
-Status: historical C4 rationale — C4a, C4b, and C4c-1 rsID input are implemented. Remaining active work
-is delegated to `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`: full dbSNP artifact
-build/operator smoke and later transcript/protein projection.
+Status: historical C4 rationale — C4a, C4b, and C4c-1 rsID input are implemented. The old C4c-1
+implementation plan is archived at `docs/plans/historical/2026-05-31-c4c-rsid-variant-label-plan.md`.
+Remaining work is checkpointed in
+`docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`: full dbSNP artifact
+build/operator smoke, datapackage hash refresh, and later transcript/protein projection.
 
 Related (builds on):
 - `docs/plans/historical/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
@@ -252,6 +254,8 @@ liftover, seqcol compatibility relations, lifted VRS reminting, and the C1 check
 liftover remedy in `science/src/science_tool/commons/liftover.py`,
 `science/src/science_tool/commons/assembly_compatibility.py`, and
 `science/src/science_tool/validate/checks/identity_context.py`. C4c-1 rsID input is implemented
-locally in `~/d/science` and `~/d/science-commons` via
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; full dbSNP artifact build/operator smoke is still
-pending, and transcript/protein HGVS projection remains a later C4c increment.
+locally in `~/d/science`; the old implementation plan is archived at
+`docs/plans/historical/2026-05-31-c4c-rsid-variant-label-plan.md`. Full dbSNP artifact
+build/operator smoke is still tracked in
+`docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`, and transcript/protein HGVS
+projection remains a later C4c increment.

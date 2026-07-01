@@ -109,8 +109,10 @@ load-bearing (epistemic) entity types**, not just hypotheses?
   evidence/uncertainty/decay — this question is the drift-detection half of that), and
   `question:0005-authoring-cost-audit` (the `operationalized_by:` contract and agentic review both
   add authoring cost that must be justified).
-- Design artifact: `docs/plans/2026-06-04-epistemic-drift-detection-design.md` (proposes the
-  three mechanisms and a staged rollout).
+- Design artifact: `docs/plans/historical/2026-06-04-epistemic-drift-detection-design.md`
+  (historical design for the three mechanisms and staged rollout). Current implementation status
+  and residual M2/M3 backlog are checkpointed in
+  `docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`.
 - Required analyses: enumerate drift patterns; score each on mechanical detectability;
   prototype the coverage check + open-question-debt term on a real project (multiple-myeloma H2
   is a ready regression fixture).

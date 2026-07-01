@@ -47,6 +47,13 @@ across active June planning files. Current user-facing behavior is documented in
 - MM30 legacy edge-corpus migration remains outside the framework implementation.
 - Broader epistemic drift M2/M3 work remains active: operationalization coverage,
   decision-review scope, and rubric/backstop behavior are not closed by M1.
+- Epistemic drift residual backlog is preserved in
+  `docs/audits/plans-cleanup/2026-07-01-final-root-plan-checkpoint.md`: M2 needs
+  an opt-in operationalization coverage contract for scoped empirical claims
+  (`operationalized_by` / `claims_scope`) plus manifest adapters; M3 needs
+  review semantics beyond M1, including per-kind rubric/backstop behavior,
+  decision-review semantics for `decision` reference entities, and a decision on
+  whether a typed scoping predicate should enter freshness propagation.
 - Patch follow-ons remain deferred: `PatchSnapshot`, remote/commons scopes,
   ontology or latent glue, patch maturity levels, lead/candidate workflow, and
   inquiry subsumption beyond the current profile bridge.
