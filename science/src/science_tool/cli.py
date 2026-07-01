@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -6452,7 +6452,7 @@ def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path
     return parsed
 
 
-def _format_count_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+def _format_count_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
     values = [f"{row[key]}:{row['count']}" for row in rows]
     return ", ".join(values) if values else "-"
 

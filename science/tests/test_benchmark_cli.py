@@ -1273,6 +1273,30 @@ benchmark:
     assert written["fallback_diagnostics"] == {"top_benchmarks": [], "top_facets": []}
 
 
+def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+
+    result = _invoke_test_triage(
+        tmp_path,
+        "--write-review-file",
+        "--output",
+        "docs/audits/benchmark-test-triage/custom.yaml",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "docs" / "audits" / "benchmark-test-triage" / "custom.yaml"
+    assert review_path.is_file()
+    assert f"wrote benchmark test triage review file: {review_path}" in result.stderr
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    assert written["review_file"] == str(review_path)
+
+
 def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
     output_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / "custom.yaml"
