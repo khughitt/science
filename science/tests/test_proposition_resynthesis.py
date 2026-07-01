@@ -1,6 +1,6 @@
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -30,6 +30,7 @@ from science_tool.annotation.proposition_resynthesis import (
     draft_to_json,
     resolve_resynthesis_action,
 )
+from science_tool.entities import parse_markdown_entity_file
 
 _CREATED = datetime(2026, 7, 1, tzinfo=timezone.utc)
 
@@ -210,3 +211,189 @@ def test_build_resynthesis_scaffold_emits_identity_context_and_empty_review_fiel
     assert payload["new_propositions"] == []
     assert payload["annotation_assignments"] == []
     assert payload["context"]["observed_statement_hints"] == list(ctx["action"].inputs["observed_statement_hints"])
+
+
+def _draft_payload(ctx: dict) -> dict:
+    return {
+        "schema_version": 1,
+        "source": "llm-review:codex-gpt-5:proposition-resynthesis-v1",
+        "action_id": ctx["action"].action_id,
+        "candidate_id": ctx["action"].candidate_id,
+        "judgment_id": ctx["action"].judgment_id,
+        "source_review": str(ctx["review_path"]),
+        "original_proposition": "proposition:broad",
+        "disposition": "replace",
+        "new_propositions": [
+            {
+                "id": "proposition:broad-positive",
+                "title": "BES can behave like meta-analysis under informative evidence",
+                "body": "BES can behave similarly to meta-analysis when evidence is informative.",
+                "frontmatter": {
+                    "subject": "BES",
+                    "predicate": "associates_with",
+                    "object": "meta-analysis behavior",
+                    "polarity": "positive",
+                    "source_refs": ["manual:curator-note"],
+                },
+            },
+            {
+                "id": "proposition:broad-negative",
+                "title": "BES can differ from data pooling under weak evidence",
+                "body": "BES can differ from data pooling when study evidence is weak.",
+                "frontmatter": {
+                    "subject": "BES",
+                    "predicate": "associates_with",
+                    "object": "data-pooling behavior",
+                    "polarity": "negative",
+                },
+            },
+        ],
+        "annotation_assignments": [
+            {
+                "annotation": "annotation:entities/papers/A2020.source#a1",
+                "from": "proposition:broad",
+                "to": "proposition:broad-positive",
+            },
+            {
+                "annotation": "annotation:entities/papers/B2021.source#b1",
+                "from": "proposition:broad",
+                "to": "proposition:broad-negative",
+            },
+        ],
+        "context": {},
+        "notes": "",
+    }
+
+
+def test_parse_resynthesis_draft_rejects_invalid_source(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["source"] = "llm-synth:wrong"
+
+    with pytest.raises(ResynthesisDraftError, match="source"):
+        parse_resynthesis_draft(payload)
+
+
+def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert report.status == "ok"
+    assert report.original_proposition == "proposition:broad"
+    assert report.replacement_propositions == 2
+    assert report.moved_annotations == 2
+    assert report.retained_annotations == 0
+    assert report.errors == ()
+    assert report.expected_annotation_targets == {
+        "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
+        "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
+    }
+
+
+def test_validate_resynthesis_draft_rejects_unknown_frontmatter_key(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["frontmatter"]["made_up_field"] = "bad"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="unknown proposition frontmatter key"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_duplicate_annotation_assignment(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"].append(dict(payload["annotation_assignments"][0]))
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="assigned more than once"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_assignment_to_unknown_target(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][0]["to"] = "proposition:not-in-draft"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="not a draft proposition"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_incomplete_replace_when_input_set_grew(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    _paper_sidecar(tmp_path, "C2022", (_ann("c1", "proposition:broad", stance="asserted"),))
+
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="replace must assign every input annotation"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_allows_split_partial_with_retained_original(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["disposition"] = "split_partial"
+    payload["annotation_assignments"][1]["to"] = "proposition:broad"
+    draft = parse_resynthesis_draft(payload)
+
+    report = validate_resynthesis_draft(tmp_path, draft)
+
+    assert report.status == "ok"
+    assert report.moved_annotations == 1
+    assert report.retained_annotations == 1
+
+
+def test_render_replacement_preserves_existing_created_updated_for_idempotent_compare(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        render_replacement_proposition,
+        validate_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+    replacement = draft.new_propositions[0]
+    rendered = render_replacement_proposition(
+        tmp_path,
+        replacement,
+        sorted(report.expected_source_refs_by_replacement[replacement.id]),
+        as_of=date(2026, 7, 1),
+    )
+    path = tmp_path / "entities" / "propositions" / "broad-positive.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(rendered.text.replace("2026-07-01", "2026-06-30"), encoding="utf-8")
+
+    rerendered = render_replacement_proposition(
+        tmp_path,
+        replacement,
+        sorted(report.expected_source_refs_by_replacement[replacement.id]),
+        as_of=date(2026, 7, 2),
+    )
+
+    assert rerendered.path == path
+    assert rerendered.changed is False
+    frontmatter, _body = parse_markdown_entity_file(path)
+    assert str(frontmatter["created"]) == "2026-06-30"
+    assert str(frontmatter["updated"]) == "2026-06-30"
