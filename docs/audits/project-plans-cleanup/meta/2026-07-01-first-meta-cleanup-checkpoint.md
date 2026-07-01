@@ -37,9 +37,9 @@ Moved:
 - `meta/doc/plans/2026-05-06-t030-llm-pass-2-output.md`
 - `meta/doc/plans/2026-05-06-t030-full-audit-results.md`
 
-Reason: the authoring-cost audit is complete and already shaped the t022 v2.1
-and v2.2 contract. Durable state now lives in
-`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`,
+Reason: the authoring-cost audit is complete and already shaped the t022
+contract. Durable state now lives in `meta/evidence/t022-core-contract.md`,
+`meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`,
 `meta/entities/questions/0005-authoring-cost-audit.md`, and
 `meta/entities/synthesis/0010-rich-evidence-payloads-improve-graph-calibration.md`.
 

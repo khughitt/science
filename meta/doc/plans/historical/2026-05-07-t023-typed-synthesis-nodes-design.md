@@ -1,6 +1,6 @@
 # Typed Synthesis Nodes - Design (t023 draft v1)
 
-> **Status:** v1 complete (2026-05-07). Review patches clarified that synthesis nodes are `[t022]` payloads with synthesis-family artifact types, split default versus maximum permissions, added routing and owner-arbitration rules, scoped effective reason codes to computed views, and moved lifecycle/output-artifact replay semantics to `[t042]`. Designs `[t023]` against the v2.3 evidence-payload core/extension contract at `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`.
+> **Status:** v1 complete (2026-05-07). Review patches clarified that synthesis nodes are `[t022]` payloads with synthesis-family artifact types, split default versus maximum permissions, added routing and owner-arbitration rules, scoped effective reason codes to computed views, and moved lifecycle/output-artifact replay semantics to `[t042]`. Designs `[t023]` against the v2.3 evidence-payload core/extension contract at `meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`.
 
 **Scope:** This task defines the cross-cutting synthesis-node contract and synthesis-family taxonomy. It does not duplicate the detailed field schemas owned by sibling aspect tasks such as `[t034]` causal graph construction, `[t035]` graph-valued / multiview artifacts, `[t037]` agent/tool operations, `[t038]` graph evolution and KG views, or `[t040]` robustness/reproducibility evaluation.
 

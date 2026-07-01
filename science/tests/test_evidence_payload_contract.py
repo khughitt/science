@@ -46,7 +46,7 @@ def _registry() -> EvidencePayloadRegistry:
         ExtensionSpec(
             name="reproducibility-checklist-audit",
             artifact_type="reproducibility-checklist-audit",
-            required_fields=["checklist_ref"],
+            required_fields=["checklist_ref", "target_artifact_ref"],
             propagation_policy="propagate-blocking",
         )
     )
@@ -99,6 +99,43 @@ def test_payload_validates_core_source_method_split_and_multi_extension_contract
     assert payload.core.extensions == ["causal-discovery-run", "causal-graph"]
 
 
+def test_payload_accepts_t022_v23_core_fields_and_optional_uncertainty_summary() -> None:
+    payload = _payload(
+        "ev-2026-paper-extracted-claim",
+        core={
+            "claim_source_ref": "paper:Faller2024",
+            "partial_fields": ["extension/causal-graph.edges"],
+            "uncertainty_summary": None,
+        },
+    )
+
+    _registry().validate_payload(payload)
+
+    assert payload.core.claim_source_ref == "paper:Faller2024"
+    assert payload.core.partial_fields == ["extension/causal-graph.edges"]
+    assert payload.core.uncertainty_summary is None
+
+
+def test_payload_accepts_t022_v22_method_enum_values() -> None:
+    payload = _payload(
+        "ev-2026-method-framework-claim",
+        core={
+            "comparison_target": "method-set",
+            "support_direction": "framework-proposal",
+        },
+    )
+
+    _registry().validate_payload(payload)
+
+    assert payload.core.comparison_target == "method-set"
+    assert payload.core.support_direction == "framework-proposal"
+
+
+def test_payload_rejects_stale_core_target_artifact_ref() -> None:
+    with pytest.raises(ValueError, match="target_artifact_ref"):
+        _payload("ev-2026-stale-target-ref", core={"target_artifact_ref": "study:dishonesty-19lab"})
+
+
 def test_payload_rejects_missing_co_required_extension_before_silent_fallback() -> None:
     payload = _payload(
         "ev-2026-bad-cpdag",
@@ -122,7 +159,6 @@ def test_payload_rejects_strengthen_belief_when_effective_blocking_reason_inheri
                 "method_ref": "paper:Banzi2026",
                 "agent_ref": "agent:reproducibility-auditor",
                 "proposition_refs": [],
-                "target_artifact_ref": "study:dishonesty-19lab",
                 "comparison_target": "artifact-target",
                 "support_direction": "quality-record",
                 "validation_role": "quality-record-only",
@@ -130,7 +166,12 @@ def test_payload_rejects_strengthen_belief_when_effective_blocking_reason_inheri
                 "uncertainty_summary": "OSIRIS 24/32 items present",
                 "reason_codes": ["code-or-data-unavailable"],
             },
-            "extension_sections": {"reproducibility-checklist-audit": {"checklist_ref": "checklist:OSIRIS-32"}},
+            "extension_sections": {
+                "reproducibility-checklist-audit": {
+                    "checklist_ref": "checklist:OSIRIS-32",
+                    "target_artifact_ref": "study:dishonesty-19lab",
+                }
+            },
         }
     )
     downstream = _payload(

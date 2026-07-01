@@ -17,7 +17,7 @@ This plan implements the next t037 research/development loop from:
 - Design contract: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
 - Source synthesis: `meta/doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`
 - Source paper summaries: `Ding2025.md`, `Yu2026.md`, `Si2025.md`
-- Contract dependency: `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`
+- Contract dependency: `meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`
 - Precedent: the t034 artifact sequence in `meta/doc/plans/historical/2026-05-06-t034-*`
 
 Out of scope for this plan:
@@ -57,7 +57,7 @@ Optional if the task owner wants task bookkeeping in the same pass:
 
 **Files:**
 - Modify if needed: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
-- Read: `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`
+- Read: `meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`
 
 - [ ] **Step 1: Verify the design is labeled v1.1**
 
@@ -91,7 +91,7 @@ Expected: every pattern appears. These are the v1.1 audit baseline rules that Ta
 Run:
 
 ```bash
-rg -n "support_direction: enum.*methodological-input.*quality-record.*operation-record|validation_role: enum.*quality-record-only.*record-only" meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md
+rg -n "support_direction: enum.*methodological-input.*quality-record.*operation-record|validation_role: enum.*quality-record-only.*record-only" meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md
 ```
 
 Expected: t022 v2.3 lists `support_direction` values including `methodological-input`, `quality-record`, and `operation-record`, and `validation_role` values including `quality-record-only` and `record-only`. If this check fails, add a coordination finding to the pilot extraction before authoring payloads.
@@ -131,7 +131,7 @@ sed -n '220,520p' meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation
 sed -n '1,220p' meta/doc/background/papers/Ding2025.md
 sed -n '1,220p' meta/doc/background/papers/Yu2026.md
 sed -n '1,220p' meta/doc/background/papers/Si2025.md
-rg -n "support_direction: enum.*methodological-input.*quality-record.*operation-record|validation_role: enum.*quality-record-only.*record-only" meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md
+rg -n "support_direction: enum.*methodological-input.*quality-record.*operation-record|validation_role: enum.*quality-record-only.*record-only" meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md
 ```
 
 Expected: all files render; no missing source file; t022 v2.3 supports the enum values used by t037. If the t022 check fails, add it as a coordination finding before authoring payloads.

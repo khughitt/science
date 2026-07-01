@@ -1,6 +1,6 @@
 # t030 — Narrow Authoring-Cost Audit (first pass)
 
-> **Scope.** Pragmatic first pass on `[t030]`: 4 paper summaries (not the full 10–20), no LLM-vs-human agreement scoring, no rubric. Goal: surface contract problems in the v2 design draft (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`) cheaply, *before* the full `[t030]` deliverable commits to a sampling plan and rubric. **This audit does not satisfy the full `[t030]` deliverables specified at `meta/tasks/active.md:345`** — it informs them.
+> **Scope.** Pragmatic first pass on `[t030]`: 4 paper summaries (not the full 10–20), no LLM-vs-human agreement scoring, no rubric. Goal: surface contract problems in the v2 design draft (`meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`) cheaply, *before* the full `[t030]` deliverable commits to a sampling plan and rubric. **This audit does not satisfy the full `[t030]` deliverables specified at `meta/tasks/active.md:345`** — it informs them.
 >
 > **Method.** For each paper, classify what payload(s) it implies, attempt to author them under v2's core schema, and log every spot where I had to invent a field, leave one blank, or pick a value that didn't quite fit. Each paper picked to **not** overlap with the six worked examples already in v2 (Gronau, Zhao, Petersen, Mohammadi, Ding, Banzi).
 

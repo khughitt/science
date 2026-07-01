@@ -4,7 +4,7 @@ title: What metadata should Science require for quantitative evidence and synthe
   updates?
 status: active
 created: '2026-05-05'
-updated: '2026-05-06'
+updated: '2026-07-01'
 id: question:0002-evidence-payload-schema
 ontology_terms: []
 datasets: []
@@ -100,14 +100,15 @@ This question asks what minimum metadata Science should require before a quantit
 
 ## Thoughts
 
-- Best current interpretation: Science needs a compact structured evidence payload with required fields for comparison target, evidence type, estimand, aggregation operator, source provenance, source behavior, pipeline provenance, and epistemic role, plus optional typed fields for priors, heterogeneity, bias, diagnostics, sensitivity deltas, transport, identifiability, cleaning, validation role, graph object type, discovery method, hidden-variable assumptions, graph-construction diagnostics, graph artifact type, integration objective, context scope, view scope, approximation class, posterior summary role, agent role, tool-chain provenance, graph version, KG view, agent evaluation status, robustness target/modifier/tolerance, replication design, metric family, and reproducibility checklist status.
-- The major remaining uncertainty is where to draw the line between required metadata and richer method-specific extensions.
-- A likely design is progressive: require a small core for all quantitative evidence, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, Mendelian-randomization graph models, graph posteriors, integrative clustering, feature selection, module discovery, predictive integration, agent/tool operations, and robustness/reproducibility evaluations.
+- Best current interpretation: Science uses a compact t022 core plus typed extensions. The durable core contract now lives at `meta/evidence/t022-core-contract.md`; the generic implementation lives in `science/src/science_tool/evidence_payload.py` with coverage in `science/tests/test_evidence_payload_contract.py`.
+- The core keeps graph-level fields only: identity, provenance, proposition attachment, comparison target, support direction, validation role/status, optional uncertainty summary, reason codes, and partial-field markers. Paper-extracted claims use `claim_source_ref`; evaluation/audit/operation targets live in their owning extensions rather than in core.
+- The major remaining uncertainty is not the t022 core shape, but how much each typed extension should require for Bayesian synthesis, truth discovery, graph-valued integration, agent/tool operations, robustness/reproducibility evaluation, and future evidence families.
+- A likely design remains progressive: require the small core for all evidence-like artifacts, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, Mendelian-randomization graph models, graph posteriors, integrative clustering, feature selection, module discovery, predictive integration, agent/tool operations, and robustness/reproducibility evaluations.
 
 ## Connections to Project
 
 - Related hypotheses: `hypothesis:0001-stochastic-revisiting`, `hypothesis:0002-rich-evidence-payloads-improve-graph-calibration`, `hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting`.
-- Required data or analyses: schema design pass over existing evidence entities, then a migration strategy for paper-summary-derived evidence.
+- Required data or analyses: extension-specific contract passes over existing evidence entities, then a migration strategy for paper-summary-derived evidence.
 - Priority level: high.
 
 ## Related

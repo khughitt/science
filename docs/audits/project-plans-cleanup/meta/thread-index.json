@@ -1,10 +1,10 @@
 {
-  "file_count": 2,
+  "file_count": 1,
   "generated_at": "2026-07-01T00:00:00Z",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "meta/doc/plans",
-  "thread_count": 2,
+  "thread_count": 1,
   "threads": [
     {
       "earliest_file_date": "2026-05-17",
@@ -26,27 +26,6 @@
         "meta/doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md": null
       },
       "thread_id": "adaptive-project-topology-and-bio-meta-next-steps"
-    },
-    {
-      "earliest_file_date": "2026-05-06",
-      "files": [
-        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md"
-      ],
-      "latest_file_date": "2026-05-06",
-      "normalized_slug": "evidence-payload-core-and-extension-contract",
-      "raw_slugs": {
-        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md": "evidence-payload-core-and-extension-contract"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md"
-        ]
-      },
-      "stripped_roles": {
-        "meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md": null
-      },
-      "thread_id": "evidence-payload-core-and-extension-contract"
     }
   ]
 }
