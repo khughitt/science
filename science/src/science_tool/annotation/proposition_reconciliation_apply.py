@@ -65,6 +65,9 @@ class CanonicalizationPreflight:
     )
     expected_annotation_targets: Mapping[str, str] = field(default_factory=dict)
     action_edit_paths_by_id: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
+    action_path_changed_by_id: Mapping[str, Mapping[Path, bool]] = field(
+        default_factory=dict
+    )
     action_diagnostics_by_id: Mapping[str, tuple[Mapping[str, Any], ...]] = field(
         default_factory=dict
     )
@@ -115,14 +118,20 @@ def _changed_and_noop_paths(
     return changed, noop
 
 
-def _changed_and_noop_paths_for_action(
-    edits: Sequence[PlannedFileEdit],
-    action_paths: Sequence[Path],
+def _changed_and_noop_paths_from_path_changes(
+    path_changes: Mapping[Path, bool],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    relevant_paths = set(action_paths)
-    return _changed_and_noop_paths(
-        tuple(edit for edit in edits if edit.path in relevant_paths)
+    changed = tuple(
+        _path_string(path)
+        for path, path_changed in sorted(path_changes.items())
+        if path_changed
     )
+    noop = tuple(
+        _path_string(path)
+        for path, path_changed in sorted(path_changes.items())
+        if not path_changed
+    )
+    return changed, noop
 
 
 def _edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
@@ -366,6 +375,24 @@ def _validate_listed_refs(
     return tuple(diagnostics)
 
 
+def _listed_already_canonical_targets(
+    *,
+    duplicate_to_canonical: Mapping[str, str],
+    live_annotation_index: Mapping[str, tuple[Path, Sidecar, str | None]],
+    listed_refs: Mapping[str, str],
+) -> dict[str, str]:
+    targets: dict[str, str] = {}
+    for annotation_ref, duplicate in sorted(listed_refs.items()):
+        canonical = duplicate_to_canonical.get(duplicate)
+        indexed = live_annotation_index.get(annotation_ref)
+        if canonical is None or indexed is None:
+            continue
+        _sidecar_path, _sidecar, promoted_to = indexed
+        if promoted_to == canonical:
+            targets[annotation_ref] = canonical
+    return targets
+
+
 def _entity_location(project_root: Path, ref: str):
     try:
         return find_entity(project_root, ref)
@@ -605,17 +632,24 @@ def plan_canonicalization_apply(
     expected_annotation_targets = {
         backlink.annotation_ref: backlink.canonical for backlink in live_backlinks
     }
+    expected_annotation_targets.update(
+        _listed_already_canonical_targets(
+            duplicate_to_canonical=duplicate_to_canonical,
+            live_annotation_index=live_annotation_index,
+            listed_refs=listed_refs,
+        )
+    )
     listed_refs_by_action = _listed_sidecar_refs_by_action(actions)
     action_edit_paths_by_id: dict[str, tuple[Path, ...]] = {}
+    action_path_changed_by_id: dict[str, Mapping[Path, bool]] = {}
 
     for action in actions:
         canonical = action.canonical_proposition
         if canonical is None:
             raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
 
-        action_paths: set[Path] = set()
+        action_path_changed: dict[Path, bool] = {}
         canonical_location = _entity_location(project_root, canonical)
-        action_paths.add(canonical_location.path)
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
         final_text, _changed = render_entity_source_refs(
@@ -623,17 +657,18 @@ def plan_canonicalization_apply(
             canonical_refs,
             as_of=as_of,
         )
-        edits[canonical_location.path] = _edit(
+        canonical_edit = _edit(
             canonical_location.path,
             final_text,
             "canonical_source_refs",
         )
+        edits[canonical_location.path] = canonical_edit
+        action_path_changed[canonical_location.path] = canonical_edit.changed
 
         for duplicate in action.members:
             if duplicate == canonical:
                 continue
             duplicate_location = _entity_location(project_root, duplicate)
-            action_paths.add(duplicate_location.path)
             frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
             existing_superseded_by = frontmatter.get("superseded_by")
             if (
@@ -648,24 +683,28 @@ def plan_canonicalization_apply(
                 {"status": "superseded", "superseded_by": canonical},
                 as_of=as_of,
             )
-            edits[duplicate_location.path] = _edit(
+            duplicate_edit = _edit(
                 duplicate_location.path,
                 final_text,
                 "duplicate_supersession",
             )
+            edits[duplicate_location.path] = duplicate_edit
+            action_path_changed[duplicate_location.path] = duplicate_edit.changed
 
         action_duplicates = _action_duplicate_propositions(action)
-        action_paths.update(
-            backlink.sidecar_path
-            for backlink in live_backlinks
-            if backlink.duplicate in action_duplicates
-        )
+        for backlink in live_backlinks:
+            if backlink.duplicate in action_duplicates:
+                action_path_changed[backlink.sidecar_path] = True
         for annotation_ref in listed_refs_by_action.get(action.action_id, set()):
             indexed = live_annotation_index.get(annotation_ref)
             if indexed is not None:
-                sidecar_path, _sidecar, _promoted_to = indexed
-                action_paths.add(sidecar_path)
-        action_edit_paths_by_id[action.action_id] = tuple(sorted(action_paths))
+                sidecar_path, _sidecar, promoted_to = indexed
+                target_changed = promoted_to != canonical
+                action_path_changed[sidecar_path] = (
+                    action_path_changed.get(sidecar_path, False) or target_changed
+                )
+        action_edit_paths_by_id[action.action_id] = tuple(sorted(action_path_changed))
+        action_path_changed_by_id[action.action_id] = dict(action_path_changed)
 
     for sidecar_path, final_text in _sidecar_final_texts(
         project_root,
@@ -679,6 +718,7 @@ def plan_canonicalization_apply(
         expected_source_refs_by_canonical=expected_refs_by_canonical,
         expected_annotation_targets=expected_annotation_targets,
         action_edit_paths_by_id=action_edit_paths_by_id,
+        action_path_changed_by_id=action_path_changed_by_id,
         action_diagnostics_by_id=_diagnostics_by_action(
             actions,
             diagnostics,
@@ -815,9 +855,8 @@ def apply_canonicalization_plan(
         actions=tuple(
             _action_result(
                 action,
-                *_changed_and_noop_paths_for_action(
-                    preflight.file_edits,
-                    preflight.action_edit_paths_by_id.get(action.action_id, ()),
+                *_changed_and_noop_paths_from_path_changes(
+                    preflight.action_path_changed_by_id.get(action.action_id, {})
                 ),
                 preflight.action_diagnostics_by_id.get(action.action_id, ()),
             )

@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -815,6 +816,96 @@ def test_postflight_fails_if_sidecar_rewrite_points_to_wrong_canonical(
     assert "proposition:other" in message
 
 
+def test_postflight_checks_listed_already_canonical_sidecar_refs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B", "annotation:entities/papers/B.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(
+        tmp_path,
+        "B",
+        (
+            _ann("b1", "proposition:b"),
+            _ann("b2", "proposition:a"),
+        ),
+    )
+    action = _action(
+        inputs={
+            "source_ref_moves": (
+                {"from": "proposition:b", "to": "proposition:a", "source_refs": ("paper:B",)},
+            ),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "annotation_refs": (
+                        "annotation:entities/papers/B.source#b1",
+                        "annotation:entities/papers/B.source#b2",
+                    ),
+                },
+            ),
+            "archive_candidates": ("proposition:b",),
+        },
+    )
+    plan = _manual_ready_plan((action,))
+    preflight = plan_canonicalization_apply(tmp_path, plan)
+    assert preflight.expected_annotation_targets[
+        "annotation:entities/papers/B.source#b2"
+    ] == "proposition:a"
+    assert any(
+        diagnostic.get("reason") == "listed_backlink_already_canonical"
+        and diagnostic.get("annotation_ref") == "annotation:entities/papers/B.source#b2"
+        for diagnostic in preflight.diagnostics
+    )
+    original_atomic_write_text = apply_module.atomic_write_text
+
+    def corrupt_already_canonical_ref(path: Path, text: str) -> None:
+        original_atomic_write_text(path, text)
+        if not path.name.endswith(".anno.trig"):
+            return
+        sidecar = read_sidecar_strict(path)
+        annotations = tuple(
+            replace(annotation, promoted_to="proposition:other")
+            if annotation.id == "b2"
+            else annotation
+            for annotation in sidecar.annotations
+        )
+        original_atomic_write_text(
+            path,
+            anno_io.serialize_sidecar(
+                Sidecar(
+                    annotations=annotations,
+                    ledgers=sidecar.ledgers,
+                    shared_targets=sidecar.shared_targets,
+                )
+            ),
+        )
+
+    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_already_canonical_ref)
+
+    with pytest.raises(ReconciliationApplyError) as exc_info:
+        apply_canonicalization_plan(tmp_path, plan)
+
+    message = str(exc_info.value)
+    assert "stage=postflight" in message
+    assert "annotation:entities/papers/B.source#b2" in message
+    assert "proposition:a" in message
+    assert "proposition:other" in message
+
+
 def test_postflight_fails_if_duplicate_backlink_remains_after_write(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -922,3 +1013,79 @@ def test_apply_canonicalization_reports_paths_per_action(tmp_path: Path):
     assert not second_result.changed_paths
     assert any(path.endswith("entities/propositions/c.md") for path in second_result.noop_paths)
     assert any(path.endswith("entities/propositions/d.md") for path in second_result.noop_paths)
+
+
+def test_apply_canonicalization_reports_shared_sidecar_changes_per_action(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+    _proposition(
+        tmp_path,
+        "c",
+        "TP53 loss increases genomic instability",
+        status="superseded",
+        superseded_by="proposition:c",
+        subject="TP53 loss",
+    )
+    _proposition(
+        tmp_path,
+        "d",
+        "Loss of TP53 raises genome instability",
+        status="superseded",
+        superseded_by="proposition:c",
+        subject="TP53 loss",
+    )
+    _paper_sidecar(
+        tmp_path,
+        "Shared",
+        (
+            _ann("b1", "proposition:b"),
+            _ann("d1", "proposition:c"),
+        ),
+    )
+    first = _action(
+        action_id="reconcile-action:first",
+        canonical="proposition:a",
+        members=("proposition:a", "proposition:b"),
+        inputs={
+            "source_ref_moves": (),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "annotation_refs": ("annotation:entities/papers/Shared.source#b1",),
+                },
+            ),
+            "archive_candidates": ("proposition:b",),
+        },
+    )
+    second = _action(
+        action_id="reconcile-action:second",
+        canonical="proposition:c",
+        members=("proposition:c", "proposition:d"),
+        inputs={
+            "source_ref_moves": (),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:d",
+                    "to": "proposition:c",
+                    "annotation_refs": ("annotation:entities/papers/Shared.source#d1",),
+                },
+            ),
+            "archive_candidates": ("proposition:d",),
+        },
+    )
+
+    report = apply_canonicalization_plan(tmp_path, _manual_ready_plan((first, second)))
+
+    first_result, second_result = report.actions
+    assert any(path.endswith("Shared.source.anno.trig") for path in report.changed_paths)
+    assert first_result.action_id == "reconcile-action:first"
+    assert first_result.status == "applied"
+    assert any(path.endswith("Shared.source.anno.trig") for path in first_result.changed_paths)
+    assert second_result.action_id == "reconcile-action:second"
+    assert second_result.status == "noop"
+    assert second_result.changed_paths == ()
+    assert any(path.endswith("Shared.source.anno.trig") for path in second_result.noop_paths)
