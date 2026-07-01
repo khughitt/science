@@ -9,8 +9,8 @@
 **Tech Stack:** Python 3.11+, numpy, polars, click, pytest. No new runtime dependencies. `concurrent.futures.ProcessPoolExecutor` for parallelism.
 
 **Context docs:**
-- Engine plan (completed): `meta/doc/plans/2026-04-24-h01-simulator.md`
-- Spec: `meta/doc/plans/2026-04-24-h01-simulator-spec.md`
+- Engine plan (completed): `meta/doc/plans/historical/2026-04-24-h01-simulator.md`
+- Spec: `meta/doc/plans/historical/2026-04-24-h01-simulator-spec.md`
 - Hypothesis: `meta/entities/hypotheses/0001-stochastic-revisiting.md`
 
 **Out of scope:** Running the sweep, populating notebook figures, writing the interpretation (all `[t002]`). Adding reference policies (UCB, optimistic-init, annealed revisit, info-gain) — deferred to `[t002]` plan authoring. Gaussian-effect-size variants and other alternative simulator designs from the handoff note — future work. A budget-aware recall oracle (a real, non-redundant companion metric for recall) — defer to `[t002]` if interpretation actually needs it.
@@ -852,7 +852,7 @@ Insert between `[t001]` and `[t002]` in `meta/tasks/active.md`:
 - blocked_by: [t001]
 - created: 2026-04-24
 
-Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine-handoff.md`: (1) parameterise the default grid in dimensionless budget-multiples with degenerate-cell filtering; (2) rename `regret` to `signal_count_regret` and document its decorrelation from recall under shared bias at high noise (no companion metric added; a budget-aware recall oracle is deferred until interpretation needs it); (3) parallelise `run_sweep` via `ProcessPoolExecutor` with validated `workers >= 1`, sample `benchmark_runtime` calibration stratified by `(n_propositions, budget)`, and re-anchor `RUNTIME_BUDGET_SECONDS` to honest serial CPU. Plan: `meta/doc/plans/2026-04-24-h01-engine-followups.md`. Unblocks [t002].
+Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine-handoff.md`: (1) parameterise the default grid in dimensionless budget-multiples with degenerate-cell filtering; (2) rename `regret` to `signal_count_regret` and document its decorrelation from recall under shared bias at high noise (no companion metric added; a budget-aware recall oracle is deferred until interpretation needs it); (3) parallelise `run_sweep` via `ProcessPoolExecutor` with validated `workers >= 1`, sample `benchmark_runtime` calibration stratified by `(n_propositions, budget)`, and re-anchor `RUNTIME_BUDGET_SECONDS` to honest serial CPU. Plan: `meta/doc/plans/historical/2026-04-24-h01-engine-followups.md`. Unblocks [t002].
 ```
 
 Also update `[t002]`'s `blocked_by` from `[t001]` to `[t020]`.

@@ -290,7 +290,7 @@ Deliverables:
 
 Granularity is a key design decision; expect to defend the chosen level (per-prompt, per-tool-version, per-model) against alternatives.
 
-**Inputs from `[t030]` D4 (2026-05-06)** at `meta/doc/plans/2026-05-06-t030-full-audit-results.md`: two verbatim-identical blind-LLM extraction passes disagreed within-1 on ~25–40% of rubric-ambiguous fields, with systematic pass-1-higher-than-pass-2 calibration drift (17/25 cases). Implications for this task: (a) per-extraction confidence and per-call agent identity are needed in agent-source records; (b) ensemble-of-N or repeated-extraction-with-disagreement-flagging should be considered for high-stakes fields; (c) the deferred full-context-manual-vs-blind-LLM signal is required to fully ground this task and should be obtained via a fresh audit before agent-source modeling commits.
+**Inputs from `[t030]` D4 (2026-05-06)** at `meta/doc/plans/historical/2026-05-06-t030-full-audit-results.md`: two verbatim-identical blind-LLM extraction passes disagreed within-1 on ~25–40% of rubric-ambiguous fields, with systematic pass-1-higher-than-pass-2 calibration drift (17/25 cases). Implications for this task: (a) per-extraction confidence and per-call agent identity are needed in agent-source records; (b) ensemble-of-N or repeated-extraction-with-disagreement-flagging should be considered for high-stakes fields; (c) the deferred full-context-manual-vs-blind-LLM signal is required to fully ground this task and should be obtained via a fresh audit before agent-source modeling commits.
 
 ### Notes
 

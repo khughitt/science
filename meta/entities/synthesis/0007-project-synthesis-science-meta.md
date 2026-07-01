@@ -3,7 +3,7 @@ type: synthesis
 title: Project synthesis - science meta
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-01'
 id: synthesis:0007-project-synthesis-science-meta
 report_kind: synthesis-rollup
 generated_at: '2026-05-06T03:57:33Z'
@@ -34,7 +34,7 @@ orphan_question_count: 1
 
 - The H01 simulator sweep (`interpretation:0001-simulator-2026-04-24`) is the only empirical anchor in the project; H02, H03, H04 are literature-grounded and pre-empirical, and H05 is speculative.
 - That sweep refined H01's mechanistic claim: the load-bearing factor is *uncertainty-guided exploration* (UCB > Thompson on both recall and Brier), not stochasticity per se — a narrowing of the literal hypothesis.
-- The post-Batch-1–6 design surface (`task:t021` parent group) is dominated by one question: how rich must an evidence payload be to fix calibration without collapsing under authoring burden — `task:t030`'s authoring-cost audit is the nearest test.
+- The post-Batch-1–6 design surface (`task:t021` parent group) is dominated by one question: how rich must an evidence payload be to fix calibration without collapsing under authoring burden. `task:t030` has now supplied the first authoring-cost audit signal and drove t022 v2.1/v2.2 pruning.
 - Three of four active hypotheses (`hypothesis:0002-rich-evidence-payloads-improve-graph-calibration`, `hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting`, `hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`) all gate on `task:t022` (minimum quantitative payload schema) — it is the project bottleneck.
 - `task:t011` already lifted H01's exploration finding into the tool's attention layer (weighted graph sampling), so the project's critical path is now schema-first, not simulator-first.
 - One orphan question (`question:0009-mcda-bayesian-interoperability`) and one knowledge gap (`topic:structured-scientific-knowledge`, demand 3 vs coverage 0) suggest a missing candidate hypothesis at the MCDA/Bayesian interface.
@@ -42,17 +42,17 @@ orphan_question_count: 1
 
 ## State
 
-The project's collective belief is that *some* form of exploration-based revisiting beats hard-gating under noisy evidence — this is the only empirically supported claim, established in `interpretation:0001-simulator-2026-04-24` across 144 000 simulator rows. Every other active hypothesis (H02, H03, H04) and the speculative H05 are at the design-frontier stage: they have literature motivation across six paper batches but no benchmark, replay, or simulation data. Strength of belief therefore concentrates sharply on H01 and dilutes across H02–H05.
+The project's collective belief is that *some* form of exploration-based revisiting beats hard-gating under noisy evidence — this is the only simulator-supported claim, established in `interpretation:0001-simulator-2026-04-24` across 144 000 simulator rows. H02 now has a first authoring-cost audit signal from `task:t030`, but still lacks a replay or calibration benchmark comparing scalar edges against rich payloads. H03, H04, and the speculative H05 remain at the design-frontier stage. Strength of belief therefore concentrates sharply on H01 and remains more tentative across H02–H05.
 
 The strongest evidence sits in two places. First, the H01 sweep's mechanistic refinement (UCB outperforming Thompson) tightens the H01 family's design implication: graph-layer attention should be *uncertainty-weighted* rather than randomly stochastic, which `task:t011` already implements. Second, the literature backing H02–H04 is broad and consistent across batches — six independent paper batches all surface the same pattern that scalar support/dispute edges lose epistemically load-bearing distinctions.
 
-What is contested is the *minimum viable* schema. H02's P3 (minimality) holds that calibration gains are achievable with a compact core, but the project has no authoring-cost evidence yet; `question:0005-authoring-cost-audit` and `task:t030` are the nearest test. The H02–H04 hypotheses agree on direction but disagree implicitly on scope: H04's causal guardrails are a strict superset of H02's calibration fields, and H03's reason codes overlap both. Reconciliation will happen at `task:t022`.
+What is contested is the *minimum viable* schema. H02's P3 (minimality) holds that calibration gains are achievable with a compact core. `task:t030` supplied the first authoring-cost evidence: several candidate core fields moved out or loosened, and blind LLM extraction showed enough rubric-sensitive drift that agent-assisted authoring cannot be treated as stable without clearer evaluation. The H02-H04 hypotheses agree on direction but disagree implicitly on scope: H04's causal guardrails are a strict superset of H02's calibration fields, and H03's reason codes overlap both. Reconciliation now runs through the implemented t022/t034/t037 family of contracts rather than through a fresh t030 audit.
 
 ## Arc
 
 The active hypotheses form a stack. **H01** sits at the bottom: a falsifiable, simulator-validated claim about budget allocation under noise. The H01 simulator interpretation drove the project's single load-bearing design refinement — that uncertainty-guided rather than stochastic exploration is the operative mechanism. Open work is the Gaussian-signal generalization (`task:t005`), the r-curve extension to resolve P5 (`task:t004`), and reason-coded uncertainty features (`task:t025`) that bridge H01 to H03.
 
-**H02** sits one layer up: it claims that storing structured evidence payloads improves graph calibration. It was drafted alongside H03 and H04 in `task:t027` after Batch 2 synthesis, then expanded across Batches 3–6 to cover causal graph construction, graph-valued integration, agent/KG operations, and robustness/reproducibility evaluation. Its falsifiability hinges on a replay benchmark and on the authoring-cost audit (`task:t030`).
+**H02** sits one layer up: it claims that storing structured evidence payloads improves graph calibration. It was drafted alongside H03 and H04 in `task:t027` after Batch 2 synthesis, then expanded across Batches 3–6 to cover causal graph construction, graph-valued integration, agent/KG operations, and robustness/reproducibility evaluation. `task:t030` supplied the first authoring-cost audit and pruned the t022 core; the remaining falsifiability hinge is a replay/calibration benchmark plus narrower follow-up on human-vs-agent extraction reliability.
 
 **H03** sits parallel to H02 at the attention layer: it claims that revisiting policies guided by typed *reason codes* beat policies guided by posterior magnitude alone. It depends on the H02 schema work (`task:t021`/`task:t022`) and on a simulator extension (`task:t025`) that has not started. Its evaluation will likely require an annotation audit before any simulator comparison is meaningful.
 
@@ -65,7 +65,7 @@ The four active hypotheses are best understood as one schema-design programme wi
 Across the four active hypotheses, the highest-leverage fronts in priority order:
 
 1. **`task:t022` — Design minimum quantitative evidence payload schema (P1).** Bottleneck for H02, H03, H04. Source: `synthesis:0010-rich-evidence-payloads-improve-graph-calibration`, `synthesis:0011-reason-coded-revisiting-beats-posterior-only-revisiting`, `synthesis:0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`.
-2. **`task:t030` — Audit authoring cost of the proposed schema (P1).** First empirical test of H02's P3 minimality claim. Blocks claims about practical viability. Source: `synthesis:0010-rich-evidence-payloads-improve-graph-calibration`.
+2. **Follow-up authoring-cost evaluation.** `task:t030` completed the first audit and produced t022 v2.1/v2.2 changes. Remaining practical-viability work is narrower: recover the originally intended full-context-human-vs-blind-LLM comparison or run a multi-model extraction audit.
 3. **`task:t026` — Causal synthesis guardrails (P2).** H04's primary implementation surface; downstream of `task:t022`. Source: `synthesis:0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`.
 4. **`task:t025` — Reason-coded uncertainty features for H01 attention (P2).** H03's primary implementation surface; bridges H01 simulator findings to H03 attention claim. Source: `synthesis:0009-stochastic-revisiting`, `synthesis:0011-reason-coded-revisiting-beats-posterior-only-revisiting`.
 5. **`task:t034` / `task:t035` — Causal graph construction pipeline artifacts and graph-valued synthesis artifact schema (P1).** Define the artifact taxonomies H02/H03/H04 all reference. Source: `synthesis:0010-rich-evidence-payloads-improve-graph-calibration`, `synthesis:0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`.

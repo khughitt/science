@@ -1,7 +1,7 @@
 # t030 — Blind LLM Extraction Pass 1 (raw output)
 
 > **Pass identifier:** `llm-blind-1` (general-purpose subagent, fresh context, ~2.5 min wall-clock).
-> **Sample:** main sample n=12, locked per `meta/doc/plans/2026-05-06-t030-full-sampling-plan-and-rubric.md`.
+> **Sample:** main sample n=12, locked per `meta/doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md`.
 > **Prompt:** as designed in the sampling plan: v2.1 schema sections + rubric + 12 paper-summary file paths; instruction not to read any other files.
 > **Status:** Raw output preserved verbatim. Will be paired with `llm-blind-2` for LLM-vs-LLM-blind agreement scoring (D4).
 

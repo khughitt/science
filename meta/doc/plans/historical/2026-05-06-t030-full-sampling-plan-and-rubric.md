@@ -1,6 +1,6 @@
 # t030 — Full Authoring-Cost Audit: Sampling Plan and Rubric
 
-> **Scope.** Full `[t030]` deliverables per `meta/tasks/active.md:345`. The narrow first pass (`meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`) drove four v2.1 patches; this plan operationalizes the wider sample, the rubric, the manual + LLM extraction passes, and the two feedback notes.
+> **Scope.** Full `[t030]` deliverables per `meta/tasks/active.md:345`. The narrow first pass (`meta/doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md`) drove four v2.1 patches; this plan operationalizes the wider sample, the rubric, the manual + LLM extraction passes, and the two feedback notes.
 
 ---
 
@@ -251,7 +251,7 @@ Total: roughly half a day's effort across the orchestrator's turns. Reasonable t
 
 ## Decision points / forks
 
-1. **Should the blind-LLM passes be run?** Yes — both passes have been run as of 2026-05-06. Pass 1 output preserved at `meta/doc/plans/2026-05-06-t030-llm-pass-1-output.md`; pass 2 launched after pass 1 returned and was visible to the orchestrator (which is why the methodology shifted to two-blind-LLM rather than manual-vs-blind).
+1. **Should the blind-LLM passes be run?** Yes — both passes have been run as of 2026-05-06. Pass 1 output preserved at `meta/doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md`; pass 2 launched after pass 1 returned and was visible to the orchestrator (which is why the methodology shifted to two-blind-LLM rather than manual-vs-blind).
 
 2. **Should `[t033]` be deferred until after D4?** Yes, but the basis is weaker than originally planned: D4 now tells `[t033]` about rubric-induced extraction variance between two blind LLM extractors, not about full-context-manual extraction. `[t033]` should call out the deferred full-context measurement as future work.
 
