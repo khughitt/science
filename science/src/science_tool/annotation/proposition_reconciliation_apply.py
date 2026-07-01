@@ -11,7 +11,7 @@ from science_tool.annotation.cross_paper_evidence import (
     _iter_project_annotation_sidecar_paths,
     _resolve_paper_ref,
 )
-from science_tool.annotation.io import serialize_sidecar
+from science_tool.annotation.io import atomic_write_text, serialize_sidecar
 from science_tool.annotation.model import Sidecar
 from science_tool.annotation.proposition_reconciliation_plan import (
     ReconciliationAction,
@@ -90,12 +90,24 @@ class ReconciliationApplyReport:
     written_paths: tuple[str, ...] = ()
 
 
+def _path_string(path: Path) -> str:
+    return path.as_posix()
+
+
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _current_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _changed_and_noop_paths(
+    edits: Sequence[PlannedFileEdit],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    changed = tuple(_path_string(edit.path) for edit in edits if edit.changed)
+    noop = tuple(_path_string(edit.path) for edit in edits if not edit.changed)
+    return changed, noop
 
 
 def _edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
@@ -568,4 +580,120 @@ def plan_canonicalization_apply(
         file_edits=tuple(edits[path] for path in sorted(edits)),
         expected_source_refs_by_canonical=expected_refs_by_canonical,
         diagnostics=tuple(diagnostics),
+    )
+
+
+def _postflight(
+    project_root: Path,
+    actions: Sequence[ReconciliationAction],
+    expected_source_refs_by_canonical: Mapping[str, tuple[str, ...]],
+) -> None:
+    duplicate_to_canonical = _duplicate_to_canonical(actions)
+    for duplicate, canonical in sorted(duplicate_to_canonical.items()):
+        duplicate_location = _entity_location(project_root, duplicate)
+        frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
+        status = frontmatter.get("status")
+        superseded_by = frontmatter.get("superseded_by")
+        if status != "superseded" or superseded_by != canonical:
+            raise ReconciliationApplyError(
+                f"{duplicate} postflight supersession mismatch: "
+                f"status={status!r}, superseded_by={superseded_by!r}, "
+                f"expected status='superseded', superseded_by={canonical!r}"
+            )
+
+    remaining_backlinks = scan_inbound_backlinks(project_root, duplicate_to_canonical)
+    if remaining_backlinks:
+        refs = ", ".join(backlink.annotation_ref for backlink in remaining_backlinks)
+        raise ReconciliationApplyError(
+            "duplicate promoted_to backlinks remain after write: " f"{refs}"
+        )
+
+    for canonical, expected_refs in sorted(expected_source_refs_by_canonical.items()):
+        canonical_location = _entity_location(project_root, canonical)
+        frontmatter, _body = parse_markdown_entity_file(canonical_location.path)
+        source_refs = {str(ref) for ref in frontmatter.get("source_refs") or ()}
+        missing = tuple(ref for ref in expected_refs if ref not in source_refs)
+        if missing:
+            raise ReconciliationApplyError(
+                f"{canonical} missing expected source_refs after write: "
+                f"{', '.join(missing)}"
+            )
+
+
+def _action_result(
+    action: ReconciliationAction,
+    changed_paths: tuple[str, ...],
+    noop_paths: tuple[str, ...],
+    diagnostics: tuple[Mapping[str, Any], ...],
+) -> ApplyActionResult:
+    canonical = action.canonical_proposition
+    if canonical is None:
+        raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
+    duplicate_propositions = tuple(member for member in action.members if member != canonical)
+    return ApplyActionResult(
+        action_id=action.action_id,
+        kind=action.kind,
+        canonical_proposition=canonical,
+        members=action.members,
+        duplicate_propositions=duplicate_propositions,
+        status="applied" if changed_paths else "noop",
+        changed_paths=changed_paths,
+        noop_paths=noop_paths,
+        diagnostics=diagnostics,
+    )
+
+
+def apply_canonicalization_plan(
+    project_root: Path,
+    plan: ReconciliationActionPlan,
+    *,
+    requested_action_ids: Sequence[str] = (),
+    as_of: date | None = None,
+) -> ReconciliationApplyReport:
+    project_root = project_root.resolve()
+    preflight = plan_canonicalization_apply(
+        project_root,
+        plan,
+        requested_action_ids=requested_action_ids,
+        as_of=as_of,
+    )
+    changed_paths, noop_paths = _changed_and_noop_paths(preflight.file_edits)
+    written: list[str] = []
+    for edit in preflight.file_edits:
+        if not edit.changed:
+            continue
+        try:
+            atomic_write_text(edit.path, edit.final_text)
+        except OSError as exc:
+            written_paths = tuple(written)
+            raise ReconciliationApplyError(
+                "[stage=write, "
+                f"files_written={len(written_paths)}, "
+                f"written_paths={written_paths}] "
+                f"failed to write {_path_string(edit.path)}: {exc}"
+            ) from exc
+        written.append(_path_string(edit.path))
+
+    try:
+        _postflight(
+            project_root,
+            preflight.actions,
+            preflight.expected_source_refs_by_canonical,
+        )
+    except ReconciliationApplyError as exc:
+        raise ReconciliationApplyError(
+            f"[stage=postflight, written_paths={tuple(written)}] {exc}"
+        ) from exc
+
+    return ReconciliationApplyReport(
+        status="ok",
+        selected_actions=len(preflight.actions),
+        changed_paths=changed_paths,
+        noop_paths=noop_paths,
+        actions=tuple(
+            _action_result(action, changed_paths, noop_paths, preflight.diagnostics)
+            for action in preflight.actions
+        ),
+        diagnostics=preflight.diagnostics,
+        written_paths=tuple(written),
     )

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from science_tool.annotation import io as anno_io
+from science_tool.annotation import proposition_reconciliation_apply as apply_module
 from science_tool.annotation.model import (
     Annotation,
     Motivation,
@@ -22,8 +23,10 @@ from science_tool.annotation.proposition_reconciliation_plan import (
     build_reconciliation_action_plan,
     reconciliation_action_id,
 )
+from science_tool.annotation.query import read_sidecar_strict
 from science_tool.annotation.proposition_reconciliation_apply import (
     ReconciliationApplyError,
+    apply_canonicalization_plan,
     plan_canonicalization_apply,
     select_canonicalization_actions,
 )
@@ -89,6 +92,7 @@ def _proposition(
     status: str = "active",
     superseded_by: str | None = None,
     subject: str = "BRCA1 loss",
+    predicate: str = "affects",
     object_: str = "genomic instability",
 ) -> None:
     path = root / "entities" / "propositions" / f"{slug}.md"
@@ -103,7 +107,7 @@ def _proposition(
         f"status: {status}\n"
         f"{superseded}"
         f"subject: {subject}\n"
-        "predicate: increases\n"
+        f"predicate: {predicate}\n"
         f"object: {object_}\n"
         "polarity: positive\n"
         "source_refs:\n"
@@ -670,3 +674,105 @@ def test_plan_canonicalization_apply_errors_when_duplicate_superseded_elsewhere(
         match="superseded_by proposition:other",
     ):
         plan_canonicalization_apply(tmp_path, _manual_ready_plan())
+
+
+def test_apply_canonicalization_rewrites_files_and_postflight_passes(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    b_sidecar_path = _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    review_doc = _review_doc_for_current_candidate(tmp_path)
+    plan = _ready_plan(tmp_path, review_doc)
+
+    report = apply_canonicalization_plan(tmp_path, plan)
+
+    assert report.status == "ok"
+    assert report.selected_actions == 1
+    assert any(path.endswith("entities/propositions/a.md") for path in report.changed_paths)
+    assert "paper:B2021" in (tmp_path / "entities" / "propositions" / "a.md").read_text(
+        encoding="utf-8"
+    )
+    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
+        encoding="utf-8"
+    )
+    assert "status: superseded" in duplicate_text
+    assert "superseded_by: proposition:a" in duplicate_text
+    b_sidecar = read_sidecar_strict(b_sidecar_path)
+    assert b_sidecar.annotations[0].promoted_to == "proposition:a"
+    assert "proposition:b" not in b_sidecar_path.read_text(encoding="utf-8")
+
+
+def test_apply_canonicalization_is_idempotent_on_second_run(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    review_doc = _review_doc_for_current_candidate(tmp_path)
+
+    first = apply_canonicalization_plan(tmp_path, _ready_plan(tmp_path, review_doc))
+    second = apply_canonicalization_plan(tmp_path, _ready_plan(tmp_path, review_doc))
+
+    assert first.changed_paths
+    assert second.status == "ok"
+    assert second.changed_paths == ()
+    assert second.noop_paths
+
+
+def test_postflight_fails_if_duplicate_backlink_remains_after_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    review_doc = _review_doc_for_current_candidate(tmp_path)
+    original_atomic_write_text = apply_module.atomic_write_text
+
+    def skip_sidecars(path: Path, text: str) -> None:
+        if path.name.endswith(".anno.trig"):
+            return
+        original_atomic_write_text(path, text)
+
+    monkeypatch.setattr(apply_module, "atomic_write_text", skip_sidecars)
+
+    with pytest.raises(ReconciliationApplyError) as exc_info:
+        apply_canonicalization_plan(tmp_path, _ready_plan(tmp_path, review_doc))
+
+    message = str(exc_info.value)
+    assert "stage=postflight" in message
+    assert "written_paths=" in message
+    assert "b.md" in message
