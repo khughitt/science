@@ -4,6 +4,12 @@ This directory holds cross-cutting convention references — short, prescriptive
 
 Bar for entries: each doc should describe a pattern observed in two or more downstream projects (or a deliberately-promoted single-project pattern with a clear cross-project rationale), be self-contained, and be linkable from the relevant chapter under `docs/user-guide/`.
 
+Placement rule: put normal operation and conceptual orientation in
+`docs/user-guide/`, stable cross-project rules in `docs/conventions/`, and
+repeatable maintenance or audit recipes in `docs/process/`. Keep plans and specs
+as temporary design/execution records unless they have been promoted into one of
+those durable homes.
+
 ## Index
 
 - [`code-task-backlinks.md`](code-task-backlinks.md) — sanctioned patterns for linking code/notebooks back to tasks, questions, hypotheses, and interpretations.

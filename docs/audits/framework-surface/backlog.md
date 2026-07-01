@@ -4,6 +4,9 @@
 
 ### B1. Add CLI And Workflow Map
 
+**Status:** Addressed by
+[`../../user-guide/cli-and-workflows.md`](../../user-guide/cli-and-workflows.md).
+
 **Goal:** Add a durable command taxonomy under `docs/user-guide/`.
 
 **Output:** `docs/user-guide/cli-and-workflows.md` plus index links.
@@ -20,6 +23,9 @@
 - Links from `agent-workflows.md` and `index.md`.
 
 ### B2. Add Documentation Placement Rule
+
+**Status:** Addressed in `docs/user-guide/index.md`,
+`docs/user-guide/agent-workflows.md`, and `docs/conventions/README.md`.
 
 **Goal:** Make it clear where durable knowledge belongs.
 

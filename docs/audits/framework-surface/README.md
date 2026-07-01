@@ -71,3 +71,10 @@ Start with a docs-first command taxonomy:
 The best first code cleanup after that is likely extracting one coherent command
 family from `science/src/science_tool/cli.py` where the domain already has clear
 module boundaries and focused tests.
+
+## Follow-Up Status
+
+The first docs slice from this audit now lives in
+[`../../user-guide/cli-and-workflows.md`](../../user-guide/cli-and-workflows.md).
+It adds the command taxonomy, write classes, dataset command distinction,
+source-authored vs graph-authored guidance, and shared CLI behavior notes.
