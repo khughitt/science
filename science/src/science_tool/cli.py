@@ -462,6 +462,7 @@ def entities_group() -> None:
 
 @entities_group.command("inventory")
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     type=click.Path(path_type=Path),
@@ -486,6 +487,7 @@ def entities_inventory_command(
 
 @entities_group.command("audit-identifiers")
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     type=click.Path(path_type=Path),
@@ -825,6 +827,7 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
 @click.argument("kind")
 @click.option("--class", "entity_class", required=True)
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     type=click.Path(path_type=Path),

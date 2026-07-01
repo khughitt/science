@@ -158,6 +158,8 @@ path. If multi-format output grows, add `--format` while preserving `--json`.
    help-text updates for the previously blank or ambiguous `--project` options.
 4. Add `--project-root` aliases for older filesystem-root commands only when the
    command family is already being touched.
+   **Status:** Started for `entities inventory`, `entities audit-identifiers`,
+   and `entities register-kind`; `--project` remains accepted.
 5. Keep command renames out of the first cleanup slice. The first implementation
    should be additive and compatibility-preserving.
 

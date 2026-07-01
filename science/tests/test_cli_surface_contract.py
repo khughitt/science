@@ -93,6 +93,12 @@ _JSON_WITHOUT_FORMAT_ALLOWLIST: dict[str, str] = {
     "qa-audit": "older advisory report flag; add --format if more output modes are introduced",
 }
 
+_PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
+    "entities audit-identifiers",
+    "entities inventory",
+    "entities register-kind",
+}
+
 
 def _walk_commands(command: click.Command, path: tuple[str, ...]) -> Iterator[tuple[tuple[str, ...], click.Command]]:
     yield path, command
@@ -161,6 +167,16 @@ def test_project_option_help_text_names_what_project_means() -> None:
             unclear.append(f"{command_path}: expected {help_phrase!r} in help {help_text!r}")
 
     assert not unclear
+
+
+def test_project_root_aliases_exist_for_touched_filesystem_project_flags() -> None:
+    missing: list[str] = []
+    for command_path in sorted(_PROJECT_ROOT_ALIAS_COMMANDS):
+        option = _option_for_path(command_path, "--project")
+        if "--project-root" not in option.opts:
+            missing.append(command_path)
+
+    assert not missing
 
 
 def test_json_only_option_usage_is_intentionally_classified() -> None:
