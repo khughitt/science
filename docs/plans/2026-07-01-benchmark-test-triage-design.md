@@ -94,18 +94,35 @@ The default review path uses the project's canonical documentation directory via
 doc/audits/benchmark-test-triage/YYYY-MM-DD-<project>.yaml
 ```
 
-`<project>` is derived from `science.yaml` `name` when available, otherwise the
-project root leaf directory. The path is project-relative in emitted metadata.
+`<project>` is the project root leaf directory, matching
+`science benchmark hint-candidates`.
 
 If a project uses an unusual convention, `--output` provides an explicit escape
-hatch. Relative `--output` paths resolve under the project root. Absolute output
-paths are rejected unless an existing command-level path policy already supports
-them for comparable review artifacts.
+hatch. The output path policy should match
+`_resolve_hint_candidates_output_path()` exactly: relative paths resolve under
+the project root; absolute paths are accepted only when they resolve under the
+project root; paths that escape the project root are rejected with
+`--output must stay under project root`.
+
+The review artifact should store:
+
+- `project: <project_root.name>`;
+- `project_root: <display path>`, using the same `_display_project_path()`
+  rendering as `benchmark hint-candidates`.
 
 ## Triage Buckets
 
 Rows are bucketed after `benchmark_tests_report()` applies its existing filters
-and sort order. Within each bucket, preserve the report's row order.
+and sort order. Bucket assignment is ordered and first-match-wins, using the
+sections below in their listed order:
+
+1. `run-now`
+2. `stage-next`
+3. `metadata-needed`
+4. `blocked-or-reference`
+5. `fallback-diagnostic`
+
+Within each bucket, preserve the report's row order.
 
 ### `run-now`
 
@@ -127,6 +144,10 @@ Rows where:
 
 These are relevant benchmark tests whose next action is access, staging,
 datapackage work, or runtime setup rather than task design.
+
+If a row is both `draft-needed` and `stage-needed`, it lands in `stage-next`.
+The staging/access work is the gating action; task details can be filled in
+after the benchmark can be reached or staged.
 
 ### `metadata-needed`
 
@@ -160,24 +181,38 @@ Fallback rows are diagnostics and coarse inventory signals. The default table
 should summarize them instead of listing every fallback row. JSON and YAML may
 include capped examples for review.
 
+Because `fallback-diagnostic` is evaluated last, a fallback row is never placed
+in `run-now`, `stage-next`, `metadata-needed`, or `blocked-or-reference` even if
+its readiness or task fields would otherwise satisfy those predicates.
+
 ## Summary
 
-The triage payload includes a summary object:
+The triage payload includes a summary object built on top of
+`benchmark_tests_report()["summary"]`. Preserve the existing report summary
+fields, including `entities_total`, `test_plan_rows`, `concrete_rows`,
+`draft_needed_rows`, `entities_with_test_plans`, `entities_without_test_plans`,
+`source_counts`, `fallback_rows`, `fallback_row_ratio`, and `top_facets`.
+
+Add only the triage-specific aggregate fields:
 
 ```json
 {
-  "rows_total": 248,
+  "test_plan_rows": 248,
+  "concrete_rows": 122,
+  "draft_needed_rows": 126,
+  "source_counts": {
+    "opportunity-relative": 122,
+    "gap-candidate": 99,
+    "gap-fallback": 27
+  },
+  "fallback_rows": 27,
+  "fallback_row_ratio": 0.109,
   "bucket_counts": {
     "run-now": 42,
     "stage-next": 61,
     "metadata-needed": 80,
     "blocked-or-reference": 38,
     "fallback-diagnostic": 27
-  },
-  "source_counts": {
-    "opportunity-relative": 122,
-    "gap-candidate": 99,
-    "gap-fallback": 27
   },
   "readiness_counts": {
     "runnable": 42,
@@ -222,6 +257,9 @@ Each bucket row is a thin projection of `BenchmarkTestRow`:
 
 `review` fields are empty placeholders for humans. They are not interpreted by
 v1 tooling.
+
+`task_id` is nullable. Rows projected from a facets-only or taskless benchmark
+should render `task_id: null` in JSON/YAML and `-` in table output.
 
 ## Table Output
 
@@ -286,7 +324,8 @@ The YAML artifact uses the JSON contract with a small header:
 
 ```yaml
 generated_at: "2026-07-01"
-project_root: "."
+project: multiple-myeloma
+project_root: "~/d/cancer/cancer-types/multiple-myeloma"
 source_command: "science benchmark test-triage --exclude-fallback --commons"
 filters:
   exclude_fallback: true
@@ -307,9 +346,11 @@ It should include the command and filters that affect the report where practical
 - Commons degradation mirrors `science benchmark tests`: print the notice to
   stderr and include `commons_notice` in JSON/YAML.
 - `--output` without `--write-review-file` is an error.
-- Existing output files are overwritten only when `--write-review-file` is
-  explicitly supplied. The command should not silently create artifacts in
-  default mode.
+- Existing output files are never overwritten. Match
+  `_write_hint_candidates_review_file()`: if the review path already exists,
+  fail with `review file already exists: <path>`. This avoids discarding human
+  review decisions in a same-day rerun.
+- The command should not create artifacts in default mode.
 
 ## Testing
 
@@ -317,11 +358,15 @@ Add tests for:
 
 - bucket classification for runnable, stage-needed, metadata-needed,
   blocked/reference, and fallback rows;
+- bucket precedence for the reachable `draft-needed` + `stage-needed`
+  combination, which must land in `stage-next`;
 - preservation of `benchmark_tests_report()` row ordering within buckets;
 - JSON shape and summary counts;
 - default table caps non-fallback buckets and summarizes fallback diagnostics;
 - `--write-review-file` writes under canonical `doc/` and prints the path to
   stderr;
+- existing review files are refused rather than overwritten;
+- absolute `--output` paths are accepted only under the project root;
 - `--output` requires `--write-review-file`;
 - commons notice behavior matches `science benchmark tests`;
 - existing `benchmark tests` behavior remains unchanged.
