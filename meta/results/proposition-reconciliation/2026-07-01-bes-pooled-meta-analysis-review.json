@@ -1,0 +1,14 @@
+{
+  "source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+  "judgments": [
+    {
+      "candidate_id": "reconcile:factorization/b5053575c4f70203eb346acdc3e124e7063ed43c7ed6a9f0d4e6ab1ba593ff7d",
+      "judgment_id": "reconcile:judgment/027c49e1e3cbbfd09e158b8e06ae02631eaf7fbb54aa7bdd03f9f849d9c7521c",
+      "lane": "factorization_disagreement",
+      "decision": "factorization_needs_resynthesis",
+      "proposition": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "confidence": "high",
+      "rationale": "The current proposition bundles two distinct claims: BES can behave similarly to meta-analysis in some settings, but BES is not data pooling and can diverge when studies are underpowered or boundary-adjacent. The mixed asserted/negated literature annotations are therefore better handled by resynthesizing the proposition into narrower condition-aware claims than by treating the negated annotations as simple disputes of one stable proposition."
+    }
+  ]
+}
