@@ -81,8 +81,8 @@ recommended action.
 
 ### B5. Extract One Root CLI Family
 
-**Status:** Started with `telemetry`: the reporting command group now lives in
-`science_tool.telemetry_cli` and is registered from the root CLI.
+**Status:** Started with `telemetry` and `feedback`: both command groups now
+live in focused modules and are registered from the root CLI.
 
 **Goal:** Reduce `science/src/science_tool/cli.py` context load without changing
 behavior.

@@ -185,3 +185,9 @@ def test_extracted_telemetry_group_is_registered_from_split_module() -> None:
     telemetry_cli = importlib.import_module("science_tool.telemetry_cli")
 
     assert science_cli.commands["telemetry"] is telemetry_cli.telemetry_group
+
+
+def test_extracted_feedback_group_is_registered_from_split_module() -> None:
+    feedback_cli = importlib.import_module("science_tool.feedback_cli")
+
+    assert science_cli.commands["feedback"] is feedback_cli.feedback_group
