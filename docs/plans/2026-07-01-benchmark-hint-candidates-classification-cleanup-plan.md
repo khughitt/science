@@ -42,15 +42,21 @@ def test_hint_candidates_report_routes_generic_terms_to_workflow_category(tmp_pa
 
     _write_entity(
         tmp_path,
-        "hypothesis",
+        "hypotheses",
         "0001-generic-prose",
-        "All our organizing conjecture goes beyond shared structure.",
-        "All our organizing conjecture goes beyond shared structure.",
+        """
+id: hypothesis:0001-generic-prose
+type: hypothesis
+title: Generic prose
+""",
+        body="All our organizing conjecture goes beyond shared structure.",
     )
 
     payload = benchmark_hint_candidates_report(tmp_path)
     by_term = {row["term"]: row for row in payload["hint_candidates"]}
 
+    assert "conjecture" in by_term
+    assert "organizing" in by_term
     for term in {"all", "beyond", "conjecture", "organizing", "our", "shared"} & set(by_term):
         assert by_term[term]["category"] == "workflow-or-modeling"
 
@@ -72,10 +78,14 @@ def test_hint_candidates_report_classifies_project_identity_from_science_yaml(tm
     )
     _write_entity(
         tmp_path,
-        "hypothesis",
+        "hypotheses",
         "0001-mm30-signal",
-        "MM30 expression signal.",
-        "MM30 expression signal.",
+        """
+id: hypothesis:0001-mm30-signal
+type: hypothesis
+title: MM30 signal
+""",
+        body="MM30 multiple myeloma expression signal.",
     )
 
     payload = benchmark_hint_candidates_report(tmp_path)
@@ -92,10 +102,14 @@ def test_hint_candidates_report_classifies_split_entity_id_stems_as_project_loca
 
     _write_entity(
         tmp_path,
-        "proposition",
+        "propositions",
         "0014-pais-small-fiber-structural-lesion",
-        "PAIS small fiber lesion.",
-        "PAIS small fiber lesion.",
+        """
+id: proposition:0014-pais-small-fiber-structural-lesion
+type: proposition
+title: PAIS small fiber lesion
+""",
+        body="PAIS small fiber lesion.",
     )
 
     payload = benchmark_hint_candidates_report(tmp_path)
@@ -114,10 +128,14 @@ def test_hint_candidates_report_missing_science_yaml_keeps_existing_project_loca
     project_root.mkdir()
     _write_entity(
         project_root,
-        "question",
+        "questions",
         "0001-project-alpha-check",
-        "Project alpha signal.",
-        "Project alpha signal.",
+        """
+id: question:0001-project-alpha-check
+type: question
+title: Project alpha check
+""",
+        body="Project alpha signal.",
     )
 
     payload = benchmark_hint_candidates_report(project_root)
@@ -127,7 +145,9 @@ def test_hint_candidates_report_missing_science_yaml_keeps_existing_project_loca
     assert rows["alpha"]["category"] == "project-local"
 ```
 
-Expected current result: at least the `mm30`, `pais`, and generic-term assertions fail because `science.yaml` identity tokens are not loaded, entity id-stems are not split, and the generic terms are not routed through `_WORKFLOW_OR_MODELING_TERMS`.
+These fixtures intentionally mirror the existing `_write_entity()` usage: plural entity directories, YAML mapping frontmatter, and candidate terms in the entity body. Invalid YAML frontmatter or singular directories will cause the loader to skip the entity and make the red/green gate meaningless.
+
+Expected current result: at least the `mm30`, `multiple`/`myeloma`, `pais`, and generic-term assertions fail because `science.yaml` identity tokens are not loaded, entity id-stems are not split, and the generic terms are not routed through `_WORKFLOW_OR_MODELING_TERMS`.
 
 - [ ] **Step 2: Run the failing tests**
 
