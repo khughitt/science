@@ -541,6 +541,70 @@ def test_resolve_review_doc_returns_candidate_and_validation_payload():
     assert resolved.judgments[0].judgment["decision"] == "same_claim"
 
 
+def test_resolve_review_doc_strips_same_claim_lane_and_candidate_id():
+    report = _candidate_report()
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": f"  {candidate.candidate_id}  ",
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", list(candidate.propositions)
+                ),
+                "lane": "  same_claim  ",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": list(candidate.propositions),
+                "rationale": "Same signed relation over same endpoints.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    assert validate_review_doc(doc, report)["status"] == "ok"
+
+    resolved = resolve_review_doc(doc, report)
+
+    assert resolved.judgments[0].candidate == candidate
+
+
+def test_resolve_review_doc_returns_factorization_candidate():
+    candidate = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="medium",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(),
+        disagreement=("object differs",),
+        recommended_action="factorization_needs_resynthesis",
+    )
+    report = ReconciliationReport(factorization_disagreements=(candidate,))
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "factorization_disagreement",
+                    "factorization_needs_resynthesis",
+                    ["proposition:p"],
+                ),
+                "lane": "factorization_disagreement",
+                "decision": "factorization_needs_resynthesis",
+                "proposition": "proposition:p",
+                "rationale": "The statement hints disagree with the current factorization.",
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    resolved = resolve_review_doc(doc, report)
+
+    assert resolved.judgments[0].candidate == candidate
+
+
 def test_resolve_review_doc_preserves_review_incomplete_payload():
     current = build_same_claim_candidates(
         [

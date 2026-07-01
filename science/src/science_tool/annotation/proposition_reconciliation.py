@@ -804,8 +804,10 @@ def resolve_review_doc(doc: Any, report: ReconciliationReport) -> ResolvedReview
     resolved: list[ResolvedReviewJudgment] = []
 
     for idx, judgment in enumerate(doc["judgments"]):
-        lane = judgment["lane"]
-        candidate_ref = judgment["candidate_id"]
+        lane = _require_non_empty_string(judgment.get("lane"), f"judgments[{idx}].lane")
+        candidate_ref = _require_non_empty_string(
+            judgment.get("candidate_id"), f"judgments[{idx}].candidate_id"
+        )
         if lane == LANE_SAME_CLAIM:
             members = set(judgment["members"])
             candidate = _resolve_same_claim_candidate(
