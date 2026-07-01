@@ -788,6 +788,28 @@ Exception modes are `scope-reduced`, `expanded-to-acquire`, and `substituted`.
 The command updates the frontmatter and appends a dated entry under
 `## Access verification log`.
 
+#### Reproducibility (`access.reproducibility`)
+
+`access.level` says *how gated the source is*; `access.reproducibility` says *whether an
+independent third party can regenerate the analysis*. Three controls, mapped to the
+[Five Safes](https://fivesafes.org/):
+
+- `obtainability` — safe people/projects (who can get in).
+- `execution` — safe setting (where compute runs).
+- `extractability` — safe outputs (what can leave).
+
+The **class** is derived, never stored: `third-party-reproducible` > `credentialed-reproducible`
+> `trust-based-output` > `insider-only`; `unknown` is unassessed (not "low"). Worked examples:
+
+| Dataset shape | obtainability / execution / extractability | class |
+|---|---|---|
+| Public GEO download | public / local / full-dataset | third-party-reproducible |
+| Self-serve DUA extract | self-service-dua / local / analysis-dataset | credentialed-reproducible |
+| N3C / OpenSAFELY enclave | approved-project / trusted-environment / aggregate-reviewed | trust-based-output |
+
+A transparency-bound project sets `reproducibility_policy` in `science.yaml`; a plan may lower the
+bar or waive one dataset explicitly (dated, scoped, with rationale + mitigation).
+
 ### Derived Datasets
 
 Derived dataset entities are machine-authored from workflow runs. A workflow
