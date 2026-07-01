@@ -250,6 +250,34 @@ def test_plan_proposition_reconciliation_cli_accepts_repeated_input(tmp_path: Pa
     assert payload["summary"]["blocked_actions"] == 2
 
 
+def test_plan_proposition_reconciliation_cli_rejects_empty_review(tmp_path: Path):
+    _manifest(tmp_path)
+    empty_review = tmp_path / "empty-review.json"
+    empty_review.write_text(
+        json.dumps(
+            {
+                "source": "llm-review:claude:proposition-reconcile-v1",
+                "judgments": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "plan-proposition-reconciliation",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(empty_review),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert f"{empty_review} produced no judgments" in result.output
+
+
 def test_plan_proposition_reconciliation_cli_rejects_empty_review_even_with_valid_input(
     tmp_path: Path,
 ):
