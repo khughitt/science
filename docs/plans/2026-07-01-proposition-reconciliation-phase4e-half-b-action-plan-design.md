@@ -94,6 +94,8 @@ The output is a single versioned object:
       "decision": "factorization_needs_resynthesis",
       "candidate_id": "reconcile:factorization/b5053575c4f70203eb346acdc3e124e7063ed43c7ed6a9f0d4e6ab1ba593ff7d",
       "judgment_id": "reconcile:judgment/027c49e1e3cbbfd09e158b8e06ae02631eaf7fbb54aa7bdd03f9f849d9c7521c",
+      "source_review": "results/proposition-reconciliation/2026-07-01-bes-pooled-meta-analysis-review.json",
+      "review_source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
       "proposition": "proposition:bes-behaves-like-pooled-meta-analysis",
       "confidence": "high",
       "rationale": "The current proposition bundles conditional meta-analysis similarity with non-pooling divergence under weak evidence.",
@@ -138,6 +140,11 @@ The output is a single versioned object:
 phase while making it impossible to confuse the Half B artifact with an executable
 mutation plan.
 
+`source_review` is the path to the reviewed JSON file that produced the action.
+`review_source` is the reviewed file's declared `llm-review:<model>:proposition-reconcile-v1`
+source string. Both are kept because one anchors the artifact on disk and the other
+records the reviewed agent/source identity.
+
 ## 5. Judgment Mapping
 
 ### `factorization_needs_resynthesis`
@@ -166,7 +173,7 @@ Emit a `canonicalize_propositions` action.
 The action records:
 
 - canonical proposition;
-- duplicate members;
+- duplicate members from the judged member set only;
 - source refs that would move to the canonical proposition;
 - sidecar backlinks that would need rewriting;
 - propositions that would eventually be archived or redirected.
@@ -174,6 +181,12 @@ The action records:
 Status is `ready` only if all member propositions still exist in the current
 reconciliation snapshot and no member appears in another action. Half B does not choose
 new canonicalization behavior beyond what the review already approved.
+
+For splittable same-claim components, the action payload is scoped to the reviewed
+`members` list, not the full generated component. If a generated component contains
+`{a,b,c}` and the reviewer marks only `{a,b}` as `same_claim`, the resulting
+`canonicalize_propositions` action may move only `b` into `a`; it must not propose
+source-ref moves, sidecar rewrites, or archive candidates for `c`.
 
 ### `related_but_distinct` and `conflict_or_negation`
 
@@ -186,8 +199,9 @@ candidate without re-review.
 Emit blocked or advisory actions, depending on the decision:
 
 - `stance_review_needed`: blocked until the relevant annotation stances are reviewed;
-- `split_possible`: advisory unless another reviewed file for the same proposition also
-  chose `factorization_needs_resynthesis`;
+- `split_possible`: advisory; if another reviewed file also chooses a mutation-oriented
+  action for the same proposition, the generic cross-action conflict rule blocks both
+  actions;
 - `insufficient_hints`: advisory metadata cleanup action;
 - `needs_human`: blocked with the reviewer rationale as the next-step description.
 
@@ -206,6 +220,10 @@ planner may still emit actions for reviewed candidates that validate cleanly, bu
 summary reports non-zero `errors`, and each fault is preserved with `reason`, `detail`,
 and `members`.
 
+Each input review file must contribute at least one resolved judgment. A review file
+with an empty `judgments` list is rejected even if other `--input` files contain valid
+judgments; silently dropping empty reviewed artifacts would make batch plans ambiguous.
+
 After validation, conflicts become plan-level blockers rather than Python exceptions
 when a complete report is still useful:
 
@@ -215,9 +233,15 @@ when a complete report is still useful:
   member sets;
 - a reviewed advisory decision conflicts with a ready mutation-oriented action.
 
-The plan's top-level `errors` list is reserved for input-level or project-level issues
-that prevented action construction but did not invalidate the review file itself. Each
-blocked action carries local `blockers` with enough context to resolve the issue.
+A cross-action conflict blocks every action it involves, not just one: for the
+different-canonical case above, both `canonicalize_propositions` actions are marked
+`blocked` and each carries a `blockers` entry naming the other action, so the conflict
+is legible from either side.
+
+The plan's top-level `errors` list is reserved for project-level reconciliation
+problems (scanner faults, `component-too-large` groups) and input-level issues, whether
+or not they block individual actions. Each blocked action carries local `blockers` with
+enough context to resolve the issue.
 
 ## 7. Deterministic IDs
 
@@ -232,7 +256,9 @@ Examples:
 - `resynthesize_proposition` primary ref: the proposition;
 - `canonicalize_propositions` primary ref: the canonical proposition, secondary refs:
   duplicate members;
-- advisory candidate decisions primary ref: the candidate id.
+- Lane B advisory decisions primary ref: the proposition;
+- Lane A advisory decisions primary ref: the candidate id, secondary refs: judged
+  members.
 
 IDs change when the reviewed judgment or action target changes. They do not include
 file paths, model names, timestamps, or table ordering.
@@ -269,8 +295,11 @@ to the same snapshot set that validation used.
 Half B should also add a small resolver helper in `proposition_reconciliation.py`, for
 example `resolve_review_doc(doc, report)`, that wraps `validate_review_doc` and returns
 each judgment paired with the resolved `SameClaimCandidate` or `FactorizationCandidate`.
-The planner should use that helper rather than reimplementing the private
-`_candidate_indexes` / `_resolve_same_claim_candidate` logic in another module.
+The helper must surface, not swallow, the full `validate_review_doc` result — in
+particular its `review_incomplete` list — so the planner's §6 blocker logic can consume
+it alongside the resolved pairs. The planner should use that helper rather than
+reimplementing the private `_candidate_indexes` / `_resolve_same_claim_candidate` logic
+in another module.
 
 ## 9. Testing
 
@@ -303,8 +332,11 @@ PYTHONPATH=../science/src:../science/model/src uv run --frozen --project ../scie
   --format json
 ```
 
-Expected: one `resynthesize_proposition` action with `status: ready`, zero writes,
-and no blockers.
+Expected: if the committed review still matches the current generated candidate, the
+command emits a JSON plan containing a `resynthesize_proposition` action for
+`proposition:bes-behaves-like-pooled-meta-analysis` with `status: ready` and
+`writes: []`. Inspect `summary.errors` rather than pinning it to zero; those errors
+reflect current project-wide reconciliation faults, not necessarily Half B failures.
 
 ## 10. Future Apply Phase
 
