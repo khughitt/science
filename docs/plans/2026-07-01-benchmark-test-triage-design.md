@@ -79,10 +79,20 @@ Add review-artifact options:
 Default behavior is table output only. `--write-review-file` is always explicit
 so normal report usage does not create git noise.
 
-When a file is written, print the resolved path to stderr:
+`--runnable-only` and `--readiness` compose exactly as in `science benchmark
+tests`: replicate its conflict guard so `--runnable-only` together with
+`--readiness <label>` (for any label other than `runnable`) fails with
+`--runnable-only conflicts with --readiness <label>`.
+
+The YAML review artifact is always written as YAML regardless of `--format`.
+`--format` controls only stdout (`table` vs. `json`); it does not change the
+artifact.
+
+When a file is written, print the resolved (absolute) path to stderr, matching
+the `science benchmark hint-candidates` message form:
 
 ```text
-wrote benchmark test triage review: doc/audits/benchmark-test-triage/2026-07-01-mm30.yaml
+wrote benchmark test triage review file: /home/user/project/doc/audits/benchmark-test-triage/2026-07-01-mm30.yaml
 ```
 
 ## Review Artifact Path
@@ -181,6 +191,11 @@ Fallback rows are diagnostics and coarse inventory signals. The default table
 should summarize them instead of listing every fallback row. JSON and YAML may
 include capped examples for review.
 
+The `fallback_diagnostics.top_benchmarks` and `fallback_diagnostics.top_facets`
+aggregates are computed over the fallback rows only. They are distinct from the
+summary's `top_facets`, which is inherited from `benchmark_tests_report()` and
+spans all rows; do not reuse the summary computation here.
+
 Because `fallback-diagnostic` is evaluated last, a fallback row is never placed
 in `run-now`, `stage-next`, `metadata-needed`, or `blocked-or-reference` even if
 its readiness or task fields would otherwise satisfy those predicates.
@@ -193,7 +208,14 @@ fields, including `entities_total`, `test_plan_rows`, `concrete_rows`,
 `draft_needed_rows`, `entities_with_test_plans`, `entities_without_test_plans`,
 `source_counts`, `fallback_rows`, `fallback_row_ratio`, and `top_facets`.
 
-Add only the triage-specific aggregate fields:
+Then add the two triage-specific aggregate fields, `bucket_counts` and
+`readiness_counts`. `bucket_counts` partitions rows across the five buckets, so
+its `fallback-diagnostic` entry is the only place fallback rows are counted.
+`readiness_counts` is a raw histogram over **all** rows (including fallback
+rows), so it intentionally counts a different population than the non-fallback
+buckets; the two are not expected to line up.
+
+The merged summary therefore looks like:
 
 ```json
 {
@@ -272,13 +294,17 @@ sections:
 4. `blocked-or-reference`
 5. `fallback-diagnostic`
 
-Each non-fallback section shows the top rows, capped per bucket. The default cap
-should be small enough to stay readable, such as 10 rows per bucket. JSON output
-contains all rows after filters.
+Each non-fallback section shows the top rows, capped per bucket. Because buckets
+preserve `benchmark_tests_report()` order and that report sorts by descending
+`priority_score` once state/source/readiness are fixed, the capped rows are the
+highest-priority rows in the bucket. The default cap should be small enough to
+stay readable, such as 10 rows per bucket. JSON output contains all rows after
+filters.
 
-The table columns should be practical for triage:
+Because rows are grouped under per-bucket section headers, the bucket is already
+implied by the section and is not repeated as a column. The table columns should
+be practical for triage:
 
-- bucket
 - entity
 - benchmark
 - task
@@ -315,8 +341,14 @@ JSON output contains:
 }
 ```
 
+`filters` records the effective non-default filter values that shaped the report
+(for example `{"exclude_fallback": true, "readiness": "runnable"}`). It is
+best-effort context, like `source_command`, not a full option dump.
+
 `review_file` is `null` unless `--write-review-file` is used. When present, it
-is project-relative if the path is under the project root.
+is the resolved (absolute) path of the written artifact, matching the
+`review_file` value emitted by `science benchmark hint-candidates`. (The path is
+always under the project root, since escapes are rejected.)
 
 ## YAML Review Artifact
 
@@ -326,13 +358,19 @@ The YAML artifact uses the JSON contract with a small header:
 generated_at: "2026-07-01"
 project: multiple-myeloma
 project_root: "~/d/cancer/cancer-types/multiple-myeloma"
+review_file: "/home/user/d/cancer/cancer-types/multiple-myeloma/doc/audits/benchmark-test-triage/2026-07-01-multiple-myeloma.yaml"
 source_command: "science benchmark test-triage --exclude-fallback --commons"
 filters:
   exclude_fallback: true
 summary: {}
 buckets: {}
 fallback_diagnostics: {}
+commons_notice: null
 ```
+
+`project_root` is the `~`-style display path (as in `benchmark
+hint-candidates`), while `review_file` is the resolved absolute path of the
+artifact itself.
 
 The `source_command` is best-effort context, not an exact shell history record.
 It should include the command and filters that affect the report where practical.
@@ -368,6 +406,8 @@ Add tests for:
 - existing review files are refused rather than overwritten;
 - absolute `--output` paths are accepted only under the project root;
 - `--output` requires `--write-review-file`;
+- `--runnable-only` combined with a non-`runnable` `--readiness` is rejected,
+  matching `science benchmark tests`;
 - commons notice behavior matches `science benchmark tests`;
 - existing `benchmark tests` behavior remains unchanged.
 

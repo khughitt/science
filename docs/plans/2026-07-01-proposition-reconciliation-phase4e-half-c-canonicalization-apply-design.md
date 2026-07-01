@@ -163,11 +163,19 @@ refs from duplicate proposition `source_refs`, while Phase 4d belief attribution
 driven by the sidecar annotation's actual `promoted_to` value.
 
 Half C should still compare the fresh inbound-backlink scan with
-`inputs.sidecar_backlink_rewrites[].annotation_refs` and report mismatches as
-preflight diagnostics. A backlink missing from duplicate `source_refs` is not allowed
-to remain invisible: either the canonical provenance update covers it from the fresh
-scan, or the scan cannot resolve its paper/annotation ownership and apply fails
-before writing.
+`inputs.sidecar_backlink_rewrites[].annotation_refs` and surface every mismatch in
+preflight. The two directions have different severities:
+
+- a ref in the fresh scan but not in the Half B list (a backlink missing from
+  duplicate `source_refs`) is covered: the canonical provenance update picks it up
+  from the fresh scan, or the scan cannot resolve its paper/annotation ownership and
+  apply fails before writing;
+- a ref in the Half B list but not in the fresh scan means the duplicate's
+  `source_refs` claims an annotation whose live sidecar backlink has drifted or
+  vanished. If that annotation now points to the canonical proposition, it is a no-op
+  confirmation. Otherwise — it points to a third proposition, or resolves to no live
+  sidecar annotation at all — apply is a hard error, not a soft diagnostic. A reviewed
+  action whose member provenance has since disappeared must stop the write.
 
 Rules:
 
@@ -175,6 +183,8 @@ Rules:
   canonical proposition;
 - if it is already the canonical proposition, count it as a no-op confirmation;
 - any other `promoted_to` value is a preflight error;
+- a Half-B-listed ref that resolves to no live sidecar annotation is a preflight
+  error, not a silently dropped diagnostic;
 - preserve status, creator, created, modified fields, bodies, selectors,
   `content_hash`, and all other annotation metadata;
 - preserve unrelated annotations in the same sidecar;
@@ -235,6 +245,7 @@ Idempotent confirmations:
 Conflicting current state remains an error:
 
 - sidecar annotation points to a third proposition;
+- a duplicate `source_refs` annotation ref resolves to no live sidecar annotation;
 - duplicate has `superseded_by` set to a different target;
 - canonical proposition is missing;
 - duplicate proposition is missing;
@@ -350,6 +361,8 @@ Unit tests:
   proposition;
 - reports a backlink that is present in a sidecar but absent from duplicate
   `source_refs`, and still covers it when paper/annotation refs are resolvable;
+- hard-errors when a duplicate `source_refs` annotation ref resolves to no live
+  sidecar annotation (drifted/vanished backlink), writing nothing;
 - marks duplicates `superseded` with `superseded_by`;
 - preserves unrelated sidecar annotations;
 - merges two independent annotation rewrites in one shared sidecar into one file edit;
