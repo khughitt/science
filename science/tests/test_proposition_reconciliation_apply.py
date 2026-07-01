@@ -65,6 +65,28 @@ def test_select_canonicalization_actions_returns_all_ready_when_unfiltered():
     assert selected == (ready,)
 
 
+def test_select_canonicalization_actions_ignores_unrequested_non_ready_and_blocked_actions():
+    blocked = _action(
+        action_id="reconcile-action:blocked",
+        blockers=({"reason": "manual-review-required", "detail": "conflicting source refs"},),
+    )
+    non_ready = _action(status="blocked", action_id="reconcile-action:not-ready")
+    ready = _action(
+        action_id="reconcile-action:ready",
+        canonical="proposition:c",
+        members=("proposition:c", "proposition:d"),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=("review.json",),
+        actions=(blocked, non_ready, ready),
+    )
+
+    selected = select_canonicalization_actions(plan, requested_action_ids=())
+
+    assert selected == (ready,)
+
+
 def test_select_canonicalization_actions_rejects_plan_errors():
     plan = ReconciliationActionPlan(
         schema_version=1,
@@ -75,6 +97,42 @@ def test_select_canonicalization_actions_rejects_plan_errors():
 
     with pytest.raises(ReconciliationApplyError, match="action plan has top-level errors"):
         select_canonicalization_actions(plan, requested_action_ids=())
+
+
+def test_select_canonicalization_actions_includes_plan_error_reason_and_detail():
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=("review.json",),
+        actions=(_action(),),
+        errors=({"reason": "component-too-large", "detail": "too many", "members": []},),
+    )
+
+    with pytest.raises(ReconciliationApplyError) as exc_info:
+        select_canonicalization_actions(plan, requested_action_ids=())
+
+    message = str(exc_info.value)
+    assert "action plan has top-level errors" in message
+    assert "component-too-large" in message
+    assert "too many" in message
+
+
+def test_select_canonicalization_actions_rejects_requested_resynthesis_action():
+    action = _action(
+        kind="resynthesize_proposition",
+        action_id="reconcile-action:resynthesize",
+        canonical="proposition:a",
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1, source_reviews=("review.json",), actions=(action,)
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="resynthesize_proposition; factorization resynthesis is not executable",
+    ):
+        select_canonicalization_actions(
+            plan, requested_action_ids=("reconcile-action:resynthesize",)
+        )
 
 
 def test_select_canonicalization_actions_rejects_requested_advisory_action():
@@ -121,6 +179,44 @@ def test_select_canonicalization_actions_rejects_duplicate_requested_ids():
         )
 
 
+def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_requested_mode():
+    first = _action(action_id="reconcile-action:duplicate")
+    second = _action(
+        action_id="reconcile-action:duplicate",
+        canonical="proposition:c",
+        members=("proposition:c", "proposition:d"),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1, source_reviews=("review.json",), actions=(first, second)
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="duplicate reconciliation action id\\(s\\) in plan: reconcile-action:duplicate",
+    ):
+        select_canonicalization_actions(
+            plan, requested_action_ids=("reconcile-action:duplicate",)
+        )
+
+
+def test_select_canonicalization_actions_rejects_duplicate_plan_action_ids_unrequested_mode():
+    first = _action(action_id="reconcile-action:duplicate")
+    second = _action(
+        action_id="reconcile-action:duplicate",
+        canonical="proposition:c",
+        members=("proposition:c", "proposition:d"),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1, source_reviews=("review.json",), actions=(first, second)
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="duplicate reconciliation action id\\(s\\) in plan: reconcile-action:duplicate",
+    ):
+        select_canonicalization_actions(plan, requested_action_ids=())
+
+
 def test_select_canonicalization_actions_rejects_requested_non_ready_action():
     action = _action(status="blocked", action_id="reconcile-action:not-ready")
     plan = ReconciliationActionPlan(
@@ -149,6 +245,22 @@ def test_select_canonicalization_actions_rejects_requested_action_with_blockers(
     assert "reconcile-action:blocked has blocker(s)" in message
     assert "manual-review-required" in message
     assert "conflicting source refs" in message
+
+
+def test_select_canonicalization_actions_rejects_malformed_action_blocker():
+    action = _action(
+        action_id="reconcile-action:blocked",
+        blockers=({"detail": "missing reason"},),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1, source_reviews=("review.json",), actions=(action,)
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="reconcile-action:blocked has malformed blocker at index 0",
+    ):
+        select_canonicalization_actions(plan, requested_action_ids=("reconcile-action:blocked",))
 
 
 def test_select_canonicalization_actions_rejects_missing_canonical_proposition():

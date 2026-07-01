@@ -54,14 +54,53 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def _format_issue(issue: Mapping[str, Any]) -> str:
+    reason = issue.get("reason")
+    if not isinstance(reason, str) or not reason:
+        raise ReconciliationApplyError("action plan has malformed error entry: missing reason")
+    detail = issue.get("detail")
+    if detail is None or detail == "":
+        return reason
+    return f"{reason}: {detail}"
+
+
+def _format_blocker(action_id: str, blocker: Mapping[str, Any], index: int) -> str:
+    reason = blocker.get("reason")
+    if not isinstance(reason, str) or not reason:
+        raise ReconciliationApplyError(f"{action_id} has malformed blocker at index {index}")
+    detail = blocker.get("detail")
+    if detail is None or detail == "":
+        return reason
+    return f"{reason}: {detail}"
+
+
+def _duplicate_action_ids(actions: Sequence[ReconciliationAction]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for action in actions:
+        if action.action_id in seen:
+            duplicates.add(action.action_id)
+        seen.add(action.action_id)
+    return tuple(sorted(duplicates))
+
+
 def select_canonicalization_actions(
     plan: ReconciliationActionPlan,
     *,
     requested_action_ids: Sequence[str] = (),
 ) -> tuple[ReconciliationAction, ...]:
     if plan.errors:
+        error_messages = "; ".join(_format_issue(error) for error in plan.errors)
         raise ReconciliationApplyError(
-            "action plan has top-level errors; run plan-proposition-reconciliation first"
+            "action plan has top-level errors; "
+            f"{error_messages}; run plan-proposition-reconciliation first"
+        )
+
+    duplicate_action_ids = _duplicate_action_ids(plan.actions)
+    if duplicate_action_ids:
+        raise ReconciliationApplyError(
+            "duplicate reconciliation action id(s) in plan: "
+            f"{', '.join(duplicate_action_ids)}"
         )
 
     by_id = {action.action_id: action for action in plan.actions}
@@ -100,14 +139,10 @@ def select_canonicalization_actions(
                 "factorization resynthesis is not executable by Half C"
             )
         if action.blockers:
-            blocker_messages = []
-            for blocker in action.blockers:
-                reason = blocker.get("reason", "unknown")
-                detail = blocker.get("detail", "")
-                message = str(reason)
-                if detail:
-                    message = f"{message}: {detail}"
-                blocker_messages.append(message)
+            blocker_messages = [
+                _format_blocker(action.action_id, blocker, index)
+                for index, blocker in enumerate(action.blockers)
+            ]
             raise ReconciliationApplyError(
                 f"{action.action_id} has blocker(s): {'; '.join(blocker_messages)}"
             )
