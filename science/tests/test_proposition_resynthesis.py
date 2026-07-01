@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import (
