@@ -3,7 +3,7 @@
 Prototype validator for t034 v1.2 `causal-graph` extension structural rules.
 
 Per the natural-systems alignment commitment in
-meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md: "the validation
+meta/doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md: "the validation
 rules in this design must be implemented as enforcing runners — a payload claiming
 strengthen-belief without estimator_diagnostics should fail at validate-time, not
 pass with a comment."
@@ -21,7 +21,7 @@ in v1.2:
 
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 
-Run with:  python meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py
+Run with:  python meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py
 
 Exits 0 if all 10 test cases match expectations; nonzero otherwise.
 """

@@ -1,10 +1,10 @@
 # t034 v1.2 `mr-graph-model` Validator Prototype — Findings
 
-> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py`. Reports what the second prototype slice exercises and what it surfaced about the role-permission machinery.
+> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py`. Reports what the second prototype slice exercises and what it surfaced about the role-permission machinery.
 >
 > **Goal:** discharge the load-bearing half of the natural-systems alignment commitment for `[t034]` — prove that role-permission rules (`validation_role` × extension state × `effective_codes`) and the v1.2 conditional-required-field machinery are decidable from a single payload's content.
 >
-> **Position in the program:** second of three planned validator slices. First slice (`causal-graph` structural rules) at `meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py` and findings at `meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md`. Third slice (cross-payload reason-code propagation) is unbuilt.
+> **Position in the program:** second of three planned validator slices. First slice (`causal-graph` structural rules) at `meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py` and findings at `meta/doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md`. Third slice (cross-payload reason-code propagation) is unbuilt.
 
 ## What the prototype implements
 

@@ -1,13 +1,13 @@
 # t034 v1.3 effective-codes / propagation Validator Prototype — Findings
 
-> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py`. Reports what the third (and final-for-now) prototype slice exercises and surfaces.
+> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py`. Reports what the third (and final-for-now) prototype slice exercises and surfaces.
 >
 > **Goal:** discharge the *remaining half* of the natural-systems alignment commitment for `[t034]` — prove that cross-payload reason-code propagation, retirement, and consumer-side strengthening rules are decidable from the payload graph and the v1.3-tightened contract.
 >
 > **Position in the program:** slice 3 of 3. Sister to:
-> - `meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py` (slice 1: structural rules on `causal-graph`)
-> - `meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py` (slice 2: role-permission rules on `mr-graph-model`)
-> - design contract: `meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md` (v1.3, 85b984c)
+> - `meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py` (slice 1: structural rules on `causal-graph`)
+> - `meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py` (slice 2: role-permission rules on `mr-graph-model`)
+> - design contract: `meta/doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md` (v1.3, 85b984c)
 
 ## What the prototype implements
 

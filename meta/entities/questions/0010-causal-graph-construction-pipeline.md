@@ -4,7 +4,7 @@ title: How should Science represent causal graph construction as a staged eviden
   pipeline?
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-01'
 id: question:0010-causal-graph-construction-pipeline
 ontology_terms: []
 datasets: []
@@ -66,6 +66,25 @@ This question asks which of those stages should become explicit Science graph ar
 - Edge-like outputs should be typed by epistemic role: `assumed_background_edge`, `llm_prior_edge`, `llm_ancestral_constraint`, `data_discovered_adjacency`, `equivalence_class_feature`, `latent_variable_hypothesis`, `identified_causal_effect`, `mediation_path`, or `mechanistic_hypothesis`.
 - The main design uncertainty is granularity. Making every graph-construction step first-class may be too heavy, but hiding those steps inside prose makes H02/H03/H04 hard to test.
 - A likely compromise is a required compact causal-discovery payload plus optional first-class entities when a step feeds many downstream claims or carries independent validation status.
+
+## Current resolution
+
+Task `[t034]` resolved the first implemented slice of this question. The durable
+contract is `meta/evidence/t034-causal-graph-contract.md`; production validation
+lives in `meta/src/t034_validator/` and runs through `meta/validate_local.py`.
+The contract covers the graph-object taxonomy, edge-role guardrails, MR
+graph-model authoring rules, effective-code propagation/retirement, and the
+`causal-effect-estimate` `strengthen-belief` consumer rule.
+
+The original t034 design, pilot extraction, findings, and prototype scripts are
+historical design evidence rather than active plans. Their executable checks are
+now carried by `meta/tests/test_t034_validator.py`.
+
+Remaining scope is follow-on design and integration, not unfinished t034 cleanup:
+per-extension consumer rules beyond the implemented causal-effect-estimate/MR
+slice, origin-chain APIs, registry-backed ref resolution across project
+boundaries, and downstream synthesis-node consumers can become new scoped tasks
+if needed.
 
 ## Connections to Project
 

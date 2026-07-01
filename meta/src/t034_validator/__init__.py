@@ -26,8 +26,9 @@ v1.4 retirement table is implemented in `_retired_by`:
   instrument_validity_assumptions including 'relevance' retires
   instrument-assumption-risk (P1.4-a — first retirement that reads upstream state)
 
-The matching prototypes in doc/plans/2026-05-06-t034-* remain the test fixtures
-and design records. This package is what runs at validate-time.
+The durable authoring contract is meta/evidence/t034-causal-graph-contract.md.
+The historical prototypes in doc/plans/historical/ were extracted into
+meta/tests/test_t034_validator.py. This package is what runs at validate-time.
 """
 from __future__ import annotations
 

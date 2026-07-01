@@ -55,7 +55,7 @@ prototype slice's concern; not exercised here (this is a stage-(a) primary).
 
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 
-Run with:  python meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py
+Run with:  python meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py
 Exits 0 if all tests match expectations; nonzero otherwise.
 """
 from __future__ import annotations

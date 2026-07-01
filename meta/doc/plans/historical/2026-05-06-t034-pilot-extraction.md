@@ -1,6 +1,6 @@
 # t034 Pilot Extraction (3 papers, v1.1)
 
-> **Status:** Pilot extraction (2026-05-06). Empirical pressure-test of `[t034]` v1.1 (`meta/doc/plans/2026-05-06-t034-causal-graph-extension-design.md`). Three Batch-3 papers extracted to v1.1 payload shape: Faller2024 (graph-diagnostic), Zuber2025 (mr-graph-model + stage-(b) sketch), Dugourd2021 (mechanistic-hypothesis-bundle). Mirrors the `[t030]` rubric so findings are comparable.
+> **Status:** Pilot extraction (2026-05-06). Empirical pressure-test of `[t034]` v1.1 (`meta/doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md`). Three Batch-3 papers extracted to v1.1 payload shape: Faller2024 (graph-diagnostic), Zuber2025 (mr-graph-model + stage-(b) sketch), Dugourd2021 (mechanistic-hypothesis-bundle). Mirrors the `[t030]` rubric so findings are comparable.
 >
 > **Goal:** find the gaps between the v1.1 schema and what authors can actually produce from existing project content. Surfaces field-overload, field-drift, and authoring ambiguities the worked examples didn't.
 
