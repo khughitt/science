@@ -44,6 +44,10 @@ Out of scope:
 ## 3. CLI Surface
 
 Add a flat `annotate` command, following the existing 4e CLI convention:
+This follows the validator-style command naming (`validate-proposition-reconciliation`)
+rather than the generator's verb-first `reconcile-propositions` name because this
+command consumes reviewed artifacts. Unlike the validator, `--input` is repeatable so
+one project-level plan can be built from several reviewed files.
 
 ```text
 science annotate plan-proposition-reconciliation \
@@ -107,11 +111,11 @@ The output is a single versioned object:
       "suggested_operations": [
         {
           "kind": "draft_proposition",
-          "description": "Draft a narrower proposition for BES/meta-analysis similarity under adequate-power or compatible-study settings."
+          "description": "Draft one or more narrower propositions from the reviewed factorization disagreement and the observed statement hints."
         },
         {
           "kind": "draft_proposition",
-          "description": "Draft a narrower proposition for BES not behaving as pooled data rescue when individual studies are underpowered."
+          "description": "Use the reviewer rationale as context, but do not synthesize new claim-family prose in the planner."
         },
         {
           "kind": "reassign_annotations",
@@ -120,7 +124,7 @@ The output is a single versioned object:
       ],
       "preconditions": [
         "review judgment validates against the current reconciliation candidate",
-        "target proposition exists and is active"
+        "target proposition exists in the current reconciliation report"
       ],
       "blockers": [],
       "writes": []
@@ -144,15 +148,16 @@ Status is `ready` when:
 
 - the current review validates;
 - the proposition exists;
-- the proposition is active;
 - there is no competing action for the same proposition.
 
 The action includes the factorization candidate's observed statement hints, papers,
 annotations, disagreement labels, and reviewer rationale. Suggested operations are
-derived from the observed stance/context pattern, but remain descriptive. For the BES
-case, the suggested operations name the two claim families already visible in the
-review: conditional similarity to meta-analysis, and non-pooling divergence under
-weak or boundary-adjacent evidence.
+deterministic templates keyed by the reviewed decision and candidate disagreement
+labels. The planner may copy the reviewer rationale and observed statement hints into
+the action, but it must not invent polished claim-family descriptions. For the BES
+case, the plan can say "draft narrower propositions from this factorization
+disagreement"; the human or a later reviewed synthesis step supplies the actual new
+claim wording.
 
 ### `same_claim`
 
@@ -166,9 +171,9 @@ The action records:
 - sidecar backlinks that would need rewriting;
 - propositions that would eventually be archived or redirected.
 
-Status is `ready` only if all member propositions still exist and no member appears in
-another action. Half B does not choose new canonicalization behavior beyond what the
-review already approved.
+Status is `ready` only if all member propositions still exist in the current
+reconciliation snapshot and no member appears in another action. Half B does not choose
+new canonicalization behavior beyond what the review already approved.
 
 ### `related_but_distinct` and `conflict_or_negation`
 
@@ -181,15 +186,25 @@ candidate without re-review.
 Emit blocked or advisory actions, depending on the decision:
 
 - `stance_review_needed`: blocked until the relevant annotation stances are reviewed;
-- `split_possible`: advisory unless the reviewer also chose
-  `factorization_needs_resynthesis`;
+- `split_possible`: advisory unless another reviewed file for the same proposition also
+  chose `factorization_needs_resynthesis`;
 - `insufficient_hints`: advisory metadata cleanup action;
 - `needs_human`: blocked with the reviewer rationale as the next-step description.
 
 ## 6. Conflict and Error Handling
 
 The planner fails early for invalid review documents. It does not produce a partial
-plan when `validate_review_doc` rejects an input.
+plan when `validate_review_doc` rejects an input. It also treats non-empty
+`review_incomplete` from `validate_review_doc` as a blocker: the reviewed file is
+schema-valid, but the generated same-claim component has unreviewed members, so
+canonicalization actions from that file are blocked until the component is fully
+accounted for.
+
+`ReconciliationReport.faults` become top-level plan `errors`. These are project-level
+reconciliation problems such as scanner faults or `component-too-large` groups. The
+planner may still emit actions for reviewed candidates that validate cleanly, but the
+summary reports non-zero `errors`, and each fault is preserved with `reason`, `detail`,
+and `members`.
 
 After validation, conflicts become plan-level blockers rather than Python exceptions
 when a complete report is still useful:
@@ -198,7 +213,6 @@ when a complete report is still useful:
 - a proposition is both canonical and duplicate in different reviewed judgments;
 - two `same_claim` judgments choose different canonical propositions for overlapping
   member sets;
-- an action references a proposition that exists but is inactive;
 - a reviewed advisory decision conflicts with a ready mutation-oriented action.
 
 The plan's top-level `errors` list is reserved for input-level or project-level issues
@@ -223,6 +237,9 @@ Examples:
 IDs change when the reviewed judgment or action target changes. They do not include
 file paths, model names, timestamps, or table ordering.
 
+The `actions` array is sorted by `action_id`. This keeps JSON output reproducible
+without coupling the IDs to presentation order.
+
 ## 8. Validation and State Anchoring
 
 The planner reuses the Half A validation stack:
@@ -230,8 +247,9 @@ The planner reuses the Half A validation stack:
 1. build the current reconciliation report from the project root;
 2. load each review JSON;
 3. run `validate_review_doc(review, current_report)`;
-4. translate validated judgments into plan actions;
-5. check action-level conflicts.
+4. resolve each validated judgment back to its current candidate object;
+5. translate resolved judgments into plan actions;
+6. check action-level conflicts.
 
 This means candidate IDs and judgment IDs stay stale-sensitive. A plan cannot be built
 from a review file that no longer matches the current candidate graph.
@@ -240,6 +258,20 @@ The action plan should include the review file paths that produced it. It should
 embed wall-clock timestamps; reproducibility comes from the validated inputs and
 deterministic IDs.
 
+Half A currently builds `PropositionSnapshot` values inside `build_reconciliation_report`
+and discards them after candidate generation. Half B needs those snapshots for
+`same_claim` action payloads (`source_refs`, `annotation_refs`, and paper refs). The
+implementation should extend `ReconciliationReport` with a non-serialized
+`proposition_snapshots` mapping, populated by the same `snapshot_from_entity` pass used
+to generate candidates. This avoids a second project load and keeps the planner anchored
+to the same snapshot set that validation used.
+
+Half B should also add a small resolver helper in `proposition_reconciliation.py`, for
+example `resolve_review_doc(doc, report)`, that wraps `validate_review_doc` and returns
+each judgment paired with the resolved `SameClaimCandidate` or `FactorizationCandidate`.
+The planner should use that helper rather than reimplementing the private
+`_candidate_indexes` / `_resolve_same_claim_candidate` logic in another module.
+
 ## 9. Testing
 
 Core tests:
@@ -247,9 +279,11 @@ Core tests:
 - valid factorization review maps to one `resynthesize_proposition` action;
 - valid `same_claim` review maps to one `canonicalize_propositions` action;
 - stale review input fails before planning;
+- non-empty `review_incomplete` blocks same-claim canonicalization;
+- `ReconciliationReport.faults` populate top-level plan errors;
 - duplicate or conflicting judgments produce blocked actions or top-level errors;
-- inactive target proposition blocks a mutation-oriented action;
 - deterministic `action_id` is stable across input ordering;
+- actions are sorted by `action_id`;
 - JSON output contains no proposed writes in Half B.
 
 CLI tests:
@@ -263,7 +297,7 @@ Real-corpus smoke:
 
 ```text
 cd meta
-PYTHONPATH=../science/src uv run --frozen --project ../science \
+PYTHONPATH=../science/src:../science/model/src uv run --frozen --project ../science \
   science annotate plan-proposition-reconciliation \
   --input results/proposition-reconciliation/2026-07-01-bes-pooled-meta-analysis-review.json \
   --format json
