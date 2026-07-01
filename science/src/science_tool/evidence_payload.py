@@ -1,4 +1,7 @@
-"""Evidence payload core schema and extension-contract validation."""
+"""Evidence payload core schema and extension-contract validation.
+
+Durable authoring contract: ``meta/evidence/t022-core-contract.md``.
+"""
 
 from __future__ import annotations
 
@@ -8,12 +11,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ComparisonTarget = Literal["null-vs-alternative", "hypothesis-set", "model-set", "artifact-target", "n-a"]
+ComparisonTarget = Literal["null-vs-alternative", "hypothesis-set", "model-set", "method-set", "artifact-target", "n-a"]
 SupportDirection = Literal[
     "supports",
     "disputes",
     "qualifies",
     "methodological-input",
+    "framework-proposal",
     "quality-record",
     "operation-record",
 ]
@@ -45,21 +49,22 @@ class EvidencePayloadCore(BaseModel):
     source_commit: str | None = None
 
     input_artifact_refs: list[str]
+    claim_source_ref: str | None = None
     method_ref: str | None = None
     agent_ref: str | None = None
     pipeline_provenance_ref: str | None = None
 
     proposition_refs: list[str]
-    target_artifact_ref: str | None = None
     comparison_target: ComparisonTarget
 
     support_direction: SupportDirection
     validation_role: ValidationRole
     validation_status: ValidationStatus
-    uncertainty_summary: str
+    uncertainty_summary: str | None = None
 
     reason_codes: list[str]
     abstention_reason: str | None = None
+    partial_fields: list[str] | None = None
 
     @field_validator("extensions")
     @classmethod
@@ -70,9 +75,9 @@ class EvidencePayloadCore(BaseModel):
 
     @model_validator(mode="after")
     def _has_attachment(self) -> "EvidencePayloadCore":
-        if not self.proposition_refs and self.target_artifact_ref is None and not self.input_artifact_refs:
+        if not self.proposition_refs and not self.input_artifact_refs and self.claim_source_ref is None:
             raise ValueError(
-                "payload must attach through proposition_refs, target_artifact_ref, or input_artifact_refs"
+                "payload must attach through proposition_refs, input_artifact_refs, or claim_source_ref"
             )
         return self
 

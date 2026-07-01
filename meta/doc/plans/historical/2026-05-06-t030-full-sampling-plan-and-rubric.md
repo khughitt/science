@@ -215,7 +215,7 @@ The extractor does not see:
 
 The blind LLM extractor sees only:
 
-- The v2.1 core-schema description (the **Proposed core schema**, **What does NOT live in t022**, and **Pitfall** sections of `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`).
+- The v2.1 core-schema description (the **Proposed core schema**, **What does NOT live in t022**, and **Pitfall** sections of `meta/doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md`).
 - The rubric above (rubric definitions + per-field score table; not the metrics, not the field-pruning rules, not the locked sample list beyond the paper assigned).
 - The paper summary file at `meta/doc/background/papers/<key>.md`.
 

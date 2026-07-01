@@ -7,8 +7,11 @@ plus any t034 / t037 / etc. extensions.
 `validate.local.sh`. Each `.yaml` / `.yml` file is one payload; the file's
 `core.payload_id` is its registry key.
 
-**Contract.** `t034-causal-graph-contract.md` is the durable authoring contract
-for causal-graph / MR graph-model payloads and effective-code propagation.
+**Contracts.**
+- `t022-core-contract.md` is the durable authoring contract for the core payload
+  schema, extension mechanism, and generic reason-code propagation behavior.
+- `t034-causal-graph-contract.md` is the durable authoring contract for
+  causal-graph / MR graph-model payloads and t034-specific effective-code rules.
 
 **Authoring rules** (v1.4 hard-error policy, t034):
 - Auto-injected reason codes (per the t034 v1.3 contribution table) must NOT be

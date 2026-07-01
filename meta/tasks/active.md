@@ -110,8 +110,18 @@ Without this split, every batch silently widened the "minimum" schema (~50 field
 `[t025]` is the canonical H03 reason-code registry — aspect tasks declare codes locally and mirror them there with batch provenance.
 Lit follow-up tasks (`[t028]`, `[t036]`, `[t039]`, `[t041]`) are P3 so they do not compete with the schema work.
 
-**State (2026-05-06):** `[t022]` shipped at v2.2 (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`) with structural claims validated by `[t030]`. Both tasks done. Aspect extensions (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) are now unblocked and move to P1.
-Carry-forwards: each aspect extension declaring an evaluation/audit/operation type now owns its own `target_artifact_ref` (no longer in core); enums have `methods-paper`/`framework-paper`/`benchmark-or-dataset-paper`, `method-set`, `framework-proposal` available; `uncertainty_summary` is `[opt]` and may be qualitative.
+**State (2026-07-01):** `[t022]` shipped and is now carried by the durable
+contract at `meta/evidence/t022-core-contract.md`, with generic implementation
+coverage in `science/src/science_tool/evidence_payload.py` and
+`science/tests/test_evidence_payload_contract.py`. `[t030]` validated the
+structural pruning that produced the compact core. Aspect extensions
+(`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) remain the place for
+family-specific fields and validators.
+Carry-forwards: each aspect extension declaring an evaluation/audit/operation
+type owns its own target field (no longer in core); paper-extracted claims use
+`claim_source_ref`; `partial_fields` marks partially enumerated list fields; and
+`uncertainty_summary` is optional so authors do not synthesize qualitative prose
+as if it were canonical uncertainty.
 
 Surfaced by: `entities/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md`.
 
