@@ -7,6 +7,7 @@ import pytest
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation import proposition_reconciliation_apply as apply_module
+from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
 from science_tool.annotation.model import (
     Annotation,
     Motivation,
@@ -677,6 +678,56 @@ def test_plan_canonicalization_apply_errors_when_duplicate_superseded_elsewhere(
         plan_canonicalization_apply(tmp_path, _manual_ready_plan())
 
 
+def test_plan_canonicalization_apply_errors_when_half_b_ref_points_to_third_proposition(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _proposition(
+        tmp_path,
+        "other",
+        "TP53 loss increases genomic instability",
+        source_refs=("paper:Other",),
+        subject="TP53 loss",
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    b_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "B2021",
+        (_ann("b1", "proposition:b"),),
+    )
+    review_doc = _review_doc_for_current_candidate(tmp_path)
+    plan = _ready_plan(tmp_path, review_doc)
+    b_sidecar = read_sidecar_strict(b_sidecar_path)
+    anno_io.write_sidecar(
+        b_sidecar_path,
+        Sidecar(
+            annotations=(
+                replace(b_sidecar.annotations[0], promoted_to="proposition:other"),
+            ),
+            ledgers=b_sidecar.ledgers,
+            shared_targets=b_sidecar.shared_targets,
+        ),
+    )
+
+    with pytest.raises(
+        ReconciliationApplyError,
+        match="not proposition:b or proposition:a",
+    ):
+        plan_canonicalization_apply(tmp_path, plan)
+
+
 def test_apply_canonicalization_rewrites_files_and_postflight_passes(tmp_path: Path):
     _manifest(tmp_path)
     _proposition(
@@ -712,6 +763,111 @@ def test_apply_canonicalization_rewrites_files_and_postflight_passes(tmp_path: P
     b_sidecar = read_sidecar_strict(b_sidecar_path)
     assert b_sidecar.annotations[0].promoted_to == "proposition:a"
     assert "proposition:b" not in b_sidecar_path.read_text(encoding="utf-8")
+
+
+def test_apply_canonicalization_reattributes_cross_paper_evidence(tmp_path: Path):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
+    review_doc = _review_doc_for_current_candidate(tmp_path)
+    plan = _ready_plan(tmp_path, review_doc)
+
+    before_a = build_cross_paper_evidence_report(
+        tmp_path,
+        proposition_ref="proposition:a",
+    )
+    before_b = build_cross_paper_evidence_report(
+        tmp_path,
+        proposition_ref="proposition:b",
+    )
+    assert [unit["paper"] for unit in before_a["units"]] == ["paper:A2020"]
+    assert [unit["paper"] for unit in before_b["units"]] == ["paper:B2021"]
+
+    apply_canonicalization_plan(tmp_path, plan)
+
+    after_a = build_cross_paper_evidence_report(
+        tmp_path,
+        proposition_ref="proposition:a",
+    )
+    after_b = build_cross_paper_evidence_report(
+        tmp_path,
+        proposition_ref="proposition:b",
+    )
+    assert {unit["paper"] for unit in after_a["units"]} == {
+        "paper:A2020",
+        "paper:B2021",
+    }
+    assert after_a["belief"]["support_units"] >= 2
+    assert after_b["units"] == []
+    duplicate_text = (tmp_path / "entities" / "propositions" / "b.md").read_text(
+        encoding="utf-8"
+    )
+    assert "status: superseded" in duplicate_text
+    assert "superseded_by: proposition:a" in duplicate_text
+
+
+def test_apply_canonicalization_accepts_sidecar_already_canonical_as_noop(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "a",
+        "BRCA1 loss increases genomic instability",
+        source_refs=("paper:A2020", "annotation:entities/papers/A2020.source#a1"),
+    )
+    _proposition(
+        tmp_path,
+        "b",
+        "Loss of BRCA1 raises genome instability",
+        status="superseded",
+        superseded_by="proposition:a",
+        source_refs=("paper:B2021", "annotation:entities/papers/B2021.source#b1"),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:a"),))
+    action = _action(
+        inputs={
+            "source_ref_moves": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "source_refs": (
+                        "paper:B2021",
+                        "annotation:entities/papers/B2021.source#b1",
+                    ),
+                },
+            ),
+            "sidecar_backlink_rewrites": (
+                {
+                    "from": "proposition:b",
+                    "to": "proposition:a",
+                    "annotation_refs": ("annotation:entities/papers/B2021.source#b1",),
+                },
+            ),
+            "archive_candidates": ("proposition:b",),
+        },
+    )
+
+    report = apply_canonicalization_plan(tmp_path, _manual_ready_plan((action,)))
+
+    assert report.status == "ok"
+    assert any(
+        diagnostic.get("reason") == "listed_backlink_already_canonical"
+        for diagnostic in report.diagnostics
+    )
 
 
 def test_apply_canonicalization_is_idempotent_on_second_run(tmp_path: Path):
