@@ -140,6 +140,36 @@ def test_factorization_resynthesis_review_maps_to_ready_action():
     assert action.suggested_operations[0]["kind"] == "draft_proposition"
 
 
+def test_factorization_resynthesis_action_plan_json_uses_list_shapes():
+    candidate = _factor_candidate()
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    payload = action_plan_to_json(
+        build_reconciliation_action_plan(
+            report,
+            [
+                ReviewedReconciliationInput(
+                    path="reviews/factorization.json",
+                    doc=_factor_review(candidate),
+                )
+            ],
+        )
+    )
+
+    action = payload["actions"][0]
+    assert action["proposition"] == "proposition:p"
+    assert action["writes"] == []
+    assert action["inputs"]["annotations"] == [
+        "annotation:entities/papers/A2020.source#a1",
+        "annotation:entities/papers/B2021.source#b1",
+    ]
+    assert isinstance(action["inputs"]["annotations"], list)
+    assert isinstance(action["inputs"]["papers"], list)
+    assert action["suggested_operations"][0]["kind"] == "draft_proposition"
+
+
 def test_report_faults_become_top_level_action_plan_errors():
     report = ReconciliationReport(
         faults=(
