@@ -18,6 +18,7 @@ from science_tool.annotation.proposition_reconciliation import (
     polarity_compatible,
     predicate_compatible,
     report_to_json,
+    resolve_review_doc,
     title_tokens,
     validate_review_doc,
 )
@@ -497,3 +498,84 @@ def test_validate_review_doc_rejects_lane_b_same_claim_decision():
 
     with pytest.raises(ReconciliationValidationError, match="Lane B"):
         validate_review_doc(doc, report)
+
+
+def test_reconciliation_report_can_carry_proposition_snapshots():
+    snapshot = _prop(
+        "proposition:a",
+        "BRCA1 loss increases genomic instability",
+        papers=frozenset({"paper:A2020"}),
+    )
+    report = ReconciliationReport(proposition_snapshots={snapshot.ref: snapshot})
+
+    assert report.proposition_snapshots == {"proposition:a": snapshot}
+
+
+def test_resolve_review_doc_returns_candidate_and_validation_payload():
+    report = _candidate_report()
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", list(candidate.propositions)
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": list(candidate.propositions),
+                "rationale": "Same signed relation over same endpoints.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    resolved = resolve_review_doc(doc, report)
+
+    assert resolved.validation["status"] == "ok"
+    assert resolved.validation["review_incomplete"] == []
+    assert len(resolved.judgments) == 1
+    assert resolved.judgments[0].candidate == candidate
+    assert resolved.judgments[0].judgment["decision"] == "same_claim"
+
+
+def test_resolve_review_doc_preserves_review_incomplete_payload():
+    current = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+            _prop("proposition:c", "BRCA1 loss promotes genomic instability"),
+        ]
+    )
+    report = ReconciliationReport(same_claim_candidates=current.candidates)
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate_id(
+                    "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": "The pair is a same-claim subset of the current component.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    resolved = resolve_review_doc(doc, report)
+
+    assert resolved.validation["review_incomplete"] == [
+        {
+            "candidate_id": report.same_claim_candidates[0].candidate_id,
+            "missing": ["proposition:c"],
+        }
+    ]
+    assert resolved.judgments[0].candidate == report.same_claim_candidates[0]
