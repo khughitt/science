@@ -1167,6 +1167,287 @@ benchmark:
     }
 
 
+def _benchmark_test_row_for_triage(
+    *,
+    entity_id: str,
+    benchmark_id: str,
+    test_plan_state: str,
+    readiness_label: str,
+    priority_source: str,
+    priority_score: int = 10,
+    task_id: str | None = "dataset:benchmark#task",
+    matched_facets: list[str] | None = None,
+    needs: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "entity_id": entity_id,
+        "entity_title": entity_id.removeprefix("hypothesis:"),
+        "benchmark_id": benchmark_id,
+        "benchmark_title": benchmark_id.removeprefix("dataset:"),
+        "task_id": task_id,
+        "test_plan_state": test_plan_state,
+        "task_type": "validation",
+        "benchmark_kinds": ["static-association"],
+        "readiness_label": readiness_label,
+        "priority_score": priority_score,
+        "priority_source": priority_source,
+        "score_components": {"source": {"component": priority_score}, "baseline": {}},
+        "matched_facets": matched_facets or ["perturbation"],
+        "reason_notes": ["fixture"],
+        "prediction_target": "target" if task_id else "",
+        "held_out_unit": "unit" if task_id else "",
+        "metric": "auroc" if task_id else "",
+        "baseline": "majority-class" if task_id else "",
+        "ground_truth": {
+            "type": "measured-outcome" if task_id else "",
+            "description": "label" if task_id else "",
+        },
+        "needs": needs or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
+    }
+
+
+def test_benchmark_test_triage_bucket_assignment_is_ordered() -> None:
+    from science_tool.benchmark_opportunities import _benchmark_test_triage_bucket
+
+    assert (
+        _benchmark_test_triage_bucket(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:run",
+                benchmark_id="dataset:run",
+                test_plan_state="concrete",
+                readiness_label="runnable",
+                priority_source="opportunity-relative",
+            )
+        )
+        == "run-now"
+    )
+    assert (
+        _benchmark_test_triage_bucket(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:stage",
+                benchmark_id="dataset:stage",
+                test_plan_state="draft-needed",
+                readiness_label="stage-needed",
+                priority_source="gap-candidate",
+                task_id=None,
+            )
+        )
+        == "stage-next"
+    )
+    assert (
+        _benchmark_test_triage_bucket(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:metadata",
+                benchmark_id="dataset:metadata",
+                test_plan_state="draft-needed",
+                readiness_label="metadata-only",
+                priority_source="gap-candidate",
+                task_id=None,
+            )
+        )
+        == "metadata-needed"
+    )
+    assert (
+        _benchmark_test_triage_bucket(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:blocked",
+                benchmark_id="dataset:blocked",
+                test_plan_state="concrete",
+                readiness_label="blocked",
+                priority_source="opportunity-relative",
+            )
+        )
+        == "blocked-or-reference"
+    )
+    assert (
+        _benchmark_test_triage_bucket(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:fallback",
+                benchmark_id="dataset:fallback",
+                test_plan_state="concrete",
+                readiness_label="runnable",
+                priority_source="gap-fallback",
+            )
+        )
+        == "fallback-diagnostic"
+    )
+
+
+def test_benchmark_test_triage_report_buckets_and_preserves_summary_fields(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0100-perturbation",
+        """
+id: hypothesis:0100-perturbation
+type: hypothesis
+title: Perturbation response hypothesis
+""",
+        body="Drug perturbation should shift response states.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0101-spatial",
+        """
+id: hypothesis:0101-spatial
+type: hypothesis
+title: Spatial validation hypothesis
+""",
+        body="Microenvironment region structure needs validation.",
+    )
+    _write_dataset(
+        tmp_path,
+        "runnable-perturbation",
+        """
+id: dataset:runnable-perturbation
+type: dataset
+title: Runnable Perturbation
+dataset_class: deposit
+local_path: data/runnable-perturbation
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial-reference",
+        """
+id: dataset:spatial-reference
+type: dataset
+title: Spatial Reference
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path)
+
+    assert payload["commons_notice"] is None
+    assert payload["review_file"] is None
+    assert payload["summary"]["test_plan_rows"] == 3
+    assert payload["summary"]["source_counts"]["opportunity-relative"] == 2
+    assert payload["summary"]["source_counts"]["gap-fallback"] == 1
+    assert payload["summary"]["bucket_counts"] == {
+        "run-now": 1,
+        "stage-next": 0,
+        "metadata-needed": 1,
+        "blocked-or-reference": 0,
+        "fallback-diagnostic": 1,
+    }
+    assert payload["summary"]["readiness_counts"]["runnable"] == 2
+    assert payload["summary"]["readiness_counts"]["metadata-only"] == 1
+    assert [row["benchmark_id"] for row in payload["buckets"]["run-now"]] == ["dataset:runnable-perturbation"]
+    assert [row["benchmark_id"] for row in payload["buckets"]["metadata-needed"]] == ["dataset:spatial-reference"]
+    assert payload["buckets"]["run-now"][0]["review"] == {
+        "decision": "",
+        "owner": "",
+        "next_action": "",
+        "notes": "",
+    }
+    assert payload["fallback_diagnostics"]["top_benchmarks"] == [
+        {"benchmark_id": "dataset:runnable-perturbation", "count": 1}
+    ]
+    assert payload["fallback_diagnostics"]["top_facets"] == [
+        {"facet": "perturbation", "count": 1},
+        {"facet": "single-cell-rna-seq", "count": 1},
+    ]
+
+
+def test_benchmark_test_triage_report_preserves_filtered_row_order_and_fallback_diagnostics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0102-generic",
+        """
+id: hypothesis:0102-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "fallback-a",
+        """
+id: dataset:fallback-a
+type: dataset
+title: Fallback A
+dataset_class: deposit
+local_path: data/fallback-a
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "fallback-b",
+        """
+id: dataset:fallback-b
+type: dataset
+title: Fallback B
+dataset_class: deposit
+local_path: data/fallback-b
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [perturbation]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback")
+
+    fallback_rows = payload["buckets"]["fallback-diagnostic"]
+    assert fallback_rows
+    assert {row["priority_source"] for row in fallback_rows} == {"gap-fallback"}
+    assert payload["summary"]["bucket_counts"]["fallback-diagnostic"] == len(fallback_rows)
+    assert payload["fallback_diagnostics"]["top_benchmarks"][0]["benchmark_id"].startswith("dataset:fallback-")
+    assert payload["fallback_diagnostics"]["top_facets"][0] == {"facet": "proteomics", "count": 2}
+    assert payload["filters"]["source"] == "gap-fallback"
+
+
 def test_opportunity_report_matches_prefixed_shorthand_related_belief(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 

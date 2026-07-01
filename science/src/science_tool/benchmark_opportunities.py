@@ -8,7 +8,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 import yaml
 
@@ -607,6 +607,48 @@ class BenchmarkTestSummary(TypedDict):
 class BenchmarkTestReport(TypedDict):
     benchmark_tests: list[BenchmarkTestRow]
     summary: BenchmarkTestSummary
+    commons_notice: str | None
+
+
+BenchmarkTestTriageBucket = Literal[
+    "run-now",
+    "stage-next",
+    "metadata-needed",
+    "blocked-or-reference",
+    "fallback-diagnostic",
+]
+
+BENCHMARK_TEST_TRIAGE_BUCKETS: tuple[BenchmarkTestTriageBucket, ...] = (
+    "run-now",
+    "stage-next",
+    "metadata-needed",
+    "blocked-or-reference",
+    "fallback-diagnostic",
+)
+
+
+class BenchmarkTestReviewFields(TypedDict):
+    decision: str
+    owner: str
+    next_action: str
+    notes: str
+
+
+class BenchmarkTestTriageRow(BenchmarkTestRow):
+    review: BenchmarkTestReviewFields
+
+
+class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
+    top_benchmarks: list[BenchmarkCountRow]
+    top_facets: list[FacetCountRow]
+
+
+class BenchmarkTestTriageReport(TypedDict):
+    summary: dict[str, Any]
+    buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]]
+    fallback_diagnostics: BenchmarkTestTriageFallbackDiagnostics
+    filters: dict[str, Any]
+    review_file: str | None
     commons_notice: str | None
 
 
@@ -2543,6 +2585,125 @@ def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int
     }
 
 
+def _empty_benchmark_test_triage_buckets() -> dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]]:
+    return {bucket: [] for bucket in BENCHMARK_TEST_TRIAGE_BUCKETS}
+
+
+def _benchmark_test_triage_bucket(row: BenchmarkTestRow) -> BenchmarkTestTriageBucket:
+    if (
+        row["test_plan_state"] == "concrete"
+        and row["readiness_label"] == "runnable"
+        and row["priority_source"] != "gap-fallback"
+    ):
+        return "run-now"
+    if row["readiness_label"] == "stage-needed" and row["priority_source"] != "gap-fallback":
+        return "stage-next"
+    if (
+        row["test_plan_state"] == "draft-needed"
+        and row["priority_source"] != "gap-fallback"
+        and row["readiness_label"] != "blocked"
+    ):
+        return "metadata-needed"
+    if row["readiness_label"] in {"metadata-only", "blocked"} and row["priority_source"] != "gap-fallback":
+        return "blocked-or-reference"
+    if row["priority_source"] == "gap-fallback":
+        return "fallback-diagnostic"
+    raise ValueError(f"unable to classify benchmark test row: {row['entity_id']} {row['benchmark_id']}")
+
+
+def _benchmark_test_review_fields() -> BenchmarkTestReviewFields:
+    return {
+        "decision": "",
+        "owner": "",
+        "next_action": "",
+        "notes": "",
+    }
+
+
+def _benchmark_test_triage_row(row: BenchmarkTestRow) -> BenchmarkTestTriageRow:
+    return cast("BenchmarkTestTriageRow", {**row, "review": _benchmark_test_review_fields()})
+
+
+def _benchmark_test_triage_bucket_counts(
+    buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]],
+) -> dict[BenchmarkTestTriageBucket, int]:
+    return {bucket: len(buckets[bucket]) for bucket in BENCHMARK_TEST_TRIAGE_BUCKETS}
+
+
+def _benchmark_test_readiness_counts(rows: list[BenchmarkTestRow]) -> dict[ReadinessLabel, int]:
+    counts: dict[ReadinessLabel, int] = {
+        "runnable": 0,
+        "stage-needed": 0,
+        "metadata-only": 0,
+        "blocked": 0,
+    }
+    for row in rows:
+        counts[row["readiness_label"]] += 1
+    return counts
+
+
+def _top_triage_benchmark_counts(rows: list[BenchmarkTestTriageRow], *, top: int = 10) -> list[BenchmarkCountRow]:
+    counter = Counter(row["benchmark_id"] for row in rows)
+    return [
+        {"benchmark_id": benchmark_id, "count": count}
+        for benchmark_id, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _top_triage_facet_counts(rows: list[BenchmarkTestTriageRow], *, top: int = 10) -> list[FacetCountRow]:
+    counter = Counter(facet for row in rows for facet in row["matched_facets"])
+    return [
+        {"facet": facet, "count": count}
+        for facet, count in sorted(counter.items(), key=lambda item: (-item[1], _facet_sort_key(item[0])))[:top]
+    ]
+
+
+def _benchmark_test_triage_summary(
+    report_summary: BenchmarkTestSummary,
+    *,
+    rows: list[BenchmarkTestRow],
+    buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = dict(report_summary)
+    summary["bucket_counts"] = _benchmark_test_triage_bucket_counts(buckets)
+    summary["readiness_counts"] = _benchmark_test_readiness_counts(rows)
+    return summary
+
+
+def _benchmark_test_triage_filters(
+    *,
+    include_commons: bool,
+    entity_id: str | None,
+    domain: str | None,
+    facet: str | None,
+    state: TestPlanState | None,
+    source: PrioritySource | None,
+    exclude_fallback: bool,
+    readiness: ReadinessLabel | None,
+    benchmark_id: str | None,
+) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    if include_commons:
+        filters["include_commons"] = True
+    if entity_id is not None:
+        filters["entity_id"] = entity_id
+    if domain is not None:
+        filters["domain"] = domain
+    if facet is not None:
+        filters["facet"] = facet
+    if state is not None:
+        filters["state"] = state
+    if source is not None:
+        filters["source"] = source
+    if exclude_fallback:
+        filters["exclude_fallback"] = True
+    if readiness is not None:
+        filters["readiness"] = readiness
+    if benchmark_id is not None:
+        filters["benchmark_id"] = benchmark_id
+    return filters
+
+
 def _normalize_benchmark_filter(value: str | None) -> str | None:
     if value is None:
         return None
@@ -2769,6 +2930,62 @@ def benchmark_tests_report(
         "benchmark_tests": rows,
         "summary": _benchmark_test_summary(rows, entities_total=len(analysis.entities)),
         "commons_notice": analysis.report["commons_notice"],
+    }
+
+
+def benchmark_test_triage_report(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    facet: str | None = None,
+    state: TestPlanState | None = None,
+    source: PrioritySource | None = None,
+    exclude_fallback: bool = False,
+    readiness: ReadinessLabel | None = None,
+    benchmark_id: str | None = None,
+    review_file: str | None = None,
+) -> BenchmarkTestTriageReport:
+    report = benchmark_tests_report(
+        project_root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+        facet=facet,
+        state=state,
+        source=source,
+        exclude_fallback=exclude_fallback,
+        readiness=readiness,
+        benchmark_id=benchmark_id,
+    )
+    rows = report["benchmark_tests"]
+    buckets = _empty_benchmark_test_triage_buckets()
+    for row in rows:
+        bucket = _benchmark_test_triage_bucket(row)
+        buckets[bucket].append(_benchmark_test_triage_row(row))
+
+    fallback_rows = buckets["fallback-diagnostic"]
+    return {
+        "summary": _benchmark_test_triage_summary(report["summary"], rows=rows, buckets=buckets),
+        "buckets": buckets,
+        "fallback_diagnostics": {
+            "top_benchmarks": _top_triage_benchmark_counts(fallback_rows),
+            "top_facets": _top_triage_facet_counts(fallback_rows),
+        },
+        "filters": _benchmark_test_triage_filters(
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            facet=facet,
+            state=state,
+            source=source,
+            exclude_fallback=exclude_fallback,
+            readiness=readiness,
+            benchmark_id=benchmark_id,
+        ),
+        "review_file": review_file,
+        "commons_notice": report["commons_notice"],
     }
 
 
