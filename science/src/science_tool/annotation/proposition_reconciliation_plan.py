@@ -11,6 +11,7 @@ from science_tool.annotation.proposition_reconciliation import (
     FactorizationCandidate,
     ReconciliationFault,
     ReconciliationReport,
+    ReconciliationValidationError,
     ResolvedReviewJudgment,
     SameClaimCandidate,
     resolve_review_doc,
@@ -442,7 +443,10 @@ def build_reconciliation_action_plan(
     actions: list[ReconciliationAction] = []
     incomplete: list[Mapping[str, Any]] = []
     for review in reviews:
-        resolved_doc = resolve_review_doc(review.doc, report)
+        try:
+            resolved_doc = resolve_review_doc(review.doc, report)
+        except ReconciliationValidationError as exc:
+            raise ReconciliationValidationError(f"{review.path}: {exc}") from exc
         if not resolved_doc.judgments:
             raise ValueError(f"{review.path} produced no judgments")
         incomplete.extend(resolved_doc.validation["review_incomplete"])

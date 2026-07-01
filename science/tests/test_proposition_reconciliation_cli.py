@@ -248,6 +248,11 @@ def test_plan_proposition_reconciliation_cli_accepts_repeated_input(tmp_path: Pa
     payload = json.loads(result.output)
     assert payload["source_reviews"] == [str(review_a), str(review_b)]
     assert payload["summary"]["blocked_actions"] == 2
+    assert any(
+        blocker["reason"] == "action_conflict"
+        for action in payload["actions"]
+        for blocker in action["blockers"]
+    )
 
 
 def test_plan_proposition_reconciliation_cli_rejects_empty_review(tmp_path: Path):
@@ -317,6 +322,38 @@ def test_plan_proposition_reconciliation_cli_rejects_empty_review_even_with_vali
 
     assert result.exit_code != 0
     assert f"{empty_review} produced no judgments" in result.output
+
+
+def test_plan_proposition_reconciliation_cli_includes_review_path_for_stale_candidate(
+    tmp_path: Path,
+):
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+    generated = CliRunner().invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    candidate = json.loads(generated.output)["same_claim_candidates"][0]
+    review = _review_for_candidate(candidate)
+    review["judgments"][0]["candidate_id"] = "reconcile:candidate:stale"
+    bad_review = tmp_path / "bad-review.json"
+    bad_review.write_text(json.dumps(review), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "plan-proposition-reconciliation",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(bad_review),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert str(bad_review) in result.output
+    assert "candidate_id is stale or unknown" in result.output
 
 
 def test_plan_proposition_reconciliation_cli_rejects_invalid_review(tmp_path: Path):
