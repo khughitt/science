@@ -97,13 +97,15 @@ behavior.
 
 ### B6. Normalize One Command Pattern
 
-**Status:** Started with two guard tests:
+**Status:** Started with guard tests:
 
 - `science/tests/test_user_guide_docs.py` checks the durable taxonomy against
   the registered top-level Click commands so new command families do not
   silently bypass classification.
 - `science/tests/test_cli_surface_contract.py` classifies every current
   `--project` use so new project-root selectors prefer `--project-root`.
+- `science/tests/test_cli_surface_contract.py` also classifies every current
+  `--json`-only command so new multi-format commands prefer `--format`.
 
 **Goal:** Make one repeated behavior consistent across a few commands.
 
