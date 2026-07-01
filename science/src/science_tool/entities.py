@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -446,19 +446,62 @@ def write_entity_file(
     _atomic_replace_text(dest, text)
 
 
+def render_entity_source_refs(
+    file_path: Path,
+    refs_to_append: Sequence[str],
+    *,
+    as_of: date | None = None,
+) -> tuple[str, bool]:
+    """Return rendered entity markdown after appending missing source refs.
+
+    Existing refs keep their current order, new refs are appended in
+    caller-provided order, exact strings are deduped, and updated advances only
+    when the rendered content changes.
+    """
+    frontmatter, body = _parse_markdown_file(file_path)
+    refs = list(frontmatter.get("source_refs") or [])
+    changed = False
+    for ref in refs_to_append:
+        if ref in refs:
+            continue
+        refs.append(ref)
+        changed = True
+    if not changed:
+        return (file_path.read_text(encoding="utf-8"), False)
+    frontmatter["source_refs"] = refs
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
+    return (_render_markdown(frontmatter, body), True)
+
+
+def render_entity_frontmatter_updates(
+    file_path: Path,
+    updates: Mapping[str, object],
+    *,
+    as_of: date | None = None,
+) -> tuple[str, bool]:
+    """Return rendered entity markdown after applying exact frontmatter updates."""
+    frontmatter, body = _parse_markdown_file(file_path)
+    changed = False
+    for key, value in updates.items():
+        if frontmatter.get(key) == value:
+            continue
+        frontmatter[key] = value
+        changed = True
+    if not changed:
+        return (file_path.read_text(encoding="utf-8"), False)
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
+    return (_render_markdown(frontmatter, body), True)
+
+
 def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
     """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
     the body. Returns True if added, False if already present. Used by promotion LINK so a
     hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
     advances to ``as_of`` (or today), matching other entity mutations."""
-    frontmatter, body = _parse_markdown_file(file_path)
-    refs = list(frontmatter.get("source_refs") or [])
-    if ref in refs:
+    rendered, changed = render_entity_source_refs(file_path, [ref], as_of=as_of)
+    if not changed:
         return False
-    refs.append(ref)
-    frontmatter["source_refs"] = refs
-    frontmatter["updated"] = (as_of or date.today()).isoformat()
-    _atomic_replace_text(file_path, _render_markdown(frontmatter, body))
+    _atomic_replace_text(file_path, rendered)
     return True
 
 

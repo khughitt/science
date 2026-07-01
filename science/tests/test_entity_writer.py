@@ -78,3 +78,104 @@ def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path:
         or 'updated: "2026-06-16"' in text
         or "updated: '2026-06-16'" in text
     )
+
+
+def test_render_entity_source_refs_computes_text_without_writing(tmp_path: Path):
+    root = _project(tmp_path)
+    dest = root / "entities" / "propositions" / "existing.md"
+    original = (
+        "---\n"
+        "id: proposition:existing\n"
+        "type: proposition\n"
+        "title: Existing\n"
+        "status: active\n"
+        "source_refs:\n"
+        '  - "paper:old"\n'
+        'created: "2026-06-01"\n'
+        'updated: "2026-06-01"\n'
+        "---\n"
+        "# Existing\n\nHand-authored prose.\n"
+    )
+    dest.write_text(original, encoding="utf-8")
+
+    from science_tool.entities import render_entity_source_refs
+
+    rendered, changed = render_entity_source_refs(
+        dest,
+        ["paper:old", "annotation:entities/papers/A.source#a1", "paper:A"],
+        as_of=date(2026, 7, 1),
+    )
+
+    assert changed is True
+    assert dest.read_text(encoding="utf-8") == original
+    assert "Hand-authored prose." in rendered
+    assert rendered.index("paper:old") < rendered.index("annotation:entities/papers/A.source#a1")
+    assert rendered.index("annotation:entities/papers/A.source#a1") < rendered.index("paper:A")
+    assert rendered.count("paper:old") == 1
+    assert rendered.count("annotation:entities/papers/A.source#a1") == 1
+    assert rendered.count("paper:A") == 1
+    assert (
+        "updated: 2026-07-01" in rendered
+        or 'updated: "2026-07-01"' in rendered
+        or "updated: '2026-07-01'" in rendered
+    )
+
+
+def test_render_entity_source_refs_noops_when_all_refs_exist(tmp_path: Path):
+    root = _project(tmp_path)
+    dest = root / "entities" / "propositions" / "existing.md"
+    original = (
+        "---\n"
+        "id: proposition:existing\n"
+        "type: proposition\n"
+        "title: Existing\n"
+        "status: active\n"
+        "source_refs:\n"
+        '  - "paper:old"\n'
+        'updated: "2026-06-01"\n'
+        "---\n"
+        "Body.\n"
+    )
+    dest.write_text(original, encoding="utf-8")
+
+    from science_tool.entities import render_entity_source_refs
+
+    rendered, changed = render_entity_source_refs(dest, ["paper:old"], as_of=date(2026, 7, 1))
+
+    assert changed is False
+    assert rendered == original
+
+
+def test_render_entity_frontmatter_updates_sets_supersession_without_writing(tmp_path: Path):
+    root = _project(tmp_path)
+    dest = root / "entities" / "propositions" / "duplicate.md"
+    original = (
+        "---\n"
+        "id: proposition:duplicate\n"
+        "type: proposition\n"
+        "title: Duplicate\n"
+        "status: active\n"
+        'updated: "2026-06-01"\n'
+        "---\n"
+        "Duplicate body.\n"
+    )
+    dest.write_text(original, encoding="utf-8")
+
+    from science_tool.entities import render_entity_frontmatter_updates
+
+    rendered, changed = render_entity_frontmatter_updates(
+        dest,
+        {"status": "superseded", "superseded_by": "proposition:canonical"},
+        as_of=date(2026, 7, 1),
+    )
+
+    assert changed is True
+    assert dest.read_text(encoding="utf-8") == original
+    assert "Duplicate body." in rendered
+    assert "status: superseded" in rendered
+    assert "superseded_by: proposition:canonical" in rendered
+    assert (
+        "updated: 2026-07-01" in rendered
+        or 'updated: "2026-07-01"' in rendered
+        or "updated: '2026-07-01'" in rendered
+    )
