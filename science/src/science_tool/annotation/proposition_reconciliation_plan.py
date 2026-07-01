@@ -443,6 +443,8 @@ def build_reconciliation_action_plan(
     incomplete: list[Mapping[str, Any]] = []
     for review in reviews:
         resolved_doc = resolve_review_doc(review.doc, report)
+        if not resolved_doc.judgments:
+            raise ValueError(f"{review.path} produced no judgments")
         incomplete.extend(resolved_doc.validation["review_incomplete"])
         for resolved in resolved_doc.judgments:
             actions.append(_action_from_resolved(review.path, resolved, report))
