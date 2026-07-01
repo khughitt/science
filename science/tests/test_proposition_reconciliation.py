@@ -4,9 +4,11 @@ import pytest
 
 from science_tool.annotation.cross_paper_evidence import LiteratureAssertion
 from science_tool.annotation.proposition_reconciliation import (
+    FactorizationCandidate,
     MAX_RECONCILIATION_COMPONENT_SIZE,
     PropositionSnapshot,
     ReconciliationReport,
+    ReconciliationValidationError,
     build_factorization_disagreements,
     build_same_claim_candidates,
     candidate_id,
@@ -17,6 +19,7 @@ from science_tool.annotation.proposition_reconciliation import (
     predicate_compatible,
     report_to_json,
     title_tokens,
+    validate_review_doc,
 )
 
 
@@ -293,3 +296,173 @@ def test_report_to_json_includes_summary_counts():
     assert payload["summary"]["same_claim_candidates"] == 1
     assert payload["summary"]["factorization_disagreements"] == 0
     assert payload["summary"]["faults"] == 0
+
+
+def _candidate_report() -> ReconciliationReport:
+    same = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+        ]
+    )
+    return ReconciliationReport(same_claim_candidates=same.candidates)
+
+
+def test_validate_review_doc_accepts_same_claim_judgment():
+    report = _candidate_report()
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": "llm-review:claude-opus-4-8:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", list(candidate.propositions)
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": list(candidate.propositions),
+                "rationale": (
+                    "The claims share endpoints, predicate, polarity, and assertion meaning."
+                ),
+                "confidence": "high",
+            }
+        ],
+    }
+
+    result = validate_review_doc(doc, report)
+
+    assert result["status"] == "ok"
+    assert result["judgments"] == 1
+    assert result["errors"] == []
+
+
+def test_validate_review_doc_reanchors_splittable_subset_after_component_growth():
+    current = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+            _prop("proposition:c", "BRCA1 loss promotes genomic instability"),
+        ]
+    )
+    report = ReconciliationReport(same_claim_candidates=current.candidates)
+    old_pair_candidate_id = candidate_id("same_claim", ["proposition:a", "proposition:b"])
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": old_pair_candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": (
+                    "The pair remains the same claim even though the current component grew."
+                ),
+                "confidence": "high",
+            }
+        ],
+    }
+
+    result = validate_review_doc(doc, report)
+
+    assert result["status"] == "ok"
+    assert result["review_incomplete"] == [
+        {
+            "candidate_id": report.same_claim_candidates[0].candidate_id,
+            "missing": ["proposition:c"],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad_source",
+    [
+        "llm-review:<MODEL>:proposition-reconcile-v1",
+        "llm-synth:claude:proposition-reconcile-v1",
+        "llm-review:claude opus:proposition-reconcile-v1",
+    ],
+)
+def test_validate_review_doc_rejects_bad_source(bad_source: str):
+    report = _candidate_report()
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": bad_source,
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", list(candidate.propositions)
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": list(candidate.propositions),
+                "rationale": "valid rationale",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="source"):
+        validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_rejects_wrong_judgment_id():
+    report = _candidate_report()
+    candidate = report.same_claim_candidates[0]
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": "reconcile:judgment/not-the-right-hash",
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": list(candidate.propositions),
+                "rationale": "valid rationale",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="judgment_id"):
+        validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_rejects_lane_b_same_claim_decision():
+    factor = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="medium",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(),
+        disagreement=("object differs",),
+        recommended_action="factorization_needs_resynthesis",
+    )
+    report = ReconciliationReport(factorization_disagreements=(factor,))
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": factor.candidate_id,
+                "judgment_id": judgment_id(
+                    "factorization_disagreement", "same_claim", ["proposition:p"]
+                ),
+                "lane": "factorization_disagreement",
+                "decision": "same_claim",
+                "proposition": "proposition:p",
+                "rationale": "valid rationale",
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="Lane B"):
+        validate_review_doc(doc, report)

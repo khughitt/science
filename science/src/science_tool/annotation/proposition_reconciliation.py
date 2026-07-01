@@ -41,6 +41,7 @@ LANE_B_DECISIONS = frozenset(
 )
 CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
 SIGN_MEANINGFUL_VALUES = frozenset(p.value for p in SIGN_MEANINGFUL_PREDICATES)
+REVIEW_SOURCE_RE = re.compile(r"^llm-review:[A-Za-z0-9._-]+:proposition-reconcile-v1$")
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _STOPWORDS = frozenset(
@@ -122,6 +123,15 @@ class ReconciliationReport:
 class SameClaimBuildResult:
     candidates: tuple[SameClaimCandidate, ...]
     faults: tuple[ReconciliationFault, ...]
+
+
+class ReconciliationValidationError(ValueError):
+    pass
+
+
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ReconciliationValidationError(message)
 
 
 def _digest(parts: list[str]) -> str:
@@ -593,3 +603,178 @@ def build_reconciliation_report(
         factorization_disagreements=factors,
         faults=tuple(faults),
     )
+
+
+def _candidate_indexes(
+    report: ReconciliationReport,
+) -> tuple[dict[str, SameClaimCandidate], dict[str, FactorizationCandidate]]:
+    same = {candidate.candidate_id: candidate for candidate in report.same_claim_candidates}
+    factors = {
+        candidate.candidate_id: candidate
+        for candidate in report.factorization_disagreements
+    }
+    return same, factors
+
+
+def _members_have_current_edge(candidate: SameClaimCandidate, members: set[str]) -> bool:
+    if len(members) < 2:
+        return False
+    for left, right in candidate.pair_edges:
+        if left in members and right in members:
+            return True
+    return False
+
+
+def _resolve_same_claim_candidate(
+    candidate_ref: str,
+    members: set[str],
+    same_by_id: Mapping[str, SameClaimCandidate],
+    all_same: tuple[SameClaimCandidate, ...],
+) -> SameClaimCandidate | None:
+    direct = same_by_id.get(candidate_ref)
+    if direct is not None:
+        return direct
+    matches = [
+        candidate
+        for candidate in all_same
+        if candidate.splittable
+        and members <= set(candidate.propositions)
+        and _members_have_current_edge(candidate, members)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _require_non_empty_string(value: Any, field_name: str) -> str:
+    _require(
+        isinstance(value, str) and bool(value.strip()),
+        f"{field_name} must be a non-empty string",
+    )
+    return value.strip()
+
+
+def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any]:
+    _require(isinstance(doc, dict), "review document must be an object")
+    source = _require_non_empty_string(doc.get("source"), "source")
+    _require(
+        REVIEW_SOURCE_RE.match(source) is not None,
+        "source must match llm-review:<model>:proposition-reconcile-v1",
+    )
+    judgments = doc.get("judgments")
+    _require(isinstance(judgments, list), "judgments must be a list")
+    same_by_id, factor_by_id = _candidate_indexes(report)
+    covered_by_candidate: dict[str, set[str]] = {}
+    errors: list[str] = []
+
+    for idx, judgment in enumerate(judgments):
+        _require(isinstance(judgment, dict), f"judgments[{idx}] must be an object")
+        candidate_ref = _require_non_empty_string(
+            judgment.get("candidate_id"), f"judgments[{idx}].candidate_id"
+        )
+        lane = _require_non_empty_string(judgment.get("lane"), f"judgments[{idx}].lane")
+        decision = _require_non_empty_string(
+            judgment.get("decision"), f"judgments[{idx}].decision"
+        )
+        _require(decision in DECISIONS, f"judgments[{idx}].decision is not allowed")
+        _require(
+            judgment.get("confidence") in CONFIDENCE_VALUES,
+            f"judgments[{idx}].confidence is not allowed",
+        )
+        _require_non_empty_string(judgment.get("rationale"), f"judgments[{idx}].rationale")
+
+        if lane == LANE_SAME_CLAIM:
+            members = judgment.get("members")
+            _require(
+                isinstance(members, list)
+                and all(isinstance(member, str) for member in members),
+                f"judgments[{idx}].members must be strings",
+            )
+            member_set = set(members)
+            _require(bool(member_set), f"judgments[{idx}].members must not be empty")
+            candidate = _resolve_same_claim_candidate(
+                candidate_ref,
+                member_set,
+                same_by_id,
+                report.same_claim_candidates,
+            )
+            if candidate is None:
+                raise ReconciliationValidationError(
+                    f"judgments[{idx}].candidate_id is stale or unknown"
+                )
+            candidate_members = set(candidate.propositions)
+            if candidate.splittable:
+                _require(
+                    member_set <= candidate_members,
+                    f"judgments[{idx}].members must be a subset of the candidate",
+                )
+            else:
+                _require(
+                    member_set == candidate_members,
+                    f"judgments[{idx}].members must equal the candidate",
+                )
+            expected_judgment = judgment_id(lane, decision, list(member_set))
+            _require(
+                judgment.get("judgment_id") == expected_judgment,
+                f"judgments[{idx}].judgment_id mismatch",
+            )
+            if decision == "same_claim":
+                canonical = _require_non_empty_string(
+                    judgment.get("canonical_proposition"),
+                    f"judgments[{idx}].canonical_proposition",
+                )
+                _require(
+                    canonical in member_set,
+                    f"judgments[{idx}].canonical_proposition must be one of members",
+                )
+            else:
+                _require(
+                    "canonical_proposition" not in judgment,
+                    f"judgments[{idx}].canonical_proposition is forbidden",
+                )
+            covered_by_candidate.setdefault(candidate.candidate_id, set()).update(member_set)
+        elif lane == LANE_FACTORIZATION:
+            candidate = factor_by_id.get(candidate_ref)
+            if candidate is None:
+                raise ReconciliationValidationError(
+                    f"judgments[{idx}].candidate_id is stale or unknown"
+                )
+            _require(
+                decision in LANE_B_DECISIONS,
+                f"judgments[{idx}] Lane B decision is not allowed",
+            )
+            proposition = _require_non_empty_string(
+                judgment.get("proposition"), f"judgments[{idx}].proposition"
+            )
+            _require(
+                proposition == candidate.proposition,
+                f"judgments[{idx}].proposition does not match candidate",
+            )
+            expected_judgment = judgment_id(lane, decision, [proposition])
+            _require(
+                judgment.get("judgment_id") == expected_judgment,
+                f"judgments[{idx}].judgment_id mismatch",
+            )
+            _require(
+                "canonical_proposition" not in judgment,
+                f"judgments[{idx}].canonical_proposition is forbidden",
+            )
+        else:
+            raise ReconciliationValidationError(f"judgments[{idx}].lane is not allowed")
+
+    incomplete: list[dict[str, Any]] = []
+    for candidate in report.same_claim_candidates:
+        if not candidate.splittable:
+            continue
+        covered = covered_by_candidate.get(candidate.candidate_id, set())
+        missing = sorted(set(candidate.propositions) - covered)
+        if missing:
+            incomplete.append({"candidate_id": candidate.candidate_id, "missing": missing})
+
+    return {
+        "status": "ok" if not errors else "error",
+        "source": source,
+        "judgments": len(judgments),
+        "errors": errors,
+        "review_incomplete": incomplete,
+    }
