@@ -458,7 +458,7 @@ def render_entity_source_refs(
     caller-provided order, exact strings are deduped, and updated advances only
     when the rendered content changes.
     """
-    frontmatter, body = _parse_markdown_file(file_path)
+    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
     refs = list(frontmatter.get("source_refs") or [])
     changed = False
     for ref in refs_to_append:
@@ -480,7 +480,7 @@ def render_entity_frontmatter_updates(
     as_of: date | None = None,
 ) -> tuple[str, bool]:
     """Return rendered entity markdown after applying exact frontmatter updates."""
-    frontmatter, body = _parse_markdown_file(file_path)
+    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
     changed = False
     for key, value in updates.items():
         if frontmatter.get(key) == value:
@@ -1483,3 +1483,17 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
     if not isinstance(frontmatter, dict):
         return ({}, body)
     return (frontmatter, body.lstrip("\n"))
+
+
+def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return ({}, text)
+    try:
+        _, frontmatter_text, body = text.split("---\n", 2)
+    except ValueError:
+        return ({}, text)
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        return ({}, body)
+    return (frontmatter, body)
