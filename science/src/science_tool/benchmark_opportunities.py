@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NotRequired, TypedDict, cast
 
+import yaml
+
 from science_tool.benchmark_catalog import benchmark_sources
 from science_tool.dataset_prioritize import readiness_for, readiness_weight
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
@@ -1313,10 +1315,16 @@ def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: l
 
 _WORKFLOW_OR_MODELING_TERMS = frozenset(
     {
+        "all",
+        "beyond",
         "catalog",
+        "conjecture",
         "model",
         "models",
+        "organizing",
+        "our",
         "project",
+        "shared",
     }
 )
 
@@ -1329,11 +1337,34 @@ def _tokens_from_label(value: str) -> set[str]:
     }
 
 
+def _project_identity_tokens(project_root: Path) -> set[str]:
+    manifest_path = project_root / "science.yaml"
+    if not manifest_path.is_file():
+        return set()
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, Mapping):
+        return set()
+    tokens: set[str] = set()
+    for key in ("name", "id"):
+        value = data.get(key)
+        if isinstance(value, str):
+            tokens.update(_tokens_from_label(value))
+    return tokens
+
+
+def _entity_id_stem_tokens(entity_id: str) -> set[str]:
+    local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
+    without_prefix = re.sub(r"^\d+-", "", local)
+    return _tokens_from_label(without_prefix)
+
+
 def _project_local_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> set[str]:
     tokens: set[str] = set()
     tokens.update(_tokens_from_label(project_root.resolve().name))
+    tokens.update(_project_identity_tokens(project_root))
     for entity in entities:
         tokens.update(_entity_id_only_tokens(entity.id, entity.kind))
+        tokens.update(_entity_id_stem_tokens(entity.id))
     return tokens
 
 

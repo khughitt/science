@@ -2633,11 +2633,11 @@ def test_gaps_report_evidence_report_categorizes_unmapped_terms_without_redefini
     _write_entity(
         project_root,
         "hypotheses",
-        "0044-cytogenetic-model",
+        "0044-benchmark-context",
         """
-id: hypothesis:0044-cytogenetic-model
+id: hypothesis:0044-benchmark-context
 type: hypothesis
-title: cBioPortal cytogenetic lesion model
+title: cBioPortal benchmark context
 """,
         body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
     )
@@ -2839,6 +2839,137 @@ def test_hint_candidates_report_rejects_invalid_min_count(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="min_count must be at least 1"):
         benchmark_hint_candidates_report(tmp_path, min_count=0)
+
+
+def test_hint_candidates_report_routes_generic_terms_to_workflow_category(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-generic-prose",
+        """
+id: hypothesis:0001-generic-prose
+type: hypothesis
+title: Generic prose
+""",
+        body="All our organizing conjecture goes beyond shared structure.",
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path)
+    by_term = {row["term"]: row for row in payload["hint_candidates"]}
+
+    assert "conjecture" in by_term
+    assert "organizing" in by_term
+    for term in {"all", "beyond", "conjecture", "organizing", "our", "shared"}:
+        assert term in by_term
+        assert by_term[term]["category"] == "workflow-or-modeling"
+
+    domain_terms = {row["term"] for row in payload["hint_candidates"] if row["category"] == "domain-candidate"}
+    assert "beyond" not in domain_terms
+    assert "conjecture" not in domain_terms
+    assert "organizing" not in domain_terms
+    assert "our" not in domain_terms
+    assert "shared" not in domain_terms
+
+
+def test_hint_candidates_report_classifies_project_identity_from_science_yaml(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    (tmp_path / "science.yaml").write_text(
+        "name: mm30\nid: multiple-myeloma\nprofile: research\n",
+        encoding="utf-8",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-expression-signal",
+        """
+id: hypothesis:0001-expression-signal
+type: hypothesis
+title: Expression signal
+""",
+        body="MM30 multiple myeloma expression signal.",
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path)
+    rows = {row["term"]: row for row in payload["hint_candidates"]}
+
+    assert rows["mm30"]["category"] == "project-local"
+    assert rows["multiple"]["category"] == "project-local"
+    assert rows["myeloma"]["category"] == "project-local"
+
+
+def test_hint_candidates_report_ignores_science_yaml_tags_for_project_identity(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    (tmp_path / "science.yaml").write_text(
+        "name: localname\nid: local-id\ntags: [tagalias]\n",
+        encoding="utf-8",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-tag-check",
+        """
+id: hypothesis:0001-tag-check
+type: hypothesis
+title: Tag check
+""",
+        body="tagalias expression signal.",
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path)
+    rows = {row["term"]: row for row in payload["hint_candidates"]}
+
+    assert rows["tagalias"]["category"] != "project-local"
+
+
+def test_hint_candidates_report_classifies_split_entity_id_stems_as_project_local(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    _write_entity(
+        tmp_path,
+        "propositions",
+        "0014-pais-small-fiber-structural-lesion",
+        """
+id: proposition:0014-pais-small-fiber-structural-lesion
+type: proposition
+title: PAIS small fiber lesion
+""",
+        body="PAIS small fiber lesion.",
+    )
+
+    payload = benchmark_hint_candidates_report(tmp_path)
+    rows = {row["term"]: row for row in payload["hint_candidates"]}
+
+    assert rows["pais"]["category"] == "project-local"
+    assert rows["small"]["category"] == "project-local"
+    assert rows["fiber"]["category"] == "project-local"
+
+
+def test_hint_candidates_report_missing_science_yaml_keeps_existing_project_local_sources(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_hint_candidates_report
+
+    project_root = tmp_path / "project-alpha"
+    project_root.mkdir()
+    _write_entity(
+        project_root,
+        "questions",
+        "0001-project-alpha-check",
+        """
+id: question:0001-project-alpha-check
+type: question
+title: Project alpha check
+""",
+        body="Project alpha signal.",
+    )
+
+    payload = benchmark_hint_candidates_report(project_root)
+    rows = {row["term"]: row for row in payload["hint_candidates"]}
+
+    assert rows["project"]["category"] == "project-local"
+    assert rows["alpha"]["category"] == "project-local"
 
 
 def test_hint_candidate_rows_from_evidence_rejects_missing_term_categories() -> None:
