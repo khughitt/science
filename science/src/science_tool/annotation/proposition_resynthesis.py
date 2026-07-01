@@ -21,7 +21,12 @@ from science_tool.annotation.proposition_reconciliation_plan import (
     ReviewedReconciliationInput,
     build_reconciliation_action_plan,
 )
-from science_tool.entities import _render_markdown, parse_markdown_entity_file, resolve_path_policy
+from science_tool.entities import (
+    _render_markdown,
+    local_part_conforms,
+    parse_markdown_entity_file,
+    resolve_path_policy,
+)
 
 RESYNTHESIS_SCHEMA_VERSION = 1
 RESYNTHESIS_SOURCE_RE = re.compile(r"^llm-review:[A-Za-z0-9._-]+:proposition-resynthesis-v1$")
@@ -44,6 +49,24 @@ ALLOWED_REPLACEMENT_FRONTMATTER_KEYS = frozenset(
         "discusses",
     }
 )
+ALLOWED_DRAFT_KEYS = frozenset(
+    {
+        "schema_version",
+        "source",
+        "action_id",
+        "candidate_id",
+        "judgment_id",
+        "source_review",
+        "original_proposition",
+        "disposition",
+        "new_propositions",
+        "annotation_assignments",
+        "context",
+        "notes",
+    }
+)
+ALLOWED_NEW_PROPOSITION_KEYS = frozenset({"id", "title", "body", "frontmatter"})
+ALLOWED_ASSIGNMENT_KEYS = frozenset({"annotation", "from", "to"})
 
 
 class ResynthesisDraftError(ValueError):
@@ -253,9 +276,16 @@ def _optional_mapping(row: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     return value
 
 
+def _reject_unknown_keys(row: Mapping[str, Any], allowed: frozenset[str], label: str) -> None:
+    unknown = sorted(set(row) - allowed)
+    if unknown:
+        raise ResynthesisDraftError(f"unknown {label} key: {unknown[0]}")
+
+
 def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
     if not isinstance(payload, Mapping):
         raise ResynthesisDraftError("resynthesis draft must be an object")
+    _reject_unknown_keys(payload, ALLOWED_DRAFT_KEYS, "resynthesis draft")
 
     schema_version = payload.get("schema_version")
     if schema_version != RESYNTHESIS_SCHEMA_VERSION:
@@ -276,6 +306,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
     for index, row in enumerate(raw_new):
         if not isinstance(row, Mapping):
             raise ResynthesisDraftError(f"new_propositions[{index}] must be an object")
+        _reject_unknown_keys(row, ALLOWED_NEW_PROPOSITION_KEYS, f"new_propositions[{index}]")
         new_propositions.append(
             NewPropositionDraft(
                 id=_required_str(row, "id"),
@@ -292,6 +323,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
     for index, row in enumerate(raw_assignments):
         if not isinstance(row, Mapping):
             raise ResynthesisDraftError(f"annotation_assignments[{index}] must be an object")
+        _reject_unknown_keys(row, ALLOWED_ASSIGNMENT_KEYS, f"annotation_assignments[{index}]")
         assignments.append(
             AnnotationAssignment(
                 annotation=_required_str(row, "annotation"),
@@ -299,6 +331,10 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
                 to_proposition=_required_str(row, "to"),
             )
         )
+
+    notes = payload.get("notes", "")
+    if not isinstance(notes, str):
+        raise ResynthesisDraftError("invalid notes")
 
     return ResynthesisDraft(
         schema_version=schema_version,
@@ -312,17 +348,20 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
         new_propositions=tuple(new_propositions),
         annotation_assignments=tuple(assignments),
         context=_optional_mapping(payload, "context"),
-        notes=str(payload.get("notes", "")),
+        notes=notes,
     )
 
 
 def _live_action_for_draft(project_root: Path, draft: ResynthesisDraft) -> ReconciliationAction:
     plan = build_live_action_plan(project_root, draft.source_review)
-    action = next((row for row in plan.actions if row.action_id == draft.action_id), None)
-    if action is None:
-        raise ResynthesisDraftError(f"unknown reconciliation action: {draft.action_id}")
-    if action.kind != "resynthesize_proposition":
-        raise ResynthesisDraftError(f"{draft.action_id} is not resynthesize_proposition")
+    action = resolve_resynthesis_action(
+        ReconciliationActionPlan(
+            schema_version=plan.schema_version,
+            source_reviews=plan.source_reviews,
+            actions=plan.actions,
+        ),
+        requested_action_id=draft.action_id,
+    )
     if action.proposition != draft.original_proposition:
         raise ResynthesisDraftError("draft original_proposition is stale")
     if action.candidate_id != draft.candidate_id:
@@ -353,6 +392,18 @@ def _validate_replacement_frontmatter(replacement: NewPropositionDraft) -> None:
     _replacement_frontmatter_source_refs(replacement.frontmatter)
 
 
+def _replacement_local_part(project_root: Path, proposition_id: str) -> str:
+    prefix, separator, local_part = proposition_id.partition(":")
+    if (
+        prefix != "proposition"
+        or separator != ":"
+        or not local_part
+        or not local_part_conforms("proposition", local_part, project_root=project_root)
+    ):
+        raise ResynthesisDraftError(f"invalid replacement proposition id: {proposition_id}")
+    return local_part
+
+
 def validate_resynthesis_draft(
     project_root: Path,
     draft: ResynthesisDraft,
@@ -375,6 +426,7 @@ def validate_resynthesis_draft(
     if len(replacements) != len(draft.new_propositions):
         raise ResynthesisDraftError("replacement proposition assigned more than once")
     for replacement in draft.new_propositions:
+        _replacement_local_part(project_root, replacement.id)
         _validate_replacement_frontmatter(replacement)
 
     seen_annotations: set[str] = set()
@@ -419,8 +471,9 @@ def validate_resynthesis_draft(
         if assignment.to_proposition in replacements:
             expected_refs[assignment.to_proposition].add(assignment.annotation)
             paper_ref = _resolve_paper_ref(sidecar_path)
-            if paper_ref is not None:
-                expected_refs[assignment.to_proposition].add(paper_ref)
+            if paper_ref is None:
+                raise ResynthesisDraftError(f"{assignment.annotation} resolves to no paper ref")
+            expected_refs[assignment.to_proposition].add(paper_ref)
 
     if draft.disposition == "replace":
         if seen_annotations != current_annotations:
@@ -445,9 +498,7 @@ def validate_resynthesis_draft(
 
 
 def _replacement_path(project_root: Path, proposition_id: str) -> Path:
-    prefix, separator, local_part = proposition_id.partition(":")
-    if prefix != "proposition" or separator != ":" or not local_part:
-        raise ResynthesisDraftError(f"invalid replacement proposition id: {proposition_id}")
+    local_part = _replacement_local_part(project_root, proposition_id)
     policy = resolve_path_policy("proposition", project_root=project_root)
     return project_root / policy.root / f"{local_part}.md"
 

@@ -276,6 +276,61 @@ def test_parse_resynthesis_draft_rejects_invalid_source(tmp_path: Path):
         parse_resynthesis_draft(payload)
 
 
+def test_parse_resynthesis_draft_rejects_unknown_top_level_key(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["unexpected"] = True
+
+    with pytest.raises(ResynthesisDraftError, match="unknown resynthesis draft key"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_unknown_new_proposition_key(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["unexpected"] = True
+
+    with pytest.raises(ResynthesisDraftError, match=r"unknown new_propositions\[0\] key"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_unknown_assignment_key(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][0]["unexpected"] = True
+
+    with pytest.raises(ResynthesisDraftError, match=r"unknown annotation_assignments\[0\] key"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_non_mapping_context(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["context"] = "not an object"
+
+    with pytest.raises(ResynthesisDraftError, match="context"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_non_string_notes(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["notes"] = 7
+
+    with pytest.raises(ResynthesisDraftError, match="notes"):
+        parse_resynthesis_draft(payload)
+
+
 def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import (
         parse_resynthesis_draft,
@@ -297,6 +352,52 @@ def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
         "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
         "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
     }
+
+
+def test_validate_resynthesis_draft_rejects_blocked_live_action(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    blocked = replace(ctx["action"], status="blocked", blockers=("review changed",))
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(blocked,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    with pytest.raises(ResynthesisDraftError, match="not ready resynthesize_proposition"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_noncanonical_replacement_id(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["id"] = "proposition:bad/slash"
+    payload["annotation_assignments"][0]["to"] = "proposition:bad/slash"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="invalid replacement proposition id"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_requires_paper_ref_for_moved_annotations(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    monkeypatch.setattr(resynthesis, "_resolve_paper_ref", lambda _sidecar_path: None)
+
+    with pytest.raises(ResynthesisDraftError, match="paper ref"):
+        validate_resynthesis_draft(tmp_path, draft)
 
 
 def test_validate_resynthesis_draft_rejects_unknown_frontmatter_key(tmp_path: Path):
