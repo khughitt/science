@@ -612,6 +612,83 @@ def validate_proposition_reconciliation_cmd(
     )
 
 
+@annotate_group.command("plan-proposition-reconciliation")
+@click.option(
+    "--input",
+    "input_paths",
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+def plan_proposition_reconciliation_cmd(
+    input_paths: tuple[Path, ...],
+    root: Path | None,
+    fmt: str,
+    output_path: Path | None,
+) -> None:
+    """Build a read-only action plan from reviewed proposition reconciliation artifacts."""
+    from science_tool.annotation.proposition_reconciliation import (
+        ReconciliationValidationError,
+        build_reconciliation_report,
+    )
+    from science_tool.annotation.proposition_reconciliation_plan import (
+        ReviewedReconciliationInput,
+        action_plan_to_json,
+        build_reconciliation_action_plan,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    reviews: list[ReviewedReconciliationInput] = []
+    for input_path in input_paths:
+        try:
+            doc = json.loads(input_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"{input_path} is not valid JSON: {exc}") from exc
+        reviews.append(ReviewedReconciliationInput(path=str(input_path), doc=doc))
+
+    report = build_reconciliation_report(project_root)
+    try:
+        plan = build_reconciliation_action_plan(report, reviews)
+    except (ReconciliationValidationError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = action_plan_to_json(plan)
+    json_text = json.dumps(payload, indent=2, sort_keys=True)
+    if output_path is not None:
+        output_path.write_text(json_text + "\n", encoding="utf-8")
+
+    if fmt == "json":
+        click.echo(json_text)
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition reconciliation action plan: "
+        f"ready={summary['ready_actions']} "
+        f"blocked={summary['blocked_actions']} "
+        f"advisory={summary['advisory_actions']} "
+        f"errors={summary['errors']}"
+    )
+    for action in payload["actions"]:
+        target = (
+            action.get("proposition")
+            or action.get("canonical_proposition")
+            or ",".join(action.get("members", []))
+            or action["candidate_id"]
+        )
+        click.echo(f"{action['status']:8s} {action['kind']} {target}")
+    if output_path is not None:
+        click.echo(f"wrote JSON action plan to {output_path}")
+
+
 @annotate_group.command("build-prose-health")
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option(

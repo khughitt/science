@@ -117,6 +117,20 @@ class ReconciliationReport:
     factorization_disagreements: tuple[FactorizationCandidate, ...] = ()
     faults: tuple[ReconciliationFault, ...] = ()
     summary: Mapping[str, Any] = field(default_factory=dict)
+    proposition_snapshots: Mapping[str, PropositionSnapshot] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ResolvedReviewJudgment:
+    review_source: str
+    judgment: Mapping[str, Any]
+    candidate: SameClaimCandidate | FactorizationCandidate
+
+
+@dataclass(frozen=True)
+class ResolvedReviewDoc:
+    validation: Mapping[str, Any]
+    judgments: tuple[ResolvedReviewJudgment, ...]
 
 
 @dataclass(frozen=True)
@@ -602,6 +616,7 @@ def build_reconciliation_report(
         same_claim_candidates=same.candidates,
         factorization_disagreements=factors,
         faults=tuple(faults),
+        proposition_snapshots=scoped_snapshots,
     )
 
 
@@ -780,3 +795,52 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
         "errors": errors,
         "review_incomplete": incomplete,
     }
+
+
+def resolve_review_doc(doc: Any, report: ReconciliationReport) -> ResolvedReviewDoc:
+    validation = validate_review_doc(doc, report)
+    source = str(validation["source"])
+    same_by_id, factor_by_id = _candidate_indexes(report)
+    resolved: list[ResolvedReviewJudgment] = []
+
+    for idx, judgment in enumerate(doc["judgments"]):
+        lane = _require_non_empty_string(judgment.get("lane"), f"judgments[{idx}].lane")
+        candidate_ref = _require_non_empty_string(
+            judgment.get("candidate_id"), f"judgments[{idx}].candidate_id"
+        )
+        if lane == LANE_SAME_CLAIM:
+            members = set(judgment["members"])
+            candidate = _resolve_same_claim_candidate(
+                candidate_ref,
+                members,
+                same_by_id,
+                report.same_claim_candidates,
+            )
+            if candidate is None:
+                raise ReconciliationValidationError(
+                    f"judgments[{idx}].candidate_id is stale or unknown"
+                )
+            resolved.append(
+                ResolvedReviewJudgment(
+                    review_source=source,
+                    judgment=judgment,
+                    candidate=candidate,
+                )
+            )
+        elif lane == LANE_FACTORIZATION:
+            candidate = factor_by_id.get(candidate_ref)
+            if candidate is None:
+                raise ReconciliationValidationError(
+                    f"judgments[{idx}].candidate_id is stale or unknown"
+                )
+            resolved.append(
+                ResolvedReviewJudgment(
+                    review_source=source,
+                    judgment=judgment,
+                    candidate=candidate,
+                )
+            )
+        else:
+            raise ReconciliationValidationError(f"judgments[{idx}].lane is not allowed")
+
+    return ResolvedReviewDoc(validation=validation, judgments=tuple(resolved))
