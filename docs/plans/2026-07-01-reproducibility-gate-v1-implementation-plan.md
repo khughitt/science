@@ -24,8 +24,8 @@
 - `science/model/src/science_model/packages/schema.py` — **Modify**: add `AccessReproducibility` model; attach `reproducibility` field to `AccessBlock`.
 - `science/model/src/science_model/frontmatter.py` — **Modify**: `_coerce_access` passes the `reproducibility` sub-block.
 - `science/src/science_tool/datasets/semantics.py` — **Modify**: add `ReproClass`/`OrdinalReproClass` aliases, the lattice, `reproducibility_class_for()`, `repro_class_rank()`, `repro_meets_bar()`.
-- `science/src/science_tool/project_config.py` — **Modify**: `ReproducibilityPolicyConfig`, `ReproducibilityWaiver`, `PlanReproducibilityPolicy`, `effective_reproducibility_policy()`; add `reproducibility_policy` field to `ProjectConfig`.
-- `science/src/science_tool/plan_gate.py` — **Modify**: `check_reproducibility()` + `_effective_repro_class()` (derived closure) + `_weakest_class()`.
+- `science/src/science_tool/project_config.py` — **Modify**: `ReproducibilityPolicyConfig`, `ReproducibilityWaiver`, `PlanReproducibilityPolicy`, `effective_reproducibility_policy()`, `load_plan_reproducibility_policy()`; add `reproducibility_policy` field to `ProjectConfig`.
+- `science/src/science_tool/plan_gate.py` — **Modify**: `check_reproducibility()` + `_effective_repro_class()` (derived closure) + `_weakest_class()`; `check_plan_data_gate()` (the integrated access-then-reproducibility Step-2b entry point).
 - `commands/plan-pipeline.md` — **Modify**: Step 2b reproducibility enforcement prose.
 - `templates/dataset.md` — **Modify**: add the `reproducibility:` block.
 - `docs/user-guide/entities.md` — **Modify**: authoring section for reproducibility.
@@ -152,26 +152,64 @@ In `_coerce_access`, where the `AccessBlock(...)` is constructed from the dict, 
 
 Add `AccessReproducibility` to the existing `from science_model.packages.schema import ...` line in `frontmatter.py`.
 
-- [ ] **Step 5: Run tests + a coercion check**
+- [ ] **Step 5: Add a real coercion round-trip test (through `parse_entity_file`)**
 
-Add one coercion test to `test_dataset_models.py` (parse a raw access dict through the model):
+A direct `AccessReproducibility(...)` construction does **not** prove `_coerce_access` passes the
+nested block — it would pass even if coercion dropped it. Test the real parse path instead. Add to
+`test_dataset_models.py`:
 
 ```python
-def test_access_reproducibility_coerced_from_dict():
-    block = AccessReproducibility(**{"obtainability": "public", "execution": "local", "extractability": "full-dataset"})
-    assert block.obtainability == "public"
+from pathlib import Path
+
+from science_model.frontmatter import parse_entity_file
+
+
+def test_access_reproducibility_round_trips_through_parse_entity_file(tmp_path: Path):
+    d = tmp_path / "entities" / "datasets"
+    d.mkdir(parents=True)
+    (d / "ds.md").write_text(
+        '---\nid: "dataset:ds"\ntype: "dataset"\ntitle: "DS"\norigin: "external"\n'
+        "access:\n"
+        '  level: "controlled"\n'
+        "  verified: true\n"
+        "  reproducibility:\n"
+        '    obtainability: "approved-project"\n'
+        '    execution: "trusted-environment"\n'
+        '    extractability: "aggregate-reviewed"\n'
+        '    notes: "enclave"\n---\n',
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(d / "ds.md", tmp_path.name)
+    assert entity is not None
+    assert entity.access.reproducibility.obtainability == "approved-project"
+    assert entity.access.reproducibility.extractability == "aggregate-reviewed"
+    assert entity.access.reproducibility.notes == "enclave"
 ```
 
 Run from `~/d/science/science/model/`: `uv run --frozen pytest tests/test_dataset_models.py -k reproducibility -v`
 Expected: PASS (4 tests).
 
-- [ ] **Step 6: Format, lint, commit**
+- [ ] **Step 6: Confirm the JSON schema stays permissive (documented decision)**
+
+v1 leaves both JSON schemas (`schemas/mixin-dataset-1.0.json`, `schemas/science-pkg-entity-1.0.json`)
+**unchanged**: neither sets `additionalProperties: false` on `access`, so an `access.reproducibility`
+sub-key is already silently allowed — exactly as the existing `access.exception` block is (it is not in
+the JSON mixin either). Pydantic is the authoritative enum enforcer. Add a confirming test that the
+repo's Draft-2020-12 `EntityValidator` accepts a dataset carrying the block. **Mirror the existing
+`EntityValidator(...)` construction in `science/tests/test_commons_promote_validation.py`** (do not
+invent constructor args); build a minimal external-dataset dict with an `access.reproducibility` block
+and assert `list(validator.validate(entity)) == []` (no schema errors).
+
+Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_commons_promote_validation.py -k reproducib -v`
+Expected: PASS (block validates; JSON layer permissive as intended).
+
+- [ ] **Step 7: Format, lint, commit**
 
 ```bash
 cd ~/d/science
 uv run --directory science/model ruff format src/science_model/packages/schema.py src/science_model/frontmatter.py
 uv run --directory science/model ruff check src/science_model
-git add science/model/src/science_model/packages/schema.py science/model/src/science_model/frontmatter.py science/model/tests/test_dataset_models.py
+git add science/model/src/science_model/packages/schema.py science/model/src/science_model/frontmatter.py science/model/tests/test_dataset_models.py science/tests/test_commons_promote_validation.py
 git commit -m "feat(model): add access.reproducibility block (Five Safes controls)"
 ```
 
@@ -360,19 +398,46 @@ git commit -m "feat(datasets): derive reproducibility class from access controls
   - `PlanReproducibilityPolicy(bar: OrdinalReproClass | None, unknown, below_bar, waivers: list[ReproducibilityWaiver])`.
   - `ProjectConfig.reproducibility_policy: ReproducibilityPolicyConfig | None = None`.
   - `effective_reproducibility_policy(project, plan) -> ReproducibilityPolicyConfig | None` — plan over project; `None` only when both absent.
+  - `load_plan_reproducibility_policy(plan_path) -> PlanReproducibilityPolicy | None` — parse a plan file's frontmatter `reproducibility_policy` (raw route via `parse_frontmatter`) into the model.
 
 - [ ] **Step 1: Write the failing tests**
 
 Add to `science/tests/test_project_config.py`:
 
 ```python
+from pathlib import Path
+
 from science_tool.project_config import (
     ProjectConfig,
     ReproducibilityPolicyConfig,
     PlanReproducibilityPolicy,
     ReproducibilityWaiver,
     effective_reproducibility_policy,
+    load_plan_reproducibility_policy,
 )
+
+
+def test_load_plan_reproducibility_policy_from_frontmatter(tmp_path: Path):
+    p = tmp_path / "plan.md"
+    p.write_text(
+        '---\nid: "plan:x"\ntype: "plan"\ntitle: "X"\n'
+        "reproducibility_policy:\n"
+        '  bar: "trust-based-output"\n'
+        "  waivers:\n"
+        '    - dataset: "dataset:n3c"\n'
+        '      accepted_class: "trust-based-output"\n'
+        '      decision_date: "2026-07-01"\n---\n',
+        encoding="utf-8",
+    )
+    pol = load_plan_reproducibility_policy(p)
+    assert pol is not None and pol.bar == "trust-based-output"
+    assert pol.waivers[0].dataset == "dataset:n3c"
+
+
+def test_load_plan_policy_absent_is_none(tmp_path: Path):
+    p = tmp_path / "plain.md"
+    p.write_text('---\nid: "plan:y"\ntype: "plan"\ntitle: "Y"\n---\n', encoding="utf-8")
+    assert load_plan_reproducibility_policy(p) is None
 
 
 def test_project_config_parses_reproducibility_policy():
@@ -474,6 +539,18 @@ def effective_reproducibility_policy(
         unknown=plan.unknown or base.unknown,
         below_bar=plan.below_bar or base.below_bar,
     )
+
+
+def load_plan_reproducibility_policy(plan_path: Path) -> PlanReproducibilityPolicy | None:
+    """Parse a plan file's frontmatter `reproducibility_policy` into a model, or None."""
+    result = parse_frontmatter(plan_path)
+    if result is None:
+        return None
+    fm, _ = result
+    raw = fm.get("reproducibility_policy")
+    if not isinstance(raw, dict):
+        return None
+    return PlanReproducibilityPolicy.model_validate(raw)
 ```
 
 Add the field to `ProjectConfig`, beside `data_policy`:
@@ -482,12 +559,14 @@ Add the field to `ProjectConfig`, beside `data_policy`:
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
 ```
 
-Confirm `Literal` is imported in `project_config.py`; add it to the `typing` import if missing.
+Confirm `Literal` is imported in `project_config.py`; add it to the `typing` import if missing. Add
+`from pathlib import Path` and `from science_model.frontmatter import parse_frontmatter` if not already
+present.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_project_config.py -k reproducib -v`
-Expected: PASS (6 tests).
+Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_project_config.py -k "reproducib or plan_policy or plan_reproducibility" -v`
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Format, lint, commit**
 
@@ -508,9 +587,9 @@ git commit -m "feat(config): reproducibility_policy on project + plan config"
 - Test: `science/tests/test_plan_reproducibility_gate.py` (create)
 
 **Interfaces:**
-- Consumes: `_load_dataset` + `_load_dataset` frontmatter, `reproducibility_class_for`, `repro_meets_bar`, `ReproducibilityPolicyConfig`, `ReproducibilityWaiver`, `DerivationBlock`.
+- Consumes: `_load_dataset`, raw frontmatter via `parse_frontmatter`, `reproducibility_class_for`, `repro_meets_bar`, `repro_class_rank`, `ReproducibilityPolicyConfig`, `ReproducibilityWaiver`, `DerivationBlock`.
 - Produces:
-  - `check_reproducibility(project_root, dataset_ids, *, policy, waivers=None, declared_inputs=None) -> tuple[bool, list[str], list[str]]` → `(pass, halts, warns)`. When `policy is None` and `dataset_ids` is non-empty: returns `(True, [], ["reproducibility-policy-missing: ..."])`.
+  - `check_reproducibility(project_root, dataset_ids, *, policy, waivers=None) -> tuple[bool, list[str], list[str]]` → `(pass, halts, warns)`. Every id in `dataset_ids` **is** a declared plan input (the caller passes the declared set); non-input catalog discovery is deferred CLI-surfacing scope, so there is no `declared_inputs` parameter. When `policy is None` and `dataset_ids` is non-empty: returns `(True, [], ["reproducibility-policy-missing: ..."])`.
   - `_effective_repro_class(project_root, ds_id) -> tuple[str, str]` — derived-closure class (weakest external upstream).
 
 - [ ] **Step 1: Write the failing tests**
@@ -652,11 +731,11 @@ def check_reproducibility(
     *,
     policy: ReproducibilityPolicyConfig | None,
     waivers: list[ReproducibilityWaiver] | None = None,
-    declared_inputs: set[str] | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     """Reproducibility Step-2b enforcement over declared plan inputs.
 
-    Returns (pass, halts, warns). policy=None => opt-out: nudge, no enforcement.
+    Every id in `dataset_ids` is a declared plan input. Returns (pass, halts, warns).
+    policy=None => opt-out: nudge, no enforcement.
     """
     waivers = waivers or []
     halts: list[str] = []
@@ -697,17 +776,35 @@ Expected: PASS (6 tests).
 
 Append to `test_plan_reproducibility_gate.py`:
 
+A derived dataset needs a **valid** `DerivationBlock` — all six required fields
+(`workflow`, `workflow_run`, `git_commit`, `config_snapshot`, `produced_at`, `inputs`) — plus a
+matching `workflow-run` entity, or `parse_entity_file` returns `None` and the class silently
+collapses to `unknown` (masking the behavior under test). Mirror the repo's existing
+`_seed_mixed_inputs` fixture from `tests/test_plan_pipeline_data_gate.py`. Note: `origin: derived`
+entities carry `datapackage:` and **must not** carry an `access:` block.
+
 ```python
 def _write_derived(root: Path, slug: str, upstream: str):
-    d = root / "entities" / "datasets"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"{slug}.md").write_text(
-        "\n".join([
-            "---", f"id: dataset:{slug}", "type: dataset", f"title: {slug}",
-            "origin: derived",
-            "derivation:", "  workflow_run: workflow-run:wr", f"  inputs: [dataset:{upstream}]",
-            "---", "", "body", "",
-        ]),
+    """Write a VALID origin:derived dataset (full DerivationBlock) + its workflow-run."""
+    ds = root / "entities" / "datasets"
+    wr = root / "entities" / "workflow-runs"
+    ds.mkdir(parents=True, exist_ok=True)
+    wr.mkdir(parents=True, exist_ok=True)
+    (wr / "wf-r1.md").write_text(
+        '---\nid: "workflow-run:wf-r1"\ntype: "workflow-run"\ntitle: "WF r1"\n'
+        f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: ["dataset:{upstream}"]\n---\n',
+        encoding="utf-8",
+    )
+    (ds / f"{slug}.md").write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
+        "derivation:\n"
+        '  workflow: "workflow:wf"\n'
+        '  workflow_run: "workflow-run:wf-r1"\n'
+        '  git_commit: "abc"\n'
+        '  config_snapshot: "c"\n'
+        '  produced_at: "2026-04-19T00:00:00Z"\n'
+        f'  inputs: ["dataset:{upstream}"]\n---\n',
         encoding="utf-8",
     )
 
@@ -734,59 +831,146 @@ git commit -m "feat(gate): enforce reproducibility over derived-input closure wi
 
 ---
 
-### Task 5: Wire Step 2b prose + full-suite green
+### Task 5: Integrated `check_plan_data_gate()` + Step 2b wiring
 
 **Files:**
+- Modify: `science/src/science_tool/plan_gate.py` (new combined entry point)
 - Modify: `commands/plan-pipeline.md` (Step 2b: Data-access gate)
-- Test: run both full suites
+- Test: `science/tests/test_plan_reproducibility_gate.py` (integration + e2e)
 
 **Interfaces:**
-- Consumes: everything above. No new code symbols — this task documents the enforcement in the command that drives the gate and confirms no regressions.
+- Consumes: `check_inputs`, `check_reproducibility`, `load_project_config`, `load_plan_reproducibility_policy`, `effective_reproducibility_policy`, `ReproducibilityPolicyConfig`, `ReproducibilityWaiver`.
+- Produces:
+  - `check_plan_data_gate(project_root, dataset_ids, *, planned_retrieval=None, reproducibility_policy=None, waivers=None) -> tuple[bool, list[str], list[str]]` — runs the existing access gate THEN reproducibility; `halts` is the union. This is the single Step-2b entry point, so a `verified: true` but non-reproducible dataset cannot slip through an access-only check.
 
-- [ ] **Step 1: Add the reproducibility subsection to Step 2b**
+Task 4's `check_reproducibility` is standalone; callers of `check_inputs` enforce access **only**. This task composes both into one gate and proves the composition end-to-end, including plan-frontmatter policy/waiver resolution.
+
+- [ ] **Step 1: Write the failing integration + e2e tests**
+
+Append to `test_plan_reproducibility_gate.py`:
+
+```python
+from science_tool.plan_gate import check_inputs, check_plan_data_gate
+from science_tool.project_config import (
+    effective_reproducibility_policy,
+    load_plan_reproducibility_policy,
+    load_project_config,
+)
+
+
+def test_verified_but_nonreproducible_passes_access_fails_combined(tmp_path):
+    _write_dataset(tmp_path, "n3c", N3C)  # access.verified=True, class trust-based-output
+    access_ok, _ = check_inputs(tmp_path, ["dataset:n3c"])
+    assert access_ok is True  # access gate ALONE passes a verified dataset
+    ok, halts, _ = check_plan_data_gate(tmp_path, ["dataset:n3c"], reproducibility_policy=BAR)
+    assert ok is False and any("trust-based-output" in h for h in halts)  # combined gate FAILS
+
+
+def test_combined_gate_passes_when_reproducible(tmp_path):
+    _write_dataset(tmp_path, "geo", OPEN)
+    ok, halts, _ = check_plan_data_gate(tmp_path, ["dataset:geo"], reproducibility_policy=BAR)
+    assert ok is True and halts == []
+
+
+def test_end_to_end_plan_waiver_from_frontmatter(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nreproducibility_policy:\n  bar: third-party-reproducible\n",
+        encoding="utf-8",
+    )
+    _write_dataset(tmp_path, "n3c", N3C)
+    plans = tmp_path / "entities" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "p.md").write_text(
+        '---\nid: "plan:p"\ntype: "plan"\ntitle: "P"\n'
+        "reproducibility_policy:\n"
+        "  waivers:\n"
+        '    - dataset: "dataset:n3c"\n'
+        '      accepted_class: "trust-based-output"\n'
+        '      decision_date: "2026-07-01"\n'
+        '      rationale: "prototype only"\n'
+        '      mitigation: "no interpretable estimate"\n---\n',
+        encoding="utf-8",
+    )
+    project_pol = load_project_config(tmp_path).reproducibility_policy
+    plan_pol = load_plan_reproducibility_policy(plans / "p.md")
+    eff = effective_reproducibility_policy(project_pol, plan_pol)
+    ok, halts, warns = check_plan_data_gate(
+        tmp_path, ["dataset:n3c"], reproducibility_policy=eff, waivers=plan_pol.waivers
+    )
+    assert ok is True and halts == []           # waiver rescues the below-bar input
+    assert any("waiver" in w for w in warns)
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_plan_reproducibility_gate.py -k "combined or end_to_end" -v`
+Expected: FAIL with `ImportError: cannot import name 'check_plan_data_gate'`.
+
+- [ ] **Step 3: Implement the combined gate**
+
+Add to `plan_gate.py`:
+
+```python
+def check_plan_data_gate(
+    project_root: Path,
+    dataset_ids: list[str],
+    *,
+    planned_retrieval: set[str] | None = None,
+    reproducibility_policy: ReproducibilityPolicyConfig | None = None,
+    waivers: list[ReproducibilityWaiver] | None = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Single Step-2b gate: existing access checks THEN reproducibility enforcement.
+
+    `halts` is the union of access + reproducibility halts. This is the entry point
+    Step 2b uses, so a verified-but-non-reproducible input cannot pass an access-only path.
+    """
+    access_ok, access_halts = check_inputs(project_root, dataset_ids, planned_retrieval=planned_retrieval)
+    repro_ok, repro_halts, warns = check_reproducibility(
+        project_root, dataset_ids, policy=reproducibility_policy, waivers=waivers
+    )
+    return (access_ok and repro_ok, access_halts + repro_halts, warns)
+```
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run from `~/d/science/science/`: `uv run --frozen pytest tests/test_plan_reproducibility_gate.py -v`
+Expected: PASS (10 tests total).
+
+- [ ] **Step 5: Wire the Step 2b prose to the combined gate**
 
 In `commands/plan-pipeline.md`, inside "Step 2b: Data-access gate", after the origin `external`/`derived` bullets, add:
 
 ```markdown
-3. **Reproducibility gate (transparency-bound plans).** After the access checks, resolve the
-   effective `reproducibility_policy` (plan frontmatter merged over `science.yaml`, plan wins).
-   - If **neither** project nor plan declares a policy: emit
-     `reproducibility-policy-missing` as a WARN and do not enforce.
-   - Otherwise, for each declared dataset input, derive its reproducibility class over the
-     transitive external-input closure (derived inputs inherit the weakest upstream class):
+3. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
+   `check_plan_data_gate` — the access checks above **then** reproducibility enforcement. Resolve
+   the effective `reproducibility_policy` (plan frontmatter merged over `science.yaml`, plan wins).
+   - If **neither** project nor plan declares a policy: emit `reproducibility-policy-missing` as a
+     WARN and do not enforce.
+   - Otherwise, for each declared dataset input, derive its class over the transitive
+     external-input closure (derived inputs inherit the weakest upstream class):
      - `class: unknown` → resolve by `policy.unknown` (default HALT).
      - class ≥ `policy.bar` → PASS (surface class + gap_reason).
      - class < `bar` with a matching plan waiver (same dataset **and** `accepted_class == derived class`)
        → PASS-with-recorded-exception.
      - class < `bar` with no matching waiver → resolve by `policy.below_bar` (default HALT).
-   - A below-bar dataset only *discovered* (not a declared input) is a WARN, never a HALT.
 ```
 
-- [ ] **Step 2: Run the full tool suite**
-
-Run from `~/d/science/science/`: `uv run --frozen pytest -q`
-Expected: PASS (no regressions; the default `-m 'not snapshot and not real_projects'` marker filter applies).
-
-- [ ] **Step 3: Run the full model suite**
-
-Run from `~/d/science/science/model/`: `uv run --frozen pytest -q`
-Expected: PASS.
-
-- [ ] **Step 4: Lint both packages**
+- [ ] **Step 6: Full suites green + lint**
 
 ```bash
-cd ~/d/science
-uv run --directory science ruff check src/science_tool
-uv run --directory science/model ruff check src/science_model
+cd ~/d/science/science && uv run --frozen pytest -q
+cd ~/d/science/science/model && uv run --frozen pytest -q
+cd ~/d/science && uv run --directory science ruff check src/science_tool && uv run --directory science/model ruff check src/science_model
 ```
-Expected: no errors.
+Expected: PASS both suites (tool default `-m 'not snapshot and not real_projects'`); no lint errors.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Format + commit**
 
 ```bash
+cd ~/d/science/science && uv run --frozen ruff format src/science_tool/plan_gate.py
 cd ~/d/science
-git add commands/plan-pipeline.md
-git commit -m "docs(commands): document reproducibility enforcement in plan-pipeline Step 2b"
+git add science/src/science_tool/plan_gate.py science/tests/test_plan_reproducibility_gate.py commands/plan-pipeline.md
+git commit -m "feat(gate): integrated check_plan_data_gate (access + reproducibility) + Step 2b"
 ```
 
 ---
@@ -858,18 +1042,27 @@ git commit -m "docs: author-facing reproducibility block in dataset template + u
 ## Self-Review
 
 **Spec coverage:**
-- `access.reproducibility` block + enums → Task 1. ✓
+- `access.reproducibility` block + enums + real `parse_entity_file` coercion test + JSON-permissive decision → Task 1. ✓
 - Derived `reproducibility_class_for()` + gap_reason + lattice + insider-before-trust-based + row-6 fail-safe + absent-block→unknown → Task 2. ✓
-- `reproducibility_policy` (project + plan, plan-over-project, plan-only opt-in) + waivers → Task 3. ✓
-- Enforcement table (unknown/meets-bar/below-bar/waiver/derived-closure/absent-policy nudge) → Task 4. ✓
-- Step 2b prose + no-regression → Task 5. ✓
+- `reproducibility_policy` (project + plan, plan-over-project, plan-only opt-in) + waivers + plan-frontmatter loader → Task 3. ✓
+- Enforcement (unknown/meets-bar/below-bar/waiver/derived-closure/absent-policy nudge) → Task 4. ✓
+- **Integrated `check_plan_data_gate` (access THEN reproducibility)** + end-to-end plan-frontmatter waiver resolution + Step 2b prose + no-regression → Task 5. ✓
 - Template + user-guide authoring → Task 6. ✓
+
+**Review findings closed (this revision):**
+- Wiring gap: Task 5 adds `check_plan_data_gate` and a test proving a verified-but-non-reproducible dataset passes access yet fails the combined gate. ✓
+- Plan-frontmatter never parsed: Task 3 adds `load_plan_reproducibility_policy`; Task 5's e2e test drives it from a real `science.yaml` + plan `.md`. ✓
+- Invalid derived fixture: Task 4 now writes a full six-field `DerivationBlock` + matching workflow-run, mirroring `_seed_mixed_inputs`. ✓
+- JSON-schema surfaces: Task 1 Step 6 documents the permissive decision + a confirming `EntityValidator` test. ✓
+- Fake coercion test: replaced with a `parse_entity_file` round-trip (Task 1 Step 5). ✓
+- Unused `declared_inputs`: removed from `check_reproducibility` (Task 4). ✓
 
 **Placeholder scan:** No TBD/TODO; every code step shows full code; every run step shows command + expected result.
 
-**Type consistency:** `ReproClass`/`OrdinalReproClass` defined in Task 2, imported by Tasks 3–4. `check_reproducibility` returns `(bool, list, list)` consistently across Task 4 tests and the Step-2b prose. `reproducibility_class_for` returns `(class, gap)` everywhere. `ReproducibilityPolicyConfig`/`ReproducibilityWaiver` names match between Tasks 3 and 4.
+**Type consistency:** `ReproClass`/`OrdinalReproClass` defined in Task 2, imported by Tasks 3–5. `check_reproducibility` returns `(bool, list, list)`; `check_plan_data_gate` returns the same shape and unions the halt lists. `reproducibility_class_for` returns `(class, gap)` everywhere. `ReproducibilityPolicyConfig`/`ReproducibilityWaiver`/`PlanReproducibilityPolicy`/`effective_reproducibility_policy`/`load_plan_reproducibility_policy` names match across Tasks 3–5.
 
 **Notes for the implementer:**
-- `check_reproducibility` is a standalone gate function (mirrors the existing test-facing `check_inputs`); wiring it into the interactive `plan-pipeline` command is prose (Task 5), matching how Step 2b already works.
+- `check_plan_data_gate` (Task 5) is the single Step-2b entry point (access **then** reproducibility); `check_reproducibility` (Task 4) is the reproducibility half, reusable in isolation.
 - The classifier reads **raw frontmatter dicts** (like `runtime_state_for`), while the Pydantic block enforces enums at parse time — two surfaces, intentionally.
+- `origin: derived` datasets carry `datapackage:` and must **not** carry `access:`; their reproducibility class comes from the transitive external-input closure.
 - If `science/tests/test_project_config.py` already exists, append; otherwise create it with the tool-suite import style.
