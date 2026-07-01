@@ -271,10 +271,10 @@ Update `test_benchmark_hint_candidates_cli_writes_default_review_file()` in `sci
 review_path = tmp_path / "doc" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
 ```
 
-Add this new test after it:
+Add these new tests after it:
 
 ```python
-def test_benchmark_hint_candidates_cli_default_review_file_uses_doc_when_docs_also_exists(
+def test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical_doc_dir(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
@@ -304,6 +304,36 @@ title: Cytogenetic benchmark gap
     assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
 ```
 
+```python
+def test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_only_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    (tmp_path / "docs").mkdir()
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0075-beta",
+        """
+id: hypothesis:0075-beta
+type: hypothesis
+title: Cytogenetic benchmark gap
+""",
+        body="Cytogenetic lesion mutation evidence should be reviewed.",
+    )
+
+    result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0, result.output
+    review_path = tmp_path / "doc" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    wrong_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / f"2026-06-30-{tmp_path.name}.yaml"
+    payload = json.loads(result.output)
+    assert payload["review_file"] == str(review_path)
+    assert review_path.exists()
+    assert not wrong_path.exists()
+    assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
+```
+
 Expected current result: FAIL because `_default_hint_candidates_review_path()` hardcodes `docs/`.
 
 - [ ] **Step 2: Run the failing CLI tests**
@@ -311,7 +341,8 @@ Expected current result: FAIL because `_default_hint_candidates_review_path()` h
 ```bash
 rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_writes_default_review_file \
-  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_uses_doc_when_docs_also_exists \
+  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical_doc_dir \
+  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_only_project \
   -q
 ```
 
@@ -336,12 +367,15 @@ def _default_hint_candidates_review_path(project_root: Path, generated: date) ->
 
 Keep `_resolve_hint_candidates_output_path()` unchanged for explicit `--output`; custom paths remain relative to project root and must stay under it.
 
+This intentionally makes default review-file creation subject to the same `science.yaml` validation that `resolve_paths()` applies elsewhere. A malformed manifest or unsupported profile should fail early rather than silently writing to a fallback path.
+
 - [ ] **Step 4: Run the focused CLI tests**
 
 ```bash
 rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_writes_default_review_file \
-  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_uses_doc_when_docs_also_exists \
+  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical_doc_dir \
+  science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_only_project \
   science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_root \
   science/tests/test_benchmark_cli.py::test_benchmark_hint_candidates_cli_rejects_absolute_output_outside_project_root \
   -q

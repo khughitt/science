@@ -109,7 +109,7 @@ The summary should continue exposing `term_bucket_cap` and the truncation notice
 Add focused tests for:
 
 - default review path uses `resolve_paths(project_root).doc_dir`;
-- default review path chooses `doc/` when both `doc/` and `docs/` exist;
+- default review path always uses canonical `doc/`, including projects that also have `docs/` or only have `docs/`;
 - successful writes still print the resolved review path to stderr;
 - generic prose terms do not appear as `domain-candidate`;
 - generic prose terms remain visible as `workflow-or-modeling` terms;
