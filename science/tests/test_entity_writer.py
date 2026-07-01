@@ -238,3 +238,46 @@ def test_render_entity_frontmatter_updates_noops_when_values_unchanged(tmp_path:
 
     assert changed is False
     assert rendered == original
+
+
+def test_entity_removal_treats_resynthesized_into_as_managed_frontmatter_ref(tmp_path: Path):
+    from science_tool.entities import plan_entity_removal, remove_entity
+
+    root = tmp_path
+    (root / "science.yaml").write_text("name: test\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    original = root / "entities" / "propositions" / "broad.md"
+    replacement = root / "entities" / "propositions" / "narrow.md"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_text(
+        "---\n"
+        "id: proposition:broad\n"
+        "type: proposition\n"
+        "title: Broad\n"
+        "status: superseded\n"
+        "resynthesized_into:\n"
+        "  - proposition:narrow\n"
+        "---\n\n"
+        "Broad body.\n",
+        encoding="utf-8",
+    )
+    replacement.write_text(
+        "---\n"
+        "id: proposition:narrow\n"
+        "type: proposition\n"
+        "title: Narrow\n"
+        "status: active\n"
+        "---\n\n"
+        "Narrow body.\n",
+        encoding="utf-8",
+    )
+
+    plan = plan_entity_removal(root, "proposition:narrow")
+
+    assert any(
+        hit.path == original and hit.kind == "safe structured reference" and "resynthesized_into" in hit.detail
+        for hit in plan.safe_hits
+    )
+
+    remove_entity(root, "proposition:narrow")
+
+    assert "resynthesized_into" not in original.read_text(encoding="utf-8")
