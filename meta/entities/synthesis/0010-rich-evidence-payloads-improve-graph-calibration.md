@@ -26,14 +26,13 @@ Arc reconstruction is limited because no `prior_interpretations` chains exist; t
 
 The investigation opened after Batch 1 Bayesian synthesis literature (covering truth discovery, Bayesian Evidence Synthesis, and causal meta-analysis) suggested that scalar support edges lose too much evidential context. `t027` drafted `hypothesis:0002-rich-evidence-payloads-improve-graph-calibration` alongside H03 and H04 after Batch 2 added source behavior and pipeline provenance findings.
 
-Batches 3–6 extended the payload specification domain-by-domain — causal graph construction (`t034`), graph-valued integration (`t035`), agent/KG operations (`t038`), and robustness/reproducibility semantics (`t040`) — each surfacing a new class of fields whose omission would cause the graph to treat unlike evidence operations as interchangeable. Task `t021` was created as a P1 parent group to coordinate this expanding design surface. The current epistemic position is that the hypothesis has strong literature-derived motivation and one practical authoring-cost audit signal from `[t030]`, but no direct calibration benchmark; it remains in `proposed` status pending replay/benchmark evidence.
+Batches 3–6 extended the payload specification domain-by-domain — causal graph construction (`t034`), graph-valued integration (`t035`), agent/KG operations (`t038`), and robustness/reproducibility semantics (`t040`) — each surfacing a new class of fields whose omission would cause the graph to treat unlike evidence operations as interchangeable. Task `t034` now has a durable implemented contract in `meta/evidence/t034-causal-graph-contract.md`, backed by `meta/src/t034_validator/` and `meta/tests/test_t034_validator.py`. Task `t021` was created as a P1 parent group to coordinate the remaining expanding design surface. The current epistemic position is that the hypothesis has strong literature-derived motivation and one practical authoring-cost audit signal from `[t030]`, but no direct calibration benchmark; it remains in `proposed` status pending replay/benchmark evidence.
 
 ## Research fronts
 
 **Open tasks (P1):**
 - `t022` — Maintain the minimum quantitative evidence payload schema as implementation feedback accumulates
 - follow-up authoring-cost evaluation — recover the original full-context-human-vs-blind-LLM signal or run a multi-model extraction audit after `[t030]`
-- `t034` — Design causal graph construction pipeline artifacts
 - `t035` — Design graph-valued synthesis artifact schema
 - `t038` — Design graph evolution and KG view provenance
 - `t040` — Design robustness/reproducibility evaluation schema

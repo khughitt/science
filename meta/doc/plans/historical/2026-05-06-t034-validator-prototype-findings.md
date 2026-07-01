@@ -1,6 +1,6 @@
 # t034 v1.2 Validator Prototype — Findings
 
-> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py`. Reports what the prototype validator pressure-tested and what it surfaced about rule decidability.
+> **Status:** Findings (2026-05-06). Companion to the validator script at `meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py`. Reports what the prototype validator pressure-tested and what it surfaced about rule decidability.
 >
 > **Goal:** discharge the natural-systems alignment commitment (recorded in `[t034]` v1.1 — "validation rules must be implemented as enforcing runners, not just docs") for one extension's structural rules. Prove the rules are decidable from payload state. Surface gaps where they aren't.
 

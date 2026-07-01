@@ -5,9 +5,9 @@
 > **Goal:** prove that the load-bearing t037 operation-record rules are decidable from payload state plus a registry-resolved operation view, mirroring t034's three-slice discharge of the natural-systems "asserted vs verified" alignment commitment for `[t037]`.
 >
 > **Position in the program:** first slice of two for `[t037]`. Sister to:
-> - `meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py` (t034 slice 1: structural)
-> - `meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py` (t034 slice 2: role-permission)
-> - `meta/doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py` (t034 slice 3: propagation)
+> - `meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py` (t034 slice 1: structural)
+> - `meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py` (t034 slice 2: role-permission)
+> - `meta/doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py` (t034 slice 3: propagation)
 >
 > Slice 1 (this doc) targets `agent-tool-operation` structural and reason-code biconditional rules. Slice 2 (deferred) targets `agent-evaluation` rules and cross-payload propagation through `pipeline_provenance_ref` and `input_artifact_refs`.
 

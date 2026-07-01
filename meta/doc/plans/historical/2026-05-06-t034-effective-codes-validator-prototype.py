@@ -3,8 +3,8 @@
 Prototype validator for t034 v1.4 cross-payload reason-code propagation.
 
 Third validator slice. Sister to:
-- meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py (slice 1: structural)
-- meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py (slice 2: role-permission)
+- meta/doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py (slice 1: structural)
+- meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py (slice 2: role-permission)
 
 This slice closes the natural-systems alignment commitment for t034: it implements
 `effective_codes` computation across a payload graph (declared ∪ auto-injected ∪
@@ -53,7 +53,7 @@ out as the smallest non-trivial slice-3 test):
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 The production validator at meta/src/t034_validator/ already implements v1.4.
 
-Run with:  python meta/doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py
+Run with:  python meta/doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py
 Exits 0 if all tests match expectations; nonzero otherwise.
 """
 from __future__ import annotations

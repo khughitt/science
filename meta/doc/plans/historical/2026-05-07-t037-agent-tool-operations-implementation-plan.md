@@ -18,7 +18,7 @@ This plan implements the next t037 research/development loop from:
 - Source synthesis: `meta/doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`
 - Source paper summaries: `Ding2025.md`, `Yu2026.md`, `Si2025.md`
 - Contract dependency: `meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`
-- Precedent: the t034 artifact sequence in `meta/doc/plans/2026-05-06-t034-*`
+- Precedent: the t034 artifact sequence in `meta/doc/plans/historical/2026-05-06-t034-*`
 
 Out of scope for this plan:
 
@@ -333,7 +333,7 @@ Expected: validation exits 0 with only pre-existing warnings.
 **Files:**
 - Create: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py`
 - Read: `meta/doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md`
-- Reference: `meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-prototype.py`
+- Reference: `meta/doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py`
 
 - [ ] **Step 1: Create the prototype file header and rule constants**
 
