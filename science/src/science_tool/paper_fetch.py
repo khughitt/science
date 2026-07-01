@@ -62,6 +62,11 @@ _DEFAULT_HOST_DELAY = 1.0
 # but with a browser-plausible prefix so the server accepts the request.
 _BROWSERLIKE_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 _HOST_USER_AGENTS: dict[str, str] = {
+    "api.elsevier.com": _BROWSERLIKE_UA,
+    "linkinghub.elsevier.com": _BROWSERLIKE_UA,
+    "www.cell.com": _BROWSERLIKE_UA,
+    "www.sciencedirect.com": _BROWSERLIKE_UA,
+    "www.thelancet.com": _BROWSERLIKE_UA,
     "www.biorxiv.org": _BROWSERLIKE_UA,
     "www.medrxiv.org": _BROWSERLIKE_UA,
 }
@@ -406,7 +411,30 @@ def _try_crossref(
         meta["authors"] = [
             " ".join(filter(None, [a.get("given"), a.get("family")])) for a in authors if isinstance(a, dict)
         ]
+    links = _crossref_text_mining_links(message)
+    if links:
+        meta["crossref_text_mining_links"] = links
     return meta, None
+
+
+def _crossref_text_mining_links(message: dict[str, Any]) -> list[dict[str, str]]:
+    """Extract Crossref full-text links explicitly intended for text mining."""
+    raw_links = message.get("link")
+    if not isinstance(raw_links, list):
+        return []
+    links: list[dict[str, str]] = []
+    for item in raw_links:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("URL") or item.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            continue
+        intended = str(item.get("intended-application") or "").lower()
+        if intended != "text-mining":
+            continue
+        content_type = str(item.get("content-type") or item.get("content_type") or "").lower()
+        links.append({"url": url, "content_type": content_type})
+    return links
 
 
 def _try_unpaywall(
@@ -943,7 +971,39 @@ def _fetch(
                 ),
             )
 
-    # Tier 6: direct Unpaywall-provided PDF URL.
+    # Tier 6: Crossref text-mining full-text links.
+    crossref_text_mining_links = metadata.get("crossref_text_mining_links")
+    if isinstance(crossref_text_mining_links, list):
+        for link in crossref_text_mining_links:
+            if not isinstance(link, dict):
+                continue
+            link_url = link.get("url")
+            if not isinstance(link_url, str) or not link_url:
+                continue
+            content_type = str(link.get("content_type") or "")
+            tiers.append("crossref_text_mining")
+            dest = pdf_dest if "pdf" in content_type else text_dest
+            ok, err = _download(client, limiter, link_url, _host_of(link_url), dest)
+            if err:
+                errors.append(err)
+            if ok:
+                pdf_path = dest if dest == pdf_dest else None
+                text_path = dest if dest == text_dest else None
+                return _write_and_return(
+                    papers_dir,
+                    slug,
+                    FetchResult(
+                        status="ok",
+                        source="crossref_text_mining",
+                        metadata=metadata,
+                        tiers_attempted=tiers,
+                        pdf_path=pdf_path,
+                        text_path=text_path,
+                        errors=errors,
+                    ),
+                )
+
+    # Tier 7: direct Unpaywall-provided PDF URL.
     if oa_pdf:
         tiers.append("unpaywall_pdf")
         ok, err = _download(client, limiter, oa_pdf, _host_of(oa_pdf), pdf_dest)
