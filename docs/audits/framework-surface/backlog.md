@@ -43,6 +43,11 @@
 
 ### B3. Define CLI Behavior Contract
 
+**Status:** Addressed by
+[`../../conventions/cli-behavior.md`](../../conventions/cli-behavior.md), with a
+summary link from
+[`../../user-guide/cli-and-workflows.md`](../../user-guide/cli-and-workflows.md).
+
 **Goal:** Create a concise contract for future command additions and refactors.
 
 **Output:** A section in `docs/user-guide/cli-and-workflows.md` or a linked

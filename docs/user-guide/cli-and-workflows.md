@@ -147,7 +147,8 @@ The stable token vocabulary lives in
 
 ## Shared CLI Behavior
 
-Prefer these conventions when adding or using commands:
+Prefer these conventions when adding or using commands. The durable convention
+lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 
 - Read-only planning commands should say when they do not modify files.
 - Mutating commands should make the write target clear: source files, generated

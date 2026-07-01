@@ -14,6 +14,7 @@ those durable homes.
 
 - [`code-task-backlinks.md`](code-task-backlinks.md) — sanctioned patterns for linking code/notebooks back to tasks, questions, hypotheses, and interpretations.
 - [`citations-and-references.md`](citations-and-references.md) — bibliography authority, `science.references` bundles, v1 citation grammar, and Labnote app-package validation.
+- [`cli-behavior.md`](cli-behavior.md) — command scope, write classes, output formats, report-then-apply semantics, and migration/exploratory labels.
 - [`data-boundary.md`](data-boundary.md) — tracked source records vs ignored payload data, `science data audit`, conservative fixes, and `data_policy:` overrides.
 - [`pipeline-qa-checkpoints.md`](pipeline-qa-checkpoints.md) — concrete shape for a pipeline data-QA step (structural vs distribution severity, config-driven bounds including shared registry/enum validation, markdown report, fail-early on structural).
 - [`reproducible-manifest-dates.md`](reproducible-manifest-dates.md) — workflow-run / derived-dataset manifest `created`/`updated` must derive from run identity (run-slug date / `--produced-at` / commit time), not regeneration wall-clock, so manifests stay date-honest and byte-reproducible.
