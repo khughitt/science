@@ -6,6 +6,8 @@ from pathlib import Path
 
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlock
+from science_tool.datasets.semantics import reproducibility_class_for, repro_meets_bar
+from science_tool.project_config import ReproducibilityPolicyConfig, ReproducibilityWaiver
 
 
 def _load_dataset(project_root: Path, ds_id: str):
@@ -40,11 +42,7 @@ def check_inputs(
             if e.access is None:
                 halts.append(f"{ds_id}: external entity missing access block")
                 continue
-            if (
-                ds_id in planned_retrieval
-                and e.access.level in _RETRIEVABLE_LEVELS
-                and not e.access.exception.mode
-            ):
+            if ds_id in planned_retrieval and e.access.level in _RETRIEVABLE_LEVELS and not e.access.exception.mode:
                 continue
             if not (e.access.verified or e.access.exception.mode != ""):
                 halts.append(f"{ds_id}: external access.verified=false and no exception")
@@ -77,3 +75,101 @@ def check_inputs(
                     halts.append(f"{ds_id} -> {sub_halts[0]}")
                     break
     return (not halts, halts)
+
+
+def _load_dataset_fm(project_root: Path, ds_id: str) -> dict:
+    slug = ds_id.removeprefix("dataset:")
+    md = project_root / "entities" / "datasets" / f"{slug}.md"
+    if not md.exists():
+        return {}
+    result = parse_frontmatter(md)
+    return result[0] if result else {}
+
+
+def _weakest_class(classes: list[tuple[str, str]]) -> tuple[str, str]:
+    """Weakest = unknown if any, else lowest lattice rank."""
+    if not classes:
+        return "unknown", "no upstreams"
+    for cls, gap in classes:
+        if cls == "unknown":
+            return "unknown", gap
+    from science_tool.datasets.semantics import repro_class_rank
+
+    return min(classes, key=lambda c: repro_class_rank(c[0]))
+
+
+def _effective_repro_class(project_root: Path, ds_id: str, _seen: set[str] | None = None) -> tuple[str, str]:
+    """Derived-closure class: weakest external upstream for a derived dataset."""
+    _seen = _seen or set()
+    if ds_id in _seen:
+        return "insider-only", "cycle"
+    _seen.add(ds_id)
+    e = _load_dataset(project_root, ds_id)
+    if e is None:
+        return "unknown", "missing entity"
+    if e.origin == "derived" and isinstance(e.derivation, DerivationBlock):
+        upstream_classes = [_effective_repro_class(project_root, up, set(_seen)) for up in e.derivation.inputs]
+        return _weakest_class(upstream_classes)
+    return reproducibility_class_for(_load_dataset_fm(project_root, ds_id))
+
+
+def check_reproducibility(
+    project_root: Path,
+    dataset_ids: list[str],
+    *,
+    policy: ReproducibilityPolicyConfig | None,
+    waivers: list[ReproducibilityWaiver] | None = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Reproducibility Step-2b enforcement over declared plan inputs.
+
+    Every id in `dataset_ids` is a declared plan input. Returns (pass, halts, warns).
+    policy=None => opt-out: nudge, no enforcement.
+    """
+    waivers = waivers or []
+    halts: list[str] = []
+    warns: list[str] = []
+
+    if policy is None:
+        if dataset_ids:
+            warns.append(
+                "reproducibility-policy-missing: plan has dataset inputs but no "
+                "reproducibility_policy; reproducibility gate not enforced."
+            )
+        return True, halts, warns
+
+    for ds_id in dataset_ids:
+        cls, gap = _effective_repro_class(project_root, ds_id)
+        if cls == "unknown":
+            msg = f"{ds_id}: reproducibility class unknown ({gap})"
+            (halts if policy.unknown == "halt" else warns).append(msg)
+            continue
+        if repro_meets_bar(cls, policy.bar):
+            continue
+        waived = any(w.dataset == ds_id and w.accepted_class == cls for w in waivers)
+        if waived:
+            warns.append(f"{ds_id}: below bar ({cls}) accepted via waiver")
+            continue
+        msg = f"{ds_id}: reproducibility {cls} below bar {policy.bar} ({gap})"
+        (halts if policy.below_bar == "halt" else warns).append(msg)
+
+    return (not halts, halts, warns)
+
+
+def check_plan_data_gate(
+    project_root: Path,
+    dataset_ids: list[str],
+    *,
+    planned_retrieval: set[str] | None = None,
+    reproducibility_policy: ReproducibilityPolicyConfig | None = None,
+    waivers: list[ReproducibilityWaiver] | None = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Single Step-2b gate: existing access checks THEN reproducibility enforcement.
+
+    `halts` is the union of access + reproducibility halts. This is the entry point
+    Step 2b uses, so a verified-but-non-reproducible input cannot pass an access-only path.
+    """
+    access_ok, access_halts = check_inputs(project_root, dataset_ids, planned_retrieval=planned_retrieval)
+    repro_ok, repro_halts, warns = check_reproducibility(
+        project_root, dataset_ids, policy=reproducibility_policy, waivers=waivers
+    )
+    return (access_ok and repro_ok, access_halts + repro_halts, warns)

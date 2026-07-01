@@ -94,6 +94,43 @@ class AccessException(BaseModel):
     rationale: str = ""
 
 
+class AccessReproducibility(BaseModel):
+    """Third-party reproducibility controls (Five Safes) for an external dataset.
+
+    Canonical source of truth. The reproducibility *class* is DERIVED from these
+    (see science_tool.datasets.semantics.reproducibility_class_for), never stored.
+    """
+
+    obtainability: Literal[
+        "public",
+        "registration",
+        "self-service-dua",
+        "approved-researcher",
+        "approved-project",
+        "named-collaboration",
+        "unavailable",
+        "unknown",
+    ] = "unknown"
+    execution: Literal[
+        "local",
+        "hosted-workspace",
+        "trusted-environment",
+        "federated-code-to-data",
+        "custodian-run",
+        "unknown",
+    ] = "unknown"
+    extractability: Literal[
+        "full-dataset",
+        "analysis-dataset",
+        "synthetic-dataset",
+        "aggregate-unreviewed",
+        "aggregate-reviewed",
+        "none",
+        "unknown",
+    ] = "unknown"
+    notes: str = ""
+
+
 class AccessBlock(BaseModel):
     """External dataset access verification gate state."""
 
@@ -113,6 +150,7 @@ class AccessBlock(BaseModel):
     source_url: str = ""
     credentials_required: str = ""
     exception: AccessException = Field(default_factory=AccessException)
+    reproducibility: AccessReproducibility = Field(default_factory=AccessReproducibility)
 
     @model_validator(mode="after")
     def _validate_availability(self) -> "AccessBlock":

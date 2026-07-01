@@ -33,6 +33,11 @@ access:
     followup_task: ""
     superseded_by_dataset: ""
     rationale: ""
+  reproducibility:                # can an INDEPENDENT party regenerate the analysis?
+    obtainability: unknown        # public | registration | self-service-dua | approved-researcher | approved-project | named-collaboration | unavailable | unknown
+    execution: unknown            # local | hosted-workspace | trusted-environment | federated-code-to-data | custodian-run | unknown
+    extractability: unknown       # full-dataset | analysis-dataset | synthetic-dataset | aggregate-unreviewed | aggregate-reviewed | none | unknown
+    notes: ""                     # free-form, e.g. "Only reviewed aggregates leave the enclave."
 
 # Derived-only — UNCOMMENT and populate when origin: derived; REMOVE access: above
 # derivation:

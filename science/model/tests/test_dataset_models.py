@@ -12,6 +12,7 @@ from science_model.frontmatter import parse_entity_file
 from science_model.packages.schema import (
     AccessBlock,
     AccessException,
+    AccessReproducibility,
     BenchmarkBlock,
     BenchmarkTask,
     DatasetUsage,
@@ -64,6 +65,55 @@ class TestAccessBlock:
         for method in ("landing-confirmed", "metadata-confirmed"):
             a = AccessBlock(level="public", verified=True, verification_method=method)
             assert a.verification_method == method
+
+
+def test_access_reproducibility_defaults_to_unknown():
+    block = AccessBlock(level="controlled", verified=True)
+    assert block.reproducibility.obtainability == "unknown"
+    assert block.reproducibility.execution == "unknown"
+    assert block.reproducibility.extractability == "unknown"
+    assert block.reproducibility.notes == ""
+
+
+def test_access_reproducibility_accepts_valid_controls():
+    block = AccessBlock(
+        level="controlled",
+        verified=True,
+        reproducibility=AccessReproducibility(
+            obtainability="approved-project",
+            execution="trusted-environment",
+            extractability="aggregate-reviewed",
+            notes="Only reviewed aggregates leave the enclave.",
+        ),
+    )
+    assert block.reproducibility.extractability == "aggregate-reviewed"
+
+
+def test_access_reproducibility_rejects_bad_enum():
+    with pytest.raises(ValidationError):
+        AccessReproducibility(obtainability="downloadable-somehow")
+
+
+def test_access_reproducibility_round_trips_through_parse_entity_file(tmp_path: Path):
+    d = tmp_path / "entities" / "datasets"
+    d.mkdir(parents=True)
+    (d / "ds.md").write_text(
+        '---\nid: "dataset:ds"\ntype: "dataset"\ntitle: "DS"\norigin: "external"\n'
+        "access:\n"
+        '  level: "controlled"\n'
+        "  verified: true\n"
+        "  reproducibility:\n"
+        '    obtainability: "approved-project"\n'
+        '    execution: "trusted-environment"\n'
+        '    extractability: "aggregate-reviewed"\n'
+        '    notes: "enclave"\n---\n',
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(d / "ds.md", tmp_path.name)
+    assert entity is not None
+    assert entity.access.reproducibility.obtainability == "approved-project"
+    assert entity.access.reproducibility.extractability == "aggregate-reviewed"
+    assert entity.access.reproducibility.notes == "enclave"
 
 
 class TestDerivationBlock:

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from science_model.frontmatter import parse_frontmatter
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
+from science_tool.datasets.semantics import OrdinalReproClass
 
 
 class ProjectRole(StrEnum):
@@ -110,9 +112,7 @@ class RefsConfig(BaseModel):
 
     entity_index_source: EntityIndexSource = EntityIndexSource.FRONTMATTER
     scan_roots: list[str] = Field(default_factory=list)
-    doi_pmid_exempt_dirs: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_DOI_PMID_EXEMPT_DIRS)
-    )
+    doi_pmid_exempt_dirs: list[str] = Field(default_factory=lambda: list(DEFAULT_DOI_PMID_EXEMPT_DIRS))
 
 
 class DataPolicyConfig(BaseModel):
@@ -120,12 +120,8 @@ class DataPolicyConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    record_patterns: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_DATA_POLICY.record_patterns)
-    )
-    payload_extensions: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_DATA_POLICY.payload_extensions)
-    )
+    record_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_DATA_POLICY.record_patterns))
+    payload_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_DATA_POLICY.payload_extensions))
     size_threshold: int = DEFAULT_DATA_POLICY.size_threshold
 
     def to_policy(self) -> DataPolicy:
@@ -134,6 +130,68 @@ class DataPolicyConfig(BaseModel):
             payload_extensions=tuple(self.payload_extensions),
             size_threshold=self.size_threshold,
         )
+
+
+class ReproducibilityPolicyConfig(BaseModel):
+    """Project reproducibility gate policy (science.yaml)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bar: OrdinalReproClass = "third-party-reproducible"
+    unknown: Literal["halt", "warn"] = "halt"
+    below_bar: Literal["halt", "warn"] = "halt"
+
+
+class ReproducibilityWaiver(BaseModel):
+    """A dated, scoped plan-level acceptance of one below-bar dataset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset: str
+    accepted_class: OrdinalReproClass
+    decision_date: str = ""
+    rationale: str = ""
+    mitigation: str = ""
+
+
+class PlanReproducibilityPolicy(BaseModel):
+    """Plan-frontmatter reproducibility_policy: bar override + waivers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bar: OrdinalReproClass | None = None
+    unknown: Literal["halt", "warn"] | None = None
+    below_bar: Literal["halt", "warn"] | None = None
+    waivers: list[ReproducibilityWaiver] = Field(default_factory=list)
+
+
+def effective_reproducibility_policy(
+    project: ReproducibilityPolicyConfig | None,
+    plan: PlanReproducibilityPolicy | None,
+) -> ReproducibilityPolicyConfig | None:
+    """Merge plan policy over project policy. Returns None only when BOTH are absent."""
+    if project is None and plan is None:
+        return None
+    base = project or ReproducibilityPolicyConfig()
+    if plan is None:
+        return base
+    return ReproducibilityPolicyConfig(
+        bar=plan.bar or base.bar,
+        unknown=plan.unknown or base.unknown,
+        below_bar=plan.below_bar or base.below_bar,
+    )
+
+
+def load_plan_reproducibility_policy(plan_path: Path) -> PlanReproducibilityPolicy | None:
+    """Parse a plan file's frontmatter `reproducibility_policy` into a model, or None."""
+    result = parse_frontmatter(plan_path)
+    if result is None:
+        return None
+    fm, _ = result
+    raw = fm.get("reproducibility_policy")
+    if not isinstance(raw, dict):
+        return None
+    return PlanReproducibilityPolicy.model_validate(raw)
 
 
 class ProjectConfig(BaseModel):
@@ -148,6 +206,7 @@ class ProjectConfig(BaseModel):
     prose_lint: ProseLintConfig | None = None
     refs: RefsConfig | None = None
     data_policy: DataPolicyConfig | None = None
+    reproducibility_policy: ReproducibilityPolicyConfig | None = None
 
     @model_validator(mode="before")
     @classmethod

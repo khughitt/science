@@ -4,7 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from science_tool.project_config import (
+    PlanReproducibilityPolicy,
+    ProjectConfig,
     ProjectRole,
+    ReproducibilityPolicyConfig,
+    ReproducibilityWaiver,
+    effective_reproducibility_policy,
+    load_plan_reproducibility_policy,
     load_project_config,
 )
 
@@ -159,17 +165,80 @@ parent: ../meta
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."):
+    with pytest.raises(
+        ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."
+    ):
         load_project_config(project_root)
+
+
+def test_load_plan_reproducibility_policy_from_frontmatter(tmp_path: Path):
+    p = tmp_path / "plan.md"
+    p.write_text(
+        '---\nid: "plan:x"\ntype: "plan"\ntitle: "X"\n'
+        "reproducibility_policy:\n"
+        '  bar: "trust-based-output"\n'
+        "  waivers:\n"
+        '    - dataset: "dataset:n3c"\n'
+        '      accepted_class: "trust-based-output"\n'
+        '      decision_date: "2026-07-01"\n---\n',
+        encoding="utf-8",
+    )
+    pol = load_plan_reproducibility_policy(p)
+    assert pol is not None and pol.bar == "trust-based-output"
+    assert pol.waivers[0].dataset == "dataset:n3c"
+
+
+def test_load_plan_policy_absent_is_none(tmp_path: Path):
+    p = tmp_path / "plain.md"
+    p.write_text('---\nid: "plan:y"\ntype: "plan"\ntitle: "Y"\n---\n', encoding="utf-8")
+    assert load_plan_reproducibility_policy(p) is None
+
+
+def test_project_config_parses_reproducibility_policy():
+    cfg = ProjectConfig.model_validate(
+        {
+            "name": "demo",
+            "reproducibility_policy": {"bar": "credentialed-reproducible", "unknown": "warn"},
+        }
+    )
+    assert cfg.reproducibility_policy.bar == "credentialed-reproducible"
+    assert cfg.reproducibility_policy.unknown == "warn"
+    assert cfg.reproducibility_policy.below_bar == "halt"  # default
+
+
+def test_absent_policy_is_none():
+    cfg = ProjectConfig.model_validate({"name": "demo"})
+    assert cfg.reproducibility_policy is None
+
+
+def test_effective_policy_plan_overrides_project():
+    project = ReproducibilityPolicyConfig(bar="third-party-reproducible")
+    plan = PlanReproducibilityPolicy(bar="trust-based-output")
+    eff = effective_reproducibility_policy(project, plan)
+    assert eff.bar == "trust-based-output"
+    assert eff.unknown == "halt"  # inherited from project default
+
+
+def test_effective_policy_plan_only_opts_in():
+    plan = PlanReproducibilityPolicy(bar="third-party-reproducible")
+    eff = effective_reproducibility_policy(None, plan)
+    assert eff is not None and eff.bar == "third-party-reproducible"
+
+
+def test_effective_policy_none_when_both_absent():
+    assert effective_reproducibility_policy(None, None) is None
+
+
+def test_waiver_requires_dataset_and_class():
+    w = ReproducibilityWaiver(dataset="dataset:x", accepted_class="trust-based-output")
+    assert w.dataset == "dataset:x"
 
 
 def test_refs_config_defaults_when_absent(tmp_path):
     """ProjectConfig.refs is None when science.yaml omits the section."""
     from science_tool.project_config import load_project_config
 
-    (tmp_path / "science.yaml").write_text(
-        "name: test-project\nprofile: research\n", encoding="utf-8"
-    )
+    (tmp_path / "science.yaml").write_text("name: test-project\nprofile: research\n", encoding="utf-8")
     config = load_project_config(tmp_path)
     assert config.refs is None
 
@@ -196,9 +265,7 @@ def test_refs_config_default_source_is_frontmatter(tmp_path):
     from science_tool.project_config import EntityIndexSource, load_project_config
 
     (tmp_path / "science.yaml").write_text(
-        "name: test-project\nprofile: research\n"
-        "refs:\n"
-        "  scan_roots: [tasks]\n",
+        "name: test-project\nprofile: research\nrefs:\n  scan_roots: [tasks]\n",
         encoding="utf-8",
     )
     config = load_project_config(tmp_path)
@@ -214,9 +281,7 @@ def test_refs_config_rejects_unknown_source(tmp_path):
     from science_tool.project_config import load_project_config
 
     (tmp_path / "science.yaml").write_text(
-        "name: test-project\nprofile: research\n"
-        "refs:\n"
-        "  entity_index_source: rdfox\n",
+        "name: test-project\nprofile: research\nrefs:\n  entity_index_source: rdfox\n",
         encoding="utf-8",
     )
     try:
@@ -243,5 +308,7 @@ children:
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."):
+    with pytest.raises(
+        ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."
+    ):
         load_project_config(project_root)

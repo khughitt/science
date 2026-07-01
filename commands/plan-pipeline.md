@@ -164,7 +164,19 @@ For each input data source identified in Step 2:
      - Recursively check each ID in `derivation.inputs` passes the gate. HALT with the
        broken-link path if any input transitively fails. Cycle detection: maintain a
        visited-set; HALT on revisit.
-3. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
+3. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
+   `check_plan_data_gate` — the access checks above **then** reproducibility enforcement. Resolve
+   the effective `reproducibility_policy` (plan frontmatter merged over `science.yaml`, plan wins).
+   - If **neither** project nor plan declares a policy: emit `reproducibility-policy-missing` as a
+     WARN and do not enforce.
+   - Otherwise, for each declared dataset input, derive its class over the transitive
+     external-input closure (derived inputs inherit the weakest upstream class):
+     - `class: unknown` → resolve by `policy.unknown` (default HALT).
+     - class ≥ `policy.bar` → PASS (surface class + gap_reason).
+     - class < `bar` with a matching plan waiver (same dataset **and** `accepted_class == derived class`)
+       → PASS-with-recorded-exception.
+     - class < `bar` with no matching waiver → resolve by `policy.below_bar` (default HALT).
+4. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
 
 ### Step 3: Add computational nodes to the inquiry (Inquiry mode only, optional)
 

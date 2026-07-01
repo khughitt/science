@@ -178,6 +178,39 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
     assert "overlay rejected for test" in err.schema_message
 
 
+def test_entity_validator_accepts_access_reproducibility_block() -> None:
+    """access.reproducibility is a Pydantic-only enum gate; the JSON mixin schema
+    stays permissive (no additionalProperties: false on access), so a dataset
+    entity carrying the block must pass EntityValidator unchanged."""
+    from science_model.entity_schema import EntityValidator
+
+    entity = {
+        "schema_profile": "science-entity-base/1.0+dataset/1.0",
+        "id": "dataset:enclave-cohort",
+        "type": "dataset",
+        "title": "Enclave cohort",
+        "version": "1.0.0",
+        "created": "2026-06-30",
+        "updated": "2026-06-30",
+        "origin": "external",
+        "tier": "evaluate-next",
+        "datapackage": "datapackage.yaml",
+        "access": {
+            "level": "controlled",
+            "verified": True,
+            "reproducibility": {
+                "obtainability": "approved-project",
+                "execution": "trusted-environment",
+                "extractability": "aggregate-reviewed",
+                "notes": "Only reviewed aggregates leave the enclave.",
+            },
+        },
+    }
+
+    validator = EntityValidator()
+    assert list(validator.validate(entity) or []) == []
+
+
 def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch):
     """An artifact with validator='plain' is skipped; 'entity-mixin' runs EntityValidator()."""
     from pathlib import Path

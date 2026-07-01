@@ -20,6 +20,7 @@ from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import (
     AccessBlock,
     AccessException,
+    AccessReproducibility,
     BenchmarkBlock,
     DerivationBlock,
     MemberOfDerivationBlock,
@@ -246,6 +247,7 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
         return AccessBlock(level=cast(_AccessLevel, raw), verified=False)
     if isinstance(raw, dict):
         ex_raw = raw.get("exception") or {}
+        repro_raw = raw.get("reproducibility") or {}
         return AccessBlock(
             level=cast(_AccessLevel, raw.get("level", "public")),
             verified=bool(raw.get("verified", False)),
@@ -255,6 +257,7 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
             source_url=raw.get("source_url", ""),
             credentials_required=raw.get("credentials_required", ""),
             exception=AccessException(**ex_raw) if ex_raw else AccessException(),
+            reproducibility=AccessReproducibility(**repro_raw) if repro_raw else AccessReproducibility(),
         )
     return None
 
