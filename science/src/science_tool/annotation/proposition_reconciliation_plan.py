@@ -375,6 +375,66 @@ def _apply_incomplete_review_blockers(
     return tuple(blocked)
 
 
+def _action_target_refs(action: ReconciliationAction) -> tuple[str, ...]:
+    if action.members:
+        return action.members
+    if action.proposition is not None:
+        return (action.proposition,)
+    if action.canonical_proposition is not None:
+        return (action.canonical_proposition,)
+    return ()
+
+
+def _apply_cross_action_conflicts(
+    actions: Sequence[ReconciliationAction],
+) -> tuple[ReconciliationAction, ...]:
+    action_id_counts: dict[str, int] = {}
+    for action in actions:
+        action_id_counts[action.action_id] = action_id_counts.get(action.action_id, 0) + 1
+    duplicate_action_ids = {
+        action_id for action_id, count in action_id_counts.items() if count > 1
+    }
+
+    by_ref: dict[str, list[ReconciliationAction]] = {}
+    for action in actions:
+        for ref in _action_target_refs(action):
+            by_ref.setdefault(ref, []).append(action)
+
+    conflicted: dict[str, set[str]] = {}
+    for ref_actions in by_ref.values():
+        action_ids = sorted({action.action_id for action in ref_actions})
+        if len(action_ids) < 2:
+            continue
+        for action_id in action_ids:
+            conflicted.setdefault(action_id, set()).update(
+                other for other in action_ids if other != action_id
+            )
+
+    out: list[ReconciliationAction] = []
+    for action in actions:
+        if action.action_id in duplicate_action_ids:
+            out.append(
+                _with_blocker(
+                    action,
+                    reason="action_conflict",
+                    detail="duplicate action produced by multiple reviewed inputs",
+                )
+            )
+            continue
+        other_ids = sorted(conflicted.get(action.action_id, set()))
+        if not other_ids:
+            out.append(action)
+            continue
+        out.append(
+            _with_blocker(
+                action,
+                reason="action_conflict",
+                detail=f"conflicts with actions: {', '.join(other_ids)}",
+            )
+        )
+    return tuple(out)
+
+
 def build_reconciliation_action_plan(
     report: ReconciliationReport,
     reviews: Sequence[ReviewedReconciliationInput],
@@ -387,12 +447,14 @@ def build_reconciliation_action_plan(
         for resolved in resolved_doc.judgments:
             actions.append(_action_from_resolved(review.path, resolved, report))
 
+    blocked_for_incomplete = _apply_incomplete_review_blockers(actions, incomplete)
+    blocked_for_conflicts = _apply_cross_action_conflicts(blocked_for_incomplete)
     return ReconciliationActionPlan(
         schema_version=SCHEMA_VERSION,
         source_reviews=tuple(review.path for review in reviews),
         actions=tuple(
             sorted(
-                _apply_incomplete_review_blockers(actions, incomplete),
+                blocked_for_conflicts,
                 key=lambda action: action.action_id,
             )
         ),

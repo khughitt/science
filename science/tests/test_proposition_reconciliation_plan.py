@@ -435,3 +435,192 @@ def test_splittable_subset_canonicalization_inputs_exclude_non_members():
         },
     )
     assert canonical_action.inputs["archive_candidates"] == ("proposition:b",)
+
+
+def test_stance_review_needed_maps_to_blocked_stance_review_action():
+    candidate = _factor_candidate(recommended_action="stance_review_needed")
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization.json",
+                doc=_factor_review(candidate, decision="stance_review_needed"),
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "review_annotation_stance"
+    assert action.status == "blocked"
+    assert action.blockers == (
+        {
+            "reason": "stance_review_needed",
+            "detail": "This broad proposition bundles distinct claim families.",
+        },
+    )
+
+
+def test_insufficient_hints_maps_to_advisory_cleanup_action():
+    candidate = _factor_candidate(recommended_action="insufficient_hints")
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization.json",
+                doc=_factor_review(candidate, decision="insufficient_hints"),
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "cleanup_factorization_hints"
+    assert action.status == "advisory"
+    assert action.blockers == ()
+
+
+def test_conflicting_factorization_actions_for_same_proposition_are_blocked():
+    candidate = _factor_candidate()
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization-resynthesis.json",
+                doc=_factor_review(
+                    candidate,
+                    decision="factorization_needs_resynthesis",
+                ),
+            ),
+            ReviewedReconciliationInput(
+                path="reviews/factorization-human.json",
+                doc=_factor_review(candidate, decision="needs_human"),
+            ),
+        ],
+    )
+
+    assert len(plan.actions) == 2
+    assert {action.status for action in plan.actions} == {"blocked"}
+    for action in plan.actions:
+        assert any(
+            blocker["reason"] == "action_conflict" for blocker in action.blockers
+        )
+
+
+def test_actions_are_sorted_by_action_id():
+    factor_candidate = _factor_candidate()
+    same_claim_report = _same_claim_report()
+    report = ReconciliationReport(
+        factorization_disagreements=(factor_candidate,),
+        same_claim_candidates=same_claim_report.same_claim_candidates,
+        faults=same_claim_report.faults,
+        proposition_snapshots={
+            factor_candidate.proposition: _snapshot(factor_candidate.proposition),
+            **same_claim_report.proposition_snapshots,
+        },
+    )
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=_same_claim_review(same_claim_report),
+            ),
+            ReviewedReconciliationInput(
+                path="reviews/factorization.json",
+                doc=_factor_review(factor_candidate),
+            ),
+        ],
+    )
+
+    assert [action.action_id for action in plan.actions] == sorted(
+        action.action_id for action in plan.actions
+    )
+
+
+def test_duplicate_reviewed_actions_are_blocked_with_exact_conflict_blocker():
+    candidate = _factor_candidate()
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    expected_blocker = {
+        "reason": "action_conflict",
+        "detail": "duplicate action produced by multiple reviewed inputs",
+    }
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization-a.json",
+                doc=_factor_review(candidate),
+            ),
+            ReviewedReconciliationInput(
+                path="reviews/factorization-b.json",
+                doc=_factor_review(candidate),
+            ),
+        ],
+    )
+
+    assert len(plan.actions) == 2
+    for action in plan.actions:
+        assert action.status == "blocked"
+        assert action.blockers == (expected_blocker,)
+
+
+def test_same_claim_advisory_conflicts_with_ready_canonicalization():
+    report = _same_claim_report()
+    candidate = report.same_claim_candidates[0]
+    members = list(candidate.propositions)
+    review = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id("same_claim", "same_claim", members),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": members,
+                "rationale": "The propositions express the same claim.",
+                "confidence": "high",
+            },
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim",
+                    "related_but_distinct",
+                    members,
+                ),
+                "lane": "same_claim",
+                "decision": "related_but_distinct",
+                "members": members,
+                "rationale": "The propositions are related but remain distinct claims.",
+                "confidence": "high",
+            },
+        ],
+    }
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [ReviewedReconciliationInput(path="reviews/same-claim.json", doc=review)],
+    )
+
+    assert len(plan.actions) == 2
+    assert {action.status for action in plan.actions} == {"blocked"}
+    for action in plan.actions:
+        assert any(
+            blocker["reason"] == "action_conflict" for blocker in action.blockers
+        )
