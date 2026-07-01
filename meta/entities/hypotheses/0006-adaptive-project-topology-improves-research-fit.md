@@ -3,7 +3,7 @@ type: hypothesis
 title: Adaptive project topology improves research fit
 status: proposed
 created: '2026-05-17'
-updated: '2026-05-17'
+updated: '2026-07-01'
 id: hypothesis:0006-adaptive-project-topology-improves-research-fit
 phase: active
 source_refs: []
@@ -64,8 +64,8 @@ The topology process should identify commons candidates, but it should not treat
 - No pilot has yet compared topology recommendations against a written baseline of harms.
 - The candidate computable signals may overfit to visible artifact density and miss high-value quiet work.
 - The human-review prompts may be too broad unless the first pilot narrows them.
-- The provenance contract is currently a design constraint, not a tested migration workflow.
-- It remains unresolved whether `~/d/bio/meta` is the right first promoted project or whether the biological substrate model should remain inside `~/d/health/meta` until the boundary is sharper.
+- The provenance contract is now documented in `core/adaptive-project-topology.md`, but remains untested as a migration workflow.
+- `core/bio-meta-scaffold-brief.md` states the intended `bio/meta` versus `health/meta` boundary, but it remains unresolved whether `~/d/bio/meta` is the right first promoted project or whether the biological substrate model should remain inside an existing project until the pilot confirms a concrete topology harm.
 
 ## Predictions
 
@@ -90,7 +90,7 @@ The topology process should identify commons candidates, but it should not treat
 - `expert_judgment` - Recent planning identified a specific load-bearing boundary risk between `~/d/health/meta` and proposed `~/d/bio/meta`.
 - `expert_judgment` - Recent paper-batch synthesis across health, cancer, cycles, and pre-cancer repeatedly surfaced shared themes: nested biological systems, reachability, perturbation response, observability, and timebase-aware causal inference.
 - `expert_judgment` - Recent commons-promotion work shows that reusable topics and workflows need a destination outside domain projects once they are implemented and broadly useful.
-- `expert_judgment` - The current design note already splits v1 computable signals from judgment-required prompts, which is consistent with a manual-first decision-support hypothesis.
+- `expert_judgment` - `core/adaptive-project-topology.md` splits v1 computable signals from judgment-required prompts, which is consistent with a manual-first decision-support hypothesis.
 
 ## Disputing Evidence
 
@@ -108,14 +108,14 @@ The topology process should identify commons candidates, but it should not treat
 - Compare recommendations against the baseline: would they have reduced a known harm, or are they merely plausible reorganizations?
 - Record false positives, false negatives, reviewer overrides, and provenance blockers.
 - Use the pilot to define the smallest computable v1 score and the minimum recommendation format.
-- Re-evaluate H06 after the `~/d/bio/meta` brief: if the boundary cannot be stated cleanly, the hypothesis should be narrowed or the case study changed.
+- Re-evaluate H06 after the `t057` pilot: if the `~/d/bio/meta` boundary cannot survive review against concrete topology harms, the hypothesis should be narrowed or the case study changed.
 
 ## Related Work
 
 - `question:0014-adaptive-project-topology` asks how Science should adapt project topology to evidence, uncertainty, and decay.
 - `[t053]` tracks the adaptive project topology task group.
-- `[t054]` will define the v1 signal metrics after the pilot constrains the signal set.
-- `[t056]` will design the recommendation workflow, including reviewer cadence and provenance contract.
+- `[t054]` defined the v1 signal metrics in `core/adaptive-project-topology.md`.
+- `[t056]` designed the recommendation workflow, including reviewer cadence and provenance contract, in `core/adaptive-project-topology.md`.
 - `[t057]` will run the baseline-of-harm and pilot audit.
-- `[t058]` will prepare the `~/d/bio/meta` scaffold brief as the first case study.
-- `doc/plans/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md` is the current design note.
+- `[t058]` prepared the `~/d/bio/meta` scaffold brief in `core/bio-meta-scaffold-brief.md`.
+- `doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md` preserves the original design note.

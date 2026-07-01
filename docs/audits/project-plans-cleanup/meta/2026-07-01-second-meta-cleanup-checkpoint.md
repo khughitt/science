@@ -53,6 +53,8 @@ before archival.
 
 ### Adaptive Topology
 
-The adaptive topology / `bio/meta` planning note remains active. It has durable
-question and hypothesis records, but only `t055` is complete; `t053`, `t054`,
-`t056`, `t057`, and `t058` remain active/proposed.
+Superseded by the later adaptive-topology cleanup checkpoint on 2026-07-01.
+The plan moved to `meta/doc/plans/historical/`, durable content moved to
+`meta/core/adaptive-project-topology.md` and
+`meta/core/bio-meta-scaffold-brief.md`, and only the `t057` pilot remains
+active.

@@ -60,4 +60,6 @@ model should contain, literature grounding, explicit decisions with recorded
 - Active tasks: `tasks/active.md`
 - Hypotheses: `entities/hypotheses/`
 - Decisions log: `core/decisions.md`
+- Adaptive project topology: `core/adaptive-project-topology.md`
+- `bio/meta` candidate brief: `core/bio-meta-scaffold-brief.md`
 - Knowledge graph: `knowledge/graph.trig` (not yet built)
