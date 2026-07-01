@@ -192,6 +192,67 @@ class TestFetchPaperBranches:
         assert "Europe PMC abstract is available" in (result.access_hint or "")
         assert "europepmc:abstract" in result.tiers_attempted
 
+    def test_direct_cell_press_pdf_uses_browser_headers(self, tmp_path: Path) -> None:
+        """fb-2026-07-01-001: Cell/Elsevier OA PDFs 403 without browser-plausible headers."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1016/j.ccell.2023.01.001"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(
+                    200,
+                    json={
+                        "is_oa": True,
+                        "best_oa_location": {"url_for_pdf": "https://www.cell.com/cancer-cell/pdf/S1535.pdf"},
+                    },
+                )
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(200, json={"resultList": {"result": []}})
+            if req.url.host == "www.cell.com":
+                assert req.headers["User-Agent"].startswith("Mozilla/5.0")
+                assert "application/pdf" in req.headers["Accept"]
+                return httpx.Response(200, content=b"%PDF cell press")
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(doi="10.1016/j.ccell.2023.01.001", cfg=_cfg(tmp_path), http=_make_client(handler))
+
+        assert result.status == "ok"
+        assert result.source == "unpaywall_pdf"
+
+    def test_crossref_text_mining_pdf_link_is_used_before_blocked_oa(self, tmp_path: Path) -> None:
+        """fb-2026-07-01-001: honor Crossref links intended for text mining."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(
+                    200,
+                    json={
+                        "message": {
+                            "DOI": "10.1016/j.ccell.2023.01.001",
+                            "link": [
+                                {
+                                    "URL": "https://api.elsevier.com/content/article/doi/10.1016/j.ccell.2023.01.001",
+                                    "content-type": "application/pdf",
+                                    "intended-application": "text-mining",
+                                }
+                            ],
+                        }
+                    },
+                )
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": True})
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(200, json={"resultList": {"result": []}})
+            if req.url.host == "api.elsevier.com":
+                return httpx.Response(200, content=b"%PDF elsevier tdm")
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(doi="10.1016/j.ccell.2023.01.001", cfg=_cfg(tmp_path), http=_make_client(handler))
+
+        assert result.status == "ok"
+        assert result.source == "crossref_text_mining"
+        assert "crossref_text_mining" in result.tiers_attempted
+
     def test_not_found_when_both_apis_404(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(404)

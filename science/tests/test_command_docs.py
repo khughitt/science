@@ -72,6 +72,16 @@ def test_plan_pipeline_respects_project_plan_numbering_convention() -> None:
     assert "entities/plans/<NNNN>-<slug>.md" in text
 
 
+def test_review_pipeline_runtime_stageability_allows_wp1_retrieval_probe_defer() -> None:
+    text = _read("commands/review-pipeline.md")
+    normalized = " ".join(text.split())
+
+    assert "PASS-with-note" in text
+    assert "WP1 is the staging step" in text
+    assert "access.verified: true" in text
+    assert "do not score absent runtime files as FAIL" in normalized
+
+
 def test_task_command_docs_use_aspects_for_task_creation() -> None:
     for path in ("commands/tasks.md", "commands/review-tasks.md"):
         text = _read(path)
