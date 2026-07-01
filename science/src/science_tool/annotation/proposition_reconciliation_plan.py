@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from science_tool.annotation.proposition_reconciliation import (
@@ -12,6 +12,7 @@ from science_tool.annotation.proposition_reconciliation import (
     ReconciliationFault,
     ReconciliationReport,
     ResolvedReviewJudgment,
+    SameClaimCandidate,
     resolve_review_doc,
 )
 
@@ -133,6 +134,144 @@ def _factorization_suggestions(decision: str) -> tuple[Mapping[str, Any], ...]:
     )
 
 
+def _snapshot(report: ReconciliationReport, ref: str):
+    try:
+        return report.proposition_snapshots[ref]
+    except KeyError as exc:
+        raise ValueError(f"missing proposition snapshot for {ref}") from exc
+
+
+def _canonicalization_inputs(
+    canonical: str,
+    members: Sequence[str],
+    report: ReconciliationReport,
+) -> Mapping[str, Any]:
+    duplicates = tuple(ref for ref in members if ref != canonical)
+    source_ref_moves: list[Mapping[str, Any]] = []
+    sidecar_backlink_rewrites: list[Mapping[str, Any]] = []
+    for duplicate in duplicates:
+        duplicate_snapshot = _snapshot(report, duplicate)
+        source_ref_moves.append(
+            {
+                "from": duplicate,
+                "to": canonical,
+                "source_refs": tuple(sorted(duplicate_snapshot.source_refs)),
+            }
+        )
+        sidecar_backlink_rewrites.append(
+            {
+                "from": duplicate,
+                "to": canonical,
+                "annotation_refs": tuple(sorted(duplicate_snapshot.annotation_refs)),
+            }
+        )
+    return {
+        "source_ref_moves": tuple(source_ref_moves),
+        "sidecar_backlink_rewrites": tuple(sidecar_backlink_rewrites),
+        "archive_candidates": duplicates,
+    }
+
+
+def _same_claim_suggestions() -> tuple[Mapping[str, Any], ...]:
+    return (
+        {
+            "kind": "move_source_refs_to_canonical",
+            "detail": "Move duplicate proposition source references onto the canonical proposition.",
+        },
+        {
+            "kind": "rewrite_sidecar_promoted_to_backlinks",
+            "detail": "Rewrite sidecar promoted_to backlinks from duplicates to the canonical proposition.",
+        },
+        {
+            "kind": "archive_duplicate_propositions",
+            "detail": "Archive duplicate proposition records after backlinks are rewritten.",
+        },
+    )
+
+
+def _action_from_same_claim(
+    source_path: str,
+    resolved: ResolvedReviewJudgment,
+    report: ReconciliationReport,
+) -> ReconciliationAction:
+    candidate = resolved.candidate
+    if not isinstance(candidate, SameClaimCandidate):
+        raise TypeError("same-claim action requires SameClaimCandidate")
+
+    judgment = resolved.judgment
+    decision = str(judgment["decision"])
+    rationale = str(judgment["rationale"])
+    judgment_id = str(judgment["judgment_id"])
+    members = tuple(sorted(str(member) for member in judgment["members"]))
+
+    if decision == "same_claim":
+        canonical = str(judgment["canonical_proposition"])
+        secondary_refs = tuple(ref for ref in members if ref != canonical)
+        action_kind = "canonicalize_propositions"
+        return ReconciliationAction(
+            action_id=reconciliation_action_id(
+                action_kind,
+                judgment_id,
+                canonical,
+                secondary_refs,
+            ),
+            kind=action_kind,
+            status="ready",
+            decision=decision,
+            candidate_id=candidate.candidate_id,
+            judgment_id=judgment_id,
+            confidence=str(judgment["confidence"]),
+            rationale=rationale,
+            source_review=source_path,
+            review_source=resolved.review_source,
+            canonical_proposition=canonical,
+            members=members,
+            inputs=_canonicalization_inputs(canonical, members, report),
+            suggested_operations=_same_claim_suggestions(),
+            preconditions=(
+                {
+                    "kind": "review_validation",
+                    "detail": "Review document validates against the current reconciliation report.",
+                },
+                {
+                    "kind": "current_snapshots",
+                    "detail": "Current proposition snapshots exist for reviewed same-claim members.",
+                },
+            ),
+            blockers=(),
+            writes=(),
+        )
+
+    action_kind = "record_reconciliation_decision"
+    return ReconciliationAction(
+        action_id=reconciliation_action_id(
+            action_kind,
+            judgment_id,
+            candidate.candidate_id,
+            members,
+        ),
+        kind=action_kind,
+        status="advisory",
+        decision=decision,
+        candidate_id=candidate.candidate_id,
+        judgment_id=judgment_id,
+        confidence=str(judgment["confidence"]),
+        rationale=rationale,
+        source_review=source_path,
+        review_source=resolved.review_source,
+        members=members,
+        inputs={"members": members, "flags": tuple(candidate.flags)},
+        suggested_operations=(
+            {
+                "kind": "record_non_merge_decision",
+                "detail": "Record the reviewed same-claim decision without canonicalization writes.",
+            },
+        ),
+        blockers=(),
+        writes=(),
+    )
+
+
 def _action_from_factorization(
     source_path: str,
     resolved: ResolvedReviewJudgment,
@@ -190,13 +329,50 @@ def _action_from_factorization(
 def _action_from_resolved(
     source_path: str,
     resolved: ResolvedReviewJudgment,
+    report: ReconciliationReport,
 ) -> ReconciliationAction:
     lane = resolved.judgment["lane"]
     if lane == LANE_FACTORIZATION:
         return _action_from_factorization(source_path, resolved)
     if lane == LANE_SAME_CLAIM:
-        raise NotImplementedError("same-claim action planning is added in Task 3")
+        return _action_from_same_claim(source_path, resolved, report)
     raise ValueError(f"unsupported reconciliation lane: {lane!r}")
+
+
+def _with_blocker(
+    action: ReconciliationAction,
+    reason: str,
+    detail: str,
+) -> ReconciliationAction:
+    return replace(
+        action,
+        status="blocked",
+        blockers=(*action.blockers, {"reason": reason, "detail": detail}),
+    )
+
+
+def _apply_incomplete_review_blockers(
+    actions: Sequence[ReconciliationAction],
+    incomplete: Sequence[Mapping[str, Any]],
+) -> tuple[ReconciliationAction, ...]:
+    missing_by_candidate = {
+        str(item["candidate_id"]): tuple(str(ref) for ref in item["missing"])
+        for item in incomplete
+    }
+    blocked: list[ReconciliationAction] = []
+    for action in actions:
+        missing = missing_by_candidate.get(action.candidate_id)
+        if missing and action.kind == "canonicalize_propositions":
+            blocked.append(
+                _with_blocker(
+                    action,
+                    "review_incomplete",
+                    f"candidate has unreviewed members: {', '.join(missing)}",
+                )
+            )
+        else:
+            blocked.append(action)
+    return tuple(blocked)
 
 
 def build_reconciliation_action_plan(
@@ -204,15 +380,22 @@ def build_reconciliation_action_plan(
     reviews: Sequence[ReviewedReconciliationInput],
 ) -> ReconciliationActionPlan:
     actions: list[ReconciliationAction] = []
+    incomplete: list[Mapping[str, Any]] = []
     for review in reviews:
         resolved_doc = resolve_review_doc(review.doc, report)
+        incomplete.extend(resolved_doc.validation["review_incomplete"])
         for resolved in resolved_doc.judgments:
-            actions.append(_action_from_resolved(review.path, resolved))
+            actions.append(_action_from_resolved(review.path, resolved, report))
 
     return ReconciliationActionPlan(
         schema_version=SCHEMA_VERSION,
         source_reviews=tuple(review.path for review in reviews),
-        actions=tuple(sorted(actions, key=lambda action: action.action_id)),
+        actions=tuple(
+            sorted(
+                _apply_incomplete_review_blockers(actions, incomplete),
+                key=lambda action: action.action_id,
+            )
+        ),
         errors=tuple(_fault_to_error(fault) for fault in report.faults),
     )
 

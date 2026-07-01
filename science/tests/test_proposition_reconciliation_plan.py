@@ -5,6 +5,7 @@ from science_tool.annotation.proposition_reconciliation import (
     PropositionSnapshot,
     ReconciliationFault,
     ReconciliationReport,
+    build_same_claim_candidates,
     candidate_id,
     judgment_id,
 )
@@ -90,6 +91,69 @@ def _factor_review(
                 "decision": decision,
                 "proposition": candidate.proposition,
                 "rationale": "This broad proposition bundles distinct claim families.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+
+def _same_claim_snapshot(
+    ref: str,
+    title: str,
+    *,
+    paper: str,
+    annotation: str,
+) -> PropositionSnapshot:
+    return PropositionSnapshot(
+        ref=ref,
+        title=title,
+        subject="BRCA1 loss",
+        predicate="increases",
+        object="genomic instability",
+        polarity="positive",
+        source_refs=frozenset({paper, annotation}),
+        paper_refs=frozenset({paper}),
+        annotation_refs=frozenset({annotation}),
+    )
+
+
+def _same_claim_report() -> ReconciliationReport:
+    snapshots = {
+        "proposition:a": _same_claim_snapshot(
+            "proposition:a",
+            "BRCA1 loss increases genomic instability",
+            paper="paper:A2020",
+            annotation="annotation:entities/papers/A2020.source#a1",
+        ),
+        "proposition:b": _same_claim_snapshot(
+            "proposition:b",
+            "Loss of BRCA1 raises genome instability",
+            paper="paper:B2021",
+            annotation="annotation:entities/papers/B2021.source#b1",
+        ),
+    }
+    same = build_same_claim_candidates(list(snapshots.values()))
+    return ReconciliationReport(
+        same_claim_candidates=same.candidates,
+        faults=same.faults,
+        proposition_snapshots=snapshots,
+    )
+
+
+def _same_claim_review(report: ReconciliationReport) -> dict:
+    candidate = report.same_claim_candidates[0]
+    members = list(candidate.propositions)
+    return {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id("same_claim", "same_claim", members),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": members,
+                "rationale": "The propositions express the same claim.",
                 "confidence": "high",
             }
         ],
@@ -189,3 +253,185 @@ def test_report_faults_become_top_level_action_plan_errors():
             "members": [],
         }
     ]
+
+
+def test_same_claim_review_maps_to_canonicalization_action():
+    report = _same_claim_report()
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/same-claim.json",
+                doc=_same_claim_review(report),
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "canonicalize_propositions"
+    assert action.status == "ready"
+    assert action.canonical_proposition == "proposition:a"
+    assert action.members == ("proposition:a", "proposition:b")
+    assert action.inputs["source_ref_moves"] == (
+        {
+            "from": "proposition:b",
+            "to": "proposition:a",
+            "source_refs": (
+                "annotation:entities/papers/B2021.source#b1",
+                "paper:B2021",
+            ),
+        },
+    )
+    assert action.inputs["sidecar_backlink_rewrites"] == (
+        {
+            "from": "proposition:b",
+            "to": "proposition:a",
+            "annotation_refs": ("annotation:entities/papers/B2021.source#b1",),
+        },
+    )
+    assert action.writes == ()
+
+
+def test_review_incomplete_blocks_same_claim_canonicalization():
+    snapshots = {
+        "proposition:a": _same_claim_snapshot(
+            "proposition:a",
+            "BRCA1 loss increases genomic instability",
+            paper="paper:A2020",
+            annotation="annotation:entities/papers/A2020.source#a1",
+        ),
+        "proposition:b": _same_claim_snapshot(
+            "proposition:b",
+            "Loss of BRCA1 raises genome instability",
+            paper="paper:B2021",
+            annotation="annotation:entities/papers/B2021.source#b1",
+        ),
+        "proposition:c": _same_claim_snapshot(
+            "proposition:c",
+            "BRCA1 loss promotes genomic instability",
+            paper="paper:C2022",
+            annotation="annotation:entities/papers/C2022.source#c1",
+        ),
+    }
+    same = build_same_claim_candidates(list(snapshots.values()))
+    report = ReconciliationReport(
+        same_claim_candidates=same.candidates,
+        faults=same.faults,
+        proposition_snapshots=snapshots,
+    )
+    review = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate_id(
+                    "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": "The reviewed pair expresses the same claim.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [ReviewedReconciliationInput(path="reviews/same-claim.json", doc=review)],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "canonicalize_propositions"
+    assert action.status == "blocked"
+    assert action.blockers == (
+        {
+            "reason": "review_incomplete",
+            "detail": "candidate has unreviewed members: proposition:c",
+        },
+    )
+    assert action.inputs["archive_candidates"] == ("proposition:b",)
+
+
+def test_splittable_subset_canonicalization_inputs_exclude_non_members():
+    snapshots = {
+        "proposition:a": _same_claim_snapshot(
+            "proposition:a",
+            "BRCA1 loss increases genomic instability",
+            paper="paper:A2020",
+            annotation="annotation:entities/papers/A2020.source#a1",
+        ),
+        "proposition:b": _same_claim_snapshot(
+            "proposition:b",
+            "Loss of BRCA1 raises genome instability",
+            paper="paper:B2021",
+            annotation="annotation:entities/papers/B2021.source#b1",
+        ),
+        "proposition:c": _same_claim_snapshot(
+            "proposition:c",
+            "BRCA1 loss promotes genomic instability",
+            paper="paper:C2022",
+            annotation="annotation:entities/papers/C2022.source#c1",
+        ),
+    }
+    same = build_same_claim_candidates(list(snapshots.values()))
+    report = ReconciliationReport(
+        same_claim_candidates=same.candidates,
+        faults=same.faults,
+        proposition_snapshots=snapshots,
+    )
+    candidate = report.same_claim_candidates[0]
+    review = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": "The reviewed pair expresses the same claim.",
+                "confidence": "high",
+            },
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim", "related_but_distinct", ["proposition:c"]
+                ),
+                "lane": "same_claim",
+                "decision": "related_but_distinct",
+                "members": ["proposition:c"],
+                "rationale": "This member should not be merged with the pair.",
+                "confidence": "high",
+            },
+        ],
+    }
+
+    plan = build_reconciliation_action_plan(
+        report,
+        [ReviewedReconciliationInput(path="reviews/same-claim.json", doc=review)],
+    )
+
+    canonical_action = next(
+        action for action in plan.actions if action.kind == "canonicalize_propositions"
+    )
+    assert canonical_action.status == "ready"
+    assert canonical_action.inputs["source_ref_moves"] == (
+        {
+            "from": "proposition:b",
+            "to": "proposition:a",
+            "source_refs": (
+                "annotation:entities/papers/B2021.source#b1",
+                "paper:B2021",
+            ),
+        },
+    )
+    assert canonical_action.inputs["archive_candidates"] == ("proposition:b",)
