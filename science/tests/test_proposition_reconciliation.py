@@ -379,6 +379,37 @@ def test_validate_review_doc_reanchors_splittable_subset_after_component_growth(
     ]
 
 
+def test_validate_review_doc_rejects_wrong_subset_candidate_id():
+    current = build_same_claim_candidates(
+        [
+            _prop("proposition:a", "BRCA1 loss increases genomic instability"),
+            _prop("proposition:b", "Loss of BRCA1 raises genome instability"),
+            _prop("proposition:c", "BRCA1 loss promotes genomic instability"),
+        ]
+    )
+    report = ReconciliationReport(same_claim_candidates=current.candidates)
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate_id("same_claim", ["proposition:a", "proposition:c"]),
+                "judgment_id": judgment_id(
+                    "same_claim", "same_claim", ["proposition:a", "proposition:b"]
+                ),
+                "lane": "same_claim",
+                "decision": "same_claim",
+                "canonical_proposition": "proposition:a",
+                "members": ["proposition:a", "proposition:b"],
+                "rationale": "The member set is real but the candidate anchor is not.",
+                "confidence": "high",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="candidate_id"):
+        validate_review_doc(doc, report)
+
+
 @pytest.mark.parametrize(
     "bad_source",
     [

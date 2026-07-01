@@ -634,6 +634,8 @@ def _resolve_same_claim_candidate(
     direct = same_by_id.get(candidate_ref)
     if direct is not None:
         return direct
+    if candidate_ref != candidate_id(LANE_SAME_CLAIM, sorted(members)):
+        return None
     matches = [
         candidate
         for candidate in all_same
