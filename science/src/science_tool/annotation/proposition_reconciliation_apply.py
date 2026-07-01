@@ -98,6 +98,39 @@ class ReconciliationApplyReport:
     written_paths: tuple[str, ...] = ()
 
 
+def apply_report_to_json(report: ReconciliationApplyReport) -> dict[str, Any]:
+    return {
+        "status": report.status,
+        "summary": {
+            "selected_actions": report.selected_actions,
+            "changed_paths": len(report.changed_paths),
+            "noop_paths": len(report.noop_paths),
+            "diagnostics": len(report.diagnostics),
+            "written_paths": len(report.written_paths),
+        },
+        "changed_paths": list(report.changed_paths),
+        "noop_paths": list(report.noop_paths),
+        "written_paths": list(report.written_paths),
+        "diagnostics": [dict(diagnostic) for diagnostic in report.diagnostics],
+        "actions": [
+            {
+                "action_id": action.action_id,
+                "kind": action.kind,
+                "canonical_proposition": action.canonical_proposition,
+                "members": list(action.members),
+                "duplicate_propositions": list(action.duplicate_propositions),
+                "status": action.status,
+                "changed_paths": list(action.changed_paths),
+                "noop_paths": list(action.noop_paths),
+                "diagnostics": [
+                    dict(diagnostic) for diagnostic in action.diagnostics
+                ],
+            }
+            for action in report.actions
+        ],
+    }
+
+
 def _path_string(path: Path) -> str:
     return path.as_posix()
 

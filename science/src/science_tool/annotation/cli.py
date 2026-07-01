@@ -689,6 +689,95 @@ def plan_proposition_reconciliation_cmd(
         click.echo(f"wrote JSON action plan to {output_path}")
 
 
+@annotate_group.command("apply-proposition-reconciliation")
+@click.option(
+    "--input",
+    "input_paths",
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--action", "action_ids", multiple=True)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def apply_proposition_reconciliation_cmd(
+    input_paths: tuple[Path, ...],
+    root: Path | None,
+    action_ids: tuple[str, ...],
+    fmt: str,
+) -> None:
+    """Apply reviewed proposition canonicalization actions."""
+    from science_tool.annotation.proposition_reconciliation import (
+        ReconciliationValidationError,
+        build_reconciliation_report,
+    )
+    from science_tool.annotation.proposition_reconciliation_apply import (
+        ReconciliationApplyError,
+        apply_canonicalization_plan,
+        apply_report_to_json,
+    )
+    from science_tool.annotation.proposition_reconciliation_plan import (
+        ReviewedReconciliationInput,
+        build_reconciliation_action_plan,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    reviews: list[ReviewedReconciliationInput] = []
+    for input_path in input_paths:
+        try:
+            doc = json.loads(input_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"{input_path} is not valid JSON: {exc}") from exc
+        reviews.append(ReviewedReconciliationInput(path=str(input_path), doc=doc))
+
+    try:
+        report = build_reconciliation_report(project_root)
+        plan = build_reconciliation_action_plan(report, reviews)
+        apply_report = apply_canonicalization_plan(
+            project_root,
+            plan,
+            requested_action_ids=action_ids,
+        )
+    except (
+        ReconciliationValidationError,
+        ReconciliationApplyError,
+        ValueError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = apply_report_to_json(apply_report)
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition reconciliation apply: "
+        f"status={payload['status']} "
+        f"selected={summary['selected_actions']} "
+        f"changed={summary['changed_paths']} "
+        f"noop={summary['noop_paths']} "
+        f"diagnostics={summary['diagnostics']} "
+        f"written={summary['written_paths']}"
+    )
+    for action in payload["actions"]:
+        click.echo(
+            f"{action['status']:8s} {action['kind']} "
+            f"{action['canonical_proposition']} "
+            f"changed={len(action['changed_paths'])} "
+            f"noop={len(action['noop_paths'])} "
+            f"diagnostics={len(action['diagnostics'])}"
+        )
+    if payload["changed_paths"]:
+        click.echo("changed paths:")
+        for path in payload["changed_paths"]:
+            click.echo(f"  {path}")
+    if payload["noop_paths"]:
+        click.echo("noop paths:")
+        for path in payload["noop_paths"]:
+            click.echo(f"  {path}")
+
+
 @annotate_group.command("build-prose-health")
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option(
