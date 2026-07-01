@@ -149,6 +149,7 @@ path. If multi-format output grows, add `--format` while preserving `--json`.
 
 1. Add a small CLI metadata test that prevents new project-root selectors from
    using `--project` unless explicitly allowlisted.
+   **Status:** Added in `science/tests/test_cli_surface_contract.py`.
 2. Add a test or lint for new commands that expose `--json` without `--format`,
    with an allowlist for legacy/convenience aliases.
 3. Improve help text for the 16 `--project` users before adding aliases.

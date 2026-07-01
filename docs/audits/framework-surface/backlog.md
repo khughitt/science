@@ -97,10 +97,13 @@ behavior.
 
 ### B6. Normalize One Command Pattern
 
-**Status:** Started with a CLI workflow-map coverage guard in
-`science/tests/test_user_guide_docs.py`. The guard checks the durable taxonomy
-against the registered top-level Click commands so new command families do not
-silently bypass classification.
+**Status:** Started with two guard tests:
+
+- `science/tests/test_user_guide_docs.py` checks the durable taxonomy against
+  the registered top-level Click commands so new command families do not
+  silently bypass classification.
+- `science/tests/test_cli_surface_contract.py` classifies every current
+  `--project` use so new project-root selectors prefer `--project-root`.
 
 **Goal:** Make one repeated behavior consistent across a few commands.
 
