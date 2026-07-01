@@ -203,3 +203,9 @@ def test_extracted_search_command_is_registered_from_split_module() -> None:
     search_cli = importlib.import_module("science_tool.search_cli")
 
     assert science_cli.commands["search"] is search_cli.search_command
+
+
+def test_extracted_data_group_is_registered_from_split_module() -> None:
+    data_cli = importlib.import_module("science_tool.data_cli")
+
+    assert science_cli.commands["data"] is data_cli.data_group
