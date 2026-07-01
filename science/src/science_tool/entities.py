@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -182,13 +182,11 @@ _NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND_DESCRIPTORS if ek.shortform}
-_DEFAULT_STATUS: dict[str, str] = {
-    ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status
-}
-_STATUS_VALUES: dict[str, frozenset[str]] = {
-    ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses
-}
-_EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset({"id", "type", "title", "status", "related", "source_refs", "created", "updated"})
+_DEFAULT_STATUS: dict[str, str] = {ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status}
+_STATUS_VALUES: dict[str, frozenset[str]] = {ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses}
+_EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset(
+    {"id", "type", "title", "status", "related", "source_refs", "created", "updated"}
+)
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 # Lifecycle states hidden from default view/consumer surfaces (consolidation P1).
@@ -446,19 +444,62 @@ def write_entity_file(
     _atomic_replace_text(dest, text)
 
 
+def render_entity_source_refs(
+    file_path: Path,
+    refs_to_append: Sequence[str],
+    *,
+    as_of: date | None = None,
+) -> tuple[str, bool]:
+    """Return rendered entity markdown after appending missing source refs.
+
+    Existing refs keep their current order, new refs are appended in
+    caller-provided order, exact strings are deduped, and updated advances only
+    when the rendered content changes.
+    """
+    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
+    refs = list(frontmatter.get("source_refs") or [])
+    changed = False
+    for ref in refs_to_append:
+        if ref in refs:
+            continue
+        refs.append(ref)
+        changed = True
+    if not changed:
+        return (file_path.read_text(encoding="utf-8"), False)
+    frontmatter["source_refs"] = refs
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
+    return (_render_markdown(frontmatter, body), True)
+
+
+def render_entity_frontmatter_updates(
+    file_path: Path,
+    updates: Mapping[str, object],
+    *,
+    as_of: date | None = None,
+) -> tuple[str, bool]:
+    """Return rendered entity markdown after applying exact frontmatter updates."""
+    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
+    changed = False
+    for key, value in updates.items():
+        if frontmatter.get(key) == value:
+            continue
+        frontmatter[key] = value
+        changed = True
+    if not changed:
+        return (file_path.read_text(encoding="utf-8"), False)
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
+    return (_render_markdown(frontmatter, body), True)
+
+
 def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
     """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
     the body. Returns True if added, False if already present. Used by promotion LINK so a
     hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
     advances to ``as_of`` (or today), matching other entity mutations."""
-    frontmatter, body = _parse_markdown_file(file_path)
-    refs = list(frontmatter.get("source_refs") or [])
-    if ref in refs:
+    rendered, changed = render_entity_source_refs(file_path, [ref], as_of=as_of)
+    if not changed:
         return False
-    refs.append(ref)
-    frontmatter["source_refs"] = refs
-    frontmatter["updated"] = (as_of or date.today()).isoformat()
-    _atomic_replace_text(file_path, _render_markdown(frontmatter, body))
+    _atomic_replace_text(file_path, rendered)
     return True
 
 
@@ -1137,8 +1178,7 @@ def list_entities(
         # be evaluated against archived rows. Fail loud rather than silently include
         # unfiltered archived rows or silently drop them.
         raise EntityCommandError(
-            "--related cannot be combined with --include-archived "
-            "(the archive index does not carry relation data)"
+            "--related cannot be combined with --include-archived (the archive index does not carry relation data)"
         )
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
@@ -1440,3 +1480,17 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
     if not isinstance(frontmatter, dict):
         return ({}, body)
     return (frontmatter, body.lstrip("\n"))
+
+
+def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return ({}, text)
+    try:
+        _, frontmatter_text, body = text.split("---\n", 2)
+    except ValueError:
+        return ({}, text)
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        return ({}, body)
+    return (frontmatter, body)

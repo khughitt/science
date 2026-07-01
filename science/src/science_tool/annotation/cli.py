@@ -131,8 +131,7 @@ def ingest_prose_decomposition_cmd(
         current_hash = compute_source_hash(artifact.source.path)
         if current_hash != artifact.source.content_hash and not allow_changed:
             raise click.ClickException(
-                "content hash mismatch: "
-                f"artifact has {artifact.source.content_hash}; current source is {current_hash}"
+                f"content hash mismatch: artifact has {artifact.source.content_hash}; current source is {current_hash}"
             )
 
         source_resolution = resolve_or_create_prose_source(
@@ -210,10 +209,7 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
         if row["message"]:
             detail.append(str(row["message"]))
         message = f" - {'; '.join(detail)}" if detail else ""
-        click.echo(
-            f"  {row['unit_id']}: {row['status']} "
-            f"({row['locator_status']}; {row['fingerprint']}){message}"
-        )
+        click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
 
 
 @annotate_group.command("validate-prose-decomposition-artifact")
@@ -259,10 +255,7 @@ def validate_prose_decomposition_artifact_cmd(
         if row["message"]:
             detail.append(str(row["message"]))
         message = f" - {'; '.join(detail)}" if detail else ""
-        click.echo(
-            f"  {row['unit_id']}: {row['status']} "
-            f"({row['locator_status']}; {row['fingerprint']}){message}"
-        )
+        click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
 
 
 def _required_prose_validation_summary(payload: dict[str, object]) -> dict[str, object]:
@@ -371,8 +364,7 @@ def apply_prose_promotion_plan_cmd(plan_json: Path, root: Path | None, fmt: str)
 
     skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
     click.echo(
-        f"applied prose promotion plan {plan_json}: "
-        f"minted={report.minted} linked={report.linked} skipped={skipped}"
+        f"applied prose promotion plan {plan_json}: minted={report.minted} linked={report.linked} skipped={skipped}"
     )
     click.echo("recovered link rows may report no minted/linked counter increments")
 
@@ -469,10 +461,7 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
             f"contested_groups={len(belief['contested_groups'])}"
         )
         for unit in payload["units"]:
-            click.echo(
-                f"  {unit['edge']:8s} {unit['paper']} "
-                f"({unit['stance']}; {unit['role']}/{unit['strength']})"
-            )
+            click.echo(f"  {unit['edge']:8s} {unit['paper']} ({unit['stance']}; {unit['role']}/{unit['strength']})")
     else:
         summary = payload["summary"]
         if summary["propositions"] == 0:
@@ -490,10 +479,7 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
     if payload["faults"]:
         click.echo(f"FAULTS ({len(payload['faults'])}):")
         for fault in payload["faults"]:
-            click.echo(
-                f"  {fault['sidecar']} [{fault['annotation']}] "
-                f"{fault['reason']}: {fault['detail']}"
-            )
+            click.echo(f"  {fault['sidecar']} [{fault['annotation']}] {fault['reason']}: {fault['detail']}")
 
 
 @annotate_group.command("reconcile-propositions")
@@ -525,9 +511,7 @@ def reconcile_propositions_cmd(
         report_to_json,
     )
 
-    selected = sum(
-        1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item
-    )
+    selected = sum(1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item)
     if selected != 1:
         raise click.ClickException("choose exactly one scope: --all, --proposition, or --source")
     if proposition_ref is not None and not proposition_ref.startswith("proposition:"):
@@ -559,14 +543,10 @@ def reconcile_propositions_cmd(
     )
     for item in payload["same_claim_candidates"]:
         click.echo(
-            f"same_claim {item['priority']:6s} {','.join(item['propositions'])} "
-            f"flags={','.join(item['flags']) or '-'}"
+            f"same_claim {item['priority']:6s} {','.join(item['propositions'])} flags={','.join(item['flags']) or '-'}"
         )
     for item in payload["factorization_disagreements"]:
-        click.echo(
-            f"factorization {item['priority']:6s} {item['proposition']} "
-            f"action={item['recommended_action']}"
-        )
+        click.echo(f"factorization {item['priority']:6s} {item['proposition']} action={item['recommended_action']}")
     if payload["faults"]:
         click.echo(f"FAULTS ({len(payload['faults'])}):")
         for fault in payload["faults"]:
@@ -582,9 +562,7 @@ def reconcile_propositions_cmd(
 )
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
-def validate_proposition_reconciliation_cmd(
-    input_path: Path, root: Path | None, fmt: str
-) -> None:
+def validate_proposition_reconciliation_cmd(input_path: Path, root: Path | None, fmt: str) -> None:
     """Validate an agent-reviewed proposition reconciliation artifact."""
     from science_tool.annotation.proposition_reconciliation import (
         ReconciliationValidationError,
@@ -687,6 +665,95 @@ def plan_proposition_reconciliation_cmd(
         click.echo(f"{action['status']:8s} {action['kind']} {target}")
     if output_path is not None:
         click.echo(f"wrote JSON action plan to {output_path}")
+
+
+@annotate_group.command("apply-proposition-reconciliation")
+@click.option(
+    "--input",
+    "input_paths",
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--action", "action_ids", multiple=True)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def apply_proposition_reconciliation_cmd(
+    input_paths: tuple[Path, ...],
+    root: Path | None,
+    action_ids: tuple[str, ...],
+    fmt: str,
+) -> None:
+    """Apply reviewed proposition canonicalization actions."""
+    from science_tool.annotation.proposition_reconciliation import (
+        ReconciliationValidationError,
+        build_reconciliation_report,
+    )
+    from science_tool.annotation.proposition_reconciliation_apply import (
+        ReconciliationApplyError,
+        apply_canonicalization_plan,
+        apply_report_to_json,
+    )
+    from science_tool.annotation.proposition_reconciliation_plan import (
+        ReviewedReconciliationInput,
+        build_reconciliation_action_plan,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    reviews: list[ReviewedReconciliationInput] = []
+    for input_path in input_paths:
+        try:
+            doc = json.loads(input_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"{input_path} is not valid JSON: {exc}") from exc
+        reviews.append(ReviewedReconciliationInput(path=str(input_path), doc=doc))
+
+    try:
+        report = build_reconciliation_report(project_root)
+        plan = build_reconciliation_action_plan(report, reviews)
+        apply_report = apply_canonicalization_plan(
+            project_root,
+            plan,
+            requested_action_ids=action_ids,
+        )
+    except (
+        ReconciliationValidationError,
+        ReconciliationApplyError,
+        ValueError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = apply_report_to_json(apply_report, project_root=project_root)
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition reconciliation apply: "
+        f"status={payload['status']} "
+        f"selected={summary['selected_actions']} "
+        f"changed={summary['changed_paths']} "
+        f"noop={summary['noop_paths']} "
+        f"diagnostics={summary['diagnostics']} "
+        f"written={summary['written_paths']}"
+    )
+    for action in payload["actions"]:
+        click.echo(
+            f"{action['status']:8s} {action['kind']} "
+            f"{action['canonical_proposition']} "
+            f"changed={len(action['changed_paths'])} "
+            f"noop={len(action['noop_paths'])} "
+            f"diagnostics={len(action['diagnostics'])}"
+        )
+    if payload["changed_paths"]:
+        click.echo("changed paths:")
+        for path in payload["changed_paths"]:
+            click.echo(f"  {path}")
+    if payload["noop_paths"]:
+        click.echo("noop paths:")
+        for path in payload["noop_paths"]:
+            click.echo(f"  {path}")
 
 
 @annotate_group.command("build-prose-health")
@@ -898,9 +965,7 @@ def _emit_table(report: VerifyReport, *, summary_only: bool) -> None:
             f"0 broken, 0 degraded, 0 fuzzy)"
         )
         if report.superseded_skipped:
-            click.echo(
-                f"  ({report.superseded_skipped} already-superseded annotations skipped)"
-            )
+            click.echo(f"  ({report.superseded_skipped} already-superseded annotations skipped)")
         return
 
     click.echo(
@@ -911,17 +976,13 @@ def _emit_table(report: VerifyReport, *, summary_only: bool) -> None:
         f"({report.annotations} annotations across {report.sidecars} sidecars)"
     )
     if report.superseded_skipped:
-        click.echo(
-            f"  ({report.superseded_skipped} already-superseded annotations skipped)"
-        )
+        click.echo(f"  ({report.superseded_skipped} already-superseded annotations skipped)")
 
     if summary_only:
         return
 
     for issue in report.issues:
-        click.echo(
-            f"  [{issue.kind}] {issue.sidecar.name} :: {issue.annotation_id}"
-        )
+        click.echo(f"  [{issue.kind}] {issue.sidecar.name} :: {issue.annotation_id}")
         if issue.source:
             click.echo(f"      source: {issue.source}")
         if issue.exact_preview:
@@ -1001,26 +1062,29 @@ def _dirty_anno_files(root: Path) -> list[Path]:
 
 @annotate_group.command("audit")
 @click.option(
-    "--root", "root_path",
+    "--root",
+    "root_path",
     default=".",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(
-    "--source", "sources_opt",
+    "--source",
+    "sources_opt",
     multiple=True,
-    help=(
-        "Source short name (repeatable). Defaults to LINT_SOURCES. "
-        "Valid: " + ", ".join(sorted(SOURCES))
-    ),
+    help=("Source short name (repeatable). Defaults to LINT_SOURCES. Valid: " + ", ".join(sorted(SOURCES))),
 )
 @click.option(
-    "--no-llm", is_flag=True, default=False,
+    "--no-llm",
+    is_flag=True,
+    default=False,
     help="Skip LLM sources (forward-compat no-op in P3.2).",
 )
 @click.option("--dry-run", is_flag=True, default=False)
 @click.option(
-    "--format", "fmt",
-    type=click.Choice(("table", "json")), default="table",
+    "--format",
+    "fmt",
+    type=click.Choice(("table", "json")),
+    default="table",
 )
 @click.option("--actor", default="science-annotate-cli")
 def audit_cmd(
@@ -1061,20 +1125,28 @@ def audit_cmd(
             for src in selected:
                 plans = list(src.scan(md))
                 planned_per_source[src.short_name] = len(plans)
-            file_reports.append({
-                "path": str(md.relative_to(root)),
-                "rows_planned": planned_per_source,
-            })
+            file_reports.append(
+                {
+                    "path": str(md.relative_to(root)),
+                    "rows_planned": planned_per_source,
+                }
+            )
             continue
         report = audit_file(
-            md, sidecar, sources=selected, actor=actor, now=now,
+            md,
+            sidecar,
+            sources=selected,
+            actor=actor,
+            now=now,
         )
         if report.rows_written or report.duplicates_skipped:
-            file_reports.append({
-                "path": str(md.relative_to(root)),
-                "rows_written": report.written_per_source,
-                "duplicates_skipped": report.duplicates_skipped,
-            })
+            file_reports.append(
+                {
+                    "path": str(md.relative_to(root)),
+                    "rows_written": report.written_per_source,
+                    "duplicates_skipped": report.duplicates_skipped,
+                }
+            )
         summary["rows_written"] += report.rows_written
         summary["duplicates_skipped"] += report.duplicates_skipped
         if report.rows_written:
@@ -1089,11 +1161,15 @@ def audit_cmd(
 def _collect_audit_markdown_files(root: Path) -> list[Path]:
     """Mirror prose_lint._collect_markdown_files but importable here."""
     from science_tool.prose_lint import _collect_markdown_files  # noqa: PLC0415
+
     return _collect_markdown_files(root)
 
 
 def _emit_audit_table(
-    summary: dict, files: list[dict], *, dry_run: bool,
+    summary: dict,
+    files: list[dict],
+    *,
+    dry_run: bool,
 ) -> None:
     if dry_run:
         click.echo(f"audit dry-run over {summary['files_scanned']} file(s):")
@@ -1114,15 +1190,18 @@ _TOKEN_LITERAL_PATTERN = _re.compile(
 
 @annotate_group.command("lift-tokens")
 @click.option(
-    "--root", "root_path",
+    "--root",
+    "root_path",
     default=".",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option("--remove", "remove_mode", is_flag=True, default=False)
 @click.option("--force-dirty", is_flag=True, default=False)
 @click.option(
-    "--format", "fmt",
-    type=click.Choice(("table", "json")), default="table",
+    "--format",
+    "fmt",
+    type=click.Choice(("table", "json")),
+    default="table",
 )
 @click.option("--actor", default="science-annotate-cli")
 def lift_tokens_cmd(
@@ -1162,9 +1241,7 @@ def lift_tokens_cmd(
     for md in md_files:
         sidecar_path = md.with_suffix(".anno.trig")
         original_text = md.read_text(encoding="utf-8")
-        original_hits = list(
-            _scan_markers_text(md, original_text, strict=False)
-        )
+        original_hits = list(_scan_markers_text(md, original_text, strict=False))
         non_doc_hits = [h for h in original_hits if not h.in_documentation]
         if not non_doc_hits:
             continue
@@ -1172,16 +1249,21 @@ def lift_tokens_cmd(
         if remove_mode:
             cleaned_text = _strip_tokens_from_prose(original_text)
             plans = _replan_for_remove(
-                source, md, original_text, cleaned_text, non_doc_hits,
+                source,
+                md,
+                original_text,
+                cleaned_text,
+                non_doc_hits,
             )
         else:
             plans = list(source.scan(md))
 
-        sidecar = (
-            read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
-        )
+        sidecar = read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
         new_sidecar, written = merge_planned(
-            sidecar, plans, actor=actor, now=now,
+            sidecar,
+            plans,
+            actor=actor,
+            now=now,
         )
 
         if remove_mode:
@@ -1196,7 +1278,8 @@ def lift_tokens_cmd(
         else:
             if written:
                 atomic_write_text(
-                    sidecar_path, serialize_sidecar(new_sidecar),
+                    sidecar_path,
+                    serialize_sidecar(new_sidecar),
                 )
 
         skipped = len(plans) - len(written)
@@ -1205,17 +1288,20 @@ def lift_tokens_cmd(
         if written:
             summary["files_with_writes"] += 1
 
-        file_reports.append({
-            "path": str(md.relative_to(root)),
-            "rows_written": len(written),
-            "duplicates_skipped": skipped,
-            **({"tokens_removed": len(non_doc_hits)} if remove_mode else {}),
-        })
+        file_reports.append(
+            {
+                "path": str(md.relative_to(root)),
+                "rows_written": len(written),
+                "duplicates_skipped": skipped,
+                **({"tokens_removed": len(non_doc_hits)} if remove_mode else {}),
+            }
+        )
 
     if fmt == "json":
         click.echo(
             json.dumps(
-                {"summary": summary, "files": file_reports}, indent=2,
+                {"summary": summary, "files": file_reports},
+                indent=2,
             )
         )
     else:
@@ -1229,6 +1315,7 @@ def lift_tokens_cmd(
 
 def _collect_lift_markdown_files(root: Path) -> list[Path]:
     from science_tool.markers import _collect_markdown_files  # noqa: PLC0415
+
     return _collect_markdown_files(root)
 
 
@@ -1236,11 +1323,7 @@ def _files_with_hits(md_files: list[Path]) -> list[Path]:
     out: list[Path] = []
     for md in md_files:
         text = md.read_text(encoding="utf-8")
-        hits = [
-            h
-            for h in _scan_markers_text(md, text, strict=False)
-            if not h.in_documentation
-        ]
+        hits = [h for h in _scan_markers_text(md, text, strict=False) if not h.in_documentation]
         if hits:
             out.append(md)
     return out
@@ -1250,7 +1333,10 @@ def _dirty_files_among(root: Path, files: list[Path]) -> list[Path]:
     try:
         proc = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=str(root), capture_output=True, text=True, check=True,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []  # not a git repo / git unavailable -> no dirty check
@@ -1269,6 +1355,7 @@ def _dirty_files_among(root: Path, files: list[Path]) -> list[Path]:
 
 def _strip_tokens_from_prose(text: str) -> str:
     from science_tool.markdown_utils import is_fence_line  # noqa: PLC0415
+
     out_lines: list[str] = []
     in_fence = False
     for line in text.splitlines(keepends=True):
@@ -1295,7 +1382,7 @@ def _strip_tokens_outside_backticks(line: str) -> str:
     # middle of a sentence; preserve leading indentation.
     leading_match = _re.match(r"^[ \t]*", joined)
     leading = leading_match.group(0) if leading_match else ""
-    body = joined[len(leading):]
+    body = joined[len(leading) :]
     body = _re.sub(r"  +", " ", body)
     return leading + body
 
@@ -1317,21 +1404,21 @@ def _replan_for_remove(
     from science_tool.annotation.sources.base import (  # noqa: PLC0415
         PlannedAnnotation,
     )
+
     plans: list = []
     cleaned_sentences = split_sentences_with_offsets(cleaned_text)
     original_sentences = split_sentences_with_offsets(original_text)
     for hit in original_hits:
         literal = f"[{hit.token}]"
         rng = sentence_range_containing_literal(
-            original_text, hit.line, literal,
+            original_text,
+            hit.line,
+            literal,
         )
         if rng is None:
             continue
         try:
-            ordinal = next(
-                i for i, (s, _e) in enumerate(original_sentences)
-                if s == rng[0]
-            )
+            ordinal = next(i for i, (s, _e) in enumerate(original_sentences) if s == rng[0])
         except StopIteration:
             continue
         if ordinal >= len(cleaned_sentences):
@@ -1339,17 +1426,22 @@ def _replan_for_remove(
         sent_start, sent_end = cleaned_sentences[ordinal]
         atype, body_msg = TOKEN_TYPE_MAP[hit.token]
         sel = build_quote_selector(
-            cleaned_text, sent_start, sent_end, context=60,
+            cleaned_text,
+            sent_start,
+            sent_end,
+            context=60,
         )
-        plans.append(PlannedAnnotation(
-            target=SpecificResource(source=md.name, selector=sel),
-            annotation_type=atype,
-            motivation=Motivation.CLASSIFYING,
-            body=TextualBody(value=f"{body_msg} (lifted from {literal})"),
-            match_text=literal,
-            source_name=source.name,
-            lifted_from=literal,
-        ))
+        plans.append(
+            PlannedAnnotation(
+                target=SpecificResource(source=md.name, selector=sel),
+                annotation_type=atype,
+                motivation=Motivation.CLASSIFYING,
+                body=TextualBody(value=f"{body_msg} (lifted from {literal})"),
+                match_text=literal,
+                source_name=source.name,
+                lifted_from=literal,
+            )
+        )
     return plans
 
 
@@ -1358,7 +1450,12 @@ def _replan_for_remove(
 # ---------------------------------------------------------------------------
 
 _VALID_STATUS_VALUES = (
-    "open", "ack", "fixed", "dismissed", "superseded", "all",
+    "open",
+    "ack",
+    "fixed",
+    "dismissed",
+    "superseded",
+    "all",
 )
 
 
@@ -1398,9 +1495,7 @@ def _scope_to_sidecars(
                 path.parent.resolve(),
                 [(path, query.read_sidecar_strict(path))],
             )
-        raise click.ClickException(
-            f"PATH {path} is not a directory, .md, or .anno.trig file"
-        )
+        raise click.ClickException(f"PATH {path} is not a directory, .md, or .anno.trig file")
     effective_root = (root or Path.cwd()).resolve()
     return effective_root, list(query.iter_sidecars(effective_root))
 
@@ -1408,17 +1503,24 @@ def _scope_to_sidecars(
 @annotate_group.command("list")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "--root", "root_path", default=None,
+    "--root",
+    "root_path",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(
-    "--status", "statuses_opt", multiple=True,
+    "--status",
+    "statuses_opt",
+    multiple=True,
     type=click.Choice(_VALID_STATUS_VALUES),
 )
 @click.option("--source", "sources_opt", multiple=True)
 @click.option("--since", "since_ref", default=None)
 @click.option(
-    "--format", "fmt", type=click.Choice(("table", "json")), default="table",
+    "--format",
+    "fmt",
+    type=click.Choice(("table", "json")),
+    default="table",
 )
 def list_cmd(
     path: Path | None,
@@ -1446,20 +1548,22 @@ def list_cmd(
         try:
             since_changed = query.git_changed_markdown(effective_root, since_ref)
         except RuntimeError as exc:
-            raise click.ClickException(
-                f"--since failed: {exc}"
-            ) from exc
+            raise click.ClickException(f"--since failed: {exc}") from exc
 
-    rows = list(query.filter_annotations(
-        sidecars,
-        statuses=statuses,
-        sources=sources_opt,
-        since_changed=since_changed,
-    ))
-    rows.sort(key=lambda pa: (
-        query.entity_relpath_for_sidecar(pa[0], effective_root),
-        pa[1].id,
-    ))
+    rows = list(
+        query.filter_annotations(
+            sidecars,
+            statuses=statuses,
+            sources=sources_opt,
+            since_changed=since_changed,
+        )
+    )
+    rows.sort(
+        key=lambda pa: (
+            query.entity_relpath_for_sidecar(pa[0], effective_root),
+            pa[1].id,
+        )
+    )
 
     if fmt == "json":
         _emit_list_json(rows, effective_root, len(sidecars))
@@ -1473,25 +1577,15 @@ def _emit_list_table(
     sidecar_count: int,
 ) -> None:
     if not rows:
-        click.echo(
-            f"annotate list: 0 annotation(s) across {sidecar_count} sidecar(s)"
-        )
+        click.echo(f"annotate list: 0 annotation(s) across {sidecar_count} sidecar(s)")
         return
     for sidecar_path, ann in rows:
-        qualified = (
-            f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}"
-        )
+        qualified = f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}"
         preview = ann.target.selector.exact
         if len(preview) > 60:
             preview = preview[:60] + "…"
-        click.echo(
-            f"  {qualified}  {ann.status.value:<10}  "
-            f"{ann.source}  {ann.annotation_type}  {preview!r}"
-        )
-    click.echo(
-        f"\nannotate list: {len(rows)} annotation(s) across "
-        f"{sidecar_count} sidecar(s)"
-    )
+        click.echo(f"  {qualified}  {ann.status.value:<10}  {ann.source}  {ann.annotation_type}  {preview!r}")
+    click.echo(f"\nannotate list: {len(rows)} annotation(s) across {sidecar_count} sidecar(s)")
 
 
 def _emit_list_json(
@@ -1502,28 +1596,34 @@ def _emit_list_json(
     items = []
     for sidecar_path, ann in rows:
         sel = ann.target.selector
-        items.append({
-            "id": ann.id,
-            "qualified_id":
-                f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}",
-            "status": ann.status.value,
-            "source": ann.source,
-            "annotation_type": ann.annotation_type,
-            "exact_preview": ann.target.selector.exact[:60],
-            "selector": {
-                "exact": sel.exact,
-                "prefix": sel.prefix,
-                "suffix": sel.suffix,
+        items.append(
+            {
+                "id": ann.id,
+                "qualified_id": f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}",
+                "status": ann.status.value,
+                "source": ann.source,
+                "annotation_type": ann.annotation_type,
+                "exact_preview": ann.target.selector.exact[:60],
+                "selector": {
+                    "exact": sel.exact,
+                    "prefix": sel.prefix,
+                    "suffix": sel.suffix,
+                },
+                "bodies": [_body_json(b) for b in ann.bodies],
+            }
+        )
+    click.echo(
+        json.dumps(
+            {
+                "summary": {
+                    "total_annotations": len(rows),
+                    "total_sidecars": sidecar_count,
+                },
+                "annotations": items,
             },
-            "bodies": [_body_json(b) for b in ann.bodies],
-        })
-    click.echo(json.dumps({
-        "summary": {
-            "total_annotations": len(rows),
-            "total_sidecars": sidecar_count,
-        },
-        "annotations": items,
-    }, indent=2))
+            indent=2,
+        )
+    )
 
 
 def _body_json(body: Body) -> dict[str, str]:
@@ -1536,6 +1636,7 @@ def _body_json(body: Body) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # annotate ack / dismiss / fix  (shared _crud_invoke orchestrator)
 # ---------------------------------------------------------------------------
+
 
 def _crud_invoke(
     verb: str,
@@ -1560,8 +1661,13 @@ def _crud_invoke(
     now = datetime.now(timezone.utc)
     try:
         result = crud.apply_status_change(
-            root, id_arg, new_status,
-            actor=actor, now=now, reason=reason, force_dirty=force_dirty,
+            root,
+            id_arg,
+            new_status,
+            actor=actor,
+            now=now,
+            reason=reason,
+            force_dirty=force_dirty,
         )
     except query.AmbiguousAnnotationId as exc:
         click.echo(str(exc), err=True)
@@ -1575,55 +1681,65 @@ def _crud_invoke(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    suffix = (
-        f" (reason: {reason})" if reason else ""
-    )
-    click.echo(
-        f"{verb}: {result.qualified_id} "
-        f"{result.prior_status.value} → {result.new_status.value}{suffix}"
-    )
+    suffix = f" (reason: {reason})" if reason else ""
+    click.echo(f"{verb}: {result.qualified_id} {result.prior_status.value} → {result.new_status.value}{suffix}")
 
 
 @annotate_group.command("ack")
 @click.argument("id_arg", metavar="ID")
 @click.option(
-    "--root", "root_path", default=None,
+    "--root",
+    "root_path",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option("--actor", "actor_opt", default=None)
 @click.option("--force-dirty", is_flag=True, default=False)
 def ack_cmd(
-    id_arg: str, root_path: Path | None,
-    actor_opt: str | None, force_dirty: bool,
+    id_arg: str,
+    root_path: Path | None,
+    actor_opt: str | None,
+    force_dirty: bool,
 ) -> None:
     """Acknowledge an annotation (status: open → ack)."""
     _crud_invoke(
-        "ack", Status.ACK,
-        id_arg=id_arg, root_path=root_path,
-        actor_opt=actor_opt, force_dirty=force_dirty,
+        "ack",
+        Status.ACK,
+        id_arg=id_arg,
+        root_path=root_path,
+        actor_opt=actor_opt,
+        force_dirty=force_dirty,
     )
 
 
 @annotate_group.command("dismiss")
 @click.argument("id_arg", metavar="ID")
 @click.option(
-    "--root", "root_path", default=None,
+    "--root",
+    "root_path",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option("--actor", "actor_opt", default=None)
 @click.option("--force-dirty", is_flag=True, default=False)
 @click.option("--reason", "reason", required=True)
 def dismiss_cmd(
-    id_arg: str, root_path: Path | None,
-    actor_opt: str | None, force_dirty: bool, reason: str,
+    id_arg: str,
+    root_path: Path | None,
+    actor_opt: str | None,
+    force_dirty: bool,
+    reason: str,
 ) -> None:
     """Dismiss an annotation (status: open → dismissed)."""
     if not reason.strip():
         raise click.ClickException("--reason cannot be empty")
     _crud_invoke(
-        "dismiss", Status.DISMISSED,
-        id_arg=id_arg, root_path=root_path,
-        actor_opt=actor_opt, force_dirty=force_dirty,
+        "dismiss",
+        Status.DISMISSED,
+        id_arg=id_arg,
+        root_path=root_path,
+        actor_opt=actor_opt,
+        force_dirty=force_dirty,
         reason=reason,
     )
 
@@ -1631,30 +1747,42 @@ def dismiss_cmd(
 @annotate_group.command("fix")
 @click.argument("id_arg", metavar="ID")
 @click.option(
-    "--root", "root_path", default=None,
+    "--root",
+    "root_path",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option("--actor", "actor_opt", default=None)
 @click.option("--force-dirty", is_flag=True, default=False)
 def fix_cmd(
-    id_arg: str, root_path: Path | None,
-    actor_opt: str | None, force_dirty: bool,
+    id_arg: str,
+    root_path: Path | None,
+    actor_opt: str | None,
+    force_dirty: bool,
 ) -> None:
     """Mark an annotation as fixed (status: open → fixed)."""
     _crud_invoke(
-        "fix", Status.FIXED,
-        id_arg=id_arg, root_path=root_path,
-        actor_opt=actor_opt, force_dirty=force_dirty,
+        "fix",
+        Status.FIXED,
+        id_arg=id_arg,
+        root_path=root_path,
+        actor_opt=actor_opt,
+        force_dirty=force_dirty,
     )
 
 
 @annotate_group.command("stats")
 @click.option(
-    "--root", "root_path", default=None,
+    "--root",
+    "root_path",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.option(
-    "--format", "fmt", type=click.Choice(("table", "json")), default="table",
+    "--format",
+    "fmt",
+    type=click.Choice(("table", "json")),
+    default="table",
 )
 def stats_cmd(root_path: Path | None, fmt: str) -> None:
     """Project-wide annotation counts (status / source / type)."""
@@ -1665,20 +1793,22 @@ def stats_cmd(root_path: Path | None, fmt: str) -> None:
         raise click.ClickException(str(exc)) from exc
     report = query.compute_stats(sidecars)
     if fmt == "json":
-        click.echo(json.dumps({
-            "summary": {
-                "total_annotations": report.total_annotations,
-                "total_sidecars": report.total_sidecars,
-            },
-            "by_status": {k.value: v for k, v in report.by_status.items()},
-            "by_source": dict(report.by_source),
-            "by_type": dict(report.by_type),
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "summary": {
+                        "total_annotations": report.total_annotations,
+                        "total_sidecars": report.total_sidecars,
+                    },
+                    "by_status": {k.value: v for k, v in report.by_status.items()},
+                    "by_source": dict(report.by_source),
+                    "by_type": dict(report.by_type),
+                },
+                indent=2,
+            )
+        )
         return
-    click.echo(
-        f"annotate stats: {report.total_annotations} annotation(s) across "
-        f"{report.total_sidecars} sidecar(s)\n"
-    )
+    click.echo(f"annotate stats: {report.total_annotations} annotation(s) across {report.total_sidecars} sidecar(s)\n")
     if report.by_status:
         click.echo("By status:")
         for status, count in report.by_status.items():
@@ -1740,9 +1870,7 @@ def pubtator_cmd(
 
     resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
     if not resolved_email:
-        raise click.ClickException(
-            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
-        )
+        raise click.ClickException("Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL.")
     cfg = (
         FetchConfig(email=resolved_email)
         if cache_dir is None
@@ -1775,21 +1903,28 @@ def pubtator_cmd(
 
 @annotate_group.command("extract")
 @click.option(
-    "--source-md", "source_md", required=True,
+    "--source-md",
+    "source_md",
+    required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Path to the paper's <citekey>.source.md.",
 )
 @click.option("--model", required=True, help="Exact extracting model id (source identity).")
 @click.option(
-    "--input", "input_path", default=None,
+    "--input",
+    "input_path",
+    default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="candidates.json produced by the paper-annotate agent.",
 )
-@click.option("--check", "check_only", is_flag=True, default=False,
-              help="Read-only: print JSON {status: changed|unchanged} for the "
-                   "source vs last extraction (ignores --format).")
-@click.option("--actor", default="paper-annotate",
-              help="Identity recorded as the annotation creator.")
+@click.option(
+    "--check",
+    "check_only",
+    is_flag=True,
+    default=False,
+    help="Read-only: print JSON {status: changed|unchanged} for the source vs last extraction (ignores --format).",
+)
+@click.option("--actor", default="paper-annotate", help="Identity recorded as the annotation creator.")
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
 def extract_cmd(
     source_md: Path,
@@ -1841,20 +1976,28 @@ def extract_cmd(
         raise click.ClickException(str(exc)) from exc
     try:
         report = adapter.extract(
-            source_md=source_md, model=model, candidates=candidates,
-            now=datetime.now(timezone.utc), actor=actor,
+            source_md=source_md,
+            model=model,
+            candidates=candidates,
+            now=datetime.now(timezone.utc),
+            actor=actor,
         )
     except SourceTextError as exc:
         raise click.ClickException(str(exc)) from exc
 
     if fmt == "json":
-        click.echo(json.dumps({
-            "written": report.written,
-            "skipped": report.skipped,
-            "grounding_dropped": report.grounding_dropped,
-            "source_text_hash_recorded": report.source_text_hash_recorded,
-            "note": report.note,
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "written": report.written,
+                    "skipped": report.skipped,
+                    "grounding_dropped": report.grounding_dropped,
+                    "source_text_hash_recorded": report.source_text_hash_recorded,
+                    "note": report.note,
+                },
+                indent=2,
+            )
+        )
     else:
         skips = ", ".join(f"{k}:{v}" for k, v in sorted(report.skipped.items())) or "none"
         click.echo(
@@ -1873,22 +2016,38 @@ def extract_cmd(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
-    "--root", "root", default=None,
+    "--root",
+    "root",
+    default=None,
     type=click.Path(file_okay=False, path_type=Path),
     help="Project root (default: cwd). Used to scan the proposition corpus + write entities.",
 )
-@click.option("--paper-ref", "paper_ref", default=None,
-              help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
-                   "Defaults to the source adapter's ref (paper:<citekey> for a "
-                   "<citekey>.source.md); a source no adapter handles fails loud.")
-@click.option("--apply", "do_apply", is_flag=True, default=False,
-              help="Execute candidates (mint/link + backlink). Default is read-only.")
-@click.option("--input", "input_path", default=None,
-              type=click.Path(exists=True, dir_okay=False, path_type=Path),
-              help="Edited candidates.json with curator overrides (use with --apply).")
+@click.option(
+    "--paper-ref",
+    "paper_ref",
+    default=None,
+    help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
+    "Defaults to the source adapter's ref (paper:<citekey> for a "
+    "<citekey>.source.md); a source no adapter handles fails loud.",
+)
+@click.option(
+    "--apply",
+    "do_apply",
+    is_flag=True,
+    default=False,
+    help="Execute candidates (mint/link + backlink). Default is read-only.",
+)
+@click.option(
+    "--input",
+    "input_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Edited candidates.json with curator overrides (use with --apply).",
+)
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
-def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
-                do_apply: bool, input_path: Path | None, fmt: str) -> None:
+def promote_cmd(
+    source_md: Path, root: Path | None, paper_ref: str | None, do_apply: bool, input_path: Path | None, fmt: str
+) -> None:
     """Promote statement annotations (proposition/question/hypothesis) into entities (mint-or-link)."""
     from science_tool.annotation.io import sidecar_for_markdown
     from science_tool.annotation.promote import (
@@ -1937,16 +2096,23 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
         edited_rows = raw.get("candidates") if isinstance(raw, dict) else raw
         if not isinstance(edited_rows, list):
             raise click.ClickException("--input must be the read-only output object or a candidates list")
-        existing_refs = {
-            f"{kind}:{slug}" for kind, corp in corpora.items() for slug in corp.existing_slugs
-        }
+        existing_refs = {f"{kind}:{slug}" for kind, corp in corpora.items() for slug in corp.existing_slugs}
         try:
             candidates = apply_overrides(candidates, edited_rows, existing_refs=existing_refs)
         except PromotionOverrideError as exc:
             raise click.ClickException(str(exc)) from exc
 
-    rows = [{"annotation": c.ref, "kind": c.kind, "decision": c.decision, "slug": c.slug,
-             "claim": c.claim[:80], "reason": c.reason} for c in candidates]
+    rows = [
+        {
+            "annotation": c.ref,
+            "kind": c.kind,
+            "decision": c.decision,
+            "slug": c.slug,
+            "claim": c.claim[:80],
+            "reason": c.reason,
+        }
+        for c in candidates
+    ]
 
     if not do_apply:
         if fmt == "json":
@@ -1958,31 +2124,53 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
         return
 
     try:
-        report = apply_candidates(candidates, sidecar_path=sidecar_path,
-                                  project_root=project_root, paper_ref=paper_ref)
+        report = apply_candidates(candidates, sidecar_path=sidecar_path, project_root=project_root, paper_ref=paper_ref)
     except PromotionApplyError as exc:
         raise click.ClickException(str(exc)) from exc
     if fmt == "json":
-        click.echo(json.dumps({"minted": report.minted, "linked": report.linked,
-                               "skipped": dict(report.skipped) | dict(skipped),
-                               "written": report.written_paths}, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "minted": report.minted,
+                    "linked": report.linked,
+                    "skipped": dict(report.skipped) | dict(skipped),
+                    "written": report.written_paths,
+                },
+                indent=2,
+            )
+        )
     else:
-        click.echo(f"annotate promote: {report.minted} minted, {report.linked} linked, "
-                   f"skipped {dict(report.skipped) | dict(skipped)}")
+        click.echo(
+            f"annotate promote: {report.minted} minted, {report.linked} linked, "
+            f"skipped {dict(report.skipped) | dict(skipped)}"
+        )
 
 
 @annotate_group.command("synthesize")
 @click.argument("source_md", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path),
-              help="Project root (default: cwd). Used to read/write proposition entities.")
-@click.option("--apply", "do_apply", is_flag=True, default=False,
-              help="Apply the curator-reviewed --input candidates. Default is read-only scaffold.")
-@click.option("--input", "input_path", default=None,
-              type=click.Path(exists=True, dir_okay=False, path_type=Path),
-              help="Edited candidates.json (required with --apply).")
+@click.option(
+    "--root",
+    "root",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: cwd). Used to read/write proposition entities.",
+)
+@click.option(
+    "--apply",
+    "do_apply",
+    is_flag=True,
+    default=False,
+    help="Apply the curator-reviewed --input candidates. Default is read-only scaffold.",
+)
+@click.option(
+    "--input",
+    "input_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Edited candidates.json (required with --apply).",
+)
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="json")
-def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
-                   input_path: Path | None, fmt: str) -> None:
+def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_path: Path | None, fmt: str) -> None:
     """Synthesize predicate/polarity/claim_layer on promoted propositions (curator-reviewed)."""
     from science_tool.annotation.io import sidecar_for_markdown
     from science_tool.annotation.promote import entity_dest
@@ -2026,8 +2214,7 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
             click.echo(json.dumps(scaffold, indent=2))
         else:
             for e in scaffold["propositions"]:
-                click.echo(f"{e['proposition']:50} statements={len(e['statements'])} "
-                           f"hints={len(e['relation_hints'])}")
+                click.echo(f"{e['proposition']:50} statements={len(e['statements'])} hints={len(e['relation_hints'])}")
             click.echo(f"unresolved relation hints: {unresolved}")
         return
 
@@ -2039,16 +2226,19 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
     scope_refs = {p: {ref_for(a.id) for a in anns} for p, anns in scope.items()}
     try:
         source, candidates = parse_candidates_doc(doc, scope_refs)
-        report = apply_synthesis(candidates, current=current, project_root=project_root,
-                                 source=source, in_scope=set(scope))
+        report = apply_synthesis(
+            candidates, current=current, project_root=project_root, source=source, in_scope=set(scope)
+        )
     except SynthesisReadError as exc:
         raise click.ClickException(str(exc)) from exc
     except SynthesisApplyError as exc:
         raise click.ClickException(str(exc)) from exc
 
     if fmt == "json":
-        click.echo(json.dumps({"updated": report.updated, "skipped": dict(report.skipped),
-                               "written": report.written_paths}, indent=2))
+        click.echo(
+            json.dumps(
+                {"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths}, indent=2
+            )
+        )
     else:
-        click.echo(f"annotate synthesize: {report.updated} updated, "
-                   f"skipped {dict(report.skipped) or 'none'}")
+        click.echo(f"annotate synthesize: {report.updated} updated, skipped {dict(report.skipped) or 'none'}")
