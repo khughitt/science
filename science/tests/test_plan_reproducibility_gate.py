@@ -1,7 +1,13 @@
 from pathlib import Path
 
-from science_tool.plan_gate import check_reproducibility
-from science_tool.project_config import ReproducibilityPolicyConfig, ReproducibilityWaiver
+from science_tool.plan_gate import check_inputs, check_plan_data_gate, check_reproducibility
+from science_tool.project_config import (
+    ReproducibilityPolicyConfig,
+    ReproducibilityWaiver,
+    effective_reproducibility_policy,
+    load_plan_reproducibility_policy,
+    load_project_config,
+)
 
 
 def _write_dataset(root: Path, slug: str, reproducibility: dict | None, *, origin="external"):
@@ -119,3 +125,46 @@ def test_convergent_derived_graph_does_not_treat_shared_upstream_as_cycle(tmp_pa
     assert ok is False
     assert any("trust-based-output" in h for h in halts)
     assert not any("cycle" in h for h in halts)
+
+
+def test_verified_but_nonreproducible_passes_access_fails_combined(tmp_path):
+    _write_dataset(tmp_path, "n3c", N3C)  # access.verified=True, class trust-based-output
+    access_ok, _ = check_inputs(tmp_path, ["dataset:n3c"])
+    assert access_ok is True  # access gate ALONE passes a verified dataset
+    ok, halts, _ = check_plan_data_gate(tmp_path, ["dataset:n3c"], reproducibility_policy=BAR)
+    assert ok is False and any("trust-based-output" in h for h in halts)  # combined gate FAILS
+
+
+def test_combined_gate_passes_when_reproducible(tmp_path):
+    _write_dataset(tmp_path, "geo", OPEN)
+    ok, halts, _ = check_plan_data_gate(tmp_path, ["dataset:geo"], reproducibility_policy=BAR)
+    assert ok is True and halts == []
+
+
+def test_end_to_end_plan_waiver_from_frontmatter(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nreproducibility_policy:\n  bar: third-party-reproducible\n",
+        encoding="utf-8",
+    )
+    _write_dataset(tmp_path, "n3c", N3C)
+    plans = tmp_path / "entities" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "p.md").write_text(
+        '---\nid: "plan:p"\ntype: "plan"\ntitle: "P"\n'
+        "reproducibility_policy:\n"
+        "  waivers:\n"
+        '    - dataset: "dataset:n3c"\n'
+        '      accepted_class: "trust-based-output"\n'
+        '      decision_date: "2026-07-01"\n'
+        '      rationale: "prototype only"\n'
+        '      mitigation: "no interpretable estimate"\n---\n',
+        encoding="utf-8",
+    )
+    project_pol = load_project_config(tmp_path).reproducibility_policy
+    plan_pol = load_plan_reproducibility_policy(plans / "p.md")
+    eff = effective_reproducibility_policy(project_pol, plan_pol)
+    ok, halts, warns = check_plan_data_gate(
+        tmp_path, ["dataset:n3c"], reproducibility_policy=eff, waivers=plan_pol.waivers
+    )
+    assert ok is True and halts == []           # waiver rescues the below-bar input
+    assert any("waiver" in w for w in warns)

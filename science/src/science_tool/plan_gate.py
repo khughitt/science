@@ -153,3 +153,23 @@ def check_reproducibility(
         (halts if policy.below_bar == "halt" else warns).append(msg)
 
     return (not halts, halts, warns)
+
+
+def check_plan_data_gate(
+    project_root: Path,
+    dataset_ids: list[str],
+    *,
+    planned_retrieval: set[str] | None = None,
+    reproducibility_policy: ReproducibilityPolicyConfig | None = None,
+    waivers: list[ReproducibilityWaiver] | None = None,
+) -> tuple[bool, list[str], list[str]]:
+    """Single Step-2b gate: existing access checks THEN reproducibility enforcement.
+
+    `halts` is the union of access + reproducibility halts. This is the entry point
+    Step 2b uses, so a verified-but-non-reproducible input cannot pass an access-only path.
+    """
+    access_ok, access_halts = check_inputs(project_root, dataset_ids, planned_retrieval=planned_retrieval)
+    repro_ok, repro_halts, warns = check_reproducibility(
+        project_root, dataset_ids, policy=reproducibility_policy, waivers=waivers
+    )
+    return (access_ok and repro_ok, access_halts + repro_halts, warns)
