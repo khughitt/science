@@ -22,6 +22,7 @@ from science_tool.annotation.proposition_reconciliation_decisions import (
     decision_record_to_json,
     evaluate_decision_records,
     load_decision_records,
+    project_decision_evaluation_to_report,
     record_from_action_payload,
     record_decision_plan_to_json,
 )
@@ -389,6 +390,53 @@ def test_evaluate_duplicate_records_reports_decision_id_once():
     assert [item.record.decision_id for item in evaluation.active] == [record.decision_id]
 
 
+def test_project_decision_evaluation_keeps_scoped_duplicate_decision_ids():
+    candidate = _same_candidate()
+    action = _same_claim_advisory_action()
+    action["candidate_id"] = candidate.candidate_id
+    action["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        list(candidate.propositions),
+    )
+    action["members"] = list(candidate.propositions)
+    record = record_from_action_payload(action, recorded_at="2026-07-02")
+    out_of_scope_candidate = _same_candidate(("proposition:c", "proposition:d"))
+    out_of_scope_action = _same_claim_advisory_action()
+    out_of_scope_action["candidate_id"] = out_of_scope_candidate.candidate_id
+    out_of_scope_action["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        list(out_of_scope_candidate.propositions),
+    )
+    out_of_scope_action["members"] = list(out_of_scope_candidate.propositions)
+    out_of_scope_record = record_from_action_payload(
+        out_of_scope_action,
+        recorded_at="2026-07-02",
+    )
+    full_report = ReconciliationReport(
+        same_claim_candidates=(candidate, out_of_scope_candidate)
+    )
+    scoped_report = _report_with_same_candidate(candidate)
+
+    evaluation = evaluate_decision_records(
+        [record, record, out_of_scope_record, out_of_scope_record],
+        full_report,
+    )
+    scoped_evaluation = project_decision_evaluation_to_report(
+        evaluation,
+        scoped_report,
+    )
+
+    assert scoped_evaluation.duplicates == (record.decision_id,)
+    assert [item.record.decision_id for item in scoped_evaluation.active] == [
+        record.decision_id
+    ]
+    assert scoped_evaluation.suppressed_same_claim_candidate_ids == frozenset(
+        {candidate.candidate_id}
+    )
+
+
 def test_evaluate_splittable_subset_does_not_suppress_whole_component():
     candidate = _same_candidate(("proposition:a", "proposition:b", "proposition:c"))
     action = _same_claim_advisory_action()
@@ -402,6 +450,80 @@ def test_evaluate_splittable_subset_does_not_suppress_whole_component():
     assert [item.record.decision_id for item in evaluation.active] == [record.decision_id]
     assert evaluation.suppressed_same_claim_candidate_ids == frozenset()
     assert not evaluation.stale
+
+
+def test_project_scoped_splittable_subset_decision_to_scoped_candidate():
+    full_candidate = _same_candidate(("proposition:a", "proposition:b", "proposition:c"))
+    scoped_candidate = _same_candidate(("proposition:a", "proposition:b"))
+    action = _same_claim_advisory_action()
+    action["candidate_id"] = scoped_candidate.candidate_id
+    action["members"] = list(scoped_candidate.propositions)
+    action["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        action["members"],
+    )
+    record = record_from_action_payload(action, recorded_at="2026-07-02")
+
+    full_evaluation = evaluate_decision_records(
+        [record],
+        _report_with_same_candidate(full_candidate),
+    )
+    scoped_evaluation = project_decision_evaluation_to_report(
+        full_evaluation,
+        _report_with_same_candidate(scoped_candidate),
+    )
+
+    assert [item.record.decision_id for item in full_evaluation.active] == [
+        record.decision_id
+    ]
+    assert full_evaluation.active[0].current_candidate_id == full_candidate.candidate_id
+    assert not full_evaluation.active[0].suppresses_candidate
+    assert [item.record.decision_id for item in scoped_evaluation.active] == [
+        record.decision_id
+    ]
+    assert scoped_evaluation.active[0].current_candidate_id == scoped_candidate.candidate_id
+    assert scoped_evaluation.active[0].suppresses_candidate
+    assert scoped_evaluation.suppressed_same_claim_candidate_ids == frozenset(
+        {scoped_candidate.candidate_id}
+    )
+
+
+def test_project_scoped_splittable_subset_decision_from_full_candidate_id():
+    full_candidate = _same_candidate(("proposition:a", "proposition:b", "proposition:c"))
+    scoped_candidate = _same_candidate(("proposition:a", "proposition:b"))
+    action = _same_claim_advisory_action()
+    action["candidate_id"] = full_candidate.candidate_id
+    action["members"] = list(scoped_candidate.propositions)
+    action["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        action["members"],
+    )
+    record = record_from_action_payload(action, recorded_at="2026-07-02")
+
+    full_evaluation = evaluate_decision_records(
+        [record],
+        _report_with_same_candidate(full_candidate),
+    )
+    scoped_evaluation = project_decision_evaluation_to_report(
+        full_evaluation,
+        _report_with_same_candidate(scoped_candidate),
+    )
+
+    assert [item.record.decision_id for item in full_evaluation.active] == [
+        record.decision_id
+    ]
+    assert full_evaluation.active[0].current_candidate_id == full_candidate.candidate_id
+    assert not full_evaluation.active[0].suppresses_candidate
+    assert [item.record.decision_id for item in scoped_evaluation.active] == [
+        record.decision_id
+    ]
+    assert scoped_evaluation.active[0].current_candidate_id == scoped_candidate.candidate_id
+    assert scoped_evaluation.active[0].suppresses_candidate
+    assert scoped_evaluation.suppressed_same_claim_candidate_ids == frozenset(
+        {scoped_candidate.candidate_id}
+    )
 
 
 def test_evaluate_stale_record_does_not_suppress_candidate():

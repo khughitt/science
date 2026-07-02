@@ -570,6 +570,7 @@ def reconcile_propositions_cmd(
         apply_reviewed_decisions_to_report_payload,
         evaluate_decision_records,
         load_decision_records,
+        project_decision_evaluation_to_report,
     )
 
     selected = sum(1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item)
@@ -595,7 +596,12 @@ def reconcile_propositions_cmd(
         decision_log = project_root / decision_log
     try:
         records = load_decision_records(decision_log)
-        evaluation = evaluate_decision_records(records, report)
+        decision_report = report
+        if not all_scope:
+            decision_report = build_reconciliation_report(project_root)
+        evaluation = evaluate_decision_records(records, decision_report)
+        if not all_scope:
+            evaluation = project_decision_evaluation_to_report(evaluation, report)
     except DecisionRecordError as exc:
         raise click.ClickException(str(exc)) from exc
     payload = apply_reviewed_decisions_to_report_payload(
@@ -615,7 +621,9 @@ def reconcile_propositions_cmd(
         f"factorization={summary['factorization_disagreements']} "
         f"faults={summary['faults']} "
         f"reviewed={summary['reviewed_decisions']} "
-        f"stale_reviewed={summary['stale_reviewed_decisions']}"
+        f"stale_reviewed={summary['stale_reviewed_decisions']} "
+        f"duplicate_reviewed={summary['duplicate_reviewed_decisions']} "
+        f"conflicting_reviewed={summary['conflicting_reviewed_decisions']}"
     )
     for item in payload["same_claim_candidates"]:
         click.echo(
@@ -832,6 +840,18 @@ def record_proposition_reconciliation_decisions_cmd(
         f"blockers={summary['blockers']} "
         f"appended={summary['appended']}"
     )
+    for blocker in payload["blockers"]:
+        parts = [f"reason={blocker['reason']}"]
+        action_id = blocker.get("action_id")
+        if action_id is not None:
+            parts.append(f"action_id={action_id}")
+        decision_id = blocker.get("decision_id")
+        if decision_id is not None:
+            parts.append(f"decision_id={decision_id}")
+        detail = blocker.get("detail")
+        if detail is not None:
+            parts.append(f"detail={detail}")
+        click.echo(f"blocker {' '.join(parts)}")
 
 
 @annotate_group.command("scaffold-proposition-resynthesis")

@@ -11,6 +11,8 @@ from science_tool.annotation.proposition_reconciliation import (
     LANE_FACTORIZATION,
     LANE_SAME_CLAIM,
     ReconciliationReport,
+    SameClaimCandidate,
+    candidate_id,
     candidate_indexes,
     judgment_id,
     members_have_current_edge,
@@ -402,6 +404,139 @@ def apply_reviewed_decisions_to_report_payload(
     output["factorization_disagreements"] = filtered_factorization_disagreements
     output["reviewed_decisions"] = reviewed_decisions_to_json(evaluation)
     return output
+
+
+def project_decision_evaluation_to_report(
+    evaluation: DecisionEvaluation,
+    report: ReconciliationReport,
+) -> DecisionEvaluation:
+    scoped_same_by_id, scoped_factor_by_id = candidate_indexes(report)
+    scoped_factor_candidate_ids = frozenset(scoped_factor_by_id)
+    scoped_snapshot_refs = frozenset(report.proposition_snapshots)
+    scoped_same_claim_refs = scoped_snapshot_refs | frozenset(
+        ref
+        for candidate in report.same_claim_candidates
+        for ref in candidate.propositions
+    )
+    scoped_factorization_refs = scoped_snapshot_refs | frozenset(
+        candidate.proposition for candidate in report.factorization_disagreements
+    )
+
+    active: list[EvaluatedDecision] = []
+    for item in evaluation.active:
+        if item.record.lane == LANE_SAME_CLAIM:
+            members = set(item.record.members)
+            candidate = _resolve_scoped_same_claim_candidate(
+                item.record.candidate_id,
+                members,
+                scoped_same_by_id,
+                report.same_claim_candidates,
+            )
+            if candidate is None or not members_have_current_edge(candidate, members):
+                continue
+            active.append(
+                EvaluatedDecision(
+                    item.record,
+                    candidate.candidate_id,
+                    set(candidate.propositions) == members,
+                )
+            )
+            continue
+
+        if item.current_candidate_id in scoped_factor_candidate_ids:
+            active.append(item)
+
+    conflicts = tuple(
+        conflict
+        for conflict in evaluation.conflicts
+        if _conflict_intersects_report(
+            conflict,
+            scoped_same_claim_refs=scoped_same_claim_refs,
+            scoped_factorization_refs=scoped_factorization_refs,
+        )
+    )
+    stale = tuple(
+        item
+        for item in evaluation.stale
+        if _stale_decision_intersects_report(item, scoped_snapshot_refs)
+    )
+    scoped_decision_ids = frozenset(
+        item.record.decision_id for item in active
+    ) | frozenset(item.record.decision_id for item in stale) | frozenset(
+        decision_id
+        for conflict in conflicts
+        for decision_id in conflict.decision_ids
+    )
+    return DecisionEvaluation(
+        active=tuple(active),
+        stale=stale,
+        duplicates=tuple(
+            decision_id
+            for decision_id in evaluation.duplicates
+            if decision_id in scoped_decision_ids
+        ),
+        conflicts=conflicts,
+        suppressed_same_claim_candidate_ids=frozenset(
+            item.current_candidate_id
+            for item in active
+            if item.record.lane == LANE_SAME_CLAIM and item.suppresses_candidate
+        ),
+        suppressed_factorization_candidate_ids=frozenset(
+            item.current_candidate_id
+            for item in active
+            if item.record.lane == LANE_FACTORIZATION and item.suppresses_candidate
+        ),
+    )
+
+
+def _resolve_scoped_same_claim_candidate(
+    candidate_ref: str,
+    members: set[str],
+    same_by_id: Mapping[str, SameClaimCandidate],
+    all_same: tuple[SameClaimCandidate, ...],
+) -> SameClaimCandidate | None:
+    candidate = resolve_same_claim_candidate(candidate_ref, members, same_by_id, all_same)
+    if candidate is not None:
+        return candidate
+
+    subset_candidate = same_by_id.get(candidate_id(LANE_SAME_CLAIM, sorted(members)))
+    if subset_candidate is not None:
+        return subset_candidate
+
+    matches = [
+        candidate
+        for candidate in all_same
+        if set(candidate.propositions) == members
+        and members_have_current_edge(candidate, members)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _conflict_intersects_report(
+    conflict: ConflictingDecision,
+    *,
+    scoped_same_claim_refs: frozenset[str],
+    scoped_factorization_refs: frozenset[str],
+) -> bool:
+    lane, refs = conflict.scope
+    if lane == LANE_SAME_CLAIM:
+        return bool(set(refs) & scoped_same_claim_refs)
+    if lane == LANE_FACTORIZATION:
+        return bool(set(refs) & scoped_factorization_refs)
+    return False
+
+
+def _stale_decision_intersects_report(
+    stale: StaleDecision,
+    scoped_snapshot_refs: frozenset[str],
+) -> bool:
+    if stale.record.lane == LANE_SAME_CLAIM:
+        return bool(set(stale.record.members) & scoped_snapshot_refs)
+    if stale.record.lane == LANE_FACTORIZATION:
+        return stale.record.proposition in scoped_snapshot_refs
+    return False
 
 
 def _filter_report_candidates(
