@@ -252,15 +252,19 @@ Run only when (a) input mode is Inquiry, AND (b) the inquiry's downstream toolin
 
 For each identified step, edit the source file at `entities/patches/<slug>.md`.
 Add transformation records under `inquiry.transformations` and connect them with
-`flow_edges`. Then run `science graph build` and re-run `science inquiry
-validate`.
+`flow_edges`. Transformation `validated_by` refs should point to existing
+validation artifacts, such as a proposition, dataset, workflow-run, method, or
+a source-owned validation artifact. Leave `validated_by` blank or omit it when
+no validation artifact exists yet. Do not use `concept:<check>` as a placeholder
+for a validation record that does not exist. Then run `science graph build` and
+re-run `science inquiry validate`.
 
 ```yaml
 inquiry:
   transformations:
     - ref: "transformation:<step>"
       tool: "<tool>"
-      validated_by: "concept:<check>"
+      validated_by: "<existing-validation-ref>"
       params:
         - value: "<value>"
           source: "<literature|empirical|design_decision>"
