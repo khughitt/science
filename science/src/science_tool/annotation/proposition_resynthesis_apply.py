@@ -24,6 +24,7 @@ from science_tool.annotation.proposition_resynthesis import (
     ResynthesisDraft,
     ResynthesisDraftError,
     ResynthesisValidationReport,
+    _live_action_for_draft,
     _read_review,
     _replacement_frontmatter_source_refs,
     _replacement_local_part,
@@ -118,6 +119,12 @@ def _validate(
     try:
         return validate_resynthesis_draft(project_root, draft, as_of=as_of)
     except ResynthesisDraftError as exc:
+        try:
+            _live_action_for_draft(project_root, draft)
+        except ResynthesisDraftError:
+            pass
+        else:
+            raise ResynthesisApplyError(str(exc)) from exc
         resume_report = _resume_validation_report(project_root, draft, as_of=as_of)
         if resume_report is not None:
             return resume_report

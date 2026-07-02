@@ -267,6 +267,42 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     assert str(positive_frontmatter["updated"]) == "2026-07-01"
 
 
+def test_apply_resynthesis_draft_rejects_incomplete_replace_when_live_action_inputs_grew(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    c_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    input_annotations = tuple(ctx["action"].inputs["annotations"]) + (
+        "annotation:entities/papers/C2022.source#c1",
+    )
+    action = replace(
+        ctx["action"],
+        inputs={**ctx["action"].inputs, "annotations": input_annotations},
+    )
+    plan = replace(ctx["plan"], actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="replace must assign every input annotation"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
+    assert not (tmp_path / "entities" / "propositions" / "broad-negative.md").exists()
+    assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
 def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_target(
     tmp_path: Path,
 ):
