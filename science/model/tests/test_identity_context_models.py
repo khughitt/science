@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+from science_model.packages.schema import AssemblyIdentity, IdentityContext, IdentityTransform
 
 
 def assert_schema_error(error: EntityValidationError, path: list[str], validator: str) -> None:
@@ -122,3 +124,84 @@ def test_assembly_proxy_rejects_unknown_type(base_idc_entity: dict) -> None:
         ["identity_context", "assembly", "proxy", "type"],
         "enum",
     )
+
+
+def test_identity_context_models_round_trip_proxy_and_transform() -> None:
+    context = IdentityContext.model_validate(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "hg19 cytoband proxy",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "declared_unresolved",
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:ucsc-cytobands",
+                    "sources": [
+                        {
+                            "dataset": "dataset:source-assembly",
+                            "assembly": {"label": "GRCh37"},
+                        }
+                    ],
+                },
+            },
+            "molecular_ids": {
+                "gene": {
+                    "namespace": "hgnc_id",
+                    "registry": "dataset:hgnc",
+                    "resolution_status": "resolved",
+                    "transform": {
+                        "type": "symbol_remap",
+                        "from": "hgnc_symbol",
+                        "method": "approved_symbol",
+                        "dataset": "dataset:hgnc-symbol-remap",
+                    },
+                }
+            },
+        }
+    )
+
+    assert context.assembly is not None
+    assert context.assembly.proxy is not None
+    assert context.assembly.proxy.sources[0].dataset == "dataset:source-assembly"
+    assert context.molecular_ids["gene"].transform == IdentityTransform(
+        type="symbol_remap",
+        from_="hgnc_symbol",
+        method="approved_symbol",
+        dataset="dataset:hgnc-symbol-remap",
+    )
+    assert context.model_dump(by_alias=True)["molecular_ids"]["gene"]["transform"]["from"] == "hgnc_symbol"
+
+
+@pytest.mark.parametrize("seqcol_digest", [None, "UNKNOWN"])
+def test_assembly_identity_resolved_requires_known_seqcol_digest(seqcol_digest: str | None) -> None:
+    payload = {
+        "registry": "dataset:assembly-registry",
+        "resolution_status": "resolved",
+    }
+    if seqcol_digest is not None:
+        payload["seqcol_digest"] = seqcol_digest
+
+    with pytest.raises(ValidationError, match="resolved assembly requires seqcol_digest"):
+        AssemblyIdentity.model_validate(payload)
+
+
+def test_assembly_identity_proxy_requires_declared_unresolved() -> None:
+    with pytest.raises(ValidationError, match="assembly proxy requires resolution_status"):
+        AssemblyIdentity.model_validate(
+            {
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+                "seqcol_digest": "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
+                "proxy": {
+                    "type": "interval_overlap_proxy",
+                    "via": "dataset:grch38-intervals",
+                    "sources": [
+                        {
+                            "dataset": "dataset:source-assembly",
+                            "assembly": {"label": "GRCh37"},
+                        }
+                    ],
+                },
+            }
+        )

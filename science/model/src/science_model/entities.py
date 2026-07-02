@@ -18,6 +18,7 @@ from science_model.packages.schema import (
     BenchmarkBlock,
     DatasetUsage,
     DerivationBlock,
+    IdentityContext,
     MemberOfDerivationBlock,
     WorkflowRecipeDerivationBlock,
 )
@@ -343,6 +344,7 @@ class Entity(BaseModel):
     derived_kind: str | None = None  # "aggregate" | "transform" | "model_output"
     dataset_usage: list[DatasetUsage] = Field(default_factory=list)
     benchmark: BenchmarkBlock | None = None
+    identity_context: IdentityContext | None = None
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":

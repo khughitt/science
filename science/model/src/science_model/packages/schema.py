@@ -8,6 +8,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+def _validate_dataset_ref(value: str, field_name: str) -> str:
+    if not value.startswith("dataset:"):
+        raise ValueError(f"{field_name} must be a dataset:<slug> entity reference")
+    return value
+
+
 class ResourceSchema(BaseModel):
     """A tabular data resource within the package."""
 
@@ -242,6 +248,115 @@ class MemberOfDerivationBlock(BaseModel):
         if not v.strip():
             raise ValueError("member_key must be a non-empty row key")
         return v
+
+
+class IdentityTransform(BaseModel):
+    """Dataset-backed identity transform used for assemblies or molecular IDs."""
+
+    type: Literal["liftover", "symbol_remap", "namespace_map"]
+    from_: str = Field(alias="from", min_length=1)
+    method: str | None = Field(default=None, min_length=1)
+    dataset: str
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @field_validator("dataset")
+    @classmethod
+    def _dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "dataset")
+
+
+class ProxySourceAssembly(BaseModel):
+    """Minimal assembly descriptor accepted inside an identity proxy source."""
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_single_identifier(self) -> "ProxySourceAssembly":
+        identifiers = [value for value in (self.label, self.seqcol_digest) if value is not None]
+        if len(identifiers) != 1:
+            raise ValueError("proxy source assembly requires exactly one of label or seqcol_digest")
+        return self
+
+
+class ProxySource(BaseModel):
+    """A source dataset and assembly descriptor used by an identity proxy."""
+
+    dataset: str
+    assembly: Literal["inherit"] | ProxySourceAssembly
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("dataset")
+    @classmethod
+    def _dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "sources[].dataset")
+
+
+class IdentityProxy(BaseModel):
+    """Assembly identity proxy derived through another dataset-backed source."""
+
+    type: Literal["cytoband_proxy", "interval_overlap_proxy", "symbol_space_proxy"]
+    via: str
+    sources: list[ProxySource] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("via")
+    @classmethod
+    def _via_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "via")
+
+
+class AssemblyIdentity(BaseModel):
+    """Reference assembly identity and optional proxy/transform provenance."""
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    registry: str
+    resolution_status: Literal["resolved", "declared_unresolved"]
+    proxy: IdentityProxy | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "registry")
+
+    @model_validator(mode="after")
+    def _validate_resolution(self) -> "AssemblyIdentity":
+        if self.resolution_status == "resolved" and (self.seqcol_digest is None or self.seqcol_digest == "UNKNOWN"):
+            raise ValueError("resolved assembly requires seqcol_digest other than UNKNOWN")
+        if self.proxy is not None and self.resolution_status != "declared_unresolved":
+            raise ValueError("assembly proxy requires resolution_status declared_unresolved")
+        return self
+
+
+class MolecularTierIdentity(BaseModel):
+    """Molecular identifier tier metadata and optional transform provenance."""
+
+    namespace: str = Field(min_length=1)
+    canonical: bool | None = None
+    registry: str | None = None
+    resolution_status: Literal["resolved", "declared_unresolved"] | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_dataset_ref(value, "registry")
+
+
+class IdentityContext(BaseModel):
+    """Biological identity context block for dataset-like entities."""
+
+    taxon: int
+    molecular_ids: dict[str, MolecularTierIdentity] = Field(default_factory=dict)
+    assembly: AssemblyIdentity | None = None
+    model_config = ConfigDict(extra="allow")
 
 
 class DatasetUsage(BaseModel):

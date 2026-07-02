@@ -23,6 +23,7 @@ from science_model.packages.schema import (
     AccessReproducibility,
     BenchmarkBlock,
     DerivationBlock,
+    IdentityContext,
     MemberOfDerivationBlock,
     WorkflowRecipeDerivationBlock,
 )
@@ -272,6 +273,15 @@ def _coerce_benchmark(fm: dict) -> BenchmarkBlock | None:
     return BenchmarkBlock.model_validate(raw)
 
 
+def _coerce_identity_context(fm: dict) -> IdentityContext | None:
+    raw = fm.get("identity_context")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("identity_context must be a mapping")
+    return IdentityContext.model_validate(raw)
+
+
 def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     """Build EpistemicReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
     raw = fm.get("review_state")
@@ -405,6 +415,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "derived_kind": fm.get("derived_kind"),
         "dataset_usage": [] if fm.get("dataset_usage") is None else fm.get("dataset_usage"),
         "benchmark": _coerce_benchmark(fm) if kind == EntityType.DATASET.value else None,
+        "identity_context": _coerce_identity_context(fm),
         "claim_layer": fm.get("claim_layer"),
         "identification_strength": fm.get("identification_strength"),
         "proxy_directness": fm.get("proxy_directness"),
