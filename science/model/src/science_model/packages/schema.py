@@ -257,7 +257,7 @@ class IdentityTransform(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     method: str | None = Field(default=None, min_length=1)
     dataset: str
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, serialize_by_alias=True)
 
     @field_validator("dataset")
     @classmethod

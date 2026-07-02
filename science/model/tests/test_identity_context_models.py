@@ -39,6 +39,7 @@ def base_idc_entity() -> dict:
 
 
 def test_assembly_proxy_validates(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["assembly"]["resolution_status"] = "declared_unresolved"
     base_idc_entity["identity_context"]["assembly"]["proxy"] = {
         "type": "interval_overlap_proxy",
         "via": "dataset:grch38-intervals",
@@ -53,7 +54,31 @@ def test_assembly_proxy_validates(base_idc_entity: dict) -> None:
     EntityValidator().validate(base_idc_entity)
 
 
+def test_assembly_resolved_rejects_unknown_seqcol_digest(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["assembly"]["seqcol_digest"] = "UNKNOWN"
+
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(base_idc_entity)
+
+
+def test_assembly_proxy_requires_declared_unresolved_schema(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["assembly"]["proxy"] = {
+        "type": "interval_overlap_proxy",
+        "via": "dataset:grch38-intervals",
+        "sources": [
+            {
+                "dataset": "dataset:source-assembly",
+                "assembly": {"label": "GRCh37"},
+            }
+        ],
+    }
+
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(base_idc_entity)
+
+
 def test_assembly_proxy_requires_sources(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["assembly"]["resolution_status"] = "declared_unresolved"
     base_idc_entity["identity_context"]["assembly"]["proxy"] = {
         "type": "interval_overlap_proxy",
         "via": "dataset:grch38-intervals",
@@ -171,6 +196,29 @@ def test_identity_context_models_round_trip_proxy_and_transform() -> None:
         dataset="dataset:hgnc-symbol-remap",
     )
     assert context.model_dump(by_alias=True)["molecular_ids"]["gene"]["transform"]["from"] == "hgnc_symbol"
+
+
+def test_identity_context_model_dump_uses_transform_alias() -> None:
+    context = IdentityContext.model_validate(
+        {
+            "taxon": 9606,
+            "molecular_ids": {
+                "gene": {
+                    "namespace": "hgnc_id",
+                    "transform": {
+                        "type": "symbol_remap",
+                        "from": "hgnc_symbol",
+                        "dataset": "dataset:hgnc-symbol-remap",
+                    },
+                }
+            },
+        }
+    )
+
+    transform = context.model_dump(mode="json")["molecular_ids"]["gene"]["transform"]
+
+    assert transform["from"] == "hgnc_symbol"
+    assert "from_" not in transform
 
 
 @pytest.mark.parametrize("taxon", [0, -1])

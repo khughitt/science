@@ -52,7 +52,20 @@
             "required": ["resolution_status"]
           },
           "then": {
-            "required": ["seqcol_digest"]
+            "required": ["seqcol_digest"],
+            "properties": {
+              "seqcol_digest": {"not": {"const": "UNKNOWN"}}
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["proxy"]
+          },
+          "then": {
+            "properties": {
+              "resolution_status": {"const": "declared_unresolved"}
+            }
           }
         }
       ]
