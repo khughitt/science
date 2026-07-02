@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from science_tool.annotation import io as anno_io
+from science_tool.annotation import proposition_archive
 from science_tool.annotation.model import (
     Annotation,
     Motivation,
@@ -51,11 +52,7 @@ def _proposition(
     return _entity(
         root,
         f"entities/propositions/{slug}.md",
-        f"id: proposition:{slug}\n"
-        "type: proposition\n"
-        f"title: {slug}\n"
-        f"status: {status}\n"
-        f"{extra_frontmatter}",
+        f"id: proposition:{slug}\ntype: proposition\ntitle: {slug}\nstatus: {status}\n{extra_frontmatter}",
         "Claim.\n",
     )
 
@@ -136,11 +133,7 @@ def test_dry_run_reports_ready_multi_successor_superseded_proposition(tmp_path: 
         tmp_path,
         "broad",
         status="superseded",
-        extra_frontmatter=(
-            "resynthesized_into:\n"
-            "  - proposition:positive\n"
-            "  - proposition:negative\n"
-        ),
+        extra_frontmatter=("resynthesized_into:\n  - proposition:positive\n  - proposition:negative\n"),
     )
 
     report = build_superseded_proposition_archive_report(tmp_path)
@@ -165,9 +158,7 @@ def test_dry_run_blocks_missing_lineage(tmp_path: Path) -> None:
 def test_dry_run_blocks_both_lineage_fields_declared(tmp_path: Path) -> None:
     candidate = _blocked_candidate(
         tmp_path,
-        "superseded_by: proposition:canonical\n"
-        "resynthesized_into:\n"
-        "  - proposition:canonical\n",
+        "superseded_by: proposition:canonical\nresynthesized_into:\n  - proposition:canonical\n",
     )
 
     assert "declares both superseded_by and resynthesized_into" in candidate["blockers"]
@@ -205,9 +196,7 @@ def test_dry_run_blocks_self_successor(tmp_path: Path) -> None:
 def test_dry_run_blocks_duplicate_successor(tmp_path: Path) -> None:
     candidate = _blocked_candidate(
         tmp_path,
-        "resynthesized_into:\n"
-        "  - proposition:canonical\n"
-        "  - proposition:canonical\n",
+        "resynthesized_into:\n  - proposition:canonical\n  - proposition:canonical\n",
     )
 
     assert "duplicate successor proposition:canonical" in candidate["blockers"]
@@ -260,9 +249,7 @@ def test_dry_run_blocks_active_archive_id_collision(tmp_path: Path) -> None:
 def test_dry_run_blocks_live_id_alias_collision(tmp_path: Path) -> None:
     candidate = _blocked_candidate(
         tmp_path,
-        "superseded_by: proposition:canonical\n"
-        "aliases:\n"
-        "  - proposition:canonical\n",
+        "superseded_by: proposition:canonical\naliases:\n  - proposition:canonical\n",
     )
 
     assert any("id/alias collision on proposition:canonical" in blocker for blocker in candidate["blockers"])
@@ -368,6 +355,30 @@ def test_apply_moves_ready_proposition_and_writes_scalar_archive_row(tmp_path: P
     assert row.archived_at == "2026-07-02T12:00:00Z"
 
 
+def test_apply_postflight_receives_expected_archived_at_when_now_supplied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    postflight_rows: list[ArchiveRow] = []
+
+    def capture_postflight(project_root: Path, rows: list[ArchiveRow]) -> None:
+        assert project_root == tmp_path.resolve()
+        postflight_rows.extend(rows)
+
+    monkeypatch.setattr(proposition_archive, "_postflight", capture_postflight)
+
+    archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert [row.archived_at for row in postflight_rows] == ["2026-07-02T12:00:00Z"]
+
+
 def test_apply_moves_ready_proposition_and_writes_resynthesis_archive_row(tmp_path: Path) -> None:
     _seed(tmp_path)
     _proposition(tmp_path, "negative")
@@ -376,11 +387,7 @@ def test_apply_moves_ready_proposition_and_writes_resynthesis_archive_row(tmp_pa
         tmp_path,
         "broad",
         status="superseded",
-        extra_frontmatter=(
-            "resynthesized_into:\n"
-            "  - proposition:positive\n"
-            "  - proposition:negative\n"
-        ),
+        extra_frontmatter=("resynthesized_into:\n  - proposition:positive\n  - proposition:negative\n"),
     )
 
     report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
@@ -397,10 +404,7 @@ def test_apply_moves_ready_candidates_and_leaves_blocked_candidates_live(tmp_pat
     _entity(
         tmp_path,
         "entities/papers/Smith2020.md",
-        "id: paper:Smith2020\n"
-        "type: paper\n"
-        "title: Smith 2020\n"
-        "status: active\n",
+        "id: paper:Smith2020\ntype: paper\ntitle: Smith 2020\nstatus: active\n",
     )
     _proposition(tmp_path, "canonical")
     ready = _proposition(
@@ -536,10 +540,7 @@ def test_apply_row_construction_fails_if_ready_candidate_gains_id_alias_collisio
     _proposition(
         tmp_path,
         "collider",
-        extra_frontmatter=(
-            "aliases:\n"
-            "  - proposition:duplicate\n"
-        ),
+        extra_frontmatter=("aliases:\n  - proposition:duplicate\n"),
     )
 
     with pytest.raises(PropositionArchiveError, match="id/alias collision on proposition:duplicate"):

@@ -254,9 +254,7 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
     candidate_ids = {
         ref
         for ref in live_ids
-        if ref.startswith("proposition:")
-        and ref in raw
-        and raw[ref].frontmatter.get("status") == "superseded"
+        if ref.startswith("proposition:") and ref in raw and raw[ref].frontmatter.get("status") == "superseded"
     }
     backlinks = _live_promoted_backlinks(project_root, candidate_ids)
     inbound = _inbound_live_refs(project_root, candidate_ids)
@@ -324,5 +322,6 @@ def archive_superseded_propositions(
     result = _relocate_rows(archive_index_path(project_root), project_root, rows, now=now)
     report["applied"] = result["applied"]
     report["skipped"] = result["skipped"]
-    _postflight(project_root, rows)
+    postflight_rows = [row.model_copy(update={"archived_at": now}) for row in rows] if now is not None else rows
+    _postflight(project_root, postflight_rows)
     return report
