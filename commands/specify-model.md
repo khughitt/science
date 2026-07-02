@@ -111,7 +111,15 @@ For each important variable:
 3. **Provenance**
    - Where does this variable definition come from?
 
-Use commands like:
+For inquiry-patch projects, record durable variable refs in
+`entities/patches/<slug>.md`. Add or update source entity files under
+`entities/` for variables that are durable project concepts, then rebuild the
+graph from source.
+
+Direct `science graph add concept` writes are exploratory and non-durable. They
+write to `knowledge/graph.trig`, which is regenerated from source files. Use
+them only for temporary graph inspection, and repeat the durable definition in a
+source file before treating the model as specified:
 
 ```bash
 science graph add concept "<name>" --type <CURIE> --definition "<definition>"

@@ -89,6 +89,11 @@ Throughout this command, **`<meta-home>`** means `entities/meta/` and
 optional `<NNNN>-` prefix). Resolve this once, up front, and use it for every
 read, scan, and write below.
 
+**Boundary with tasks.** A next-steps run produces recommendations, not task
+records. Do not treat `<meta-home>` files as the durable task queue. Convert
+recommendations into `science tasks add ...` only after user acceptance.
+Accepted work belongs in `science tasks ...` and `tasks/active.md`.
+
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`
 2. Recent completed tasks: scan `tasks/done/` for the most recent file

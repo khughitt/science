@@ -17,6 +17,10 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
     return text.split(start_marker, 1)[1].split(end_marker, 1)[0]
 
 
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
 def test_command_to_skill_name_uses_science_namespace() -> None:
     assert command_to_skill_name(Path("commands/status.md")) == "science-status"
     assert command_to_skill_name(Path("commands/research-topic.md")) == "science-research-topic"
@@ -466,6 +470,41 @@ def test_next_steps_skill_scans_done_files_for_each_month_in_recent_window() -> 
     assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
     assert "Do not stop at the current month file" in text
     assert "treat those rows as recent progress, not status drift" in text
+
+
+def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
+    next_steps = _norm(_read_skill("science-next-steps"))
+    sketch_model_raw = _read_skill("science-sketch-model")
+    sketch_model = _norm(sketch_model_raw)
+    specify_model = _norm(_read_skill("science-specify-model"))
+    add_hypothesis = _norm(_read_skill("science-add-hypothesis"))
+
+    assert "A next-steps run produces recommendations, not task records." in next_steps
+    assert (
+        "Convert recommendations into `science tasks add ...` only after user acceptance."
+        in next_steps
+    )
+    assert "Do not use `science graph add concept` as the durable authoring path." in sketch_model
+    assert "Direct graph mutation writes to `knowledge/graph.trig`" in sketch_model
+    assert (
+        "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
+        in sketch_model
+    )
+    assert "boundary roles, flow edges, or unknown markers until a source owner is available" in sketch_model
+    assert "Use the patch source for inquiry-local assumptions and transformations" in sketch_model
+    assert "the inquiry compiler mints those local nodes from the authored patch" in sketch_model
+    assert "```bash\nscience graph add concept" not in sketch_model_raw
+    assert "Direct `science graph add concept` writes are exploratory and non-durable." in specify_model
+    assert (
+        "For inquiry-patch projects, record durable variable refs in `entities/patches/<slug>.md`."
+        in specify_model
+    )
+    assert "Create first, then draft." in add_hypothesis
+    assert (
+        "`science hypotheses create` owns ID sequencing, frontmatter, file placement, "
+        "and prospective validation."
+        in add_hypothesis
+    )
 
 
 # ---------------------------------------------------------------------------
