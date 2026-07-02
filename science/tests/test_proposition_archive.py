@@ -289,6 +289,59 @@ def test_dry_run_blocks_active_archive_alias_collision(tmp_path: Path) -> None:
     assert any("id/alias collision" in blocker for blocker in candidate["blockers"])
 
 
+def test_live_sidecar_backlink_blocks_archive(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+    _paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", promoted_to="proposition:duplicate")])
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert candidate["blocking_annotation_refs"] == ["annotation:entities/papers/Smith2020.source#a-1"]
+    assert "live annotation backlink" in candidate["blockers"][0]
+
+
+def test_inactive_sidecar_backlink_does_not_block_archive(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+    _paper_sidecar(
+        tmp_path,
+        "Smith2020",
+        [_ann("a-1", promoted_to="proposition:duplicate", status=Status.FIXED)],
+    )
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "ready"
+    assert candidate["blocking_annotation_refs"] == []
+
+
+def test_report_surfaces_generic_inbound_live_refs_as_context(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+    _entity(
+        tmp_path,
+        "entities/propositions/observer.md",
+        "id: proposition:observer\n"
+        "type: proposition\n"
+        "title: Observer\n"
+        "status: active\n"
+        "related:\n"
+        "  - proposition:duplicate\n",
+    )
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "ready"
+    assert candidate["inbound_live_refs"] == ["proposition:observer"]
+
+
 def test_apply_raises_task_5_placeholder(tmp_path: Path) -> None:
     _seed(tmp_path)
 

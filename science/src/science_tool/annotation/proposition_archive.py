@@ -4,10 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from science_tool.archive import ArchiveRow, derive_archive_path, load_archive_index
+from science_tool.annotation.io import read_sidecar, sidecar_for_markdown
+from science_tool.annotation.model import Status
+from science_tool.annotation.query import entity_relpath_for_sidecar
+from science_tool.archive import ArchiveRow, _inbound_live_refs, derive_archive_path, load_archive_index
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.sources import load_project_sources
+
+
+_ACTIVE_ANNOTATION_STATUSES = frozenset({Status.OPEN.value, Status.ACK.value})
 
 
 class PropositionArchiveError(ValueError):
@@ -46,6 +52,41 @@ def _raw_entities(project_root: Path) -> dict[str, _RawEntity]:
             frontmatter=dict(fm),
         )
     return rows
+
+
+def _annotation_status_value(status: object) -> str:
+    if isinstance(status, Status):
+        return status.value
+    return str(status)
+
+
+def _annotation_ref_for_sidecar(project_root: Path, sidecar_path: Path, annotation_id: str) -> str:
+    return f"annotation:{entity_relpath_for_sidecar(sidecar_path, project_root)}#{annotation_id}"
+
+
+def _live_promoted_backlinks(project_root: Path, candidate_ids: set[str]) -> dict[str, list[str]]:
+    backlinks: dict[str, set[str]] = {candidate_id: set() for candidate_id in candidate_ids}
+    entities_root = project_root / "entities"
+    if not entities_root.is_dir():
+        return {candidate_id: [] for candidate_id in candidate_ids}
+    for markdown_path in iter_entity_markdown(entities_root):
+        sidecar_path = sidecar_for_markdown(markdown_path)
+        if not sidecar_path.is_file():
+            continue
+        try:
+            sidecar = read_sidecar(sidecar_path)
+        except Exception as exc:
+            raise PropositionArchiveError(f"could not read sidecar {sidecar_path}: {exc}") from exc
+        for ann in sidecar.annotations:
+            if ann.annotation_type != "proposition":
+                continue
+            promoted_to = ann.promoted_to
+            if promoted_to not in candidate_ids:
+                continue
+            if _annotation_status_value(ann.status) not in _ACTIVE_ANNOTATION_STATUSES:
+                continue
+            backlinks[promoted_to].add(_annotation_ref_for_sidecar(project_root, sidecar_path, ann.id))
+    return {candidate_id: sorted(refs) for candidate_id, refs in backlinks.items()}
 
 
 def _alias_tokens(entity_id: str, frontmatter: dict[str, Any]) -> set[str]:
@@ -129,6 +170,15 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
     archive = load_archive_index(project_root)
     resolvable_ids = live_ids | set(archive.resolvable_ids())
     raw = _raw_entities(project_root)
+    candidate_ids = {
+        ref
+        for ref in live_ids
+        if ref.startswith("proposition:")
+        and ref in raw
+        and raw[ref].frontmatter.get("status") == "superseded"
+    }
+    backlinks = _live_promoted_backlinks(project_root, candidate_ids)
+    inbound = _inbound_live_refs(project_root, candidate_ids)
     collision_owners = _collision_owner_index(raw, archive)
 
     candidates: list[dict[str, Any]] = []
@@ -145,6 +195,9 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
             blockers.append(f"archive destination exists: {archive_path}")
         if row.id in archive.active_by_id:
             blockers.append(f"archive id already active: {row.id}")
+        annotation_refs = backlinks.get(row.id, [])
+        if annotation_refs:
+            blockers.append(f"live annotation backlink(s): {', '.join(annotation_refs)}")
         for token in sorted(_alias_tokens(row.id, row.frontmatter)):
             colliding = collision_owners.get(token, set()) - {row.id}
             if colliding:
@@ -159,8 +212,8 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
                 "successors": successors,
                 "status": status,
                 "blockers": sorted(blockers),
-                "blocking_annotation_refs": [],
-                "inbound_live_refs": [],
+                "blocking_annotation_refs": annotation_refs,
+                "inbound_live_refs": inbound.get(row.id, []),
             }
         )
 
