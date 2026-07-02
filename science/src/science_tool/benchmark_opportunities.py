@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict, cast
 
 import yaml
+from science_model.packages.schema import (
+    BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_REASON_RE,
+    BENCHMARK_TASK_SUPPORT_STATES,
+    BenchmarkTaskSupportState,
+)
 
 from science_tool.benchmark_catalog import benchmark_sources
 from science_tool.dataset_prioritize import readiness_for, readiness_weight
@@ -221,6 +227,15 @@ def _normalized_values(values: list[str]) -> list[str]:
 
 
 @dataclass(frozen=True)
+class OpportunityTaskSupport:
+    state: BenchmarkTaskSupportState
+    reason: str
+    checked_at: str
+    evidence: list[str]
+    notes: list[str]
+
+
+@dataclass(frozen=True)
 class OpportunityTask:
     id: str
     canonical_task_id: str
@@ -232,6 +247,7 @@ class OpportunityTask:
     ground_truth_type: str
     ground_truth_description: str
     prose: list[str]
+    support: OpportunityTaskSupport | None
 
 
 @dataclass(frozen=True)
@@ -588,6 +604,11 @@ class BenchmarkTestRow(TypedDict):
     metric: str
     baseline: str
     ground_truth: BenchmarkTestGroundTruth
+    task_support_state: BenchmarkTaskSupportState | None
+    task_support_reason: str
+    task_support_checked_at: str
+    task_support_evidence: list[str]
+    task_support_notes: list[str]
     needs: list[str]
 
 
@@ -732,10 +753,79 @@ def _string_list(value: object) -> list[str]:
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
+def _task_support_optional_string(
+    dataset_id: str,
+    task_id: str,
+    support: Mapping[str, object],
+    key: str,
+) -> str:
+    value = support.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support {key} must be a string")
+    return value.strip()
+
+
+def _task_support_string_list(
+    dataset_id: str,
+    task_id: str,
+    support: Mapping[str, object],
+    key: str,
+) -> list[str]:
+    message = f"{dataset_id}#{task_id}: benchmark task support {key} must be a list of nonempty strings"
+    value = support.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(message)
+
+    values: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(message)
+        values.append(item.strip())
+    return values
+
+
+def _task_support_from_mapping(
+    dataset_id: str,
+    task_id: str,
+    value: object,
+) -> OpportunityTaskSupport | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support must be a mapping")
+
+    state = value.get("state")
+    if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support state {state!r} is invalid")
+
+    reason = _task_support_optional_string(dataset_id, task_id, value, "reason")
+    if state in {"candidate", "blocked"} and not reason:
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support reason is required for state {state!r}")
+    if reason and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(reason) is None:
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support reason {reason!r} is invalid")
+
+    checked_at = _task_support_optional_string(dataset_id, task_id, value, "checked_at")
+    if checked_at and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(checked_at) is None:
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support checked_at {checked_at!r} is invalid")
+
+    return OpportunityTaskSupport(
+        state=cast("BenchmarkTaskSupportState", state),
+        reason=reason,
+        checked_at=checked_at,
+        evidence=_task_support_string_list(dataset_id, task_id, value, "evidence"),
+        notes=_task_support_string_list(dataset_id, task_id, value, "notes"),
+    )
+
+
 def _task_from_mapping(dataset_id: str, task: Mapping[str, object]) -> OpportunityTask | None:
     task_id = task.get("id")
     if not isinstance(task_id, str) or not task_id.strip():
         return None
+    task_id = task_id.strip()
     ground_truth = task.get("ground_truth")
     gt_type = ""
     gt_description = ""
@@ -766,6 +856,7 @@ def _task_from_mapping(dataset_id: str, task: Mapping[str, object]) -> Opportuni
         ground_truth_type=gt_type,
         ground_truth_description=gt_description,
         prose=prose,
+        support=_task_support_from_mapping(dataset_id, task_id, task.get("support")),
     )
 
 
@@ -2421,6 +2512,16 @@ def _ground_truth_payload(task: OpportunityTask | None) -> BenchmarkTestGroundTr
     return {"type": task.ground_truth_type, "description": task.ground_truth_description}
 
 
+def _task_support_reason_notes(task: OpportunityTask | None) -> list[str]:
+    if task is None or task.support is None or not task.support.reason:
+        return []
+    if task.support.state == "blocked":
+        return [f"task-support:blocked:{task.support.reason}"]
+    if task.support.state == "candidate":
+        return [f"task-support:candidate:{task.support.reason}"]
+    return []
+
+
 def _benchmark_test_row(
     *,
     entity_id: str,
@@ -2435,6 +2536,8 @@ def _benchmark_test_row(
 ) -> BenchmarkTestRow:
     if _test_plan_state(task) == "draft-needed" and "draft-needed" not in reason_notes:
         reason_notes.append("draft-needed")
+    support = task.support if task is not None else None
+    reason_notes.extend(_task_support_reason_notes(task))
     return {
         "entity_id": entity_id,
         "entity_title": entity_title,
@@ -2458,6 +2561,11 @@ def _benchmark_test_row(
         "metric": task.metric if task is not None else "",
         "baseline": task.baseline if task is not None else "",
         "ground_truth": _ground_truth_payload(task),
+        "task_support_state": support.state if support is not None else None,
+        "task_support_reason": support.reason if support is not None else "",
+        "task_support_checked_at": support.checked_at if support is not None else "",
+        "task_support_evidence": list(support.evidence) if support is not None else [],
+        "task_support_notes": list(support.notes) if support is not None else [],
         "needs": _task_needs(task),
     }
 
