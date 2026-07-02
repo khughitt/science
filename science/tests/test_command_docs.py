@@ -521,7 +521,8 @@ def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -
     assert "runtime/package descriptor" in boundary
     assert "not the local dataset entity lifecycle" in boundary
     assert "Use `science dataset add <slug>`" in boundary
-    assert "Use `science datasets validate --path data/raw/`" in boundary
+    assert "science dataset verify-access <slug>" in boundary
+    assert "science datasets validate --path data/raw/" in boundary
 
 
 def test_command_docs_do_not_reference_retired_user_docs() -> None:

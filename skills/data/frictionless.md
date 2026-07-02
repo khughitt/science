@@ -18,6 +18,16 @@ A **Data Package** is a `datapackage.json` file describing one or more data **re
 
 A **resource** describes a single data file: its path, format, schema (field names, types, constraints), and encoding.
 
+## Boundary With Dataset Entities
+
+A Frictionless `datapackage.json` is a runtime/package descriptor for files that
+exist in `data/raw/`, `data/processed/`, or result package directories. It is
+not the local dataset entity lifecycle.
+
+Use `science dataset add <slug>` and `science dataset verify-access <slug>` for
+the durable `dataset:<slug>` entity. Use `science datasets validate --path data/raw/`, `science datasets infer-schema`, and `science datasets qa` for
+runtime datapackage descriptors and file-level QA.
+
 ## Creating a Data Package
 
 ### Option A: Auto-describe from existing files
@@ -75,7 +85,7 @@ Use these Frictionless types:
 ## Validation
 
 ```bash
-# Validate a data package (built-in lightweight checks)
+# Validate a runtime data package (built-in lightweight checks)
 science datasets validate --path data/raw/
 
 # For deeper validation, install frictionless CLI separately: uv add frictionless

@@ -114,10 +114,33 @@ FASTA files in the `sequences/` subdirectory. Annotate with EDAM terms:
 
 ## When Adding a New Data Source
 
-1. Document it using the framework `dataset.md` template (or a project override in `.ai/templates/`) — save to `entities/datasets/<source-name>.md`
-2. Update `science.yaml` with the new data source entry
-3. Add acquisition scripts to `code/scripts/`
-4. Create or update `datapackage.json` in the appropriate directory
+1. Create new durable dataset entities through the singular lifecycle:
+   ```bash
+   science dataset add <slug> \
+     --title "<dataset title>" \
+     --source-url "<landing-page-or-accession-url>" \
+     --level <public|registration|controlled|commercial|mixed> \
+     --tier <use-now|evaluate-next|track>
+   ```
+2. Verify access evidence before pipeline planning consumes the dataset:
+   ```bash
+   science dataset verify-access <slug> \
+     --license <spdx-or-unknown> \
+     --method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed> \
+     --source-url "<landing-page-or-download-url>"
+   ```
+3. Link the dataset to the question or hypothesis it supports:
+   ```bash
+   science dataset link <dataset-ref> <question-or-hypothesis-ref>
+   ```
+4. Add acquisition scripts to `code/scripts/` or workflow rules under `code/workflows/`.
+5. Create or update runtime datapackage descriptors in the appropriate data directory.
+
+Manual template authoring is a fallback for unsupported fields, deliberate
+legacy backfills, or project-specific review templates. When using that path,
+write to `entities/datasets/<source-name>.md`, keep unknown evidence visibly
+marked, and then run `science dataset verify-access <slug>` or record the
+blocked verification reason.
 
 ## When Working With Specialized Biological Data
 
@@ -144,12 +167,17 @@ Load the relevant leaf before designing preprocessing or QA:
 
 Shared runtime and source clients may be incomplete in some projects.
 When automation is unavailable:
-- Manually document data sources using the template, including source URL or
-  accession, retrieval date, license/access constraints, checksum, and exact
-  files acquired
-- Download data by hand and place in `data/raw/`
-- Write preprocessing scripts in `code/scripts/` with clear comments
-- Always update `science.yaml` data_sources when adding new data
+- Use `science dataset add <slug>` and `science dataset verify-access <slug>`
+  whenever current CLI fields can express the dataset record.
+- Manually document data sources with the dataset template only when the CLI
+  cannot represent the needed field or a project-specific review path requires
+  the template.
+- Download data by hand and place it in `data/raw/` only when automated download
+  support is unavailable.
+- Write preprocessing scripts in `code/scripts/` or workflow rules under
+  `code/workflows/` with clear provenance.
+- Keep runtime datapackage descriptors current for raw and processed data
+  directories.
 
 ## Companion Skills
 
