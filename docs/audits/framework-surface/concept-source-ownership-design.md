@@ -43,6 +43,12 @@ The sharp contradiction:
 4. This checkout has no `entities/concepts/` directory, so the model-declared
    home is not exercised by current projects here.
 
+The nearest sibling strengthens the contradiction. `construct` is also an
+`AUTHORED_CORE` reference kind, has `home="entities/constructs"`, and uses slug
+identity. It is not blocked by the entity writer. The `concept` behavior is
+therefore not a broad policy against source-authored reference kinds; it is a
+lone special case that diverges from its near-identical sibling.
+
 Therefore, "stable project concept lives in `entities/concepts/*.md`" is a
 target contract implied by the model, not current supported CLI behavior.
 Guidance must not describe it as an available routine workflow until the CLI
@@ -54,13 +60,20 @@ and tests support it.
 |---|---|
 | Stable project concept | Core profile declares `entities/concepts`, but `science entity create concept ...` is blocked. Lightweight `concept:*` rows may be loaded from `knowledge/sources/<profile>/terms.yaml` or aggregate sources. |
 | Direct concept graph mutation | `science graph add concept ...` writes a node into `knowledge/graph.trig`. It is exploratory/non-durable because graph build overwrites the file. |
-| Boundary ref | Authored in `entities/patches/<slug>.md` under `inquiry.boundary_roles`; compiler treats it as an existing ref that must resolve before materialization succeeds. |
-| Flow-edge endpoint | Authored in `inquiry.flow_edges`; compiler treats subject/object refs as existing refs that must resolve. |
-| Flow-edge claim | Authored in `claim_refs`; compiler treats each as an existing proposition-like ref and reifies the edge claim relation. |
-| Causal treatment/outcome | Authored as `inquiry.treatment` and `inquiry.outcome`; causal profiles require both and compiler treats both as existing refs. |
+| Stable project construct | Core profile declares `entities/constructs`, and the entity writer does not special-case-block `construct`. This makes the `concept` block an internal CLI/model asymmetry rather than a general authored-reference policy. |
+| Boundary ref | Authored in `entities/patches/<slug>.md` under `inquiry.boundary_roles`; patch-membership derivation treats it as an existing ref and raises `PatchMembershipError` during graph build if it cannot resolve. |
+| Flow-edge endpoint | Authored in `inquiry.flow_edges`; patch-membership derivation treats subject/object refs as existing refs and hard-errors during graph build if they cannot resolve. |
+| Flow-edge claim | Authored in `claim_refs`; patch-membership derivation treats each as an existing proposition-like ref and hard-errors during graph build if it cannot resolve. Graph export later warns and skips missing evidence-overlay claim bundles when reading already materialized graph state. |
+| Causal treatment/outcome | Authored as `inquiry.treatment` and `inquiry.outcome`; causal profiles require both, and patch-membership derivation treats both as existing refs. Graph export later warns and skips missing treatment/outcome overlay refs when they are absent from exported member nodes. |
 | Unknown | Authored as a ref in `inquiry.unknowns`; compiler adds `sci:Unknown` as an additive marker on the referenced existing node. It is not a standalone unknown owner. |
 | Assumption | Authored as a structured record in `inquiry.assumptions`; compiler mints an inquiry-local assumption URI and optional provenance. |
 | Transformation | Authored as a structured record in `inquiry.transformations`; compiler mints an inquiry-local transformation URI with tool, params, and validation refs. |
+
+The "must resolve" contract is enforced by graph build through patch-membership
+derivation, not by every downstream graph reader. Export surfaces should remain
+tolerant enough to render partial or older graph state with warnings, but source
+authoring guidance should still treat unresolved inquiry endpoint refs as build
+errors.
 
 ## Target Ownership Contract
 
@@ -88,6 +101,13 @@ levels for concepts:
 - **Entity owner:** Markdown source record when the concept needs body prose,
   lifecycle status, aliases, source refs, or relationships. The model declares
   this path, but the CLI currently blocks it.
+
+In current live project practice, both concept-specific durable tiers are weak:
+`terms.yaml` is exercised here only in tests, and `entities/concepts` has no
+active project examples in this checkout. Until one of those paths becomes a
+routine supported workflow, the only reliable durable choices for a
+concept-like thing are a more specific registered domain/source kind or prose
+deferral.
 
 ## Design Principles
 
@@ -151,6 +171,11 @@ the core profile. This likely needs tests for path policy, default status,
 materialization, health, and archive behavior. It should also update or remove
 the explicit block in `entities.py`.
 
+The `construct` sibling suggests this may be a small behavioral slice rather
+than a new subsystem: remove the `concept` special case, then prove concept
+authoring follows the same source-entity path as other authored-core reference
+kinds.
+
 ### 2. Should local-profile term authoring get a CLI helper?
 
 Today, `terms.yaml` is a valid lightweight source surface, but routine authoring
@@ -181,6 +206,9 @@ Keep the first implementation slice docs-and-tests only:
    - `sketch-model`, `specify-model`, and `plan-pipeline` do not present
      unresolved `concept:<...>` placeholders as durable owner creation;
    - generated Codex mirrors stay aligned.
+   Use stable anchors and stable sentence assertions, following the existing
+   `science/tests/test_user_guide_docs.py` marker/anchor pattern, rather than
+   broad prose-scanning tests that fail on harmless reflow.
 2. Update `docs/user-guide/epistemic-model.md` with an explicit ownership table
    for inquiry refs and local nodes.
 3. Update `docs/user-guide/entities.md` to state the current `concept` mismatch
