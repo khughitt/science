@@ -122,11 +122,15 @@ def _effective_repro_class(project_root: Path, ds_id: str, _seen: set[str] | Non
         return "unknown", "missing entity"
     # Both run-provenance (DerivationBlock) and recipe-provenance
     # (WorkflowRecipeDerivationBlock) carry `.inputs`; recurse the closure over
-    # either so recipe-derived datasets inherit their upstream class instead of
-    # collapsing to `unknown`. (MemberOfDerivationBlock has no `.inputs`.)
+    # either so derived datasets inherit their upstream class instead of
+    # collapsing to `unknown`.
     if e.origin == "derived" and isinstance(e.derivation, (DerivationBlock, WorkflowRecipeDerivationBlock)):
         upstream_classes = [_effective_repro_class(project_root, up, set(_seen)) for up in e.derivation.inputs]
         return _weakest_class(upstream_classes)
+    # A promoted member (MemberOfDerivationBlock) has no `.inputs`; it inherits
+    # the reproducibility of its parent collection via `parent_dataset`.
+    if e.origin == "derived" and isinstance(e.derivation, MemberOfDerivationBlock):
+        return _effective_repro_class(project_root, e.derivation.parent_dataset, set(_seen))
     return reproducibility_class_for(_load_dataset_fm(project_root, ds_id))
 
 
