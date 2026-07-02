@@ -54,7 +54,8 @@ This changes guidance from:
 
 to:
 
-- use the most specific registered domain kind when one exists;
+- use the most specific registered kind when one exists (a domain kind such as
+  `gene` or `dataset`, or a core reference kind such as `construct` or `outcome`);
 - use `terms.yaml` for lightweight local semantic terms;
 - use `science entity create concept ...` when the local concept needs a normal
   entity owner;
@@ -102,6 +103,9 @@ change:
    the expected title.
 2. Add a status test that `--status deprecated` is accepted for concepts, and
    an invalid status is rejected through the existing validation path.
+   (`deprecated` is already classified LIVE in the `_LIVE_STATUSES` allowlist in
+   `entities.py`, so no new status is introduced and the `test_status_visibility.py`
+   guard does not need to change.)
 3. Add an end-to-end test that a concept created through the CLI can be loaded
    and then used as a resolvable inquiry boundary/treatment/outcome or related
    ref during graph build.
@@ -154,6 +158,7 @@ This slice should not:
 | A hidden downstream path still assumes concepts are aggregate-only. | Run concept-specific entity, source-load, graph-materialization, and docs guard tests. |
 | Docs start recommending concept entities where a domain kind is better. | Keep the entity guide and command docs explicit: domain kind first, concept only for project-local semantic owners. |
 | `terms.yaml` becomes redundant or confusing. | Document it as the lightweight tier, not a deprecated tier. |
+| A `terms.yaml` (or aggregate) row and a new markdown owner both mint the same `concept:*` id. | The destination check (`entities.py`) only tests file existence, so it cannot see a same-id row in another source. Confirm the existing identity-collision path covers the two-tier case: `load_project_sources()` loads markdown owners before the structured/`terms.yaml` loader, so the markdown owner deterministically wins the id, and a competing row raises `EntityIdentityCollisionError` under `strict_identity` or is dropped-and-surfaced by the `entity_identity` health check otherwise. Add a test that asserts this rather than assuming it. |
 | Existing generated skill guards still forbid `science entity create concept`. | Replace those guards with behavior-aware assertions and regenerate mirrors. |
 | `graph add concept` remains easy to misuse. | Keep negative docs guards that prevent it from appearing as a durable authoring path; consider a later CLI warning/deprecation design. |
 
@@ -167,6 +172,10 @@ This slice should not:
   requires resolvable refs.
 - `science entity create construct ...` and existing non-concept entity create
   behavior remain unchanged.
+- A `concept:*` id already declared by a `terms.yaml` (or aggregate) row does not
+  silently produce two owners: the markdown owner wins deterministically, and the
+  duplicate is either rejected (`strict_identity`) or reported by the
+  `entity_identity` health check.
 - User guide, command docs, and generated Codex skills no longer describe
   concept authoring as a CLI/model mismatch.
 - Docs still state that `science graph add concept` is exploratory and
