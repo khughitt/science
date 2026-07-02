@@ -134,6 +134,8 @@ behavior.
 
 ### B7. Dataset Surface Design
 
+**Status:** Drafted in [`dataset-surface-design.md`](dataset-surface-design.md).
+
 **Goal:** Decide whether `data`, `dataset`, `datasets`, `data-package`, and
 `commons dataset` need aliases, help-text changes, or regrouping.
 
