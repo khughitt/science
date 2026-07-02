@@ -403,6 +403,52 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     ).annotations[0].promoted_to == "proposition:broad-negative"
 
 
+def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_original_source_refs(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar = anno_io.read_sidecar(sidecar_path)
+    anno_io.write_sidecar(
+        sidecar_path,
+        replace(
+            sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in sidecar.annotations
+            ),
+        ),
+    )
+    original_path = tmp_path / "entities" / "propositions" / "broad.md"
+    original_frontmatter, _body = parse_markdown_entity_file(original_path)
+    rendered, changed = render_entity_frontmatter_updates(
+        original_path,
+        {
+            "source_refs": [
+                ref
+                for ref in original_frontmatter["source_refs"]
+                if not str(ref).startswith("annotation:")
+            ]
+        },
+        as_of=date(2026, 7, 1),
+    )
+    assert changed is True
+    original_path.write_text(rendered, encoding="utf-8")
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert report.status == "ok"
+    assert read_sidecar_strict(sidecar_path).annotations[0].promoted_to == "proposition:broad-positive"
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad-negative"
+
+
 def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     tmp_path: Path,
 ):
@@ -520,7 +566,7 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
     ).annotations[0].promoted_to == "proposition:broad"
 
 
-def test_apply_resynthesis_draft_resume_rejects_omitted_already_moved_input_before_writes(
+def test_apply_resynthesis_draft_resume_rejects_omitted_already_moved_assignment_before_writes(
     tmp_path: Path,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import (
@@ -551,8 +597,6 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_already_moved_input_befo
         encoding="utf-8"
     )
     payload = _draft_payload(ctx)
-    payload["input_annotations"] = payload["input_annotations"][:1]
-    payload["context"]["input_annotations"] = payload["context"]["input_annotations"][:1]
     payload["new_propositions"] = payload["new_propositions"][:1]
     payload["annotation_assignments"] = payload["annotation_assignments"][:1]
     draft = parse_resynthesis_draft(payload)
