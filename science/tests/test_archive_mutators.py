@@ -130,3 +130,64 @@ def test_generic_archive_preserves_resynthesized_into_when_present(tmp_path: Pat
     assert report["applied"] == ["proposition:broad"]
     row = load_archive_index(tmp_path).active_by_id["proposition:broad"]
     assert row.resynthesized_into == ["proposition:negative", "proposition:positive"]
+
+
+def test_report_includes_resynthesized_into_for_dry_run_candidates(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "propositions",
+        "broad",
+        "---\n"
+        "id: proposition:broad\n"
+        "type: proposition\n"
+        "status: superseded\n"
+        "resynthesized_into:\n"
+        "  - proposition:negative\n"
+        "  - proposition:positive\n"
+        "---\n"
+        "Broad claim.\n",
+    )
+
+    report = archive_entities(tmp_path, apply=False, now="T1")
+
+    assert report["candidates"] == [
+        {
+            "id": "proposition:broad",
+            "kind": "proposition",
+            "status": "superseded",
+            "original_path": "entities/propositions/broad.md",
+            "superseded_by": None,
+            "resynthesized_into": ["proposition:negative", "proposition:positive"],
+            "inbound_live_refs": [],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("raw_resynthesized_into", "name"),
+    [
+        ("proposition:next", "scalar"),
+        ("{target: proposition:next}", "mapping"),
+    ],
+)
+def test_malformed_resynthesized_into_is_ignored_not_split(
+    tmp_path: Path, raw_resynthesized_into: str, name: str
+) -> None:
+    _write(
+        tmp_path,
+        "propositions",
+        name,
+        "---\n"
+        f"id: proposition:{name}\n"
+        "type: proposition\n"
+        "status: superseded\n"
+        f"resynthesized_into: {raw_resynthesized_into}\n"
+        "---\n"
+        "Broad claim.\n",
+    )
+
+    report = archive_entities(tmp_path, apply=True, now="T1")
+
+    assert report["candidates"][0]["resynthesized_into"] == []
+    row = load_archive_index(tmp_path).active_by_id[f"proposition:{name}"]
+    assert row.resynthesized_into == []

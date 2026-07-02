@@ -126,6 +126,7 @@ def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[Archiv
         status = fm.get("status")
         if status not in statuses:
             continue
+        raw_resynthesized_into = fm.get("resynthesized_into")
         original_rel = path.relative_to(project_root).as_posix()
         rows.append(
             ArchiveRow(
@@ -138,8 +139,8 @@ def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[Archiv
                 status=status,
                 superseded_by=fm.get("superseded_by") if isinstance(fm.get("superseded_by"), str) else None,
                 resynthesized_into=[
-                    ref for ref in (fm.get("resynthesized_into") or []) if isinstance(ref, str)
-                ],
+                    ref for ref in raw_resynthesized_into if isinstance(ref, str)
+                ] if isinstance(raw_resynthesized_into, list) else [],
                 original_path=original_rel,
                 reason=f"status:{status}",
             )
