@@ -367,6 +367,36 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     assert str(positive_frontmatter["updated"]) == "2026-07-01"
 
 
+def test_apply_resynthesis_draft_first_run_rejects_manual_only_extra_replacement(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"].append(
+        {
+            "id": "proposition:broad-extra",
+            "title": "BES requires an extra manual-only replacement",
+            "body": "This replacement has no moved input annotations.",
+            "frontmatter": {
+                "subject": "BES",
+                "predicate": "associates_with",
+                "object": "manual-only replacement",
+                "polarity": "positive",
+                "source_refs": ["manual:extra-note"],
+            },
+        }
+    )
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="replacement propositions must match assigned annotation targets"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+
 def test_apply_resynthesis_draft_resume_rejects_manual_only_extra_replacement(
     tmp_path: Path,
 ):
@@ -1319,7 +1349,7 @@ def test_apply_resynthesis_draft_preflight_failure_writes_nothing(
 
     monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
 
-    with pytest.raises(ResynthesisApplyError, match="replacement proposition has no source refs"):
+    with pytest.raises(ResynthesisApplyError, match="replacement propositions must match assigned annotation targets"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert writes == []

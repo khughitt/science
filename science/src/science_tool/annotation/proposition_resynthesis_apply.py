@@ -238,6 +238,8 @@ def _resume_validation_report(
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
     if len(replacements) != len(draft.new_propositions):
         return None
+    if draft.original_proposition in replacements:
+        raise ResynthesisApplyError("original proposition cannot be a replacement")
     for replacement in draft.new_propositions:
         _replacement_local_part(project_root, replacement.id)
         _validate_replacement_frontmatter(replacement)
@@ -250,6 +252,7 @@ def _resume_validation_report(
     }
     moved = 0
     retained = 0
+    assigned_replacement_ids: set[str] = set()
     for assignment in draft.annotation_assignments:
         if assignment.annotation in seen_annotations:
             raise ResynthesisApplyError(f"{assignment.annotation} assigned more than once")
@@ -268,6 +271,7 @@ def _resume_validation_report(
             retained += 1
         elif assignment.to_proposition in replacements:
             moved += 1
+            assigned_replacement_ids.add(assignment.to_proposition)
         else:
             raise ResynthesisApplyError(f"{assignment.to_proposition} is not a draft proposition")
 
@@ -320,6 +324,9 @@ def _resume_validation_report(
             raise ResynthesisApplyError(
                 "split_partial must retain at least one annotation on original proposition; use replace if all move"
             )
+
+    if set(replacements) != assigned_replacement_ids:
+        raise ResynthesisApplyError("replacement propositions must match assigned annotation targets")
 
     for proposition, refs in expected_refs.items():
         if not refs:

@@ -652,6 +652,55 @@ def test_scaffold_proposition_resynthesis_cli_writes_draft(tmp_path: Path):
     assert draft["annotation_assignments"] == []
 
 
+def test_scaffold_proposition_resynthesis_cli_writes_project_relative_source_review_for_relative_input(
+    tmp_path: Path,
+    monkeypatch,
+):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    ctx = _factorization_project(project_root)
+    output_path = project_root / "resynthesis-draft.json"
+    monkeypatch.chdir(tmp_path)
+
+    scaffolded = CliRunner().invoke(
+        annotate_group,
+        [
+            "scaffold-proposition-resynthesis",
+            "--root",
+            "project",
+            "--input",
+            "project/review.json",
+            "--output",
+            "project/resynthesis-draft.json",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert scaffolded.exit_code == 0, scaffolded.output
+    draft = json.loads(output_path.read_text(encoding="utf-8"))
+    assert draft["source_review"] == "review.json"
+
+    populated = _draft_payload({**ctx, "review_path": Path("review.json")})
+    populated["source_review"] = draft["source_review"]
+    output_path.write_text(json.dumps(populated), encoding="utf-8")
+
+    validated = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-proposition-resynthesis",
+            "--root",
+            "project",
+            "--input",
+            "project/resynthesis-draft.json",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert validated.exit_code == 0, validated.output
+
+
 def test_validate_proposition_resynthesis_cli_reports_valid_draft(tmp_path: Path):
     ctx = _factorization_project(tmp_path)
     draft_path = tmp_path / "resynthesis-draft.json"

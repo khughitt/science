@@ -464,7 +464,7 @@ def test_validate_resynthesis_draft_rejects_model_invalid_replacement_frontmatte
         validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
 
-def test_validate_resynthesis_draft_rejects_replacement_without_source_refs(tmp_path: Path):
+def test_validate_resynthesis_draft_rejects_unassigned_replacement_without_source_refs(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
 
     ctx = _factorization_project(tmp_path)
@@ -472,7 +472,44 @@ def test_validate_resynthesis_draft_rejects_replacement_without_source_refs(tmp_
     payload["annotation_assignments"][1]["to"] = "proposition:broad-positive"
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisDraftError, match="replacement proposition has no source refs"):
+    with pytest.raises(ResynthesisDraftError, match="replacement propositions must match assigned annotation targets"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+
+def test_validate_resynthesis_draft_rejects_manual_only_extra_replacement(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"].append(
+        {
+            "id": "proposition:broad-extra",
+            "title": "BES requires an extra manual-only replacement",
+            "body": "This replacement has no moved input annotations.",
+            "frontmatter": {
+                "subject": "BES",
+                "predicate": "associates_with",
+                "object": "manual-only replacement",
+                "polarity": "positive",
+                "source_refs": ["manual:extra-note"],
+            },
+        }
+    )
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="replacement propositions must match assigned annotation targets"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+
+def test_validate_resynthesis_draft_rejects_original_as_replacement(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["id"] = "proposition:broad"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="original proposition cannot be a replacement"):
         validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
 

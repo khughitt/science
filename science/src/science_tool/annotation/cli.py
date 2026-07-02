@@ -680,6 +680,14 @@ def _read_json_object_for_cli(input_path: Path) -> Mapping[str, Any]:
     return loaded
 
 
+def _project_relative_or_absolute(project_root: Path, path: Path) -> str:
+    resolved = path if path.is_absolute() else (Path.cwd() / path).resolve()
+    try:
+        return resolved.relative_to(project_root).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 @annotate_group.command("scaffold-proposition-resynthesis")
 @click.option(
     "--input",
@@ -720,16 +728,18 @@ def scaffold_proposition_resynthesis_cmd(
 
     project_root = (root or Path.cwd()).resolve()
     try:
-        review = _read_json_object_for_cli(input_path)
+        review_path = input_path if input_path.is_absolute() else (Path.cwd() / input_path).resolve()
+        source_review = _project_relative_or_absolute(project_root, review_path)
+        review = _read_json_object_for_cli(review_path)
         report = build_reconciliation_report(project_root)
         plan = build_reconciliation_action_plan(
             report,
-            [ReviewedReconciliationInput(path=str(input_path), doc=review)],
+            [ReviewedReconciliationInput(path=str(review_path), doc=review)],
         )
         draft = build_resynthesis_scaffold(
             plan,
             requested_action_id=action_id,
-            source_review=str(input_path),
+            source_review=source_review,
         )
     except (
         ResynthesisDraftError,
