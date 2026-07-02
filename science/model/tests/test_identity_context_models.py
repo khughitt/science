@@ -173,6 +173,12 @@ def test_identity_context_models_round_trip_proxy_and_transform() -> None:
     assert context.model_dump(by_alias=True)["molecular_ids"]["gene"]["transform"]["from"] == "hgnc_symbol"
 
 
+@pytest.mark.parametrize("taxon", [0, -1])
+def test_identity_context_rejects_non_positive_taxon(taxon: int) -> None:
+    with pytest.raises(ValidationError):
+        IdentityContext.model_validate({"taxon": taxon})
+
+
 @pytest.mark.parametrize("seqcol_digest", [None, "UNKNOWN"])
 def test_assembly_identity_resolved_requires_known_seqcol_digest(seqcol_digest: str | None) -> None:
     payload = {
