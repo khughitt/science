@@ -121,7 +121,7 @@ Science project tracking. It also defines IDs, statuses, blockers, and related
 refs. It is a good anchor for other command docs to cite when they recommend
 creating follow-up work.
 
-### 4. `sketch-model` appears to lag the current inquiry source-first guidance.
+### 4. `sketch-model` lags the current inquiry source-first guidance.
 
 `docs/user-guide/epistemic-model.md` says the old inquiry graph-mutating
 commands are retired and that users should edit the source file and rebuild.
@@ -129,19 +129,29 @@ commands are retired and that users should edit the source file and rebuild.
 a retired-mutator error.
 
 `commands/sketch-model.md`, however, still tells users to add reusable variables
-with `science graph add concept ...` before editing the inquiry block. That may
-be acceptable for exploratory graph surgery, but it conflicts with the current
-source-first durable guidance unless explicitly marked as exploratory or
-replaced with source-authored concept/entity creation guidance.
+with `science graph add concept ...` before editing the inquiry block. This is
+not merely a stylistic mismatch. `graph add concept` writes directly to
+`knowledge/graph.trig`, and `science graph build` / graph materialization
+deterministically rebuilds that file from project sources. Concepts added only
+through `graph add concept` do not survive a rebuild.
+
+The cleanup should therefore replace `graph add concept` as the durable
+sketch-model path, not just label it as another normal option. If any direct
+graph mutation remains in the command, it should be explicitly framed as
+exploratory and non-durable.
 
 ### 5. `specify-model` already distinguishes target and representation.
 
 `commands/specify-model.md` has a useful Step 0 that routes inquiry refs,
 hypothesis refs, file-based DAG projects, and proposition decomposition
-differently. It still includes `science graph add concept ...` examples for
-variable typing, so it should be checked alongside `sketch-model` to decide
-whether those examples remain exploratory-only or need source-first
-replacement.
+differently. It already tells file-based DAG projects to skip `graph add
+concept` because those graph mutations do not map onto the `.dot` /
+`.edges.yaml` file pair.
+
+The residual issue is narrower: the inquiry-patch path still includes
+`science graph add concept ...` examples for variable typing. That guidance
+should be checked alongside `sketch-model` and either replaced with source-first
+patch-source authoring or explicitly marked as exploratory/non-durable.
 
 ### 6. `add-hypothesis` is mostly aligned but can emphasize lifecycle earlier.
 
@@ -188,13 +198,15 @@ Keep the first implementation slice docs-only and behavior-preserving:
 
 ## Open Questions For The Implementation Plan
 
-1. Should `science graph add concept ...` remain in `sketch-model` as an
-   explicitly exploratory step, or should the first slice replace it with
-   source-authored entity creation guidance?
+1. Should any `science graph add concept ...` example remain in `sketch-model`
+   at all? If it remains, it must be explicitly labeled exploratory and
+   non-durable because graph materialization rewrites `knowledge/graph.trig`.
 
-2. Does the framework have a preferred source-authored concept helper today, or
-   should concept authoring use the generic `science entity create <kind> ...`
-   path when needed?
+2. For standalone durable concept-like records, should the guidance use the
+   generic `science entity create <kind> ...` path, which exists today? For
+   inquiry-internal variables, the likely source-first home is the
+   `entities/patches/<slug>.md` inquiry block rather than a standalone entity.
+   The implementation plan should keep those two cases separate.
 
 3. Should the next-steps boundary be duplicated in `commands/plan-pipeline.md`
    Step 6, or is it enough to cite `science tasks add` there as the tracking
