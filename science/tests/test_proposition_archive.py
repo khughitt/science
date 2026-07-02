@@ -476,6 +476,75 @@ def test_apply_row_construction_fails_if_ready_candidate_lineage_changes(tmp_pat
         _rows_for_ready_candidates(tmp_path, report)
 
 
+def test_apply_row_construction_fails_if_ready_candidate_gains_active_sidecar_backlink(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    report = build_superseded_proposition_archive_report(tmp_path)
+    assert _candidate_by_id(report, "proposition:duplicate")["status"] == "ready"
+
+    _paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", promoted_to="proposition:duplicate")])
+
+    with pytest.raises(PropositionArchiveError, match="live annotation backlink"):
+        _rows_for_ready_candidates(tmp_path, report)
+
+
+def test_apply_row_construction_fails_if_ready_candidate_gains_active_archive_id_collision(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    report = build_superseded_proposition_archive_report(tmp_path)
+    assert _candidate_by_id(report, "proposition:duplicate")["status"] == "ready"
+
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:duplicate",
+            original_path="entities/_archive/propositions/duplicate.md",
+            archived_at="T1",
+        ),
+    )
+
+    with pytest.raises(PropositionArchiveError, match="archive id already active: proposition:duplicate"):
+        _rows_for_ready_candidates(tmp_path, report)
+
+
+def test_apply_row_construction_fails_if_ready_candidate_gains_id_alias_collision(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    report = build_superseded_proposition_archive_report(tmp_path)
+    assert _candidate_by_id(report, "proposition:duplicate")["status"] == "ready"
+
+    _proposition(
+        tmp_path,
+        "collider",
+        extra_frontmatter=(
+            "aliases:\n"
+            "  - proposition:duplicate\n"
+        ),
+    )
+
+    with pytest.raises(PropositionArchiveError, match="id/alias collision on proposition:duplicate"):
+        _rows_for_ready_candidates(tmp_path, report)
+
+
 def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
     _seed(tmp_path)
     _proposition(tmp_path, "canonical")

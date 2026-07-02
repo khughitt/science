@@ -171,30 +171,39 @@ def _row_for_candidate(candidate: _RawEntity, lineage_kind: str, successors: lis
 
 
 def _rows_for_ready_candidates(project_root: Path, report: dict) -> list[ArchiveRow]:
-    sources = load_project_sources(project_root)
-    live_ids = {entity.canonical_id or entity.id for entity in sources.entities}
-    archive = load_archive_index(project_root)
-    resolvable_ids = live_ids | set(archive.resolvable_ids())
+    current_report = build_superseded_proposition_archive_report(project_root)
+    current_by_id = {candidate["id"]: candidate for candidate in current_report["candidates"]}
     raw = _raw_entities(project_root)
     rows: list[ArchiveRow] = []
     for candidate in report["candidates"]:
         if candidate["status"] != "ready":
             continue
-        raw_entity = raw.get(candidate["id"])
+        candidate_id = candidate["id"]
+        current = current_by_id.get(candidate_id)
+        raw_entity = raw.get(candidate_id)
+        if current is None:
+            if raw_entity is None:
+                raise PropositionArchiveError(f"{candidate_id} disappeared before archive apply")
+            if raw_entity.frontmatter.get("status") != "superseded":
+                raise PropositionArchiveError(f"{candidate_id} is no longer superseded before archive apply")
+            raise PropositionArchiveError(f"{candidate_id} is no longer an archive candidate before archive apply")
+        if current["status"] != "ready":
+            blockers = current.get("blockers") or []
+            details = f": {', '.join(blockers)}" if blockers else f": current status is {current['status']}"
+            raise PropositionArchiveError(f"{candidate_id} is no longer ready before archive apply{details}")
         if raw_entity is None:
-            raise PropositionArchiveError(f"{candidate['id']} disappeared before archive apply")
-        if raw_entity.frontmatter.get("status") != "superseded":
-            raise PropositionArchiveError(f"{candidate['id']} is no longer superseded before archive apply")
-
-        lineage_kind, successors, blockers = _lineage_for_candidate(raw_entity, resolvable_ids)
-        if blockers:
-            raise PropositionArchiveError(
-                f"{candidate['id']} is no longer ready before archive apply: {', '.join(sorted(blockers))}"
-            )
+            raise PropositionArchiveError(f"{candidate_id} disappeared before archive apply")
+        for field in ("original_path", "archive_path"):
+            if current[field] != candidate[field]:
+                raise PropositionArchiveError(
+                    f"{candidate_id} {field} changed before archive apply: {candidate[field]} -> {current[field]}"
+                )
+        lineage_kind = current["lineage_kind"]
+        successors = current["successors"]
         if lineage_kind not in {"superseded_by", "resynthesized_into"}:
-            raise PropositionArchiveError(f"{candidate['id']} has invalid lineage kind at apply")
+            raise PropositionArchiveError(f"{candidate_id} has invalid lineage kind at apply")
         if lineage_kind != candidate["lineage_kind"] or successors != candidate["successors"]:
-            raise PropositionArchiveError(f"{candidate['id']} lineage changed before archive apply")
+            raise PropositionArchiveError(f"{candidate_id} lineage changed before archive apply")
         rows.append(_row_for_candidate(raw_entity, lineage_kind, successors))
     return rows
 
@@ -206,7 +215,8 @@ def _postflight(project_root: Path, rows: list[ArchiveRow]) -> None:
     for row in rows:
         if row.id not in index.active_by_id:
             raise PropositionArchiveError(f"{row.id} missing from archive index after apply")
-        assert row.original_path is not None
+        if row.original_path is None:
+            raise PropositionArchiveError(f"{row.id} archive row missing original_path after apply")
         live_path = project_root / row.original_path
         archive_path = project_root / derive_archive_path(row.original_path)
         if live_path.exists():
