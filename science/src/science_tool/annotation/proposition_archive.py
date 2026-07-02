@@ -71,7 +71,8 @@ def _annotation_ref_for_sidecar(project_root: Path, sidecar_path: Path, annotati
     return f"annotation:{entity_relpath_for_sidecar(sidecar_path, project_root)}#{annotation_id}"
 
 
-def _live_promoted_backlinks(project_root: Path, candidate_ids: set[str]) -> dict[str, list[str]]:
+def _live_promoted_backlinks(project_root: Path, candidate_owners: dict[str, set[str]]) -> dict[str, list[str]]:
+    candidate_ids = {candidate_id for owners in candidate_owners.values() for candidate_id in owners}
     backlinks: dict[str, set[str]] = {candidate_id: set() for candidate_id in candidate_ids}
     entities_root = project_root / "entities"
     if not entities_root.is_dir():
@@ -88,11 +89,16 @@ def _live_promoted_backlinks(project_root: Path, candidate_ids: set[str]) -> dic
             if ann.annotation_type != "proposition":
                 continue
             promoted_to = ann.promoted_to
-            if promoted_to not in candidate_ids:
+            if not isinstance(promoted_to, str):
+                continue
+            owners = candidate_owners.get(promoted_to, set())
+            if not owners:
                 continue
             if _annotation_status_value(ann.status) not in _ACTIVE_ANNOTATION_STATUSES:
                 continue
-            backlinks[promoted_to].add(_annotation_ref_for_sidecar(project_root, sidecar_path, ann.id))
+            ref = _annotation_ref_for_sidecar(project_root, sidecar_path, ann.id)
+            for owner in owners:
+                backlinks[owner].add(ref)
     return {candidate_id: sorted(refs) for candidate_id, refs in backlinks.items()}
 
 
@@ -115,13 +121,35 @@ def _collision_owner_index(raw: dict[str, _RawEntity], archive: Any) -> dict[str
     return owners
 
 
-def _successor_resolver(live_ids: set[str], archive: Any) -> dict[str, str]:
-    resolver = {entity_id: entity_id for entity_id in live_ids}
-    resolver.update(archive.resolvable_ids())
-    return resolver
+def _successor_owner_index(live_ids: set[str], archive: Any) -> dict[str, set[str]]:
+    owners: dict[str, set[str]] = {entity_id: {entity_id} for entity_id in live_ids}
+    for archived_id, archived_row in archive.active_by_id.items():
+        for token in (archived_id, *archived_row.aliases, *archived_row.same_as):
+            owners.setdefault(token, set()).add(archived_id)
+    return owners
 
 
-def _lineage_for_candidate(candidate: _RawEntity, resolver: dict[str, str]) -> tuple[str | None, list[str], list[str]]:
+def _candidate_owner_index(raw: dict[str, _RawEntity], candidate_ids: set[str]) -> dict[str, set[str]]:
+    owners: dict[str, set[str]] = {}
+    for candidate_id in candidate_ids:
+        candidate = raw[candidate_id]
+        for token in _alias_tokens(candidate_id, candidate.frontmatter):
+            owners.setdefault(token, set()).add(candidate_id)
+    return owners
+
+
+def _resolve_successor(target: str, owner_index: dict[str, set[str]]) -> tuple[str, list[str]]:
+    owners = owner_index.get(target, set())
+    if not owners:
+        return target, [f"unknown successor {target}"]
+    if len(owners) > 1:
+        return target, [f"ambiguous successor {target}: {sorted(owners)}"]
+    return next(iter(owners)), []
+
+
+def _lineage_for_candidate(
+    candidate: _RawEntity, successor_owners: dict[str, set[str]]
+) -> tuple[str | None, list[str], list[str]]:
     fm = candidate.frontmatter
     has_scalar = "superseded_by" in fm
     has_multi = "resynthesized_into" in fm
@@ -151,14 +179,13 @@ def _lineage_for_candidate(candidate: _RawEntity, resolver: dict[str, str]) -> t
     canonical_successors: list[str] = []
     seen: set[str] = set()
     for target in successors:
-        canonical_target = resolver.get(target, target)
+        canonical_target, target_blockers = _resolve_successor(target, successor_owners)
+        blockers.extend(target_blockers)
         if canonical_target == candidate.id:
             blockers.append("lineage points to itself")
         if canonical_target in seen:
             blockers.append(f"duplicate successor {canonical_target}")
         seen.add(canonical_target)
-        if target not in resolver:
-            blockers.append(f"unknown successor {target}")
         canonical_successors.append(canonical_target)
     return lineage_kind, sorted(canonical_successors), blockers
 
@@ -261,14 +288,15 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
     sources = load_project_sources(project_root)
     live_ids = {entity.canonical_id or entity.id for entity in sources.entities}
     archive = load_archive_index(project_root)
-    resolver = _successor_resolver(live_ids, archive)
+    successor_owners = _successor_owner_index(live_ids, archive)
     raw = _raw_entities(project_root)
     candidate_ids = {
         ref
         for ref in live_ids
         if ref.startswith("proposition:") and ref in raw and raw[ref].frontmatter.get("status") == "superseded"
     }
-    backlinks = _live_promoted_backlinks(project_root, candidate_ids)
+    candidate_owners = _candidate_owner_index(raw, candidate_ids)
+    backlinks = _live_promoted_backlinks(project_root, candidate_owners)
     inbound = _inbound_live_refs(project_root, candidate_ids)
     collision_owners = _collision_owner_index(raw, archive)
 
@@ -280,7 +308,7 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
         if row is None or row.frontmatter.get("status") != "superseded":
             continue
 
-        lineage_kind, successors, blockers = _lineage_for_candidate(row, resolver)
+        lineage_kind, successors, blockers = _lineage_for_candidate(row, successor_owners)
         archive_path = derive_archive_path(row.relpath)
         if (project_root / archive_path).exists():
             blockers.append(f"archive destination exists: {archive_path}")

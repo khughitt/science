@@ -251,6 +251,45 @@ def test_dry_run_blocks_duplicate_successor_through_archived_alias(tmp_path: Pat
     assert candidate["successors"] == ["proposition:archived-canonical", "proposition:archived-canonical"]
 
 
+def test_dry_run_blocks_ambiguous_archived_successor_alias(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:archived-a",
+            aliases=["proposition:shared-alias"],
+            original_path="entities/propositions/archived-a.md",
+            archived_at="T1",
+        ),
+    )
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:archived-b",
+            same_as=["proposition:shared-alias"],
+            original_path="entities/propositions/archived-b.md",
+            archived_at="T1",
+        ),
+    )
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:shared-alias\n",
+    )
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert any(
+        "ambiguous successor proposition:shared-alias" in blocker or "collision" in blocker
+        for blocker in candidate["blockers"]
+    )
+
+
 def test_dry_run_blocks_unknown_successor(tmp_path: Path) -> None:
     candidate = _blocked_candidate(tmp_path, "superseded_by: proposition:missing\n")
 
@@ -333,6 +372,29 @@ def test_live_sidecar_backlink_blocks_archive(tmp_path: Path) -> None:
     _proposition(tmp_path, "canonical")
     _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
     _paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", promoted_to="proposition:duplicate")])
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert candidate["blocking_annotation_refs"] == ["annotation:entities/papers/Smith2020.source#a-1"]
+    assert "live annotation backlink" in candidate["blockers"][0]
+
+
+def test_live_sidecar_backlink_through_candidate_alias_blocks_archive(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter=(
+            "superseded_by: proposition:canonical\n"
+            "aliases:\n"
+            "  - proposition:old-alias\n"
+        ),
+    )
+    _paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", promoted_to="proposition:old-alias")])
 
     report = build_superseded_proposition_archive_report(tmp_path)
 
