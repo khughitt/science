@@ -185,8 +185,24 @@ tombstone-emission worklist with active archive rows that carry lineage:
   or active archived id;
 - for multi-successor `resynthesized_into`, validate every target first, fail on
   any unresolved target, then seed the row;
+- when a resolved successor is itself an active archived id, also mark that successor
+  as referenced so it emits its own archived stub; otherwise an archived-to-archived
+  lineage chain would leave the successor as a bare URI with no `sci:ArchivedEntity`
+  type;
 - after seeding, the existing tombstone loop can emit the archived stub and lineage
-  edges in one place.
+  edges in one place. That loop currently reads only `row.superseded_by`; it must
+  also emit one `sci:supersededBy` per `resynthesized_into` target.
+
+This seeding is deliberately general, not proposition-scoped. The seeding key is
+`ArchiveRow.superseded_by` (and the new `resynthesized_into`), and the generic
+`science entities archive` command already writes `superseded_by` onto archive rows
+for any superseded entity, not just propositions. So this change also makes
+pre-existing, unreferenced archived rows from earlier generic archiving emit a
+tombstone stub and `sci:supersededBy` edge on the next graph materialization. That
+is intended: an archived entity's supersession lineage should be graph-visible
+regardless of how it was archived or whether a live entity still points at it. The
+change is in materialization, not in the archive command, so the command stays
+content-agnostic even though the graph rendering of its past outputs gains edges.
 
 Existing archive behavior for legacy scalar `superseded_by` rows can remain as-is:
 today an unresolvable scalar successor is omitted, and if no live entity references
@@ -306,12 +322,19 @@ Focused tests should cover:
 - graph triples for lineage are stable before and after archive movement;
 - a clean archived superseded proposition with no inbound live refs still emits an
   archived stub and lineage edge after relocation;
+- a pre-existing, unreferenced non-proposition archived row that carries a resolvable
+  `superseded_by` now emits a stub and `sci:supersededBy` edge, confirming the
+  materialization change is general and intentional;
+- an archived-to-archived lineage chain emits a stub for the successor row, not a
+  bare URI;
 - active archived successors are accepted as lineage targets;
 - stale live sidecar `promoted_to` backlinks block movement and are reported;
 - malformed lineage blocks movement;
 - destination collision blocks movement before overwriting;
 - re-running after successful apply reports no live candidates;
-- existing generic archive tests continue to pass.
+- existing generic archive tests still pass; any that snapshot graph triples for an
+  already-archived entity with a resolvable `superseded_by` must be re-baselined for
+  the newly emitted stub and edge rather than assumed unchanged.
 
 The graph-stability tests should parse the materialized dataset and assert exact
 `sci:supersededBy` triples in the knowledge graph, not serialized TriG substrings.
@@ -326,7 +349,10 @@ The graph-stability tests should parse the materialized dataset and assert exact
   movement.
 - Archive rows preserve enough lineage for archived-id resolution and graph
   tombstone emission.
-- The generic archive command remains content-agnostic.
+- The generic archive command remains content-agnostic. The materialization change
+  is general: it makes any lineage-bearing archived row graph-visible, including
+  pre-existing rows from earlier generic archiving. That is an intended, more-correct
+  graph rendering of past outputs, not a change to the archive command's behavior.
 - No sidecar rewrite, deletion, belief recomputation, or Half C/D apply change is
   introduced in this phase.
 
