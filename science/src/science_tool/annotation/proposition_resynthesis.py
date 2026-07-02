@@ -288,7 +288,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
     _reject_unknown_keys(payload, ALLOWED_DRAFT_KEYS, "resynthesis draft")
 
     schema_version = payload.get("schema_version")
-    if schema_version != RESYNTHESIS_SCHEMA_VERSION:
+    if type(schema_version) is not int or schema_version != RESYNTHESIS_SCHEMA_VERSION:
         raise ResynthesisDraftError(f"schema_version must be {RESYNTHESIS_SCHEMA_VERSION}")
 
     source = _required_str(payload, "source")
@@ -483,6 +483,10 @@ def validate_resynthesis_draft(
             raise ResynthesisDraftError("replace assignments must target draft propositions")
     elif draft.disposition == "split_partial" and moved == 0:
         raise ResynthesisDraftError("split_partial must move at least one annotation to a new proposition")
+
+    for proposition, refs in expected_refs.items():
+        if not refs:
+            raise ResynthesisDraftError(f"{proposition} replacement proposition has no source refs")
 
     return ResynthesisValidationReport(
         status="ok",

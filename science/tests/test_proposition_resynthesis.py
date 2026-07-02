@@ -276,6 +276,17 @@ def test_parse_resynthesis_draft_rejects_invalid_source(tmp_path: Path):
         parse_resynthesis_draft(payload)
 
 
+def test_parse_resynthesis_draft_rejects_bool_schema_version(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["schema_version"] = True
+
+    with pytest.raises(ResynthesisDraftError, match="schema_version"):
+        parse_resynthesis_draft(payload)
+
+
 def test_parse_resynthesis_draft_rejects_unknown_top_level_key(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
 
@@ -352,6 +363,18 @@ def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
         "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
         "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
     }
+
+
+def test_validate_resynthesis_draft_rejects_replacement_without_source_refs(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][1]["to"] = "proposition:broad-positive"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="replacement proposition has no source refs"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
 
 def test_validate_resynthesis_draft_ignores_inactive_promoted_backlinks(tmp_path: Path):
@@ -532,6 +555,7 @@ def test_validate_resynthesis_draft_allows_split_partial_with_retained_original(
     ctx = _factorization_project(tmp_path)
     payload = _draft_payload(ctx)
     payload["disposition"] = "split_partial"
+    payload["new_propositions"] = payload["new_propositions"][:1]
     payload["annotation_assignments"][1]["to"] = "proposition:broad"
     draft = parse_resynthesis_draft(payload)
 
