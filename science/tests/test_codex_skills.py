@@ -486,6 +486,13 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
     )
     assert "Do not use `science graph add concept` as the durable authoring path." in sketch_model
     assert "Direct graph mutation writes to `knowledge/graph.trig`" in sketch_model
+    assert (
+        "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
+        in sketch_model
+    )
+    assert "boundary roles, flow edges, or unknown markers until a source owner is available" in sketch_model
+    assert "Use the patch source for inquiry-local assumptions and transformations" in sketch_model
+    assert "the inquiry compiler mints those local nodes from the authored patch" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "Direct `science graph add concept` writes are exploratory and non-durable." in specify_model
     assert (
