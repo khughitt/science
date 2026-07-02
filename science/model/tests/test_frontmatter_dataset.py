@@ -231,9 +231,11 @@ def test_dataset_frontmatter_coerces_identity_context(tmp_md) -> None:
     assert e.identity_context.assembly is not None
     assert e.identity_context.assembly.proxy is not None
     assert e.identity_context.assembly.proxy.sources[0].dataset == "dataset:source-assembly"
-    assert e.identity_context.molecular_ids["gene"].transform == IdentityTransform(
-        type="symbol_remap",
-        from_="hgnc_symbol",
-        method="approved_symbol",
-        dataset="dataset:hgnc-symbol-remap",
+    assert e.identity_context.molecular_ids["gene"].transform == IdentityTransform.model_validate(
+        {
+            "type": "symbol_remap",
+            "from": "hgnc_symbol",
+            "method": "approved_symbol",
+            "dataset": "dataset:hgnc-symbol-remap",
+        }
     )

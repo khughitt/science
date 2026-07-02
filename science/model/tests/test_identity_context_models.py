@@ -189,11 +189,13 @@ def test_identity_context_models_round_trip_proxy_and_transform() -> None:
     assert context.assembly is not None
     assert context.assembly.proxy is not None
     assert context.assembly.proxy.sources[0].dataset == "dataset:source-assembly"
-    assert context.molecular_ids["gene"].transform == IdentityTransform(
-        type="symbol_remap",
-        from_="hgnc_symbol",
-        method="approved_symbol",
-        dataset="dataset:hgnc-symbol-remap",
+    assert context.molecular_ids["gene"].transform == IdentityTransform.model_validate(
+        {
+            "type": "symbol_remap",
+            "from": "hgnc_symbol",
+            "method": "approved_symbol",
+            "dataset": "dataset:hgnc-symbol-remap",
+        }
     )
     assert context.model_dump(by_alias=True)["molecular_ids"]["gene"]["transform"]["from"] == "hgnc_symbol"
 
@@ -219,6 +221,25 @@ def test_identity_context_model_dump_uses_transform_alias() -> None:
 
     assert transform["from"] == "hgnc_symbol"
     assert "from_" not in transform
+
+
+def test_identity_context_rejects_transform_from_field_name() -> None:
+    with pytest.raises(ValidationError):
+        IdentityContext.model_validate(
+            {
+                "taxon": 9606,
+                "molecular_ids": {
+                    "gene": {
+                        "namespace": "hgnc_id",
+                        "transform": {
+                            "type": "symbol_remap",
+                            "from_": "hgnc_symbol",
+                            "dataset": "dataset:hgnc-symbol-remap",
+                        },
+                    }
+                },
+            }
+        )
 
 
 @pytest.mark.parametrize("taxon", [0, -1])
