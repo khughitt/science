@@ -184,13 +184,44 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
             raise ResynthesisApplyError("source review judgment lane is stale")
         if judgment.get("decision") != "factorization_needs_resynthesis":
             raise ResynthesisApplyError("source review judgment decision is stale")
-        return _draft_input_annotations(draft)
+        return _validated_resume_input_annotations(project_root, draft)
 
     if found_judgment:
         raise ResynthesisApplyError("draft candidate_id is stale")
     if found_candidate:
         raise ResynthesisApplyError("draft judgment_id is stale")
     raise ResynthesisApplyError("source review judgment for draft was not found")
+
+
+def _validated_resume_input_annotations(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+    draft_annotations = _draft_input_annotations(draft)
+    snapshot_annotations = _replacement_annotation_snapshot(project_root, draft)
+    if not snapshot_annotations:
+        raise ResynthesisApplyError("input annotation snapshot is incomplete: prior apply state is unavailable")
+    if snapshot_annotations != draft_annotations:
+        raise ResynthesisApplyError("input annotation snapshot does not match draft input_annotations")
+    return draft_annotations
+
+
+def _replacement_annotation_snapshot(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+    annotations: set[str] = set()
+    for replacement in draft.new_propositions:
+        try:
+            location = find_entity(project_root, replacement.id)
+            frontmatter, _body = parse_markdown_entity_file(location.path)
+        except (EntityCommandError, OSError, ValueError) as exc:
+            raise ResynthesisApplyError(
+                "input annotation snapshot is incomplete: "
+                f"{replacement.id} replacement proposition is unavailable in prior apply state"
+            ) from exc
+        source_refs = frontmatter.get("source_refs") or ()
+        if isinstance(source_refs, str) or not isinstance(source_refs, Sequence):
+            raise ResynthesisApplyError(
+                "input annotation snapshot is incomplete: "
+                f"{replacement.id} replacement proposition source_refs are invalid"
+            )
+        annotations.update(str(ref) for ref in source_refs if str(ref).startswith("annotation:"))
+    return annotations
 
 
 def _draft_input_annotations(draft: ResynthesisDraft) -> set[str]:
@@ -525,6 +556,20 @@ def _frontmatter_for_ref(project_root: Path, ref: str) -> Mapping[str, Any]:
 
 def _postflight(project_root: Path, preflight: ResynthesisPreflight) -> None:
     draft = preflight.draft
+    for edit in preflight.file_edits:
+        try:
+            current_text = edit.path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ResynthesisApplyError(
+                f"{_path_string(edit.path)} missing after write; planned file state could not be verified"
+            ) from exc
+        actual_sha256 = _sha256_text(current_text)
+        if actual_sha256 != edit.after_sha256:
+            raise ResynthesisApplyError(
+                f"{_path_string(edit.path)} postflight planned file state mismatch: "
+                f"sha256={actual_sha256}, expected {edit.after_sha256}"
+            )
+
     for replacement in draft.new_propositions:
         _frontmatter_for_ref(project_root, replacement.id)
 

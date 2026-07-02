@@ -420,10 +420,13 @@ def test_apply_resynthesis_draft_rejects_live_plan_error_after_prior_write(
 
 def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_target(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+    import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: ctx["plan"])
     sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
     sidecar = anno_io.read_sidecar(sidecar_path)
     anno_io.write_sidecar(
@@ -454,10 +457,13 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
 
 def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_original_source_refs(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+    import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: ctx["plan"])
     sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
     sidecar = anno_io.read_sidecar(sidecar_path)
     anno_io.write_sidecar(
@@ -507,6 +513,40 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     )
 
     ctx = _factorization_project(tmp_path)
+    apply_resynthesis_draft(tmp_path, parse_resynthesis_draft(_draft_payload(ctx)), as_of=date(2026, 7, 1))
+    c_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"].append(
+        {
+            "annotation": "annotation:entities/papers/C2022.source#c1",
+            "from": "proposition:broad",
+            "to": "proposition:broad-positive",
+        }
+    )
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_tampered_input_without_replacement_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
     for citekey, annotation_id, target in (
         ("A2020", "a1", "proposition:broad-positive"),
         ("B2021", "b1", "proposition:broad-negative"),
@@ -530,7 +570,15 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
         "C2022",
         (_ann("c1", "proposition:broad", stance="asserted"),),
     )
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
     payload = _draft_payload(ctx)
+    payload["input_annotations"].append("annotation:entities/papers/C2022.source#c1")
+    payload["context"]["input_annotations"].append("annotation:entities/papers/C2022.source#c1")
     payload["annotation_assignments"].append(
         {
             "annotation": "annotation:entities/papers/C2022.source#c1",
@@ -540,9 +588,10 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     )
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
+    with pytest.raises(ResynthesisApplyError, match="replacement.*snapshot|prior apply state"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
 
 
@@ -601,7 +650,10 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
 
     with pytest.raises(
         ResynthesisApplyError,
-        match="input_annotations are stale|assign every input annotation|remains promoted_to original",
+        match=(
+            "input_annotations are stale|assign every input annotation|remains promoted_to original|"
+            "input annotation snapshot is incomplete"
+        ),
     ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
@@ -820,7 +872,10 @@ def test_apply_resynthesis_draft_split_partial_resume_rejects_omitted_original_a
     monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="split_partial must assign every input annotation"):
+    with pytest.raises(
+        ResynthesisApplyError,
+        match="split_partial must assign every input annotation|input annotation snapshot is incomplete",
+    ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
@@ -877,3 +932,30 @@ def test_apply_resynthesis_draft_preflight_failure_writes_nothing(
         tmp_path / "entities" / "propositions" / "broad.md"
     )
     assert original_frontmatter["status"] == "active"
+
+
+def test_apply_resynthesis_draft_postflight_rejects_corrupted_planned_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    original_atomic_write_text = apply_module.atomic_write_text
+
+    def corrupt_positive_replacement(path: Path, text: str) -> None:
+        if path.name == "broad-positive.md":
+            text = text.replace(
+                "BES can behave similarly to meta-analysis when evidence is informative.",
+                "BES can behave similarly to meta-analysis when evidence is informative. Corrupted.",
+            )
+        original_atomic_write_text(path, text)
+
+    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_positive_replacement)
+
+    with pytest.raises(ResynthesisApplyError, match="postflight.*hash|planned file state"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
