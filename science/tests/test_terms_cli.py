@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from _fixtures.entity_helpers import seed_project
+from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -53,6 +53,56 @@ def test_terms_add_creates_minimal_local_terms_yaml_and_reloads() -> None:
         assert entity.kind == "concept"
         assert entity.title == "Treatment response"
         assert entity.file_path == "knowledge/sources/local/terms.yaml"
+
+
+def test_terms_add_rejects_schema_incompatible_registered_kind_without_writing() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "terms",
+                "add",
+                "mechanism:minimal",
+                "--title",
+                "Minimal mechanism",
+            ],
+        )
+
+        assert result.exit_code != 0, result.output
+        assert "mechanism:minimal" in result.output
+        assert "cannot be represented as a lightweight term" in result.output
+        assert not (root / "knowledge" / "sources" / "local" / "terms.yaml").exists()
+
+
+def test_terms_add_rejects_ids_that_canonicalize_before_writing() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/papers/Smith2024.md",
+            {"kind": "paper", "id": "paper:Smith2024", "title": "Smith 2024"},
+        )
+
+        result = runner.invoke(
+            main,
+            [
+                "terms",
+                "add",
+                "article:Smith2024",
+                "--title",
+                "Smith 2024",
+            ],
+        )
+
+        assert result.exit_code != 0, result.output
+        assert "article:Smith2024 canonicalizes to paper:Smith2024" in result.output
+        assert not (root / "knowledge" / "sources" / "local" / "terms.yaml").exists()
 
 
 def test_terms_add_serializes_only_populated_optional_fields() -> None:
