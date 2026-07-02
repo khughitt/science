@@ -21,6 +21,10 @@ def _edit_by_suffix(preflight, suffix: str):
     return matches[0]
 
 
+def _paths_for_reason(preflight, reason: str) -> list[Path]:
+    return [edit.path for edit in preflight.file_edits if edit.reason == reason]
+
+
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
     tmp_path: Path,
 ):
@@ -81,7 +85,19 @@ def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_super
     assert "proposition:broad-positive" in sidecar_a_edit.final_text
     assert "proposition:broad-negative" in sidecar_b_edit.final_text
 
-    assert [edit.path for edit in preflight.file_edits] == sorted(edit.path for edit in preflight.file_edits)
+    assert [edit.reason for edit in preflight.file_edits] == [
+        "replacement_proposition",
+        "replacement_proposition",
+        "annotation_promoted_to_rewrite",
+        "annotation_promoted_to_rewrite",
+        "original_resynthesis_lineage",
+    ]
+    assert _paths_for_reason(preflight, "replacement_proposition") == sorted(
+        _paths_for_reason(preflight, "replacement_proposition")
+    )
+    assert _paths_for_reason(preflight, "annotation_promoted_to_rewrite") == sorted(
+        _paths_for_reason(preflight, "annotation_promoted_to_rewrite")
+    )
 
 
 def test_plan_resynthesis_apply_merges_multiple_rewrites_in_one_sidecar(tmp_path: Path, monkeypatch):
@@ -500,6 +516,75 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad-negative"
+
+
+def test_apply_resynthesis_draft_resumes_after_replacement_writes_and_one_sidecar_rewrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    expected_refs_by_replacement = {
+        "proposition:broad-positive": (
+            "annotation:entities/papers/A2020.source#a1",
+            "manual:curator-note",
+            "paper:A2020",
+        ),
+        "proposition:broad-negative": (
+            "annotation:entities/papers/B2021.source#b1",
+            "paper:B2021",
+        ),
+    }
+    for replacement in draft.new_propositions:
+        rendered = render_replacement_proposition(
+            tmp_path,
+            replacement,
+            expected_refs_by_replacement[replacement.id],
+            as_of=date(2026, 7, 1),
+        )
+        rendered.path.write_text(rendered.text, encoding="utf-8")
+
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar = anno_io.read_sidecar(sidecar_path)
+    anno_io.write_sidecar(
+        sidecar_path,
+        replace(
+            sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in sidecar.annotations
+            ),
+        ),
+    )
+    before_sidecar = sidecar_path.read_text(encoding="utf-8")
+    monkeypatch.setattr(
+        resynthesis,
+        "build_live_action_plan",
+        lambda _root, _review: ReconciliationActionPlan(
+            schema_version=1,
+            source_reviews=(str(ctx["review_path"]),),
+            actions=(),
+        ),
+    )
+
+    report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert report.status == "ok"
+    assert sidecar_path.read_text(encoding="utf-8") == before_sidecar
+    assert any(path.endswith("entities/papers/A2020.source.anno.trig") for path in report.noop_paths)
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad-negative"
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "superseded"
 
 
 def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_original_source_refs(

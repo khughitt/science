@@ -532,6 +532,20 @@ def _new_or_existing_edit(path: Path, final_text: str, reason: str) -> PlannedFi
     )
 
 
+def _ordered_file_edits(edits: Mapping[Path, PlannedFileEdit]) -> tuple[PlannedFileEdit, ...]:
+    phase_by_reason = {
+        "replacement_proposition": 0,
+        "annotation_promoted_to_rewrite": 1,
+        "original_resynthesis_lineage": 2,
+    }
+    return tuple(
+        sorted(
+            edits.values(),
+            key=lambda edit: (phase_by_reason.get(edit.reason, 3), edit.path),
+        )
+    )
+
+
 def plan_resynthesis_apply(
     project_root: Path,
     draft: ResynthesisDraft,
@@ -564,7 +578,7 @@ def plan_resynthesis_apply(
     return ResynthesisPreflight(
         draft=draft,
         validation=validation,
-        file_edits=tuple(edits[path] for path in sorted(edits)),
+        file_edits=_ordered_file_edits(edits),
         expected_annotation_targets=validation.expected_annotation_targets,
         expected_source_refs_by_replacement=validation.expected_source_refs_by_replacement,
         expected_original_state=_original_updates(draft),
