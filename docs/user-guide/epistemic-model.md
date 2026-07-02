@@ -74,7 +74,7 @@ The authored `inquiry:` block carries:
 | `flow_edges` | Directed inquiry edges using `feedsInto`, `produces`, or `causes`, optionally backed by `proposition:` refs in `claim_refs`. |
 | `assumptions` | Inquiry-local assumption nodes minted during graph build, with optional provenance. |
 | `transformations` | Inquiry-local transformation nodes, tools, parameters, and validation refs. |
-| `unknowns` | Existing refs marked as `sci:Unknown` until resolved or justified. |
+| `unknowns` | Refs marked as `sci:Unknown`; unresolved placeholders may be used during sketch but should be resolved or justified before non-sketch status. |
 
 The graph build compiles inquiry patch profiles into dedicated `sci:Inquiry`
 named graphs and then derives patch-membership records. Boundary nodes and edge
@@ -92,14 +92,15 @@ and compiler-minted local nodes for inquiry-local structure.
 | Flow-edge endpoints | Existing source refs connected by the inquiry. Edges do not create endpoint owners. |
 | Flow-edge claims | Existing `proposition:*` refs when an edge has an explicit truth-apt assertion. |
 | Causal treatment/outcome | Existing source refs, usually domain kinds, project concepts that already resolve, or lightweight local terms. |
-| Unknowns | Existing source refs marked as `sci:Unknown` until resolved or justified. Unknown is a marker, not a standalone owner. |
+| Unknowns | Refs marked as `sci:Unknown`; they may name unresolved placeholders during sketch, but should be resolved or justified before non-sketch status. Unknown is a marker, not a durable owner. |
 | Assumptions | Inquiry-local records in `inquiry.assumptions`; graph build mints local assumption nodes. |
 | Transformations | Inquiry-local records in `inquiry.transformations`; graph build mints local transformation nodes. |
 
 Unresolved endpoint refs are graph-build errors. Boundary refs, flow endpoints,
-causal treatment/outcome refs, claim refs, and unknown refs must already resolve
-through source records or lightweight term rows before the inquiry can be
-materialized.
+causal treatment/outcome refs, and claim refs must already resolve through
+source records or lightweight term rows before the inquiry can be materialized.
+Unknown markers may remain in sketch; non-sketch inquiries should resolve or
+justify them.
 
 Use `concept:*` only when that ref already resolves through a source such as a
 local-profile `terms.yaml` row or a future supported concept entity. The

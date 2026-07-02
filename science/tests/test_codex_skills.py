@@ -490,7 +490,9 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
         "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
         in sketch_model
     )
-    assert "boundary roles, flow edges, or unknown markers until a source owner is available" in sketch_model
+    assert "defer boundary roles or flow edges until a source owner is available" in sketch_model
+    assert "Unknown markers may be used in sketch as temporary uncertainty markers" in sketch_model
+    assert "resolve or justify them before moving out of sketch" in sketch_model
     assert "Use the patch source for inquiry-local assumptions and transformations" in sketch_model
     assert "the inquiry compiler mints those local nodes from the authored patch" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw

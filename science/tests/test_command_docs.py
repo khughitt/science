@@ -1155,7 +1155,9 @@ def test_sketch_model_uses_source_first_inquiry_authoring() -> None:
         "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
         in normalized
     )
-    assert "boundary roles, flow edges, or unknown markers until a source owner is available" in normalized
+    assert "defer boundary roles or flow edges until a source owner is available" in normalized
+    assert "Unknown markers may be used in sketch as temporary uncertainty markers" in normalized
+    assert "resolve or justify them before moving out of sketch" in normalized
     assert "Use the patch source for inquiry-local assumptions and transformations" in normalized
     assert "the inquiry compiler mints those local nodes from the authored patch" in normalized
     assert "```bash\nscience graph add concept" not in text

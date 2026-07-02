@@ -172,10 +172,16 @@ def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     assert "Inquiry fields use two ownership modes" in normalized
     assert "| Boundary refs | Existing source refs selected by the inquiry" in section
     assert "| Flow-edge endpoints | Existing source refs connected by the inquiry" in section
-    assert "| Unknowns | Existing source refs marked as `sci:Unknown`" in section
+    assert "| Unknowns | Refs marked as `sci:Unknown`" in section
     assert "| Assumptions | Inquiry-local records in `inquiry.assumptions`" in section
     assert "| Transformations | Inquiry-local records in `inquiry.transformations`" in section
     assert "Unresolved endpoint refs are graph-build errors" in normalized
+    assert (
+        "Boundary refs, flow endpoints, causal treatment/outcome refs, and claim refs must already resolve"
+        in normalized
+    )
+    assert "Unknown markers may remain in sketch" in normalized
+    assert "non-sketch inquiries should resolve or justify them" in normalized
     assert "`science graph add concept` is not durable inquiry authoring" in normalized
 
 
