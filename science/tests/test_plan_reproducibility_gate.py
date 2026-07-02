@@ -127,6 +127,55 @@ def test_convergent_derived_graph_does_not_treat_shared_upstream_as_cycle(tmp_pa
     assert not any("cycle" in h for h in halts)
 
 
+def _write_recipe_derived(root: Path, slug: str, upstreams: str | list[str]):
+    """Write a VALID origin:derived dataset using the RECIPE derivation form
+    (WorkflowRecipeDerivationBlock: workflow_recipe + inputs, no workflow-run)."""
+    upstream_slugs = [upstreams] if isinstance(upstreams, str) else upstreams
+    upstream_ids = [f"dataset:{upstream}" for upstream in upstream_slugs]
+    upstreams_yaml = "[" + ", ".join(f'"{upstream_id}"' for upstream_id in upstream_ids) + "]"
+    ds = root / "entities" / "datasets"
+    ds.mkdir(parents=True, exist_ok=True)
+    (ds / f"{slug}.md").write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
+        "derivation:\n"
+        '  kind: "workflow"\n'
+        '  workflow_recipe: "workflow:wf"\n'
+        '  recipe_lockfile: "code/workflows/config.yaml"\n'
+        f"  inputs: {upstreams_yaml}\n---\n",
+        encoding="utf-8",
+    )
+
+
+def test_recipe_derived_input_inherits_upstream_not_unknown(tmp_path):
+    # Regression: recipe-provenance (WorkflowRecipeDerivationBlock) derived
+    # datasets must inherit their upstream class through the closure, not collapse
+    # to `unknown`. Upstream is third-party-reproducible -> the derived dataset
+    # inherits it and PASSES (before the fix it halted as unknown).
+    _write_dataset(tmp_path, "geo", OPEN)
+    _write_recipe_derived(tmp_path, "recipe_derived", "geo")
+    ok, halts, _ = check_reproducibility(tmp_path, ["dataset:recipe_derived"], policy=BAR)
+    assert ok is True and halts == []
+
+
+def test_recipe_derived_inherits_weakest_below_bar_upstream(tmp_path):
+    # And when the recipe upstream is below-bar, the derived dataset inherits the
+    # below-bar class and halts for that reason (not for `unknown`).
+    _write_dataset(tmp_path, "n3c", N3C)
+    _write_recipe_derived(tmp_path, "recipe_from_n3c", "n3c")
+    ok, halts, _ = check_reproducibility(tmp_path, ["dataset:recipe_from_n3c"], policy=BAR)
+    assert ok is False and any("trust-based-output" in h for h in halts)
+
+
+def test_recipe_derived_passes_access_gate_via_inputs(tmp_path):
+    # check_inputs must treat a recipe-provenance derived dataset as ready when
+    # its transitive inputs are ready (no workflow-run symmetry required).
+    _write_dataset(tmp_path, "geo", OPEN)  # verified=True
+    _write_recipe_derived(tmp_path, "recipe_derived_access", "geo")
+    ok, halts = check_inputs(tmp_path, ["dataset:recipe_derived_access"])
+    assert ok is True and halts == []
+
+
 def test_verified_but_nonreproducible_passes_access_fails_combined(tmp_path):
     _write_dataset(tmp_path, "n3c", N3C)  # access.verified=True, class trust-based-output
     access_ok, _ = check_inputs(tmp_path, ["dataset:n3c"])
