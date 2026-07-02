@@ -176,6 +176,30 @@ def test_recipe_derived_passes_access_gate_via_inputs(tmp_path):
     assert ok is True and halts == []
 
 
+def _write_member_derived(root: Path, slug: str, parent: str):
+    """Write a VALID origin:derived dataset using the member_of derivation form
+    (MemberOfDerivationBlock: parent_dataset + member_key, no inputs)."""
+    ds = root / "entities" / "datasets"
+    ds.mkdir(parents=True, exist_ok=True)
+    (ds / f"{slug}.md").write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        "derivation:\n"
+        '  kind: "member_of"\n'
+        f'  parent_dataset: "dataset:{parent}"\n'
+        f'  member_key: "{slug}-row"\n---\n',
+        encoding="utf-8",
+    )
+
+
+def test_member_of_derived_inherits_parent_class_not_unknown(tmp_path):
+    # Regression: member_of-provenance derived datasets inherit their parent
+    # collection's reproducibility class through the closure, not `unknown`.
+    _write_dataset(tmp_path, "geo", OPEN)
+    _write_member_derived(tmp_path, "member_derived", "geo")
+    ok, halts, _ = check_reproducibility(tmp_path, ["dataset:member_derived"], policy=BAR)
+    assert ok is True and halts == []
+
+
 def test_verified_but_nonreproducible_passes_access_fails_combined(tmp_path):
     _write_dataset(tmp_path, "n3c", N3C)  # access.verified=True, class trust-based-output
     access_ok, _ = check_inputs(tmp_path, ["dataset:n3c"])
