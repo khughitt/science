@@ -598,6 +598,104 @@ def test_parse_dataset_benchmark_block(tmp_path: Path) -> None:
     assert task.ground_truth is not None and task.ground_truth.type == "measured-outcome"
 
 
+def test_parse_dataset_benchmark_task_support_block(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: progression-risk",
+        "      task_type: survival prediction",
+        "      prediction_target: progression or relapse",
+        "      held_out_unit: patient",
+        "      metric: concordance-index",
+        "      baseline: clinical covariates",
+        "      ground_truth:",
+        "        type: clinical-endpoint",
+        "        description: progression-free survival endpoint",
+        "      support:",
+        "        state: blocked",
+        "        reason: open-metadata-missing-progression-endpoint",
+        "        checked_at: '2026-07-02'",
+        "        evidence:",
+        "          - recipe/reports/validation.json#task_support.progression-risk",
+        "        notes:",
+        "          - Open metadata lacks progression endpoint coverage.",
+    )
+
+    entity = parse_entity_file(md, project_slug="testproj")
+
+    task = entity.benchmark.tasks[0]
+    assert task.support is not None
+    assert task.support.state == "blocked"
+    assert task.support.reason == "open-metadata-missing-progression-endpoint"
+    assert task.support.checked_at == "2026-07-02"
+    assert task.support.evidence == ["recipe/reports/validation.json#task_support.progression-risk"]
+    assert task.support.notes == ["Open metadata lacks progression endpoint coverage."]
+
+
+def test_parse_dataset_benchmark_task_support_unknown_state_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: progression-risk",
+        "      support:",
+        "        state: blockd",
+        "        reason: open-metadata-missing-progression-endpoint",
+        "        checked_at: '2026-07-02'",
+    )
+
+    with pytest.raises(ValidationError, match="support"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_task_support_candidate_requires_reason(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: overall-survival",
+        "      support:",
+        "        state: candidate",
+        "        checked_at: '2026-07-02'",
+    )
+
+    with pytest.raises(ValidationError, match="support.reason is required"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_task_support_reason_must_be_kebab_case(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: progression-risk",
+        "      support:",
+        "        state: blocked",
+        "        reason: Missing Endpoint",
+        "        checked_at: '2026-07-02'",
+    )
+
+    with pytest.raises(ValidationError, match="support.reason"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_task_support_checked_at_must_be_iso_date(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: progression-risk",
+        "      support:",
+        "        state: blocked",
+        "        reason: open-metadata-missing-progression-endpoint",
+        "        checked_at: '2026/07/02'",
+    )
+
+    with pytest.raises(ValidationError, match="support.checked_at"):
+        parse_entity_file(md, project_slug="testproj")
+
+
 def test_parse_dataset_benchmark_malformed_task_id_raises(tmp_path: Path) -> None:
     md = _write_dataset_md(
         tmp_path,

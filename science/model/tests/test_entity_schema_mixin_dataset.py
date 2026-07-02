@@ -194,6 +194,66 @@ def test_dataset_benchmark_block_validates(base_entity: dict) -> None:
     EntityValidator().validate(entity)
 
 
+def test_dataset_benchmark_supported_task_accepts_empty_reason(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "tasks": [
+                {
+                    "id": "drug-response",
+                    "support": {"state": "supported", "reason": "", "checked_at": ""},
+                }
+            ],
+        },
+    }
+
+    EntityValidator().validate(entity)
+
+
+def test_dataset_benchmark_task_accepts_null_support(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "tasks": [
+                {
+                    "id": "drug-response",
+                    "support": None,
+                }
+            ],
+        },
+    }
+
+    EntityValidator().validate(entity)
+
+
+@pytest.mark.parametrize(
+    "support",
+    [
+        {"state": "blockd", "reason": "open-metadata-missing-progression-endpoint", "checked_at": "2026-07-02"},
+        {"state": "blocked", "reason": "Missing Endpoint", "checked_at": "2026-07-02"},
+        {"state": "blocked", "reason": "open-metadata-missing-progression-endpoint", "checked_at": "2026/07/02"},
+    ],
+)
+def test_dataset_benchmark_task_rejects_invalid_support_fields(base_entity: dict, support: dict[str, str]) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "tasks": [
+                {
+                    "id": "progression-risk",
+                    "support": support,
+                }
+            ],
+        },
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
+
+
 @pytest.mark.parametrize("task_id", ["Bad Task", "a-", "a--b"])
 def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict, task_id: str) -> None:
     entity = base_entity | {

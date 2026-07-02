@@ -101,11 +101,52 @@
             "description": {"type": "string"}
           }
         },
+        "support": {
+          "anyOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/benchmark_task_support"}
+          ]
+        },
         "interpretation_limits": {"type": "array", "items": {"type": "string"}},
         "intervention": {"type": "string"},
         "timepoints": {"type": "array", "items": {"type": "string"}},
         "contexts": {"type": "array", "items": {"type": "string"}}
       }
+    },
+    "benchmark_task_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {"enum": ["supported", "candidate", "blocked"]},
+        "reason": {
+          "type": "string",
+          "anyOf": [
+            {"const": ""},
+            {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+          ]
+        },
+        "checked_at": {
+          "type": "string",
+          "anyOf": [
+            {"const": ""},
+            {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          ]
+        },
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"enum": ["candidate", "blocked"]}}, "required": ["state"]},
+          "then": {
+            "required": ["reason"],
+            "properties": {
+              "reason": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+            }
+          }
+        }
+      ]
     },
     "access": {
       "type": "object",
