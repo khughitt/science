@@ -145,8 +145,7 @@ For each input data source identified in Step 2:
        that controlled or commercial siblings remain out of scope. HALT if the plan would consume any restricted sibling,
        or if the public slice is not distinguishable enough to verify independently.
      - HALT otherwise with Branch A/B options:
-       - **Branch A** — verifiable under current credentials → run verification
-         (manual or future `science dataset verify`), then re-run this step.
+       - **Branch A** — verifiable under current credentials → run the current `science dataset verify-access` command: `science dataset verify-access <slug>` with enum-safe evidence, then re-run this step.
        - **Branch B** — requires credentials the project does not hold.
          Three sub-options:
          (a) **scope-reduce**: defer to a follow-up task; populate

@@ -106,10 +106,14 @@ in the plan):
     absent runtime files as FAIL in this pattern; instead require WP1 to end by
     producing the runtime artifact, datapackage/checksums, and any updated
     `last_reviewed` evidence before downstream work runs.
-- `consumed_by` includes `plan:<this-plan-file-stem>`.
-- The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
+  - `consumed_by` includes `plan:<this-plan-file-stem>`.
+  - The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
   external records use `access:`, derived records use `derivation:`, and
   resource-level metadata lives in the runtime datapackage.
+- Access verification should be current: if a public, registration-only, or
+  credentialed external dataset is obtainable but has stale or missing evidence,
+  require `science dataset verify-access <slug>` before downstream stages consume
+  it.
 
 **Scoring:**
 
