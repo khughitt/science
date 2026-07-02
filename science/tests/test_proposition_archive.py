@@ -595,6 +595,45 @@ def test_postflight_fails_if_active_archive_row_original_path_differs_from_plann
         _postflight(tmp_path, [planned])
 
 
+@pytest.mark.parametrize(
+    ("planned_update", "active_update", "field"),
+    [
+        ({}, {"title": "Changed title"}, "title"),
+        ({}, {"reason": "changed:reason"}, "reason"),
+        ({"archived_at": None}, {"archived_at": "T1"}, "archived_at"),
+    ],
+)
+def test_postflight_fails_if_active_archive_row_metadata_differs_from_planned_row(
+    tmp_path: Path,
+    planned_update: dict[str, str | None],
+    active_update: dict[str, str | None],
+    field: str,
+) -> None:
+    _seed(tmp_path)
+    original_path = "entities/propositions/duplicate.md"
+    planned = ArchiveRow(
+        op="archive",
+        id="proposition:duplicate",
+        kind="proposition",
+        title="duplicate",
+        status="superseded",
+        superseded_by="proposition:canonical",
+        original_path=original_path,
+        archived_at="T0",
+        reason="status:superseded",
+    ).model_copy(update=planned_update)
+    archived = tmp_path / derive_archive_path(original_path)
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("Archived proposition.\n", encoding="utf-8")
+    append_row(
+        archive_index_path(tmp_path),
+        planned.model_copy(update=active_update),
+    )
+
+    with pytest.raises(PropositionArchiveError, match=f"proposition:duplicate archive index mismatch: {field}"):
+        _postflight(tmp_path, [planned])
+
+
 def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
     _seed(tmp_path)
     _proposition(tmp_path, "canonical")

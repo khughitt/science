@@ -219,16 +219,19 @@ def _postflight(project_root: Path, rows: list[ArchiveRow]) -> None:
             raise PropositionArchiveError(f"{row.id} archive row missing original_path after apply")
         active = index.active_by_id[row.id]
         fields = (
+            "op",
+            "id",
             "kind",
-            "status",
+            "title",
             "aliases",
             "same_as",
+            "status",
             "superseded_by",
             "resynthesized_into",
             "original_path",
+            "archived_at",
+            "reason",
         )
-        if row.archived_at is not None:
-            fields = (*fields, "archived_at")
         for field in fields:
             if getattr(active, field) != getattr(row, field):
                 raise PropositionArchiveError(f"{row.id} archive index mismatch: {field}")
