@@ -11,8 +11,8 @@ lineage in the graph, and archive settled superseded propositions.
 One workflow gap remains: reviewed advisory decisions are not durable inputs to
 future candidate generation. Half B emits advisory `record_reconciliation_decision`
 actions for judgments such as `related_but_distinct`, `conflict_or_negation`,
-`split_possible`, and `insufficient_hints`, but no command records those decisions as
-project state. The same reviewed candidate can therefore keep resurfacing.
+and `split_possible`, but no command records those decisions as project state. The
+same reviewed candidate can therefore keep resurfacing.
 
 This phase adds a narrow persistence surface for reviewed reconciliation decisions
 and teaches reconciliation reporting to acknowledge current saved decisions without
@@ -71,8 +71,8 @@ Each line is one immutable record:
 ```
 
 For Lane A, `members` is the reviewed member set and `proposition` is `null`. For
-Lane B advisory decisions (`split_possible` and `insufficient_hints`), `proposition`
-is the reviewed proposition and `members` is empty.
+Lane B `split_possible` decisions use `proposition` for the reviewed proposition and
+leave `members` empty.
 
 `decision_id` is deterministic:
 
@@ -148,7 +148,7 @@ Lane B current decision:
 
 - `candidate_id` matches the current factorization candidate for `proposition`;
 - `judgment_id` equals `judgment_id("factorization_disagreement", decision, [proposition])`;
-- the decision is one of `split_possible` or `insufficient_hints`;
+- the decision is `split_possible`;
 - the candidate is still present in the current factorization report.
 
 Stale decisions are not used for suppression. They remain in the append-only log as
