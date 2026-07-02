@@ -353,7 +353,7 @@ class MolecularTierIdentity(BaseModel):
 class IdentityContext(BaseModel):
     """Biological identity context block for dataset-like entities."""
 
-    taxon: int = Field(ge=1)
+    taxon: int = Field(strict=True, ge=1)
     molecular_ids: dict[str, MolecularTierIdentity] = Field(default_factory=dict)
     assembly: AssemblyIdentity | None = None
     model_config = ConfigDict(extra="allow")

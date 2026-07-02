@@ -179,6 +179,11 @@ def test_identity_context_rejects_non_positive_taxon(taxon: int) -> None:
         IdentityContext.model_validate({"taxon": taxon})
 
 
+def test_identity_context_rejects_string_taxon() -> None:
+    with pytest.raises(ValidationError):
+        IdentityContext.model_validate({"taxon": "9606"})
+
+
 @pytest.mark.parametrize("seqcol_digest", [None, "UNKNOWN"])
 def test_assembly_identity_resolved_requires_known_seqcol_digest(seqcol_digest: str | None) -> None:
     payload = {
