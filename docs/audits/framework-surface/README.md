@@ -17,6 +17,8 @@ threads before any behavioral refactor.
   model/API tightening opportunities.
 - [`flag-drift.md`](flag-drift.md) records concrete CLI option drift against the
   CLI behavior convention.
+- [`dataset-surface-design.md`](dataset-surface-design.md) designs the
+  dataset/data command-surface guidance cleanup.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary
@@ -82,3 +84,9 @@ It adds the command taxonomy, write classes, dataset command distinction,
 source-authored vs graph-authored guidance, and shared CLI behavior notes.
 The taxonomy is now guarded by `science/tests/test_user_guide_docs.py`, which
 checks the guide against the registered top-level Click commands.
+
+The dataset surface follow-up is drafted in
+[`dataset-surface-design.md`](dataset-surface-design.md). It keeps command
+behavior stable for the first slice and focuses on aligning user-guide,
+command, skill, and generated Codex guidance around the singular/plural
+dataset command boundary.

@@ -11,6 +11,12 @@ def _read_skill(name: str) -> str:
     return (ROOT / "codex-skills" / name / "SKILL.md").read_text(encoding="utf-8")
 
 
+def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
+    assert start_marker in text
+    assert end_marker in text
+    return text.split(start_marker, 1)[1].split(end_marker, 1)[0]
+
+
 def test_command_to_skill_name_uses_science_namespace() -> None:
     assert command_to_skill_name(Path("commands/status.md")) == "science-status"
     assert command_to_skill_name(Path("commands/research-topic.md")) == "science-research-topic"
@@ -184,6 +190,41 @@ def test_catalog_datasets_generated_skill_documents_dataset_link_helper(tmp_path
     assert "science dataset reconcile-links --fix" in text
     assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
     assert "idempotent" in text
+
+
+def test_committed_find_datasets_skill_routes_durable_records_through_dataset_lifecycle() -> None:
+    text = _read_skill("science-find-datasets")
+
+    assert "entities/questions/" in text
+    assert "entities/hypotheses/" in text
+    assert "legacy specs/research-question.md only if it exists" in text
+    assert "science datasets search" in text
+    assert "science dataset add <slug>" in text
+    assert "--level <public|registration|controlled|commercial|mixed>" in text
+    add_example = _slice_between(
+        text,
+        "science dataset add <slug>",
+        "science dataset verify-access <slug>",
+    )
+    assert "--license" not in add_example
+    assert "science dataset verify-access <slug>" in text
+    assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
+    assert "--source-url \"<landing-page-or-download-url>\"" in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "Direct template authoring is a fallback" in text
+    assert "For each `Use now` or `Evaluate next` dataset, create a dataset note" not in text
+    assert "--level <public|controlled|mixed>" not in text
+    assert "--method <landing-confirmed|downloaded|manual-review>" not in text
+    assert "--source \"<landing-page-or-download-url>\"" not in text
+    assert "--date <YYYY-MM-DD>" not in text
+
+
+def test_committed_plan_pipeline_skill_uses_current_dataset_verify_access_gate() -> None:
+    text = _read_skill("science-plan-pipeline")
+
+    assert "science dataset verify-access <slug>" in text
+    assert "current `science dataset verify-access`" in text
+    assert "future `science dataset verify`" not in text
 
 
 def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_path: Path) -> None:

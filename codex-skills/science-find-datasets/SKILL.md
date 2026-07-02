@@ -71,8 +71,10 @@ Before executing any research command:
    fall back to:
    `uv run --with <science-plugin-root>/science science <command>`
 
-Find datasets for the user input.
-If no argument is provided, derive candidate search terms from `specs/research-question.md`, active hypotheses, and inquiry variables, then ask the user to confirm the focus.
+Find candidate external datasets for the user input.
+If no argument is provided, derive candidate search terms from active questions,
+hypotheses, inquiry variables, and legacy specs only when those files exist;
+then ask the user to confirm the focus.
 
 ## Setup
 
@@ -80,14 +82,14 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 
 Additionally:
 1. Read `skills/data/SKILL.md` for data management conventions.
-2. If present, read `skills/data/frictionless.md` for Data Package guidance.
-3. Read `.ai/templates/dataset.md` first; if not found, read `templates/dataset.md`.
-4. Read project context:
-   - `specs/research-question.md`
-   - `specs/scope-boundaries.md`
+2. If present, read `skills/data/frictionless.md` for runtime Data Package guidance.
+3. Read project context:
+   - `entities/questions/`
    - `entities/hypotheses/`
-   - Existing `entities/datasets/` (to avoid duplicating known datasets)
-5. If an inquiry exists, check inquiry variables to understand what data the project needs:
+   - `entities/datasets/` to avoid duplicating known dataset records
+   - legacy specs/research-question.md only if it exists
+   - legacy specs/scope-boundaries.md only if it exists
+4. If an inquiry exists, check inquiry variables to understand what data the project needs:
    ```bash
    science inquiry list --format json
    ```
@@ -201,36 +203,56 @@ Label each as:
 - `Evaluate next` — promising but needs closer inspection
 - `Track` — potentially useful, defer
 
-### Step 5: Document selected datasets
+### Step 5: Record selected datasets
 
-For each `Use now` or `Evaluate next` dataset, create a dataset note:
+For each `Use now` or `Evaluate next` dataset, ensure there is a durable
+project record managed through the singular dataset entity lifecycle. Discovery
+uses plural `science datasets ...`; durable project records use singular
+`science dataset ...`.
 
-**File:** `entities/datasets/<slug>.md` using `.ai/templates/dataset.md` first, then `templates/dataset.md`
+For new durable records that can be expressed by current fields, use:
 
-Fill in all available fields. For fields you cannot verify, mark as `[UNVERIFIED]`.
+```bash
+science dataset add <slug> \
+  --title "<dataset title>" \
+  --source-url "<landing-page-or-accession-url>" \
+  --level <public|registration|controlled|commercial|mixed> \
+  --tier <use-now|evaluate-next|track>
+```
 
-Required frontmatter fields to populate (see template comments for enum values):
+Then verify access evidence before handing the dataset to pipeline planning:
 
-- `tier` — one of `use-now`, `evaluate-next`, `track` (mirror the ranking label from Step 4)
-- `access` — one of `public`, `controlled`, `mixed`
-  When mapping an adapter result's `access` tier to the entity `access.level`,
-  apply: `public → public`, `restricted → controlled`, `controlled → controlled`.
-  `mixed` is set only when sibling artefacts differ in level (see emission rules).
-- `license` — SPDX identifier or `unknown`
-- `formats` — list of lower-case format slugs
-- `size_estimate` — with unit (e.g., `"12 GB"`, `"~500 MB"`, `"unknown"`)
-- `update_cadence` — `static`, `rolling`, `monthly`, `quarterly`, `annual`, or `versioned-releases`
-- `ontology_terms` — canonical CURIEs (UBERON:*, CL:*, MONDO:*, DOID:*, EFO:*, etc.), not free text
+```bash
+science dataset verify-access <slug> \
+  --license <spdx-or-unknown> \
+  --method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed> \
+  --source-url "<landing-page-or-download-url>"
+```
 
-#### Multi-accession resources
+When the dataset supports a question or hypothesis, add typed links with the
+helper instead of editing backlinks by hand:
 
-If a resource spans multiple accessions (primary + mirror, atlas + component studies, etc.), pick one pattern:
+```bash
+science dataset link <dataset-ref> <question-or-hypothesis-ref>
+```
 
-1. **One record, multi-accession list** — preferred default. List every accession in `datasets:`.
-2. **Parent + overview + children** — preferred for atlases. One overview record, one per component, linked via `related:`.
-3. **One record per accession** — last resort, when accessions share little context.
+If multiple dataset records need ranking after discovery, run:
 
-See the `## Multi-accession resources` comment block in `templates/dataset.md` for examples.
+```bash
+science dataset prioritize --format json
+```
+
+Direct template authoring is a fallback, reserved for unsupported fields or
+deliberate legacy backfills. When using that fallback, record why CLI lifecycle
+commands cannot represent the needed change. Read `.ai/templates/dataset.md`
+first; if it is not present, read `templates/dataset.md`.
+Fill unknown fields as `[UNVERIFIED]`, then immediately run
+`science dataset verify-access <slug>` or record why verification is blocked.
+
+When mapping an adapter result's `access` tier to the entity `access.level`,
+apply: `public -> public`, `restricted -> controlled`, and
+`controlled -> controlled`. Use `mixed` only when sibling artefacts differ in
+access level.
 
 ### Step 6: Variable mapping (if inquiry exists)
 
@@ -242,17 +264,19 @@ If the project has an active inquiry, create a coverage matrix:
 
 Include this mapping in a `## Variable Coverage` section of the search output.
 
-### Step 7: Update project files
+### Step 7: Write durable outputs
 
-1. Update `science.yaml` data_sources section with new entries.
-2. Write machine-readable search results to `entities/searches/YYYY-MM-DD-datasets-<slug>.json`.
-3. If appropriate, suggest download commands:
+1. Write machine-readable search results to `entities/searches/YYYY-MM-DD-datasets-<slug>.json`.
+2. Ensure new durable records were created with `science dataset add <slug>`;
+   refresh access evidence for new or existing records with
+   `science dataset verify-access <slug>`.
+3. If appropriate, suggest runtime acquisition commands:
    ```bash
    science datasets download <source>:<id> --dest data/raw/
    ```
 4. Offer to create follow-up tasks via `science tasks add`:
    - Download and inspect `Use now` datasets
-   - Create `datapackage.json` for downloaded data
+   - Create or update `datapackage.json` for downloaded runtime files
    - Map variables for pipeline planning
 
 ### Step 8: Suggest next steps
@@ -264,13 +288,14 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 
 ### Emission rules (rev 2.1)
 
-When emitting `entities/datasets/<slug>.md`:
+When emitting or backfilling `entities/datasets/<slug>.md` through the CLI or the
+explicit template fallback:
 
 - One entity per **distinguishable artefact** at a distinct access level. A paper
   with one public supplement and one controlled EGA deposit produces TWO entities,
   optionally plus a third umbrella entity linking them via `parent_dataset` /
   `siblings`.
-- Always set `origin: "external"`.
+- External discovery records should resolve to `origin: "external"`.
 - Default `access.verified: false`, `access.last_reviewed: ""`, `consumed_by: []`.
 - Populate `access.level`, `access.source_url`, and `access.credentials_required`
   from discovery evidence. When uncertain, use the most restrictive known level

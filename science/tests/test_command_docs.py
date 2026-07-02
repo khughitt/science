@@ -29,6 +29,14 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _slice_between(text: str, start: str, end: str) -> str:
+    if start not in text:
+        raise AssertionError(f"missing start marker: {start}")
+    if end not in text:
+        raise AssertionError(f"missing end marker: {end}")
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def test_catalog_datasets_setup_is_layout_v3_aware() -> None:
     text = _read("commands/catalog-datasets.md")
 
@@ -80,6 +88,66 @@ def test_review_pipeline_runtime_stageability_allows_wp1_retrieval_probe_defer()
     assert "WP1 is the staging step" in text
     assert "access.verified: true" in text
     assert "do not score absent runtime files as FAIL" in normalized
+
+
+def test_find_datasets_setup_is_layout_v3_aware() -> None:
+    text = _read("commands/find-datasets.md")
+
+    assert "entities/questions/" in text
+    assert "entities/hypotheses/" in text
+    assert "entities/datasets/" in text
+    assert "legacy specs/research-question.md only if it exists" in text
+    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "- `specs/research-question.md`" not in text
+    assert "- `specs/scope-boundaries.md`" not in text
+
+
+def test_find_datasets_routes_durable_records_through_dataset_lifecycle() -> None:
+    text = _read("commands/find-datasets.md")
+
+    assert "science datasets search" in text
+    assert "science datasets metadata <source>:<id> --format json" in text
+    assert "science datasets files <source>:<id> --format json" in text
+    assert "science dataset add <slug>" in text
+    assert "--level <public|registration|controlled|commercial|mixed>" in text
+    add_example = _slice_between(
+        text,
+        "science dataset add <slug>",
+        "science dataset verify-access <slug>",
+    )
+    assert "--license" not in add_example
+    assert "science dataset verify-access <slug>" in text
+    assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
+    assert '--source-url "<landing-page-or-download-url>"' in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "science dataset prioritize" in text
+    assert "Direct template authoring is a fallback" in text
+    assert "For each `Use now` or `Evaluate next` dataset, create a dataset note" not in text
+    assert "Update `science.yaml` data_sources section with new entries" not in text
+    assert "--level <public|controlled|mixed>" not in text
+    assert "--method <landing-confirmed|downloaded|manual-review>" not in text
+    assert '--source "<landing-page-or-download-url>"' not in text
+    assert "--date <YYYY-MM-DD>" not in text
+
+
+def test_plan_pipeline_uses_current_dataset_verify_access_gate() -> None:
+    text = _read("commands/plan-pipeline.md")
+
+    assert "science dataset verify-access <slug>" in text
+    assert "current `science dataset verify-access`" in text
+    assert "future science dataset verify" not in text
+    assert "future `science dataset verify`" not in text
+    assert "(manual or future `science dataset verify`)" not in text
+
+
+def test_review_pipeline_uses_current_dataset_verify_access_gate() -> None:
+    text = _read("commands/review-pipeline.md")
+
+    assert "science dataset verify-access <slug>" in text
+    assert "Access verification should be current" in text
+    assert "science dataset verify " not in text
+    assert "future science dataset verify" not in text
+    assert "science dataset verify`" not in text
 
 
 def test_task_command_docs_use_aspects_for_task_creation() -> None:
@@ -416,6 +484,47 @@ def test_command_docs_use_explicit_framework_resolution(
     text = _read(path)
     for expected in expected_strings:
         assert expected in text
+
+
+def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> None:
+    text = _read("skills/data/SKILL.md")
+
+    assert "science dataset add <slug>" in text
+    assert "--level <public|registration|controlled|commercial|mixed>" in text
+    add_example = _slice_between(
+        text,
+        "science dataset add <slug>",
+        "science dataset verify-access <slug>",
+    )
+    assert "--license" not in add_example
+    assert "science dataset verify-access <slug>" in text
+    assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
+    assert '--source-url "<landing-page-or-download-url>"' in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "Manual template authoring is a fallback" in text
+    assert "entities/datasets/<slug>.md" in text
+    assert "entities/datasets/<source-name>.md" not in text
+    assert "runtime datapackage descriptors" in text
+    assert "--level <public|controlled|mixed>" not in text
+    assert "--method <landing-confirmed|downloaded|manual-review>" not in text
+    assert '--source "<landing-page-or-download-url>"' not in text
+    assert "--date <YYYY-MM-DD>" not in text
+
+
+def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
+    text = _read("skills/data/frictionless.md")
+
+    boundary = _slice_between(
+        text,
+        "## Boundary With Dataset Entities",
+        "## Creating a Data Package",
+    )
+
+    assert "runtime/package descriptor" in boundary
+    assert "not the local dataset entity lifecycle" in boundary
+    assert "Use `science dataset add <slug>`" in boundary
+    assert "science dataset verify-access <slug>" in boundary
+    assert "science datasets validate --path data/raw/" in boundary
 
 
 def test_command_docs_do_not_reference_retired_user_docs() -> None:
