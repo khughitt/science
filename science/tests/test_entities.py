@@ -531,10 +531,24 @@ def test_create_entity_unresolved_warning_names_failing_ref(tmp_path: Path) -> N
     assert any("related" in w and "hypothesis:0099-missing" in w for w in unresolved)
 
 
-def test_create_entity_rejects_concept_with_guidance(tmp_path: Path) -> None:
+def test_create_entity_concept_writes_source(tmp_path: Path) -> None:
     seed_project(tmp_path)
-    with pytest.raises(EntityCommandError, match="graph add concept"):
-        create_entity(project_root=tmp_path, kind="concept", title="Local Concept", entity_id="concept:local")
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="concept",
+        title="Local Concept",
+        entity_id="concept:local",
+        today=date(2026, 4, 28),
+    )
+
+    assert result.entity_id == "concept:local"
+    assert result.path == tmp_path / "entities/concepts/local.md"
+    assert result.path.is_file()
+    frontmatter = yaml.safe_load(result.path.read_text(encoding="utf-8").split("---")[1])
+    assert frontmatter["id"] == "concept:local"
+    assert frontmatter["type"] == "concept"
+    assert frontmatter["status"] == "active"
 
 
 def test_create_entity_prewrite_validation_removes_no_tmp_file(tmp_path: Path) -> None:

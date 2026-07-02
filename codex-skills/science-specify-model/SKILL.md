@@ -180,9 +180,10 @@ For each important variable:
 
 For inquiry-patch projects, record durable variable refs in
 `entities/patches/<slug>.md`. Make sure those refs resolve through source
-records or lightweight term rows before rebuilding the graph from source. Use a
-more specific registered source kind when one exists; do not assume `concept`
-entity authoring is available today.
+records, lightweight term rows, or concept entity owners before rebuilding the
+graph from source. Use a more specific registered source kind when one exists;
+use `science entity create concept "<title>"` only for reusable project-local
+concepts that need a full Markdown owner.
 
 Direct `science graph add concept` writes are exploratory and non-durable. They
 write to `knowledge/graph.trig`, which is regenerated from source files. Use

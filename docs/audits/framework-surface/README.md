@@ -21,6 +21,12 @@ threads before any behavioral refactor.
   dataset/data command-surface guidance cleanup.
 - [`task-inquiry-surface-design.md`](task-inquiry-surface-design.md) designs the
   task, next-steps, question/hypothesis, and inquiry guidance cleanup.
+- [`concept-source-ownership-design.md`](concept-source-ownership-design.md)
+  audits source ownership for inquiry refs, concepts, unknown markers,
+  assumptions, and transformations.
+- [`source-authored-concepts-design.md`](source-authored-concepts-design.md)
+  designs the behavior slice that enables `science entity create concept ...`
+  as the durable Markdown owner path for project-local concepts.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary
@@ -98,3 +104,11 @@ The task/inquiry surface follow-up is drafted in
 first slice read-only and taxonomy-first, focusing on the boundary between
 operational tasks, next-step synthesis, durable questions/hypotheses, and
 source-first inquiry models.
+
+The concept ownership follow-up is split across
+[`concept-source-ownership-design.md`](concept-source-ownership-design.md) and
+[`source-authored-concepts-design.md`](source-authored-concepts-design.md). The
+first records the broader ownership contract for inquiry refs and concept-like
+nodes. The second narrows the next behavior slice to aligning the core model,
+entity writer, docs, and generated skills around source-authored concept
+entities.

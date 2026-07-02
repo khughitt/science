@@ -182,20 +182,22 @@ def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     )
     assert "Unknown markers may remain in sketch" in normalized
     assert "non-sketch inquiries should resolve or justify them" in normalized
+    assert "`science entity create concept" in normalized
     assert "`science graph add concept` is not durable inquiry authoring" in normalized
 
 
-def test_entities_chapter_documents_current_concept_ownership_mismatch() -> None:
+def test_entities_chapter_documents_source_authored_concepts() -> None:
     text = _read(GUIDE_ROOT / "entities.md")
     section = _slice_between(
         text,
-        "### Current Concept Ownership Mismatch",
+        "### Source-Authored Concepts",
         "### Legacy Topic Triage",
     )
     normalized = _norm(section)
 
-    assert "The core model declares `concept` as an authored reference kind" in normalized
-    assert "`science entity create concept` is not a supported routine today" in normalized
+    assert "`terms.yaml` is the lightweight concept tier" in normalized
+    assert "`science entity create concept" in normalized
+    assert "`entities/concepts/<slug>.md`" in normalized
+    assert "Use the most specific registered kind before creating a local concept" in normalized
     assert "`science graph add concept` writes derived graph state" in normalized
-    assert "`construct` is source-authored through the normal entity lifecycle" in normalized
-    assert "`terms.yaml` is the supported lightweight concept-like source path" in normalized
+    assert "Do not use graph-added concepts as durable owners" in normalized

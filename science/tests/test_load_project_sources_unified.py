@@ -23,6 +23,7 @@ from science_model.source_contracts import BindingSource
 from science_tool.graph.entity_registry import EntityKindShadowError
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import build_identity_table
+from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
 
 
@@ -312,6 +313,78 @@ def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:
     )
     with pytest.raises(EntityIdentityCollisionError, match="dataset:x"):
         load_project_sources(tmp_path)
+
+
+def test_concept_markdown_owner_collides_with_terms_yaml_under_strict_identity(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "entities" / "concepts").mkdir(parents=True)
+    (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
+        '---\nid: "concept:treatment-response"\ntype: "concept"\n'
+        'title: "Treatment Response"\nstatus: "active"\n---\n',
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "terms.yaml").write_text(
+        "\n".join(
+            [
+                "terms:",
+                "  - id: concept:treatment-response",
+                "    title: Treatment response term",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EntityIdentityCollisionError, match="concept:treatment-response"):
+        load_project_sources(tmp_path)
+
+
+def test_concept_markdown_owner_wins_over_terms_yaml_in_nonstrict_load(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "entities" / "concepts").mkdir(parents=True)
+    (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
+        '---\nid: "concept:treatment-response"\ntype: "concept"\n'
+        'title: "Treatment Response"\nstatus: "active"\n---\n',
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "terms.yaml").write_text(
+        "\n".join(
+            [
+                "terms:",
+                "  - id: concept:treatment-response",
+                "    title: Treatment response term",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path, strict_identity=False)
+    concepts = [entity for entity in sources.entities if entity.canonical_id == "concept:treatment-response"]
+    owners = [
+        declaration
+        for declaration in sources.identity_declarations
+        if declaration.canonical_id == "concept:treatment-response"
+    ]
+
+    assert len(concepts) == 1
+    assert concepts[0].title == "Treatment Response"
+    assert sources.entity_source_adapters["concept:treatment-response"] == "markdown"
+    assert {owner.adapter for owner in owners} == {"markdown", "aggregate"}
+    collisions = build_identity_table(sources).collisions()
+    assert len(collisions) == 1
+    assert collisions[0].canonical_id == "concept:treatment-response"
+
+    rows, failed = audit_project_sources(sources)
+    collision_rows = [row for row in rows if row["check"] == "identity_collision"]
+    assert failed is False
+    assert len(collision_rows) == 1
+    assert collision_rows[0]["source"] == "concept:treatment-response"
+    assert collision_rows[0]["status"] == "warn"
 
 
 def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:

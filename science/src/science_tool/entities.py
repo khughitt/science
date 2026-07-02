@@ -785,8 +785,6 @@ def create_entity(
 ) -> EntityWriteResult:
     project_root = project_root.resolve()
     today_value = today or date.today()
-    if kind == "concept":
-        raise EntityCommandError("Source-authored concepts are not supported; use graph add concept instead")
     resolve_path_policy(kind)
     if slug is not None and entity_id is not None:
         raise EntityCommandError("Use either --slug or --id, not both")

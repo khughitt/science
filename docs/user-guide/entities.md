@@ -467,7 +467,7 @@ Use these destinations instead of new semantic `topic:*` refs:
 |---|---|
 | Catalog-backed thing | Domain kind such as `gene`, `protein`, `disease`, `pathway`, or another declared catalog kind. |
 | Analytical procedure | `method`. |
-| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref is needed, use a lightweight row in `knowledge/sources/<profile>/terms.yaml`; full `entities/concepts` authoring is model-declared but not routine CLI-supported yet. |
+| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref only needs a lightweight identity, use a row in `knowledge/sources/<profile>/terms.yaml`; when it needs prose, lifecycle status, source refs, aliases, same-as links, or relationships, create a Markdown owner with `science entity create concept ...`. |
 | Cross-cutting organizing lens | `theme`. |
 | Conjecture under investigation | `hypothesis`. |
 | Analysis-session narrative | `interpretation`. |
@@ -495,23 +495,32 @@ Keep entries minimal: `id` and `title` are required; `aliases`, `same_as`,
 Markdown entity owner when it accumulates body prose, structured relations, or
 lifecycle work.
 
-### Current Concept Ownership Mismatch
+### Source-Authored Concepts
 
-The core model declares `concept` as an authored reference kind with the home
-`entities/concepts`, but `science entity create concept` is not a supported
-routine today. The entity writer currently blocks that command and points to
-graph mutation instead.
+Use the most specific registered kind before creating a local concept. Domain
+and core reference kinds such as `gene`, `protein`, `disease`, `pathway`,
+`dataset`, `method`, `construct`, or `outcome` carry more meaning than a generic
+`concept:*` owner.
 
-That graph-mutating path is not a durable replacement. `science graph add
-concept` writes derived graph state in `knowledge/graph.trig`, and `science
-graph build` regenerates that file from source records.
+`terms.yaml` is the lightweight concept tier. Use it when a term needs a stable
+resolvable `concept:*` identity but does not need body prose, lifecycle work, or
+structured relationships.
 
-The mismatch is concept-specific. `construct` is source-authored through the
-normal entity lifecycle even though it is also an authored-core reference kind.
-Until `concept` follows the same supported source path, `terms.yaml` is the
-supported lightweight concept-like source path. Use a more specific registered
-kind when one exists, keep weak ideas in prose when they do not need graph refs,
-and avoid creating unresolved `concept:*` placeholders to silence validation.
+Use `science entity create concept "<title>"` when a project-local concept needs
+a full Markdown owner:
+
+```bash
+science entity create concept "Treatment Response"
+```
+
+That command writes `entities/concepts/<slug>.md` and uses the normal entity
+lifecycle: slug identity, `active` / `deprecated` status validation, source
+refs, related refs, aliases, same-as links, notes, and graph materialization.
+
+`science graph add concept` writes derived graph state in `knowledge/graph.trig`,
+and `science graph build` regenerates that file from source records. Do not use
+graph-added concepts as durable owners for variables, treatment/outcome refs,
+unknowns, or boundary refs.
 
 ### Legacy Topic Triage
 

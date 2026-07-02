@@ -102,12 +102,12 @@ source records or lightweight term rows before the inquiry can be materialized.
 Unknown markers may remain in sketch; non-sketch inquiries should resolve or
 justify them.
 
-Use `concept:*` only when that ref already resolves through a source such as a
-local-profile `terms.yaml` row or a future supported concept entity. The
-current CLI does not support routine `science entity create concept ...`
-authoring, and `science graph add concept` is not durable inquiry authoring.
-Direct graph mutation writes generated graph state that `science graph build`
-overwrites from source files.
+Use `concept:*` only when that ref already resolves through a source owner. Use
+a local-profile `terms.yaml` row for lightweight terms, or
+`science entity create concept "<title>"` when the project-local concept needs a
+full Markdown owner under `entities/concepts/`. `science graph add concept` is
+not durable inquiry authoring. Direct graph mutation writes generated graph
+state that `science graph build` overwrites from source files.
 
 ### Causal Inquiry Profiles
 

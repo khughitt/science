@@ -92,7 +92,7 @@ For brevity, the examples below write just `science <command>`; always expand th
 - **MUST NOT** edit `knowledge/graph.trig` directly.
 - **MUST** define `knowledge_profiles` in `science.yaml` before building the graph.
 - **MUST** treat markdown docs, task files, and `knowledge/sources/` files as the canonical graph inputs.
-- **MUST** add project-local entities and aliases under `knowledge/sources/<local-profile>/`, not as ad hoc triples.
+- **MUST** add project-local entities through supported source owners such as `entities/`, `knowledge/sources/<local-profile>/`, or CLI helpers, not as ad hoc triples.
 - **MUST** run `science graph audit` before `science graph build`.
 - **MUST** keep tasks as graph entities; do not treat them as out-of-band metadata.
 
@@ -102,8 +102,9 @@ Before adding new entities, check the cross-project registry for existing defini
 
 For every new entity, read `docs/process/entity-creation-cookbook.md` and
 check shared kinds before creating project-local entries. If no shared identity fits,
-prefer a local `concept:*` entity for project-scoped concepts rather than
-inventing a shared canonical ID.
+prefer the most specific registered kind. Use a lightweight `terms.yaml` row for
+simple project-scoped concepts, or `science entity create concept "<title>"` when
+the concept needs a full Markdown owner.
 
 ## Canonical Inputs
 
