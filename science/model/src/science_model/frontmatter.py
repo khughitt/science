@@ -24,6 +24,7 @@ from science_model.packages.schema import (
     BenchmarkBlock,
     DerivationBlock,
     MemberOfDerivationBlock,
+    WorkflowRecipeDerivationBlock,
 )
 from science_model.sync import SyncSource
 
@@ -283,7 +284,9 @@ def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     )
 
 
-def _coerce_derivation(fm: dict) -> DerivationBlock | MemberOfDerivationBlock | None:
+def _coerce_derivation(
+    fm: dict,
+) -> DerivationBlock | WorkflowRecipeDerivationBlock | MemberOfDerivationBlock | None:
     raw = fm.get("derivation")
     if not isinstance(raw, dict):
         return None
@@ -297,6 +300,17 @@ def _coerce_derivation(fm: dict) -> DerivationBlock | MemberOfDerivationBlock | 
             kind="member_of",
             parent_dataset=parent_dataset,
             member_key=member_key,
+        )
+    # Recipe-provenance form (commons-promoted derived datasets): a
+    # `workflow_recipe` + `inputs`, with no `workflow_run`. Distinguished from
+    # run-provenance by the presence of `workflow_recipe`.
+    workflow_recipe = raw.get("workflow_recipe", "")
+    if workflow_recipe:
+        return WorkflowRecipeDerivationBlock(
+            kind="workflow",
+            workflow_recipe=workflow_recipe,
+            inputs=list(raw.get("inputs") or []),
+            recipe_lockfile=raw.get("recipe_lockfile", ""),
         )
     workflow = raw.get("workflow", "")
     workflow_run = raw.get("workflow_run", "")

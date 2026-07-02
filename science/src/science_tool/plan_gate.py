@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlock
+from science_model.packages.schema import (
+    DerivationBlock,
+    MemberOfDerivationBlock,
+    WorkflowRecipeDerivationBlock,
+)
 from science_tool.datasets.semantics import reproducibility_class_for, repro_meets_bar
 from science_tool.project_config import ReproducibilityPolicyConfig, ReproducibilityWaiver
 
@@ -54,6 +58,15 @@ def check_inputs(
             if isinstance(e.derivation, MemberOfDerivationBlock):
                 # member_of datasets are structurally-derived; their readiness
                 # is the parent collection's responsibility, not a pipeline run.
+                continue
+            if isinstance(e.derivation, WorkflowRecipeDerivationBlock):
+                # Recipe-provenance derived dataset: no workflow-run to verify;
+                # readiness reduces to its transitive inputs passing.
+                for upstream in e.derivation.inputs:
+                    sub_ok, sub_halts = check_inputs(project_root, [upstream], planned_retrieval=planned_retrieval)
+                    if not sub_ok:
+                        halts.append(f"{ds_id} -> {sub_halts[0]}")
+                        break
                 continue
             if not isinstance(e.derivation, DerivationBlock):
                 halts.append(f"{ds_id}: derived entity has unsupported derivation block")
@@ -107,7 +120,11 @@ def _effective_repro_class(project_root: Path, ds_id: str, _seen: set[str] | Non
     e = _load_dataset(project_root, ds_id)
     if e is None:
         return "unknown", "missing entity"
-    if e.origin == "derived" and isinstance(e.derivation, DerivationBlock):
+    # Both run-provenance (DerivationBlock) and recipe-provenance
+    # (WorkflowRecipeDerivationBlock) carry `.inputs`; recurse the closure over
+    # either so recipe-derived datasets inherit their upstream class instead of
+    # collapsing to `unknown`. (MemberOfDerivationBlock has no `.inputs`.)
+    if e.origin == "derived" and isinstance(e.derivation, (DerivationBlock, WorkflowRecipeDerivationBlock)):
         upstream_classes = [_effective_repro_class(project_root, up, set(_seen)) for up in e.derivation.inputs]
         return _weakest_class(upstream_classes)
     return reproducibility_class_for(_load_dataset_fm(project_root, ds_id))
