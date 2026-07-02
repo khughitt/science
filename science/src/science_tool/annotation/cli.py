@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 import re as _re
 import subprocess
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 
@@ -665,6 +666,220 @@ def plan_proposition_reconciliation_cmd(
         click.echo(f"{action['status']:8s} {action['kind']} {target}")
     if output_path is not None:
         click.echo(f"wrote JSON action plan to {output_path}")
+
+
+def _read_json_object_for_cli(input_path: Path) -> Mapping[str, Any]:
+    try:
+        loaded = json.loads(input_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"{input_path} is not valid JSON: {exc}") from exc
+    except OSError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if not isinstance(loaded, Mapping):
+        raise click.ClickException(f"{input_path} must contain a JSON object")
+    return loaded
+
+
+def _project_relative_or_absolute(project_root: Path, path: Path) -> str:
+    resolved = path if path.is_absolute() else (Path.cwd() / path).resolve()
+    try:
+        return resolved.relative_to(project_root).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+@annotate_group.command("scaffold-proposition-resynthesis")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--action", "action_id", default=None)
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def scaffold_proposition_resynthesis_cmd(
+    input_path: Path,
+    root: Path | None,
+    action_id: str | None,
+    output_path: Path | None,
+    fmt: str,
+) -> None:
+    """Write a proposition resynthesis review draft scaffold."""
+    from science_tool.annotation.proposition_reconciliation import (
+        ReconciliationValidationError,
+        build_reconciliation_report,
+    )
+    from science_tool.annotation.proposition_reconciliation_plan import (
+        ReviewedReconciliationInput,
+        build_reconciliation_action_plan,
+    )
+    from science_tool.annotation.proposition_resynthesis import (
+        ResynthesisDraftError,
+        build_resynthesis_scaffold,
+        draft_to_json,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        review_path = input_path if input_path.is_absolute() else (Path.cwd() / input_path).resolve()
+        source_review = _project_relative_or_absolute(project_root, review_path)
+        review = _read_json_object_for_cli(review_path)
+        report = build_reconciliation_report(project_root)
+        plan = build_reconciliation_action_plan(
+            report,
+            [ReviewedReconciliationInput(path=str(review_path), doc=review)],
+        )
+        draft = build_resynthesis_scaffold(
+            plan,
+            requested_action_id=action_id,
+            source_review=source_review,
+        )
+    except (
+        ResynthesisDraftError,
+        ReconciliationValidationError,
+        ValueError,
+        OSError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    draft_payload = draft_to_json(draft)
+    json_text = json.dumps(draft_payload, indent=2, sort_keys=True)
+    if output_path is not None:
+        try:
+            output_path.write_text(json_text + "\n", encoding="utf-8")
+        except OSError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "schema_version": draft.schema_version,
+        "status": "ok",
+        "selected_action_id": draft.action_id,
+        "output_path": str(output_path) if output_path is not None else None,
+        "draft": draft_payload,
+    }
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    click.echo(
+        "proposition resynthesis scaffold: "
+        f"action={draft.action_id} "
+        f"annotations={len(draft.input_annotations)} "
+        "replacements=0"
+    )
+    if output_path is not None:
+        click.echo(f"wrote JSON draft to {output_path}")
+
+
+@annotate_group.command("validate-proposition-resynthesis")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def validate_proposition_resynthesis_cmd(input_path: Path, root: Path | None, fmt: str) -> None:
+    """Validate a proposition resynthesis draft without applying it."""
+    from science_tool.annotation.proposition_reconciliation import ReconciliationValidationError
+    from science_tool.annotation.proposition_resynthesis import (
+        ResynthesisDraftError,
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+        validation_report_to_json,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        draft = parse_resynthesis_draft(_read_json_object_for_cli(input_path))
+        report = validate_resynthesis_draft(project_root, draft)
+    except (
+        ResynthesisDraftError,
+        ReconciliationValidationError,
+        ValueError,
+        OSError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = validation_report_to_json(report)
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition resynthesis validate: "
+        f"status={payload['status']} "
+        f"replacements={summary['replacement_propositions']} "
+        f"moved={summary['moved_annotations']} "
+        f"retained={summary['retained_annotations']}"
+    )
+
+
+@annotate_group.command("apply-proposition-resynthesis")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def apply_proposition_resynthesis_cmd(input_path: Path, root: Path | None, fmt: str) -> None:
+    """Apply a validated proposition resynthesis draft."""
+    from science_tool.annotation.proposition_reconciliation import ReconciliationValidationError
+    from science_tool.annotation.proposition_resynthesis import (
+        ResynthesisDraftError,
+        parse_resynthesis_draft,
+    )
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+        apply_resynthesis_report_to_json,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        draft = parse_resynthesis_draft(_read_json_object_for_cli(input_path))
+        report = apply_resynthesis_draft(project_root, draft)
+    except (
+        ResynthesisDraftError,
+        ResynthesisApplyError,
+        ReconciliationValidationError,
+        ValueError,
+        OSError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = apply_resynthesis_report_to_json(report, project_root=project_root)
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition resynthesis apply: "
+        f"replacements={summary['replacement_propositions']} "
+        f"moved_annotations={summary['rewritten_annotations']} "
+        f"changed={summary['changed_paths']} "
+        f"noop={summary['noop_paths']}"
+    )
+    if payload["changed_paths"]:
+        click.echo("changed paths:")
+        for path in payload["changed_paths"]:
+            click.echo(f"  {path}")
+    if payload["noop_paths"]:
+        click.echo("noop paths:")
+        for path in payload["noop_paths"]:
+            click.echo(f"  {path}")
 
 
 @annotate_group.command("apply-proposition-reconciliation")

@@ -943,6 +943,7 @@ _REMOVABLE_FRONTMATTER_REF_KEYS: frozenset[str] = frozenset(
         "source_refs",
         "supersedes",
         "superseded_by",
+        "resynthesized_into",
         "consolidates",
         "consolidated_into",
         "members",
