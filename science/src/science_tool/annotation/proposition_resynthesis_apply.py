@@ -170,7 +170,7 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
             raise ResynthesisApplyError("source review judgment lane is stale")
         if judgment.get("decision") != "factorization_needs_resynthesis":
             raise ResynthesisApplyError("source review judgment decision is stale")
-        return _draft_context_input_annotations(draft)
+        return _draft_input_annotations(draft)
 
     if found_judgment:
         raise ResynthesisApplyError("draft candidate_id is stale")
@@ -179,15 +179,13 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
     raise ResynthesisApplyError("source review judgment for draft was not found")
 
 
-def _draft_context_input_annotations(draft: ResynthesisDraft) -> set[str]:
-    annotations = draft.context.get("input_annotations")
-    if isinstance(annotations, str) or not isinstance(annotations, Sequence):
-        raise ResynthesisApplyError("context.input_annotations must be a list of annotation refs")
-
+def _draft_input_annotations(draft: ResynthesisDraft) -> set[str]:
     current_annotations: set[str] = set()
-    for annotation in annotations:
-        if not isinstance(annotation, str) or not annotation:
-            raise ResynthesisApplyError("context.input_annotations must contain non-empty strings")
+    for annotation in draft.input_annotations:
+        if not isinstance(annotation, str) or not annotation or annotation != annotation.strip():
+            raise ResynthesisApplyError("input_annotations must contain non-empty strings")
+        if annotation in current_annotations:
+            raise ResynthesisApplyError("input_annotations contains duplicate annotation refs")
         current_annotations.add(annotation)
     return current_annotations
 
@@ -271,6 +269,13 @@ def _resume_validation_report(
             raise ResynthesisApplyError("replace must assign every input annotation")
         if retained:
             raise ResynthesisApplyError("replace assignments must target draft propositions")
+        omitted_original_annotations = sorted(
+            annotation_ref
+            for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
+            if promoted_to == draft.original_proposition and annotation_ref not in expected_action_annotations
+        )
+        if omitted_original_annotations:
+            raise ResynthesisApplyError("replace must assign every input annotation")
     elif draft.disposition == "split_partial":
         if seen_annotations != expected_action_annotations:
             raise ResynthesisApplyError("split_partial must assign every input annotation")
@@ -501,14 +506,19 @@ def _postflight(project_root: Path, preflight: ResynthesisPreflight) -> None:
 
     original = draft.original_proposition
     if draft.disposition == "replace":
-        for assignment in draft.annotation_assignments:
-            indexed = live_index.get(assignment.annotation)
+        for annotation_ref in draft.input_annotations:
+            indexed = live_index.get(annotation_ref)
             if indexed is None:
                 continue
             _sidecar_path, _sidecar, promoted_to = indexed
             if promoted_to == original:
                 raise ResynthesisApplyError(
-                    f"{assignment.annotation} remains promoted_to original after replace"
+                    f"{annotation_ref} remains promoted_to original after replace"
+                )
+        for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in sorted(live_index.items()):
+            if promoted_to == original:
+                raise ResynthesisApplyError(
+                    f"{annotation_ref} remains promoted_to original after replace"
                 )
     elif draft.disposition == "split_partial":
         for assignment in draft.annotation_assignments:

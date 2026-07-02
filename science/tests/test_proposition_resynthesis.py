@@ -208,6 +208,8 @@ def test_build_resynthesis_scaffold_emits_identity_context_and_empty_review_fiel
     assert payload["source_review"] == str(ctx["review_path"])
     assert payload["original_proposition"] == "proposition:broad"
     assert payload["disposition"] == "replace"
+    assert draft.input_annotations == tuple(ctx["action"].inputs["annotations"])
+    assert payload["input_annotations"] == list(ctx["action"].inputs["annotations"])
     assert payload["new_propositions"] == []
     assert payload["annotation_assignments"] == []
     assert payload["context"]["observed_statement_hints"] == list(ctx["action"].inputs["observed_statement_hints"])
@@ -223,6 +225,7 @@ def _draft_payload(ctx: dict) -> dict:
         "source_review": str(ctx["review_path"]),
         "original_proposition": "proposition:broad",
         "disposition": "replace",
+        "input_annotations": list(ctx["action"].inputs["annotations"]),
         "new_propositions": [
             {
                 "id": "proposition:broad-positive",
@@ -317,6 +320,39 @@ def test_parse_resynthesis_draft_rejects_missing_notes(tmp_path: Path):
     del payload["notes"]
 
     with pytest.raises(ResynthesisDraftError, match="missing resynthesis draft key: notes"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_missing_input_annotations(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    del payload["input_annotations"]
+
+    with pytest.raises(ResynthesisDraftError, match="missing resynthesis draft key: input_annotations"):
+        parse_resynthesis_draft(payload)
+
+
+@pytest.mark.parametrize(
+    "input_annotations",
+    [
+        "annotation:entities/papers/A2020.source#a1",
+        [" annotation:entities/papers/A2020.source#a1"],
+        [""],
+        ["annotation:entities/papers/A2020.source#a1", "annotation:entities/papers/A2020.source#a1"],
+    ],
+)
+def test_parse_resynthesis_draft_rejects_malformed_input_annotations(
+    tmp_path: Path, input_annotations: object
+):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["input_annotations"] = input_annotations
+
+    with pytest.raises(ResynthesisDraftError, match="input_annotations"):
         parse_resynthesis_draft(payload)
 
 
@@ -621,7 +657,21 @@ def test_validate_resynthesis_draft_rejects_incomplete_replace_when_action_input
 
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisDraftError, match="replace must assign every input annotation"):
+    with pytest.raises(ResynthesisDraftError, match="input_annotations are stale"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_stale_top_level_input_annotations(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["input_annotations"] = payload["input_annotations"][:1]
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="input_annotations are stale"):
         validate_resynthesis_draft(tmp_path, draft)
 
 

@@ -104,6 +104,7 @@ def test_plan_resynthesis_apply_merges_multiple_rewrites_in_one_sidecar(tmp_path
     (tmp_path / "entities" / "papers" / "B2021.source.anno.trig").unlink()
     payload = _draft_payload(ctx)
     payload["annotation_assignments"][1]["annotation"] = "annotation:entities/papers/A2020.source#b1"
+    payload["input_annotations"][1] = "annotation:entities/papers/A2020.source#b1"
     action = replace(
         ctx["action"],
         inputs={
@@ -327,7 +328,7 @@ def test_apply_resynthesis_draft_rejects_incomplete_replace_when_live_action_inp
 
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="replace must assign every input annotation"):
+    with pytest.raises(ResynthesisApplyError, match="input_annotations are stale"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
@@ -453,21 +454,67 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
 def test_apply_resynthesis_draft_resume_rejects_missing_context_input_annotations(
     tmp_path: Path,
 ):
+    from science_tool.annotation.proposition_resynthesis import ResynthesisDraftError
+
+    ctx = _factorization_project(tmp_path)
+
+    payload = _draft_payload(ctx)
+    del payload["input_annotations"]
+
+    with pytest.raises(ResynthesisDraftError, match="input_annotations"):
+        parse_resynthesis_draft(payload)
+
+
+def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_superseding_original(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
     from science_tool.annotation.proposition_resynthesis_apply import (
         ResynthesisApplyError,
         apply_resynthesis_draft,
     )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
-    draft = parse_resynthesis_draft(_draft_payload(ctx))
-    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
-
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar = anno_io.read_sidecar(sidecar_path)
+    anno_io.write_sidecar(
+        sidecar_path,
+        replace(
+            sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in sidecar.annotations
+            ),
+        ),
+    )
+    unavailable = replace(ctx["action"], status="blocked", blockers=("already partially applied",))
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(unavailable,),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
     payload = _draft_payload(ctx)
-    del payload["context"]["input_annotations"]
-    missing_snapshot = parse_resynthesis_draft(payload)
+    payload["input_annotations"] = payload["input_annotations"][:1]
+    payload["context"]["input_annotations"] = payload["context"]["input_annotations"][:1]
+    payload["new_propositions"] = payload["new_propositions"][:1]
+    payload["annotation_assignments"] = payload["annotation_assignments"][:1]
+    draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="context.input_annotations"):
-        apply_resynthesis_draft(tmp_path, missing_snapshot, as_of=date(2026, 7, 2))
+    with pytest.raises(ResynthesisApplyError, match="assign every input annotation|remains promoted_to original"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "active"
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad"
 
 
 def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_source_refs(

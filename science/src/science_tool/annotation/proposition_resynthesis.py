@@ -59,6 +59,7 @@ ALLOWED_DRAFT_KEYS = frozenset(
         "source_review",
         "original_proposition",
         "disposition",
+        "input_annotations",
         "new_propositions",
         "annotation_assignments",
         "context",
@@ -98,6 +99,7 @@ class ResynthesisDraft:
     source_review: str
     original_proposition: str
     disposition: Literal["replace", "split_partial"]
+    input_annotations: tuple[str, ...]
     new_propositions: tuple[NewPropositionDraft, ...] = ()
     annotation_assignments: tuple[AnnotationAssignment, ...] = ()
     context: Mapping[str, Any] = field(default_factory=dict)
@@ -204,12 +206,12 @@ def build_resynthesis_scaffold(
         source_review=source_review,
         original_proposition=action.proposition,
         disposition="replace",
+        input_annotations=tuple(action.inputs.get("annotations", ())),
         new_propositions=(),
         annotation_assignments=(),
         context={
             "rationale": action.rationale,
             "observed_statement_hints": tuple(action.inputs.get("observed_statement_hints", ())),
-            "input_annotations": tuple(action.inputs.get("annotations", ())),
             "papers": tuple(action.inputs.get("papers", ())),
         },
     )
@@ -233,6 +235,7 @@ def draft_to_json(draft: ResynthesisDraft) -> dict[str, Any]:
         "source_review": draft.source_review,
         "original_proposition": draft.original_proposition,
         "disposition": draft.disposition,
+        "input_annotations": list(draft.input_annotations),
         "new_propositions": [
             {
                 "id": row.id,
@@ -274,6 +277,23 @@ def _optional_mapping(row: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ResynthesisDraftError(f"invalid {key}")
     return value
+
+
+def _required_string_sequence(row: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    value = row.get(key)
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ResynthesisDraftError(f"{key} must be a list of annotation refs")
+
+    seen: set[str] = set()
+    refs: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item or item != item.strip():
+            raise ResynthesisDraftError(f"{key} must contain non-empty strings")
+        if item in seen:
+            raise ResynthesisDraftError(f"{key} contains duplicate annotation refs")
+        seen.add(item)
+        refs.append(item)
+    return tuple(refs)
 
 
 def _reject_unknown_keys(row: Mapping[str, Any], allowed: frozenset[str], label: str) -> None:
@@ -352,6 +372,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
         source_review=_required_str(payload, "source_review"),
         original_proposition=_required_str(payload, "original_proposition"),
         disposition=disposition,  # type: ignore[arg-type]
+        input_annotations=_required_string_sequence(payload, "input_annotations"),
         new_propositions=tuple(new_propositions),
         annotation_assignments=tuple(assignments),
         context=_required_mapping(payload, "context"),
@@ -427,6 +448,8 @@ def validate_resynthesis_draft(
 ) -> ResynthesisValidationReport:
     action = _live_action_for_draft(project_root, draft)
     current_annotations = _current_action_annotations(action)
+    if set(draft.input_annotations) != current_annotations:
+        raise ResynthesisDraftError("input_annotations are stale")
     live_index = _live_annotation_index(project_root)
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
