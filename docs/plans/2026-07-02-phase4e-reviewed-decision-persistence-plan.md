@@ -42,6 +42,7 @@
   - blocked `stance_review_needed` / `needs_human`;
   - advisory `cleanup_factorization_hints` for `insufficient_hints`.
 - A saved same-claim subset decision may reanchor through a larger splittable candidate, but it must not hide the whole larger candidate unless the saved `members` equal the current candidate's full proposition set.
+- The record command applies blockers with targeted exclusion, not all-or-nothing: a stale, malformed, or conflicting action withholds only its own decision (and, for a conflict, the specific new decisions in that scope). Every other valid decision in the same plan still appears in `would_append` and is appended under `--apply`. Blockers are reported per action so a partial apply is never silent.
 
 ---
 
@@ -925,7 +926,46 @@ Expected: FAIL because the command does not exist.
 
 - [ ] **Step 3: Add plan loading and record planning helpers**
 
-Extend `science/src/science_tool/annotation/proposition_reconciliation_decisions.py`:
+First append this regression test to `science/tests/test_proposition_reconciliation_decisions.py`.
+It pins the targeted-exclusion contract: a stale (or conflicting) sibling action must
+not withhold the unrelated valid decisions in the same plan.
+
+```python
+from science_tool.annotation.proposition_reconciliation_decisions import (
+    build_record_decision_plan,
+)
+
+
+def test_build_record_decision_plan_appends_valid_despite_stale_sibling():
+    candidate = _same_candidate()
+    valid = _same_claim_advisory_action()
+    valid["candidate_id"] = candidate.candidate_id
+    valid["members"] = list(candidate.propositions)
+    valid["judgment_id"] = judgment_id(
+        "same_claim", "related_but_distinct", list(candidate.propositions)
+    )
+
+    stale = _same_claim_advisory_action()
+    stale["action_id"] = "reconcile-action:stale"
+    stale["candidate_id"] = "reconcile:same-claim/missing"
+    stale["members"] = ["proposition:x", "proposition:y"]
+    stale["judgment_id"] = judgment_id(
+        "same_claim", "related_but_distinct", ["proposition:x", "proposition:y"]
+    )
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [valid, stale], "errors": []},
+        existing_records=(),
+        report=_report_with_same_candidate(candidate),
+        recorded_at="2026-07-02",
+    )
+
+    valid_record = record_from_action_payload(valid, recorded_at="2026-07-02")
+    assert [record.decision_id for record in plan.would_append] == [valid_record.decision_id]
+    assert [blocker["reason"] for blocker in plan.blockers] == ["candidate-missing"]
+```
+
+Then extend `science/src/science_tool/annotation/proposition_reconciliation_decisions.py`:
 
 ```python
 @dataclass(frozen=True)
@@ -977,21 +1017,43 @@ def build_record_decision_plan(
 
     existing_ids = {record.decision_id for record in existing_records}
     existing_eval = evaluate_decision_records(existing_records, report)
-    combined_eval = evaluate_decision_records([*existing_records, *records], report)
     new_ids = {record.decision_id for record in records}
+    combined_eval = evaluate_decision_records([*existing_records, *records], report)
+
+    # Targeted exclusion: a conflict withholds ONLY the conflicting new decisions,
+    # never the unrelated valid ones. Stale/malformed actions are already excluded
+    # from `records` above and reported as per-action blockers; they must not
+    # suppress sibling appends.
+    conflicted_new_ids: set[str] = set()
     for conflict in combined_eval.conflicts:
-        if any(decision_id in new_ids for decision_id in conflict.decision_ids):
-            blockers.append(
-                {
-                    "reason": "conflicting-reviewed-decisions",
-                    "decision_ids": list(conflict.decision_ids),
-                    "decisions": list(conflict.decisions),
-                }
-            )
-    would_append = tuple(sorted((record for record in records if record.decision_id not in existing_ids), key=lambda item: item.decision_id))
+        conflict_new_ids = {
+            decision_id for decision_id in conflict.decision_ids if decision_id in new_ids
+        }
+        if not conflict_new_ids:
+            continue
+        conflicted_new_ids.update(conflict_new_ids)
+        blockers.append(
+            {
+                "reason": "conflicting-reviewed-decisions",
+                "decision_ids": list(conflict.decision_ids),
+                "decisions": list(conflict.decisions),
+            }
+        )
+
+    would_append = tuple(
+        sorted(
+            (
+                record
+                for record in records
+                if record.decision_id not in existing_ids
+                and record.decision_id not in conflicted_new_ids
+            ),
+            key=lambda item: item.decision_id,
+        )
+    )
     already = tuple(sorted(record.decision_id for record in records if record.decision_id in existing_ids))
     return RecordDecisionPlan(
-        would_append=() if blockers else would_append,
+        would_append=would_append,
         already_recorded=already,
         stale_existing=existing_eval.stale,
         blockers=tuple(blockers),

@@ -152,11 +152,21 @@ Lane B current decision:
 - the candidate is still present in the current factorization report.
 
 Stale decisions are not used for suppression. They remain in the append-only log as
-historical review records and are surfaced by diagnostics. The first implementation
-should report at least `candidate-missing` and `members-no-longer-edge-connected`.
-More specific stale reasons such as `judgment-id-mismatch` or `proposition-missing`
-can be added when they are useful, but the read path must not pretend a stale record
-covers the current candidate.
+historical review records and are surfaced by diagnostics with one of two reasons:
+
+- `candidate-missing` — the recorded `candidate_id` no longer resolves to a current
+  candidate. This covers a same-claim candidate that is gone or no longer reanchors
+  through a current splittable component, and a factorization candidate whose
+  `proposition` no longer matches the current candidate for that id.
+- `members-no-longer-edge-connected` — the same-claim candidate resolves, but its
+  current evidence no longer includes a pair edge among the recorded `members`.
+
+Self-consistency failures are not stale reasons. A record whose `judgment_id` or
+`decision_id` does not match its own derived value, or whose lane/members/proposition
+shape is invalid, is a hard load-time error that fails loud with a line number, not a
+silently-ignored stale record. Finer stale reasons can be split out later if a
+consumer needs them, but the read path must never let a stale record suppress a
+current candidate.
 
 ## 6. Report Integration
 
