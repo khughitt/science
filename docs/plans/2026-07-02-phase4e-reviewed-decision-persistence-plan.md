@@ -23,7 +23,7 @@
   - Add `--decisions` and `--show-reviewed` to `reconcile-propositions`.
 - Modify: `science/src/science_tool/annotation/proposition_reconciliation.py`
   - Keep existing report model; no candidate heuristic changes.
-  - Only add helper exports if the decisions module needs a public wrapper around current private candidate resolution.
+  - Promote current private candidate-resolution helpers to public module helpers so the decisions module does not import `_`-prefixed internals.
 - Create: `science/tests/test_proposition_reconciliation_decisions.py`
   - Unit tests for IDs, record parsing, validation, filtering, and append idempotency.
 - Modify: `science/tests/test_proposition_reconciliation_cli.py`
@@ -343,6 +343,7 @@ rtk git commit -m "feat(4e): model reviewed reconciliation decisions"
 ## Task 2: JSONL Loading, Appending, And Current-Corpus Validation
 
 **Files:**
+- Modify: `science/src/science_tool/annotation/proposition_reconciliation.py`
 - Modify: `science/src/science_tool/annotation/proposition_reconciliation_decisions.py`
 - Modify: `science/tests/test_proposition_reconciliation_decisions.py`
 
@@ -491,7 +492,36 @@ rtk uv run --frozen --project science pytest science/tests/test_proposition_reco
 
 Expected: FAIL on missing JSONL/evaluation functions.
 
-- [ ] **Step 3: Implement JSON conversion, load, append, and evaluation**
+- [ ] **Step 3: Promote candidate-resolution helpers to public API**
+
+In `science/src/science_tool/annotation/proposition_reconciliation.py`, add public
+aliases immediately after the existing private helpers:
+
+```python
+def candidate_indexes(
+    report: ReconciliationReport,
+) -> tuple[dict[str, SameClaimCandidate], dict[str, FactorizationCandidate]]:
+    return _candidate_indexes(report)
+
+
+def members_have_current_edge(candidate: SameClaimCandidate, members: set[str]) -> bool:
+    return _members_have_current_edge(candidate, members)
+
+
+def resolve_same_claim_candidate(
+    candidate_ref: str,
+    members: set[str],
+    same_by_id: Mapping[str, SameClaimCandidate],
+    all_same: tuple[SameClaimCandidate, ...],
+) -> SameClaimCandidate | None:
+    return _resolve_same_claim_candidate(candidate_ref, members, same_by_id, all_same)
+```
+
+Do not delete the private helpers in this task; `validate_review_doc` and
+`resolve_review_doc` already use them internally. The public wrappers make the
+cross-module dependency explicit.
+
+- [ ] **Step 4: Implement JSON conversion, load, append, and evaluation**
 
 Extend `science/src/science_tool/annotation/proposition_reconciliation_decisions.py`:
 
@@ -503,8 +533,9 @@ from science_tool.annotation.proposition_reconciliation import (
     FactorizationCandidate,
     ReconciliationReport,
     SameClaimCandidate,
-    _candidate_indexes,
-    _resolve_same_claim_candidate,
+    candidate_indexes,
+    members_have_current_edge,
+    resolve_same_claim_candidate,
 )
 
 
@@ -522,10 +553,18 @@ class StaleDecision:
 
 
 @dataclass(frozen=True)
+class ConflictingDecision:
+    scope: tuple[str, tuple[str, ...]]
+    decision_ids: tuple[str, ...]
+    decisions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DecisionEvaluation:
     active: tuple[EvaluatedDecision, ...]
     stale: tuple[StaleDecision, ...]
     duplicates: tuple[str, ...]
+    conflicts: tuple[ConflictingDecision, ...]
     suppressed_same_claim_candidate_ids: frozenset[str]
     suppressed_factorization_candidate_ids: frozenset[str]
 
@@ -652,13 +691,11 @@ def append_decision_records(path: Path, records: Sequence[DecisionRecord]) -> Ap
 
 
 def evaluate_decision_records(records: Sequence[DecisionRecord], report: ReconciliationReport) -> DecisionEvaluation:
-    same_by_id, factor_by_id = _candidate_indexes(report)
+    same_by_id, factor_by_id = candidate_indexes(report)
     seen: set[str] = set()
     duplicates: list[str] = []
     active: list[EvaluatedDecision] = []
     stale: list[StaleDecision] = []
-    suppress_same: set[str] = set()
-    suppress_factor: set[str] = set()
 
     for record in records:
         if record.decision_id in seen:
@@ -667,7 +704,7 @@ def evaluate_decision_records(records: Sequence[DecisionRecord], report: Reconci
         seen.add(record.decision_id)
         if record.lane == LANE_SAME_CLAIM:
             members = set(record.members)
-            candidate = _resolve_same_claim_candidate(
+            candidate = resolve_same_claim_candidate(
                 record.candidate_id,
                 members,
                 same_by_id,
@@ -676,53 +713,83 @@ def evaluate_decision_records(records: Sequence[DecisionRecord], report: Reconci
             if candidate is None:
                 stale.append(StaleDecision(record, "candidate-missing"))
                 continue
-            if not _members_have_edge(candidate, members):
+            if not members_have_current_edge(candidate, members):
                 stale.append(StaleDecision(record, "members-no-longer-edge-connected"))
                 continue
             suppresses = set(candidate.propositions) == members
-            if suppresses:
-                suppress_same.add(candidate.candidate_id)
             active.append(EvaluatedDecision(record, candidate.candidate_id, suppresses))
         else:
             candidate = factor_by_id.get(record.candidate_id)
             if candidate is None or candidate.proposition != record.proposition:
                 stale.append(StaleDecision(record, "candidate-missing"))
                 continue
-            suppress_factor.add(candidate.candidate_id)
             active.append(EvaluatedDecision(record, candidate.candidate_id, True))
+
+    conflicts = _decision_conflicts(active)
+    conflict_scopes = {conflict.scope for conflict in conflicts}
+    effective_active = tuple(
+        item for item in active if _decision_scope(item.record) not in conflict_scopes
+    )
+    suppress_same = {
+        item.current_candidate_id
+        for item in effective_active
+        if item.record.lane == LANE_SAME_CLAIM and item.suppresses_candidate
+    }
+    suppress_factor = {
+        item.current_candidate_id
+        for item in effective_active
+        if item.record.lane == LANE_FACTORIZATION and item.suppresses_candidate
+    }
     return DecisionEvaluation(
-        active=tuple(active),
+        active=effective_active,
         stale=tuple(stale),
         duplicates=tuple(sorted(duplicates)),
+        conflicts=conflicts,
         suppressed_same_claim_candidate_ids=frozenset(suppress_same),
         suppressed_factorization_candidate_ids=frozenset(suppress_factor),
     )
 
 
-def _members_have_edge(candidate: SameClaimCandidate, members: set[str]) -> bool:
-    if len(members) < 2:
-        return False
-    for left, right in candidate.pair_edges:
-        if left in members and right in members:
-            return True
-    return False
+def _decision_scope(record: DecisionRecord) -> tuple[str, tuple[str, ...]]:
+    if record.lane == LANE_SAME_CLAIM:
+        return (record.lane, record.members)
+    return (record.lane, (record.proposition or "",))
+
+
+def _decision_conflicts(active: Sequence[EvaluatedDecision]) -> tuple[ConflictingDecision, ...]:
+    by_scope: dict[tuple[str, tuple[str, ...]], list[DecisionRecord]] = {}
+    for item in active:
+        by_scope.setdefault(_decision_scope(item.record), []).append(item.record)
+    conflicts: list[ConflictingDecision] = []
+    for scope, records in sorted(by_scope.items()):
+        decisions = sorted({record.decision for record in records})
+        if len(decisions) < 2:
+            continue
+        conflicts.append(
+            ConflictingDecision(
+                scope=scope,
+                decision_ids=tuple(sorted(record.decision_id for record in records)),
+                decisions=tuple(decisions),
+            )
+        )
+    return tuple(conflicts)
 ```
 
-- [ ] **Step 4: Run focused tests and fix type/lint issues**
+- [ ] **Step 5: Run focused tests and fix type/lint issues**
 
 Run:
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_proposition_reconciliation_decisions.py -q
-rtk uv run --frozen --project science ruff check science/src/science_tool/annotation/proposition_reconciliation_decisions.py science/tests/test_proposition_reconciliation_decisions.py
+rtk uv run --frozen --project science ruff check science/src/science_tool/annotation/proposition_reconciliation.py science/src/science_tool/annotation/proposition_reconciliation_decisions.py science/tests/test_proposition_reconciliation_decisions.py
 ```
 
-Expected: PASS. If pyright complains about importing private helpers, add a small public helper in `proposition_reconciliation.py` instead of suppressing the error.
+Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-rtk git add science/src/science_tool/annotation/proposition_reconciliation_decisions.py science/tests/test_proposition_reconciliation_decisions.py
+rtk git add science/src/science_tool/annotation/proposition_reconciliation.py science/src/science_tool/annotation/proposition_reconciliation_decisions.py science/tests/test_proposition_reconciliation_decisions.py
 rtk git commit -m "feat(4e): validate reviewed decision records"
 ```
 
@@ -910,10 +977,21 @@ def build_record_decision_plan(
 
     existing_ids = {record.decision_id for record in existing_records}
     existing_eval = evaluate_decision_records(existing_records, report)
+    combined_eval = evaluate_decision_records([*existing_records, *records], report)
+    new_ids = {record.decision_id for record in records}
+    for conflict in combined_eval.conflicts:
+        if any(decision_id in new_ids for decision_id in conflict.decision_ids):
+            blockers.append(
+                {
+                    "reason": "conflicting-reviewed-decisions",
+                    "decision_ids": list(conflict.decision_ids),
+                    "decisions": list(conflict.decisions),
+                }
+            )
     would_append = tuple(sorted((record for record in records if record.decision_id not in existing_ids), key=lambda item: item.decision_id))
     already = tuple(sorted(record.decision_id for record in records if record.decision_id in existing_ids))
     return RecordDecisionPlan(
-        would_append=would_append,
+        would_append=() if blockers else would_append,
         already_recorded=already,
         stale_existing=existing_eval.stale,
         blockers=tuple(blockers),
@@ -1083,6 +1161,8 @@ def test_reconcile_propositions_suppresses_reviewed_decision_by_default(tmp_path
     assert report_result.exit_code == 0, report_result.output
     payload = json.loads(report_result.output)
     assert payload["summary"]["reviewed_decisions"] == 1
+    assert payload["summary"]["same_claim_candidates"] == 0
+    assert payload["summary"]["generated_same_claim_candidates"] == 1
     assert payload["same_claim_candidates"] == []
     assert payload["reviewed_decisions"]["active"][0]["candidate_id"] == candidate["candidate_id"]
 
@@ -1111,6 +1191,7 @@ def test_reconcile_propositions_show_reviewed_keeps_annotated_candidate(tmp_path
 
     assert report_result.exit_code == 0, report_result.output
     payload = json.loads(report_result.output)
+    assert payload["summary"]["same_claim_candidates"] == 1
     assert len(payload["same_claim_candidates"]) == 1
     assert payload["same_claim_candidates"][0]["reviewed_decision_id"].startswith("reconcile-decision:")
 ```
@@ -1149,6 +1230,14 @@ def reviewed_decisions_to_json(evaluation: DecisionEvaluation) -> dict[str, Any]
             for item in evaluation.stale
         ],
         "duplicates": list(evaluation.duplicates),
+        "conflicts": [
+            {
+                "scope": {"lane": item.scope[0], "refs": list(item.scope[1])},
+                "decision_ids": list(item.decision_ids),
+                "decisions": list(item.decisions),
+            }
+            for item in evaluation.conflicts
+        ],
     }
 
 
@@ -1160,11 +1249,15 @@ def apply_reviewed_decisions_to_report_payload(
 ) -> dict[str, Any]:
     out = dict(payload)
     summary = dict(out.get("summary", {}))
+    generated_same = int(summary.get("same_claim_candidates", 0))
+    generated_factor = int(summary.get("factorization_disagreements", 0))
     active_by_candidate = {item.current_candidate_id: item for item in evaluation.active}
+    summary["generated_same_claim_candidates"] = generated_same
+    summary["generated_factorization_disagreements"] = generated_factor
     summary["reviewed_decisions"] = len(evaluation.active)
     summary["stale_reviewed_decisions"] = len(evaluation.stale)
     summary["duplicate_reviewed_decisions"] = len(evaluation.duplicates)
-    out["summary"] = summary
+    summary["conflicting_reviewed_decisions"] = len(evaluation.conflicts)
     out["reviewed_decisions"] = reviewed_decisions_to_json(evaluation)
 
     same_candidates = []
@@ -1194,6 +1287,9 @@ def apply_reviewed_decisions_to_report_payload(
         else:
             factor_candidates.append(item)
     out["factorization_disagreements"] = factor_candidates
+    summary["same_claim_candidates"] = len(same_candidates)
+    summary["factorization_disagreements"] = len(factor_candidates)
+    out["summary"] = summary
     return out
 ```
 
@@ -1246,6 +1342,10 @@ After `payload = report_to_json(report)`, add:
     )
 ```
 
+This hook intentionally runs before the `fmt in {"json", "scaffold"}` branch. Both
+JSON and scaffold output should suppress already-recorded advisory decisions by
+default, and both should honor `--show-reviewed`.
+
 Update table output summary to include reviewed counts:
 
 ```python
@@ -1290,7 +1390,7 @@ rtk git commit -m "feat(4e): apply reviewed decisions to reconciliation reports"
 Append to `science/tests/test_proposition_reconciliation_decisions.py`:
 
 ```python
-def test_conflicting_current_same_claim_decisions_fail_validation():
+def test_conflicting_current_same_claim_decisions_are_diagnostics_not_suppression():
     candidate = _same_candidate()
     base = _same_claim_advisory_action()
     base["candidate_id"] = candidate.candidate_id
@@ -1302,8 +1402,11 @@ def test_conflicting_current_same_claim_decisions_fail_validation():
     conflict_payload["judgment_id"] = judgment_id("same_claim", "conflict_or_negation", list(candidate.propositions))
     conflict = record_from_action_payload(conflict_payload, recorded_at="2026-07-02")
 
-    with pytest.raises(DecisionRecordError, match="conflicting reviewed decisions"):
-        evaluate_decision_records([related, conflict], _report_with_same_candidate(candidate))
+    evaluation = evaluate_decision_records([related, conflict], _report_with_same_candidate(candidate))
+
+    assert evaluation.conflicts[0].decisions == ("conflict_or_negation", "related_but_distinct")
+    assert evaluation.suppressed_same_claim_candidate_ids == frozenset()
+    assert evaluation.active == ()
 
 
 def test_malformed_decision_record_reports_line_number(tmp_path: Path):
@@ -1344,24 +1447,30 @@ rtk uv run --frozen --project science pytest science/tests/test_proposition_reco
 
 Expected: FAIL for conflict detection if not implemented yet.
 
-- [ ] **Step 3: Implement conflict detection**
+- [ ] **Step 3: Verify conflict detection suppresses nothing**
 
-In `evaluate_decision_records`, after collecting active records and before returning,
-add:
+Confirm `evaluate_decision_records` has the Task 2 conflict behavior:
 
 ```python
-    by_scope: dict[tuple[str, tuple[str, ...]], set[str]] = {}
-    for item in active:
-        if item.record.lane == LANE_SAME_CLAIM:
-            key = (LANE_SAME_CLAIM, item.record.members)
-        else:
-            key = (LANE_FACTORIZATION, (item.record.proposition or "",))
-        by_scope.setdefault(key, set()).add(item.record.decision)
-    conflicts = {key: decisions for key, decisions in by_scope.items() if len(decisions) > 1}
-    if conflicts:
-        details = "; ".join(f"{key[0]}:{','.join(key[1])}={','.join(sorted(decisions))}" for key, decisions in sorted(conflicts.items()))
-        raise DecisionRecordError(f"conflicting reviewed decisions: {details}")
+    conflicts = _decision_conflicts(active)
+    conflict_scopes = {conflict.scope for conflict in conflicts}
+    effective_active = tuple(
+        item for item in active if _decision_scope(item.record) not in conflict_scopes
+    )
 ```
+
+and returns:
+
+```python
+        active=effective_active,
+        conflicts=conflicts,
+```
+
+If the test from Step 1 fails, make the implementation match those snippets and
+recompute suppression sets only from `effective_active`.
+
+Do not raise from `evaluate_decision_records` for current same-scope conflicts. The
+read path must keep `reconcile-propositions` usable and surface the conflict as data.
 
 - [ ] **Step 4: Run focused tests and static checks**
 

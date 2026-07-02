@@ -152,9 +152,11 @@ Lane B current decision:
 - the candidate is still present in the current factorization report.
 
 Stale decisions are not used for suppression. They remain in the append-only log as
-historical review records and are surfaced by diagnostics with a reason such as
-`candidate-missing`, `judgment-id-mismatch`, `members-no-longer-edge-connected`, or
-`proposition-missing`.
+historical review records and are surfaced by diagnostics. The first implementation
+should report at least `candidate-missing` and `members-no-longer-edge-connected`.
+More specific stale reasons such as `judgment-id-mismatch` or `proposition-missing`
+can be added when they are useful, but the read path must not pretend a stale record
+covers the current candidate.
 
 ## 6. Report Integration
 
@@ -190,8 +192,16 @@ For JSON output, add a block such as:
 ```
 
 By default, current covered advisory candidates should be omitted from the main
-candidate lists and counted in `summary.reviewed_decisions`. A `--show-reviewed`
-option can include them in the main lists with `reviewed_decision_id` annotations.
+candidate lists and counted in `summary.reviewed_decisions`. The filtered list counts
+must match the post-filter lists; if generated totals are useful, expose them under
+separate names such as `generated_same_claim_candidates`. A `--show-reviewed` option
+can include covered candidates in the main lists with `reviewed_decision_id`
+annotations.
+
+The existing `scaffold` format shares the JSON payload path. It should use the same
+default suppression behavior as JSON so scaffold output does not keep asking for
+review of already-recorded advisory decisions. `--show-reviewed` should affect
+`scaffold` and `json` consistently.
 
 This keeps normal review queues focused while preserving auditability. Stale
 decisions should never suppress candidates; if a candidate resurfaces because its
@@ -199,19 +209,26 @@ shape changed, it belongs back in the active queue.
 
 ## 7. Conflict And Duplicate Handling
 
-The decision log is append-only, but report-time interpretation should be strict:
+The decision log is append-only, but report-time interpretation should stay usable:
 
 - duplicate `decision_id` records are benign and reported as duplicates;
 - two current decision records covering the same Lane A member set with different
-  decisions are a validation error for the decision log;
+  decisions are reported as conflicts and suppress nothing for that member set;
 - a current advisory decision conflicting with a current ready mutation action should
   still be handled by Half B plan conflict rules before persistence;
 - stale records are never conflicts with current records.
 
 The persistence command deduplicates before append, so duplicate records should only
-come from manual edits or merges. A separate validator can report them, but the first
-implementation can include validation in `reconcile-propositions` and the record
-command rather than adding a new CLI.
+come from manual edits or merges. Conflicts can happen when a reviewer legitimately
+changes their mind about an unchanged candidate, or when two branches append different
+decisions. Since this phase has no explicit supersede record, the read path must not
+make `reconcile-propositions` unusable. It should surface the conflict in diagnostics,
+leave the candidate active, and let a later revision/supersede mechanism decide how
+to retire the older decision.
+
+The persistence command should be stricter than the read path: if appending a new
+record would create a current same-scope conflict with an existing current record, it
+should report a blocker and not append that record.
 
 ## 8. Data Flow
 
@@ -245,7 +262,8 @@ Core tests:
 - current saved Lane B decision suppresses the matching factorization candidate;
 - stale saved decision does not suppress a candidate and reports a reason;
 - splittable subset decisions reanchor through a larger current component;
-- conflicting current decision records fail validation;
+- conflicting current decision records are reported as diagnostics and suppress
+  nothing;
 - malformed JSONL records fail loud with line numbers.
 
 CLI tests:
