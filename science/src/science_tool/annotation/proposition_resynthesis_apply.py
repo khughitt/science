@@ -166,6 +166,10 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
             continue
         if judgment.get("proposition") != draft.original_proposition:
             raise ResynthesisApplyError("source review judgment proposition is stale")
+        if judgment.get("lane") != "factorization_disagreement":
+            raise ResynthesisApplyError("source review judgment lane is stale")
+        if judgment.get("decision") != "factorization_needs_resynthesis":
+            raise ResynthesisApplyError("source review judgment decision is stale")
         return _draft_context_input_annotations(draft)
 
     if found_judgment:

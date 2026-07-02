@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -265,6 +266,37 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     )
     assert str(positive_frontmatter["created"]) == "2026-07-01"
     assert str(positive_frontmatter["updated"]) == "2026-07-01"
+
+
+def test_apply_resynthesis_draft_resume_rejects_changed_review_decision_without_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+    positive_path = tmp_path / "entities" / "propositions" / "broad-positive.md"
+    positive_text = positive_path.read_text(encoding="utf-8")
+    review = ctx["review"]
+    review["judgments"][0]["decision"] = "factorization_no_action"
+    ctx["review_path"].write_text(json.dumps(review), encoding="utf-8")
+    writes: list[Path] = []
+
+    def spy_atomic_write_text(path: Path, text: str) -> None:
+        writes.append(path)
+
+    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+
+    with pytest.raises(ResynthesisApplyError, match="source review judgment decision is stale"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
+
+    assert writes == []
+    assert positive_path.read_text(encoding="utf-8") == positive_text
 
 
 def test_apply_resynthesis_draft_rejects_incomplete_replace_when_live_action_inputs_grew(
