@@ -29,7 +29,7 @@ threads before any behavioral refactor.
   as the durable Markdown owner path for project-local concepts.
 - [`terms-authoring-ergonomics-design.md`](terms-authoring-ergonomics-design.md)
   designs a focused `science terms add` surface for lightweight local semantic
-  terms in `knowledge/sources/<profile>/terms.yaml`.
+  terms in the configured local profile's `terms.yaml`.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary

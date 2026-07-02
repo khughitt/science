@@ -20,8 +20,8 @@ yet need a full entity markdown file.
 
 `terms.yaml` is already a real source surface:
 
-- `knowledge/sources/<profile>/terms.yaml` rows load through the aggregate
-  source adapter.
+- `knowledge/sources/<local-profile>/terms.yaml` rows load through the
+  aggregate source adapter.
 - A row such as `id: concept:treatment-response` infers `kind: concept` from
   the CURIE prefix when no explicit kind is supplied.
 - The row's `description` becomes the lightweight content preview.
@@ -47,7 +47,7 @@ another full entity writer. It is a thin helper for lightweight local terms.
 
 | Layer | Current behavior |
 |---|---|
-| Storage path | `knowledge/sources/<profile>/terms.yaml` under a source profile directory. |
+| Storage path | `knowledge/sources/<local-profile>/terms.yaml`, where `<local-profile>` is the configured `knowledge_profiles.local` value, defaulting to `local`. The aggregate loader does not glob every `knowledge/sources/*/terms.yaml`. |
 | YAML shape | Root object with `terms:` list. Rows may use `id` or `canonical_id`. |
 | Kind inference | If the row id is a CURIE and `kind` is absent, the prefix before `:` becomes `kind`. |
 | Supported body | `description` is lightweight prose. `content` and `body` are ignored. |
@@ -95,7 +95,7 @@ source surface should have a small safe writer.
 ## Decision
 
 Add a focused `science terms add` command for creating lightweight local term
-rows in `knowledge/sources/<profile>/terms.yaml`.
+rows in the configured local profile's `terms.yaml`.
 
 The command should be narrow in the first slice:
 
@@ -104,7 +104,9 @@ The command should be narrow in the first slice:
 - avoid update/delete/promote behavior;
 - reject content fields that the loader ignores;
 - fail early on malformed ids, unsupported kinds, duplicate rows, and existing
-  markdown owners with the same canonical id.
+  markdown owners with the same canonical id;
+- do not accept a free-form profile selector in the first slice, because rows
+  written outside the configured local profile would not be loaded or resolve.
 
 This gives agents and humans one durable command for "I need this local term to
 resolve, but I do not need a full markdown entity yet."
@@ -127,18 +129,18 @@ science terms add concept:treatment-response --title "Treatment response" --desc
 
 | Input | Contract |
 |---|---|
-| `<id>` | Required canonical CURIE-style id whose prefix is a registered source kind, such as `concept:treatment-response` or `method:bayesian-model-check`. External ontology CURIEs belong in `--ontology-term`, not as the local term id. |
+| `<id>` | Required canonical CURIE-style id whose prefix is a registered entity kind, such as `concept:treatment-response` or `method:bayesian-model-check`. External ontology CURIEs such as `HP:0001250` belong in `--ontology-term`, not as the local term id. |
 | `--title` | Required display title. |
 | `--description` | Optional short prose. This maps to the lightweight content preview. |
 | `--alias` | Repeatable alias string. |
 | `--same-as` | Repeatable external equivalent id or URI. |
 | `--ontology-term` | Repeatable ontology CURIE. |
-| `--profile` | Optional source profile directory name. Defaults to the project local profile when the project config exposes one, otherwise `local`. |
 | `--project-root` | Standard project root selector following the CLI behavior contract. |
 
-Do not accept `--body`, `--content`, or markdown-template flags in this command.
-Those belong to full entity owners and would be silently ignored by the current
-terms loader.
+Do not accept `--body`, `--content`, `--name`, `--profile`, or
+markdown-template flags in this command. Body/content fields belong to full
+entity owners and would be ignored by the current terms loader. `--title` is
+the authored display field; `name` is not mapped by the loader.
 
 ### Written Row
 
@@ -149,18 +151,19 @@ terms:
   - id: concept:treatment-response
     title: Treatment response
     description: Clinical response after treatment.
-    aliases: []
-    same_as: []
-    ontology_terms: []
 ```
 
-The implementation may omit empty optional arrays if that better matches the
-surrounding file style, but it should be deterministic for new files.
+Rows deliberately omit redundant `kind:` and rely on the existing prefix
+inference. The writer should emit only keys that carry values; loader defaults
+cover empty optional fields. This keeps new rows minimal and avoids churn in
+curated source files.
 
 ### File Handling
 
-- Target path: `knowledge/sources/<profile>/terms.yaml`.
-- Create `knowledge/sources/<profile>/` when missing.
+- Target path: `knowledge/sources/<local-profile>/terms.yaml`, where
+  `<local-profile>` comes from `knowledge_profiles.local`, falling back to
+  `local`.
+- Create `knowledge/sources/<local-profile>/` when missing.
 - Create a new YAML file with root key `terms` when missing.
 - Preserve existing row order and append the new row at the end.
 - Preserve unrelated top-level keys if an existing file already has them.
@@ -179,18 +182,17 @@ touching the file when input is invalid.
 |---|---|
 | Missing colon in id | Error: id must be a canonical CURIE-style term id. |
 | Empty prefix or local id | Error. |
-| Unsupported kind prefix | Error unless the prefix resolves to a registered source kind. |
+| Unsupported kind prefix | Error unless the prefix resolves to a registered entity kind through the entity registry. Do not treat external ontology prefixes as valid local ids; tell users to pass those through `--ontology-term`. |
 | Existing row with same `id` or `canonical_id` in target `terms.yaml` | Error. |
 | Existing source owner with the same canonical id anywhere in the project | Error by default. |
 | Existing markdown owner with the same id | Error with guidance to edit the markdown owner instead. |
-| Existing aggregate row in another profile with the same id | Error by default, because two lightweight owners create non-obvious precedence. |
 | Existing malformed `terms.yaml` | Error without rewriting the file. |
-| User supplies ignored body/content fields | Click rejects unknown options. |
+| User supplies body/content/name/profile flags | Click rejects unknown options. |
 
 The same-id check should use the project source-loading/identity machinery where
-possible, not a filename-only check. The prior concept work proved that
-markdown-vs-terms collisions are deterministic, but the authoring command
-should avoid creating the collision in the first place.
+possible, not a broad filesystem scan. The prior concept work proved that
+markdown-vs-terms collisions are deterministic, but the authoring command should
+avoid creating collisions within the loaded source set in the first place.
 
 ## Boundaries
 
@@ -237,12 +239,14 @@ The implementation plan should start with failing tests for:
    `--ontology-term` serialize to the expected row fields.
 4. A malformed id fails before writing.
 5. An unsupported prefix fails before writing.
-6. An existing markdown owner with the same canonical id blocks term creation.
-7. An existing terms row in another profile with the same canonical id blocks
-   term creation.
+6. An external ontology prefix such as `HP:0001250` fails as the row id and the
+   error points to `--ontology-term`.
+7. An existing markdown owner with the same canonical id blocks term creation.
 8. An existing malformed `terms.yaml` is rejected without rewrite.
-9. The created row reloads through `load_project_sources()`.
-10. Command docs and generated Codex mirrors use `science terms add` instead of
+9. The created row reloads through `load_project_sources()` with the expected
+   title.
+10. The command rejects `--body`, `--content`, `--name`, and `--profile`.
+11. Command docs and generated Codex mirrors use `science terms add` instead of
     hand-authoring YAML for routine lightweight term creation.
 
 ## Non-Goals
@@ -265,7 +269,7 @@ This slice should not:
 | The command creates a second owner for an id that already resolves. | Source-load before writing and fail on any existing canonical id. |
 | The command suggests terms are a full entity replacement. | Docs keep the lightweight term vs markdown owner boundary explicit. |
 | YAML rewriting causes unnecessary churn. | Preserve existing row order and unrelated top-level keys; append only. |
-| Profile defaulting is ambiguous. | Use the project local profile when available; otherwise use `local`; document the rule. |
+| Free-form profile selection writes dead rows. | Do not expose `--profile` in the first slice; always write to the configured local profile. |
 | The first slice grows into a terms-management subsystem. | Limit to `add` and defer update/delete/promote/list to later designs. |
 
 ## Acceptance Criteria
@@ -274,10 +278,11 @@ This slice should not:
   creates a valid lightweight terms row under
   `knowledge/sources/local/terms.yaml` or the configured local profile.
 - Created rows reload through `load_project_sources()` and resolve as
-  canonical ids.
+  canonical ids with the supplied title.
 - Duplicate ids are rejected before writing, including ids owned by markdown
-  entity files and ids in other `terms.yaml` profiles.
-- The command does not accept body/content options that the loader ignores.
+  entity files.
+- The command does not accept body/content/name/profile options that the loader
+  ignores or cannot load.
 - Existing row order is preserved and the new row is appended.
 - User-guide, command docs, and generated Codex mirrors describe
   `science terms add` as the routine lightweight authoring path.

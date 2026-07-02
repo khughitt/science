@@ -164,7 +164,7 @@ a flat list of 25 commands.
 [`terms-authoring-ergonomics-design.md`](terms-authoring-ergonomics-design.md).
 
 **Goal:** Make lightweight local semantic terms authorable without hand-editing
-`knowledge/sources/<profile>/terms.yaml`.
+the configured local profile's `terms.yaml`.
 
 **Acceptance criteria:**
 
