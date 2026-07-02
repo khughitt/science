@@ -195,16 +195,40 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
 
 def _validated_resume_input_annotations(project_root: Path, draft: ResynthesisDraft) -> set[str]:
     draft_annotations = _draft_input_annotations(draft)
-    snapshot_annotations = _replacement_annotation_snapshot(project_root, draft)
+    replacement_snapshot = _replacement_annotation_snapshot(project_root, draft)
+    snapshot_annotations = set().union(*replacement_snapshot.values()) if replacement_snapshot else set()
     if not snapshot_annotations:
         raise ResynthesisApplyError("input annotation snapshot is incomplete: prior apply state is unavailable")
-    if snapshot_annotations != draft_annotations:
+
+    replacement_ids = {replacement.id for replacement in draft.new_propositions}
+    assigned_to_replacements: dict[str, set[str]] = {replacement_id: set() for replacement_id in replacement_ids}
+    retained_on_original: set[str] = set()
+    for assignment in draft.annotation_assignments:
+        if assignment.annotation not in draft_annotations:
+            raise ResynthesisApplyError(f"{assignment.annotation} is not a current input annotation")
+        if assignment.to_proposition in assigned_to_replacements:
+            assigned_to_replacements[assignment.to_proposition].add(assignment.annotation)
+        elif assignment.to_proposition == draft.original_proposition:
+            retained_on_original.add(assignment.annotation)
+
+    if snapshot_annotations | retained_on_original != draft_annotations:
         raise ResynthesisApplyError("input annotation snapshot does not match draft input_annotations")
+
+    for replacement_id, snapshot in sorted(replacement_snapshot.items()):
+        assigned = assigned_to_replacements[replacement_id]
+        if not assigned:
+            raise ResynthesisApplyError(
+                f"{replacement_id} replacement annotation snapshot has no assigned input annotations"
+            )
+        if snapshot != assigned:
+            raise ResynthesisApplyError(
+                f"{replacement_id} replacement annotation snapshot does not match assigned moved annotations"
+            )
     return draft_annotations
 
 
-def _replacement_annotation_snapshot(project_root: Path, draft: ResynthesisDraft) -> set[str]:
-    annotations: set[str] = set()
+def _replacement_annotation_snapshot(project_root: Path, draft: ResynthesisDraft) -> dict[str, set[str]]:
+    annotations_by_replacement: dict[str, set[str]] = {}
     for replacement in draft.new_propositions:
         try:
             location = find_entity(project_root, replacement.id)
@@ -220,8 +244,10 @@ def _replacement_annotation_snapshot(project_root: Path, draft: ResynthesisDraft
                 "input annotation snapshot is incomplete: "
                 f"{replacement.id} replacement proposition source_refs are invalid"
             )
-        annotations.update(str(ref) for ref in source_refs if str(ref).startswith("annotation:"))
-    return annotations
+        annotations_by_replacement[replacement.id] = {
+            str(ref) for ref in source_refs if str(ref).startswith("annotation:")
+        }
+    return annotations_by_replacement
 
 
 def _draft_input_annotations(draft: ResynthesisDraft) -> set[str]:

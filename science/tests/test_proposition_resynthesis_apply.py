@@ -8,7 +8,7 @@ import pytest
 from science_tool.annotation import io as anno_io
 from science_tool.annotation import proposition_resynthesis_apply as apply_module
 from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
-from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, render_replacement_proposition
 from science_tool.annotation.query import read_sidecar_strict
 from science_tool.entities import parse_markdown_entity_file, render_entity_frontmatter_updates
 
@@ -267,6 +267,53 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     )
     assert str(positive_frontmatter["created"]) == "2026-07-01"
     assert str(positive_frontmatter["updated"]) == "2026-07-01"
+
+
+def test_apply_resynthesis_draft_resume_rejects_manual_only_extra_replacement(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    payload = _draft_payload(ctx)
+    extra_replacement = {
+        "id": "proposition:broad-extra",
+        "title": "BES requires an extra manual-only replacement",
+        "body": "This replacement has no moved input annotations.",
+        "frontmatter": {
+            "subject": "BES",
+            "predicate": "associates_with",
+            "object": "manual-only replacement",
+            "polarity": "positive",
+            "source_refs": ["manual:extra-note"],
+        },
+    }
+    payload["new_propositions"].append(extra_replacement)
+    tampered_draft = parse_resynthesis_draft(payload)
+    rendered_extra = render_replacement_proposition(
+        tmp_path,
+        tampered_draft.new_propositions[-1],
+        ("manual:extra-note",),
+        as_of=date(2026, 7, 2),
+    )
+    rendered_extra.path.write_text(rendered_extra.text, encoding="utf-8")
+
+    with pytest.raises(ResynthesisApplyError, match="replacement.*annotation|snapshot"):
+        apply_resynthesis_draft(tmp_path, tampered_draft, as_of=date(2026, 7, 2))
+
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["resynthesized_into"] == [
+        "proposition:broad-negative",
+        "proposition:broad-positive",
+    ]
 
 
 def test_apply_resynthesis_draft_resume_rejects_changed_review_decision_without_writes(
