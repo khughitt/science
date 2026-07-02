@@ -342,6 +342,17 @@ def test_parse_resynthesis_draft_rejects_non_string_notes(tmp_path: Path):
         parse_resynthesis_draft(payload)
 
 
+def test_parse_resynthesis_draft_rejects_normalized_required_string(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["action_id"] = f" {ctx['action'].action_id}"
+
+    with pytest.raises(ResynthesisDraftError, match="action_id"):
+        parse_resynthesis_draft(payload)
+
+
 def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import (
         parse_resynthesis_draft,
@@ -404,6 +415,19 @@ def test_validate_resynthesis_draft_rejects_replacement_without_source_refs(tmp_
     draft = parse_resynthesis_draft(payload)
 
     with pytest.raises(ResynthesisDraftError, match="replacement proposition has no source refs"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+
+@pytest.mark.parametrize("source_refs", [None, [" paper:A2020 "]])
+def test_validate_resynthesis_draft_rejects_normalized_source_refs(tmp_path: Path, source_refs):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["frontmatter"]["source_refs"] = source_refs
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="source_refs"):
         validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
 

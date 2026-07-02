@@ -257,9 +257,9 @@ def draft_to_json(draft: ResynthesisDraft) -> dict[str, Any]:
 
 def _required_str(row: Mapping[str, Any], key: str) -> str:
     value = row.get(key)
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or not value or value != value.strip():
         raise ResynthesisDraftError(f"missing or invalid {key}")
-    return value.strip()
+    return value
 
 
 def _required_mapping(row: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -365,16 +365,16 @@ def _live_action_for_draft(project_root: Path, draft: ResynthesisDraft) -> Recon
 
 
 def _replacement_frontmatter_source_refs(frontmatter: Mapping[str, Any]) -> tuple[str, ...]:
-    source_refs = frontmatter.get("source_refs", ())
-    if source_refs is None:
+    if "source_refs" not in frontmatter:
         return ()
+    source_refs = frontmatter["source_refs"]
     if not isinstance(source_refs, Sequence) or isinstance(source_refs, str):
         raise ResynthesisDraftError("proposition frontmatter source_refs must be a list")
     refs: list[str] = []
     for ref in source_refs:
-        if not isinstance(ref, str) or not ref.strip():
+        if not isinstance(ref, str) or not ref or ref != ref.strip():
             raise ResynthesisDraftError("proposition frontmatter source_refs must contain non-empty strings")
-        refs.append(ref.strip())
+        refs.append(ref)
     return tuple(refs)
 
 
