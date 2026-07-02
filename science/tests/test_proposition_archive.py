@@ -16,6 +16,7 @@ from science_tool.annotation.model import (
 )
 from science_tool.annotation.proposition_archive import (
     PropositionArchiveError,
+    _postflight,
     _rows_for_ready_candidates,
     archive_superseded_propositions,
     build_superseded_proposition_archive_report,
@@ -543,6 +544,54 @@ def test_apply_row_construction_fails_if_ready_candidate_gains_id_alias_collisio
 
     with pytest.raises(PropositionArchiveError, match="id/alias collision on proposition:duplicate"):
         _rows_for_ready_candidates(tmp_path, report)
+
+
+def test_postflight_fails_if_active_archive_row_lineage_differs_from_planned_row(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    original_path = "entities/propositions/duplicate.md"
+    planned = ArchiveRow(
+        op="archive",
+        id="proposition:duplicate",
+        kind="proposition",
+        status="superseded",
+        superseded_by="proposition:canonical",
+        original_path=original_path,
+        archived_at="T1",
+    )
+    archived = tmp_path / derive_archive_path(original_path)
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("Archived proposition.\n", encoding="utf-8")
+    append_row(
+        archive_index_path(tmp_path),
+        planned.model_copy(update={"superseded_by": "proposition:replacement"}),
+    )
+
+    with pytest.raises(PropositionArchiveError, match="proposition:duplicate archive index mismatch: superseded_by"):
+        _postflight(tmp_path, [planned])
+
+
+def test_postflight_fails_if_active_archive_row_original_path_differs_from_planned_row(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    original_path = "entities/propositions/duplicate.md"
+    planned = ArchiveRow(
+        op="archive",
+        id="proposition:duplicate",
+        kind="proposition",
+        status="superseded",
+        superseded_by="proposition:canonical",
+        original_path=original_path,
+        archived_at="T1",
+    )
+    archived = tmp_path / derive_archive_path(original_path)
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("Archived proposition.\n", encoding="utf-8")
+    append_row(
+        archive_index_path(tmp_path),
+        planned.model_copy(update={"original_path": "entities/propositions/other.md"}),
+    )
+
+    with pytest.raises(PropositionArchiveError, match="proposition:duplicate archive index mismatch: original_path"):
+        _postflight(tmp_path, [planned])
 
 
 def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
