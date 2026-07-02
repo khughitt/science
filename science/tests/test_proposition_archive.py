@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import (
     Annotation,
@@ -13,6 +15,8 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.proposition_archive import (
+    PropositionArchiveError,
+    archive_superseded_propositions,
     build_superseded_proposition_archive_report,
 )
 from science_tool.archive import (
@@ -92,6 +96,18 @@ def _candidate_by_id(report: dict, ref: str) -> dict:
     return next(candidate for candidate in report["candidates"] if candidate["id"] == ref)
 
 
+def _blocked_candidate(root: Path, extra_frontmatter: str, *, slug: str = "duplicate") -> dict:
+    _seed(root)
+    _proposition(root, "canonical")
+    _proposition(root, slug, status="superseded", extra_frontmatter=extra_frontmatter)
+
+    report = build_superseded_proposition_archive_report(root)
+
+    candidate = _candidate_by_id(report, f"proposition:{slug}")
+    assert candidate["status"] == "blocked"
+    return candidate
+
+
 def test_dry_run_reports_ready_scalar_superseded_proposition(tmp_path: Path) -> None:
     _seed(tmp_path)
     _proposition(tmp_path, "canonical")
@@ -142,6 +158,112 @@ def test_dry_run_blocks_missing_lineage(tmp_path: Path) -> None:
     assert "missing lineage" in candidate["blockers"]
 
 
+def test_dry_run_blocks_both_lineage_fields_declared(tmp_path: Path) -> None:
+    candidate = _blocked_candidate(
+        tmp_path,
+        "superseded_by: proposition:canonical\n"
+        "resynthesized_into:\n"
+        "  - proposition:canonical\n",
+    )
+
+    assert "declares both superseded_by and resynthesized_into" in candidate["blockers"]
+    assert candidate["lineage_kind"] is None
+    assert candidate["successors"] == []
+
+
+@pytest.mark.parametrize(
+    ("extra_frontmatter", "blocker"),
+    [
+        ("superseded_by:\n", "malformed superseded_by"),
+        ("superseded_by:\n  - proposition:canonical\n", "malformed superseded_by"),
+        ("resynthesized_into: proposition:canonical\n", "malformed resynthesized_into"),
+        ("resynthesized_into:\n  - proposition:canonical\n  - 123\n", "malformed resynthesized_into"),
+    ],
+)
+def test_dry_run_blocks_malformed_scalar_and_list_lineage(
+    tmp_path: Path,
+    extra_frontmatter: str,
+    blocker: str,
+) -> None:
+    candidate = _blocked_candidate(tmp_path, extra_frontmatter)
+
+    assert blocker in candidate["blockers"]
+    assert candidate["successors"] == []
+
+
+def test_dry_run_blocks_self_successor(tmp_path: Path) -> None:
+    candidate = _blocked_candidate(tmp_path, "superseded_by: proposition:duplicate\n")
+
+    assert "lineage points to itself" in candidate["blockers"]
+    assert candidate["successors"] == ["proposition:duplicate"]
+
+
+def test_dry_run_blocks_duplicate_successor(tmp_path: Path) -> None:
+    candidate = _blocked_candidate(
+        tmp_path,
+        "resynthesized_into:\n"
+        "  - proposition:canonical\n"
+        "  - proposition:canonical\n",
+    )
+
+    assert "duplicate successor proposition:canonical" in candidate["blockers"]
+    assert candidate["successors"] == ["proposition:canonical", "proposition:canonical"]
+
+
+def test_dry_run_blocks_unknown_successor(tmp_path: Path) -> None:
+    candidate = _blocked_candidate(tmp_path, "superseded_by: proposition:missing\n")
+
+    assert "unknown successor proposition:missing" in candidate["blockers"]
+    assert candidate["successors"] == ["proposition:missing"]
+
+
+def test_dry_run_blocks_archive_destination_collision(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+    archive_path = tmp_path / "entities" / "_archive" / "propositions" / "duplicate.md"
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_text("Existing archive content.\n", encoding="utf-8")
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert "archive destination exists: entities/_archive/propositions/duplicate.md" in candidate["blockers"]
+
+
+def test_dry_run_blocks_active_archive_id_collision(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:duplicate",
+            original_path="entities/_archive/propositions/duplicate.md",
+            archived_at="T1",
+        ),
+    )
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert "archive id already active: proposition:duplicate" in candidate["blockers"]
+
+
+def test_dry_run_blocks_live_id_alias_collision(tmp_path: Path) -> None:
+    candidate = _blocked_candidate(
+        tmp_path,
+        "superseded_by: proposition:canonical\n"
+        "aliases:\n"
+        "  - proposition:canonical\n",
+    )
+
+    assert any("id/alias collision on proposition:canonical" in blocker for blocker in candidate["blockers"])
+
+
 def test_dry_run_blocks_active_archive_alias_collision(tmp_path: Path) -> None:
     # An active archive row whose *alias* equals the candidate id is not caught by the
     # "archive id already active" check (active_by_id is keyed by canonical id), and
@@ -165,3 +287,10 @@ def test_dry_run_blocks_active_archive_alias_collision(tmp_path: Path) -> None:
     candidate = _candidate_by_id(report, "proposition:duplicate")
     assert candidate["status"] == "blocked"
     assert any("id/alias collision" in blocker for blocker in candidate["blockers"])
+
+
+def test_apply_raises_task_5_placeholder(tmp_path: Path) -> None:
+    _seed(tmp_path)
+
+    with pytest.raises(PropositionArchiveError, match="apply is implemented in Task 5"):
+        archive_superseded_propositions(tmp_path, apply=True)
