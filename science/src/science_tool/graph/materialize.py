@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date as _date
 from pathlib import Path
@@ -139,6 +139,87 @@ def _archived_uri_if_active(
     return None
 
 
+_LIVE_LINEAGE_FIELDS = ("superseded_by", "resynthesized_into")
+
+
+def _has_live_lineage(frontmatter: Mapping[str, object]) -> bool:
+    return any(field in frontmatter for field in _LIVE_LINEAGE_FIELDS)
+
+
+def _lineage_context(owner: str | None, path: str) -> str:
+    if owner:
+        return f"{owner} ({path})"
+    return f"<missing id> ({path})"
+
+
+def _live_lineage_targets(owner: str, path: str, frontmatter: Mapping[str, object]) -> tuple[str, ...]:
+    has_superseded_by = "superseded_by" in frontmatter
+    has_resynthesized_into = "resynthesized_into" in frontmatter
+    context = _lineage_context(owner, path)
+
+    if has_superseded_by and has_resynthesized_into:
+        raise ValueError(f"live lineage {context} cannot declare both superseded_by and resynthesized_into")
+
+    status = frontmatter.get("status")
+    if status != "superseded":
+        fields = ", ".join(field for field in _LIVE_LINEAGE_FIELDS if field in frontmatter)
+        raise ValueError(f"live lineage {context} declares {fields} but status is {status!r}, expected 'superseded'")
+
+    if has_superseded_by:
+        target = frontmatter.get("superseded_by")
+        if not isinstance(target, str) or not target:
+            raise ValueError(f"live lineage {context} has malformed superseded_by")
+        targets = (target,)
+    elif has_resynthesized_into:
+        raw_targets = frontmatter.get("resynthesized_into")
+        if not isinstance(raw_targets, list) or not raw_targets:
+            raise ValueError(f"live lineage {context} has malformed resynthesized_into")
+        bad_targets = [target for target in raw_targets if not isinstance(target, str) or not target]
+        if bad_targets:
+            raise ValueError(f"live lineage {context} has malformed resynthesized_into")
+        targets = tuple(raw_targets)
+    else:
+        return ()
+
+    seen: set[str] = set()
+    for target in targets:
+        if target == owner:
+            raise ValueError(f"live lineage {context} cannot supersede itself")
+        if target in seen:
+            raise ValueError(f"live lineage {context} has duplicate successor {target}")
+        seen.add(target)
+    return targets
+
+
+def _add_live_lineage_edges(
+    sources: ProjectSources,
+    *,
+    entity_index: Mapping[str, Entity],
+    archive_active: Mapping[str, object],
+    referenced_archived: set[str],
+    knowledge,
+) -> None:
+    for document in sorted(sources.markdown_documents, key=lambda doc: doc.path):
+        frontmatter = document.frontmatter
+        if not _has_live_lineage(frontmatter):
+            continue
+
+        raw_owner = frontmatter.get("id")
+        owner = raw_owner if isinstance(raw_owner, str) and raw_owner else None
+        context = _lineage_context(owner, document.path)
+        if owner is None:
+            raise ValueError(f"live lineage owner {context} has missing or invalid id")
+        if owner not in entity_index:
+            raise ValueError(f"live lineage owner {context} is not a loaded live entity")
+
+        for target in _live_lineage_targets(owner, document.path, frontmatter):
+            if target not in entity_index and target not in archive_active:
+                raise ValueError(f"live lineage {context} points to unknown live lineage target {target}")
+            if target in archive_active:
+                referenced_archived.add(target)
+            knowledge.add((_entity_uri(owner), SCI_NS.supersededBy, _entity_uri(target)))
+
+
 def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Public wrapper for diagnostic re-derivation (e.g. `patch check`).
 
@@ -254,6 +335,14 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
             archive_active=archive_active,
             referenced_archived=referenced_archived,
         )
+
+    _add_live_lineage_edges(
+        sources,
+        entity_index=entity_index,
+        archive_active=archive_active,
+        referenced_archived=referenced_archived,
+        knowledge=knowledge,
+    )
 
     # Emit one tombstone stub node per referenced active archived id into the
     # knowledge graph. Runs AFTER both the per-entity relation loop and the
