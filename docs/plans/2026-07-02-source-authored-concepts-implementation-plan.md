@@ -731,13 +731,13 @@ with:
 Replace:
 
 ```markdown
-- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight `terms.yaml` row for stable concepts, rewrite as `meta:*`, or retire the ref.
+- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight `terms.yaml` row for stable concepts, rewrite as `meta:` or `tag:` when the mention is classification metadata, or leave prose-only notes out of the graph
 ```
 
 with:
 
 ```markdown
-- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight `terms.yaml` row for stable concepts, create a full concept owner with `science entity create concept "<title>"`, rewrite as `meta:*`, or retire the ref.
+- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight `terms.yaml` row for stable concepts, create a full concept owner with `science entity create concept "<title>"`, rewrite as `meta:` or `tag:` when the mention is classification metadata, or leave prose-only notes out of the graph
 ```
 
 - [ ] **Step 9: Run docs guard tests**
