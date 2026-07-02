@@ -359,10 +359,40 @@ def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
     assert report.moved_annotations == 2
     assert report.retained_annotations == 0
     assert report.errors == ()
+    assert report.planned_changed_paths == 2
+    assert report.planned_noop_paths == 0
     assert report.expected_annotation_targets == {
         "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
         "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
     }
+
+
+def test_validate_resynthesis_draft_rejects_conflicting_existing_replacement_file(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    _proposition(
+        tmp_path,
+        "broad-positive",
+        "Conflicting existing proposition",
+        source_refs=("manual:conflict",),
+    )
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    with pytest.raises(ResynthesisDraftError, match="existing replacement proposition differs from draft"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+
+def test_validate_resynthesis_draft_rejects_model_invalid_replacement_frontmatter(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    del payload["new_propositions"][0]["frontmatter"]["object"]
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="predicate requires both subject and object"):
+        validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
 
 def test_validate_resynthesis_draft_rejects_replacement_without_source_refs(tmp_path: Path):
@@ -596,6 +626,9 @@ def test_render_replacement_preserves_existing_created_updated_for_idempotent_co
 
     assert rerendered.path == path
     assert rerendered.changed is False
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
+    assert report.planned_changed_paths == 1
+    assert report.planned_noop_paths == 1
     frontmatter, _body = parse_markdown_entity_file(path)
     assert str(frontmatter["created"]) == "2026-06-30"
     assert str(frontmatter["updated"]) == "2026-06-30"

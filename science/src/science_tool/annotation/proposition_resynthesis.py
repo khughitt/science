@@ -418,7 +418,6 @@ def validate_resynthesis_draft(
     *,
     as_of: date | None = None,
 ) -> ResynthesisValidationReport:
-    _ = as_of
     action = _live_action_for_draft(project_root, draft)
     current_annotations = _current_action_annotations(action)
     live_index = _live_annotation_index(project_root)
@@ -488,12 +487,28 @@ def validate_resynthesis_draft(
         if not refs:
             raise ResynthesisDraftError(f"{proposition} replacement proposition has no source refs")
 
+    planned_changed_paths = 0
+    planned_noop_paths = 0
+    for replacement in draft.new_propositions:
+        rendered = render_replacement_proposition(
+            project_root,
+            replacement,
+            sorted(expected_refs[replacement.id]),
+            as_of=as_of,
+        )
+        if rendered.changed:
+            planned_changed_paths += 1
+        else:
+            planned_noop_paths += 1
+
     return ResynthesisValidationReport(
         status="ok",
         original_proposition=draft.original_proposition,
         replacement_propositions=len(draft.new_propositions),
         moved_annotations=moved,
         retained_annotations=retained,
+        planned_changed_paths=planned_changed_paths,
+        planned_noop_paths=planned_noop_paths,
         expected_annotation_targets=expected_targets,
         expected_source_refs_by_replacement={
             proposition: tuple(sorted(refs)) for proposition, refs in sorted(expected_refs.items())
@@ -530,7 +545,7 @@ def render_replacement_proposition(
     path = _replacement_path(project_root, replacement.id)
     draft_source_refs = _replacement_frontmatter_source_refs(replacement.frontmatter)
 
-    frontmatter: dict[str, object] = dict(replacement.frontmatter)
+    frontmatter: dict[str, Any] = dict(replacement.frontmatter)
     frontmatter.update(
         {
             "id": replacement.id,
@@ -552,7 +567,7 @@ def render_replacement_proposition(
             frontmatter["updated"] = existing_frontmatter["updated"]
 
     try:
-        PropositionEntity(**frontmatter)
+        PropositionEntity.model_validate(frontmatter)
     except ValueError as exc:
         raise ResynthesisDraftError(str(exc)) from exc
 
