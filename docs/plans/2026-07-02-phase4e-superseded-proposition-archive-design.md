@@ -27,8 +27,10 @@ In scope:
 - blocking archive movement when live annotation sidecars still promote statements
   to the superseded proposition;
 - preserving scalar and multi-successor lineage in the archive index;
+- extending archive-row graph materialization so unreferenced archived rows that
+  carry resolvable lineage still get tombstone nodes and `sci:supersededBy` edges;
 - extending archive-row graph materialization so archived `resynthesized_into`
-  emits `sci:supersededBy` edges;
+  emits one `sci:supersededBy` edge per successor;
 - reusing existing archive relocation primitives for the actual file move and
   append-only index write.
 
@@ -105,6 +107,13 @@ The candidate is archive-ready only when all checks pass:
 in the report with a blocker rather than being silently ignored, because they are
 hidden from default entity listings but not safely archival.
 
+The report should also surface generic inbound live references, matching the
+existing archive command's decision-support behavior for `related`, `source_refs`,
+and `relations[].target`. These refs remain resolvable after archive through the
+archive index, so they are not hard blockers in this phase. They are still useful
+context for review, and they can mask missing archive-lineage emission in tests
+because they incidentally put the archived id into `referenced_archived`.
+
 ## 5. Cross-Paper Evidence Boundary
 
 The critical 4e-specific readiness check is the sidecar backlink scan.
@@ -155,15 +164,36 @@ Graph materialization should preserve lineage across live and archived states:
 
 - live `superseded_by` already emits one `sci:supersededBy`;
 - live `resynthesized_into` already emits one `sci:supersededBy` per successor;
-- archived `ArchiveRow.superseded_by` continues to emit one `sci:supersededBy`
-  when the target resolves;
+- archived `ArchiveRow.superseded_by` should emit one `sci:supersededBy` when the
+  target resolves, even when no live entity currently points at the archived id;
 - archived `ArchiveRow.resynthesized_into` should emit one `sci:supersededBy` per
-  target and fail materialization if any target is unresolved.
+  target and fail materialization if any target is unresolved, even when no live
+  entity currently points at the archived id.
+
+Current archive tombstone emission is not enough for this archive-movement phase.
+Today materialization emits archived tombstone nodes only for ids collected in
+`referenced_archived`, and that set is populated when a live entity references an
+archived id. The archive row's own `superseded_by` does not add the archived row
+itself to `referenced_archived`. Therefore a cleanly superseded proposition with no
+remaining inbound live refs would lose its `sci:supersededBy` edge immediately after
+relocation.
+
+This phase must close that gap explicitly. Materialization should seed the
+tombstone-emission worklist with active archive rows that carry lineage:
+
+- for scalar `superseded_by`, seed the row when its target resolves to a live entity
+  or active archived id;
+- for multi-successor `resynthesized_into`, validate every target first, fail on
+  any unresolved target, then seed the row;
+- after seeding, the existing tombstone loop can emit the archived stub and lineage
+  edges in one place.
 
 Existing archive behavior for legacy scalar `superseded_by` rows can remain as-is:
-today an unresolvable scalar successor is omitted. The new `resynthesized_into`
-field should be strict from the start because it is introduced by this phase and
-has no legacy row population.
+today an unresolvable scalar successor is omitted, and if no live entity references
+that archived id, no tombstone stub is emitted. That lenience is historical archive
+behavior, not a baseline that satisfies 4e. The new command prevents dangling
+scalar lineage before archive, and the new `resynthesized_into` field should be
+strict from the start because it has no legacy row population.
 
 Acceptance should compare graph triples before and after archive movement: the
 superseded proposition should remain graph-visible as an archived stub with the
@@ -190,6 +220,7 @@ The report should include:
 - lineage kind: `superseded_by` or `resynthesized_into`;
 - successor ids;
 - blocking annotation refs, if any;
+- inbound live refs, if any;
 - archive destination;
 - status: `ready`, `blocked`, or `skipped`.
 
@@ -200,6 +231,10 @@ Apply should move only `ready` candidates. If any selected candidate becomes inv
 between dry run and apply, fail before moving that candidate. The command may be
 non-atomic across multiple candidates, matching the existing archive tier, but it
 must report which ids were applied and which were skipped or blocked.
+
+The apply timestamp should be captured once and threaded into archive-row creation.
+Dry-run JSON should not include `archived_at`; tests should inject a fixed timestamp
+when asserting applied archive rows so output comparisons stay deterministic.
 
 ## 9. Data Flow
 
@@ -212,15 +247,21 @@ Recommended flow:
    collision checks.
 5. Scan live annotation sidecars under `entities/` and build
    `promoted_to -> annotation refs`.
-6. Build candidate reports for every live superseded proposition.
-7. On apply, pass ready candidate rows to an archive relocation helper that writes
+6. Scan generic inbound live refs using the same fields as the generic archive
+   command: `related`, `source_refs`, and `relations[].target`.
+7. Build candidate reports for every live superseded proposition.
+8. On apply, pass ready candidate rows to an archive relocation helper that writes
    complete `ArchiveRow` entries, including `resynthesized_into`.
-8. Postflight by reloading the archive index and verifying each moved id is active
+9. Postflight by reloading the archive index and verifying each moved id is active
    in the index, its live file is absent, its archive file exists, and graph
    materialization still emits the expected lineage triples.
 
 The implementation should reuse existing sidecar parsing and archive relocation
 helpers instead of duplicating serialization or filesystem-move logic.
+It should not reuse the generic `_candidate_rows` helper for this command's
+candidate construction: that helper is status-based and currently reads only
+`superseded_by`, while this phase must preserve `resynthesized_into` and report
+annotation-backlink blockers.
 
 ## 10. Error Handling
 
@@ -263,6 +304,8 @@ Focused tests should cover:
 - dry-run reports a ready multi-successor `resynthesized_into` proposition;
 - apply moves ready propositions and writes archive rows with preserved lineage;
 - graph triples for lineage are stable before and after archive movement;
+- a clean archived superseded proposition with no inbound live refs still emits an
+  archived stub and lineage edge after relocation;
 - active archived successors are accepted as lineage targets;
 - stale live sidecar `promoted_to` backlinks block movement and are reported;
 - malformed lineage blocks movement;
