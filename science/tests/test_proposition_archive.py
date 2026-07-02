@@ -220,6 +220,37 @@ def test_dry_run_blocks_duplicate_successor(tmp_path: Path) -> None:
     assert candidate["successors"] == ["proposition:canonical", "proposition:canonical"]
 
 
+def test_dry_run_blocks_duplicate_successor_through_archived_alias(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:archived-canonical",
+            aliases=["proposition:archived-alias"],
+            original_path="entities/propositions/archived-canonical.md",
+            archived_at="T1",
+        ),
+    )
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter=(
+            "resynthesized_into:\n"
+            "  - proposition:archived-canonical\n"
+            "  - proposition:archived-alias\n"
+        ),
+    )
+
+    report = build_superseded_proposition_archive_report(tmp_path)
+
+    candidate = _candidate_by_id(report, "proposition:duplicate")
+    assert candidate["status"] == "blocked"
+    assert "duplicate successor proposition:archived-canonical" in candidate["blockers"]
+    assert candidate["successors"] == ["proposition:archived-canonical", "proposition:archived-canonical"]
+
+
 def test_dry_run_blocks_unknown_successor(tmp_path: Path) -> None:
     candidate = _blocked_candidate(tmp_path, "superseded_by: proposition:missing\n")
 
@@ -372,6 +403,47 @@ def test_apply_moves_ready_proposition_and_writes_scalar_archive_row(tmp_path: P
     assert row.archived_at == "2026-07-02T12:00:00Z"
 
 
+def test_apply_canonicalizes_scalar_archived_alias_successor(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:archived-canonical",
+            kind="proposition",
+            title="Archived canonical",
+            aliases=["proposition:archived-alias"],
+            original_path="entities/propositions/archived-canonical.md",
+            archived_at="T1",
+        ),
+    )
+    original = _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:archived-alias\n",
+    )
+
+    dry_run = build_superseded_proposition_archive_report(tmp_path)
+    candidate = _candidate_by_id(dry_run, "proposition:duplicate")
+    assert candidate["status"] == "ready"
+    assert candidate["lineage_kind"] == "superseded_by"
+    assert candidate["successors"] == ["proposition:archived-canonical"]
+
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert report["applied"] == ["proposition:duplicate"]
+    assert not original.exists()
+    row = load_archive_index(tmp_path).active_by_id["proposition:duplicate"]
+    assert row.superseded_by == "proposition:archived-canonical"
+    knowledge = _knowledge_graph(tmp_path)
+    assert (
+        _entity_uri("proposition:duplicate"),
+        SCI_NS.supersededBy,
+        _entity_uri("proposition:archived-canonical"),
+    ) in knowledge
+
+
 def test_apply_postflight_receives_expected_archived_at_when_now_supplied(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -414,6 +486,53 @@ def test_apply_moves_ready_proposition_and_writes_resynthesis_archive_row(tmp_pa
     row = load_archive_index(tmp_path).active_by_id["proposition:broad"]
     assert row.superseded_by is None
     assert row.resynthesized_into == ["proposition:negative", "proposition:positive"]
+
+
+def test_apply_canonicalizes_resynthesis_archived_alias_successor(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "live")
+    append_row(
+        archive_index_path(tmp_path),
+        ArchiveRow(
+            op="archive",
+            id="proposition:archived-canonical",
+            kind="proposition",
+            title="Archived canonical",
+            same_as=["proposition:archived-alias"],
+            original_path="entities/propositions/archived-canonical.md",
+            archived_at="T1",
+        ),
+    )
+    original = _proposition(
+        tmp_path,
+        "broad",
+        status="superseded",
+        extra_frontmatter=(
+            "resynthesized_into:\n"
+            "  - proposition:live\n"
+            "  - proposition:archived-alias\n"
+        ),
+    )
+
+    dry_run = build_superseded_proposition_archive_report(tmp_path)
+    candidate = _candidate_by_id(dry_run, "proposition:broad")
+    assert candidate["status"] == "ready"
+    assert candidate["lineage_kind"] == "resynthesized_into"
+    assert candidate["successors"] == ["proposition:archived-canonical", "proposition:live"]
+
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert report["applied"] == ["proposition:broad"]
+    assert not original.exists()
+    row = load_archive_index(tmp_path).active_by_id["proposition:broad"]
+    assert row.superseded_by is None
+    assert row.resynthesized_into == ["proposition:archived-canonical", "proposition:live"]
+    knowledge = _knowledge_graph(tmp_path)
+    broad = _entity_uri("proposition:broad")
+    assert set(knowledge.objects(broad, SCI_NS.supersededBy)) == {
+        _entity_uri("proposition:archived-canonical"),
+        _entity_uri("proposition:live"),
+    }
 
 
 def test_apply_moves_ready_candidates_and_leaves_blocked_candidates_live(tmp_path: Path) -> None:

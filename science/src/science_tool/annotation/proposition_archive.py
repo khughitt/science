@@ -115,7 +115,13 @@ def _collision_owner_index(raw: dict[str, _RawEntity], archive: Any) -> dict[str
     return owners
 
 
-def _lineage_for_candidate(candidate: _RawEntity, resolvable_ids: set[str]) -> tuple[str | None, list[str], list[str]]:
+def _successor_resolver(live_ids: set[str], archive: Any) -> dict[str, str]:
+    resolver = {entity_id: entity_id for entity_id in live_ids}
+    resolver.update(archive.resolvable_ids())
+    return resolver
+
+
+def _lineage_for_candidate(candidate: _RawEntity, resolver: dict[str, str]) -> tuple[str | None, list[str], list[str]]:
     fm = candidate.frontmatter
     has_scalar = "superseded_by" in fm
     has_multi = "resynthesized_into" in fm
@@ -142,16 +148,19 @@ def _lineage_for_candidate(candidate: _RawEntity, resolvable_ids: set[str]) -> t
             successors.append(target)
         lineage_kind = "resynthesized_into"
 
+    canonical_successors: list[str] = []
     seen: set[str] = set()
     for target in successors:
-        if target == candidate.id:
+        canonical_target = resolver.get(target, target)
+        if canonical_target == candidate.id:
             blockers.append("lineage points to itself")
-        if target in seen:
-            blockers.append(f"duplicate successor {target}")
-        seen.add(target)
-        if target not in resolvable_ids:
+        if canonical_target in seen:
+            blockers.append(f"duplicate successor {canonical_target}")
+        seen.add(canonical_target)
+        if target not in resolver:
             blockers.append(f"unknown successor {target}")
-    return lineage_kind, sorted(successors), blockers
+        canonical_successors.append(canonical_target)
+    return lineage_kind, sorted(canonical_successors), blockers
 
 
 def _row_for_candidate(candidate: _RawEntity, lineage_kind: str, successors: list[str]) -> ArchiveRow:
@@ -252,7 +261,7 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
     sources = load_project_sources(project_root)
     live_ids = {entity.canonical_id or entity.id for entity in sources.entities}
     archive = load_archive_index(project_root)
-    resolvable_ids = live_ids | set(archive.resolvable_ids())
+    resolver = _successor_resolver(live_ids, archive)
     raw = _raw_entities(project_root)
     candidate_ids = {
         ref
@@ -271,7 +280,7 @@ def build_superseded_proposition_archive_report(project_root: Path) -> dict:
         if row is None or row.frontmatter.get("status") != "superseded":
             continue
 
-        lineage_kind, successors, blockers = _lineage_for_candidate(row, resolvable_ids)
+        lineage_kind, successors, blockers = _lineage_for_candidate(row, resolver)
         archive_path = derive_archive_path(row.relpath)
         if (project_root / archive_path).exists():
             blockers.append(f"archive destination exists: {archive_path}")
