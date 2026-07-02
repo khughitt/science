@@ -445,7 +445,9 @@ def test_create_graph_points_to_cookbook_for_new_entities() -> None:
 
     assert "docs/process/entity-creation-cookbook.md" in text
     assert "check shared kinds" in text
-    assert "local `concept:*`" in text
+    assert "prefer the most specific registered kind" in text
+    assert "lightweight `terms.yaml` row" in text
+    assert 'science entity create concept "<title>"' in text
 
 
 def test_update_graph_mentions_fix_on_touch_for_legacy_entities() -> None:
@@ -516,12 +518,12 @@ def test_concept_ownership_committed_skills_reflect_command_boundaries() -> None
     plan_pipeline_raw = _read_skill("science-plan-pipeline")
     plan_pipeline = _norm(plan_pipeline_raw)
 
-    assert "Do not use `science entity create concept` in this workflow" in sketch_model
-    assert "Use a registered source kind, a lightweight `terms.yaml` row, or prose deferral" in sketch_model
+    assert "Use the most specific registered source kind available before creating a local concept." in sketch_model
+    assert "Use `science entity create concept" in sketch_model
+    assert "when the model genuinely needs a reusable project-local concept" in sketch_model
+    assert "Use a lightweight `terms.yaml` row when the term only needs a resolvable identity" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
-    assert "```bash\nscience entity create concept" not in sketch_model_raw
-    assert "science entity create concept " not in sketch_model_raw
-    assert "Make sure those refs resolve through source records or lightweight term rows" in specify_model
+    assert "Make sure those refs resolve through source records, lightweight term rows, or concept entity owners" in specify_model
     assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
@@ -539,12 +541,12 @@ def test_generated_concept_ownership_skills_reflect_command_boundaries(
     plan_pipeline_raw = generated["science-plan-pipeline"].read_text(encoding="utf-8")
     plan_pipeline = _norm(plan_pipeline_raw)
 
-    assert "Do not use `science entity create concept` in this workflow" in sketch_model
-    assert "Use a registered source kind, a lightweight `terms.yaml` row, or prose deferral" in sketch_model
+    assert "Use the most specific registered source kind available before creating a local concept." in sketch_model
+    assert "Use `science entity create concept" in sketch_model
+    assert "when the model genuinely needs a reusable project-local concept" in sketch_model
+    assert "Use a lightweight `terms.yaml` row when the term only needs a resolvable identity" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
-    assert "```bash\nscience entity create concept" not in sketch_model_raw
-    assert "science entity create concept " not in sketch_model_raw
-    assert "Make sure those refs resolve through source records or lightweight term rows" in specify_model
+    assert "Make sure those refs resolve through source records, lightweight term rows, or concept entity owners" in specify_model
     assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline

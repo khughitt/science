@@ -156,14 +156,15 @@ science inquiry init "<slug>" \
 ```
 
 Treatment and outcome refs may be `concept:*` only when the concept already
-resolves through `terms.yaml` or another supported source owner.
+resolves through a source owner such as `terms.yaml` or `entities/concepts/*.md`.
 
 2. **Create or update durable source entities**
 
 Create or update source records before referencing them from the inquiry. Use
-the most specific registered source kind available, such as `question`,
-`hypothesis`, `dataset`, `proposition`, `method`, `construct`, or a declared
-domain kind. Use CLI helpers where available, then rebuild the graph.
+the most specific registered source kind available before creating a local
+concept. Good targets include `question`, `hypothesis`, `dataset`,
+`proposition`, `method`, `construct`, `outcome`, or a declared domain kind. Use
+CLI helpers where available, then rebuild the graph.
 
 For durable source records, use the generic entity lifecycle only for source
 kinds the project actually supports or has registered:
@@ -172,17 +173,16 @@ kinds the project actually supports or has registered:
 science entity create <kind> "<title>" --id "<kind>:<slug>"
 ```
 
-`concept` is currently a known CLI/model mismatch: the model declares
-`entities/concepts`, but the entity writer does not support routine
-`science entity create concept` authoring. Do not use `science entity create concept` in this workflow.
-Use a registered source kind, a lightweight `terms.yaml` row, or prose deferral
-instead.
+Use `science entity create concept "<title>"` when the model genuinely needs a
+reusable project-local concept with a full Markdown owner. Use a lightweight
+`terms.yaml` row when the term only needs a resolvable identity. Keep weak ideas
+in prose when they do not need graph refs yet.
 
-Do not invent unsupported `concept`, `variable`, or `unknown` entity files just
-to satisfy a sketch. If no supported durable source kind exists yet, describe
-the term in the inquiry patch prose and defer boundary roles or flow edges until
-a source owner is available. Unknown markers may be used in sketch as temporary
-uncertainty markers; resolve or justify them before moving out of sketch.
+Do not invent unsupported `variable` or `unknown` entity files just to satisfy a
+sketch. If no supported durable source kind exists yet, describe the term in the
+inquiry patch prose and defer boundary roles or flow edges until a source owner
+is available. Unknown markers may be used in sketch as temporary uncertainty
+markers; resolve or justify them before moving out of sketch.
 
 `boundary_roles` and `flow_edges` should reference existing source refs.
 Unknown refs are sketch markers, not durable owners. Use the patch source for
@@ -197,7 +197,7 @@ source files.
 Open `entities/patches/<slug>.md` and add boundary roles and flow edges.
 
 Refs may be `concept:*` only when the concept already resolves through
-`terms.yaml` or another supported source owner.
+`terms.yaml`, `entities/concepts/*.md`, or another supported source owner.
 
 ```yaml
 inquiry:
