@@ -171,6 +171,10 @@ def _row_for_candidate(candidate: _RawEntity, lineage_kind: str, successors: lis
 
 
 def _rows_for_ready_candidates(project_root: Path, report: dict) -> list[ArchiveRow]:
+    sources = load_project_sources(project_root)
+    live_ids = {entity.canonical_id or entity.id for entity in sources.entities}
+    archive = load_archive_index(project_root)
+    resolvable_ids = live_ids | set(archive.resolvable_ids())
     raw = _raw_entities(project_root)
     rows: list[ArchiveRow] = []
     for candidate in report["candidates"]:
@@ -179,10 +183,18 @@ def _rows_for_ready_candidates(project_root: Path, report: dict) -> list[Archive
         raw_entity = raw.get(candidate["id"])
         if raw_entity is None:
             raise PropositionArchiveError(f"{candidate['id']} disappeared before archive apply")
-        lineage_kind = candidate["lineage_kind"]
-        successors = candidate["successors"]
+        if raw_entity.frontmatter.get("status") != "superseded":
+            raise PropositionArchiveError(f"{candidate['id']} is no longer superseded before archive apply")
+
+        lineage_kind, successors, blockers = _lineage_for_candidate(raw_entity, resolvable_ids)
+        if blockers:
+            raise PropositionArchiveError(
+                f"{candidate['id']} is no longer ready before archive apply: {', '.join(sorted(blockers))}"
+            )
         if lineage_kind not in {"superseded_by", "resynthesized_into"}:
             raise PropositionArchiveError(f"{candidate['id']} has invalid lineage kind at apply")
+        if lineage_kind != candidate["lineage_kind"] or successors != candidate["successors"]:
+            raise PropositionArchiveError(f"{candidate['id']} lineage changed before archive apply")
         rows.append(_row_for_candidate(raw_entity, lineage_kind, successors))
     return rows
 

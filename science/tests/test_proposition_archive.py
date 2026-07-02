@@ -15,6 +15,8 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.proposition_archive import (
+    PropositionArchiveError,
+    _rows_for_ready_candidates,
     archive_superseded_propositions,
     build_superseded_proposition_archive_report,
 )
@@ -427,6 +429,53 @@ def test_apply_moves_ready_candidates_and_leaves_blocked_candidates_live(tmp_pat
     assert set(load_archive_index(tmp_path).active_by_id) == {"proposition:ready"}
 
 
+def test_apply_row_construction_fails_if_ready_candidate_is_no_longer_superseded(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    report = build_superseded_proposition_archive_report(tmp_path)
+    assert _candidate_by_id(report, "proposition:duplicate")["status"] == "ready"
+
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="active",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+
+    with pytest.raises(PropositionArchiveError, match="no longer superseded"):
+        _rows_for_ready_candidates(tmp_path, report)
+
+
+def test_apply_row_construction_fails_if_ready_candidate_lineage_changes(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "replacement")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    report = build_superseded_proposition_archive_report(tmp_path)
+    assert _candidate_by_id(report, "proposition:duplicate")["status"] == "ready"
+
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:replacement\n",
+    )
+
+    with pytest.raises(PropositionArchiveError, match="lineage changed before archive apply"):
+        _rows_for_ready_candidates(tmp_path, report)
+
+
 def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
     _seed(tmp_path)
     _proposition(tmp_path, "canonical")
@@ -442,3 +491,4 @@ def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
 
     assert report["summary"] == {"ready": 0, "blocked": 0, "skipped": 0}
     assert report["applied"] == []
+    assert report["skipped"] == []
