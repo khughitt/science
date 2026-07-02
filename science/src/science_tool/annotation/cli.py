@@ -483,6 +483,50 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
             click.echo(f"  {fault['sidecar']} [{fault['annotation']}] {fault['reason']}: {fault['detail']}")
 
 
+@annotate_group.command("archive-superseded-propositions")
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--apply", "apply_changes", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def archive_superseded_propositions_cmd(root: Path | None, apply_changes: bool, fmt: str) -> None:
+    """Archive 4e-ready superseded propositions after evidence-backlink checks."""
+    from science_tool.annotation.proposition_archive import (
+        PropositionArchiveError,
+        archive_superseded_propositions,
+    )
+    from science_tool.archive import ArchiveError
+
+    project_root = (root or Path.cwd()).resolve()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        payload = archive_superseded_propositions(project_root, apply=apply_changes, now=now)
+    except (PropositionArchiveError, ArchiveError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    mode = "apply" if apply_changes else "dry-run"
+    click.echo(
+        "superseded proposition archive "
+        f"({mode}): ready={summary['ready']} blocked={summary['blocked']} skipped={summary['skipped']}"
+    )
+    for candidate in payload["candidates"]:
+        click.echo(
+            f"{candidate['status']:8s} {candidate['id']} "
+            f"{candidate['lineage_kind'] or '-'} -> {','.join(candidate['successors']) or '-'}"
+        )
+        for blocker in candidate["blockers"]:
+            click.echo(f"  blocker: {blocker}")
+        if candidate["inbound_live_refs"]:
+            click.echo(f"  inbound refs: {','.join(candidate['inbound_live_refs'])}")
+    if payload["applied"]:
+        click.echo(f"applied: {','.join(payload['applied'])}")
+    if payload["skipped"]:
+        click.echo(f"skipped: {','.join(payload['skipped'])}")
+
+
 @annotate_group.command("reconcile-propositions")
 @click.option("--all", "all_scope", is_flag=True, default=False)
 @click.option("--proposition", "proposition_ref", default=None)

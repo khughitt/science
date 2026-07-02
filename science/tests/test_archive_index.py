@@ -66,3 +66,24 @@ def test_every_row_has_schema_version(tmp_path: Path) -> None:
 def test_missing_index_loads_empty(tmp_path: Path) -> None:
     idx = load_archive_index(tmp_path)
     assert idx.active_by_id == {}
+
+
+def test_archive_row_round_trips_resynthesized_into() -> None:
+    row = ArchiveRow(
+        op="archive",
+        id="proposition:broad",
+        kind="proposition",
+        status="superseded",
+        original_path="entities/propositions/broad.md",
+        resynthesized_into=["proposition:negative", "proposition:positive"],
+    )
+
+    loaded = ArchiveRow.model_validate_json(row.model_dump_json())
+
+    assert loaded.resynthesized_into == ["proposition:negative", "proposition:positive"]
+
+
+def test_archive_row_backfills_empty_resynthesized_into_for_existing_rows() -> None:
+    loaded = ArchiveRow.model_validate_json('{"op": "archive", "id": "proposition:old"}')
+
+    assert loaded.resynthesized_into == []

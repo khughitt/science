@@ -220,6 +220,61 @@ def _add_live_lineage_edges(
             knowledge.add((_entity_uri(owner), SCI_NS.supersededBy, _entity_uri(target)))
 
 
+def _archive_lineage_targets(
+    archived_id: str,
+    row,
+    *,
+    entity_index: Mapping[str, Entity],
+    archive_active: Mapping[str, object],
+) -> tuple[str, ...]:
+    targets: list[str] = []
+    if row.superseded_by and (row.superseded_by in entity_index or row.superseded_by in archive_active):
+        targets.append(row.superseded_by)
+
+    resynthesized_into = getattr(row, "resynthesized_into", [])
+    if resynthesized_into:
+        if not isinstance(resynthesized_into, list):
+            raise ValueError(f"archived lineage {archived_id} has malformed resynthesized_into")
+        seen: set[str] = set()
+        for target in resynthesized_into:
+            if not isinstance(target, str) or not target:
+                raise ValueError(f"archived lineage {archived_id} has malformed resynthesized_into")
+            if target == archived_id:
+                raise ValueError(f"archived lineage {archived_id} cannot supersede itself")
+            if target in seen:
+                raise ValueError(f"archived lineage {archived_id} has duplicate successor {target}")
+            seen.add(target)
+            if target not in entity_index and target not in archive_active:
+                raise ValueError(f"archived lineage {archived_id} points to unknown archived lineage target {target}")
+            targets.append(target)
+    return tuple(targets)
+
+
+def _seed_archived_lineage_stubs(
+    *,
+    entity_index: Mapping[str, Entity],
+    archive_active: Mapping[str, object],
+    referenced_archived: set[str],
+) -> dict[str, tuple[str, ...]]:
+    lineage_targets: dict[str, tuple[str, ...]] = {}
+    for archived_id in sorted(archive_active):
+        row = archive_active[archived_id]
+        targets = _archive_lineage_targets(
+            archived_id,
+            row,
+            entity_index=entity_index,
+            archive_active=archive_active,
+        )
+        if not targets:
+            continue
+        referenced_archived.add(archived_id)
+        for target in targets:
+            if target in archive_active:
+                referenced_archived.add(target)
+        lineage_targets[archived_id] = targets
+    return lineage_targets
+
+
 def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Public wrapper for diagnostic re-derivation (e.g. `patch check`).
 
@@ -344,6 +399,12 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
         knowledge=knowledge,
     )
 
+    archive_lineage_targets = _seed_archived_lineage_stubs(
+        entity_index=entity_index,
+        archive_active=archive_active,
+        referenced_archived=referenced_archived,
+    )
+
     # Emit one tombstone stub node per referenced active archived id into the
     # knowledge graph. Runs AFTER both the per-entity relation loop and the
     # authored-relation loop have populated `referenced_archived`.
@@ -356,10 +417,8 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
         if row.title:
             knowledge.add((uri, RDFS.label, Literal(row.title)))
         knowledge.add((uri, SCI_NS.archived, Literal(True)))
-        # superseded_by emitted only when it resolves to a known id — a live entity OR
-        # another active archived id. Unresolvable/dangling successor -> omitted.
-        if row.superseded_by and (row.superseded_by in entity_index or row.superseded_by in archive_active):
-            knowledge.add((uri, SCI_NS.supersededBy, _entity_uri(row.superseded_by)))
+        for target in archive_lineage_targets.get(archived_id, ()):
+            knowledge.add((uri, SCI_NS.supersededBy, _entity_uri(target)))
 
     for binding in sources.bindings:
         _add_binding(
