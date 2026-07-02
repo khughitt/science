@@ -467,7 +467,7 @@ Use these destinations instead of new semantic `topic:*` refs:
 |---|---|
 | Catalog-backed thing | Domain kind such as `gene`, `protein`, `disease`, `pathway`, or another declared catalog kind. |
 | Analytical procedure | `method`. |
-| Stable project-local concept | `concept`, often as a lightweight row in `knowledge/sources/<profile>/terms.yaml`. |
+| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref is needed, use a lightweight row in `knowledge/sources/<profile>/terms.yaml`; full `entities/concepts` authoring is model-declared but not routine CLI-supported yet. |
 | Cross-cutting organizing lens | `theme`. |
 | Conjecture under investigation | `hypothesis`. |
 | Analysis-session narrative | `interpretation`. |
@@ -475,6 +475,8 @@ Use these destinations instead of new semantic `topic:*` refs:
 | Named explanatory bundle with participants and claims | `mechanism`. |
 | Temporary classification marker | Field-scoped `tag:*`, only where free-form labels are accepted. |
 | Operational marker | `meta:*`, or prose when it should not enter the graph. |
+
+### Lightweight Semantic Terms
 
 `terms.yaml` is for lightweight semantic rows that are more durable than a
 one-off prose label but do not yet deserve a full Markdown owner:
@@ -492,6 +494,26 @@ Keep entries minimal: `id` and `title` are required; `aliases`, `same_as`,
 `ontology_terms`, and short descriptions are optional. Promote the row to a
 Markdown entity owner when it accumulates body prose, structured relations, or
 lifecycle work.
+
+### Current Concept Ownership Mismatch
+
+The core model declares `concept` as an authored reference kind with the home
+`entities/concepts`, but `science entity create concept` is not a supported
+routine today. The entity writer currently blocks that command and points to
+graph mutation instead.
+
+That graph-mutating path is not a durable replacement. `science graph add
+concept` writes derived graph state in `knowledge/graph.trig`, and `science
+graph build` regenerates that file from source records.
+
+The mismatch is concept-specific. `construct` is source-authored through the
+normal entity lifecycle even though it is also an authored-core reference kind.
+Until `concept` follows the same supported source path, `terms.yaml` is the
+supported lightweight concept-like source path. Use a more specific registered
+kind when one exists, keep weak ideas in prose when they do not need graph refs,
+and avoid creating unresolved `concept:*` placeholders to silence validation.
+
+### Legacy Topic Triage
 
 `topic` remains registered for legacy projects and migration surfaces, but it is
 not the default semantic destination for new work. Do not create topic stubs to

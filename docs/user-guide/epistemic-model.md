@@ -81,6 +81,33 @@ named graphs and then derives patch-membership records. Boundary nodes and edge
 endpoints must resolve to existing entities; assumption and transformation nodes
 are minted by the compiler.
 
+### Inquiry Ref Ownership Contract
+
+Inquiry fields use two ownership modes: existing source refs for reusable things
+and compiler-minted local nodes for inquiry-local structure.
+
+| Item | Durable owner |
+|---|---|
+| Boundary refs | Existing source refs selected by the inquiry and marked as `BoundaryIn` or `BoundaryOut`. |
+| Flow-edge endpoints | Existing source refs connected by the inquiry. Edges do not create endpoint owners. |
+| Flow-edge claims | Existing `proposition:*` refs when an edge has an explicit truth-apt assertion. |
+| Causal treatment/outcome | Existing source refs, usually domain kinds, project concepts that already resolve, or lightweight local terms. |
+| Unknowns | Existing source refs marked as `sci:Unknown` until resolved or justified. Unknown is a marker, not a standalone owner. |
+| Assumptions | Inquiry-local records in `inquiry.assumptions`; graph build mints local assumption nodes. |
+| Transformations | Inquiry-local records in `inquiry.transformations`; graph build mints local transformation nodes. |
+
+Unresolved endpoint refs are graph-build errors. Boundary refs, flow endpoints,
+causal treatment/outcome refs, claim refs, and unknown refs must already resolve
+through source records or lightweight term rows before the inquiry can be
+materialized.
+
+Use `concept:*` only when that ref already resolves through a source such as a
+local-profile `terms.yaml` row or a future supported concept entity. The
+current CLI does not support routine `science entity create concept ...`
+authoring, and `science graph add concept` is not durable inquiry authoring.
+Direct graph mutation writes generated graph state that `science graph build`
+overwrites from source files.
+
 ### Causal Inquiry Profiles
 
 Causal modeling is a typed inquiry profile, not a separate project subsystem.
