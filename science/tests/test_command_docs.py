@@ -502,6 +502,8 @@ def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> Non
     assert '--source-url "<landing-page-or-download-url>"' in text
     assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
     assert "Manual template authoring is a fallback" in text
+    assert "entities/datasets/<slug>.md" in text
+    assert "entities/datasets/<source-name>.md" not in text
     assert "runtime datapackage descriptors" in text
     assert "--level <public|controlled|mixed>" not in text
     assert "--method <landing-confirmed|downloaded|manual-review>" not in text

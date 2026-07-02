@@ -138,9 +138,9 @@ FASTA files in the `sequences/` subdirectory. Annotate with EDAM terms:
 
 Manual template authoring is a fallback for unsupported fields, deliberate
 legacy backfills, or project-specific review templates. When using that path,
-write to `entities/datasets/<source-name>.md`, keep unknown evidence visibly
-marked, and then run `science dataset verify-access <slug>` or record the
-blocked verification reason.
+write to `entities/datasets/<slug>.md`, keep unknown evidence visibly marked,
+and then run `science dataset verify-access <slug>` or record the blocked
+verification reason.
 
 ## When Working With Specialized Biological Data
 
