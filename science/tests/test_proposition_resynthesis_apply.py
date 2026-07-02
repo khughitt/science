@@ -284,7 +284,7 @@ def test_apply_resynthesis_draft_resume_rejects_changed_review_decision_without_
     positive_path = tmp_path / "entities" / "propositions" / "broad-positive.md"
     positive_text = positive_path.read_text(encoding="utf-8")
     review = ctx["review"]
-    review["judgments"][0]["decision"] = "factorization_no_action"
+    review["judgments"][0]["decision"] = "split_possible"
     ctx["review_path"].write_text(json.dumps(review), encoding="utf-8")
     writes: list[Path] = []
 
@@ -364,6 +364,55 @@ def test_apply_resynthesis_draft_rejects_live_plan_error_before_prior_writes(
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad"
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_rejects_live_plan_error_after_prior_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar = anno_io.read_sidecar(sidecar_path)
+    anno_io.write_sidecar(
+        sidecar_path,
+        replace(
+            sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in sidecar.annotations
+            ),
+        ),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(ctx["action"],),
+        errors=({"reason": "scanner-fault"},),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    with pytest.raises(ResynthesisApplyError, match="action plan has top-level errors: scanner-fault"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
+    assert not (tmp_path / "entities" / "propositions" / "broad-negative.md").exists()
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "active"
+    assert read_sidecar_strict(sidecar_path).annotations[0].promoted_to == "proposition:broad-positive"
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad"
@@ -537,11 +586,10 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
             ),
         ),
     )
-    unavailable = replace(ctx["action"], status="blocked", blockers=("already partially applied",))
     plan = ReconciliationActionPlan(
         schema_version=1,
         source_reviews=(str(ctx["review_path"]),),
-        actions=(unavailable,),
+        actions=(),
     )
     monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
     payload = _draft_payload(ctx)
@@ -727,6 +775,61 @@ def test_apply_resynthesis_draft_split_partial_keeps_original_active(tmp_path: P
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_split_partial_resume_rejects_omitted_original_annotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["disposition"] = "split_partial"
+    payload["new_propositions"] = payload["new_propositions"][:1]
+    payload["annotation_assignments"][1]["to"] = "proposition:broad"
+
+    moved_sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    moved_sidecar = anno_io.read_sidecar(moved_sidecar_path)
+    anno_io.write_sidecar(
+        moved_sidecar_path,
+        replace(
+            moved_sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in moved_sidecar.annotations
+            ),
+        ),
+    )
+    omitted_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="split_partial must assign every input annotation"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "active"
+    assert read_sidecar_strict(moved_sidecar_path).annotations[0].promoted_to == "proposition:broad-positive"
+    assert read_sidecar_strict(omitted_sidecar_path).annotations[0].promoted_to == "proposition:broad"
 
 
 def test_apply_resynthesis_draft_cross_paper_evidence_moves_to_replacements(

@@ -121,14 +121,28 @@ def _validate(
     except ResynthesisDraftError as exc:
         try:
             _live_action_for_draft(project_root, draft)
-        except ResynthesisDraftError:
-            pass
+        except ResynthesisDraftError as live_exc:
+            if not _is_consumed_or_stale_live_action_error(live_exc):
+                raise ResynthesisApplyError(str(live_exc)) from live_exc
         else:
             raise ResynthesisApplyError(str(exc)) from exc
         resume_report = _resume_validation_report(project_root, draft, as_of=as_of)
         if resume_report is not None:
             return resume_report
         raise ResynthesisApplyError(str(exc)) from exc
+
+
+def _is_consumed_or_stale_live_action_error(exc: ResynthesisDraftError) -> bool:
+    message = str(exc)
+    return any(
+        marker in message
+        for marker in (
+            "candidate_id is stale or unknown",
+            "draft candidate_id is stale",
+            "unknown reconciliation action",
+            "no ready resynthesize_proposition actions",
+        )
+    )
 
 
 def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> set[str]:
@@ -274,10 +288,6 @@ def _resume_validation_report(
         raise ResynthesisApplyError("input annotation snapshot is incomplete")
 
     if draft.disposition == "replace":
-        if seen_annotations != expected_action_annotations:
-            raise ResynthesisApplyError("replace must assign every input annotation")
-        if retained:
-            raise ResynthesisApplyError("replace assignments must target draft propositions")
         omitted_original_annotations = sorted(
             annotation_ref
             for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
@@ -285,6 +295,29 @@ def _resume_validation_report(
         )
         if omitted_original_annotations:
             raise ResynthesisApplyError("replace must assign every input annotation")
+    elif draft.disposition == "split_partial":
+        retained_on_original = {
+            assignment.annotation
+            for assignment in draft.annotation_assignments
+            if assignment.to_proposition == draft.original_proposition
+        }
+        omitted_original_annotations = sorted(
+            annotation_ref
+            for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
+            if promoted_to == draft.original_proposition
+            and (
+                annotation_ref not in expected_action_annotations
+                or annotation_ref not in retained_on_original
+            )
+        )
+        if omitted_original_annotations:
+            raise ResynthesisApplyError(f"{draft.disposition} must assign every input annotation")
+
+    if draft.disposition == "replace":
+        if seen_annotations != expected_action_annotations:
+            raise ResynthesisApplyError("replace must assign every input annotation")
+        if retained:
+            raise ResynthesisApplyError("replace assignments must target draft propositions")
     elif draft.disposition == "split_partial":
         if seen_annotations != expected_action_annotations:
             raise ResynthesisApplyError("split_partial must assign every input annotation")
