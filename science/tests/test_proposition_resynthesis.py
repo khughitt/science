@@ -298,6 +298,28 @@ def test_parse_resynthesis_draft_rejects_unknown_top_level_key(tmp_path: Path):
         parse_resynthesis_draft(payload)
 
 
+def test_parse_resynthesis_draft_rejects_missing_context(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    del payload["context"]
+
+    with pytest.raises(ResynthesisDraftError, match="missing resynthesis draft key: context"):
+        parse_resynthesis_draft(payload)
+
+
+def test_parse_resynthesis_draft_rejects_missing_notes(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    del payload["notes"]
+
+    with pytest.raises(ResynthesisDraftError, match="missing resynthesis draft key: notes"):
+        parse_resynthesis_draft(payload)
+
+
 def test_parse_resynthesis_draft_rejects_unknown_new_proposition_key(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
 
@@ -618,6 +640,33 @@ def test_validate_resynthesis_draft_allows_split_partial_with_retained_original(
     assert report.status == "ok"
     assert report.moved_annotations == 1
     assert report.retained_annotations == 1
+
+
+def test_validate_resynthesis_draft_rejects_incomplete_split_partial(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["disposition"] = "split_partial"
+    payload["new_propositions"] = payload["new_propositions"][:1]
+    payload["annotation_assignments"][1]["to"] = "proposition:broad"
+    del payload["annotation_assignments"][1]
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="split_partial must assign every input annotation"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
+def test_validate_resynthesis_draft_rejects_split_partial_without_retained_original(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["disposition"] = "split_partial"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisDraftError, match="split_partial must retain at least one annotation"):
+        validate_resynthesis_draft(tmp_path, draft)
 
 
 def test_render_replacement_preserves_existing_created_updated_for_idempotent_compare(tmp_path: Path):

@@ -282,10 +282,17 @@ def _reject_unknown_keys(row: Mapping[str, Any], allowed: frozenset[str], label:
         raise ResynthesisDraftError(f"unknown {label} key: {unknown[0]}")
 
 
+def _ensure_keys(row: Mapping[str, Any], allowed: frozenset[str], label: str) -> None:
+    missing = sorted(allowed - set(row))
+    if missing:
+        raise ResynthesisDraftError(f"missing {label} key: {missing[0]}")
+    _reject_unknown_keys(row, allowed, label)
+
+
 def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
     if not isinstance(payload, Mapping):
         raise ResynthesisDraftError("resynthesis draft must be an object")
-    _reject_unknown_keys(payload, ALLOWED_DRAFT_KEYS, "resynthesis draft")
+    _ensure_keys(payload, ALLOWED_DRAFT_KEYS, "resynthesis draft")
 
     schema_version = payload.get("schema_version")
     if type(schema_version) is not int or schema_version != RESYNTHESIS_SCHEMA_VERSION:
@@ -332,7 +339,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
             )
         )
 
-    notes = payload.get("notes", "")
+    notes = payload["notes"]
     if not isinstance(notes, str):
         raise ResynthesisDraftError("invalid notes")
 
@@ -347,7 +354,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
         disposition=disposition,  # type: ignore[arg-type]
         new_propositions=tuple(new_propositions),
         annotation_assignments=tuple(assignments),
-        context=_optional_mapping(payload, "context"),
+        context=_required_mapping(payload, "context"),
         notes=notes,
     )
 
@@ -480,8 +487,15 @@ def validate_resynthesis_draft(
             raise ResynthesisDraftError("replace must assign every input annotation")
         if retained:
             raise ResynthesisDraftError("replace assignments must target draft propositions")
-    elif draft.disposition == "split_partial" and moved == 0:
-        raise ResynthesisDraftError("split_partial must move at least one annotation to a new proposition")
+    elif draft.disposition == "split_partial":
+        if seen_annotations != current_annotations:
+            raise ResynthesisDraftError("split_partial must assign every input annotation")
+        if moved == 0:
+            raise ResynthesisDraftError("split_partial must move at least one annotation to a new proposition")
+        if retained == 0:
+            raise ResynthesisDraftError(
+                "split_partial must retain at least one annotation on original proposition; use replace if all move"
+            )
 
     for proposition, refs in expected_refs.items():
         if not refs:
