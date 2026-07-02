@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -25,7 +26,6 @@ from science_tool.annotation.proposition_resynthesis import (
     ResynthesisDraftError,
     ResynthesisValidationReport,
     _live_action_for_draft,
-    _read_review,
     _replacement_frontmatter_source_refs,
     _replacement_local_part,
     _validate_replacement_frontmatter,
@@ -154,100 +154,52 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
     if draft.action_id != expected_action_id:
         raise ResynthesisApplyError("draft action_id is stale")
 
-    review_path = Path(draft.source_review)
-    if not review_path.is_absolute():
-        review_path = project_root / review_path
+    _validate_resume_snapshot(project_root, draft)
+    return _draft_input_annotations(draft)
+
+
+def _resume_snapshot_path(project_root: Path, action_id: str) -> Path:
+    return project_root / "results" / "annotation" / "proposition-resynthesis" / f"{_sha256_text(action_id)[:16]}.json"
+
+
+def _resume_snapshot_payload(draft: ResynthesisDraft) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "action_id": draft.action_id,
+        "candidate_id": draft.candidate_id,
+        "judgment_id": draft.judgment_id,
+        "source_review": draft.source_review,
+        "original_proposition": draft.original_proposition,
+        "disposition": draft.disposition,
+        "input_annotations": list(draft.input_annotations),
+        "replacement_propositions": [replacement.id for replacement in draft.new_propositions],
+        "annotation_assignments": [
+            {
+                "annotation": assignment.annotation,
+                "from": assignment.from_proposition,
+                "to": assignment.to_proposition,
+            }
+            for assignment in draft.annotation_assignments
+        ],
+    }
+
+
+def _resume_snapshot_text(draft: ResynthesisDraft) -> str:
+    return json.dumps(_resume_snapshot_payload(draft), sort_keys=True, indent=2) + "\n"
+
+
+def _validate_resume_snapshot(project_root: Path, draft: ResynthesisDraft) -> None:
+    path = _resume_snapshot_path(project_root, draft.action_id)
     try:
-        review_doc = _read_review(review_path)
-    except ResynthesisDraftError as exc:
-        raise ResynthesisApplyError(str(exc)) from exc
-    judgments = review_doc.get("judgments")
-    if isinstance(judgments, str) or not isinstance(judgments, Sequence):
-        raise ResynthesisApplyError("source review judgments must be a list")
-
-    found_candidate = False
-    found_judgment = False
-    for judgment in judgments:
-        if not isinstance(judgment, Mapping):
-            continue
-        if judgment.get("candidate_id") == draft.candidate_id:
-            found_candidate = True
-        if judgment.get("judgment_id") == draft.judgment_id:
-            found_judgment = True
-        if judgment.get("candidate_id") != draft.candidate_id:
-            continue
-        if judgment.get("judgment_id") != draft.judgment_id:
-            continue
-        if judgment.get("proposition") != draft.original_proposition:
-            raise ResynthesisApplyError("source review judgment proposition is stale")
-        if judgment.get("lane") != "factorization_disagreement":
-            raise ResynthesisApplyError("source review judgment lane is stale")
-        if judgment.get("decision") != "factorization_needs_resynthesis":
-            raise ResynthesisApplyError("source review judgment decision is stale")
-        return _validated_resume_input_annotations(project_root, draft)
-
-    if found_judgment:
-        raise ResynthesisApplyError("draft candidate_id is stale")
-    if found_candidate:
-        raise ResynthesisApplyError("draft judgment_id is stale")
-    raise ResynthesisApplyError("source review judgment for draft was not found")
-
-
-def _validated_resume_input_annotations(project_root: Path, draft: ResynthesisDraft) -> set[str]:
-    draft_annotations = _draft_input_annotations(draft)
-    replacement_snapshot = _replacement_annotation_snapshot(project_root, draft)
-    snapshot_annotations = set().union(*replacement_snapshot.values()) if replacement_snapshot else set()
-    if not snapshot_annotations:
-        raise ResynthesisApplyError("input annotation snapshot is incomplete: prior apply state is unavailable")
-
-    replacement_ids = {replacement.id for replacement in draft.new_propositions}
-    assigned_to_replacements: dict[str, set[str]] = {replacement_id: set() for replacement_id in replacement_ids}
-    retained_on_original: set[str] = set()
-    for assignment in draft.annotation_assignments:
-        if assignment.annotation not in draft_annotations:
-            raise ResynthesisApplyError(f"{assignment.annotation} is not a current input annotation")
-        if assignment.to_proposition in assigned_to_replacements:
-            assigned_to_replacements[assignment.to_proposition].add(assignment.annotation)
-        elif assignment.to_proposition == draft.original_proposition:
-            retained_on_original.add(assignment.annotation)
-
-    if snapshot_annotations | retained_on_original != draft_annotations:
-        raise ResynthesisApplyError("input annotation snapshot does not match draft input_annotations")
-
-    for replacement_id, snapshot in sorted(replacement_snapshot.items()):
-        assigned = assigned_to_replacements[replacement_id]
-        if not assigned:
-            raise ResynthesisApplyError(
-                f"{replacement_id} replacement annotation snapshot has no assigned input annotations"
-            )
-        if snapshot != assigned:
-            raise ResynthesisApplyError(
-                f"{replacement_id} replacement annotation snapshot does not match assigned moved annotations"
-            )
-    return draft_annotations
-
-
-def _replacement_annotation_snapshot(project_root: Path, draft: ResynthesisDraft) -> dict[str, set[str]]:
-    annotations_by_replacement: dict[str, set[str]] = {}
-    for replacement in draft.new_propositions:
-        try:
-            location = find_entity(project_root, replacement.id)
-            frontmatter, _body = parse_markdown_entity_file(location.path)
-        except (EntityCommandError, OSError, ValueError) as exc:
-            raise ResynthesisApplyError(
-                "input annotation snapshot is incomplete: "
-                f"{replacement.id} replacement proposition is unavailable in prior apply state"
-            ) from exc
-        source_refs = frontmatter.get("source_refs") or ()
-        if isinstance(source_refs, str) or not isinstance(source_refs, Sequence):
-            raise ResynthesisApplyError(
-                "input annotation snapshot is incomplete: "
-                f"{replacement.id} replacement proposition source_refs are invalid"
-            )
-        annotations_by_replacement[replacement.id] = {
-            str(ref) for ref in source_refs if str(ref).startswith("annotation:")
-        }
-    return annotations_by_replacement
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ResynthesisApplyError("resume snapshot missing") from exc
+    except json.JSONDecodeError as exc:
+        raise ResynthesisApplyError(f"resume snapshot is not valid JSON: {exc}") from exc
+    if not isinstance(loaded, Mapping):
+        raise ResynthesisApplyError("resume snapshot must be a JSON object")
+    if loaded != _resume_snapshot_payload(draft):
+        raise ResynthesisApplyError("resume snapshot mismatch")
 
 
 def _draft_input_annotations(draft: ResynthesisDraft) -> set[str]:
@@ -534,9 +486,10 @@ def _new_or_existing_edit(path: Path, final_text: str, reason: str) -> PlannedFi
 
 def _ordered_file_edits(edits: Mapping[Path, PlannedFileEdit]) -> tuple[PlannedFileEdit, ...]:
     phase_by_reason = {
-        "replacement_proposition": 0,
-        "annotation_promoted_to_rewrite": 1,
-        "original_resynthesis_lineage": 2,
+        "resynthesis_resume_snapshot": 0,
+        "replacement_proposition": 1,
+        "annotation_promoted_to_rewrite": 2,
+        "original_resynthesis_lineage": 3,
     }
     return tuple(
         sorted(
@@ -556,6 +509,12 @@ def plan_resynthesis_apply(
     validation = _validate(root, draft, as_of)
 
     edits: dict[Path, PlannedFileEdit] = {}
+    snapshot_path = _resume_snapshot_path(root, draft.action_id)
+    edits[snapshot_path] = _new_or_existing_edit(
+        snapshot_path,
+        _resume_snapshot_text(draft),
+        "resynthesis_resume_snapshot",
+    )
     for replacement in draft.new_propositions:
         expected_refs = validation.expected_source_refs_by_replacement[replacement.id]
         rendered = render_replacement_proposition(root, replacement, expected_refs, as_of=as_of)

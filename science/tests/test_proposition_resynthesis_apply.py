@@ -1,3 +1,4 @@
+import hashlib
 import json
 from dataclasses import replace
 from datetime import date
@@ -23,6 +24,11 @@ def _edit_by_suffix(preflight, suffix: str):
 
 def _paths_for_reason(preflight, reason: str) -> list[Path]:
     return [edit.path for edit in preflight.file_edits if edit.reason == reason]
+
+
+def _snapshot_path(tmp_path: Path, action_id: str) -> Path:
+    digest = hashlib.sha256(action_id.encode()).hexdigest()[:16]
+    return tmp_path / "results" / "annotation" / "proposition-resynthesis" / f"{digest}.json"
 
 
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
@@ -58,6 +64,45 @@ def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_super
     original_edit = _edit_by_suffix(preflight, "entities/propositions/broad.md")
     sidecar_a_edit = _edit_by_suffix(preflight, "entities/papers/A2020.source.anno.trig")
     sidecar_b_edit = _edit_by_suffix(preflight, "entities/papers/B2021.source.anno.trig")
+    snapshot_edit = _edit_by_suffix(
+        preflight,
+        f"results/annotation/proposition-resynthesis/{hashlib.sha256(draft.action_id.encode()).hexdigest()[:16]}.json",
+    )
+
+    assert snapshot_edit.reason == "resynthesis_resume_snapshot"
+    assert snapshot_edit.path == _snapshot_path(tmp_path, draft.action_id)
+    assert snapshot_edit.changed is True
+    snapshot_payload = json.loads(snapshot_edit.final_text)
+    assert snapshot_payload == {
+        "action_id": draft.action_id,
+        "annotation_assignments": [
+            {
+                "annotation": "annotation:entities/papers/A2020.source#a1",
+                "from": "proposition:broad",
+                "to": "proposition:broad-positive",
+            },
+            {
+                "annotation": "annotation:entities/papers/B2021.source#b1",
+                "from": "proposition:broad",
+                "to": "proposition:broad-negative",
+            },
+        ],
+        "candidate_id": draft.candidate_id,
+        "disposition": "replace",
+        "input_annotations": [
+            "annotation:entities/papers/A2020.source#a1",
+            "annotation:entities/papers/B2021.source#b1",
+        ],
+        "judgment_id": draft.judgment_id,
+        "original_proposition": "proposition:broad",
+        "replacement_propositions": [
+            "proposition:broad-positive",
+            "proposition:broad-negative",
+        ],
+        "schema_version": 1,
+        "source_review": draft.source_review,
+    }
+    assert snapshot_edit.final_text == json.dumps(snapshot_payload, sort_keys=True, indent=2) + "\n"
 
     assert positive_edit.reason == "replacement_proposition"
     assert positive_edit.before_sha256 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -86,6 +131,7 @@ def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_super
     assert "proposition:broad-negative" in sidecar_b_edit.final_text
 
     assert [edit.reason for edit in preflight.file_edits] == [
+        "resynthesis_resume_snapshot",
         "replacement_proposition",
         "replacement_proposition",
         "annotation_promoted_to_rewrite",
@@ -274,10 +320,12 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     second = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
     assert first.changed_paths
+    assert _snapshot_path(tmp_path, draft.action_id).exists()
     assert second.status == "ok"
     assert second.changed_paths == ()
     assert second.written_paths == ()
     assert second.noop_paths
+    assert _snapshot_path(tmp_path, draft.action_id).as_posix() in second.noop_paths
     positive_frontmatter, _positive_body = parse_markdown_entity_file(
         tmp_path / "entities" / "propositions" / "broad-positive.md"
     )
@@ -332,12 +380,73 @@ def test_apply_resynthesis_draft_resume_rejects_manual_only_extra_replacement(
     ]
 
 
-def test_apply_resynthesis_draft_resume_rejects_changed_review_decision_without_writes(
+def test_apply_resynthesis_draft_resume_rejects_tampered_extra_replacement_snapshot_mismatch(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    payload = _draft_payload(ctx)
+    extra_replacement = {
+        "id": "proposition:broad-extra",
+        "title": "BES requires an extra replacement",
+        "body": "This replacement redirects the B2021 annotation after the original apply.",
+        "frontmatter": {
+            "subject": "BES",
+            "predicate": "associates_with",
+            "object": "post-apply replacement",
+            "polarity": "positive",
+            "source_refs": ["annotation:entities/papers/B2021.source#b1", "paper:B2021"],
+        },
+    }
+    payload["new_propositions"] = [payload["new_propositions"][0], extra_replacement]
+    payload["annotation_assignments"][1]["to"] = "proposition:broad-extra"
+    tampered_draft = parse_resynthesis_draft(payload)
+    rendered_extra = render_replacement_proposition(
+        tmp_path,
+        tampered_draft.new_propositions[-1],
+        ("annotation:entities/papers/B2021.source#b1", "paper:B2021"),
+        as_of=date(2026, 7, 2),
+    )
+    rendered_extra.path.write_text(rendered_extra.text, encoding="utf-8")
+    b_sidecar_path = tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    b_sidecar = anno_io.read_sidecar(b_sidecar_path)
+    anno_io.write_sidecar(
+        b_sidecar_path,
+        replace(
+            b_sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-extra")
+                if annotation.id == "b1"
+                else annotation
+                for annotation in b_sidecar.annotations
+            ),
+        ),
+    )
+
+    with pytest.raises(ResynthesisApplyError, match="resume snapshot.*mismatch"):
+        apply_resynthesis_draft(tmp_path, tampered_draft, as_of=date(2026, 7, 2))
+
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["resynthesized_into"] == [
+        "proposition:broad-negative",
+        "proposition:broad-positive",
+    ]
+
+
+def test_apply_resynthesis_draft_resume_uses_snapshot_when_review_decision_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import (
-        ResynthesisApplyError,
         apply_resynthesis_draft,
     )
 
@@ -356,9 +465,9 @@ def test_apply_resynthesis_draft_resume_rejects_changed_review_decision_without_
 
     monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
 
-    with pytest.raises(ResynthesisApplyError, match="source review judgment decision is stale"):
-        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
+    report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
+    assert report.status == "ok"
     assert writes == []
     assert positive_path.read_text(encoding="utf-8") == positive_text
 
@@ -523,30 +632,17 @@ def test_apply_resynthesis_draft_resumes_after_replacement_writes_and_one_sideca
     monkeypatch: pytest.MonkeyPatch,
 ):
     from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
-    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft, plan_resynthesis_apply
     import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
     draft = parse_resynthesis_draft(_draft_payload(ctx))
-    expected_refs_by_replacement = {
-        "proposition:broad-positive": (
-            "annotation:entities/papers/A2020.source#a1",
-            "manual:curator-note",
-            "paper:A2020",
-        ),
-        "proposition:broad-negative": (
-            "annotation:entities/papers/B2021.source#b1",
-            "paper:B2021",
-        ),
-    }
-    for replacement in draft.new_propositions:
-        rendered = render_replacement_proposition(
-            tmp_path,
-            replacement,
-            expected_refs_by_replacement[replacement.id],
-            as_of=date(2026, 7, 1),
-        )
-        rendered.path.write_text(rendered.text, encoding="utf-8")
+    preflight = plan_resynthesis_apply(tmp_path, draft, as_of=date(2026, 7, 1))
+    for edit in preflight.file_edits:
+        if edit.reason not in {"resynthesis_resume_snapshot", "replacement_proposition"}:
+            continue
+        edit.path.parent.mkdir(parents=True, exist_ok=True)
+        edit.path.write_text(edit.final_text, encoding="utf-8")
 
     sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
     sidecar = anno_io.read_sidecar(sidecar_path)
@@ -661,7 +757,7 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     )
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
+    with pytest.raises(ResynthesisApplyError, match="resume snapshot mismatch"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
@@ -720,11 +816,74 @@ def test_apply_resynthesis_draft_resume_rejects_tampered_input_without_replaceme
     )
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="replacement.*snapshot|prior apply state"):
+    with pytest.raises(ResynthesisApplyError, match="resume snapshot missing"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_tampered_extra_input_snapshot_mismatch(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+    c_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    c_sidecar = anno_io.read_sidecar(c_sidecar_path)
+    anno_io.write_sidecar(
+        c_sidecar_path,
+        replace(
+            c_sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "c1"
+                else annotation
+                for annotation in c_sidecar.annotations
+            ),
+        ),
+    )
+    positive_path = tmp_path / "entities" / "propositions" / "broad-positive.md"
+    positive_frontmatter, _body = parse_markdown_entity_file(positive_path)
+    rendered, changed = render_entity_frontmatter_updates(
+        positive_path,
+        {
+            "source_refs": [
+                *positive_frontmatter["source_refs"],
+                "paper:C2022",
+                "annotation:entities/papers/C2022.source#c1",
+            ]
+        },
+        as_of=date(2026, 7, 2),
+    )
+    assert changed is True
+    positive_path.write_text(rendered, encoding="utf-8")
+
+    payload = _draft_payload(ctx)
+    payload["input_annotations"].append("annotation:entities/papers/C2022.source#c1")
+    payload["context"]["input_annotations"].append("annotation:entities/papers/C2022.source#c1")
+    payload["annotation_assignments"].append(
+        {
+            "annotation": "annotation:entities/papers/C2022.source#c1",
+            "from": "proposition:broad",
+            "to": "proposition:broad-positive",
+        }
+    )
+    tampered_draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="resume snapshot.*mismatch"):
+        apply_resynthesis_draft(tmp_path, tampered_draft, as_of=date(2026, 7, 2))
+
+    assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad-positive"
 
 
 def test_apply_resynthesis_draft_resume_rejects_missing_context_input_annotations(
@@ -784,7 +943,7 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
         ResynthesisApplyError,
         match=(
             "input_annotations are stale|assign every input annotation|remains promoted_to original|"
-            "input annotation snapshot is incomplete"
+            "input annotation snapshot is incomplete|resume snapshot missing"
         ),
     ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
@@ -835,7 +994,10 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_already_moved_assignment
 
     with pytest.raises(
         ResynthesisApplyError,
-        match="input_annotations are stale|input annotation snapshot is incomplete|assign every input annotation",
+        match=(
+            "input_annotations are stale|input annotation snapshot is incomplete|"
+            "assign every input annotation|resume snapshot missing"
+        ),
     ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
@@ -911,6 +1073,71 @@ def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_sour
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_missing_snapshot_with_prior_sidecar_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    expected_refs_by_replacement = {
+        "proposition:broad-positive": (
+            "annotation:entities/papers/A2020.source#a1",
+            "manual:curator-note",
+            "paper:A2020",
+        ),
+        "proposition:broad-negative": (
+            "annotation:entities/papers/B2021.source#b1",
+            "paper:B2021",
+        ),
+    }
+    for replacement in draft.new_propositions:
+        rendered = render_replacement_proposition(
+            tmp_path,
+            replacement,
+            expected_refs_by_replacement[replacement.id],
+            as_of=date(2026, 7, 1),
+        )
+        rendered.path.write_text(rendered.text, encoding="utf-8")
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar = anno_io.read_sidecar(sidecar_path)
+    anno_io.write_sidecar(
+        sidecar_path,
+        replace(
+            sidecar,
+            annotations=tuple(
+                replace(annotation, promoted_to="proposition:broad-positive")
+                if annotation.id == "a1"
+                else annotation
+                for annotation in sidecar.annotations
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        resynthesis,
+        "build_live_action_plan",
+        lambda _root, _review: ReconciliationActionPlan(
+            schema_version=1,
+            source_reviews=(str(ctx["review_path"]),),
+            actions=(),
+        ),
+    )
+
+    with pytest.raises(ResynthesisApplyError, match="resume snapshot.*missing"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "active"
 
 
 def test_apply_resynthesis_draft_rejects_stale_candidate_id_without_writes(
@@ -1006,7 +1233,10 @@ def test_apply_resynthesis_draft_split_partial_resume_rejects_omitted_original_a
 
     with pytest.raises(
         ResynthesisApplyError,
-        match="split_partial must assign every input annotation|input annotation snapshot is incomplete",
+        match=(
+            "split_partial must assign every input annotation|"
+            "input annotation snapshot is incomplete|resume snapshot missing"
+        ),
     ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
