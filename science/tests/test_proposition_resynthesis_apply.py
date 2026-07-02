@@ -11,7 +11,7 @@ from science_tool.annotation.proposition_resynthesis import parse_resynthesis_dr
 from science_tool.annotation.query import read_sidecar_strict
 from science_tool.entities import parse_markdown_entity_file
 
-from test_proposition_resynthesis import _ann, _draft_payload, _factorization_project
+from test_proposition_resynthesis import _ann, _draft_payload, _factorization_project, _paper_sidecar
 
 
 def _edit_by_suffix(preflight, suffix: str):
@@ -297,6 +297,54 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad-negative"
+
+
+def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    for citekey, annotation_id, target in (
+        ("A2020", "a1", "proposition:broad-positive"),
+        ("B2021", "b1", "proposition:broad-negative"),
+    ):
+        sidecar_path = tmp_path / "entities" / "papers" / f"{citekey}.source.anno.trig"
+        sidecar = anno_io.read_sidecar(sidecar_path)
+        anno_io.write_sidecar(
+            sidecar_path,
+            replace(
+                sidecar,
+                annotations=tuple(
+                    replace(annotation, promoted_to=target)
+                    if annotation.id == annotation_id
+                    else annotation
+                    for annotation in sidecar.annotations
+                ),
+            ),
+        )
+    c_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"].append(
+        {
+            "annotation": "annotation:entities/papers/C2022.source#c1",
+            "from": "proposition:broad",
+            "to": "proposition:broad-positive",
+        }
+    )
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
 
 
 def test_apply_resynthesis_draft_rejects_stale_candidate_id_without_writes(

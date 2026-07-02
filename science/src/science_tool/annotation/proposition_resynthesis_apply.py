@@ -25,6 +25,8 @@ from science_tool.annotation.proposition_resynthesis import (
     ResynthesisDraft,
     ResynthesisDraftError,
     ResynthesisValidationReport,
+    _current_action_annotations,
+    _live_action_for_draft,
     _replacement_frontmatter_source_refs,
     _replacement_local_part,
     _validate_replacement_frontmatter,
@@ -156,7 +158,7 @@ def _review_judgment_for_resume(project_root: Path, draft: ResynthesisDraft) -> 
     raise ResynthesisApplyError("draft judgment_id is stale")
 
 
-def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> None:
+def _reviewed_action_annotations_for_resume(project_root: Path, draft: ResynthesisDraft) -> set[str]:
     judgment = _review_judgment_for_resume(project_root, draft)
     proposition = judgment.get("proposition")
     if not isinstance(proposition, str) or not proposition:
@@ -171,6 +173,33 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> No
     if expected_action_id != draft.action_id:
         raise ResynthesisApplyError("draft action_id is stale")
 
+    try:
+        location = find_entity(project_root, draft.original_proposition)
+        frontmatter, _body = parse_markdown_entity_file(location.path)
+    except (EntityCommandError, OSError, ValueError) as exc:
+        raise ResynthesisApplyError(f"{draft.original_proposition} failed resume identity validation: {exc}") from exc
+
+    source_refs = frontmatter.get("source_refs") or ()
+    if isinstance(source_refs, str) or not isinstance(source_refs, Sequence):
+        raise ResynthesisApplyError(f"{draft.original_proposition} has malformed source_refs")
+    annotations: set[str] = set()
+    for ref in source_refs:
+        if not isinstance(ref, str):
+            raise ResynthesisApplyError(f"{draft.original_proposition} has malformed source_refs")
+        if ref.startswith("annotation:"):
+            annotations.add(ref)
+    if not annotations:
+        raise ResynthesisApplyError(f"{draft.original_proposition} has no reviewed action annotations")
+    return annotations
+
+
+def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+    try:
+        action = _live_action_for_draft(project_root, draft)
+        return _current_action_annotations(action)
+    except ResynthesisDraftError:
+        return _reviewed_action_annotations_for_resume(project_root, draft)
+
 
 def _resume_validation_report(
     project_root: Path,
@@ -178,7 +207,7 @@ def _resume_validation_report(
     *,
     as_of: date | None,
 ) -> ResynthesisValidationReport | None:
-    _validate_resume_identity(project_root, draft)
+    expected_action_annotations = _validate_resume_identity(project_root, draft)
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
     if len(replacements) != len(draft.new_propositions):
@@ -192,11 +221,6 @@ def _resume_validation_report(
     except ReconciliationApplyError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
 
-    live_original_annotations = {
-        annotation_ref
-        for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
-        if promoted_to == draft.original_proposition
-    }
     seen_annotations: set[str] = set()
     expected_targets: dict[str, str] = {}
     expected_refs: dict[str, set[str]] = {
@@ -209,6 +233,9 @@ def _resume_validation_report(
         if assignment.annotation in seen_annotations:
             raise ResynthesisApplyError(f"{assignment.annotation} assigned more than once")
         seen_annotations.add(assignment.annotation)
+
+        if assignment.annotation not in expected_action_annotations:
+            raise ResynthesisApplyError(f"{assignment.annotation} is not a current input annotation")
         if assignment.from_proposition != draft.original_proposition:
             raise ResynthesisApplyError(
                 f"{assignment.annotation} from_proposition must be {draft.original_proposition}"
@@ -239,12 +266,14 @@ def _resume_validation_report(
                 raise ResynthesisApplyError(f"{assignment.annotation} resolves to no paper ref")
             expected_refs[assignment.to_proposition].add(paper_ref)
 
-    if not live_original_annotations <= seen_annotations:
-        return None
     if draft.disposition == "replace":
+        if seen_annotations != expected_action_annotations:
+            raise ResynthesisApplyError("replace must assign every input annotation")
         if retained:
             raise ResynthesisApplyError("replace assignments must target draft propositions")
     elif draft.disposition == "split_partial":
+        if seen_annotations != expected_action_annotations:
+            raise ResynthesisApplyError("split_partial must assign every input annotation")
         if moved == 0:
             raise ResynthesisApplyError("split_partial must move at least one annotation to a new proposition")
         if retained == 0:
