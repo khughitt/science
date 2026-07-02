@@ -81,6 +81,22 @@ State semantics:
 Missing `support` means no explicit task-support assessment is available and
 preserves current behavior.
 
+Validation ownership:
+
+- The Pydantic model and JSON schema own structure: state enum, reason-code
+  shape, required-when-`candidate`/`blocked`, and `checked_at` date format.
+- The benchmark report loader also validates `support` when reading raw
+  frontmatter. `science benchmark tests` currently uses
+  `_dataset_from_source` -> `_tasks` -> `_task_from_mapping`, not Pydantic
+  entity instances, so invalid support metadata must fail loudly on the report
+  path. Unknown states must not degrade to "missing support".
+- The `benchmark_metadata` validation check owns additional project-facing
+  diagnostics and any cross-field warnings that are clearer as validation
+  messages than as model errors.
+
+`checked_at` is advisory provenance for the assessment. V1 does not apply a
+freshness or staleness policy.
+
 ## Report Contract
 
 Extend `BenchmarkTestRow` with additive fields:
@@ -91,8 +107,8 @@ Extend `BenchmarkTestRow` with additive fields:
 - `task_support_evidence`: list of strings
 - `task_support_notes`: list of strings
 
-The table output should keep its current columns initially, but `needs` or
-`reason_notes` should include concise support notes:
+The table output should keep its current columns initially, but `reason_notes`
+should include concise support notes:
 
 - `task-support:blocked:<reason>`
 - `task-support:candidate:<reason>`
@@ -101,18 +117,27 @@ JSON consumers get the structured fields directly.
 
 ## Readiness and Triage Rules
 
-Task support refines benchmark actionability after the normal dataset readiness
-calculation.
+Task support is an axis separate from dataset access/runtime readiness.
+`readiness_label` should remain the dataset-access verdict produced from
+`runtime_state_for` and `readiness_for`. Do not overwrite it to represent task
+support; use the structured task-support fields and `reason_notes` for that.
+
+Triage combines the axes with explicit support-state branches. The implementation
+seam is `_benchmark_test_triage_bucket`, not `_readiness_label`.
 
 Rules:
 
-1. If `task.support.state == "blocked"`, force
-   `readiness_label: blocked` for that row and include the support reason in
-   `reason_notes`.
-2. If `task.support.state == "candidate"`, do not allow the row into
-   `run-now`. If the dataset would otherwise be runnable, classify the row as
-   `metadata-needed`; if the dataset is stage-needed, keep `stage-next`.
-3. If `task.support.state == "supported"` or support is missing, preserve the
+1. If `priority_source == "gap-fallback"`, keep the row in
+   `fallback-diagnostic`. Fallback rows are diagnostic clutter by definition;
+   task support should still be visible in row fields, but it should not promote
+   a fallback into an action bucket.
+2. If `task.support.state == "blocked"`, route the row to
+   `blocked-or-reference` and include the support reason in `reason_notes`.
+3. If `task.support.state == "candidate"`, do not allow the row into
+   `run-now`. If `readiness_label == "stage-needed"`, route it to
+   `stage-next`; if `readiness_label == "runnable"`, route it to
+   `metadata-needed`; otherwise route it to `blocked-or-reference`.
+4. If `task.support.state == "supported"` or support is missing, preserve the
    current readiness and triage behavior.
 
 This keeps blocked tasks visible for review while preventing them from being
@@ -135,9 +160,15 @@ For `dataset:mmrf-commpass`:
 Expected report behavior after the metadata update:
 
 - `science benchmark tests --commons --benchmark mmrf-commpass` still shows
-  MMRF rows, but `progression-risk` rows have `readiness_label: blocked`.
+  MMRF rows. `progression-risk` rows retain their dataset-level
+  `readiness_label` but include `task_support_state: blocked` and a support
+  reason note.
 - `science benchmark test-triage --commons --benchmark mmrf-commpass` places
-  `progression-risk` rows in `blocked-or-reference`.
+  non-fallback `progression-risk` rows in `blocked-or-reference`. This is not a
+  large bucket movement for today's pointer-class MMRF record, because it
+  already lands there as `metadata-only`; the visible delta is the durable
+  reason for the blocker and future-proof behavior if the dataset is later
+  promoted.
 - Candidate `overall-survival` rows, if present, are visible as candidate task
   plans and cannot enter `run-now`.
 
@@ -151,7 +182,10 @@ Expected report behavior after the metadata update:
 - `science/src/science_tool/benchmark_opportunities.py`
   - Extend `OpportunityTask` and `_task_from_mapping`.
   - Extend `BenchmarkTestRow`.
-  - Apply support-state overrides in row construction and triage.
+  - Validate task support while parsing raw frontmatter; invalid support should
+    raise instead of silently behaving like missing support.
+  - Add support-state branches in triage without changing dataset readiness
+    semantics.
 - `science/src/science_tool/validate/checks/benchmark_metadata.py`
   - Add focused validation for reason codes and support-state consistency if
     schema validation does not already cover a case.
@@ -163,12 +197,17 @@ Expected report behavior after the metadata update:
 Add tests that cover:
 
 - Model and JSON schema accept valid `support` and reject unknown states.
+- The report parser rejects invalid raw-frontmatter support state rather than
+  silently treating it as missing support.
 - Benchmark metadata validation rejects malformed support reason codes.
 - `benchmark_tests_report` projects support fields into rows.
-- `blocked` support forces `readiness_label: blocked`.
-- `candidate` support remains visible but does not enter the `run-now` triage
-  bucket.
-- MMRF-style `progression-risk` rows become blocked rather than metadata-only.
+- `blocked` support routes non-fallback rows to `blocked-or-reference` while
+  preserving the dataset-level `readiness_label`.
+- `candidate` support remains visible and does not enter the `run-now` triage
+  bucket, including the concrete-task case where `metadata-needed` would not be
+  reached by the existing draft-needed predicate.
+- MMRF-style `progression-risk` rows carry a blocked support reason rather than
+  appearing as clean metadata-only actionability.
 
 ## Alternatives Considered
 
