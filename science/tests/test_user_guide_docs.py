@@ -16,6 +16,19 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _slice_between(text: str, start: str, end: str) -> str:
+    if start not in text:
+        raise AssertionError(f"missing start marker: {start}")
+    remainder = text.split(start, 1)[1]
+    if end not in remainder:
+        raise AssertionError(f"missing end marker after {start}: {end}")
+    return remainder.split(end, 1)[0]
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _section_kinds(text: str, section: str) -> list[str]:
     pattern = re.compile(
         rf"<!-- entity-kinds:{section}:start -->\n(?P<body>.*?)\n<!-- entity-kinds:{section}:end -->",
@@ -145,3 +158,38 @@ def test_entities_chapter_documents_reference_semantics_and_topic_deprecation() 
     assert "Field-scoped `tag:*`" in text
     assert "`topic` remains registered for legacy projects and migration surfaces" in normalized
     assert "Do not create topic stubs to silence unresolved-reference checks." in normalized
+
+
+def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
+    text = _read(GUIDE_ROOT / "epistemic-model.md")
+    section = _slice_between(
+        text,
+        "### Inquiry Ref Ownership Contract",
+        "### Causal Inquiry Profiles",
+    )
+    normalized = _norm(section)
+
+    assert "Inquiry fields use two ownership modes" in normalized
+    assert "| Boundary refs | Existing source refs selected by the inquiry" in section
+    assert "| Flow-edge endpoints | Existing source refs connected by the inquiry" in section
+    assert "| Unknowns | Existing source refs marked as `sci:Unknown`" in section
+    assert "| Assumptions | Inquiry-local records in `inquiry.assumptions`" in section
+    assert "| Transformations | Inquiry-local records in `inquiry.transformations`" in section
+    assert "Unresolved endpoint refs are graph-build errors" in normalized
+    assert "`science graph add concept` is not durable inquiry authoring" in normalized
+
+
+def test_entities_chapter_documents_current_concept_ownership_mismatch() -> None:
+    text = _read(GUIDE_ROOT / "entities.md")
+    section = _slice_between(
+        text,
+        "### Current Concept Ownership Mismatch",
+        "### Legacy Topic Triage",
+    )
+    normalized = _norm(section)
+
+    assert "The core model declares `concept` as an authored reference kind" in normalized
+    assert "`science entity create concept` is not a supported routine today" in normalized
+    assert "`science graph add concept` writes derived graph state" in normalized
+    assert "`construct` is source-authored through the normal entity lifecycle" in normalized
+    assert "`terms.yaml` is the supported lightweight concept-like source path" in normalized
