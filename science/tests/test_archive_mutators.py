@@ -107,3 +107,26 @@ def test_unarchive_collision_fails_before_moving(tmp_path: Path) -> None:
     # archive copy still present, no tombstone applied
     assert (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()
     assert set(load_archive_index(tmp_path).active_by_id) == {"interpretation:0001-x"}
+
+
+def test_generic_archive_preserves_resynthesized_into_when_present(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "propositions",
+        "broad",
+        "---\n"
+        "id: proposition:broad\n"
+        "type: proposition\n"
+        "status: superseded\n"
+        "resynthesized_into:\n"
+        "  - proposition:negative\n"
+        "  - proposition:positive\n"
+        "---\n"
+        "Broad claim.\n",
+    )
+
+    report = archive_entities(tmp_path, apply=True, now="T1")
+
+    assert report["applied"] == ["proposition:broad"]
+    row = load_archive_index(tmp_path).active_by_id["proposition:broad"]
+    assert row.resynthesized_into == ["proposition:negative", "proposition:positive"]

@@ -35,6 +35,7 @@ class ArchiveRow(BaseModel):
     same_as: list[str] = Field(default_factory=list)
     status: str | None = None
     superseded_by: str | None = None
+    resynthesized_into: list[str] = Field(default_factory=list)
     original_path: str | None = None
     archived_at: str | None = None
     reason: str | None = None
@@ -135,7 +136,10 @@ def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[Archiv
                 aliases=[a for a in (fm.get("aliases") or []) if isinstance(a, str)],
                 same_as=[s for s in (fm.get("same_as") or []) if isinstance(s, str)],
                 status=status,
-                superseded_by=fm.get("superseded_by"),
+                superseded_by=fm.get("superseded_by") if isinstance(fm.get("superseded_by"), str) else None,
+                resynthesized_into=[
+                    ref for ref in (fm.get("resynthesized_into") or []) if isinstance(ref, str)
+                ],
                 original_path=original_rel,
                 reason=f"status:{status}",
             )
@@ -218,11 +222,22 @@ def archive_entities(
     project_root = Path(project_root).resolve()
     rows = _candidate_rows(project_root, statuses)
     inbound = _inbound_live_refs(project_root, {r.id for r in rows})
-    report: dict = {"candidates": [{"id": r.id, "kind": r.kind, "status": r.status,
-                                    "original_path": r.original_path, "superseded_by": r.superseded_by,
-                                    "inbound_live_refs": inbound.get(r.id, [])}
-                                   for r in rows],
-                    "applied": [], "skipped": []}
+    report: dict = {
+        "candidates": [
+            {
+                "id": r.id,
+                "kind": r.kind,
+                "status": r.status,
+                "original_path": r.original_path,
+                "superseded_by": r.superseded_by,
+                "resynthesized_into": r.resynthesized_into,
+                "inbound_live_refs": inbound.get(r.id, []),
+            }
+            for r in rows
+        ],
+        "applied": [],
+        "skipped": [],
+    }
     if not apply:
         return report
 
