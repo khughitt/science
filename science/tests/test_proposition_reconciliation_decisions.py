@@ -16,12 +16,14 @@ from science_tool.annotation.proposition_reconciliation_decisions import (
     DecisionRecord,
     DecisionRecordError,
     append_decision_records,
+    build_record_decision_plan,
     decision_record_from_json,
     decision_record_id,
     decision_record_to_json,
     evaluate_decision_records,
     load_decision_records,
     record_from_action_payload,
+    record_decision_plan_to_json,
 )
 
 
@@ -444,3 +446,111 @@ def test_evaluate_current_factorization_split_suppresses_candidate():
 
     assert evaluation.suppressed_factorization_candidate_ids == frozenset({factor.candidate_id})
     assert not evaluation.stale
+
+
+def test_build_record_decision_plan_appends_valid_despite_stale_sibling():
+    candidate = _same_candidate()
+    valid = _same_claim_advisory_action()
+    valid["candidate_id"] = candidate.candidate_id
+    valid["members"] = list(candidate.propositions)
+    valid["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        list(candidate.propositions),
+    )
+    stale = _same_claim_advisory_action()
+    stale["action_id"] = "reconcile-action:stale"
+    stale["candidate_id"] = "reconcile:same-claim/stale"
+    stale["members"] = ["proposition:x", "proposition:y"]
+    stale["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        stale["members"],
+    )
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [valid, stale], "errors": []},
+        existing_records=(),
+        report=_report_with_same_candidate(candidate),
+        recorded_at="2026-07-02",
+    )
+
+    assert [record.decision_id for record in plan.would_append] == [
+        record_from_action_payload(valid, recorded_at="2026-07-02").decision_id
+    ]
+    assert [blocker["reason"] for blocker in plan.blockers] == ["candidate-missing"]
+
+
+def test_build_record_decision_plan_dedupes_duplicate_same_plan_actions():
+    candidate = _same_candidate()
+    first = _same_claim_advisory_action()
+    first["candidate_id"] = candidate.candidate_id
+    first["members"] = list(candidate.propositions)
+    first["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        list(candidate.propositions),
+    )
+    duplicate = dict(first)
+    duplicate["action_id"] = "reconcile-action:duplicate"
+    expected = record_from_action_payload(first, recorded_at="2026-07-02")
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [first, duplicate], "errors": []},
+        existing_records=(),
+        report=_report_with_same_candidate(candidate),
+        recorded_at="2026-07-02",
+    )
+    payload = record_decision_plan_to_json(plan)
+
+    assert [record.decision_id for record in plan.would_append] == [expected.decision_id]
+    assert plan.already_recorded == (expected.decision_id,)
+    assert payload["summary"]["would_append"] == 1
+    assert payload["summary"]["already_recorded"] == 1
+    assert [record["decision_id"] for record in payload["would_append"]] == [expected.decision_id]
+    assert payload["already_recorded"] == [expected.decision_id]
+
+
+def test_build_record_decision_plan_conflict_blocker_includes_action_id():
+    candidate = _same_candidate()
+    existing_action = _same_claim_advisory_action()
+    existing_action["candidate_id"] = candidate.candidate_id
+    existing_action["members"] = list(candidate.propositions)
+    existing_action["judgment_id"] = judgment_id(
+        "same_claim",
+        "related_but_distinct",
+        list(candidate.propositions),
+    )
+    existing = record_from_action_payload(existing_action, recorded_at="2026-07-01")
+    conflict_action = _same_claim_advisory_action()
+    conflict_action["action_id"] = "reconcile-action:conflict"
+    conflict_action["decision"] = "conflict_or_negation"
+    conflict_action["candidate_id"] = candidate.candidate_id
+    conflict_action["members"] = list(candidate.propositions)
+    conflict_action["judgment_id"] = judgment_id(
+        "same_claim",
+        "conflict_or_negation",
+        list(candidate.propositions),
+    )
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [conflict_action], "errors": []},
+        existing_records=(existing,),
+        report=_report_with_same_candidate(candidate),
+        recorded_at="2026-07-02",
+    )
+
+    assert plan.would_append == ()
+    assert len(plan.blockers) == 1
+    assert plan.blockers[0]["reason"] == "conflicting-reviewed-decisions"
+    assert plan.blockers[0]["action_id"] == "reconcile-action:conflict"
+
+
+def test_build_record_decision_plan_rejects_bool_schema_version():
+    with pytest.raises(DecisionRecordError, match="schema_version"):
+        build_record_decision_plan(
+            action_plan={"schema_version": True, "actions": [], "errors": []},
+            existing_records=(),
+            report=ReconciliationReport(),
+            recorded_at="2026-07-02",
+        )

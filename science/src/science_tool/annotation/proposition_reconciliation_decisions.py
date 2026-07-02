@@ -85,6 +85,14 @@ class AppendDecisionResult:
     already_recorded: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RecordDecisionPlan:
+    would_append: tuple[DecisionRecord, ...]
+    already_recorded: tuple[str, ...]
+    stale_existing: tuple[StaleDecision, ...]
+    blockers: tuple[Mapping[str, Any], ...]
+
+
 def decision_record_id(
     lane: str,
     decision: str,
@@ -140,7 +148,7 @@ def decision_record_from_json(
         raise DecisionRecordError(f"{prefix}proposition must be a string or null")
 
     record = DecisionRecord(
-        schema_version=_required_int(payload.get("schema_version"), "schema_version", prefix),
+        schema_version=_required_schema_version(payload.get("schema_version"), prefix),
         decision_id=_required_json_text(payload, "decision_id", prefix),
         judgment_id=_required_json_text(payload, "judgment_id", prefix),
         candidate_id=_required_json_text(payload, "candidate_id", prefix),
@@ -206,6 +214,111 @@ def append_decision_records(
                 handle.write("\n")
 
     return AppendDecisionResult(tuple(appended), tuple(already_recorded))
+
+
+def build_record_decision_plan(
+    action_plan: Mapping[str, Any],
+    existing_records: Sequence[DecisionRecord],
+    report: ReconciliationReport,
+    recorded_at: str,
+) -> RecordDecisionPlan:
+    _required_schema_version(action_plan.get("schema_version"), "")
+    if action_plan.get("errors"):
+        raise DecisionRecordError("action plan contains errors")
+    actions = action_plan.get("actions")
+    if not isinstance(actions, list):
+        raise DecisionRecordError("actions must be a list")
+
+    existing_evaluation = evaluate_decision_records(existing_records, report)
+    planned_ids = {record.decision_id for record in existing_records}
+    blockers: list[Mapping[str, Any]] = []
+    new_records: list[DecisionRecord] = []
+    new_record_actions: dict[str, Mapping[str, Any]] = {}
+    already_recorded: list[str] = []
+
+    for action in actions:
+        if not isinstance(action, Mapping):
+            blockers.append({"reason": "malformed-action", "detail": "action must be an object"})
+            continue
+        if action.get("kind") != _ACTION_KIND:
+            continue
+        try:
+            record = record_from_action_payload(action, recorded_at=recorded_at)
+        except DecisionRecordError as exc:
+            blockers.append(_action_blocker(action, _action_error_reason(exc), str(exc)))
+            continue
+
+        evaluation = evaluate_decision_records([record], report)
+        if evaluation.stale:
+            stale = evaluation.stale[0]
+            blockers.append(_record_blocker(record, action, stale.reason, stale.reason))
+            continue
+        if record.decision_id in planned_ids:
+            already_recorded.append(record.decision_id)
+            continue
+        planned_ids.add(record.decision_id)
+        new_records.append(record)
+        new_record_actions[record.decision_id] = action
+
+    conflicted_new_ids = _conflicting_new_decision_ids(
+        existing_records,
+        new_records,
+        report,
+    )
+    for record in new_records:
+        if record.decision_id in conflicted_new_ids:
+            blockers.append(
+                _record_blocker(
+                    record,
+                    new_record_actions[record.decision_id],
+                    "conflicting-reviewed-decisions",
+                    "conflicts with another current reviewed decision",
+                )
+            )
+
+    would_append = tuple(
+        sorted(
+            (
+                record
+                for record in new_records
+                if record.decision_id not in conflicted_new_ids
+            ),
+            key=lambda item: item.decision_id,
+        )
+    )
+    return RecordDecisionPlan(
+        would_append=would_append,
+        already_recorded=tuple(sorted(set(already_recorded))),
+        stale_existing=existing_evaluation.stale,
+        blockers=tuple(blockers),
+    )
+
+
+def record_decision_plan_to_json(
+    plan: RecordDecisionPlan,
+    *,
+    appended: Sequence[str] = (),
+) -> dict[str, Any]:
+    return {
+        "summary": {
+            "would_append": len(plan.would_append),
+            "already_recorded": len(plan.already_recorded),
+            "stale_existing": len(plan.stale_existing),
+            "blockers": len(plan.blockers),
+            "appended": len(appended),
+        },
+        "would_append": [decision_record_to_json(record) for record in plan.would_append],
+        "already_recorded": list(plan.already_recorded),
+        "stale_existing": [
+            {
+                "reason": stale.reason,
+                "record": decision_record_to_json(stale.record),
+            }
+            for stale in plan.stale_existing
+        ],
+        "blockers": [_jsonable(blocker) for blocker in plan.blockers],
+        "appended": list(appended),
+    }
 
 
 def evaluate_decision_records(
@@ -277,6 +390,65 @@ def evaluate_decision_records(
     )
 
 
+def _action_error_reason(exc: DecisionRecordError) -> str:
+    if str(exc).startswith("candidate_id "):
+        return "candidate-missing"
+    return "malformed-action"
+
+
+def _action_blocker(
+    action: Mapping[str, Any],
+    reason: str,
+    detail: str,
+) -> Mapping[str, Any]:
+    blocker: dict[str, Any] = {"reason": reason, "detail": detail}
+    action_id = action.get("action_id")
+    if isinstance(action_id, str) and action_id.strip():
+        blocker["action_id"] = action_id.strip()
+    return blocker
+
+
+def _record_blocker(
+    record: DecisionRecord,
+    action: Mapping[str, Any] | None,
+    reason: str,
+    detail: str,
+) -> Mapping[str, Any]:
+    blocker: dict[str, Any] = {
+        "reason": reason,
+        "detail": detail,
+        "decision_id": record.decision_id,
+    }
+    if action is not None:
+        action_id = action.get("action_id")
+        if isinstance(action_id, str) and action_id.strip():
+            blocker["action_id"] = action_id.strip()
+    return blocker
+
+
+def _conflicting_new_decision_ids(
+    existing_records: Sequence[DecisionRecord],
+    new_records: Sequence[DecisionRecord],
+    report: ReconciliationReport,
+) -> frozenset[str]:
+    if not new_records:
+        return frozenset()
+    new_ids = {record.decision_id for record in new_records}
+    evaluation = evaluate_decision_records([*existing_records, *new_records], report)
+    conflicted: set[str] = set()
+    for conflict in evaluation.conflicts:
+        conflicted.update(decision_id for decision_id in conflict.decision_ids if decision_id in new_ids)
+    return frozenset(conflicted)
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_jsonable(item) for item in value]
+    return value
+
+
 def record_from_action_payload(
     action: Mapping[str, Any],
     *,
@@ -336,8 +508,7 @@ def record_from_action_payload(
 
 
 def _validate_record_shape(record: DecisionRecord) -> None:
-    if record.schema_version != SCHEMA_VERSION:
-        raise DecisionRecordError(f"schema_version must be {SCHEMA_VERSION}")
+    _required_schema_version(record.schema_version, "")
     for field_name in (
         "decision_id",
         "judgment_id",
@@ -443,6 +614,13 @@ def _required_int(value: Any, field_name: str, prefix: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise DecisionRecordError(f"{prefix}{field_name} must be an integer")
     return value
+
+
+def _required_schema_version(value: Any, prefix: str) -> int:
+    schema_version = _required_int(value, "schema_version", prefix)
+    if schema_version != SCHEMA_VERSION:
+        raise DecisionRecordError(f"{prefix}schema_version must be {SCHEMA_VERSION}")
+    return schema_version
 
 
 def _required_str(value: Any, field_name: str) -> str:
