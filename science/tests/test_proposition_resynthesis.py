@@ -354,6 +354,49 @@ def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
     }
 
 
+def test_validate_resynthesis_draft_ignores_inactive_promoted_backlinks(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    inactive = replace(
+        _ann("c1", "proposition:broad", stance="asserted"),
+        status=Status.FIXED,
+        modified=_CREATED,
+        modified_by="test",
+    )
+    _paper_sidecar(tmp_path, "C2022", (inactive,))
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert report.status == "ok"
+    assert report.expected_annotation_targets == {
+        "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
+        "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
+    }
+
+
+def test_validate_resynthesis_draft_rejects_missing_action_input_annotations(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    malformed = replace(ctx["action"], inputs={})
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(malformed,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    with pytest.raises(ResynthesisDraftError, match="malformed input annotations"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
 def test_validate_resynthesis_draft_rejects_blocked_live_action(tmp_path: Path, monkeypatch):
     from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
     from science_tool.annotation.proposition_resynthesis import (
@@ -458,14 +501,24 @@ def test_validate_resynthesis_draft_rejects_assignment_to_unknown_target(tmp_pat
         validate_resynthesis_draft(tmp_path, draft)
 
 
-def test_validate_resynthesis_draft_rejects_incomplete_replace_when_input_set_grew(tmp_path: Path, monkeypatch):
+def test_validate_resynthesis_draft_rejects_incomplete_replace_when_action_inputs_grew(
+    tmp_path: Path, monkeypatch
+):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
     import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
     payload = _draft_payload(ctx)
     _paper_sidecar(tmp_path, "C2022", (_ann("c1", "proposition:broad", stance="asserted"),))
-    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: ctx["plan"])
+    input_annotations = tuple(ctx["action"].inputs["annotations"]) + (
+        "annotation:entities/papers/C2022.source#c1",
+    )
+    action = replace(
+        ctx["action"],
+        inputs={**ctx["action"].inputs, "annotations": input_annotations},
+    )
+    plan = replace(ctx["plan"], actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
 
     draft = parse_resynthesis_draft(payload)
 

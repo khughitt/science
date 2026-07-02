@@ -397,6 +397,21 @@ def _replacement_local_part(project_root: Path, proposition_id: str) -> str:
     return local_part
 
 
+def _current_action_annotations(action: ReconciliationAction) -> set[str]:
+    if "annotations" not in action.inputs:
+        raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
+    annotations = action.inputs["annotations"]
+    if isinstance(annotations, str) or not isinstance(annotations, Sequence):
+        raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
+
+    current_annotations = set()
+    for annotation in annotations:
+        if not isinstance(annotation, str) or not annotation:
+            raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
+        current_annotations.add(annotation)
+    return current_annotations
+
+
 def validate_resynthesis_draft(
     project_root: Path,
     draft: ResynthesisDraft,
@@ -405,15 +420,8 @@ def validate_resynthesis_draft(
 ) -> ResynthesisValidationReport:
     _ = as_of
     action = _live_action_for_draft(project_root, draft)
-    current_annotations = set()
-    for annotation in action.inputs.get("annotations", ()):
-        if not isinstance(annotation, str) or not annotation:
-            raise ResynthesisDraftError(f"{action.action_id} has malformed input annotation")
-        current_annotations.add(annotation)
+    current_annotations = _current_action_annotations(action)
     live_index = _live_annotation_index(project_root)
-    for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items():
-        if promoted_to == draft.original_proposition:
-            current_annotations.add(annotation_ref)
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
     if len(replacements) != len(draft.new_propositions):
