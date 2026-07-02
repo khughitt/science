@@ -258,6 +258,35 @@ def draft_to_json(draft: ResynthesisDraft) -> dict[str, Any]:
     }
 
 
+def validation_report_to_json(report: ResynthesisValidationReport) -> dict[str, Any]:
+    return {
+        "schema_version": RESYNTHESIS_SCHEMA_VERSION,
+        "status": report.status,
+        "original_proposition": report.original_proposition,
+        "replacement_propositions": report.replacement_propositions,
+        "moved_annotations": report.moved_annotations,
+        "retained_annotations": report.retained_annotations,
+        "planned_changed_paths": report.planned_changed_paths,
+        "planned_noop_paths": report.planned_noop_paths,
+        "expected_annotation_targets": dict(report.expected_annotation_targets),
+        "expected_source_refs_by_replacement": {
+            proposition: list(refs)
+            for proposition, refs in report.expected_source_refs_by_replacement.items()
+        },
+        "errors": [dict(error) for error in report.errors],
+        "warnings": [dict(warning) for warning in report.warnings],
+        "summary": {
+            "replacement_propositions": report.replacement_propositions,
+            "moved_annotations": report.moved_annotations,
+            "retained_annotations": report.retained_annotations,
+            "planned_changed_paths": report.planned_changed_paths,
+            "planned_noop_paths": report.planned_noop_paths,
+            "errors": len(report.errors),
+            "warnings": len(report.warnings),
+        },
+    }
+
+
 def _required_str(row: Mapping[str, Any], key: str) -> str:
     value = row.get(key)
     if not isinstance(value, str) or not value or value != value.strip():

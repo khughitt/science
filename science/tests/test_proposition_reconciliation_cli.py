@@ -16,6 +16,10 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.proposition_reconciliation import judgment_id
+from test_proposition_resynthesis import (
+    _draft_payload,
+    _factorization_project,
+)
 
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
 
@@ -613,3 +617,131 @@ def test_apply_proposition_reconciliation_cli_rejects_non_canonicalization_actio
 
     assert result.exit_code != 0
     assert "not executable by Half C" in result.output
+
+
+def test_scaffold_proposition_resynthesis_cli_writes_draft(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    output_path = tmp_path / "resynthesis-draft.json"
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "scaffold-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(ctx["review_path"]),
+            "--output",
+            str(output_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    draft = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "ok"
+    assert payload["selected_action_id"] == ctx["action"].action_id
+    assert payload["output_path"] == str(output_path)
+    assert payload["draft"] == draft
+    assert draft["action_id"] == ctx["action"].action_id
+    assert draft["input_annotations"] == list(ctx["action"].inputs["annotations"])
+    assert draft["new_propositions"] == []
+    assert draft["annotation_assignments"] == []
+
+
+def test_validate_proposition_resynthesis_cli_reports_valid_draft(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "ok"
+    assert payload["summary"] == {
+        "replacement_propositions": 2,
+        "moved_annotations": 2,
+        "retained_annotations": 0,
+        "planned_changed_paths": 2,
+        "planned_noop_paths": 0,
+        "errors": 0,
+        "warnings": 0,
+    }
+    assert payload["expected_annotation_targets"] == {
+        "annotation:entities/papers/A2020.source#a1": "proposition:broad-positive",
+        "annotation:entities/papers/B2021.source#b1": "proposition:broad-negative",
+    }
+
+
+def test_apply_proposition_resynthesis_cli_applies_valid_draft(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "apply-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
+    assert payload["status"] == "ok"
+    assert payload["summary"]["replacement_propositions"] == 2
+    assert payload["summary"]["rewritten_annotations"] == 2
+    assert all(not path.startswith(str(tmp_path)) for path in payload["changed_paths"])
+    assert "entities/propositions/broad-positive.md" in payload["changed_paths"]
+    assert "entities/propositions/broad-negative.md" in payload["changed_paths"]
+    assert (
+        anno_io.read_sidecar(tmp_path / "entities" / "papers" / "A2020.source.anno.trig")
+        .annotations[0]
+        .promoted_to
+        == "proposition:broad-positive"
+    )
+
+
+def test_validate_proposition_resynthesis_cli_includes_input_path_on_malformed_json(
+    tmp_path: Path,
+):
+    _factorization_project(tmp_path)
+    draft_path = tmp_path / "malformed-draft.json"
+    draft_path.write_text("{not json", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert str(draft_path) in result.output
+    assert "is not valid JSON" in result.output
