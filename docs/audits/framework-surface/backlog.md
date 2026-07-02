@@ -158,6 +158,24 @@ a flat list of 25 commands.
 - Links stable token conventions without moving everything out of
   `docs/conventions/annotation-tokens.md`.
 
+### B9. Terms Authoring Ergonomics
+
+**Status:** Drafted in
+[`terms-authoring-ergonomics-design.md`](terms-authoring-ergonomics-design.md).
+
+**Goal:** Make lightweight local semantic terms authorable without hand-editing
+`knowledge/sources/<profile>/terms.yaml`.
+
+**Acceptance criteria:**
+
+- Adds a narrow `science terms add <id> --title ...` source-write command.
+- Preserves the distinction between lightweight term rows and full markdown
+  entity owners.
+- Fails before writing on malformed ids, unsupported prefixes, duplicate ids,
+  and existing source owners.
+- Preserves existing YAML row order and appends new rows.
+- Updates user-guide, command docs, and generated Codex mirrors.
+
 ## Suggested Order
 
 1. B1: CLI and workflow map.

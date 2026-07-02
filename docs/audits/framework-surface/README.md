@@ -27,6 +27,9 @@ threads before any behavioral refactor.
 - [`source-authored-concepts-design.md`](source-authored-concepts-design.md)
   designs the behavior slice that enables `science entity create concept ...`
   as the durable Markdown owner path for project-local concepts.
+- [`terms-authoring-ergonomics-design.md`](terms-authoring-ergonomics-design.md)
+  designs a focused `science terms add` surface for lightweight local semantic
+  terms in `knowledge/sources/<profile>/terms.yaml`.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary
@@ -112,3 +115,8 @@ first records the broader ownership contract for inquiry refs and concept-like
 nodes. The second narrows the next behavior slice to aligning the core model,
 entity writer, docs, and generated skills around source-authored concept
 entities.
+
+The lightweight term authoring follow-up is drafted in
+[`terms-authoring-ergonomics-design.md`](terms-authoring-ergonomics-design.md).
+It keeps full concept entities and lightweight term rows separate, and proposes
+a narrow `science terms add` command for routine `terms.yaml` authoring.
