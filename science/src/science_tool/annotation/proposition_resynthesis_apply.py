@@ -198,6 +198,20 @@ def _resume_validation_report(
     *,
     as_of: date | None,
 ) -> ResynthesisValidationReport | None:
+    try:
+        live_index = _live_annotation_index(project_root)
+    except ReconciliationApplyError as exc:
+        raise ResynthesisApplyError(str(exc)) from exc
+
+    has_prior_write = any(
+        assignment.from_proposition != assignment.to_proposition
+        and (indexed := live_index.get(assignment.annotation)) is not None
+        and indexed[2] == assignment.to_proposition
+        for assignment in draft.annotation_assignments
+    )
+    if not has_prior_write:
+        return None
+
     expected_action_annotations = _validate_resume_identity(project_root, draft)
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
@@ -206,11 +220,6 @@ def _resume_validation_report(
     for replacement in draft.new_propositions:
         _replacement_local_part(project_root, replacement.id)
         _validate_replacement_frontmatter(replacement)
-
-    try:
-        live_index = _live_annotation_index(project_root)
-    except ReconciliationApplyError as exc:
-        raise ResynthesisApplyError(str(exc)) from exc
 
     seen_annotations: set[str] = set()
     expected_targets: dict[str, str] = {}

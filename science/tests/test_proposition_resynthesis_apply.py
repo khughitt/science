@@ -335,6 +335,39 @@ def test_apply_resynthesis_draft_rejects_incomplete_replace_when_live_action_inp
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
 
 
+def test_apply_resynthesis_draft_rejects_live_plan_error_before_prior_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(ctx["action"],),
+        errors=({"reason": "scanner-fault"},),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    with pytest.raises(ResynthesisApplyError, match="action plan has top-level errors: scanner-fault"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
+    assert not (tmp_path / "entities" / "propositions" / "broad-negative.md").exists()
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad"
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad"
+
+
 def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_target(
     tmp_path: Path,
 ):
