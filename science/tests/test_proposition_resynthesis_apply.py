@@ -9,11 +9,12 @@ import pytest
 from science_tool.annotation import io as anno_io
 from science_tool.annotation import proposition_resynthesis_apply as apply_module
 from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
+from science_tool.annotation.model import Status
 from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, render_replacement_proposition
 from science_tool.annotation.query import read_sidecar_strict
 from science_tool.entities import parse_markdown_entity_file, render_entity_frontmatter_updates
 
-from test_proposition_resynthesis import _ann, _draft_payload, _factorization_project, _paper_sidecar
+from test_proposition_resynthesis import _CREATED, _ann, _draft_payload, _factorization_project, _paper_sidecar
 
 
 def _edit_by_suffix(preflight, suffix: str):
@@ -190,6 +191,39 @@ def test_plan_resynthesis_apply_merges_multiple_rewrites_in_one_sidecar(tmp_path
     assert sidecar_edits[0].path == sidecar_path
     assert "proposition:broad-positive" in sidecar_edits[0].final_text
     assert "proposition:broad-negative" in sidecar_edits[0].final_text
+
+
+def test_apply_resynthesis_draft_ignores_inactive_original_backlink_outside_inputs(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    inactive_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (
+            replace(
+                _ann("inactive", "proposition:broad"),
+                status=Status.FIXED,
+                modified=_CREATED,
+                modified_by="test",
+            ),
+        ),
+    )
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad-positive"
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad-negative"
+    inactive_annotation = read_sidecar_strict(inactive_sidecar_path).annotations[0]
+    assert inactive_annotation.status == Status.FIXED
+    assert inactive_annotation.promoted_to == "proposition:broad"
 
 
 def test_plan_resynthesis_apply_rejects_annotation_drift_to_third_target(tmp_path: Path, monkeypatch):

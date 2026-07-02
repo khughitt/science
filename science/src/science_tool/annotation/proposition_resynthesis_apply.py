@@ -296,29 +296,13 @@ def _resume_validation_report(
     if already_promoted_missing:
         raise ResynthesisApplyError("input annotation snapshot is incomplete")
 
-    if draft.disposition == "replace":
-        omitted_original_annotations = sorted(
-            annotation_ref
-            for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
-            if promoted_to == draft.original_proposition and annotation_ref not in expected_action_annotations
-        )
-        if omitted_original_annotations:
-            raise ResynthesisApplyError("replace must assign every input annotation")
-    elif draft.disposition == "split_partial":
+    if draft.disposition == "split_partial":
         retained_on_original = {
             assignment.annotation
             for assignment in draft.annotation_assignments
             if assignment.to_proposition == draft.original_proposition
         }
-        omitted_original_annotations = sorted(
-            annotation_ref
-            for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
-            if promoted_to == draft.original_proposition
-            and (
-                annotation_ref not in expected_action_annotations
-                or annotation_ref not in retained_on_original
-            )
-        )
+        omitted_original_annotations = sorted(expected_action_annotations - retained_on_original - seen_annotations)
         if omitted_original_annotations:
             raise ResynthesisApplyError(f"{draft.disposition} must assign every input annotation")
 
@@ -597,11 +581,6 @@ def _postflight(project_root: Path, preflight: ResynthesisPreflight) -> None:
             if indexed is None:
                 continue
             _sidecar_path, _sidecar, promoted_to = indexed
-            if promoted_to == original:
-                raise ResynthesisApplyError(
-                    f"{annotation_ref} remains promoted_to original after replace"
-                )
-        for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in sorted(live_index.items()):
             if promoted_to == original:
                 raise ResynthesisApplyError(
                     f"{annotation_ref} remains promoted_to original after replace"
