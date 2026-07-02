@@ -321,6 +321,109 @@ def record_decision_plan_to_json(
     }
 
 
+def reviewed_decisions_to_json(evaluation: DecisionEvaluation) -> dict[str, Any]:
+    return {
+        "active": [
+            {
+                "decision_id": item.record.decision_id,
+                "candidate_id": item.current_candidate_id,
+                "lane": item.record.lane,
+                "decision": item.record.decision,
+                "members": list(item.record.members),
+                "proposition": item.record.proposition,
+                "suppresses_candidate": item.suppresses_candidate,
+            }
+            for item in evaluation.active
+        ],
+        "stale": [
+            {
+                "decision_id": item.record.decision_id,
+                "reason": item.reason,
+            }
+            for item in evaluation.stale
+        ],
+        "duplicates": list(evaluation.duplicates),
+        "conflicts": [
+            {
+                "scope": {
+                    "lane": conflict.scope[0],
+                    "refs": list(conflict.scope[1]),
+                },
+                "decision_ids": list(conflict.decision_ids),
+                "decisions": list(conflict.decisions),
+            }
+            for conflict in evaluation.conflicts
+        ],
+    }
+
+
+def apply_reviewed_decisions_to_report_payload(
+    payload: Mapping[str, Any],
+    evaluation: DecisionEvaluation,
+    *,
+    show_reviewed: bool,
+) -> dict[str, Any]:
+    summary = dict(payload["summary"])
+    same_claim_candidates = [dict(item) for item in payload["same_claim_candidates"]]
+    factorization_disagreements = [
+        dict(item) for item in payload["factorization_disagreements"]
+    ]
+
+    summary["generated_same_claim_candidates"] = len(same_claim_candidates)
+    summary["generated_factorization_disagreements"] = len(factorization_disagreements)
+    summary["reviewed_decisions"] = len(evaluation.active)
+    summary["stale_reviewed_decisions"] = len(evaluation.stale)
+    summary["duplicate_reviewed_decisions"] = len(evaluation.duplicates)
+    summary["conflicting_reviewed_decisions"] = len(evaluation.conflicts)
+
+    reviewed_by_candidate_id = {
+        item.current_candidate_id: item.record.decision_id for item in evaluation.active
+    }
+
+    filtered_same_claim_candidates = _filter_report_candidates(
+        same_claim_candidates,
+        suppressed_candidate_ids=evaluation.suppressed_same_claim_candidate_ids,
+        reviewed_by_candidate_id=reviewed_by_candidate_id,
+        show_reviewed=show_reviewed,
+    )
+    filtered_factorization_disagreements = _filter_report_candidates(
+        factorization_disagreements,
+        suppressed_candidate_ids=evaluation.suppressed_factorization_candidate_ids,
+        reviewed_by_candidate_id=reviewed_by_candidate_id,
+        show_reviewed=show_reviewed,
+    )
+
+    summary["same_claim_candidates"] = len(filtered_same_claim_candidates)
+    summary["factorization_disagreements"] = len(filtered_factorization_disagreements)
+
+    output = dict(payload)
+    output["summary"] = summary
+    output["same_claim_candidates"] = filtered_same_claim_candidates
+    output["factorization_disagreements"] = filtered_factorization_disagreements
+    output["reviewed_decisions"] = reviewed_decisions_to_json(evaluation)
+    return output
+
+
+def _filter_report_candidates(
+    candidates: Sequence[Mapping[str, Any]],
+    *,
+    suppressed_candidate_ids: frozenset[str],
+    reviewed_by_candidate_id: Mapping[str, str],
+    show_reviewed: bool,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for candidate in candidates:
+        candidate_id_value = candidate["candidate_id"]
+        if candidate_id_value in suppressed_candidate_ids and not show_reviewed:
+            continue
+        item = dict(candidate)
+        reviewed_decision_id = reviewed_by_candidate_id.get(candidate_id_value)
+        if reviewed_decision_id is not None:
+            item["reviewed_decision_id"] = reviewed_decision_id
+        filtered.append(item)
+    return filtered
+
+
 def evaluate_decision_records(
     records: Sequence[DecisionRecord],
     report: ReconciliationReport,

@@ -543,17 +543,33 @@ def archive_superseded_propositions_cmd(root: Path | None, apply_changes: bool, 
     type=click.Choice(("table", "json", "scaffold")),
     default="table",
 )
+@click.option(
+    "--decisions",
+    "decisions_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--show-reviewed", "show_reviewed", is_flag=True, default=False)
 def reconcile_propositions_cmd(
     all_scope: bool,
     proposition_ref: str | None,
     source_md: Path | None,
     root: Path | None,
     fmt: str,
+    decisions_path: Path | None,
+    show_reviewed: bool,
 ) -> None:
     """Generate deterministic proposition reconciliation candidates."""
     from science_tool.annotation.proposition_reconciliation import (
         build_reconciliation_report,
         report_to_json,
+    )
+    from science_tool.annotation.proposition_reconciliation_decisions import (
+        DEFAULT_DECISION_LOG,
+        DecisionRecordError,
+        apply_reviewed_decisions_to_report_payload,
+        evaluate_decision_records,
+        load_decision_records,
     )
 
     selected = sum(1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item)
@@ -574,6 +590,19 @@ def reconcile_propositions_cmd(
         source_sidecar=source_sidecar,
     )
     payload = report_to_json(report)
+    decision_log = decisions_path or Path(DEFAULT_DECISION_LOG)
+    if not decision_log.is_absolute():
+        decision_log = project_root / decision_log
+    try:
+        records = load_decision_records(decision_log)
+        evaluation = evaluate_decision_records(records, report)
+    except DecisionRecordError as exc:
+        raise click.ClickException(str(exc)) from exc
+    payload = apply_reviewed_decisions_to_report_payload(
+        payload,
+        evaluation,
+        show_reviewed=show_reviewed,
+    )
 
     if fmt in {"json", "scaffold"}:
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
@@ -584,7 +613,9 @@ def reconcile_propositions_cmd(
         "proposition reconciliation: "
         f"same_claim={summary['same_claim_candidates']} "
         f"factorization={summary['factorization_disagreements']} "
-        f"faults={summary['faults']}"
+        f"faults={summary['faults']} "
+        f"reviewed={summary['reviewed_decisions']} "
+        f"stale_reviewed={summary['stale_reviewed_decisions']}"
     )
     for item in payload["same_claim_candidates"]:
         click.echo(

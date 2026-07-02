@@ -149,6 +149,54 @@ def _related_but_distinct_plan(root: Path, runner: CliRunner) -> Path:
     return plan_path
 
 
+def _record_related_but_distinct_decision(root: Path, runner: CliRunner) -> dict:
+    _manifest(root)
+    _proposition(root, "a", "BRCA1 loss increases genomic instability")
+    _proposition(root, "b", "Loss of BRCA1 raises genome instability")
+    generated = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(root), "--format", "json"],
+    )
+    assert generated.exit_code == 0, generated.output
+    candidate = json.loads(generated.output)["same_claim_candidates"][0]
+    review_path = root / "review.json"
+    review_path.write_text(
+        json.dumps(_related_but_distinct_review_for_candidate(candidate)),
+        encoding="utf-8",
+    )
+    plan_path = root / "plan.json"
+    plan_result = runner.invoke(
+        annotate_group,
+        [
+            "plan-proposition-reconciliation",
+            "--root",
+            str(root),
+            "--input",
+            str(review_path),
+            "--output",
+            str(plan_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert plan_result.exit_code == 0, plan_result.output
+    record_result = runner.invoke(
+        annotate_group,
+        [
+            "record-proposition-reconciliation-decisions",
+            "--root",
+            str(root),
+            "--input",
+            str(plan_path),
+            "--apply",
+            "--format",
+            "json",
+        ],
+    )
+    assert record_result.exit_code == 0, record_result.output
+    return candidate
+
+
 def test_reconcile_propositions_json(tmp_path: Path):
     _manifest(tmp_path)
     _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
@@ -166,6 +214,78 @@ def test_reconcile_propositions_json(tmp_path: Path):
         "proposition:a",
         "proposition:b",
     ]
+
+
+def test_reconcile_propositions_suppresses_reviewed_decision_by_default(tmp_path: Path):
+    runner = CliRunner()
+    candidate = _record_related_but_distinct_decision(tmp_path, runner)
+
+    result = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["reviewed_decisions"] == 1
+    assert payload["summary"]["same_claim_candidates"] == 0
+    assert payload["summary"]["generated_same_claim_candidates"] == 1
+    assert payload["same_claim_candidates"] == []
+    assert payload["reviewed_decisions"]["active"][0]["candidate_id"] == candidate["candidate_id"]
+
+    scaffold = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "scaffold"],
+    )
+    assert scaffold.exit_code == 0, scaffold.output
+    scaffold_payload = json.loads(scaffold.output)
+    assert scaffold_payload["summary"]["same_claim_candidates"] == 0
+    assert scaffold_payload["same_claim_candidates"] == []
+
+
+def test_reconcile_propositions_show_reviewed_keeps_annotated_candidate(tmp_path: Path):
+    runner = CliRunner()
+    _record_related_but_distinct_decision(tmp_path, runner)
+
+    result = runner.invoke(
+        annotate_group,
+        [
+            "reconcile-propositions",
+            "--all",
+            "--show-reviewed",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["same_claim_candidates"] == 1
+    assert len(payload["same_claim_candidates"]) == 1
+    assert payload["same_claim_candidates"][0]["reviewed_decision_id"].startswith(
+        "reconcile-decision:"
+    )
+
+    scaffold = runner.invoke(
+        annotate_group,
+        [
+            "reconcile-propositions",
+            "--all",
+            "--show-reviewed",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "scaffold",
+        ],
+    )
+    assert scaffold.exit_code == 0, scaffold.output
+    scaffold_payload = json.loads(scaffold.output)
+    assert scaffold_payload["summary"]["same_claim_candidates"] == 1
+    assert scaffold_payload["same_claim_candidates"][0]["reviewed_decision_id"].startswith(
+        "reconcile-decision:"
+    )
 
 
 def test_reconcile_propositions_table(tmp_path: Path):
