@@ -7,7 +7,14 @@ from typing import Any
 from science_tool.annotation.io import read_sidecar, sidecar_for_markdown
 from science_tool.annotation.model import Status
 from science_tool.annotation.query import entity_relpath_for_sidecar
-from science_tool.archive import ArchiveRow, _inbound_live_refs, derive_archive_path, load_archive_index
+from science_tool.archive import (
+    ArchiveRow,
+    _inbound_live_refs,
+    _relocate_rows,
+    archive_index_path,
+    derive_archive_path,
+    load_archive_index,
+)
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.sources import load_project_sources
@@ -163,6 +170,43 @@ def _row_for_candidate(candidate: _RawEntity, lineage_kind: str, successors: lis
     )
 
 
+def _rows_for_ready_candidates(project_root: Path, report: dict) -> list[ArchiveRow]:
+    raw = _raw_entities(project_root)
+    rows: list[ArchiveRow] = []
+    for candidate in report["candidates"]:
+        if candidate["status"] != "ready":
+            continue
+        raw_entity = raw.get(candidate["id"])
+        if raw_entity is None:
+            raise PropositionArchiveError(f"{candidate['id']} disappeared before archive apply")
+        lineage_kind = candidate["lineage_kind"]
+        successors = candidate["successors"]
+        if lineage_kind not in {"superseded_by", "resynthesized_into"}:
+            raise PropositionArchiveError(f"{candidate['id']} has invalid lineage kind at apply")
+        rows.append(_row_for_candidate(raw_entity, lineage_kind, successors))
+    return rows
+
+
+def _postflight(project_root: Path, rows: list[ArchiveRow]) -> None:
+    from science_tool.graph.materialize import materialize_graph
+
+    index = load_archive_index(project_root)
+    for row in rows:
+        if row.id not in index.active_by_id:
+            raise PropositionArchiveError(f"{row.id} missing from archive index after apply")
+        assert row.original_path is not None
+        live_path = project_root / row.original_path
+        archive_path = project_root / derive_archive_path(row.original_path)
+        if live_path.exists():
+            raise PropositionArchiveError(f"{row.id} live file still exists after archive apply")
+        if not archive_path.exists():
+            raise PropositionArchiveError(f"{row.id} archived file missing after archive apply")
+    try:
+        materialize_graph(project_root, strict=False)
+    except Exception as exc:
+        raise PropositionArchiveError(f"postflight materialization failed: {exc}") from exc
+
+
 def build_superseded_proposition_archive_report(project_root: Path) -> dict:
     project_root = Path(project_root).resolve()
     sources = load_project_sources(project_root)
@@ -231,7 +275,17 @@ def archive_superseded_propositions(
     apply: bool = False,
     now: str | None = None,
 ) -> dict:
+    project_root = Path(project_root).resolve()
     report = build_superseded_proposition_archive_report(project_root)
     if not apply:
         return report
-    raise PropositionArchiveError("apply is implemented in Task 5")
+
+    rows = _rows_for_ready_candidates(project_root, report)
+    if not rows:
+        return report
+
+    result = _relocate_rows(archive_index_path(project_root), project_root, rows, now=now)
+    report["applied"] = result["applied"]
+    report["skipped"] = result["skipped"]
+    _postflight(project_root, rows)
+    return report

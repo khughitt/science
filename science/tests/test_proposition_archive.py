@@ -15,7 +15,6 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.proposition_archive import (
-    PropositionArchiveError,
     archive_superseded_propositions,
     build_superseded_proposition_archive_report,
 )
@@ -23,6 +22,8 @@ from science_tool.archive import (
     ArchiveRow,
     append_row,
     archive_index_path,
+    derive_archive_path,
+    load_archive_index,
 )
 
 
@@ -342,8 +343,102 @@ def test_report_surfaces_generic_inbound_live_refs_as_context(tmp_path: Path) ->
     assert candidate["inbound_live_refs"] == ["proposition:observer"]
 
 
-def test_apply_raises_task_5_placeholder(tmp_path: Path) -> None:
+def test_apply_moves_ready_proposition_and_writes_scalar_archive_row(tmp_path: Path) -> None:
     _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    original = _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
 
-    with pytest.raises(PropositionArchiveError, match="apply is implemented in Task 5"):
-        archive_superseded_propositions(tmp_path, apply=True)
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert report["applied"] == ["proposition:duplicate"]
+    assert not original.exists()
+    archived = tmp_path / derive_archive_path("entities/propositions/duplicate.md")
+    assert archived.exists()
+    row = load_archive_index(tmp_path).active_by_id["proposition:duplicate"]
+    assert row.superseded_by == "proposition:canonical"
+    assert row.resynthesized_into == []
+    assert row.archived_at == "2026-07-02T12:00:00Z"
+
+
+def test_apply_moves_ready_proposition_and_writes_resynthesis_archive_row(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "negative")
+    _proposition(tmp_path, "positive")
+    original = _proposition(
+        tmp_path,
+        "broad",
+        status="superseded",
+        extra_frontmatter=(
+            "resynthesized_into:\n"
+            "  - proposition:positive\n"
+            "  - proposition:negative\n"
+        ),
+    )
+
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert report["applied"] == ["proposition:broad"]
+    assert not original.exists()
+    row = load_archive_index(tmp_path).active_by_id["proposition:broad"]
+    assert row.superseded_by is None
+    assert row.resynthesized_into == ["proposition:negative", "proposition:positive"]
+
+
+def test_apply_moves_ready_candidates_and_leaves_blocked_candidates_live(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _entity(
+        tmp_path,
+        "entities/papers/Smith2020.md",
+        "id: paper:Smith2020\n"
+        "type: paper\n"
+        "title: Smith 2020\n"
+        "status: active\n",
+    )
+    _proposition(tmp_path, "canonical")
+    ready = _proposition(
+        tmp_path,
+        "ready",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    blocked = _proposition(
+        tmp_path,
+        "blocked",
+        status="superseded",
+        extra_frontmatter=(
+            "superseded_by: proposition:canonical\n"
+            "source_refs:\n"
+            "  - paper:Smith2020\n"
+            "  - annotation:entities/papers/Smith2020.source#a-1\n"
+        ),
+    )
+    _paper_sidecar(tmp_path, "Smith2020", [_ann("a-1", promoted_to="proposition:blocked")])
+
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    assert report["applied"] == ["proposition:ready"]
+    assert not ready.exists()
+    assert blocked.exists()
+    assert set(load_archive_index(tmp_path).active_by_id) == {"proposition:ready"}
+
+
+def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(
+        tmp_path,
+        "duplicate",
+        status="superseded",
+        extra_frontmatter="superseded_by: proposition:canonical\n",
+    )
+    archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+
+    report = archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:01:00Z")
+
+    assert report["summary"] == {"ready": 0, "blocked": 0, "skipped": 0}
+    assert report["applied"] == []
