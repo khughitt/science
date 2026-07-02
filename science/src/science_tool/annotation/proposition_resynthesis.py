@@ -354,14 +354,7 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
 
 def _live_action_for_draft(project_root: Path, draft: ResynthesisDraft) -> ReconciliationAction:
     plan = build_live_action_plan(project_root, draft.source_review)
-    action = resolve_resynthesis_action(
-        ReconciliationActionPlan(
-            schema_version=plan.schema_version,
-            source_reviews=plan.source_reviews,
-            actions=plan.actions,
-        ),
-        requested_action_id=draft.action_id,
-    )
+    action = resolve_resynthesis_action(plan, requested_action_id=draft.action_id)
     if action.proposition != draft.original_proposition:
         raise ResynthesisDraftError("draft original_proposition is stale")
     if action.candidate_id != draft.candidate_id:
@@ -531,7 +524,7 @@ def render_replacement_proposition(
             "id": replacement.id,
             "type": "proposition",
             "title": replacement.title,
-            "status": str(frontmatter.get("status") or "active"),
+            "status": "active",
             "created": today,
             "updated": today,
             "source_refs": _merged_source_refs(draft_source_refs, expected_source_refs),

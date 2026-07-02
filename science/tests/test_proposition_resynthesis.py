@@ -372,6 +372,28 @@ def test_validate_resynthesis_draft_rejects_blocked_live_action(tmp_path: Path, 
         validate_resynthesis_draft(tmp_path, draft)
 
 
+def test_validate_resynthesis_draft_rejects_top_level_action_plan_errors(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    plan = ReconciliationActionPlan(
+        schema_version=1,
+        source_reviews=(str(ctx["review_path"]),),
+        actions=(ctx["action"],),
+        errors=({"reason": "scanner-fault"},),
+    )
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    with pytest.raises(ResynthesisDraftError, match="action plan has top-level errors: scanner-fault"):
+        validate_resynthesis_draft(tmp_path, draft)
+
+
 def test_validate_resynthesis_draft_rejects_noncanonical_replacement_id(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
 
@@ -436,12 +458,14 @@ def test_validate_resynthesis_draft_rejects_assignment_to_unknown_target(tmp_pat
         validate_resynthesis_draft(tmp_path, draft)
 
 
-def test_validate_resynthesis_draft_rejects_incomplete_replace_when_input_set_grew(tmp_path: Path):
+def test_validate_resynthesis_draft_rejects_incomplete_replace_when_input_set_grew(tmp_path: Path, monkeypatch):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
+    import science_tool.annotation.proposition_resynthesis as resynthesis
 
     ctx = _factorization_project(tmp_path)
     payload = _draft_payload(ctx)
     _paper_sidecar(tmp_path, "C2022", (_ann("c1", "proposition:broad", stance="asserted"),))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: ctx["plan"])
 
     draft = parse_resynthesis_draft(payload)
 
@@ -498,3 +522,30 @@ def test_render_replacement_preserves_existing_created_updated_for_idempotent_co
     frontmatter, _body = parse_markdown_entity_file(path)
     assert str(frontmatter["created"]) == "2026-06-30"
     assert str(frontmatter["updated"]) == "2026-06-30"
+
+
+def test_render_replacement_owns_status_even_when_draft_supplies_status(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        parse_resynthesis_draft,
+        render_replacement_proposition,
+        validate_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["new_propositions"][0]["frontmatter"]["status"] = "superseded"
+    draft = parse_resynthesis_draft(payload)
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+    replacement = draft.new_propositions[0]
+
+    rendered = render_replacement_proposition(
+        tmp_path,
+        replacement,
+        sorted(report.expected_source_refs_by_replacement[replacement.id]),
+        as_of=date(2026, 7, 1),
+    )
+
+    rendered.path.parent.mkdir(parents=True, exist_ok=True)
+    rendered.path.write_text(rendered.text, encoding="utf-8")
+    frontmatter, _body = parse_markdown_entity_file(rendered.path)
+    assert frontmatter["status"] == "active"
