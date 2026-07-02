@@ -16,7 +16,11 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.proposition_reconciliation import judgment_id
-from science_tool.annotation.proposition_reconciliation_decisions import DEFAULT_DECISION_LOG
+from science_tool.annotation.proposition_reconciliation_decisions import (
+    DEFAULT_DECISION_LOG,
+    append_decision_records,
+    record_from_action_payload,
+)
 from test_proposition_resynthesis import (
     _draft_payload,
     _factorization_project,
@@ -197,6 +201,27 @@ def _record_related_but_distinct_decision(root: Path, runner: CliRunner) -> dict
     return candidate
 
 
+def _decision_action_for_candidate(candidate: dict, decision: str) -> dict:
+    return {
+        "action_id": f"reconcile-action:{decision}",
+        "kind": "record_reconciliation_decision",
+        "status": "advisory",
+        "decision": decision,
+        "candidate_id": candidate["candidate_id"],
+        "judgment_id": judgment_id("same_claim", decision, candidate["propositions"]),
+        "confidence": "high",
+        "rationale": f"Reviewed as {decision}.",
+        "source_review": "review.json",
+        "review_source": "llm-review:claude:proposition-reconcile-v1",
+        "members": candidate["propositions"],
+        "inputs": {"members": candidate["propositions"], "flags": []},
+        "suggested_operations": [],
+        "preconditions": [],
+        "blockers": [],
+        "writes": [],
+    }
+
+
 def test_reconcile_propositions_json(tmp_path: Path):
     _manifest(tmp_path)
     _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
@@ -286,6 +311,155 @@ def test_reconcile_propositions_show_reviewed_keeps_annotated_candidate(tmp_path
     assert scaffold_payload["same_claim_candidates"][0]["reviewed_decision_id"].startswith(
         "reconcile-decision:"
     )
+
+
+def test_reconcile_propositions_reports_conflicting_current_reviewed_decisions(
+    tmp_path: Path,
+):
+    runner = CliRunner()
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+    generated = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    assert generated.exit_code == 0, generated.output
+    candidate = json.loads(generated.output)["same_claim_candidates"][0]
+    related = record_from_action_payload(
+        _decision_action_for_candidate(candidate, "related_but_distinct"),
+        recorded_at="2026-07-02",
+    )
+    conflict = record_from_action_payload(
+        _decision_action_for_candidate(candidate, "conflict_or_negation"),
+        recorded_at="2026-07-02",
+    )
+    append_decision_records(tmp_path / DEFAULT_DECISION_LOG, [related, conflict])
+
+    result = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["conflicting_reviewed_decisions"] == 1
+    assert payload["summary"]["reviewed_decisions"] == 0
+    assert payload["summary"]["same_claim_candidates"] == 1
+    assert payload["same_claim_candidates"][0]["candidate_id"] == candidate["candidate_id"]
+    assert payload["same_claim_candidates"][0].get("reviewed_decision_id") is None
+    assert payload["reviewed_decisions"]["active"] == []
+    assert payload["reviewed_decisions"]["conflicts"] == [
+        {
+            "scope": {
+                "lane": "same_claim",
+                "refs": candidate["propositions"],
+            },
+            "decision_ids": sorted([related.decision_id, conflict.decision_id]),
+            "decisions": ["conflict_or_negation", "related_but_distinct"],
+        }
+    ]
+
+
+def test_reconcile_propositions_reports_stale_reviewed_decision(
+    tmp_path: Path,
+):
+    runner = CliRunner()
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")
+    _proposition(tmp_path, "b", "Loss of BRCA1 raises genome instability")
+    generated = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    assert generated.exit_code == 0, generated.output
+    candidate = json.loads(generated.output)["same_claim_candidates"][0]
+    action = _decision_action_for_candidate(candidate, "related_but_distinct")
+    action["candidate_id"] = "reconcile:same-claim/stale"
+    record = record_from_action_payload(action, recorded_at="2026-07-02")
+    append_decision_records(tmp_path / DEFAULT_DECISION_LOG, [record])
+
+    result = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["stale_reviewed_decisions"] == 1
+    assert payload["summary"]["reviewed_decisions"] == 0
+    assert payload["reviewed_decisions"]["stale"][0]["reason"] == "candidate-missing"
+    assert payload["summary"]["same_claim_candidates"] == 1
+    assert payload["same_claim_candidates"]
+
+
+def test_reconcile_propositions_suppresses_reviewed_factorization_decision(
+    tmp_path: Path,
+):
+    runner = CliRunner()
+    _factorization_project(tmp_path)
+    generated = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    assert generated.exit_code == 0, generated.output
+    candidate = json.loads(generated.output)["factorization_disagreements"][0]
+    record = record_from_action_payload(
+        {
+            "action_id": "reconcile-action:split-possible",
+            "kind": "record_reconciliation_decision",
+            "status": "advisory",
+            "decision": "split_possible",
+            "candidate_id": candidate["candidate_id"],
+            "judgment_id": judgment_id(
+                "factorization_disagreement",
+                "split_possible",
+                [candidate["proposition"]],
+            ),
+            "confidence": "medium",
+            "rationale": "Reviewed as possible to split later.",
+            "source_review": "review.json",
+            "review_source": "llm-review:claude:proposition-reconcile-v1",
+            "proposition": candidate["proposition"],
+            "inputs": {},
+            "suggested_operations": [],
+            "preconditions": [],
+            "blockers": [],
+            "writes": [],
+        },
+        recorded_at="2026-07-02",
+    )
+    append_decision_records(tmp_path / DEFAULT_DECISION_LOG, [record])
+
+    result = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    shown = runner.invoke(
+        annotate_group,
+        [
+            "reconcile-propositions",
+            "--all",
+            "--show-reviewed",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["reviewed_decisions"] == 1
+    assert payload["summary"]["generated_factorization_disagreements"] == 1
+    assert payload["summary"]["factorization_disagreements"] == 0
+    assert payload["factorization_disagreements"] == []
+
+    assert shown.exit_code == 0, shown.output
+    shown_payload = json.loads(shown.output)
+    assert shown_payload["summary"]["factorization_disagreements"] == 1
+    assert shown_payload["factorization_disagreements"][0]["candidate_id"] == candidate["candidate_id"]
+    assert shown_payload["factorization_disagreements"][0]["reviewed_decision_id"] == record.decision_id
 
 
 def test_reconcile_propositions_table(tmp_path: Path):
