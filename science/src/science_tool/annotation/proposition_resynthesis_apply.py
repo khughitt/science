@@ -170,7 +170,11 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
             raise ResynthesisApplyError("source review judgment lane is stale")
         if judgment.get("decision") != "factorization_needs_resynthesis":
             raise ResynthesisApplyError("source review judgment decision is stale")
-        return _draft_input_annotations(draft)
+        draft_annotations = _draft_input_annotations(draft)
+        expected_annotations = _original_source_input_annotations(project_root, draft)
+        if draft_annotations != expected_annotations:
+            raise ResynthesisApplyError("input_annotations are stale")
+        return expected_annotations
 
     if found_judgment:
         raise ResynthesisApplyError("draft candidate_id is stale")
@@ -188,6 +192,33 @@ def _draft_input_annotations(draft: ResynthesisDraft) -> set[str]:
             raise ResynthesisApplyError("input_annotations contains duplicate annotation refs")
         current_annotations.add(annotation)
     return current_annotations
+
+
+def _original_source_input_annotations(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+    try:
+        location = find_entity(project_root, draft.original_proposition)
+        frontmatter, _body = parse_markdown_entity_file(location.path)
+    except (EntityCommandError, OSError, ValueError) as exc:
+        raise ResynthesisApplyError(f"{draft.original_proposition} failed resume snapshot parse: {exc}") from exc
+
+    source_refs = frontmatter.get("source_refs")
+    if isinstance(source_refs, str) or not isinstance(source_refs, Sequence):
+        raise ResynthesisApplyError("original proposition source_refs must be a list")
+
+    annotations: set[str] = set()
+    for ref in source_refs:
+        if not isinstance(ref, str) or not ref or ref != ref.strip():
+            raise ResynthesisApplyError("original proposition source_refs must contain non-empty strings")
+        if not ref.startswith("annotation:"):
+            continue
+        if any(char.isspace() for char in ref):
+            raise ResynthesisApplyError("original proposition source_refs contains malformed annotation ref")
+        if ref in annotations:
+            raise ResynthesisApplyError("original proposition source_refs contains duplicate annotation refs")
+        annotations.add(ref)
+    if not annotations:
+        raise ResynthesisApplyError("original proposition source_refs has no input annotations")
+    return annotations
 
 
 def _resume_validation_report(
@@ -263,6 +294,15 @@ def _resume_validation_report(
             if paper_ref is None:
                 raise ResynthesisApplyError(f"{assignment.annotation} resolves to no paper ref")
             expected_refs[assignment.to_proposition].add(paper_ref)
+
+    already_promoted_missing = sorted(
+        annotation_ref
+        for annotation_ref, (_sidecar_path, _sidecar, promoted_to) in live_index.items()
+        if promoted_to in replacements
+        and (annotation_ref not in expected_action_annotations or annotation_ref not in seen_annotations)
+    )
+    if already_promoted_missing:
+        raise ResynthesisApplyError("input annotation snapshot is incomplete")
 
     if draft.disposition == "replace":
         if seen_annotations != expected_action_annotations:

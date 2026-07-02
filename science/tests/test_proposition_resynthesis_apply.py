@@ -505,7 +505,10 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
     payload["annotation_assignments"] = payload["annotation_assignments"][:1]
     draft = parse_resynthesis_draft(payload)
 
-    with pytest.raises(ResynthesisApplyError, match="assign every input annotation|remains promoted_to original"):
+    with pytest.raises(
+        ResynthesisApplyError,
+        match="input_annotations are stale|assign every input annotation|remains promoted_to original",
+    ):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     original_frontmatter, _body = parse_markdown_entity_file(
@@ -515,6 +518,59 @@ def test_apply_resynthesis_draft_resume_rejects_omitted_input_annotation_before_
     assert read_sidecar_strict(
         tmp_path / "entities" / "papers" / "B2021.source.anno.trig"
     ).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_omitted_already_moved_input_before_writes(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    for citekey, annotation_id, target in (
+        ("A2020", "a1", "proposition:broad-positive"),
+        ("B2021", "b1", "proposition:broad-negative"),
+    ):
+        sidecar_path = tmp_path / "entities" / "papers" / f"{citekey}.source.anno.trig"
+        sidecar = anno_io.read_sidecar(sidecar_path)
+        anno_io.write_sidecar(
+            sidecar_path,
+            replace(
+                sidecar,
+                annotations=tuple(
+                    replace(annotation, promoted_to=target)
+                    if annotation.id == annotation_id
+                    else annotation
+                    for annotation in sidecar.annotations
+                ),
+            ),
+        )
+    before_b_sidecar = (tmp_path / "entities" / "papers" / "B2021.source.anno.trig").read_text(
+        encoding="utf-8"
+    )
+    payload = _draft_payload(ctx)
+    payload["input_annotations"] = payload["input_annotations"][:1]
+    payload["context"]["input_annotations"] = payload["context"]["input_annotations"][:1]
+    payload["new_propositions"] = payload["new_propositions"][:1]
+    payload["annotation_assignments"] = payload["annotation_assignments"][:1]
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(
+        ResynthesisApplyError,
+        match="input_annotations are stale|input annotation snapshot is incomplete|assign every input annotation",
+    ):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    original_frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "broad.md"
+    )
+    assert original_frontmatter["status"] == "active"
+    assert "resynthesized_into" not in original_frontmatter
+    assert (tmp_path / "entities" / "papers" / "B2021.source.anno.trig").read_text(
+        encoding="utf-8"
+    ) == before_b_sidecar
 
 
 def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_source_refs(

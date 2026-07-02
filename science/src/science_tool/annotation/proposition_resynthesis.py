@@ -425,19 +425,28 @@ def _replacement_local_part(project_root: Path, proposition_id: str) -> str:
     return local_part
 
 
-def _current_action_annotations(action: ReconciliationAction) -> set[str]:
+def _current_action_annotations(action: ReconciliationAction) -> tuple[str, ...]:
     if "annotations" not in action.inputs:
         raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
     annotations = action.inputs["annotations"]
     if isinstance(annotations, str) or not isinstance(annotations, Sequence):
         raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
 
-    current_annotations = set()
+    current_annotations: list[str] = []
+    seen_annotations: set[str] = set()
     for annotation in annotations:
-        if not isinstance(annotation, str) or not annotation:
+        if (
+            not isinstance(annotation, str)
+            or not annotation
+            or annotation != annotation.strip()
+            or any(char.isspace() for char in annotation)
+        ):
             raise ResynthesisDraftError(f"{action.action_id} has malformed input annotations")
-        current_annotations.add(annotation)
-    return current_annotations
+        if annotation in seen_annotations:
+            raise ResynthesisDraftError(f"{action.action_id} has duplicate input annotations")
+        current_annotations.append(annotation)
+        seen_annotations.add(annotation)
+    return tuple(current_annotations)
 
 
 def validate_resynthesis_draft(
@@ -448,8 +457,9 @@ def validate_resynthesis_draft(
 ) -> ResynthesisValidationReport:
     action = _live_action_for_draft(project_root, draft)
     current_annotations = _current_action_annotations(action)
-    if set(draft.input_annotations) != current_annotations:
+    if draft.input_annotations != current_annotations:
         raise ResynthesisDraftError("input_annotations are stale")
+    current_annotation_set = set(current_annotations)
     live_index = _live_annotation_index(project_root)
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
@@ -473,7 +483,7 @@ def validate_resynthesis_draft(
             raise ResynthesisDraftError(f"{assignment.annotation} assigned more than once")
         seen_annotations.add(assignment.annotation)
 
-        if assignment.annotation not in current_annotations:
+        if assignment.annotation not in current_annotation_set:
             raise ResynthesisDraftError(f"{assignment.annotation} is not a current input annotation")
         if assignment.from_proposition != draft.original_proposition:
             raise ResynthesisDraftError(f"{assignment.annotation} from_proposition must be {draft.original_proposition}")
@@ -506,12 +516,12 @@ def validate_resynthesis_draft(
             expected_refs[assignment.to_proposition].add(paper_ref)
 
     if draft.disposition == "replace":
-        if seen_annotations != current_annotations:
+        if seen_annotations != current_annotation_set:
             raise ResynthesisDraftError("replace must assign every input annotation")
         if retained:
             raise ResynthesisDraftError("replace assignments must target draft propositions")
     elif draft.disposition == "split_partial":
-        if seen_annotations != current_annotations:
+        if seen_annotations != current_annotation_set:
             raise ResynthesisDraftError("split_partial must assign every input annotation")
         if moved == 0:
             raise ResynthesisDraftError("split_partial must move at least one annotation to a new proposition")
