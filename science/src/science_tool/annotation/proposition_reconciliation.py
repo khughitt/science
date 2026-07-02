@@ -663,6 +663,25 @@ def _resolve_same_claim_candidate(
     return None
 
 
+def candidate_indexes(
+    report: ReconciliationReport,
+) -> tuple[dict[str, SameClaimCandidate], dict[str, FactorizationCandidate]]:
+    return _candidate_indexes(report)
+
+
+def members_have_current_edge(candidate: SameClaimCandidate, members: set[str]) -> bool:
+    return _members_have_current_edge(candidate, members)
+
+
+def resolve_same_claim_candidate(
+    candidate_ref: str,
+    members: set[str],
+    same_by_id: Mapping[str, SameClaimCandidate],
+    all_same: tuple[SameClaimCandidate, ...],
+) -> SameClaimCandidate | None:
+    return _resolve_same_claim_candidate(candidate_ref, members, same_by_id, all_same)
+
+
 def _require_non_empty_string(value: Any, field_name: str) -> str:
     _require(
         isinstance(value, str) and bool(value.strip()),

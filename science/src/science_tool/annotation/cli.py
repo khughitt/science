@@ -11,7 +11,7 @@ import json
 import re as _re
 import subprocess
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -543,17 +543,34 @@ def archive_superseded_propositions_cmd(root: Path | None, apply_changes: bool, 
     type=click.Choice(("table", "json", "scaffold")),
     default="table",
 )
+@click.option(
+    "--decisions",
+    "decisions_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--show-reviewed", "show_reviewed", is_flag=True, default=False)
 def reconcile_propositions_cmd(
     all_scope: bool,
     proposition_ref: str | None,
     source_md: Path | None,
     root: Path | None,
     fmt: str,
+    decisions_path: Path | None,
+    show_reviewed: bool,
 ) -> None:
     """Generate deterministic proposition reconciliation candidates."""
     from science_tool.annotation.proposition_reconciliation import (
         build_reconciliation_report,
         report_to_json,
+    )
+    from science_tool.annotation.proposition_reconciliation_decisions import (
+        DEFAULT_DECISION_LOG,
+        DecisionRecordError,
+        apply_reviewed_decisions_to_report_payload,
+        evaluate_decision_records,
+        load_decision_records,
+        project_decision_evaluation_to_report,
     )
 
     selected = sum(1 for item in (all_scope, proposition_ref is not None, source_md is not None) if item)
@@ -574,6 +591,24 @@ def reconcile_propositions_cmd(
         source_sidecar=source_sidecar,
     )
     payload = report_to_json(report)
+    decision_log = decisions_path or Path(DEFAULT_DECISION_LOG)
+    if not decision_log.is_absolute():
+        decision_log = project_root / decision_log
+    try:
+        records = load_decision_records(decision_log)
+        decision_report = report
+        if not all_scope:
+            decision_report = build_reconciliation_report(project_root)
+        evaluation = evaluate_decision_records(records, decision_report)
+        if not all_scope:
+            evaluation = project_decision_evaluation_to_report(evaluation, report)
+    except DecisionRecordError as exc:
+        raise click.ClickException(str(exc)) from exc
+    payload = apply_reviewed_decisions_to_report_payload(
+        payload,
+        evaluation,
+        show_reviewed=show_reviewed,
+    )
 
     if fmt in {"json", "scaffold"}:
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
@@ -584,7 +619,11 @@ def reconcile_propositions_cmd(
         "proposition reconciliation: "
         f"same_claim={summary['same_claim_candidates']} "
         f"factorization={summary['factorization_disagreements']} "
-        f"faults={summary['faults']}"
+        f"faults={summary['faults']} "
+        f"reviewed={summary['reviewed_decisions']} "
+        f"stale_reviewed={summary['stale_reviewed_decisions']} "
+        f"duplicate_reviewed={summary['duplicate_reviewed_decisions']} "
+        f"conflicting_reviewed={summary['conflicting_reviewed_decisions']}"
     )
     for item in payload["same_claim_candidates"]:
         click.echo(
@@ -730,6 +769,89 @@ def _project_relative_or_absolute(project_root: Path, path: Path) -> str:
         return resolved.relative_to(project_root).as_posix()
     except ValueError:
         return resolved.as_posix()
+
+
+@annotate_group.command("record-proposition-reconciliation-decisions")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--decisions",
+    "decisions_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+@click.option("--apply", "apply", is_flag=True, default=False)
+def record_proposition_reconciliation_decisions_cmd(
+    input_path: Path,
+    root: Path | None,
+    decisions_path: Path | None,
+    fmt: str,
+    apply: bool,
+) -> None:
+    """Record reviewed non-writing proposition reconciliation decisions."""
+    from science_tool.annotation.proposition_reconciliation import build_reconciliation_report
+    from science_tool.annotation.proposition_reconciliation_decisions import (
+        DEFAULT_DECISION_LOG,
+        DecisionRecordError,
+        append_decision_records,
+        build_record_decision_plan,
+        load_decision_records,
+        record_decision_plan_to_json,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    decision_log = decisions_path or Path(DEFAULT_DECISION_LOG)
+    if not decision_log.is_absolute():
+        decision_log = project_root / decision_log
+
+    try:
+        action_plan = _read_json_object_for_cli(input_path)
+        existing_records = load_decision_records(decision_log)
+        report = build_reconciliation_report(project_root)
+        plan = build_record_decision_plan(
+            action_plan=action_plan,
+            existing_records=existing_records,
+            report=report,
+            recorded_at=date.today().isoformat(),
+        )
+        appended: tuple[str, ...] = ()
+        if apply and plan.would_append:
+            appended = append_decision_records(decision_log, plan.would_append).appended
+    except (DecisionRecordError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = record_decision_plan_to_json(plan, appended=appended)
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "proposition reconciliation decision records: "
+        f"would_append={summary['would_append']} "
+        f"already_recorded={summary['already_recorded']} "
+        f"stale_existing={summary['stale_existing']} "
+        f"blockers={summary['blockers']} "
+        f"appended={summary['appended']}"
+    )
+    for blocker in payload["blockers"]:
+        parts = [f"reason={blocker['reason']}"]
+        action_id = blocker.get("action_id")
+        if action_id is not None:
+            parts.append(f"action_id={action_id}")
+        decision_id = blocker.get("decision_id")
+        if decision_id is not None:
+            parts.append(f"decision_id={decision_id}")
+        detail = blocker.get("detail")
+        if detail is not None:
+            parts.append(f"detail={detail}")
+        click.echo(f"blocker {' '.join(parts)}")
 
 
 @annotate_group.command("scaffold-proposition-resynthesis")
