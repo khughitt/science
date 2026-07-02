@@ -13,6 +13,7 @@ from science_model.identity import EntityClass
 from science_model.profiles.schema import ProfileManifest
 
 from science_tool.cli import main
+from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -53,6 +54,94 @@ def test_entity_create_accepts_local_numeric_id_part() -> None:
         assert path.is_file()
         frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
         assert frontmatter["id"] == "hypothesis:0005-local-id"
+
+
+def test_entity_create_concept_writes_source() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "create", "concept", "Treatment Response"])
+
+        assert result.exit_code == 0, result.output
+        assert "concept:treatment-response" in result.output
+        path = Path("entities/concepts/treatment-response.md")
+        assert path.is_file()
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["id"] == "concept:treatment-response"
+        assert frontmatter["type"] == "concept"
+        assert frontmatter["title"] == "Treatment Response"
+        assert frontmatter["status"] == "active"
+
+
+def test_entity_create_concept_accepts_deprecated_status_and_rejects_invalid_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        deprecated = runner.invoke(
+            main,
+            ["entity", "create", "concept", "Legacy Concept", "--status", "deprecated"],
+        )
+        invalid = runner.invoke(
+            main,
+            ["entity", "create", "concept", "Bad Concept", "--status", "retired"],
+        )
+
+        assert deprecated.exit_code == 0, deprecated.output
+        path = Path("entities/concepts/legacy-concept.md")
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["status"] == "deprecated"
+        assert invalid.exit_code != 0
+        assert "Invalid status for concept: retired" in invalid.output
+
+
+def test_entity_create_concept_loads_and_resolves_in_graph_build() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "create", "concept", "Treatment Response"])
+        assert result.exit_code == 0, result.output
+        write_markdown_entity(
+            root,
+            "entities/hypotheses/h1.md",
+            {
+                "id": "hypothesis:h1",
+                "type": "hypothesis",
+                "title": "H1",
+                "status": "proposed",
+                "related": ["concept:treatment-response"],
+            },
+        )
+
+        sources = load_project_sources(root)
+        by_id = {entity.canonical_id: entity for entity in sources.entities}
+        assert "concept:treatment-response" in by_id
+        assert sources.entity_source_adapters["concept:treatment-response"] == "markdown"
+
+        trig_path = materialize_graph(root, strict=False)
+        assert trig_path.is_file()
+
+
+def test_entity_create_construct_still_uses_generic_slug_path() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "create", "construct", "Treatment Response Construct"])
+
+        assert result.exit_code == 0, result.output
+        assert "construct:treatment-response-construct" in result.output
+        path = Path("entities/constructs/treatment-response-construct.md")
+        assert path.is_file()
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["id"] == "construct:treatment-response-construct"
+        assert frontmatter["type"] == "construct"
 
 
 def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
