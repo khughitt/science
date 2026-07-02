@@ -19,6 +19,8 @@ threads before any behavioral refactor.
   CLI behavior convention.
 - [`dataset-surface-design.md`](dataset-surface-design.md) designs the
   dataset/data command-surface guidance cleanup.
+- [`task-inquiry-surface-design.md`](task-inquiry-surface-design.md) designs the
+  task, next-steps, question/hypothesis, and inquiry guidance cleanup.
 - [`backlog.md`](backlog.md) ranks follow-up cleanup and implementation slices.
 
 ## Summary
@@ -90,3 +92,9 @@ The dataset surface follow-up is drafted in
 behavior stable for the first slice and focuses on aligning user-guide,
 command, skill, and generated Codex guidance around the singular/plural
 dataset command boundary.
+
+The task/inquiry surface follow-up is drafted in
+[`task-inquiry-surface-design.md`](task-inquiry-surface-design.md). It keeps the
+first slice read-only and taxonomy-first, focusing on the boundary between
+operational tasks, next-step synthesis, durable questions/hypotheses, and
+source-first inquiry models.
