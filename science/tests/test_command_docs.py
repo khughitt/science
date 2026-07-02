@@ -486,6 +486,44 @@ def test_command_docs_use_explicit_framework_resolution(
         assert expected in text
 
 
+def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> None:
+    text = _read("skills/data/SKILL.md")
+
+    assert "science dataset add <slug>" in text
+    assert "--level <public|registration|controlled|commercial|mixed>" in text
+    add_example = _slice_between(
+        text,
+        "science dataset add <slug>",
+        "science dataset verify-access <slug>",
+    )
+    assert "--license" not in add_example
+    assert "science dataset verify-access <slug>" in text
+    assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
+    assert '--source-url "<landing-page-or-download-url>"' in text
+    assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
+    assert "Manual template authoring is a fallback" in text
+    assert "runtime datapackage descriptors" in text
+    assert "--level <public|controlled|mixed>" not in text
+    assert "--method <landing-confirmed|downloaded|manual-review>" not in text
+    assert '--source "<landing-page-or-download-url>"' not in text
+    assert "--date <YYYY-MM-DD>" not in text
+
+
+def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
+    text = _read("skills/data/frictionless.md")
+
+    boundary = _slice_between(
+        text,
+        "## Boundary With Dataset Entities",
+        "## Creating a Data Package",
+    )
+
+    assert "runtime/package descriptor" in boundary
+    assert "not the local dataset entity lifecycle" in boundary
+    assert "Use `science dataset add <slug>`" in boundary
+    assert "Use `science datasets validate --path data/raw/`" in boundary
+
+
 def test_command_docs_do_not_reference_retired_user_docs() -> None:
     retired = (
         USER_GUIDE_DOC,
