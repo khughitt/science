@@ -167,15 +167,27 @@ in the plan):
 - Runtime stageability (separate gate, runs in addition to verification):
   - At least one of `entity.datapackage` or `entity.local_path` is populated AND
     the referenced runtime file exists on disk.
-- `consumed_by` includes `plan:<this-plan-file-stem>`.
-- The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
+  - Exception for retrieval probes: if `access.verified: true` and the plan says
+    WP1 is the staging step ("retrieve and verify this dataset"), treat the
+    absent runtime file as **PASS-with-note** / deferred-to-WP1; do not score
+    absent runtime files as FAIL in this pattern; instead require WP1 to end by
+    producing the runtime artifact, datapackage/checksums, and any updated
+    `last_reviewed` evidence before downstream work runs.
+  - `consumed_by` includes `plan:<this-plan-file-stem>`.
+  - The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
   external records use `access:`, derived records use `derivation:`, and
   resource-level metadata lives in the runtime datapackage.
+- Access verification should be current: if a public, registration-only, or
+  credentialed external dataset is obtainable but has stale or missing evidence,
+  require `science dataset verify-access <slug>` before downstream stages consume
+  it.
 
 **Scoring:**
 
 - **PASS** — all sources resolve; verification gate satisfied per origin; runtime
-  stageability satisfied; backlink present; freshness OK; invariants hold.
+  stageability satisfied, or runtime stageability is explicitly deferred to WP1
+  under the retrieval-probe exception above; backlink present; freshness OK;
+  invariants hold.
 - **WARN** — stale `last_reviewed` (> 12 months); missing canonical `plan:<stem>`
   backlink; cached-field drift between entity and runtime
   (`ontology_terms`/`license`/`update_cadence` only); lineage drift.
@@ -186,8 +198,9 @@ in the plan):
     `last_reviewed`.
   - Derived missing `workflow_run` entity, asymmetric `produces:` edge, or broken
     transitive input chain.
-  - Runtime stageability fails: neither `datapackage` nor `local_path` populated,
-    OR the referenced runtime file does not exist on disk.
+  - Runtime stageability fails outside the retrieval-probe exception: neither
+    `datapackage` nor `local_path` populated, OR the referenced runtime file
+    does not exist on disk.
   - A plan references an umbrella entity (non-empty `siblings:`).
   - Origin/block-exclusion violation (#7 or #8).
   - research-package symmetry violation (#11).
