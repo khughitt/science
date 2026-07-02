@@ -541,7 +541,7 @@ class TestFeedbackConcern:
     def test_fb_concerns_constant_matches_lib(self):
         # Fail-loud guard against vocab drift between the CLI's click.Choice tuple
         # and the library SSOT.
-        from science_tool.cli import _FB_CONCERNS
+        from science_tool.feedback_cli import _FB_CONCERNS
         from science_tool.feedback import VALID_CONCERNS
         assert _FB_CONCERNS == VALID_CONCERNS
 

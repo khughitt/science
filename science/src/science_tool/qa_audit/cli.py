@@ -15,8 +15,22 @@ from science_tool.qa_audit.audit import audit_workflows, render_markdown
               help="Repo root used to resolve each run's manifest_path.")
 @click.option("--out", "out_path", type=click.Path(path_type=Path), default=None,
               help="Optional file to write the markdown report to.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
 @click.option("--json", "as_json", is_flag=True, default=False, help="Emit JSON rows instead of a table.")
-def qa_audit_command(runs_dir: Path, repo_root: Path, out_path: Path | None, as_json: bool) -> None:
+def qa_audit_command(
+    runs_dir: Path,
+    repo_root: Path,
+    out_path: Path | None,
+    output_format: str,
+    as_json: bool,
+) -> None:
     """Advisory process-quality audit: flag single-run / QA-ignoring workflows.
 
     Always exits 0 — this never gates a build or `science validate`.
@@ -24,7 +38,7 @@ def qa_audit_command(runs_dir: Path, repo_root: Path, out_path: Path | None, as_
     if not runs_dir.exists():
         raise click.ClickException(f"runs dir not found: {runs_dir}")
     rows = audit_workflows(runs_dir=runs_dir, repo_root=repo_root)
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(json.dumps(rows, indent=2, sort_keys=True))
         return
     md = render_markdown(rows)

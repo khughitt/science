@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from science_tool.cli import main as science_cli
 from science_model.identity import EntityClass
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import KindCategory
@@ -75,6 +76,24 @@ def test_user_guide_index_links_all_chapters() -> None:
     for chapter in expected:
         assert (GUIDE_ROOT / chapter).exists()
         assert chapter in index
+
+
+def test_cli_workflow_map_mentions_every_top_level_command() -> None:
+    text = _read(GUIDE_ROOT / "cli-and-workflows.md")
+    code_spans = re.findall(r"`([^`]+)`", text)
+    documented_commands: set[str] = set()
+
+    for span in code_spans:
+        words = span.split()
+        if not words:
+            continue
+        if words[0] == "science" and len(words) > 1:
+            documented_commands.add(words[1])
+        elif len(words) == 1:
+            documented_commands.add(words[0])
+
+    missing = sorted(set(science_cli.commands) - documented_commands)
+    assert not missing, "Top-level commands missing from CLI workflow map: " + ", ".join(missing)
 
 
 def test_deleted_user_docs_are_not_reintroduced() -> None:

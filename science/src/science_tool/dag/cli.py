@@ -42,6 +42,7 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
     help="Render only this DAG slug. Defaults to all discovered DAGs.",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,
@@ -108,6 +109,7 @@ def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: igno
     help="Overwrite existing edges.yaml stubs (resets curation).",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,
@@ -165,6 +167,7 @@ def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -
     help="Output format. `--json` is kept as a convenience alias.",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,
@@ -236,6 +239,7 @@ def staleness_cmd(
     help="Output format. `--json` is kept as a convenience alias.",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,
@@ -286,6 +290,7 @@ def audit_cmd(
     help="Human-readable label for the DAG (default: slug).",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,
@@ -362,6 +367,7 @@ def schema_cmd(output_path: Path | None) -> None:
     help="Output format. `--json` is kept as a convenience alias.",
 )
 @click.option(
+    "--project-root",
     "--project",
     "project_path",
     default=None,

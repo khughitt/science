@@ -29,6 +29,18 @@ def test_book_split_cli_emits_json(tmp_path: Path) -> None:
     assert data[0]["start_page"] == 1
 
 
+def test_book_split_cli_accepts_format_json(tmp_path: Path) -> None:
+    pdf = tmp_path / "b.pdf"
+    _make_pdf(pdf, 20, [("Intro", 0), ("Body", 10)])
+
+    result = CliRunner().invoke(main, ["book-split", str(pdf), "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert [c["title"] for c in data] == ["Intro", "Body"]
+    assert data[0]["start_page"] == 1
+
+
 def _make_pdf_with_parts(path: Path, n_pages: int) -> None:
     writer = PdfWriter()
     for _ in range(n_pages):

@@ -14,18 +14,19 @@ from science_model.reasoning import MembershipRole
 
 from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
+from science_tool.book_split_cli import book_split_command
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.commons import commons_group
 from science_tool.curate.cli import curate_group
+from science_tool.data_cli import data_group
 from science_tool.dag.cli import dag_group
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
 from science_tool.datasets.validate import validate_path
-from science_tool.distill.openalex import distill_openalex
-from science_tool.distill.pykeen_source import distill_pykeen
-from science_tool.doi import lookup_doi_metadata
+from science_tool.doi_cli import doi_group
+from science_tool.distill_cli import distill_group
 from science_tool.entities import (
     EntityCommandError,
     EntityRemovalPlan,
@@ -41,6 +42,7 @@ from science_tool.entities import (
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
 from science_tool.entity_migrations import audit_identifiers
+from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.materialize import materialization_audit, materialize_graph
@@ -90,6 +92,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_tool.labnote_cli import labnote_group
 from science_tool.markers_cli import markers_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.patch.cli import patch_group
@@ -100,6 +103,7 @@ from science_tool.prose_lint_cli import prose_group
 from science_tool.qa_audit.cli import qa_audit_command
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
+from science_tool.search_cli import search_command
 from science_tool.skills_lint import skills_group
 from science_tool.styles import (
     COLOR_POLICY_CHOICES,
@@ -112,9 +116,7 @@ from science_tool.styles import (
     resolve_color_policy,
     set_color_policy,
 )
-from science_tool.data_audit import audit_project, render_json
-from science_tool.data_audit_fix import apply_fixes
-from science_tool.project_config import load_project_config, resolve_data_policy
+from science_tool.telemetry_cli import telemetry_group
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.wander.cli import wander_command
@@ -247,37 +249,6 @@ def _record_cli_success(_: object, **__: object) -> None:
     _record_telemetry_finish()
 
 
-@main.command("search")
-@click.argument("query")
-@click.option(
-    "--archived",
-    is_flag=True,
-    default=False,
-    help="Search the archive index (required; live search not yet implemented).",
-)
-@click.option(
-    "--project-root",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path("."),
-    help="Project root (default: current directory).",
-)
-@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json", show_default=True)
-def search_command(query: str, archived: bool, project_root: Path, output_format: str) -> None:
-    """Search entities. P3 supports --archived only (reads the archive index)."""
-    if not archived:
-        raise click.UsageError(
-            "science search currently supports only --archived (live entity search is not implemented)."
-        )
-    from science_tool.archive import search_archive
-
-    hits = search_archive(project_root, query)
-    if output_format == "json":
-        click.echo(json.dumps(hits, indent=2, sort_keys=True))
-    else:
-        for h in hits:
-            click.echo(f"{h['id']}  [{h['kind']}]  {h['title'] or ''}")
-
-
 def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
     if not entries:
         return None
@@ -371,88 +342,14 @@ main.add_command(qa_audit_command)
 main.add_command(commons_group)
 main.add_command(validate_cmd)
 main.add_command(patch_group)
-
-
-@main.group("data")
-def data_group() -> None:
-    """Audit the data/results/entities tracking boundary."""
-
-
-@data_group.command("audit")
-@click.option("--project", "project_path", type=click.Path(path_type=Path),
-              default=None, envvar="SCIENCE_PROJECT_ROOT",
-              help="Project root (defaults to $SCIENCE_PROJECT_ROOT or cwd).")
-@click.option("--fix", is_flag=True, default=False,
-              help="Relocate stranded records data/ → results/ (stages, never commits).")
-@click.option("--json", "as_json", is_flag=True, default=False,
-              help="Emit the machine-readable move report.")
-def data_audit_command(project_path: Path | None, fix: bool, as_json: bool) -> None:
-    """Report (and optionally fix) data/results/entities boundary violations."""
-    project_path = project_path or Path.cwd()  # runtime default; honors the env var above
-    try:
-        policy = resolve_data_policy(load_project_config(project_path))
-    except FileNotFoundError:
-        from science_tool.data_policy import DEFAULT_DATA_POLICY
-        policy = DEFAULT_DATA_POLICY
-    violations = audit_project(project_path, policy)
-
-    if fix:
-        outcomes = apply_fixes(project_path, violations)
-        if as_json:
-            click.echo(render_json(violations, outcomes), nl=False)
-        else:
-            performed = sum(1 for o in outcomes if o.performed)
-            flagged = sum(1 for o in outcomes if not o.performed)
-            for o in outcomes:
-                mark = "moved" if o.performed else "FLAG"
-                tgt = o.violation.proposed_target or "-"
-                click.echo(f"  [{mark}] {o.violation.path} → {tgt}"
-                           + (f"  ({o.reason})" if o.reason else ""))
-            click.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
-        return
-
-    if as_json:
-        click.echo(render_json(violations), nl=False)
-    else:
-        if not violations:
-            click.echo("clean: no data/results boundary violations.")
-        for v in violations:
-            tgt = v.proposed_target or "-"
-            click.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
-    if violations:
-        raise SystemExit(1)
-
-
-@main.group("labnote")
-def labnote() -> None:
-    """Export Labnote app packages."""
-
-
-@labnote.command("export")
-@click.option(
-    "--project-root",
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True, exists=True),
-    default=Path("."),
-    show_default=True,
-    help="Science project root containing science.yaml.",
-)
-@click.option(
-    "--out",
-    "out_dir",
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-    required=True,
-    help="Output Labnote app package directory.",
-)
-def labnote_export(project_root: Path, out_dir: Path) -> None:
-    """Export a public Labnote app package from a Science project."""
-    from science_tool.labnote_export import export_labnote_package
-
-    try:
-        diagnostics = export_labnote_package(project_root=project_root, out_dir=out_dir)
-    except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
-        raise click.ClickException(str(exc)) from exc
-    warning_count = len(diagnostics.get("warnings", []))
-    click.echo(f"Exported Labnote package to {out_dir} ({warning_count} warning(s))")
+main.add_command(telemetry_group)
+main.add_command(feedback_group)
+main.add_command(labnote_group)
+main.add_command(search_command)
+main.add_command(data_group)
+main.add_command(distill_group)
+main.add_command(book_split_command)
+main.add_command(doi_group)
 
 
 @main.group("entities")
@@ -461,7 +358,14 @@ def entities_group() -> None:
 
 
 @entities_group.command("inventory")
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root to inventory (legacy alias; default: current working directory).",
+)
 @click.option("--format", "output_format", type=click.Choice(["json"]), default="json")
 @click.option("--output", type=click.Path(path_type=Path), default=None)
 def entities_inventory_command(
@@ -479,7 +383,14 @@ def entities_inventory_command(
 
 
 @entities_group.command("audit-identifiers")
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root to audit (legacy alias; default: current working directory).",
+)
 def entities_audit_identifiers_command(project_path: Path) -> None:
     click.echo(json.dumps(audit_identifiers(project_path), indent=2))
 
@@ -812,7 +723,14 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
 @entities_group.command("register-kind")
 @click.argument("kind")
 @click.option("--class", "entity_class", required=True)
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Project root whose local profile should be updated (legacy alias; default: current working directory).",
+)
 def entities_register_kind_command(kind: str, entity_class: str, project_path: Path) -> None:
     """Register a project-local entity kind in the local profile."""
     try:
@@ -3887,54 +3805,6 @@ def _human_size(size_bytes: int) -> str:
     return f"{value:.1f} TB"
 
 
-@main.group()
-def doi() -> None:
-    """DOI metadata commands."""
-
-
-@doi.command("lookup")
-@click.argument("doi")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def doi_lookup(doi: str, output_format: str) -> None:
-    """Lookup DOI metadata via Crossref."""
-
-    metadata = lookup_doi_metadata(doi)
-    rows = [{"field": key, "value": str(value)} for key, value in metadata.items()]
-    emit_query_rows(
-        output_format=output_format,
-        title="DOI Lookup",
-        columns=[("field", "Field"), ("value", "Value")],
-        rows=rows,
-    )
-
-
-@main.group()
-def distill() -> None:
-    """Distill public knowledge graphs into Turtle snapshots."""
-
-
-@distill.command("openalex")
-@click.option("--level", type=click.Choice(("subfields", "topics")), default="subfields", show_default=True)
-@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
-@click.option("--cache-path", default=None, type=click.Path(path_type=Path))
-def distill_openalex_cmd(level: str, output_path: Path | None, cache_path: Path | None) -> None:
-    """Fetch OpenAlex science hierarchy and write Turtle snapshot."""
-
-    result = distill_openalex(level=level, output_path=output_path, cache_path=cache_path)
-    click.echo(f"Wrote OpenAlex snapshot ({level}) to {result}")
-
-
-@distill.command("pykeen")
-@click.argument("dataset_name")
-@click.option("--budget", type=int, default=None)
-@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
-def distill_pykeen_cmd(dataset_name: str, budget: int | None, output_path: Path | None) -> None:
-    """Distill a PyKEEN dataset into a Turtle snapshot."""
-
-    result = distill_pykeen(dataset_name=dataset_name, budget=budget, output_path=output_path)
-    click.echo(f"Wrote {dataset_name} snapshot to {result}")
-
-
 DEFAULT_TASKS_DIR = Path("tasks")
 
 
@@ -4695,6 +4565,14 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     type=click.Path(file_okay=False, path_type=Path),
     help="Materialize the bundle's source tree into this empty or new directory.",
 )
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, default=False, help="Emit a JSON verdict.")
 @click.pass_context
 def project_verify(
@@ -4702,6 +4580,7 @@ def project_verify(
     bundle: Path,
     against_root: Path | None,
     extract_to: Path | None,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Verify a serialized project bundle."""
@@ -4712,16 +4591,18 @@ def project_verify(
         verify_project,
     )
 
+    emit_json = as_json or output_format == "json"
+
     try:
         result = verify_project(bundle, against=against_root, extract=extract_to)
     except BundleIntegrityError as exc:
-        _emit_verify_error(as_json, exit_code=2, status="integrity", message=str(exc))
+        _emit_verify_error(emit_json, exit_code=2, status="integrity", message=str(exc))
         ctx.exit(2)
     except VerifyError as exc:
-        _emit_verify_error(as_json, exit_code=4, status="operational", message=str(exc))
+        _emit_verify_error(emit_json, exit_code=4, status="operational", message=str(exc))
         ctx.exit(4)
 
-    if as_json:
+    if emit_json:
         click.echo(json.dumps(verdict_json(result), indent=2, sort_keys=True))
     else:
         _render_verify_human(result)
@@ -5374,33 +5255,6 @@ def persist_source_cmd(
     click.echo(f"Wrote {out}")
 
 
-@main.command("book-split")
-@click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--json", "as_json", is_flag=True, help="Emit the chapter manifest as JSON.")
-def book_split_cmd(pdf: Path, as_json: bool) -> None:
-    """Extract a chapter manifest from a book PDF's outline/bookmarks.
-
-    Intended for the /review-books command: call this first; on a non-zero exit
-    with 'no outline', fall back to reading the book's table-of-contents pages.
-    """
-    import json as _json
-
-    from science_tool.book_split import BookSplitError, split_book
-
-    try:
-        chapters = split_book(pdf)
-    except BookSplitError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    payload = [c.to_dict() for c in chapters]
-    if as_json:
-        click.echo(_json.dumps(payload, indent=2))
-    else:
-        for c in chapters:
-            part = f"  [{c.part}]" if c.part else ""
-            click.echo(f"{c.n:>3}. {c.title}  (pp. {c.start_page}-{c.end_page}){part}")
-
-
 @main.group("questions")
 def question() -> None:
     """Question-file management commands."""
@@ -5577,12 +5431,21 @@ def bib() -> None:
     help="Read the BibTeX entry from this file.",
 )
 @click.option("--replace", is_flag=True, help="Replace the existing entry if the key is already present.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def bib_add(
     project_root: Path,
     entry: str | None,
     entry_file: Path | None,
     replace: bool,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Atomically append a BibTeX entry to papers/references.bib.
@@ -5616,7 +5479,7 @@ def bib_add(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(_json.dumps({"key": result.key, "action": result.action, "path": str(result.path)}))
     else:
         click.echo(f"{result.action}: {result.key} ({result.path})")
@@ -5739,509 +5602,6 @@ def sync_rebuild(config_path: str | None) -> None:
         state_path=state_path,
     )
     click.echo(f"Rebuild complete. {report.entities_total} entities, {report.relations_total} relations.")
-
-
-@main.group()
-def telemetry() -> None:
-    """Local telemetry reporting commands."""
-
-
-@telemetry.command("status")
-@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def telemetry_status_cmd(output_format: str) -> None:
-    """Show local telemetry status."""
-    from science_tool.telemetry import get_telemetry_dir, read_events, telemetry_enabled
-
-    telemetry_dir = get_telemetry_dir()
-    rows = [
-        {
-            "enabled": telemetry_enabled(),
-            "telemetry_dir": str(telemetry_dir),
-            "event_count": len(read_events(telemetry_dir)),
-        }
-    ]
-    emit_query_rows(
-        output_format=output_format,
-        title="Telemetry Status",
-        columns=[
-            ("enabled", "Enabled"),
-            ("telemetry_dir", "Directory"),
-            ("event_count", "Events"),
-        ],
-        rows=rows,
-    )
-
-
-@telemetry.command("report")
-@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-@click.option("--errors", "include_errors", is_flag=True, help="Include recent command failures.")
-@click.option("--limit", default=5, type=click.IntRange(1, 100), show_default=True, help="Recent error rows to show.")
-def telemetry_report_cmd(output_format: str, include_errors: bool, limit: int) -> None:
-    """Summarize local telemetry events."""
-    from science_tool.telemetry import get_telemetry_dir, read_events, recent_error_rows, summarize_events
-
-    events = read_events(get_telemetry_dir())
-    summary = summarize_events(events)
-    if include_errors:
-        summary["recent_errors"] = recent_error_rows(events, limit=limit)
-    rows = [summary]
-    emit_query_rows(
-        output_format=output_format,
-        title="Telemetry Report",
-        columns=[
-            ("total_events", "Events"),
-            ("event_types", "Event types"),
-            ("commands", "Commands"),
-            ("error_classes", "Errors"),
-            ("exit_codes", "Exit codes"),
-        ],
-        rows=rows,
-    )
-    if include_errors and output_format != "json":
-        emit_query_rows(
-            output_format=output_format,
-            title="Recent Errors",
-            columns=[
-                ("timestamp", "Timestamp", {"no_wrap": True}),
-                ("failure", "Failure"),
-                ("argv", "Argv"),
-            ],
-            rows=_telemetry_error_table_rows(cast(list[dict[str, object]], summary["recent_errors"])),
-        )
-
-
-@telemetry.command("export")
-@click.option("--format", "output_format", default="jsonl", type=click.Choice(["jsonl"]))
-def telemetry_export_cmd(output_format: str) -> None:
-    """Export local telemetry events."""
-    from science_tool.telemetry import export_events_jsonl, get_telemetry_dir, read_events
-
-    if output_format == "jsonl":
-        click.echo(export_events_jsonl(read_events(get_telemetry_dir())), nl=False)
-
-
-@telemetry.command("prune")
-@click.option("--before", "before_date", required=True, type=click.DateTime(formats=["%Y-%m-%d"]))
-@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def telemetry_prune_cmd(before_date: datetime, output_format: str) -> None:
-    """Remove local telemetry events before a date."""
-    from science_tool.telemetry import get_telemetry_dir, prune_events
-
-    telemetry_dir = get_telemetry_dir()
-    cutoff = before_date.date()
-    removed = prune_events(telemetry_dir, before=cutoff)
-    rows = [{"before": cutoff.isoformat(), "removed": removed, "telemetry_dir": str(telemetry_dir)}]
-    emit_query_rows(
-        output_format=output_format,
-        title="Telemetry Prune",
-        columns=[
-            ("before", "Before"),
-            ("removed", "Removed"),
-            ("telemetry_dir", "Directory"),
-        ],
-        rows=rows,
-    )
-
-
-_FB_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
-_FB_STATUSES = ("open", "addressed", "deferred", "wontfix")
-# Keep in sync with science_tool.feedback.VALID_CONCERNS.
-_FB_CONCERNS = (
-    "tooling",
-    "methodology:statistics",
-    "methodology:qa",
-    "methodology:design",
-    "methodology:data-fitness",
-    "methodology:reasoning",
-)
-
-
-@main.group()
-def feedback() -> None:
-    """Feedback management commands."""
-
-
-def _get_feedback_dir() -> Path:
-    import os
-
-    from science_tool.registry.config import get_science_config_dir
-
-    return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
-
-
-@feedback.command("add", context_settings={"allow_extra_args": True})
-@click.option("--from-recent", is_flag=True, help="Use the newest eligible local telemetry event as feedback context.")
-@click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
-@click.option("--summary", required=True, help="One-line description")
-@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS), help="tooling (default) or a methodology:* lens")
-@click.option("--detail", default=None, help="Optional prose detail")
-@click.option("--project", default=None, help="Project name (auto-detected if omitted)")
-@click.option("--related", multiple=True, help="Related feedback entry IDs")
-@click.pass_context
-def feedback_add(
-    ctx: click.Context,
-    from_recent: bool,
-    target: str,
-    summary: str,
-    category: str | None,
-    concern: str | None,
-    detail: str | None,
-    project: str | None,
-    related: tuple[str, ...],
-) -> None:
-    """Add a feedback entry."""
-    from datetime import date as _date
-
-    from science_tool.feedback import (
-        FeedbackEntry,
-        detect_project,
-        find_duplicate,
-        next_feedback_id,
-        save_entry,
-    )
-
-    fb_dir = _get_feedback_dir()
-    recent_index = _parse_from_recent_index(ctx.args, from_recent=from_recent)
-    if recent_index is not None:
-        from science_tool.telemetry import feedback_context_from_recent_event, get_telemetry_dir, read_events
-
-        try:
-            telemetry_context = feedback_context_from_recent_event(read_events(get_telemetry_dir()), index=recent_index)
-        except ValueError as exc:
-            raise click.ClickException(str(exc)) from exc
-        target = target or telemetry_context.target
-        category = category or telemetry_context.category
-        detail = f"{detail}\n\n{telemetry_context.detail}" if detail else telemetry_context.detail
-
-    if target is None:
-        raise click.UsageError("--target is required unless --from-recent is used")
-    category = category or "suggestion"
-    concern = concern or "tooling"
-
-    if project is None:
-        project = detect_project(Path.cwd())
-
-    # Check for duplicates
-    dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
-    if dup is not None:
-        dup.recurrence += 1
-        save_entry(fb_dir, dup)
-        click.echo(f"Incremented recurrence on {dup.id} (now {dup.recurrence})")
-        return
-
-    today = _date.today().isoformat()
-    entry_id = next_feedback_id(fb_dir, today)
-
-    entry = FeedbackEntry(
-        id=entry_id,
-        created=today,
-        project=project,
-        target=target,
-        category=category,
-        summary=summary,
-        detail=detail,
-        related=list(related),
-        concern=concern,
-    )
-    save_entry(fb_dir, entry)
-    click.echo(f"Created {entry.id}: {entry.summary}")
-
-
-def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int | None:
-    if not from_recent:
-        if extra_args:
-            raise click.UsageError(f"Unexpected argument: {extra_args[0]}")
-        return None
-    if not extra_args:
-        return 1
-    if len(extra_args) > 1:
-        raise click.UsageError("--from-recent accepts at most one 1-based index")
-    try:
-        index = int(extra_args[0])
-    except ValueError as exc:
-        raise click.UsageError("--from-recent index must be an integer") from exc
-    if index < 1:
-        raise click.UsageError("--from-recent index must be 1 or greater")
-    return index
-
-
-@feedback.command("list")
-@click.option("--status", default="open", help="Filter by status (omit for 'open'; use 'all' for all statuses)")
-@click.option("--target", default=None, help="Filter by target (supports fnmatch globs)")
-@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option("--project", default=None, help="Filter by project")
-@click.option("--concern", default=None, help="Filter by concern (supports fnmatch globs, e.g. 'methodology:*')")
-@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def feedback_list(
-    status: str | None,
-    target: str | None,
-    category: str | None,
-    project: str | None,
-    concern: str | None,
-    output_format: str,
-) -> None:
-    """List feedback entries (default: open only)."""
-    from science_tool.feedback import list_entries
-
-    if status == "all":
-        status = None
-
-    fb_dir = _get_feedback_dir()
-    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project, concern=concern)
-
-    columns = [
-        ("id", "ID"),
-        ("created", "Date"),
-        ("project", "Project"),
-        ("target", "Target"),
-        ("concern", "Concern"),
-        ("category", "Category"),
-        ("summary", "Summary"),
-        ("recurrence", "Recur"),
-    ]
-    rows = [
-        {
-            "id": e.id,
-            "created": e.created,
-            "project": e.project,
-            "target": e.target,
-            "concern": e.concern,
-            "category": e.category,
-            "summary": e.summary,
-            "recurrence": e.recurrence,
-        }
-        for e in entries
-    ]
-    emit_query_rows(output_format=output_format, title="Feedback", columns=columns, rows=rows)
-
-
-@feedback.command("update")
-@click.argument("entry_id")
-@click.option("--status", default=None, type=click.Choice(_FB_STATUSES))
-@click.option("--resolution", default=None, help="Required when setting terminal status")
-@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
-@click.option("--concern", default=None, type=click.Choice(_FB_CONCERNS))
-@click.option("--summary", default=None)
-@click.option("--detail", default=None)
-@click.option("--related", multiple=True, help="Related feedback entry IDs")
-def feedback_update(
-    entry_id: str,
-    status: str | None,
-    resolution: str | None,
-    category: str | None,
-    concern: str | None,
-    summary: str | None,
-    detail: str | None,
-    related: tuple[str, ...],
-) -> None:
-    """Update a feedback entry."""
-    from science_tool.feedback import update_entry as _update
-
-    fb_dir = _get_feedback_dir()
-    try:
-        entry = _update(
-            fb_dir,
-            entry_id,
-            status=status,
-            resolution=resolution,
-            category=category,
-            concern=concern,
-            summary=summary,
-            detail=detail,
-            related=list(related) if related else None,
-        )
-    except (FileNotFoundError, ValueError) as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(f"Updated {entry.id}")
-
-
-@feedback.command("triage")
-@click.option("--target", default=None, help="Filter by target (fnmatch glob)")
-@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
-@click.option(
-    "--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category"
-)
-@click.option(
-    "--since", "since_days", type=click.IntRange(min=0), default=None, help="Only include entries from the last N days"
-)
-@click.option("--with-telemetry", is_flag=True, help="Include recent local telemetry context.")
-@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def feedback_triage(
-    target: str | None,
-    concern: str | None,
-    cluster_mode: bool,
-    since_days: int | None,
-    with_telemetry: bool,
-    output_format: str,
-) -> None:
-    """Show open entries grouped or clustered for triage."""
-    from science_tool.feedback import attach_telemetry_to_triage_rows, cluster_for_triage, group_for_triage
-
-    fb_dir = _get_feedback_dir()
-    if cluster_mode or output_format == "json":
-        rows = cluster_for_triage(fb_dir, target=target, concern=concern, since_days=since_days)
-        if with_telemetry:
-            from science_tool.telemetry import format_feedback_telemetry, get_telemetry_dir, read_events
-
-            rows = attach_telemetry_to_triage_rows(
-                rows,
-                events=read_events(get_telemetry_dir()),
-                since_days=since_days,
-            )
-        if not rows:
-            if output_format == "json":
-                emit_query_rows(
-                    output_format=output_format,
-                    title="Feedback Triage",
-                    columns=[],
-                    rows=[],
-                    meta={"cluster": True, "since_days": since_days, "with_telemetry": with_telemetry},
-                )
-            else:
-                click.echo("No open feedback entries.")
-            return
-        columns = [
-            ("target", "Target"),
-            ("concern", "Concern"),
-            ("category", "Category"),
-            ("count", "Count"),
-            ("total_recurrence", "Recur"),
-            ("suggested_status", "Suggested"),
-            ("suggested_next_test_target", "Next test target"),
-            ("representative_summary", "Summary"),
-            ("entry_ids", "Entries"),
-        ]
-        if with_telemetry:
-            columns.append(("telemetry_text", "Telemetry"))
-        table_rows = rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
-        emit_query_rows(
-            output_format=output_format,
-            title="Feedback Triage",
-            columns=columns,
-            rows=table_rows,
-            meta={"cluster": True, "since_days": since_days, "with_telemetry": with_telemetry},
-        )
-        return
-
-    groups = group_for_triage(fb_dir, target=target, concern=concern)
-
-    if not groups:
-        click.echo("No open feedback entries.")
-        return
-
-    telemetry_events: list[dict[str, object]] = []
-    if with_telemetry:
-        from science_tool.telemetry import get_telemetry_dir, read_events
-
-        telemetry_events = read_events(get_telemetry_dir())
-
-    for (concern_key, target_key), group in groups.items():
-        n_projects = len(group["projects"])
-        n_entries = len(group["entries"])
-        total_recur = group["total_recurrence"]
-        projects_str = ", ".join(sorted(group["projects"])) if group["projects"] else "unknown"
-        click.echo(
-            f"\n## [{concern_key}] {target_key}  "
-            f"({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
-        )
-        if with_telemetry:
-            from science_tool.telemetry import format_feedback_telemetry, summarize_recent_for_feedback_target
-
-            summary = summarize_recent_for_feedback_target(
-                telemetry_events,
-                target=group["target"],
-                since_days=since_days if since_days is not None else 14,
-            )
-            click.echo(f"Telemetry: {format_feedback_telemetry(summary)}")
-        for entry in group["entries"]:
-            click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
-
-
-def _feedback_triage_table_rows(rows: list[dict[str, object]], *, with_telemetry: bool) -> list[dict[str, object]]:
-    from science_tool.telemetry import format_feedback_telemetry
-
-    table_rows: list[dict[str, object]] = []
-    for row in rows:
-        entry_ids = row.get("entry_ids")
-        telemetry = row.get("telemetry")
-        copied = dict(row)
-        copied["entry_ids"] = ", ".join(str(entry_id) for entry_id in entry_ids) if isinstance(entry_ids, list) else ""
-        copied["telemetry_text"] = (
-            format_feedback_telemetry(cast(dict[str, object], telemetry))
-            if with_telemetry and isinstance(telemetry, dict)
-            else ""
-        )
-        table_rows.append(copied)
-    return table_rows
-
-
-def _telemetry_error_table_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    table_rows: list[dict[str, object]] = []
-    for row in rows:
-        failure = str(row.get("command") or "")
-        details = [
-            f"exit={row['exit_code']}" if isinstance(row.get("exit_code"), int) else "",
-            str(row.get("error_class") or ""),
-        ]
-        detail_text = " ".join(detail for detail in details if detail)
-        if detail_text:
-            failure = f"{failure} ({detail_text})" if failure else detail_text
-        table_rows.append(
-            {
-                "timestamp": row.get("timestamp", ""),
-                "failure": failure,
-                "argv": row.get("argv", ""),
-            }
-        )
-    return table_rows
-
-
-@feedback.command("scaffold-test")
-@click.argument("entry_id")
-@click.option(
-    "--out",
-    "out_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Output path for the pytest scaffold; relative paths are resolved from the current directory.",
-)
-@click.option("--dry-run", is_flag=True, help="Print the planned output path without writing.")
-@click.option("--force", is_flag=True, help="Overwrite an existing scaffold file.")
-def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, force: bool) -> None:
-    """Create a failing pytest scaffold for one feedback entry."""
-    from science_tool.feedback import scaffold_test_for_feedback
-
-    fb_dir = _get_feedback_dir()
-    try:
-        result = scaffold_test_for_feedback(
-            fb_dir,
-            entry_id,
-            project_root=Path.cwd(),
-            out_path=out_path,
-            force=force,
-            dry_run=dry_run,
-        )
-    except (FileNotFoundError, FileExistsError) as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    prefix = "[dry run] Would write" if dry_run else "Wrote"
-    click.echo(f"{prefix} feedback regression scaffold: {result.path}")
-    click.echo(f"Suggested existing test target: {result.suggested_test_target}")
-    click.echo(f"Replace the scaffold with a real failing test before closing {entry_id}.")
-
-
-@feedback.command("report")
-@click.option("--status", default=None, help="Filter by status")
-@click.option("--project", default=None, help="Filter by project")
-@click.option("--concern", default=None, help="Filter by concern (fnmatch glob)")
-def feedback_report(status: str | None, project: str | None, concern: str | None) -> None:
-    """Generate a markdown report of feedback entries."""
-    from science_tool.feedback import render_report
-
-    fb_dir = _get_feedback_dir()
-    report = render_report(fb_dir, status=status, project=project, concern=concern)
-    click.echo(report)
 
 
 # ── dataset (entity lifecycle) ──────────────────────────────────────────────

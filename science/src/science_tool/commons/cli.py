@@ -65,6 +65,13 @@ if TYPE_CHECKING:
     from science_model.entity_schema.profile import ProfileComponent
 
 
+COMMONS_TEXT_FORMATS: tuple[str, str] = ("text", "json")
+
+
+def _wants_json(*, as_json: bool, output_format: str) -> bool:
+    return as_json or output_format == "json"
+
+
 @click.group("commons")
 def commons_group() -> None:
     """Manage the shared knowledge store."""
@@ -88,13 +95,21 @@ def index_group() -> None:
 
 
 @index_group.command("rebuild")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON report.")
-def index_rebuild_cmd(as_json: bool) -> None:
+def index_rebuild_cmd(output_format: str, as_json: bool) -> None:
     """Rebuild registry.sqlite from filesystem state."""
     root = _require_root()
     adapter = CommonsEntityAdapter(root)
     report = RegistryBuilder(root, adapter).rebuild()
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         payload = {
             "entities_indexed": report.entities_indexed,
             "errors": [
@@ -127,13 +142,21 @@ def _require_root() -> Path:
 
 @commons_group.command("show")
 @click.argument("entity_id")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
 @click.option(
     "--project",
     default=None,
     help="Merge the named registered project's overlay into the entity.",
 )
-def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
+def show_cmd(entity_id: str, output_format: str, as_json: bool, project: str | None) -> None:
     """Print one entity by canonical id, optionally merged with a project overlay."""
     if project is None:
         root = _require_root()
@@ -141,7 +164,7 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
             record = CommonsQuery(root).show(entity_id)
         except CommonsError as exc:
             raise click.ClickException(str(exc)) from exc
-        if as_json:
+        if _wants_json(as_json=as_json, output_format=output_format):
             click.echo(json.dumps(_record_to_json(record, root), indent=2, sort_keys=True))
         else:
             _print_record_human(record)
@@ -157,7 +180,7 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
             f"inactive until Phase E; merged from live entity",
             err=True,
         )
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(_merged_to_json(merged), indent=2, sort_keys=True))
     else:
         _print_merged_human(merged)
@@ -200,6 +223,14 @@ def list_cmd(output_format: str) -> None:
 @click.option("--year-from", type=int, default=None, help="(paper only) Inclusive lower bound.")
 @click.option("--year-to", type=int, default=None, help="(paper only) Inclusive upper bound.")
 @click.option("--slug-glob", default=None, help="fnmatch pattern over slug.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
 def find_cmd(
     entity_type: str,
@@ -208,6 +239,7 @@ def find_cmd(
     year_from: int | None,
     year_to: int | None,
     slug_glob: str | None,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Filter the commons registry."""
@@ -227,7 +259,7 @@ def find_cmd(
         raise click.UsageError(str(exc)) from exc
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(
             json.dumps(
                 [_record_to_json(r, root) for r in records],
@@ -331,11 +363,20 @@ def _print_merged_human(merged: MergedEntity) -> None:
     default=None,
     help="Validate every overlay file in the named registered project.",
 )
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
 def validate_cmd(
     entity_type: str | None,
     slug: str | None,
     project: str | None,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Validate commons entities, or a project's overlay files with --project."""
@@ -346,7 +387,7 @@ def validate_cmd(
             overlay_report = validate_project_overlays(project)
         except CommonsError as exc:
             raise click.ClickException(str(exc)) from exc
-        if as_json:
+        if _wants_json(as_json=as_json, output_format=output_format):
             click.echo(
                 json.dumps(
                     {
@@ -374,7 +415,7 @@ def validate_cmd(
 
     root = _require_root()
     report = CommonsValidator(CommonsEntityAdapter(root)).validate(type=entity_type, slug=slug)
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         payload = {
             "checked": report.checked,
             "errors": [
@@ -425,8 +466,23 @@ def dataset_group() -> None:
 @click.option("--title", default=None, help="Dataset title. Defaults to title-cased slug.")
 @click.option("--version", default="0.1.0", show_default=True, help="Wrapper package version.")
 @click.option("--date", "today", default=None, help="Creation/update date override for tests.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | None, as_json: bool) -> None:
+def dataset_init_cmd(
+    slug: str,
+    title: str | None,
+    version: str,
+    today: str | None,
+    output_format: str,
+    as_json: bool,
+) -> None:
     """Create a commons-born dataset package scaffold."""
     root = _require_root()
     try:
@@ -445,7 +501,7 @@ def dataset_init_cmd(slug: str, title: str | None, version: str, today: str | No
         f"science commons dataset build {slug}",
         f"science commons dataset validate {slug}",
     ]
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         payload = {
             "created": created,
             "dataset_dir": str(dataset_dir),
@@ -481,8 +537,16 @@ def dataset_build_cmd(slug: str, cores: int) -> None:
 
 @dataset_group.command("status")
 @click.argument("slug")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def dataset_status_cmd(slug: str, as_json: bool) -> None:
+def dataset_status_cmd(slug: str, output_format: str, as_json: bool) -> None:
     """Report commons-born dataset package/build status."""
     root = _require_root()
     try:
@@ -490,7 +554,7 @@ def dataset_status_cmd(slug: str, as_json: bool) -> None:
     except (DatasetLifecycleError, CommonsError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         payload = {
             "datapackage_exists": status.datapackage_exists,
             "datapackage_placeholder_hashes": status.datapackage_placeholder_hashes,
@@ -518,8 +582,16 @@ def dataset_status_cmd(slug: str, as_json: bool) -> None:
 
 @dataset_group.command("validate")
 @click.argument("slug")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def dataset_validate_cmd(slug: str, as_json: bool) -> None:
+def dataset_validate_cmd(slug: str, output_format: str, as_json: bool) -> None:
     """Validate a commons-born dataset package."""
     root = _require_root()
     try:
@@ -527,7 +599,7 @@ def dataset_validate_cmd(slug: str, as_json: bool) -> None:
     except DatasetLifecycleError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(_dataset_validation_to_json(report, root), indent=2, sort_keys=True))
     else:
         state = "valid" if report.valid else "invalid"
@@ -576,14 +648,22 @@ def data_group() -> None:
 @data_group.command("resolve")
 @click.argument("dataset_id")
 @click.argument("logical_path")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
+def data_resolve_cmd(dataset_id: str, logical_path: str, output_format: str, as_json: bool) -> None:
     """Resolve DATASET_ID + LOGICAL_PATH to a verified absolute filesystem path."""
     try:
         resolved = resolve(dataset_id, logical_path)
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(
             json.dumps(
                 {
@@ -603,8 +683,16 @@ def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
 
 @commons_group.command("member-payload")
 @click.argument("member_id")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def member_payload_cmd(member_id: str, as_json: bool) -> None:
+def member_payload_cmd(member_id: str, output_format: str, as_json: bool) -> None:
     """Resolve a promoted virtual collection member payload."""
     try:
         payload = resolve_virtual_member_payload(member_id)
@@ -621,7 +709,7 @@ def member_payload_cmd(member_id: str, as_json: bool) -> None:
         "payload_kind": payload.payload_kind,
         "payload": payload.payload,
     }
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(rendered, indent=2, sort_keys=True))
         return
 
@@ -643,6 +731,14 @@ def reference_graph_group() -> None:
 @click.option("--date", "stamp", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Created/updated date.")
 @click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="use-now", show_default=True)
 @click.option("--apply", "apply_flag", is_flag=True, help="Write the promoted member dataset.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
 def reference_graph_scaffold_member_cmd(
     parent_dataset: str,
@@ -652,6 +748,7 @@ def reference_graph_scaffold_member_cmd(
     stamp: Any,
     tier: str,
     apply_flag: bool,
+    output_format: str,
     as_json: bool,
 ) -> None:
     """Scaffold a promoted bio.reference_graph.member dataset."""
@@ -669,7 +766,7 @@ def reference_graph_scaffold_member_cmd(
         raise click.ClickException(str(exc)) from exc
 
     root = _require_root()
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(planned.to_json(commons_root=root), indent=2, sort_keys=True))
         return
 
@@ -682,8 +779,16 @@ def reference_graph_scaffold_member_cmd(
 @reference_graph_group.command("resolve-member")
 @click.argument("registry_id")
 @click.argument("member_key")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(COMMONS_TEXT_FORMATS),
+    default="text",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, as_json: bool) -> None:
+def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, output_format: str, as_json: bool) -> None:
     """Resolve a graph member key in a pinned reference graph."""
     try:
         match = resolve_graph_member(member_key, registry_id=registry_id)
@@ -696,13 +801,13 @@ def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, as_jso
             "registry_id": registry_id,
             "member_key": member_key,
         }
-        if as_json:
+        if _wants_json(as_json=as_json, output_format=output_format):
             click.echo(json.dumps(payload, indent=2, sort_keys=True))
             return
         click.echo(f"unresolved {registry_id} {member_key}")
         return
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(match.to_json(), indent=2, sort_keys=True))
         return
 

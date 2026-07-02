@@ -6,14 +6,15 @@ graph summaries, and project health in version-controlled project files.
 
 This guide is the canonical user-facing manual for Science. It explains the
 project model, the entity system, the epistemic model, evidence authoring,
-derived graph state, validation, agent workflows, and cross-project work.
+derived graph state, validation, CLI workflows, agent workflows, and
+cross-project work.
 
 ## Reading Path
 
 1. Start with [Introduction](introduction.md) and [Science Model](science-model.md).
 2. Learn [Project Layout](project-layout.md) and [Entities](entities.md).
 3. Learn the [Epistemic Model](epistemic-model.md) and [Evidence Lines](evidence-lines.md).
-4. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Agent Workflows](agent-workflows.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Benchmarking](benchmarking.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
+4. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Benchmarking](benchmarking.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
 
 ## Chapters
 
@@ -28,6 +29,7 @@ derived graph state, validation, agent workflows, and cross-project work.
 | [Graph And Derived State](graph-and-derived-state.md) | How authored files become graph state, summaries, snapshots, and reports. |
 | [Big-Picture Synthesis](big-picture-synthesis.md) | Generated synthesis reports, question resolution, and topic-coverage knowledge gaps. |
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
+| [CLI And Workflows](cli-and-workflows.md) | Command families, write classes, canonical vs migration surfaces, and shared CLI behavior. |
 | [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
 | [Feedback And Telemetry](feedback-and-telemetry.md) | Feedback entries, concern taxonomy, local telemetry, redaction, reporting, pruning, and telemetry-assisted triage. |
 | [Benchmarking](benchmarking.md) | Benchmark metadata, validation, catalog coverage, opportunities, gaps, calibration, and read-only test projections. |

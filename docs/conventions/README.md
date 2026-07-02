@@ -4,10 +4,17 @@ This directory holds cross-cutting convention references — short, prescriptive
 
 Bar for entries: each doc should describe a pattern observed in two or more downstream projects (or a deliberately-promoted single-project pattern with a clear cross-project rationale), be self-contained, and be linkable from the relevant chapter under `docs/user-guide/`.
 
+Placement rule: put normal operation and conceptual orientation in
+`docs/user-guide/`, stable cross-project rules in `docs/conventions/`, and
+repeatable maintenance or audit recipes in `docs/process/`. Keep plans and specs
+as temporary design/execution records unless they have been promoted into one of
+those durable homes.
+
 ## Index
 
 - [`code-task-backlinks.md`](code-task-backlinks.md) — sanctioned patterns for linking code/notebooks back to tasks, questions, hypotheses, and interpretations.
 - [`citations-and-references.md`](citations-and-references.md) — bibliography authority, `science.references` bundles, v1 citation grammar, and Labnote app-package validation.
+- [`cli-behavior.md`](cli-behavior.md) — command scope, write classes, output formats, report-then-apply semantics, and migration/exploratory labels.
 - [`data-boundary.md`](data-boundary.md) — tracked source records vs ignored payload data, `science data audit`, conservative fixes, and `data_policy:` overrides.
 - [`pipeline-qa-checkpoints.md`](pipeline-qa-checkpoints.md) — concrete shape for a pipeline data-QA step (structural vs distribution severity, config-driven bounds including shared registry/enum validation, markdown report, fail-early on structural).
 - [`reproducible-manifest-dates.md`](reproducible-manifest-dates.md) — workflow-run / derived-dataset manifest `created`/`updated` must derive from run identity (run-slug date / `--produced-at` / commit time), not regeneration wall-clock, so manifests stay date-honest and byte-reproducible.
