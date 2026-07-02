@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -18,6 +19,7 @@ from science_tool.annotation.proposition_reconciliation_apply import (
     _path_string,
     _sha256_text,
 )
+from science_tool.annotation.proposition_reconciliation_plan import reconciliation_action_id
 from science_tool.annotation.proposition_resynthesis import (
     AnnotationAssignment,
     ResynthesisDraft,
@@ -122,12 +124,62 @@ def _validate(
         raise ResynthesisApplyError(str(exc)) from exc
 
 
+def _source_review_path(project_root: Path, source_review: str) -> Path:
+    path = Path(source_review)
+    if not path.is_absolute():
+        path = project_root / path
+    return path
+
+
+def _review_judgment_for_resume(project_root: Path, draft: ResynthesisDraft) -> Mapping[str, Any]:
+    review_path = _source_review_path(project_root, draft.source_review)
+    try:
+        loaded = json.loads(review_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ResynthesisApplyError(f"{review_path} failed resume identity validation: {exc}") from exc
+    if not isinstance(loaded, Mapping):
+        raise ResynthesisApplyError(f"{review_path} must contain a JSON object")
+    judgments = loaded.get("judgments")
+    if not isinstance(judgments, Sequence) or isinstance(judgments, str):
+        raise ResynthesisApplyError(f"{review_path} judgments must be a list")
+
+    candidate_matches: list[Mapping[str, Any]] = []
+    for judgment in judgments:
+        if not isinstance(judgment, Mapping):
+            continue
+        if judgment.get("candidate_id") == draft.candidate_id:
+            candidate_matches.append(judgment)
+            if judgment.get("judgment_id") == draft.judgment_id:
+                return judgment
+    if not candidate_matches:
+        raise ResynthesisApplyError("draft candidate_id is stale")
+    raise ResynthesisApplyError("draft judgment_id is stale")
+
+
+def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> None:
+    judgment = _review_judgment_for_resume(project_root, draft)
+    proposition = judgment.get("proposition")
+    if not isinstance(proposition, str) or not proposition:
+        raise ResynthesisApplyError("source review judgment has no proposition")
+    if proposition != draft.original_proposition:
+        raise ResynthesisApplyError("draft original_proposition is stale")
+    expected_action_id = reconciliation_action_id(
+        "resynthesize_proposition",
+        draft.judgment_id,
+        draft.original_proposition,
+    )
+    if expected_action_id != draft.action_id:
+        raise ResynthesisApplyError("draft action_id is stale")
+
+
 def _resume_validation_report(
     project_root: Path,
     draft: ResynthesisDraft,
     *,
     as_of: date | None,
 ) -> ResynthesisValidationReport | None:
+    _validate_resume_identity(project_root, draft)
+
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
     if len(replacements) != len(draft.new_propositions):
         return None

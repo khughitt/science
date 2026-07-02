@@ -299,6 +299,28 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     ).annotations[0].promoted_to == "proposition:broad-negative"
 
 
+def test_apply_resynthesis_draft_rejects_stale_candidate_id_without_writes(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["candidate_id"] = "factorization:stale"
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="draft candidate_id is stale"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert not (tmp_path / "entities" / "propositions" / "broad-positive.md").exists()
+    assert read_sidecar_strict(
+        tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    ).annotations[0].promoted_to == "proposition:broad"
+
+
 def test_apply_resynthesis_draft_split_partial_keeps_original_active(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
 
