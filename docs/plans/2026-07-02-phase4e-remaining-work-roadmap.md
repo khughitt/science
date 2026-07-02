@@ -55,6 +55,8 @@ Scope:
 - read live raw frontmatter during graph materialization;
 - emit `sci:supersededBy` for live `superseded_by`;
 - emit one `sci:supersededBy` edge per `resynthesized_into` target;
+- audit graph consumers before implementation so adding live-subject
+  `sci:supersededBy` triples does not accidentally trigger archive-only behavior;
 - fail loud on malformed or dangling live lineage.
 
 Why first:
