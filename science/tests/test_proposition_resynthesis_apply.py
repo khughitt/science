@@ -246,7 +246,6 @@ def test_apply_resynthesis_draft_creates_files_rewrites_sidecars_and_supersedes_
 
 def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     tmp_path: Path,
-    monkeypatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
 
@@ -254,7 +253,6 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
     draft = parse_resynthesis_draft(_draft_payload(ctx))
 
     first = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
-    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
     second = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
     assert first.changed_paths
@@ -271,7 +269,6 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
 
 def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_target(
     tmp_path: Path,
-    monkeypatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
 
@@ -292,7 +289,6 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     )
     before_sidecar = sidecar_path.read_text(encoding="utf-8")
     draft = parse_resynthesis_draft(_draft_payload(ctx))
-    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
 
     report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
@@ -307,7 +303,6 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
 
 def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     tmp_path: Path,
-    monkeypatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import (
         ResynthesisApplyError,
@@ -347,12 +342,31 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
         }
     )
     draft = parse_resynthesis_draft(payload)
-    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
 
     with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_missing_context_input_annotations(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    payload = _draft_payload(ctx)
+    del payload["context"]["input_annotations"]
+    missing_snapshot = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError, match="context.input_annotations"):
+        apply_resynthesis_draft(tmp_path, missing_snapshot, as_of=date(2026, 7, 2))
 
 
 def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_source_refs(

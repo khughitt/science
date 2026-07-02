@@ -18,13 +18,13 @@ from science_tool.annotation.proposition_reconciliation_apply import (
     _path_string,
     _sha256_text,
 )
+from science_tool.annotation.proposition_reconciliation_plan import reconciliation_action_id
 from science_tool.annotation.proposition_resynthesis import (
     AnnotationAssignment,
     ResynthesisDraft,
     ResynthesisDraftError,
     ResynthesisValidationReport,
-    _current_action_annotations,
-    _live_action_for_draft,
+    _read_review,
     _replacement_frontmatter_source_refs,
     _replacement_local_part,
     _validate_replacement_frontmatter,
@@ -125,11 +125,60 @@ def _validate(
 
 
 def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+    expected_action_id = reconciliation_action_id(
+        "resynthesize_proposition",
+        draft.judgment_id,
+        draft.original_proposition,
+    )
+    if draft.action_id != expected_action_id:
+        raise ResynthesisApplyError("draft action_id is stale")
+
+    review_path = Path(draft.source_review)
+    if not review_path.is_absolute():
+        review_path = project_root / review_path
     try:
-        action = _live_action_for_draft(project_root, draft)
-        return _current_action_annotations(action)
+        review_doc = _read_review(review_path)
     except ResynthesisDraftError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
+    judgments = review_doc.get("judgments")
+    if isinstance(judgments, str) or not isinstance(judgments, Sequence):
+        raise ResynthesisApplyError("source review judgments must be a list")
+
+    found_candidate = False
+    found_judgment = False
+    for judgment in judgments:
+        if not isinstance(judgment, Mapping):
+            continue
+        if judgment.get("candidate_id") == draft.candidate_id:
+            found_candidate = True
+        if judgment.get("judgment_id") == draft.judgment_id:
+            found_judgment = True
+        if judgment.get("candidate_id") != draft.candidate_id:
+            continue
+        if judgment.get("judgment_id") != draft.judgment_id:
+            continue
+        if judgment.get("proposition") != draft.original_proposition:
+            raise ResynthesisApplyError("source review judgment proposition is stale")
+        return _draft_context_input_annotations(draft)
+
+    if found_judgment:
+        raise ResynthesisApplyError("draft candidate_id is stale")
+    if found_candidate:
+        raise ResynthesisApplyError("draft judgment_id is stale")
+    raise ResynthesisApplyError("source review judgment for draft was not found")
+
+
+def _draft_context_input_annotations(draft: ResynthesisDraft) -> set[str]:
+    annotations = draft.context.get("input_annotations")
+    if isinstance(annotations, str) or not isinstance(annotations, Sequence):
+        raise ResynthesisApplyError("context.input_annotations must be a list of annotation refs")
+
+    current_annotations: set[str] = set()
+    for annotation in annotations:
+        if not isinstance(annotation, str) or not annotation:
+            raise ResynthesisApplyError("context.input_annotations must contain non-empty strings")
+        current_annotations.add(annotation)
+    return current_annotations
 
 
 def _resume_validation_report(

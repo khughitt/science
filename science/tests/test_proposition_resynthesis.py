@@ -260,7 +260,7 @@ def _draft_payload(ctx: dict) -> dict:
                 "to": "proposition:broad-negative",
             },
         ],
-        "context": {},
+        "context": {"input_annotations": list(ctx["action"].inputs["annotations"])},
         "notes": "",
     }
 
