@@ -4,13 +4,18 @@ Date: 2026-07-02
 
 ## 1. Purpose
 
-This roadmap tracks the work left after Phase 4e Half A-D:
+This roadmap tracks the work left after Phase 4e Half A-D plus the follow-up
+lineage/archive slices:
 
 - Half A: deterministic reconciliation candidates plus reviewed judgment files;
 - Half B: read-only action planning from reviewed judgments;
 - Half C: narrow apply surface for reviewed `same_claim` canonicalization;
 - Half D: narrow scaffold/validate/apply surface for reviewed factorization
-  resynthesis.
+  resynthesis;
+- live lineage visibility: graph-visible `sci:supersededBy` for live
+  `superseded_by` / `resynthesized_into` frontmatter;
+- superseded proposition archive: deliberate archive movement for settled
+  superseded propositions.
 
 The shipped path is usable, but several adjacent capabilities remain intentionally
 deferred. This document keeps those deferrals visible without turning them into
@@ -18,25 +23,21 @@ stale implementation plans.
 
 ## 2. Recommended Order
 
-1. **Live lineage visibility.**
-   Make live `superseded_by` and `resynthesized_into` frontmatter graph-visible via
-   `sci:supersededBy`. This closes the most concrete gap left by Half C/D.
+1. **Reviewed decision persistence.**
+   Persist advisory/non-merge reconciliation judgments so reviewed candidates do not
+   repeatedly resurface as if no decision had been made.
 
 2. **Agent-assisted resynthesis draft filling.**
    Use Half D's scaffold context, observed statement hints, and reviewer rationale
    to draft replacement propositions and annotation assignments. The output remains
    a reviewed draft artifact; apply stays deterministic and mechanical.
 
-3. **Archive movement for settled superseded propositions.**
-   Once live lineage is graph-visible and stable, add a deliberate archive path for
-   superseded propositions that no longer need to remain in the active entity tree.
-
-4. **Richer claim-family suggestions.**
+3. **Richer claim-family suggestions.**
    Improve factorization candidate context by clustering observed statement hints
    into explainable claim families. This should improve review and draft-filling
    ergonomics without changing belief semantics.
 
-5. **Explicit relation/approval metadata.**
+4. **Explicit relation/approval metadata.**
    Add explicit relation authoring or saved-draft approval metadata only when a
    downstream consumer needs more than the current source string and frontmatter
    lineage fields.
@@ -45,10 +46,13 @@ stale implementation plans.
 
 ### Live Lineage Visibility
 
-Status: designed; implementation plan not drafted.
+Status: implemented.
 
 Design doc:
 `docs/plans/2026-07-02-phase4e-live-lineage-visibility-design.md`
+
+Implementation plan:
+`docs/plans/2026-07-02-phase4e-live-lineage-visibility-implementation-plan.md`
 
 Scope:
 
@@ -63,6 +67,51 @@ Why first:
 
 Half C/D already write durable lineage. Making that lineage visible in the graph
 unblocks later health, archive, and consumer-facing surfaces.
+
+### Superseded Proposition Archive
+
+Status: implemented.
+
+Design doc:
+`docs/plans/2026-07-02-phase4e-superseded-proposition-archive-design.md`
+
+Implementation plan:
+`docs/plans/2026-07-02-phase4e-superseded-proposition-archive-plan.md`
+
+Scope:
+
+- select live `status: superseded` propositions with resolvable lineage;
+- block archive movement while live sidecars still promote annotations to the
+  superseded proposition;
+- preserve `superseded_by` and `resynthesized_into` in archive rows;
+- keep lineage graph-visible after archive movement.
+
+Why complete:
+
+The 4e lifecycle can now move safely from reviewed reconciliation, to deterministic
+apply, to graph-visible lineage, to deliberate archive movement for settled
+superseded propositions.
+
+### Reviewed Decision Persistence
+
+Status: designed; implementation plan not drafted.
+
+Design doc:
+`docs/plans/2026-07-02-phase4e-reviewed-decision-persistence-design.md`
+
+Likely shape:
+
+- consume Half B advisory action plans;
+- persist reviewed non-merge / no-mutation decisions in a deterministic project-local
+  decision log;
+- let reconciliation reports suppress or annotate candidates already covered by a
+  current reviewed decision;
+- fail loud on stale decisions rather than silently hiding live candidates.
+
+Open questions:
+
+- how much stale-decision diagnostics should appear in `reconcile-propositions`
+  versus a separate validate command.
 
 ### Agent-Assisted Resynthesis Draft Filling
 
@@ -83,23 +132,6 @@ Open questions:
   by a deterministic slugger;
 - how much of the reviewer rationale should be copied into replacement proposition
   bodies versus kept only as draft notes.
-
-### Archive Movement For Settled Superseded Propositions
-
-Status: blocked on live lineage visibility.
-
-Likely shape:
-
-- select `status: superseded` propositions with resolvable lineage;
-- verify no live sidecar `promoted_to` values still point at the superseded owner;
-- move files through existing archive machinery rather than deleting them;
-- preserve lineage in the archive index so graph tombstone behavior remains intact.
-
-Open questions:
-
-- when a superseded proposition is "settled" enough to archive;
-- whether archive should be manual-only or plan/apply;
-- how to handle superseded propositions that still carry historical source refs.
 
 ### Richer Claim-Family Suggestions
 
