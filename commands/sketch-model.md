@@ -151,23 +151,32 @@ science inquiry init "<slug>" \
   --label "<descriptive label>" \
   --target "<hypothesis:hNN or question:qNN>" \
   --profile causal \
-  --treatment "concept:<treatment>" \
-  --outcome "concept:<outcome>"
+  --treatment "<existing-treatment-ref>" \
+  --outcome "<existing-outcome-ref>"
 ```
+
+Treatment and outcome refs may be `concept:*` only when the concept already
+resolves through `terms.yaml` or another supported source owner.
 
 2. **Create or update durable source entities**
 
-Create or update source records before referencing them from the inquiry. Prefer
-normal entity files under `entities/` when the variable, question, hypothesis,
-dataset, or proposition is a durable project concept. Use CLI helpers where
-available, then rebuild the graph.
+Create or update source records before referencing them from the inquiry. Use
+the most specific registered source kind available, such as `question`,
+`hypothesis`, `dataset`, `proposition`, `method`, `construct`, or a declared
+domain kind. Use CLI helpers where available, then rebuild the graph.
 
-For standalone durable concept-like records, use the generic entity lifecycle
-only for source kinds the project actually supports or has registered:
+For durable source records, use the generic entity lifecycle only for source
+kinds the project actually supports or has registered:
 
 ```bash
 science entity create <kind> "<title>" --id "<kind>:<slug>"
 ```
+
+`concept` is currently a known CLI/model mismatch: the model declares
+`entities/concepts`, but the entity writer does not support routine
+`science entity create concept` authoring. Do not use `science entity create concept` in this workflow.
+Use a registered source kind, a lightweight `terms.yaml` row, or prose deferral
+instead.
 
 Do not invent unsupported `concept`, `variable`, or `unknown` entity files just
 to satisfy a sketch. If no supported durable source kind exists yet, describe
@@ -183,26 +192,29 @@ from source files.
 
 3. **Edit the `inquiry:` block**
 
-Open `entities/patches/<slug>.md` and add boundary roles and flow edges:
+Open `entities/patches/<slug>.md` and add boundary roles and flow edges.
+
+Refs may be `concept:*` only when the concept already resolves through
+`terms.yaml` or another supported source owner.
 
 ```yaml
 inquiry:
   profile: investigation
   status: sketch
   boundary_roles:
-    - ref: "concept:<input>"
+    - ref: "<existing-input-ref>"
       role: BoundaryIn
-    - ref: "concept:<output>"
+    - ref: "<existing-output-ref>"
       role: BoundaryOut
   flow_edges:
-    - subject: "concept:<from>"
+    - subject: "<existing-from-ref>"
       predicate: feedsInto
-      object: "concept:<to>"
+      object: "<existing-to-ref>"
       claim_refs: []
   assumptions: []
   transformations: []
   unknowns:
-    - "concept:<unknown>"
+    - "<existing-unknown-ref>"
 ```
 
 Use `predicate: causes` for causal edges in a causal inquiry. Do not imply that

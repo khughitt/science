@@ -112,14 +112,15 @@ For each important variable:
    - Where does this variable definition come from?
 
 For inquiry-patch projects, record durable variable refs in
-`entities/patches/<slug>.md`. Add or update source entity files under
-`entities/` for variables that are durable project concepts, then rebuild the
-graph from source.
+`entities/patches/<slug>.md`. Make sure those refs resolve through source
+records or lightweight term rows before rebuilding the graph from source. Use a
+more specific registered source kind when one exists; do not assume `concept`
+entity authoring is available today.
 
 Direct `science graph add concept` writes are exploratory and non-durable. They
 write to `knowledge/graph.trig`, which is regenerated from source files. Use
-them only for temporary graph inspection, and repeat the durable definition in a
-source file before treating the model as specified:
+them only for temporary graph inspection. Do not treat graph-added concepts as
+owners for variables, treatment/outcome refs, or unknowns.
 
 ```bash
 science graph add concept "<name>" --type <CURIE> --definition "<definition>"
@@ -142,12 +143,16 @@ science propositions create "<clear proposition title>" \
   --source-ref "<ref>"
 ```
 
-Then fill the proposition file with explicit subject-predicate-object structure in prose and, when useful, frontmatter fields such as:
+Then fill the proposition file with explicit subject-predicate-object structure
+in prose and, when useful, frontmatter fields such as the following.
+
+`concept:*` refs are acceptable here only when they already resolve through a
+source owner or lightweight term row.
 
 ```yaml
-subject: "concept:<subject>"
+subject: "<existing-subject-ref>"
 predicate: "<predicate>"
-object: "concept:<object>"
+object: "<existing-object-ref>"
 claim_layer: "empirical_regularity|causal_effect|mechanistic_narrative|structural_claim"
 ```
 
@@ -158,9 +163,9 @@ Edit `entities/patches/<slug>.md` and add the proposition to the edge's
 
 ```yaml
 flow_edges:
-  - subject: "concept:<subject>"
+  - subject: "<existing-subject-ref>"
     predicate: feedsInto
-    object: "concept:<object>"
+    object: "<existing-object-ref>"
     claim_refs:
       - "proposition:<id>"
 ```
