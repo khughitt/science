@@ -9,7 +9,7 @@ from science_tool.annotation import proposition_resynthesis_apply as apply_modul
 from science_tool.annotation.cross_paper_evidence import build_cross_paper_evidence_report
 from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
 from science_tool.annotation.query import read_sidecar_strict
-from science_tool.entities import parse_markdown_entity_file
+from science_tool.entities import parse_markdown_entity_file, render_entity_frontmatter_updates
 
 from test_proposition_resynthesis import _ann, _draft_payload, _factorization_project, _paper_sidecar
 
@@ -244,13 +244,17 @@ def test_apply_resynthesis_draft_creates_files_rewrites_sidecars_and_supersedes_
     assert all(not path.startswith("/") for path in payload["written_paths"])
 
 
-def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(tmp_path: Path):
+def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(
+    tmp_path: Path,
+    monkeypatch,
+):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
 
     ctx = _factorization_project(tmp_path)
     draft = parse_resynthesis_draft(_draft_payload(ctx))
 
     first = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
     second = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
     assert first.changed_paths
@@ -267,6 +271,7 @@ def test_apply_resynthesis_draft_second_run_is_noop_and_preserves_dates(tmp_path
 
 def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_target(
     tmp_path: Path,
+    monkeypatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
 
@@ -287,6 +292,7 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
     )
     before_sidecar = sidecar_path.read_text(encoding="utf-8")
     draft = parse_resynthesis_draft(_draft_payload(ctx))
+    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
 
     report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
@@ -301,6 +307,7 @@ def test_apply_resynthesis_draft_resumes_when_one_sidecar_already_points_to_targ
 
 def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
     tmp_path: Path,
+    monkeypatch,
 ):
     from science_tool.annotation.proposition_resynthesis_apply import (
         ResynthesisApplyError,
@@ -340,8 +347,73 @@ def test_apply_resynthesis_draft_resume_rejects_unreviewed_live_assignment(
         }
     )
     draft = parse_resynthesis_draft(payload)
+    monkeypatch.setattr(apply_module, "_live_action_for_draft", lambda _root, _draft: ctx["action"])
 
     with pytest.raises(ResynthesisApplyError, match="not a current input annotation"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
+
+
+def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_source_refs(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    for citekey, annotation_id, target in (
+        ("A2020", "a1", "proposition:broad-positive"),
+        ("B2021", "b1", "proposition:broad-negative"),
+    ):
+        sidecar_path = tmp_path / "entities" / "papers" / f"{citekey}.source.anno.trig"
+        sidecar = anno_io.read_sidecar(sidecar_path)
+        anno_io.write_sidecar(
+            sidecar_path,
+            replace(
+                sidecar,
+                annotations=tuple(
+                    replace(annotation, promoted_to=target)
+                    if annotation.id == annotation_id
+                    else annotation
+                    for annotation in sidecar.annotations
+                ),
+            ),
+        )
+    c_sidecar_path = _paper_sidecar(
+        tmp_path,
+        "C2022",
+        (_ann("c1", "proposition:broad", stance="asserted"),),
+    )
+    original_path = tmp_path / "entities" / "propositions" / "broad.md"
+    original_frontmatter, _body = parse_markdown_entity_file(original_path)
+    rendered, changed = render_entity_frontmatter_updates(
+        original_path,
+        {
+            "source_refs": [
+                *original_frontmatter["source_refs"],
+                "paper:C2022",
+                "annotation:entities/papers/C2022.source#c1",
+            ]
+        },
+        as_of=date(2026, 7, 1),
+    )
+    assert changed is True
+    original_path.write_text(rendered, encoding="utf-8")
+
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"].append(
+        {
+            "annotation": "annotation:entities/papers/C2022.source#c1",
+            "from": "proposition:broad",
+            "to": "proposition:broad-positive",
+        }
+    )
+    draft = parse_resynthesis_draft(payload)
+
+    with pytest.raises(ResynthesisApplyError):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
 
     assert read_sidecar_strict(c_sidecar_path).annotations[0].promoted_to == "proposition:broad"
