@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from rdflib import Dataset
+from rdflib.namespace import RDF
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation import proposition_archive
@@ -29,6 +31,7 @@ from science_tool.archive import (
     derive_archive_path,
     load_archive_index,
 )
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
 def _seed(root: Path) -> None:
@@ -95,6 +98,20 @@ def _ann(
 
 def _candidate_by_id(report: dict, ref: str) -> dict:
     return next(candidate for candidate in report["candidates"] if candidate["id"] == ref)
+
+
+def _knowledge_graph(root: Path):
+    from science_tool.graph.materialize import materialize_graph
+
+    out_path = materialize_graph(root, strict=False)
+    dataset = Dataset()
+    dataset.parse(source=str(out_path), format="trig")
+    return dataset.graph(PROJECT_NS["graph/knowledge"])
+
+
+def _entity_uri(ref: str):
+    kind, slug = ref.split(":", 1)
+    return PROJECT_NS[f"{kind}/{slug}"]
 
 
 def _blocked_candidate(root: Path, extra_frontmatter: str, *, slug: str = "duplicate") -> dict:
@@ -650,3 +667,48 @@ def test_apply_is_idempotent_after_success(tmp_path: Path) -> None:
     assert report["summary"] == {"ready": 0, "blocked": 0, "skipped": 0}
     assert report["applied"] == []
     assert report["skipped"] == []
+
+
+def test_scalar_lineage_graph_triple_survives_archive_movement(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "canonical")
+    _proposition(tmp_path, "duplicate", status="superseded", extra_frontmatter="superseded_by: proposition:canonical\n")
+
+    before = _knowledge_graph(tmp_path)
+    archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+    after = _knowledge_graph(tmp_path)
+
+    triple = (
+        _entity_uri("proposition:duplicate"),
+        SCI_NS.supersededBy,
+        _entity_uri("proposition:canonical"),
+    )
+    assert triple in before
+    assert triple in after
+    assert (_entity_uri("proposition:duplicate"), RDF.type, SCI_NS.ArchivedEntity) in after
+
+
+def test_multi_successor_graph_triples_survive_archive_movement(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _proposition(tmp_path, "negative")
+    _proposition(tmp_path, "positive")
+    _proposition(
+        tmp_path,
+        "broad",
+        status="superseded",
+        extra_frontmatter=(
+            "resynthesized_into:\n"
+            "  - proposition:positive\n"
+            "  - proposition:negative\n"
+        ),
+    )
+
+    before = _knowledge_graph(tmp_path)
+    archive_superseded_propositions(tmp_path, apply=True, now="2026-07-02T12:00:00Z")
+    after = _knowledge_graph(tmp_path)
+
+    broad = _entity_uri("proposition:broad")
+    expected = {_entity_uri("proposition:negative"), _entity_uri("proposition:positive")}
+    assert set(before.objects(broad, SCI_NS.supersededBy)) == expected
+    assert set(after.objects(broad, SCI_NS.supersededBy)) == expected
+    assert (broad, RDF.type, SCI_NS.ArchivedEntity) in after
