@@ -308,6 +308,143 @@ def test_build_resynthesis_context_packet_expands_scaffold_with_live_context(tmp
     )
 
 
+def test_resynthesis_context_derives_constraints_has_no_timestamps_and_echoes_progress(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        ALLOWED_REPLACEMENT_FRONTMATTER_KEYS,
+        RESYNTHESIS_DISPOSITIONS,
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["notes"] = "Reviewer wants a conservative split."
+    draft = parse_resynthesis_draft(payload)
+
+    packet = build_resynthesis_context_packet(tmp_path, draft, draft_path="draft.json")
+    encoded = json.dumps(packet, sort_keys=True)
+
+    assert packet["constraints"]["allowed_dispositions"] == sorted(RESYNTHESIS_DISPOSITIONS)
+    assert packet["constraints"]["allowed_replacement_frontmatter_keys"] == sorted(
+        ALLOWED_REPLACEMENT_FRONTMATTER_KEYS
+    )
+    assert packet["draft_progress"]["disposition"] == "replace"
+    assert packet["draft_progress"]["new_propositions"] == payload["new_propositions"]
+    assert packet["draft_progress"]["annotation_assignments"] == payload["annotation_assignments"]
+    assert packet["draft_progress"]["notes"] == "Reviewer wants a conservative split."
+    assert "2026-07-03" not in encoded
+    assert "created" not in packet["original_proposition"]["frontmatter"]
+    assert "updated" not in packet["original_proposition"]["frontmatter"]
+
+
+def test_resynthesis_context_rejects_missing_observed_hint_for_input_annotation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    draft = parse_resynthesis_draft(payload)
+    action = replace(
+        ctx["action"],
+        inputs={
+            **ctx["action"].inputs,
+            "observed_statement_hints": tuple(ctx["action"].inputs["observed_statement_hints"][:1]),
+        },
+    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    with pytest.raises(ResynthesisDraftError, match="has no observed statement hint"):
+        build_resynthesis_context_packet(tmp_path, draft)
+
+
+def test_resynthesis_context_excludes_annotationless_hints_from_assignment_rows(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    draft = parse_resynthesis_draft(payload)
+    annotationless_hint = {
+        "paper": "paper:NoAnnotation2026",
+        "stance": "asserted",
+        "section": "discussion",
+        "subject": "BES",
+        "object": "unassignable claim text",
+        "subject_concept": None,
+        "object_concept": None,
+        "exact": "This hint has no annotation ref.",
+    }
+    action = replace(
+        ctx["action"],
+        inputs={
+            **ctx["action"].inputs,
+            "observed_statement_hints": (
+                *ctx["action"].inputs["observed_statement_hints"],
+                annotationless_hint,
+            ),
+        },
+    )
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    packet = build_resynthesis_context_packet(tmp_path, draft)
+
+    assert [row["annotation"] for row in packet["input_annotations"]] == list(payload["input_annotations"])
+    assert all(row.get("exact") != "This hint has no annotation ref." for row in packet["input_annotations"])
+
+
+def test_resynthesis_context_preserves_subject_object_hint_fields(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    draft = parse_resynthesis_draft(payload)
+    hints = tuple(
+        {
+            **hint,
+            "subject": "BES",
+            "object": "meta-analysis behavior",
+            "subject_concept": "concept:bes",
+            "object_concept": "concept:meta-analysis",
+        }
+        if hint.get("annotation") == "annotation:entities/papers/A2020.source#a1"
+        else hint
+        for hint in ctx["action"].inputs["observed_statement_hints"]
+    )
+    action = replace(ctx["action"], inputs={**ctx["action"].inputs, "observed_statement_hints": hints})
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    packet = build_resynthesis_context_packet(tmp_path, draft)
+    row = packet["input_annotations"][0]
+
+    assert row["annotation"] == "annotation:entities/papers/A2020.source#a1"
+    assert row["subject"] == "BES"
+    assert row["object"] == "meta-analysis behavior"
+    assert row["subject_concept"] == "concept:bes"
+    assert row["object_concept"] == "concept:meta-analysis"
+
+
 def test_build_resynthesis_context_packet_uses_draft_placeholder_without_path(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import (
         build_resynthesis_context_packet,
