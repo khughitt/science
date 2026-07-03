@@ -1,0 +1,136 @@
+{
+  "actions": [
+    {
+      "action_id": "reconcile-action:48c71016a0a5ad04a2536d5c8685221124b6c3794b15a0dd9ff28278a07be538",
+      "blockers": [],
+      "candidate_id": "reconcile:factorization/3d258aa71a79219a27a4c1258106b072cd1f0f94b077e77adc18c4f3eec0dc46",
+      "confidence": "high",
+      "decision": "accepted_sparse_hints",
+      "inputs": {
+        "annotations": [
+          "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+          "annotation:entities/papers/Volker2023.source#bes-not-data-pooling"
+        ],
+        "assertion_fingerprint": "sha256:a8043ece1aa7126d00b6384c49af7c68c9c028446df723e66b11d73c0b48bb8e",
+        "disagreement": [
+          "multiple assertions have insufficient factorization hints"
+        ],
+        "observed_statement_hints": [
+          {
+            "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+            "exact": "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative.",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:VanWonderen2024",
+            "section": "key-findings",
+            "stance": "asserted",
+            "subject": null,
+            "subject_concept": null
+          },
+          {
+            "annotation": "annotation:entities/papers/Volker2023.source#bes-not-data-pooling",
+            "exact": "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis.",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:Volker2023",
+            "section": "key-findings",
+            "stance": "asserted",
+            "subject": null,
+            "subject_concept": null
+          }
+        ],
+        "papers": [
+          "paper:VanWonderen2024",
+          "paper:Volker2023"
+        ]
+      },
+      "judgment_id": "reconcile:judgment/1a5941bea0e77cc87ae1deede1305c4950ca1003a9e5935515c937fa4f0a17d6",
+      "kind": "record_reconciliation_decision",
+      "preconditions": [],
+      "proposition": "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data",
+      "rationale": "The proposition is already factored in frontmatter; the remaining candidate reflects sparse statement-hint metadata on two concordant asserted annotations, not a reconciliation need.",
+      "review_source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+      "source_review": "meta/results/proposition-reconciliation/2026-07-03-bes-negative-sparse-hints-review.json",
+      "status": "advisory",
+      "suggested_operations": [
+        {
+          "detail": "Record reviewed closure for the current sparse-hint candidate.",
+          "kind": "record_sparse_hint_closure"
+        }
+      ],
+      "writes": []
+    },
+    {
+      "action_id": "reconcile-action:6fc2b422c591050e0db27099f44d3d22341f7e2dda3dab576e7b42951d5fab55",
+      "blockers": [],
+      "candidate_id": "reconcile:factorization/121d907c080a2c073dc7e12d7bb4acf4c4d3e45381809c172a2c190d8ec02117",
+      "confidence": "medium",
+      "decision": "accepted_sparse_hints",
+      "inputs": {
+        "annotations": [
+          "annotation:entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation",
+          "annotation:entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation"
+        ],
+        "assertion_fingerprint": "sha256:fc19d5b507a6a30066dfcad6ce5bd4f73282ad95485dfc9f0290f0a2bc836885",
+        "disagreement": [
+          "multiple assertions have insufficient factorization hints"
+        ],
+        "observed_statement_hints": [
+          {
+            "annotation": "annotation:entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation",
+            "exact": "Klugkist and Volker introduce Bayesian evidence synthesis (BES) as a way to combine Bayes factors for informative hypotheses across multiple studies that address a common theory but may use different designs, measurements, parameters, or statistical models [@Klugkist2023].",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:Klugkist2023",
+            "section": "key-contribution",
+            "stance": "asserted",
+            "subject": null,
+            "subject_concept": null
+          },
+          {
+            "annotation": "annotation:entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation",
+            "exact": "Van Lissa, Clapper, and Kuiper present the product Bayes factor (PBF) as a practical method for aggregating support for an informative hypothesis across heterogeneous conceptual replication studies [@VanLissa2024].",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:VanLissa2024",
+            "section": "key-contribution",
+            "stance": "asserted",
+            "subject": null,
+            "subject_concept": null
+          }
+        ],
+        "papers": [
+          "paper:Klugkist2023",
+          "paper:VanLissa2024"
+        ]
+      },
+      "judgment_id": "reconcile:judgment/ac806937c0f3b8c1ae054b44cccab34d438d71ccdf9bebd1beb5261dc0486579",
+      "kind": "record_reconciliation_decision",
+      "preconditions": [],
+      "proposition": "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses",
+      "rationale": "The proposition intentionally makes a broad cross-method claim over BES and product Bayes factor examples; the current sparse-hint candidate reflects missing statement-hint metadata, not a current need to split or resynthesize the proposition.",
+      "review_source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+      "source_review": "meta/results/proposition-reconciliation/2026-07-03-conceptual-replication-sparse-hints-review.json",
+      "status": "advisory",
+      "suggested_operations": [
+        {
+          "detail": "Record reviewed closure for the current sparse-hint candidate.",
+          "kind": "record_sparse_hint_closure"
+        }
+      ],
+      "writes": []
+    }
+  ],
+  "errors": [],
+  "schema_version": 1,
+  "source_reviews": [
+    "meta/results/proposition-reconciliation/2026-07-03-bes-negative-sparse-hints-review.json",
+    "meta/results/proposition-reconciliation/2026-07-03-conceptual-replication-sparse-hints-review.json"
+  ],
+  "summary": {
+    "advisory_actions": 2,
+    "blocked_actions": 0,
+    "errors": 0,
+    "ready_actions": 0
+  }
+}
