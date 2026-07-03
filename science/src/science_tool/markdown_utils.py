@@ -13,7 +13,15 @@ from pathlib import Path
 import yaml
 
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
+_INLINE_CODE_RE = re.compile(r"(`+).*?\1")
+
+
+class UnterminatedHtmlCommentError(ValueError):
+    """Raised when rendered-prose scanning encounters an unclosed HTML comment."""
+
+    def __init__(self, offset: int) -> None:
+        self.offset = offset
+        super().__init__(f"unterminated HTML comment starting at character {offset}")
 
 
 def is_fence_line(line: str) -> bool:
@@ -28,6 +36,69 @@ def strip_inline_code(line: str) -> str:
     in prose about the convention itself) from prose-level scanning.
     """
     return _INLINE_CODE_RE.sub("", line)
+
+
+def strip_html_comments(text: str) -> str:
+    """Remove balanced HTML comments from rendered-prose text.
+
+    Stray ``-->`` tokens outside comment mode are visible prose and are preserved.
+    An unclosed ``<!--`` fails closed because treating the rest of the file as a
+    comment would hide real citations from validation.
+    """
+    out: list[str] = []
+    index = 0
+    while index < len(text):
+        start = text.find("<!--", index)
+        if start == -1:
+            out.append(text[index:])
+            break
+        out.append(text[index:start])
+        end = text.find("-->", start + 4)
+        if end == -1:
+            raise UnterminatedHtmlCommentError(start)
+        index = end + 3
+    return "".join(out)
+
+
+def strip_html_comments_preserving_code(markdown: str) -> str:
+    """Remove HTML comments from displayed Markdown while keeping code verbatim.
+
+    Fenced-code delimiters and their contents pass through unchanged; within
+    non-fenced regions, inline-code spans are protected before comment removal.
+    Used for exported prose text, not the citation scan.
+    """
+    result: list[str] = []
+    buffer: list[str] = []
+    in_fence = False
+
+    def flush() -> None:
+        if not buffer:
+            return
+        block = "\n".join(buffer)
+        buffer.clear()
+        stash: list[str] = []
+
+        def _protect(match: re.Match[str]) -> str:
+            stash.append(match.group(0))
+            return f"\x00{len(stash) - 1}\x00"
+
+        protected = _INLINE_CODE_RE.sub(_protect, block)
+        stripped = strip_html_comments(protected)
+        restored = re.sub(r"\x00(\d+)\x00", lambda m: stash[int(m.group(1))], stripped)
+        result.append(restored)
+
+    for line in markdown.splitlines():
+        if is_fence_line(line):
+            flush()
+            result.append(line)
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            result.append(line)
+            continue
+        buffer.append(line)
+    flush()
+    return "\n".join(result)
 
 
 def frontmatter_line_numbers(path: Path) -> set[int]:

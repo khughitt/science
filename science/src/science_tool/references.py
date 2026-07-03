@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.bibliography import BibEntry, load_bib_entries, raw_bib_entry_keys
-from science_tool.markdown_utils import is_fence_line, strip_inline_code
+from science_tool.markdown_utils import is_fence_line, strip_html_comments, strip_inline_code
 
 
 def _split_authors(raw: str) -> list[str]:
@@ -230,7 +230,7 @@ def _parse_block(inner: str) -> tuple[list[Citation], list[str]]:
 
 
 def _prose_lines(markdown: str) -> list[str]:
-    """Lines with inline code stripped and fenced-code blocks removed."""
+    """Rendered-prose lines: fenced code, inline code, then HTML comments removed."""
     lines: list[str] = []
     in_fence = False
     for line in markdown.splitlines():
@@ -240,7 +240,7 @@ def _prose_lines(markdown: str) -> list[str]:
         if in_fence:
             continue
         lines.append(strip_inline_code(line))
-    return lines
+    return strip_html_comments("\n".join(lines)).splitlines()
 
 
 def parse_citations(markdown: str) -> CitationScan:

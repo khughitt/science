@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from science_tool.bibliography import BibEntry
+from science_tool.markdown_utils import UnterminatedHtmlCommentError
 from science_tool.references import (
     CONTRACT,
     SCHEMA_VERSION,
@@ -165,6 +166,12 @@ def test_validate_fails_closed_on_unknown_key() -> None:
     assert "Missing2026" in exc.value.unresolved
 
 
+def test_validate_visible_placeholder_citekey_still_fails_closed() -> None:
+    with pytest.raises(UnresolvedCitationError) as exc:
+        validate_exported_markdown(_payload("Visible placeholder [@citekey]."), {"Smith2020"})
+    assert "citekey" in exc.value.unresolved
+
+
 def test_validate_partial_returns_unresolved_block() -> None:
     unresolved = validate_exported_markdown(
         _payload("bad [@Missing2026]"), {"Smith2020"}, allow_partial=True
@@ -180,3 +187,53 @@ def test_validate_partial_returns_unresolved_block() -> None:
 def test_validate_fails_on_unsupported_syntax_even_with_partial() -> None:
     with pytest.raises(UnsupportedCitationSyntaxError):
         validate_exported_markdown(_payload("see [-@Smith2020]"), {"Smith2020"}, allow_partial=True)
+
+
+def _citation_pairs(markdown: str) -> list[tuple[str, str | None]]:
+    scan = parse_citations(markdown)
+    assert scan.unsupported == []
+    return [(citation.citekey, citation.locator) for citation in scan.citations]
+
+
+def test_parse_citations_ignores_single_line_html_comment() -> None:
+    markdown = "<!-- Template citation [@citekey] -->\nVisible [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_ignores_multiline_html_comment() -> None:
+    markdown = """Intro.
+<!--
+Draft note [@Missing2026] and bare @AlsoMissing.
+-->
+Visible [@Smith2020]."""
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_scans_text_around_same_line_html_comment() -> None:
+    markdown = "Before [@Smith2020] <!-- ignored [@citekey] --> after [@Jones2021, p. 42]."
+    assert _citation_pairs(markdown) == [("Smith2020", None), ("Jones2021", "p. 42")]
+
+
+def test_parse_citations_strips_multiple_comments_on_one_line() -> None:
+    markdown = "x <!-- ignored [@citekey] --> y <!-- ignored [@Missing2026] --> z [@Smith2020]"
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_preserves_stray_comment_closer() -> None:
+    markdown = "A --> B [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_ignores_comment_marker_inside_inline_code() -> None:
+    markdown = "Use `<!--` in HTML examples, then cite [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_ignores_comment_marker_inside_multibacktick_inline_code() -> None:
+    markdown = "Use ``<!--`` in HTML examples, then cite [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_fails_closed_on_unterminated_html_comment() -> None:
+    with pytest.raises(UnterminatedHtmlCommentError, match="unterminated HTML comment"):
+        parse_citations("Visible [@Smith2020].\n<!-- author note [@citekey]\nVisible [@Jones2021].")
