@@ -28,19 +28,32 @@ def test_load_returns_entries() -> None:
 
 def test_available_keys_are_the_seqcol_digests() -> None:
     keys = available_assembly_keys(**_kw())
-    assert "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp" in keys
-    assert "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2" in keys
+    assert "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a" in keys
+    assert "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA" in keys
     assert len(keys) == 2
 
 
 def test_resolve_by_exact_digest() -> None:
-    entry = resolve_assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp", **_kw())
+    entry = resolve_assembly("XemD97fxYMS4q-FBm_n5CHQgmzh1_67a", **_kw())
     assert entry is not None and entry.label == "GRCh38"
 
 
-def test_resolve_by_label_alias() -> None:
+def test_resolve_by_label() -> None:
     entry = resolve_assembly("GRCh37", **_kw())
-    assert entry is not None and entry.seqcol_digest == "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2"
+    assert entry is not None and entry.seqcol_digest == "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA"
+
+
+def test_entry_carries_row_bound_aliases_and_metadata() -> None:
+    assert resolve_assembly("GRCh38.p14", **_kw()) == AssemblyEntry(
+        seqcol_digest="XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+        label="GRCh38",
+        aliases=("GRCh38.p14",),
+        accession="GCA_000001405.15",
+        n_sequences=455,
+        naming="ncbi",
+        source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+        source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+    )
 
 
 def test_resolve_unknown_returns_none() -> None:
@@ -58,6 +71,47 @@ def test_parse_rejects_duplicate_member_key() -> None:
         {"seqcol_digest": "DUP", "label": "B", "accession": ""},
     ]
     with pytest.raises(AssemblyRegistryError, match="duplicate member key"):
+        _parse_registry_rows(rows)
+
+
+def test_parse_rejects_duplicate_label() -> None:
+    from science_tool.commons.assembly import AssemblyRegistryError, _parse_registry_rows
+
+    rows = [
+        {"seqcol_digest": "A", "label": "GRCh38", "aliases": "", "accession": ""},
+        {"seqcol_digest": "B", "label": "GRCh38", "aliases": "", "accession": ""},
+    ]
+    with pytest.raises(AssemblyRegistryError, match="duplicate assembly label"):
+        _parse_registry_rows(rows)
+
+
+def test_parse_rejects_duplicate_alias_across_rows() -> None:
+    from science_tool.commons.assembly import AssemblyRegistryError, _parse_registry_rows
+
+    rows = [
+        {"seqcol_digest": "A", "label": "GRCh38", "aliases": "human-current", "accession": ""},
+        {"seqcol_digest": "B", "label": "GRCh37", "aliases": "human-current", "accession": ""},
+    ]
+    with pytest.raises(AssemblyRegistryError, match="duplicate assembly alias"):
+        _parse_registry_rows(rows)
+
+
+def test_parse_rejects_alias_that_collides_with_another_label() -> None:
+    from science_tool.commons.assembly import AssemblyRegistryError, _parse_registry_rows
+
+    rows = [
+        {"seqcol_digest": "A", "label": "GRCh38", "aliases": "human-current", "accession": ""},
+        {"seqcol_digest": "B", "label": "human-current", "aliases": "", "accession": ""},
+    ]
+    with pytest.raises(AssemblyRegistryError, match="duplicate assembly label or alias"):
+        _parse_registry_rows(rows)
+
+
+def test_parse_rejects_alias_that_collides_with_same_row_label() -> None:
+    from science_tool.commons.assembly import AssemblyRegistryError, _parse_registry_rows
+
+    rows = [{"seqcol_digest": "D1", "label": "GRCh38", "aliases": "GRCh38", "accession": ""}]
+    with pytest.raises(AssemblyRegistryError, match="duplicate assembly label or alias"):
         _parse_registry_rows(rows)
 
 

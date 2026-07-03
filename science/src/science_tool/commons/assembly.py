@@ -31,7 +31,53 @@ class AssemblyEntry:
 
     seqcol_digest: str
     label: str
-    accession: str
+    aliases: tuple[str, ...] = ()
+    accession: str = ""
+    n_sequences: int | None = None
+    naming: str = ""
+    source_collection_url: str = ""
+    source_url: str = ""
+
+
+def _optional_clean_text(row: dict[str, Any], column: str) -> str:
+    raw = row.get(column)
+    if raw is None:
+        return ""
+    return str(raw).strip()
+
+
+def _parse_aliases(raw: Any, *, row_index: int) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    text = str(raw).strip()
+    if not text:
+        return ()
+
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for part in text.split("|"):
+        alias = part.strip()
+        if not alias:
+            raise AssemblyRegistryError(f"row {row_index}: blank assembly alias")
+        if alias in seen:
+            raise AssemblyRegistryError(f"row {row_index}: duplicate assembly alias {alias!r}")
+        seen.add(alias)
+        aliases.append(alias)
+    return tuple(aliases)
+
+
+def _parse_optional_positive_int(raw: Any, *, row_index: int, column: str) -> int | None:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    if not text.isdecimal():
+        raise AssemblyRegistryError(f"row {row_index}: invalid {column}: expected positive decimal integer")
+    value = int(text)
+    if value <= 0:
+        raise AssemblyRegistryError(f"row {row_index}: invalid {column}: expected positive decimal integer")
+    return value
 
 
 def _parse_registry_rows(rows: Iterable[dict[str, Any]]) -> list[AssemblyEntry]:
@@ -43,21 +89,49 @@ def _parse_registry_rows(rows: Iterable[dict[str, Any]]) -> list[AssemblyEntry]:
     unit-testable with in-memory dicts.
     """
     entries: list[AssemblyEntry] = []
-    seen: set[str] = set()
+    seen_digests: set[str] = set()
+    seen_labels: dict[str, int] = {}
+    seen_aliases: dict[str, int] = {}
     for i, row in enumerate(rows):
         if "seqcol_digest" not in row:
             raise AssemblyRegistryError(f"row {i}: missing required column 'seqcol_digest'")
-        digest = (row.get("seqcol_digest") or "").strip()
+        digest = _optional_clean_text(row, "seqcol_digest")
         if not digest:
             raise AssemblyRegistryError(f"row {i}: blank seqcol_digest (member key)")
-        if digest in seen:
+        if digest in seen_digests:
             raise AssemblyRegistryError(f"duplicate member key seqcol_digest={digest!r}")
-        seen.add(digest)
+        seen_digests.add(digest)
+
+        label = _optional_clean_text(row, "label")
+        aliases = _parse_aliases(row.get("aliases"), row_index=i)
+        if label and label in aliases:
+            raise AssemblyRegistryError(f"row {i}: duplicate assembly label or alias {label!r}")
+        if label and label in seen_labels:
+            raise AssemblyRegistryError(f"duplicate assembly label {label!r}")
+        if label and label in seen_aliases:
+            raise AssemblyRegistryError(f"duplicate assembly label or alias {label!r}")
+
+        for alias in aliases:
+            if alias in seen_labels:
+                raise AssemblyRegistryError(f"duplicate assembly label or alias {alias!r}")
+            if alias in seen_aliases:
+                raise AssemblyRegistryError(f"duplicate assembly alias {alias!r}")
+
+        if label:
+            seen_labels[label] = i
+        for alias in aliases:
+            seen_aliases[alias] = i
+
         entries.append(
             AssemblyEntry(
                 seqcol_digest=digest,
-                label=(row.get("label") or "").strip(),
-                accession=(row.get("accession") or "").strip(),
+                label=label,
+                aliases=aliases,
+                accession=_optional_clean_text(row, "accession"),
+                n_sequences=_parse_optional_positive_int(row.get("n_sequences"), row_index=i, column="n_sequences"),
+                naming=_optional_clean_text(row, "naming"),
+                source_collection_url=_optional_clean_text(row, "source_collection_url"),
+                source_url=_optional_clean_text(row, "source_url"),
             )
         )
     return entries
@@ -104,4 +178,14 @@ def resolve_assembly(
         if entry.seqcol_digest == label_or_digest:
             return entry
     label_matches = [e for e in entries if e.label and e.label == label_or_digest]
-    return label_matches[0] if len(label_matches) == 1 else None
+    if len(label_matches) == 1:
+        return label_matches[0]
+    if len(label_matches) > 1:
+        raise AssemblyRegistryError(f"duplicate assembly label {label_or_digest!r}")
+
+    alias_matches = [e for e in entries if label_or_digest in e.aliases]
+    if len(alias_matches) == 1:
+        return alias_matches[0]
+    if len(alias_matches) > 1:
+        raise AssemblyRegistryError(f"duplicate assembly alias {label_or_digest!r}")
+    return None

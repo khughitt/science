@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import socket
 
 from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID, AssemblyEntry
@@ -8,8 +9,11 @@ from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
 from science_tool.commons.identity_resolve import resolve_assembly_label, resolve_identity, resolve_namespace
 
 
-_HG38_DIGEST = "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
+_HG38_DIGEST = "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a"
 _AVAILABLE_GENE_REGISTRY = {GENE_CROSSWALK_ID: {"available": True, "tier": "gene"}}
+_FIXTURES = Path(__file__).parent / "fixtures" / "commons"
+_ASSEMBLY_COMMONS = _FIXTURES / "assembly"
+_ASSEMBLY_DATA = _FIXTURES / "assembly-data"
 
 
 def test_resolve_assembly_label_with_fixture_registry(monkeypatch) -> None:
@@ -17,7 +21,16 @@ def test_resolve_assembly_label_with_fixture_registry(monkeypatch) -> None:
 
     def fake_resolve_assembly(label_or_digest: str, *, registry_id: str, commons_root=None, data_root=None):
         calls.append((label_or_digest, registry_id))
-        return AssemblyEntry(seqcol_digest=_HG38_DIGEST, label="hg38", accession="GCF_000001405.40")
+        return AssemblyEntry(
+            seqcol_digest=_HG38_DIGEST,
+            label="hg38",
+            aliases=(),
+            accession="GCF_000001405.40",
+            n_sequences=455,
+            naming="ucsc",
+            source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+            source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+        )
 
     monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
 
@@ -75,7 +88,16 @@ def test_resolve_identity_never_uses_network(monkeypatch) -> None:
         raise AssertionError("identity resolver must not open network sockets")
 
     def fake_resolve_assembly(label_or_digest: str, *, registry_id: str, commons_root=None, data_root=None):
-        return AssemblyEntry(seqcol_digest=_HG38_DIGEST, label="hg38", accession="GCF_000001405.40")
+        return AssemblyEntry(
+            seqcol_digest=_HG38_DIGEST,
+            label="hg38",
+            aliases=(),
+            accession="GCF_000001405.40",
+            n_sequences=455,
+            naming="ucsc",
+            source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+            source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+        )
 
     monkeypatch.setattr(socket, "socket", fake_socket)
     monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
@@ -87,6 +109,30 @@ def test_resolve_identity_never_uses_network(monkeypatch) -> None:
 
     assert resolved.identity_context["assembly"]["seqcol_digest"] == _HG38_DIGEST
     assert resolved.identity_context["assembly"]["resolution_status"] == "resolved"
+
+
+def test_identity_resolver_reads_on_disk_assembly_registry_without_network(monkeypatch) -> None:
+    def fail_socket(*args, **kwargs):
+        raise AssertionError("runtime identity resolution must not open network sockets")
+
+    monkeypatch.setattr(socket, "socket", fail_socket)
+    assert (
+        resolve_assembly_label("GRCh38", ASSEMBLY_REGISTRY_ID, commons_root=_ASSEMBLY_COMMONS, data_root=_ASSEMBLY_DATA)
+        == _HG38_DIGEST
+    )
+    resolved = resolve_identity(
+        {"taxon": 9606, "assembly": {"label": "GRCh38.p14", "registry": ASSEMBLY_REGISTRY_ID}},
+        registries=_AVAILABLE_GENE_REGISTRY,
+        commons_root=_ASSEMBLY_COMMONS,
+        data_root=_ASSEMBLY_DATA,
+    )
+    assert resolved.identity_context["assembly"] == {
+        "label": "GRCh38.p14",
+        "registry": ASSEMBLY_REGISTRY_ID,
+        "seqcol_digest": _HG38_DIGEST,
+        "resolution_status": "resolved",
+    }
+    assert resolved.messages == ()
 
 
 def test_resolve_namespace_supported_gene_namespace() -> None:

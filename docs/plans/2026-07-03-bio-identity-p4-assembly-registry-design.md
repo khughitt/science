@@ -88,6 +88,8 @@ Runtime checks:
 - `resolve_identity` catches registry unavailability and degrades to `declared_unresolved` with a warning;
 - no runtime resolver path may fetch from the network.
 
+At the direct resolver boundary (`load_assembly_registry` / `resolve_assembly`), malformed registry rows raise `AssemblyRegistryError`. At the authoring boundary, `resolve_identity` preserves the P1-P3 graceful-degradation policy: it catches `AssemblyRegistryError`, emits a warning, and returns `resolution_status: declared_unresolved`. Hard prevention of duplicate label/alias artifacts comes from build-time `validate_registry_label_bindings` plus datapackage SHA review; authoring commands do not crash merely because a local commons artifact is corrupt.
+
 ## Alternatives Considered
 
 ### A. Finish the existing commons dataset and keep Science's read contract
