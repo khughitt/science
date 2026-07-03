@@ -735,11 +735,12 @@ def test_parse_literature_bare_key_normalized_to_cite():
 
 
 def test_parse_rejects_literature_without_ref():
+    # Strictness: literature with no ref must raise here, BEFORE any file write.
     with pytest.raises(Exception):
         parse_origin_spec("literature")
 ```
 
-Add a CLI end-to-end test using the project's Click runner (copy the invocation pattern + scratch-project fixture from an existing `science/tests/` CLI test that exercises `hypotheses create`):
+Add CLI end-to-end tests using the project's Click runner (copy the invocation pattern + scratch-project fixture from an existing `science/tests/` CLI test that exercises `hypotheses create`):
 
 ```python
 def test_create_writes_origins(cli_runner, scratch_project):
@@ -754,6 +755,14 @@ def test_create_writes_origins(cli_runner, scratch_project):
     text = created.read_text(encoding="utf-8")
     assert "added_by: user" in text
     assert "type: user" in text and "ref: cite:Smith2019" in text
+
+
+def test_create_rejects_malformed_literature_origin(cli_runner, scratch_project):
+    # A malformed literature origin (no ref) must fail the command with a clean
+    # nonzero exit and write NO entity file.
+    result = cli_runner.invoke(app, ["hypotheses", "create", "Bad", "--origin", "literature"])
+    assert result.exit_code != 0
+    assert not list((scratch_project / "entities" / "hypotheses").glob("*.md"))
 ```
 
 **Note to implementer:** find the real CLI app object + `hypotheses create` invocation + scratch-project fixture in an existing `science/tests/test_*cli*.py` and mirror them.
@@ -807,6 +816,16 @@ In each command body, build extra frontmatter and pass it through (merging with 
     if added_by:
         extra["added_by"] = added_by
     # ... pass extra as create_entity(..., extra_frontmatter=extra)
+```
+
+Wrap `parse_origin_spec` so a malformed spec fails **cleanly before any write** — catch its `ValidationError` and re-raise as `click.BadParameter` (or the repo's `EntityCommandError`), so `test_create_rejects_malformed_literature_origin` sees a nonzero exit and no file:
+
+```python
+    from pydantic import ValidationError
+    try:
+        parsed = [parse_origin_spec(s) for s in origins]
+    except ValidationError as exc:
+        raise click.BadParameter(f"invalid --origin: {exc}") from exc
 ```
 
 **Note to implementer:** confirm how these two commands currently call `create_entity` and that `extra_frontmatter` **overrides** the template's `origins: []` (write the CLI e2e test first — Step 1 — to prove it). If `build_entity_markdown` merges rather than overrides list fields, adjust the merge so an explicit `--origin` wins.
@@ -910,11 +929,31 @@ git commit -m "feat(commands): record topic origin in research-topic"
 - [ ] **Step 1: Model suite** — `cd science/model && uv run --frozen pytest` → PASS.
 - [ ] **Step 2: Tool suite** — `cd science && uv run --frozen pytest` → PASS (incl. graph/health/cli/codex origin tests).
 - [ ] **Step 3: Lint + types** — `cd science && uv run ruff check && uv run pyright` → clean.
-- [ ] **Step 4: End-to-end smoke** — on a scratch project: `science hypotheses create "Smoke" --origin user@2026-07-03 --origin literature:cite:<key-in-references.bib> --added-by user`; `science graph`; `science health`. Confirm `graph.trig` has the `sci:Origin` nodes + `sci:addedBy`, health is clean, then swap to a missing cite key and confirm health flags it.
-- [ ] **Step 5: Final commit (if a smoke-fix was needed)**
+- [ ] **Step 4: Automated CLI→graph end-to-end test** — prove the **create path and the materialization path together** (not only hand-written markdown). Append to `science/tests/test_graph_origins.py`:
+
+```python
+def test_cli_created_entity_materializes_origins(cli_runner, scratch_project):
+    # scratch_project must have a paper referenced by the cite key in references.bib,
+    # or use a user origin to keep the fixture minimal.
+    result = cli_runner.invoke(app, [  # adapt app/fixtures to the real CLI test harness
+        "hypotheses", "create", "E2E",
+        "--origin", "user@2026-07-03", "--added-by", "user",
+    ])
+    assert result.exit_code == 0, result.output
+    out = materialize_graph(scratch_project)
+    g = _g(out)
+    assert (None, PROV.wasAttributedTo, URIRef(SCI + "agent/user")) in g
+    assert any(str(o) == "user" for o in g.objects(None, URIRef(SCI + "addedBy")))
+```
+
+Run: `cd science && uv run --frozen pytest tests/test_graph_origins.py::test_cli_created_entity_materializes_origins -v` → PASS.
+
+- [ ] **Step 5: Manual smoke (optional confidence check)** — on a scratch project: `science hypotheses create "Smoke" --origin user@2026-07-03 --origin literature:cite:<key-in-references.bib> --added-by user`; `science graph`; `science health`. Confirm `graph.trig` has the `sci:Origin` nodes + `sci:addedBy`, health is clean, then swap to a missing cite key and confirm health flags it.
+
+- [ ] **Step 6: Final commit (if a fix was needed)**
 
 ```bash
-git add -A && git commit -m "test: origin-provenance end-to-end verification"
+git add -A && git commit -m "test: origin-provenance CLI-to-graph end-to-end"
 ```
 
 ---
