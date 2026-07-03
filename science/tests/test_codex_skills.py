@@ -446,7 +446,7 @@ def test_create_graph_points_to_cookbook_for_new_entities() -> None:
     assert "docs/process/entity-creation-cookbook.md" in text
     assert "check shared kinds" in text
     assert "prefer the most specific registered kind" in text
-    assert "lightweight `terms.yaml` row" in text
+    assert 'science terms add <id> --title "<title>"' in text
     assert 'science entity create concept "<title>"' in text
 
 
@@ -521,9 +521,10 @@ def test_concept_ownership_committed_skills_reflect_command_boundaries() -> None
     assert "Use the most specific registered source kind available before creating a local concept." in sketch_model
     assert "Use `science entity create concept" in sketch_model
     assert "when the model genuinely needs a reusable project-local concept" in sketch_model
-    assert "Use a lightweight `terms.yaml` row when the term only needs a resolvable identity" in sketch_model
+    assert "Use `science terms add concept:" in sketch_model
+    assert "when the term only needs a resolvable lightweight identity" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
-    assert "Make sure those refs resolve through source records, lightweight term rows, or concept entity owners" in specify_model
+    assert "Make sure those refs resolve through source records, `science terms add` rows, or concept entity owners" in specify_model
     assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
@@ -544,14 +545,32 @@ def test_generated_concept_ownership_skills_reflect_command_boundaries(
     assert "Use the most specific registered source kind available before creating a local concept." in sketch_model
     assert "Use `science entity create concept" in sketch_model
     assert "when the model genuinely needs a reusable project-local concept" in sketch_model
-    assert "Use a lightweight `terms.yaml` row when the term only needs a resolvable identity" in sketch_model
+    assert "Use `science terms add concept:" in sketch_model
+    assert "when the term only needs a resolvable lightweight identity" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
-    assert "Make sure those refs resolve through source records, lightweight term rows, or concept entity owners" in specify_model
+    assert "Make sure those refs resolve through source records, `science terms add` rows, or concept entity owners" in specify_model
     assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
     assert 'validated_by: "<existing-validation-ref>"' in plan_pipeline_raw
     assert 'validated_by: "concept:<check>"' not in plan_pipeline_raw
+
+
+def test_terms_authoring_committed_skills_use_terms_add() -> None:
+    create_graph = _norm(_read_skill("science-create-graph"))
+    health = _norm(_read_skill("science-health"))
+
+    assert "Use `science terms add <id> --title \"<title>\"` for simple project-scoped concepts" in create_graph
+    assert "add a lightweight term with `science terms add`" in health
+
+
+def test_terms_authoring_generated_skills_use_terms_add(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    create_graph = _norm(generated["science-create-graph"].read_text(encoding="utf-8"))
+    health = _norm(generated["science-health"].read_text(encoding="utf-8"))
+
+    assert "Use `science terms add <id> --title \"<title>\"` for simple project-scoped concepts" in create_graph
+    assert "add a lightweight term with `science terms add`" in health
 
 
 # ---------------------------------------------------------------------------

@@ -160,6 +160,16 @@ def test_entities_chapter_documents_reference_semantics_and_topic_deprecation() 
     assert "Do not create topic stubs to silence unresolved-reference checks." in normalized
 
 
+def test_entities_documents_terms_add_for_lightweight_terms() -> None:
+    normalized = _norm(_read(GUIDE_ROOT / "entities.md"))
+
+    assert "`terms.yaml` is for lightweight semantic rows" in normalized
+    assert 'Use `science terms add <id> --title "<title>"` for routine lightweight term creation' in normalized
+    assert "The command writes to the configured local profile's `terms.yaml`" in normalized
+    assert "Do not pass external ontology CURIEs as the term id; put them in `--ontology-term`." in normalized
+    assert "Promote the row to a Markdown entity owner when it accumulates body prose" in normalized
+
+
 def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     text = _read(GUIDE_ROOT / "epistemic-model.md")
     section = _slice_between(
@@ -186,6 +196,14 @@ def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     assert "`science graph add concept` is not durable inquiry authoring" in normalized
 
 
+def test_epistemic_model_references_terms_add_for_lightweight_refs() -> None:
+    normalized = _norm(_read(GUIDE_ROOT / "epistemic-model.md"))
+
+    assert "source records or `science terms add` lightweight rows before the inquiry can be materialized" in normalized
+    assert "Use `science terms add concept:" in normalized
+    assert "`science entity create concept" in normalized
+
+
 def test_entities_chapter_documents_source_authored_concepts() -> None:
     text = _read(GUIDE_ROOT / "entities.md")
     section = _slice_between(
@@ -196,6 +214,7 @@ def test_entities_chapter_documents_source_authored_concepts() -> None:
     normalized = _norm(section)
 
     assert "`terms.yaml` is the lightweight concept tier" in normalized
+    assert "Use `science terms add concept:" in normalized
     assert "`science entity create concept" in normalized
     assert "`entities/concepts/<slug>.md`" in normalized
     assert "Use the most specific registered kind before creating a local concept" in normalized
