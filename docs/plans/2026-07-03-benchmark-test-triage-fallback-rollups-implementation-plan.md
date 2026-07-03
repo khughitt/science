@@ -229,7 +229,36 @@ benchmark:
     assert rollups[1]["task_support_reason"] == "requires-study-specific-staging"
     assert rollups[1]["readiness_label"] == "metadata-only"
     assert rollups[1]["dataset_class"] == "reference"
+
+
+def test_benchmark_test_fallback_rollups_raise_on_inconsistent_support_reason() -> None:
+    from science_tool.benchmark_opportunities import _benchmark_test_fallback_rollups
+
+    base = {
+        "benchmark_id": "dataset:drift",
+        "benchmark_title": "Drift",
+        "task_id": "dataset:drift#ready",
+        "task_type": "protein-lineage-association",
+        "task_support_state": "candidate",
+        "readiness_label": "runnable",
+        "dataset_class": "deposit",
+        "test_plan_state": "concrete",
+        "matched_facets": ["proteomics"],
+        "reason_notes": ["fallback:high-baseline"],
+    }
+    rows = [
+        {**base, "entity_id": "hypothesis:a", "task_support_reason": "reason-one"},
+        {**base, "entity_id": "hypothesis:b", "task_support_reason": "reason-two"},
+    ]
+
+    with pytest.raises(ValueError, match="inconsistent task support reasons"):
+        _benchmark_test_fallback_rollups(cast("list[Any]", rows))
 ```
+
+This test exercises the design's fail-loud-against-metadata-drift contract directly.
+Because the grouping key makes conflicting reasons unreachable through the public
+report API, the private helper is called with hand-crafted rows that share a group
+key but disagree on `task_support_reason`.
 
 - [ ] **Step 2: Run report tests and verify they fail for the missing field**
 
@@ -239,10 +268,13 @@ Run:
 PYTHONPATH=science/src:science/model/src uv run --frozen pytest \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_fallback_diagnostics_roll_up_visible_fallback_rows \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_fallback_rollups_sort_and_cap_examples \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_test_fallback_rollups_raise_on_inconsistent_support_reason \
   -q
 ```
 
-Expected: FAIL with `KeyError: 'rollups'`.
+Expected: FAIL. The two report tests fail with `KeyError: 'rollups'`; the invariant
+test fails with `ImportError`/`AttributeError` because `_benchmark_test_fallback_rollups`
+does not exist yet.
 
 - [ ] **Step 3: Add rollup report types**
 
@@ -441,6 +473,7 @@ PYTHONPATH=science/src:science/model/src uv run --frozen pytest \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_report_preserves_filtered_row_order_and_fallback_diagnostics \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_fallback_diagnostics_roll_up_visible_fallback_rows \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_fallback_rollups_sort_and_cap_examples \
+  science/tests/test_benchmark_opportunities.py::test_benchmark_test_fallback_rollups_raise_on_inconsistent_support_reason \
   science/tests/test_benchmark_opportunities.py::test_benchmark_test_triage_report_exclude_fallback_prevents_suppression \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_writes_default_review_file \
   -q
@@ -886,6 +919,8 @@ Use `superpowers:requesting-code-review` to request a review of the implementati
 ## Self-Review
 
 - Spec coverage: The plan adds the required `rollups` field, keeps existing fallback rows, preserves aggregate JSON diagnostics, renders rollups in the default table, accounts for suppressed blocked fallback rows, and verifies review YAML serialization.
+- Deliberate deviation from the design doc: the `entity_count` rollup field is intentionally omitted. It was speculative (justified only by a hypothetical future multi-task row shape that cannot occur within a single fallback bucket today), and dropping it follows `Explicit > Defensive`. The design doc has been updated to match.
+- Fail-loud coverage: the group-invariant `ValueError` branches (inconsistent `benchmark_title` / `task_type` / `task_support_reason`) are unreachable through the public report API, so a dedicated unit test calls `_benchmark_test_fallback_rollups` directly with a conflicting group to pin the design's drift-detection contract.
 - Placeholder scan: No `TBD`, `TODO`, or open-ended implementation steps remain. Each task has concrete code snippets and commands.
 - Type consistency: `BenchmarkTestFallbackRollup` fields match the design and the CLI reads the same field names. The sort order uses existing `READINESS_LABELS`, `DATASET_CLASSES`, and task support states.
 - Test strategy: The tests cover grouping, count partitioning, field propagation, sorting, example capping, suppressed/default behavior, `--include-blocked-fallback`, `--exclude-fallback`, CLI table rendering, and review-file serialization.
