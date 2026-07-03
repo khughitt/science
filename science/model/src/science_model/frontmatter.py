@@ -335,6 +335,7 @@ def _coerce_derivation(
         config_snapshot=raw.get("config_snapshot", ""),
         produced_at=raw.get("produced_at", ""),
         inputs=list(raw.get("inputs") or []),
+        transformations=list(raw.get("transformations") or []),
     )
 
 

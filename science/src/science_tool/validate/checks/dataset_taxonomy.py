@@ -27,6 +27,7 @@ _USAGE_ROLES = (
     "cited",
     "upstream",
     "training",
+    "reference",
 )
 _USAGE_OVERLAPS = ("full", "partial", "unknown")
 _DEPENDENCE_PROVENANCE_ROLES = ("upstream", "training")
@@ -76,8 +77,7 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: source_class {source_class!r} invalid "
-                f"(expected one of {list(_SOURCE_CLASSES)})",
+                f"{ident}: source_class {source_class!r} invalid (expected one of {list(_SOURCE_CLASSES)})",
                 "taxonomy.source-class-invalid",
             )
 
@@ -87,24 +87,21 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                 yield _result(
                     Severity.ERROR,
                     path,
-                    f"{ident}: source_class=derived requires derived_kind "
-                    f"({list(_DERIVED_KINDS)})",
+                    f"{ident}: source_class=derived requires derived_kind ({list(_DERIVED_KINDS)})",
                     "taxonomy.derived-kind-missing",
                 )
             elif derived_kind not in _DERIVED_KINDS:
                 yield _result(
                     Severity.ERROR,
                     path,
-                    f"{ident}: derived_kind {derived_kind!r} invalid "
-                    f"(expected one of {list(_DERIVED_KINDS)})",
+                    f"{ident}: derived_kind {derived_kind!r} invalid (expected one of {list(_DERIVED_KINDS)})",
                     "taxonomy.derived-kind-invalid",
                 )
         elif derived_kind is not None:
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: derived_kind is only allowed when source_class=derived "
-                f"(source_class={source_class!r})",
+                f"{ident}: derived_kind is only allowed when source_class=derived (source_class={source_class!r})",
                 "taxonomy.derived-kind-misplaced",
             )
 
@@ -120,8 +117,7 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: dataset_usage must be a list of usage entries, "
-                f"got {type(usage).__name__}",
+                f"{ident}: dataset_usage must be a list of usage entries, got {type(usage).__name__}",
                 "taxonomy.dataset-usage-malformed",
             )
         for entry in entries:
@@ -139,10 +135,7 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
         # output / meta-analysis can only record inputs via dataset_usage
         # (role upstream|training). Without it, independence is not derivable.
         if fm.get("origin") == "external" and source_class == "derived":
-            has_provenance = any(
-                isinstance(e, dict) and e.get("role") in _DEPENDENCE_PROVENANCE_ROLES
-                for e in entries
-            )
+            has_provenance = any(isinstance(e, dict) and e.get("role") in _DEPENDENCE_PROVENANCE_ROLES for e in entries)
             if not has_provenance:
                 yield _result(
                     Severity.WARN,

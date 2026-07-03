@@ -107,11 +107,53 @@ def _write_derived(root: Path, slug: str, upstreams: str | list[str]):
     )
 
 
+def _write_derived_with_reference_transform(root: Path, slug: str, upstream: str, reference: str):
+    """Write a derived dataset whose transformation dataset is a non-dependence reference."""
+    ds = root / "entities" / "datasets"
+    wr = root / "entities" / "workflow-runs"
+    ds.mkdir(parents=True, exist_ok=True)
+    wr.mkdir(parents=True, exist_ok=True)
+    run_slug = f"{slug}-r1"
+    (wr / f"{run_slug}.md").write_text(
+        f'---\nid: "workflow-run:{run_slug}"\ntype: "workflow-run"\ntitle: "WF {slug}"\n'
+        f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: ["dataset:{upstream}"]\n---\n',
+        encoding="utf-8",
+    )
+    (ds / f"{slug}.md").write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
+        "derivation:\n"
+        '  workflow: "workflow:wf"\n'
+        f'  workflow_run: "workflow-run:{run_slug}"\n'
+        '  git_commit: "abc"\n'
+        '  config_snapshot: "c"\n'
+        '  produced_at: "2026-04-19T00:00:00Z"\n'
+        f'  inputs: ["dataset:{upstream}"]\n'
+        "  transformations:\n"
+        "    - kind: identity_transform\n"
+        "      target: assembly\n"
+        f'      dataset: "dataset:{reference}"\n'
+        "      type: liftover\n---\n",
+        encoding="utf-8",
+    )
+
+
 def test_derived_input_inherits_weakest_upstream(tmp_path):
     _write_dataset(tmp_path, "n3c", N3C)
     _write_derived(tmp_path, "derived_ok", "n3c")
     ok, halts, _ = check_reproducibility(tmp_path, ["dataset:derived_ok"], policy=BAR)
     assert ok is False and any("trust-based-output" in h for h in halts)
+
+
+def test_reference_transform_dataset_does_not_enter_reproducibility_closure(tmp_path):
+    _write_dataset(tmp_path, "geo", OPEN)
+    _write_dataset(tmp_path, "liftover-chain", N3C)
+    _write_derived_with_reference_transform(tmp_path, "lifted", "geo", "liftover-chain")
+
+    ok, halts, _ = check_reproducibility(tmp_path, ["dataset:lifted"], policy=BAR)
+
+    assert ok is True
+    assert halts == []
 
 
 def test_convergent_derived_graph_does_not_treat_shared_upstream_as_cycle(tmp_path):
@@ -239,5 +281,5 @@ def test_end_to_end_plan_waiver_from_frontmatter(tmp_path):
     ok, halts, warns = check_plan_data_gate(
         tmp_path, ["dataset:n3c"], reproducibility_policy=eff, waivers=plan_pol.waivers
     )
-    assert ok is True and halts == []           # waiver rescues the below-bar input
+    assert ok is True and halts == []  # waiver rescues the below-bar input
     assert any("waiver" in w for w in warns)

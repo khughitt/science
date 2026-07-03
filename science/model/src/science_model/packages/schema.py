@@ -174,6 +174,7 @@ class DerivationBlock(BaseModel):
     config_snapshot: str
     produced_at: str
     inputs: list[str] = Field(default_factory=list)
+    transformations: list[dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("workflow")
     @classmethod
@@ -195,6 +196,15 @@ class DerivationBlock(BaseModel):
         for item in v:
             if not item.startswith("dataset:"):
                 raise ValueError(f"inputs must be dataset:<slug> entity references; got {item!r}")
+        return v
+
+    @field_validator("transformations")
+    @classmethod
+    def _transformation_dataset_ids(cls, v: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for index, item in enumerate(v):
+            dataset = item.get("dataset")
+            if not isinstance(dataset, str) or not dataset.startswith("dataset:"):
+                raise ValueError(f"transformations[{index}].dataset must be a dataset:<slug> entity reference")
         return v
 
 
@@ -468,7 +478,15 @@ class DatasetUsage(BaseModel):
     """
 
     ref: str
-    role: Literal["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]
+    role: Literal[
+        "analyzed",
+        "set_definition_source",
+        "validation_source",
+        "cited",
+        "upstream",
+        "training",
+        "reference",
+    ]
     overlap: Literal["full", "partial", "unknown"] = "unknown"
 
     @field_validator("ref")

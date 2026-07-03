@@ -20,6 +20,7 @@ UsageSource = Literal[
     "authored",
     "paper.datasets",
     "derivation.inputs",
+    "derivation.transformations",
     "geneset.members_resource",
     "reference_graph.node_index_resource",
 ]
@@ -114,6 +115,29 @@ def usage_records_for_entity(
                     source_path=source_path,
                 )
             )
+        for index, transformation in enumerate(getattr(derivation, "transformations", []) or []):
+            if not isinstance(transformation, dict):
+                raise DatasetUsageMaterializationError(
+                    f"{entity.canonical_id}: derivation.transformations[{index}] is not an object"
+                )
+            raw_ref = transformation.get("dataset")
+            if not isinstance(raw_ref, str) or not raw_ref.startswith("dataset:"):
+                raise DatasetUsageMaterializationError(
+                    f"{entity.canonical_id}: derivation.transformations[{index}].dataset "
+                    "must be a dataset:<slug> entity reference"
+                )
+            dataset_ref = _canonical_dataset_ref(raw_ref, resolve_dataset_ref)
+            _reject_self_reference(entity, dataset_ref)
+            records.append(
+                DatasetUsageRecord(
+                    consumer_id=entity.canonical_id,
+                    dataset_ref=dataset_ref,
+                    role="reference",
+                    overlap="unknown",
+                    source="derivation.transformations",
+                    source_path=source_path,
+                )
+            )
 
     return records
 
@@ -194,9 +218,7 @@ def _canonical_dataset_ref(raw_ref: str, resolve_dataset_ref: Callable[[str], st
 
 def _reject_self_reference(entity: Entity, dataset_ref: str) -> None:
     if entity.kind == "dataset" and dataset_ref == entity.canonical_id:
-        raise DatasetUsageMaterializationError(
-            f"{entity.canonical_id}: self-referential dataset usage {dataset_ref!r}"
-        )
+        raise DatasetUsageMaterializationError(f"{entity.canonical_id}: self-referential dataset usage {dataset_ref!r}")
 
 
 def project_entity_uri(canonical_id: str) -> URIRef:
