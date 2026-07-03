@@ -107,3 +107,20 @@ Recommended next slice:
 No commons metadata edits were made in this slice. The sampled dominant rollups
 already carry explicit task-support metadata, and the remaining actionability
 work is staging/audit work rather than report metadata cleanup.
+
+## Verification
+
+Final checks run:
+
+- `science benchmark test-triage --commons --source gap-fallback` for all four active projects
+
+Commons checks:
+
+- `science commons validate` was not run because no commons metadata edits were made.
+- `science commons index rebuild` was not run because no commons metadata edits were made; the final smoke checks still reported the pre-existing stale commons registry warning.
+
+Outcome:
+
+- Visible fallback diagnostics remain grouped into the dominant benchmark/task rollups.
+- MMRF blocked fallback rows remain suppressed by default.
+- No benchmark matching, scoring, sorting, or fallback-selection code changed.
