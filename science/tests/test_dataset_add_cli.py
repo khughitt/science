@@ -97,6 +97,14 @@ def test_add_refuses_malformed_schema_profile(tmp_path: Path) -> None:
     assert not (tmp_path / "entities" / "datasets" / "bad-profile.md").exists()
 
 
+def test_add_refuses_blank_schema_profile(tmp_path: Path) -> None:
+    res = _add(tmp_path, "bad-profile", "--title", "Bad", "--schema-profile", "")
+
+    assert res.exit_code == 1
+    assert "invalid schema_profile" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "bad-profile.md").exists()
+
+
 def test_add_writes_declared_unresolved_identity_for_unknown_assembly(tmp_path: Path) -> None:
     res = _add(
         tmp_path,

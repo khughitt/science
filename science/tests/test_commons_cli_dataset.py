@@ -138,6 +138,27 @@ def test_dataset_init_refuses_malformed_schema_profile(tmp_path: Path, monkeypat
     assert not (root / "datasets" / "bad-profile").exists()
 
 
+def test_dataset_init_refuses_blank_schema_profile(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "bad-profile",
+            "--schema-profile",
+            "",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid schema_profile" in result.output
+    assert not (root / "datasets" / "bad-profile").exists()
+
+
 def test_dataset_init_writes_declared_unresolved_identity_for_unknown_assembly(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "commons"
     (root / "datasets").mkdir(parents=True)

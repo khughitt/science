@@ -7006,7 +7006,7 @@ def dataset_add(
             source_url=source_url,
             ontology_terms=ontology_terms,
             related=related,
-            schema_profile=schema_profile or BASE_DATASET_SCHEMA_PROFILE,
+            schema_profile=BASE_DATASET_SCHEMA_PROFILE if schema_profile is None else schema_profile,
             identity_context=identity_context,
         )
     except (EntityCommandError, IdentityAuthoringError) as exc:

@@ -517,7 +517,7 @@ def dataset_init_cmd(
             slug,
             title=title,
             version=version,
-            schema_profile=schema_profile or BASE_DATASET_SCHEMA_PROFILE,
+            schema_profile=BASE_DATASET_SCHEMA_PROFILE if schema_profile is None else schema_profile,
             identity_context=identity_context,
             today=today,
         )

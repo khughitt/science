@@ -6,13 +6,10 @@ from typing import Any
 
 from science_model.entity_schema.profile import ProfileParseError, parse_profile
 
-from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID
-from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
-from science_tool.commons.identity_resolve import resolve_identity
-from science_tool.commons.protein_crosswalk import PROTEIN_CROSSWALK_ID
-from science_tool.validate.checks.identity_context import required_identity_tiers
-
 BASE_DATASET_SCHEMA_PROFILE = "science-entity-base/1.0+dataset/1.0"
+ASSEMBLY_REGISTRY_ID = "dataset:assembly-registry"
+GENE_CROSSWALK_ID = "dataset:gene-crosswalk-hgnc"
+PROTEIN_CROSSWALK_ID = "dataset:protein-crosswalk-uniprot"
 
 _TIER_FLAG_BY_NAME = {
     "assembly": "--assembly",
@@ -66,6 +63,8 @@ def build_identity_context(
 
     if not identity_context:
         return {}
+    from science_tool.commons.identity_resolve import resolve_identity
+
     resolved = resolve_identity(identity_context)
     errors = [message for message in resolved.messages if message.level == "error"]
     if errors:
@@ -82,6 +81,8 @@ def require_profile_identity(schema_profile: str, identity_context: Any) -> None
         raise IdentityAuthoringError(f"invalid schema_profile: {exc}") from exc
     if profile.mixin is None or profile.mixin.name != "dataset":
         raise IdentityAuthoringError("invalid schema_profile: dataset lifecycle requires a dataset schema_profile")
+
+    from science_tool.validate.checks.identity_context import required_identity_tiers
 
     required_tiers = required_identity_tiers(schema_profile, identity_context)
     if not required_tiers:
