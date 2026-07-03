@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from science_tool.annotation.proposition_reconciliation import (
+    DECISION_ACCEPTED_SPARSE_HINTS,
     LANE_FACTORIZATION,
     LANE_SAME_CLAIM,
     FactorizationCandidate,
@@ -14,6 +15,7 @@ from science_tool.annotation.proposition_reconciliation import (
     ReconciliationValidationError,
     ResolvedReviewJudgment,
     SameClaimCandidate,
+    factorization_assertion_fingerprint,
     resolve_review_doc,
 )
 
@@ -118,6 +120,13 @@ def _factorization_suggestions(decision: str) -> tuple[Mapping[str, Any], ...]:
             {
                 "kind": "cleanup_factorization_hints",
                 "detail": "Add missing statement hints before planning proposition changes.",
+            },
+        )
+    if decision == DECISION_ACCEPTED_SPARSE_HINTS:
+        return (
+            {
+                "kind": "record_sparse_hint_closure",
+                "detail": "Record reviewed closure for the current sparse-hint candidate.",
             },
         )
     if decision == "needs_human":
@@ -331,6 +340,9 @@ def _action_from_factorization(
     elif decision == "insufficient_hints":
         action_kind = "cleanup_factorization_hints"
         status = "advisory"
+    elif decision == DECISION_ACCEPTED_SPARSE_HINTS:
+        action_kind = "record_reconciliation_decision"
+        status = "advisory"
     elif decision == "needs_human":
         action_kind = "needs_human_review"
         status = "blocked"
@@ -344,6 +356,12 @@ def _action_from_factorization(
 
     proposition = candidate.proposition
     judgment_id = _review_text(judgment, "judgment_id")
+    inputs = _factorization_inputs(candidate)
+    if decision == DECISION_ACCEPTED_SPARSE_HINTS:
+        inputs = {
+            **inputs,
+            "assertion_fingerprint": factorization_assertion_fingerprint(candidate),
+        }
     return ReconciliationAction(
         action_id=reconciliation_action_id(action_kind, judgment_id, proposition),
         kind=action_kind,
@@ -356,7 +374,7 @@ def _action_from_factorization(
         source_review=source_path,
         review_source=resolved.review_source,
         proposition=proposition,
-        inputs=_factorization_inputs(candidate),
+        inputs=inputs,
         suggested_operations=_factorization_suggestions(decision),
         blockers=blockers,
         writes=(),

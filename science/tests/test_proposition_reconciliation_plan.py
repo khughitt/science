@@ -7,6 +7,7 @@ from science_tool.annotation.proposition_reconciliation import (
     ReconciliationReport,
     build_same_claim_candidates,
     candidate_id,
+    factorization_assertion_fingerprint,
     judgment_id,
 )
 from science_tool.annotation.proposition_reconciliation_plan import (
@@ -645,6 +646,44 @@ def test_insufficient_hints_maps_to_advisory_cleanup_action():
     action = plan.actions[0]
     assert action.kind == "cleanup_factorization_hints"
     assert action.status == "advisory"
+    assert action.blockers == ()
+
+
+def test_accepted_sparse_hints_maps_to_record_decision_action_with_fingerprint():
+    candidate = _factor_candidate(recommended_action="insufficient_hints")
+    candidate = FactorizationCandidate(
+        candidate_id=candidate.candidate_id,
+        proposition=candidate.proposition,
+        priority="low",
+        papers=candidate.papers,
+        current=candidate.current,
+        observed_statement_hints=candidate.observed_statement_hints,
+        disagreement=("multiple assertions have insufficient factorization hints",),
+        recommended_action=candidate.recommended_action,
+    )
+    report = ReconciliationReport(
+        factorization_disagreements=(candidate,),
+        proposition_snapshots={candidate.proposition: _snapshot(candidate.proposition)},
+    )
+    plan = build_reconciliation_action_plan(
+        report,
+        [
+            ReviewedReconciliationInput(
+                path="reviews/factorization.json",
+                doc=_factor_review(candidate, decision="accepted_sparse_hints"),
+            )
+        ],
+    )
+
+    assert len(plan.actions) == 1
+    action = plan.actions[0]
+    assert action.kind == "record_reconciliation_decision"
+    assert action.status == "advisory"
+    assert action.decision == "accepted_sparse_hints"
+    assert action.proposition == candidate.proposition
+    assert action.inputs["assertion_fingerprint"] == factorization_assertion_fingerprint(
+        candidate
+    )
     assert action.blockers == ()
 
 

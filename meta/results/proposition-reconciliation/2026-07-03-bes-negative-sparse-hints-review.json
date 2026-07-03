@@ -1,0 +1,14 @@
+{
+  "source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+  "judgments": [
+    {
+      "candidate_id": "reconcile:factorization/3d258aa71a79219a27a4c1258106b072cd1f0f94b077e77adc18c4f3eec0dc46",
+      "judgment_id": "reconcile:judgment/1a5941bea0e77cc87ae1deede1305c4950ca1003a9e5935515c937fa4f0a17d6",
+      "lane": "factorization_disagreement",
+      "decision": "accepted_sparse_hints",
+      "proposition": "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data",
+      "confidence": "high",
+      "rationale": "The proposition is already factored in frontmatter; the remaining candidate reflects sparse statement-hint metadata on two concordant asserted annotations, not a reconciliation need."
+    }
+  ]
+}

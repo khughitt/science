@@ -1,0 +1,14 @@
+{
+  "source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+  "judgments": [
+    {
+      "candidate_id": "reconcile:factorization/121d907c080a2c073dc7e12d7bb4acf4c4d3e45381809c172a2c190d8ec02117",
+      "judgment_id": "reconcile:judgment/ac806937c0f3b8c1ae054b44cccab34d438d71ccdf9bebd1beb5261dc0486579",
+      "lane": "factorization_disagreement",
+      "decision": "accepted_sparse_hints",
+      "proposition": "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses",
+      "confidence": "medium",
+      "rationale": "The proposition intentionally makes a broad cross-method claim over BES and product Bayes factor examples; the current sparse-hint candidate reflects missing statement-hint metadata, not a current need to split or resynthesize the proposition."
+    }
+  ]
+}
