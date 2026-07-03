@@ -36,19 +36,6 @@ Body.
 """.strip(),
         encoding="utf-8",
     )
-    dag_path = project / "doc" / "figures" / "dags" / "h1.edges.yaml"
-    dag_path.parent.mkdir(parents=True)
-    dag_path.write_text(
-        """
-edges:
-  - id: e001
-    source: a
-    target: b
-    relation: supports
-    interpretation: Edge interpretation.
-""".strip(),
-        encoding="utf-8",
-    )
 
     inventory = build_inventory(project)
 
@@ -63,8 +50,8 @@ edges:
     assert inventory.audit_hash
     assert [entity.id for entity in inventory.entities] == ["finding:f001"]
     assert inventory.aliases[0].alias == "f001"
-    assert inventory.graph_addresses[0].address == "dag-edge:h1:e001"
-    assert inventory.finding_candidates[0].targets == ["dag-edge:h1:e001"]
+    assert inventory.graph_addresses == []
+    assert inventory.finding_candidates == []
     assert inventory.watch_paths == ["doc", "knowledge", "notes", "papers", "results", "specs", "tasks"]
 
 
