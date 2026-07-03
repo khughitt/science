@@ -87,6 +87,20 @@ def test_base_accepts_optional_fields_when_present(base_schema: dict) -> None:
     Draft202012Validator(base_schema).validate(entity)
 
 
+def test_base_accepts_reference_dataset_usage_role(base_schema: dict) -> None:
+    entity = {
+        "schema_profile": "science-entity-base/1.0+paper/1.0",
+        "id": "paper:Adams2025",
+        "type": "paper",
+        "title": "Example",
+        "version": "1.0.0",
+        "created": "2026-05-13",
+        "updated": "2026-05-13",
+        "dataset_usage": [{"ref": "dataset:ontology", "role": "reference"}],
+    }
+    Draft202012Validator(base_schema).validate(entity)
+
+
 def test_base_rejects_invalid_date_format(base_schema: dict) -> None:
     # Validator must construct Draft202012Validator with FORMAT_CHECKER for
     # format: "date" to actually fire (jsonschema default ignores formats).

@@ -221,6 +221,20 @@ def test_paper_datasets_analyzed_full_is_refinement_not_conflict() -> None:
     assert results == []
 
 
+def test_dataset_usage_reference_role_is_valid_non_dependence() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:ontology", "role": "reference"}])],
+            dataset_ref_status={"dataset:ontology": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert results == []
+
+
 def test_dataset_self_reference_errors() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
@@ -290,9 +304,7 @@ def test_unresolved_refs_use_pinned_severities() -> None:
     ]
 
 
-def test_check_dataset_influence_resolves_local_dataset_ref(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_resolves_local_dataset_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
@@ -345,9 +357,7 @@ def test_check_dataset_influence_resolves_local_dataset_alias_ref(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
@@ -364,9 +374,7 @@ def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
@@ -384,12 +392,10 @@ def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [dataset:gtex, gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [dataset:gtex, gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
     (tmp_path / "entities" / "papers").mkdir(parents=True)
-    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [gtex]\n---\n",
         encoding="utf-8",
     )
@@ -413,8 +419,7 @@ def test_check_dataset_influence_uses_manual_aliases_for_dataset_usage_refs(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "origin: external\naccess: {level: public, verified: true}\n",
     )
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
@@ -431,7 +436,7 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
     mappings.parent.mkdir(parents=True)
     mappings.write_text('aliases:\n  "dataset:gtex": "paper:Adams2025"\n', encoding="utf-8")
     (tmp_path / "entities" / "papers").mkdir(parents=True)
-    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
         "type: paper\n"
@@ -460,22 +465,12 @@ def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
     mappings.parent.mkdir(parents=True)
     mappings.write_text('aliases:\n  "dataset:gtex": "paper:Smith2024"\n', encoding="utf-8")
     (tmp_path / "entities" / "papers").mkdir(parents=True)
-    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
-        "---\n"
-        "id: paper:Adams2025\n"
-        "type: paper\n"
-        "title: Adams\n"
-        "datasets: [dataset:gtex]\n"
-        "---\n",
+    (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [dataset:gtex]\n---\n",
         encoding="utf-8",
     )
     (tmp_path / "entities" / "papers" / "Smith2024.md").write_text(
-        "---\n"
-        "id: paper:Smith2024\n"
-        "type: paper\n"
-        "title: Smith\n"
-        "aliases: [dataset:smith]\n"
-        "---\n",
+        "---\nid: paper:Smith2024\ntype: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
         encoding="utf-8",
     )
 
@@ -500,20 +495,11 @@ def test_check_dataset_influence_derivation_input_alias_to_non_dataset_errors(
     _write_dataset(
         tmp_path,
         "derived",
-        "origin: derived\n"
-        "derivation:\n"
-        "  kind: aggregate\n"
-        "  inputs:\n"
-        "    - dataset:gtex\n",
+        "origin: derived\nderivation:\n  kind: aggregate\n  inputs:\n    - dataset:gtex\n",
     )
     (tmp_path / "entities" / "papers").mkdir(parents=True)
-    (tmp_path / "entities" / "papers" /"Smith2024.md").write_text(
-        "---\n"
-        "id: paper:Smith2024\n"
-        "type: paper\n"
-        "title: Smith\n"
-        "aliases: [dataset:smith]\n"
-        "---\n",
+    (tmp_path / "entities" / "papers" / "Smith2024.md").write_text(
+        "---\nid: paper:Smith2024\ntype: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
         encoding="utf-8",
     )
 
@@ -554,18 +540,12 @@ def test_check_dataset_influence_derivation_input_alias_resolves(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
     _write_dataset(
         tmp_path,
         "derived",
-        "origin: derived\n"
-        "derivation:\n"
-        "  kind: aggregate\n"
-        "  inputs:\n"
-        "    - dataset:gtex\n",
+        "origin: derived\nderivation:\n  kind: aggregate\n  inputs:\n    - dataset:gtex\n",
     )
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
@@ -581,18 +561,12 @@ def test_check_dataset_influence_derivation_inputs_require_raw_dataset_refs(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
     _write_dataset(
         tmp_path,
         "derived",
-        "origin: derived\n"
-        "derivation:\n"
-        "  kind: aggregate\n"
-        "  inputs:\n"
-        "    - gtex\n",
+        "origin: derived\nderivation:\n  kind: aggregate\n  inputs:\n    - gtex\n",
     )
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
@@ -600,9 +574,7 @@ def test_check_dataset_influence_derivation_inputs_require_raw_dataset_refs(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.derivation-inputs-invalid")]
 
 
-def test_check_dataset_influence_geneset_row_alias_resolves(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_geneset_row_alias_resolves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
@@ -610,18 +582,14 @@ def test_check_dataset_influence_geneset_row_alias_resolves(
     _write_dataset(
         tmp_path,
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access: {level: public, verified: true}\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess: {level: public, verified: true}\n",
     )
     _write_geneset_collection(tmp_path, dataset_ref="dataset:gtex")
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
 
 
-def test_check_dataset_influence_unbuilt_commons_ref_infos(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_unbuilt_commons_ref_infos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
@@ -633,9 +601,7 @@ def test_check_dataset_influence_unbuilt_commons_ref_infos(
     assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
 
 
-def test_check_dataset_influence_empty_commons_dir_ref_infos(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_empty_commons_dir_ref_infos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     commons = tmp_path / "empty-commons"

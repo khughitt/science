@@ -23,7 +23,7 @@ DatasetRefStatus = Literal["resolved", "missing", "unavailable", "non_dataset"]
 
 
 _COMMONS_LAYOUT_DIRS = (".git", "datasets", "papers", "topics", "themes")
-_ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training")
+_ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training", "reference")
 _OVERLAPS = ("full", "partial", "unknown")
 
 
