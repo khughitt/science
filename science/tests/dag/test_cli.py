@@ -45,6 +45,15 @@ def _write_propositions_for_dot(project: Path, dot_path: Path, slug_prefix: str)
         _write_proposition(project, f"{slug_prefix}-{index}", source, target)
 
 
+def _assert_no_retired_edge_yaml(project: Path) -> None:
+    assert not list(project.glob("doc/figures/dags/*.edges.yaml"))
+
+
+def _remove_retired_edge_yaml(project: Path) -> None:
+    for edge_yaml in project.glob("doc/figures/dags/*.edges.yaml"):
+        edge_yaml.unlink()
+
+
 @pytest.fixture
 def cli_project(tmp_path: Path) -> Path:
     """Copy the mm30 fixture to tmp for CLI tests.
@@ -68,6 +77,13 @@ def cli_project(tmp_path: Path) -> Path:
         _write_propositions_for_dot(project, dags_dir / f"{slug}.dot", slug)
 
     return project
+
+
+@pytest.fixture
+def cli_audit_project(cli_project: Path) -> Path:
+    _remove_retired_edge_yaml(cli_project)
+    _assert_no_retired_edge_yaml(cli_project)
+    return cli_project
 
 
 def test_cli_dag_render_writes_auto_artifacts(cli_project: Path) -> None:
@@ -141,10 +157,10 @@ def test_dag_staleness_accepts_format_json(cli_project: Path) -> None:
     assert "drifted_edges" in payload
 
 
-def test_dag_audit_accepts_format_json(cli_project: Path) -> None:
+def test_dag_audit_accepts_format_json(cli_audit_project: Path) -> None:
     runner = CliRunner()
 
-    result = runner.invoke(main, ["dag", "audit", "--project", str(cli_project), "--format", "json"])
+    result = runner.invoke(main, ["dag", "audit", "--project", str(cli_audit_project), "--format", "json"])
 
     assert result.exit_code in {0, 1}, result.output
     payload = json.loads(result.stdout)
@@ -163,20 +179,20 @@ def test_cli_dag_staleness_exit_code_on_clean_project(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
-def test_cli_dag_audit_is_read_only_by_default(cli_project: Path) -> None:
+def test_cli_dag_audit_is_read_only_by_default(cli_audit_project: Path) -> None:
     """dag audit without --fix must not mutate tasks/active.md or edges.yaml."""
-    active_before = (cli_project / "tasks/active.md").read_text()
+    active_before = (cli_audit_project / "tasks/active.md").read_text()
     runner = CliRunner()
-    result = runner.invoke(main, ["dag", "audit", "--project", str(cli_project)])
+    result = runner.invoke(main, ["dag", "audit", "--project", str(cli_audit_project)])
     assert result.exit_code in (0, 1)
-    assert (cli_project / "tasks/active.md").read_text() == active_before
+    assert (cli_audit_project / "tasks/active.md").read_text() == active_before
 
 
-def test_cli_dag_audit_fix_mutates(cli_project: Path) -> None:
+def test_cli_dag_audit_fix_mutates(cli_audit_project: Path) -> None:
     """dag audit --fix opens tasks (we'll only check that it doesn't error;
     actual mutation behavior is unit-tested in test_audit.py)."""
     runner = CliRunner()
-    result = runner.invoke(main, ["dag", "audit", "--fix", "--project", str(cli_project)])
+    result = runner.invoke(main, ["dag", "audit", "--fix", "--project", str(cli_audit_project)])
     # --fix path must run without error; it's OK if it also exits 1 (findings present).
     assert result.exit_code in (0, 1), result.output
 

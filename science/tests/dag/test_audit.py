@@ -51,6 +51,23 @@ def _write_propositions_for_all_dots(project: Path) -> None:
         _write_propositions_for_dot(project, dot_path, dot_path.stem)
 
 
+def _remove_retired_edge_yaml(project: Path) -> None:
+    for edge_yaml in project.glob("doc/figures/dags/*.edges.yaml"):
+        edge_yaml.unlink()
+
+
+def _assert_no_retired_edge_yaml(project: Path) -> None:
+    assert not list(project.glob("doc/figures/dags/*.edges.yaml"))
+
+
+def _copy_audit_fixture_without_retired_yaml(source: Path, target: Path) -> Path:
+    shutil.copytree(source, target)
+    _remove_retired_edge_yaml(target)
+    _write_propositions_for_all_dots(target)
+    _assert_no_retired_edge_yaml(target)
+    return target
+
+
 def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     """Minimal project layout with one proposition-backed DOT edge + supporting tasks."""
     (tmp_path / "science.yaml").write_text("profile: research\n", encoding="utf-8")
@@ -168,16 +185,13 @@ def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
 
 def test_audit_smoke_on_mm30_fixture(tmp_path: Path) -> None:
     """Real mm30 fixture runs end-to-end without error."""
-    project = tmp_path / "mm30"
-    shutil.copytree(FIXTURE_ROOT, project)
+    project = _copy_audit_fixture_without_retired_yaml(FIXTURE_ROOT, tmp_path / "mm30")
     paths = DagPaths(
         dag_dir=project / "doc/figures/dags",
         tasks_dir=project / "tasks",
         dags=None,
         project_root=project,
     )
-    for slug in ("h1-prognosis", "h1-progression", "h2-subtype-architecture", "h1-h2-bridge"):
-        _write_propositions_for_dot(project, project / f"doc/figures/dags/{slug}.dot", slug)
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     assert isinstance(report, AuditReport)
 
@@ -190,9 +204,7 @@ FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 
 
 def test_audit_includes_validation_section(tmp_path: Path) -> None:
-    project = tmp_path / "clean"
-    shutil.copytree(FIXTURE_MINIMAL / "clean", project)
-    _write_propositions_for_all_dots(project)
+    project = _copy_audit_fixture_without_retired_yaml(FIXTURE_MINIMAL / "clean", tmp_path / "clean")
     paths = load_dag_paths(project)
     report = run_audit(paths)
     js = report.to_json()
@@ -203,9 +215,7 @@ def test_audit_includes_validation_section(tmp_path: Path) -> None:
 def test_audit_json_has_top_level_today_and_strict(tmp_path: Path) -> None:
     import re
 
-    project = tmp_path / "clean"
-    shutil.copytree(FIXTURE_MINIMAL / "clean", project)
-    _write_propositions_for_all_dots(project)
+    project = _copy_audit_fixture_without_retired_yaml(FIXTURE_MINIMAL / "clean", tmp_path / "clean")
     paths = load_dag_paths(project)
     report = run_audit(paths)
     js = report.to_json()
@@ -217,15 +227,24 @@ def test_audit_json_has_top_level_today_and_strict(tmp_path: Path) -> None:
 
 
 def test_audit_exit_code_reflects_validation_failure(tmp_path: Path) -> None:
-    project = tmp_path / "cyclic"
-    shutil.copytree(FIXTURE_MINIMAL / "cyclic", project)
-    _write_propositions_for_all_dots(project)
-    paths = load_dag_paths(project)
+    project = _copy_audit_fixture_without_retired_yaml(FIXTURE_MINIMAL / "cyclic", tmp_path / "cyclic")
+    paths = DagPaths(
+        dag_dir=project / "doc/figures/dags",
+        tasks_dir=project / "tasks",
+        dags=("toy",),
+        project_root=project,
+    )
     report = run_audit(paths)
     assert report.has_findings  # validation produced findings → audit reports them
 
 
-def test_audit_fix_blocks_when_validation_fails() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
+def test_audit_fix_blocks_when_validation_fails(tmp_path: Path) -> None:
+    project = _copy_audit_fixture_without_retired_yaml(FIXTURE_MINIMAL / "cyclic", tmp_path / "cyclic")
+    paths = DagPaths(
+        dag_dir=project / "doc/figures/dags",
+        tasks_dir=project / "tasks",
+        dags=("toy",),
+        project_root=project,
+    )
     with pytest.raises(RuntimeError, match="validation failed"):
         run_audit(paths, fix=True)
