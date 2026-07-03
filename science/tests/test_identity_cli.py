@@ -8,6 +8,8 @@ from click.testing import CliRunner
 from science_model.frontmatter import parse_frontmatter
 from science_tool.cli import main as science_cli
 from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID, AssemblyEntry
+from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
+from science_tool.commons.protein_crosswalk import PROTEIN_CROSSWALK_ID
 
 
 _HG38_DIGEST = "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
@@ -79,6 +81,34 @@ def test_resolve_writes_seqcol_digest_for_resolved_assembly(tmp_path: Path, monk
         "registry": ASSEMBLY_REGISTRY_ID,
         "seqcol_digest": _HG38_DIGEST,
         "resolution_status": "resolved",
+    }
+
+
+def test_resolve_writes_molecular_id_namespaces(tmp_path: Path) -> None:
+    path = _write_dataset(tmp_path, "x")
+
+    res = _run(
+        tmp_path,
+        "resolve",
+        "dataset:x",
+        "--gene-namespace",
+        "hgnc_id",
+        "--protein-namespace",
+        "uniprot",
+    )
+
+    assert res.exit_code == 0, res.output
+    assert _frontmatter(path)["identity_context"]["molecular_ids"] == {
+        "gene": {
+            "namespace": "hgnc_id",
+            "registry": GENE_CROSSWALK_ID,
+            "resolution_status": "declared_unresolved",
+        },
+        "protein": {
+            "namespace": "uniprot",
+            "registry": PROTEIN_CROSSWALK_ID,
+            "resolution_status": "declared_unresolved",
+        },
     }
 
 
