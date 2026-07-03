@@ -2,7 +2,7 @@
 
 ## Header
 
-- **Project root:** `/home/keith/d/protein-landscape` (canonical), inventoried at `/mnt/ssd/Dropbox/protein-landscape` (same repo via Dropbox path)
+- **Project root:** `~/d/protein-landscape` (canonical), inventoried at `~/d/protein-landscape` (same repo)
 - **Project SHA at audit:** `acae609eaec6378b507fd4c0615afc1654c0d0a8`
 - **Dirty tree summary:** 1 untracked file (full porcelain in inventory)
 - **Inventory artifact:** `docs/audits/downstream-project-conventions/inventory/protein-landscape.json`
