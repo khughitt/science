@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.13, Click, Pydantic, PyYAML, pytest, existing `science_tool.dag` modules, `science_model.propositions.PropositionEntity`.
 
+**Execution environment (worktree):** This plan runs in a git worktree. Executors MUST `cd` into the worktree root and confirm the branch (`git branch --show-current` → `phase5f-dag-edge-retirement-design`) before any `git commit`, or commits leak to `main`. Prefix test/spike commands with `PYTHONPATH=src:model/src` so worktree-local `science_tool` (and `science_model`) edits are exercised instead of the editable install resolved from `main`. Phase 5f makes NO `science_model` changes — the `legacy_patch`/`legacy_edge_id`/`legacy_relation_label` fields already exist in the model — so the model-shadowing gotcha does not bite here, but the `PYTHONPATH` prefix keeps `science_tool` edits authoritative.
+
 ---
 
 ## File Structure
@@ -20,10 +22,17 @@
   - Make `schema` explicitly retired.
   - Stop collapsing empty proposition edge lists into the YAML fallback sentinel.
   - Thread proposition edges into audit render path indirectly through `run_audit`.
+- Modify `science/src/science_tool/dag/paths.py`
+  - Add a `project_root` field to `DagPaths` (default `None`) so validation/audit can
+    load compiled propositions without reverse-deriving the project root from
+    `dag_dir` depth. `load_dag_paths` sets it; direct constructions may omit it and
+    fall back to the default-layout heuristic.
 - Modify `science/src/science_tool/dag/render.py`
   - Discover DOT slugs.
   - Remove implicit retired YAML fallback from default render.
   - Fail loudly when DOT edges have no compiled proposition edge.
+  - Reuse `validate._parse_dot_topology` for the fail-loud preflight; do NOT add a
+    second DOT-edge parser.
 - Modify `science/src/science_tool/dag/number.py`
   - Discover DOT slugs.
   - Never write `*.edges.yaml`.
@@ -37,9 +46,12 @@
   - Rebuild default validation around DOT topology plus proposition-backed edges.
   - Retire YAML shape/ref/posterior checks from default validation.
 - Modify `science/src/science_tool/dag/audit.py`
-  - Stop using YAML staleness.
-  - Render from proposition edges.
-  - Keep audit read-only unless future proposition-backed mutations exist.
+  - Stop using YAML staleness: remove the `check_staleness` call from `run_audit`,
+    drop the `staleness` field from `AuditReport`, and delete the now-dead
+    YAML-drift mutation helpers.
+  - Render from proposition edges (threaded in Task 4 so the suite stays green).
+  - Keep audit read-only; `--fix` becomes a no-op (no proposition-backed mutation
+    model is in Phase 5f scope).
 - Modify `science/src/science_tool/dag/staleness.py`
   - Leave internals for historical imports, but CLI should stop using it as a default DAG command.
 - Modify `science/src/science_tool/dag/inventory.py`
@@ -51,10 +63,35 @@
   - Create `science/tests/dag/test_retired_edges.py`
   - Update `science/tests/dag/test_render.py`
   - Update `science/tests/dag/test_validate.py`
+  - Update `science/tests/dag/test_validate_cli.py`
   - Update `science/tests/dag/test_number.py`
   - Update `science/tests/dag/test_cli.py`
+  - Update `science/tests/dag/test_audit.py`
   - Update `science/tests/dag/test_dag_inventory.py`
   - Update `science/tests/test_entities_inventory.py`
+  - Append to `science/tests/test_edges_yaml_retired.py`
+  - `science/tests/dag/test_staleness.py` — no change required (the `check_staleness`
+    FUNCTION is retained; only the CLI surface retires), but re-run to confirm green.
+
+---
+
+## Existing Test Disposition
+
+The new RED/GREEN tests in each task are ADDITIVE. Separately, **59 existing
+`*.edges.yaml`-default tests across six files** exercise behavior this phase
+retires and will fail once render/number/validate/audit stop reading YAML. Each
+behavioral task below MUST migrate or delete its file's YAML-default tests in the
+same commit, or the suite stays red until Task 10. Legend: **DEL** = delete
+(coverage moves to the retired-inspection surface or to `test_schema.py`'s pydantic
+unit tests); **DOT** = rewrite against DOT-only topology; **PROP** = rewrite against
+a proposition-backed fixture.
+
+- `test_render.py` (7 → **Task 4**): `test_render_all_byte_identical_dot_vs_mm30_reference` DEL-or-PROP; `test_render_one_handles_eliminated_edge` PROP (eliminated now derives from the `refuted` channel); `test_render_one_uses_compact_inline_legend` PROP; `test_render_one_structural_invariants` PROP; `test_render_one_ignores_claim_only_yaml_edges` DEL (claim-only propositions are already skipped by `edges_from_propositions`); `test_render_discovers_slugs_when_whitelist_absent` DOT; `test_render_png_failure_is_non_fatal` PROP.
+- `test_number.py` (5 → **Task 5**): `test_number_one_is_idempotent` DOT; `test_number_all_processes_multiple_slugs` DOT; `test_numbered_dot_has_edge_labels` DOT; `test_number_one_preserves_existing_curation` DEL; `test_number_one_force_stubs_resets_curation` DEL (replaced by `test_number_one_force_stubs_is_retired`).
+- `test_validate.py` (20 → **Task 6**): posterior ×3 (`test_posterior_beta_must_be_finite`, `test_posterior_hdi_must_be_ordered`, `test_posterior_prob_sign_must_be_in_unit_interval`) DEL; jsonschema ×3 (`test_jsonschema_conformance_passes_on_clean`, `test_jsonschema_conformance_runs_on_mm30_fixture`, `test_jsonschema_conformance_catches_drift`) DEL; strict-curation ×2 (`test_strict_flags_missing_identification`, `test_strict_flags_empty_description`) DEL; yaml/dot reconciliation ×2 (`test_yaml_missing_edge_present_in_dot`, `test_yaml_edge_not_in_dot`) DEL (replaced by `test_validate_flags_dot_edge_without_matching_proposition`); topology ×5 (`test_clean_fixture_has_no_topology_findings`, `test_acyclicity_flags_cycle`, `test_acyclicity_passes_on_clean`, `test_strict_flags_orphan_dot_node`, `test_strict_flags_cross_dag_node_case_mismatch`) DOT; report-shape ×2 (`test_validation_report_ok_on_clean_fixture`, `test_validation_report_to_json_shape`) PROP; non-strict blocking (`test_non_strict_does_not_emit_strict_errors_as_blocking`) DOT; mm30 ×2 (`test_mm30_fixture_validates_non_strict`, `test_mm30_fixture_validates_strict`) DEL-or-PROP (only if mm30 has compiled propositions). `test_validation_finding_severity_literal` KEEP.
+- `test_validate_cli.py` (7 → **Task 6**): `test_validate_clean_exits_zero` PROP; `test_validate_cyclic_exits_one` DOT; `test_validate_json_shape` PROP; `test_validate_dag_scope` PROP; `test_validate_missing_identification_non_strict_exits_zero` + `test_validate_missing_identification_strict_exits_one` DEL; `test_audit_json_includes_validation` PROP (audit JSON no longer has a `staleness` key — see Task 7). **KEEP but VERIFY:** `test_schema_stdout_is_valid_json` and `test_schema_write_to_file` stay green ONLY because Task 2 emits the retired banner to STDERR, keeping stdout/file pure JSON.
+- `test_cli.py` (10 → **Tasks 4/5/7**): `test_cli_dag_render_writes_auto_artifacts` PROP (T4); `test_cli_dag_render_single_slug` PROP (T4); `test_dag_validate_accepts_format_json` PROP (T6); `test_cli_dag_number_is_idempotent` DOT (T5); `test_cli_dag_init_scaffolds_new_dag` rewritten in T5; `test_cli_dag_staleness_json_schema` + `test_dag_staleness_accepts_format_json` DEL (T7, replaced by `test_cli_dag_staleness_is_retired`); `test_dag_audit_accepts_format_json` PROP (fixture-migrated in T4, drop staleness key in T7); `test_cli_dag_audit_is_read_only_by_default` PROP (fixture-migrated in T4, finalized in T7); `test_cli_dag_audit_fix_mutates` DEL (T7 — `--fix` is now a no-op).
+- Fully unaffected (no change): `test_refs_validation.py`, `test_schema.py`, `test_schema_artifact.py`, `test_dag_render_status_adapter.py`, `test_staleness.py` (function retained).
 
 ---
 
@@ -436,12 +473,20 @@ def test_cli_dag_retired_edges_table_reports_orphans(tmp_path: Path) -> None:
 
 
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
-    result = CliRunner().invoke(main, ["dag", "schema"])
+    # Banner goes to STDERR so stdout stays pure JSON (see test_validate_cli.py
+    # ::test_schema_stdout_is_valid_json). Use a runner that separates streams.
+    result = CliRunner(mix_stderr=False).invoke(main, ["dag", "schema"])
 
     assert result.exit_code == 0
-    assert "RETIRED" in result.output
-    assert "edges.yaml" in result.output
+    assert "RETIRED" in result.stderr
+    assert "edges.yaml" in result.stderr
+    # stdout must remain parseable JSON.
+    json.loads(result.stdout)
 ```
+
+> Note: on Click ≥ 8.2 `CliRunner` no longer accepts `mix_stderr`; drop the kwarg
+> and read `result.stderr` directly (streams are separated by default). Confirm
+> which Click is pinned in `science` and use the matching form.
 
 - [ ] **Step 2: Run RED tests**
 
@@ -518,8 +563,11 @@ def schema_cmd(output_path: Path | None) -> None:
         "RETIRED: this schema describes the retired *.edges.yaml migration surface, "
         "not an active DAG authoring input.\n"
     )
+    # Banner ALWAYS to stderr so stdout / the written file stay pure JSON. This
+    # keeps test_validate_cli.py::{test_schema_stdout_is_valid_json,
+    # test_schema_write_to_file} and the test_schema_artifact.py drift guard green.
+    click.echo(banner, nl=False, err=True)
     if output_path is None:
-        click.echo(banner, nl=False)
         click.echo(canonical, nl=False)
     else:
         output_path.write_text(canonical, encoding="utf-8")
@@ -590,6 +638,13 @@ Expected: FAIL with `KeyError: 'proposition_id'`.
 
 - [ ] **Step 3: Implement projection metadata and relational loader**
 
+Note: `original_label` and `belief_magnitude="speculative"` (plus `refuted`,
+`has_grounding_evidence`) ALREADY exist in the current `proposition_to_edge`
+(this worktree already carries earlier Task 5f work). This step is a THREE-key
+addition — `proposition_id`, `legacy_patch`, `legacy_edge_id` — not a rewrite.
+Diff the current file first and add only the missing keys; the block below shows
+the full intended dict for reference.
+
 In `science/src/science_tool/dag/proposition_edges.py`, update `proposition_to_edge`:
 
 ```python
@@ -659,11 +714,31 @@ Expected: commit succeeds.
 
 ## Task 4: DOT Discovery And Fail-Loud Render Defaults
 
+> **Ordering note:** This task makes `proposition_edges` a REQUIRED kwarg on
+> `render_all`/`render_one` AND makes render fail loudly on any DOT edge with no
+> matching proposition. Two knock-on effects on `run_audit` (the only other
+> caller, `render_all(paths)` at `audit.py:226`):
+> 1. *Signature:* the missing kwarg would `TypeError`. This task threads
+>    proposition edges into `run_audit`'s render call (Step 5c) to fix it.
+> 2. *Behavior:* audit-composing tests built on `.edges.yaml` fixtures (which have
+>    no compiled propositions) would now make render RAISE. So this task also
+>    migrates `test_audit.py` and the audit CLI tests to proposition-backed,
+>    NO-`.edges.yaml` fixtures (Step 5d). Such a fixture stays green across the
+>    whole sequence: new render is satisfied by the matching proposition; the
+>    still-YAML validate (until Task 6) and still-composed staleness (until Task 7)
+>    both find no `.edges.yaml` and return clean/empty. Task 7 then drops the
+>    `staleness` key from these tests' assertions.
+> Skipping either leaves `tests/dag/test_audit.py` and the full suite red from
+> Task 4 through Task 7.
+
 **Files:**
+- Modify: `science/src/science_tool/dag/paths.py` (add `DagPaths.project_root`)
 - Modify: `science/src/science_tool/dag/render.py`
+- Modify: `science/src/science_tool/dag/audit.py` (thread proposition edges into render)
 - Modify: `science/src/science_tool/dag/cli.py`
-- Test: `science/tests/dag/test_render.py`
-- Test: `science/tests/dag/test_cli.py`
+- Test: `science/tests/dag/test_render.py` (append new tests + migrate the 7 YAML-default tests per Existing Test Disposition)
+- Test: `science/tests/dag/test_cli.py` (append + migrate `test_cli_dag_render_*`)
+- Test: `science/tests/dag/test_audit.py` (migrate audit-composing tests to proposition-backed, no-YAML fixtures so render's fail-loud doesn't break them; Task 7 finalizes)
 
 - [ ] **Step 1: Add failing render tests**
 
@@ -782,22 +857,21 @@ def _discover_slugs(dag_dir: Path) -> list[str]:
     return slugs
 ```
 
-Add a DOT-edge preflight:
+Add a DOT-edge preflight. Do NOT write a second DOT parser — reuse
+`validate._parse_dot_topology`, which already returns `(nodes, edges)` and is the
+same set `dag validate` checks against, so render's fail-loud and validate's
+`proposition_edge_missing` stay in lockstep. `render` does not import `validate`
+today and `validate` does not import `render` (verified acyclic), so this import
+is safe:
 
 ```python
-def _dot_edges(dot_path: Path) -> list[tuple[str, str]]:
-    text = _flatten_multiline_attrs(dot_path.read_text())
-    edges: list[tuple[str, str]] = []
-    for line in text.splitlines():
-        em = EDGE_RE.match(line)
-        if em:
-            edges.append((em.group("src"), em.group("tgt")))
-    return edges
+from science_tool.dag.validate import _parse_dot_topology
 
 
 def _assert_dot_edges_backed(slug: str, dot_path: Path, edges: list[dict]) -> None:
     available = {(str(edge.get("source")), str(edge.get("target"))) for edge in edges}
-    missing = [(src, tgt) for src, tgt in _dot_edges(dot_path) if (src, tgt) not in available]
+    _, dot_edges = _parse_dot_topology(dot_path)
+    missing = [(src, tgt) for src, tgt in sorted(dot_edges) if (src, tgt) not in available]
     if missing:
         rendered = ", ".join(f"{src} -> {tgt}" for src, tgt in missing)
         raise ValueError(
@@ -859,22 +933,78 @@ def _source_proposition_edges(project: Path) -> list[dict]:
 
 The existing `render_cmd` call sites can continue passing `proposition_edges=proposition_edges`.
 
+- [ ] **Step 5b: Add `project_root` to `DagPaths`**
+
+In `science/src/science_tool/dag/paths.py`, add a `project_root` field so
+validation/audit can load compiled propositions without reverse-deriving the root
+from `dag_dir` depth (which breaks under a configured non-default `dag_dir`):
+
+```python
+@dataclass(frozen=True)
+class DagPaths:
+    dag_dir: Path
+    tasks_dir: Path
+    dags: tuple[str, ...] | None  # None = auto-discover all <slug>.dot files
+    project_root: Path | None = None  # set by load_dag_paths; None => derive from dag_dir
+```
+
+Set it in BOTH `load_dag_paths` return branches (`project_root=project_root`).
+Then update the `--dag` scoping rebuild in `cli.py` (`validate_cmd`, ~line 393) to
+PRESERVE it: `DagPaths(dag_dir=paths.dag_dir, tasks_dir=paths.tasks_dir,
+dags=(slug,), project_root=paths.project_root)`. Consumers derive the root as
+`paths.project_root or paths.dag_dir.parents[2]` — the fallback is a default-layout
+heuristic for directly-constructed `DagPaths` in tests; real runs always go through
+`load_dag_paths`, which sets it explicitly.
+
+- [ ] **Step 5c: Thread proposition edges through `run_audit`'s render (ordering)**
+
+In `science/src/science_tool/dag/audit.py`, so the required-kwarg change does not
+break audit. Add `from science_tool.dag.proposition_edges import load_proposition_edges`
+and change the render call in `run_audit`:
+
+```python
+    project_root = paths.project_root or paths.dag_dir.parents[2]
+    render_all(paths, proposition_edges=load_proposition_edges(project_root))
+```
+
+Leave `check_staleness` and `AuditReport.staleness` alone for now — Task 7 removes
+them. This step is purely to keep the suite green across the required-kwarg change.
+
+- [ ] **Step 5d: Migrate the existing render AND audit-composing tests**
+
+Per the Existing Test Disposition section, migrate/delete the 7 YAML-default
+`test_render.py` tests and the two `test_cli_dag_render_*` tests in this commit.
+The new `render_all`/`render_one` signature is required-kwarg, so any test calling
+them without `proposition_edges=` must be updated or removed here — not left for
+Task 10. ALSO migrate the audit-composing tests (`test_audit.py`, and the audit
+CLI tests `test_dag_audit_accepts_format_json` / `test_cli_dag_audit_is_read_only_by_default`)
+to proposition-backed, no-`.edges.yaml` fixtures so render's new fail-loud does not
+raise inside `run_audit` (they keep asserting the still-present `staleness` key
+until Task 7 removes it; delete `test_cli_dag_audit_fix_mutates` in Task 7). Note the new render tests exercise the real `render_png` (shells out to
+graphviz `dot`); they inherit whatever graphviz assumption the existing passing
+render tests already rely on. If graphviz is unavailable in the runner, prefer
+asserting on the emitted `<slug>-auto.dot` and reuse the existing
+`test_render_png_failure_is_non_fatal` pattern rather than asserting on the PNG.
+
 - [ ] **Step 6: Run GREEN render tests**
 
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/dag/test_render.py::test_render_discovers_dot_slugs_without_edges_yaml science/tests/dag/test_render.py::test_render_refuses_yaml_only_fallback science/tests/dag/test_render.py::test_render_fails_before_partial_write_when_dot_edge_unbacked science/tests/dag/test_cli.py::test_cli_dag_render_zero_propositions_does_not_fallback_to_yaml -q
+rtk uv run --frozen --project science pytest science/tests/dag/test_render.py science/tests/dag/test_audit.py science/tests/dag/test_cli.py::test_cli_dag_render_zero_propositions_does_not_fallback_to_yaml -q
 ```
 
-Expected: PASS.
+Expected: PASS — the new fail-loud tests AND the migrated `test_render.py` /
+`test_audit.py` tests. Running the whole `test_render.py` + `test_audit.py` files
+(not just the new nodes) confirms no migrated test was left calling the old
+signature.
 
 - [ ] **Step 7: Commit Task 4**
 
 Run:
 
 ```bash
-rtk git add science/src/science_tool/dag/render.py science/src/science_tool/dag/cli.py science/tests/dag/test_render.py science/tests/dag/test_cli.py
+rtk git add science/src/science_tool/dag/render.py science/src/science_tool/dag/paths.py science/src/science_tool/dag/audit.py science/src/science_tool/dag/cli.py science/tests/dag/test_render.py science/tests/dag/test_cli.py science/tests/dag/test_audit.py
 rtk git commit -m "feat: render DAGs from proposition edges only"
 ```
 
@@ -912,7 +1042,14 @@ def test_number_one_force_stubs_is_retired(number_workspace: Path) -> None:
         number_one(number_workspace, "h1-progression", force_stubs=True, proposition_edges=[])
 ```
 
-Replace the old `test_number_one_force_stubs_resets_curation` expectation with the new hard-error test above.
+Migrate the existing `test_number.py` tests per the Existing Test Disposition
+section, in this commit: DELETE `test_number_one_preserves_existing_curation` and
+`test_number_one_force_stubs_resets_curation` (both assert retired `.edges.yaml`
+curation; the latter is replaced by `test_number_one_force_stubs_is_retired`);
+rewrite `test_number_one_is_idempotent`, `test_number_all_processes_multiple_slugs`,
+and `test_numbered_dot_has_edge_labels` to DOT-only fixtures (no `.edges.yaml`
+sibling). `number` now discovers via the DOT-based `_discover_slugs` inherited from
+render (Task 4), so number fixtures need a `<slug>.dot` present.
 
 In `science/tests/dag/test_cli.py`, update `test_cli_dag_init_scaffolds_new_dag`:
 
@@ -1045,8 +1182,17 @@ Expected: commit succeeds.
 
 **Files:**
 - Modify: `science/src/science_tool/dag/validate.py`
-- Modify: `science/src/science_tool/dag/paths.py`
-- Test: `science/tests/dag/test_validate.py`
+- Test: `science/tests/dag/test_validate.py` (append new tests + migrate the 20 YAML-default tests per Existing Test Disposition)
+- Test: `science/tests/dag/test_validate_cli.py` (migrate the 7 YAML-default tests; verify the 2 schema tests stay green with the stderr banner)
+
+> `DagPaths.project_root` was added in Task 4 (Step 5b). This task consumes it;
+> `paths.py` needs no further change here.
+
+> Fixture note (verified): a hand-written `entities/propositions/<slug>.md` with
+> minimal frontmatter (`kind/id/type/subject/predicate/object/polarity/claim_layer/
+> identification_strength`, no `title`) IS loaded by `load_local_entity_index` and
+> materializes as a `PropositionEntity` with those fields populated. The Task 6
+> `_write_proposition` helper is sound as written.
 
 - [ ] **Step 1: Add failing validation tests**
 
@@ -1144,13 +1290,13 @@ Expected: FAIL because validation still reads YAML and does not check propositio
 
 - [ ] **Step 3: Update `DagPaths` documentation**
 
-In `science/src/science_tool/dag/paths.py`, update the comment/docstring:
+The `project_root` field and both `load_dag_paths` branches were added in Task 4
+(Step 5b). Here, only refresh the `paths.py` wording so it no longer describes
+`*.edges.yaml` as the discovery surface:
 
 ```python
     dags: tuple[str, ...] | None  # None = auto-discover all <slug>.dot files
 ```
-
-And:
 
 ```python
     Falls back to defaults when the ``dag:`` block is absent. A project with
@@ -1180,8 +1326,10 @@ def _discover_dot_files(paths: DagPaths) -> list[Path]:
 
 
 def _project_root_from_paths(paths: DagPaths) -> Path:
-    # Default dag_dir is <project>/doc/figures/dags.
-    return paths.dag_dir.parents[2]
+    # load_dag_paths sets project_root explicitly; the parents[2] fallback is only
+    # for directly-constructed DagPaths in tests using the default doc/figures/dags
+    # layout. Do NOT rely on parents[2] alone — it breaks under a configured dag_dir.
+    return paths.project_root or paths.dag_dir.parents[2]
 ```
 
 Then rewrite `validate_project`:
@@ -1338,17 +1486,17 @@ def _check_legacy_dag_metadata(
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/dag/test_validate.py -q
+rtk uv run --frozen --project science pytest science/tests/dag/test_validate.py science/tests/dag/test_validate_cli.py -q
 ```
 
-Expected: PASS after replacing old YAML-default assertions in `test_validate.py` with DOT/proposition assertions. Keep these old YAML behaviors only in retired-surface tests: schema emission belongs to `test_cli.py::test_cli_dag_schema_says_schema_is_retired`; retired YAML content scanning belongs to `test_retired_edges.py`; default `validate_project()` must not parse malformed YAML.
+Expected: PASS after migrating the 20 `test_validate.py` + 7 `test_validate_cli.py` YAML-default tests (per Existing Test Disposition) to DOT/proposition assertions. Keep these old YAML behaviors only in retired-surface tests: schema emission belongs to `test_cli.py::test_cli_dag_schema_says_schema_is_retired`; retired YAML content scanning belongs to `test_retired_edges.py`; default `validate_project()` must not parse malformed YAML.
 
 - [ ] **Step 6: Commit Task 6**
 
 Run:
 
 ```bash
-rtk git add science/src/science_tool/dag/validate.py science/src/science_tool/dag/paths.py science/tests/dag/test_validate.py
+rtk git add science/src/science_tool/dag/validate.py science/src/science_tool/dag/paths.py science/tests/dag/test_validate.py science/tests/dag/test_validate_cli.py
 rtk git commit -m "feat: validate DAGs from proposition edges"
 ```
 
@@ -1358,11 +1506,22 @@ Expected: commit succeeds.
 
 ## Task 7: Audit And Staleness Retire YAML Drift
 
+> **This is the load-bearing task for the design goal.** After Phase 5f, `dag
+> audit` must NOT read retired YAML at all. Today `run_audit` calls
+> `check_staleness` (`audit.py:229`), which reads `*.edges.yaml`, and
+> `AuditReport` carries a required `staleness` field consumed by `to_json`,
+> `has_findings`, and the CLI. Threading proposition edges into render (Task 4) is
+> necessary but NOT sufficient — this task must also REMOVE the staleness
+> composition from `run_audit`/`AuditReport`/`audit_cmd`, or audit still reads
+> retired YAML and the acceptance criteria fail. The `check_staleness` FUNCTION
+> stays in `staleness.py` (its unit tests in `test_staleness.py` remain green); only
+> its use as a default audit/CLI surface is retired.
+
 **Files:**
-- Modify: `science/src/science_tool/dag/audit.py`
-- Modify: `science/src/science_tool/dag/cli.py`
-- Test: `science/tests/dag/test_cli.py`
-- Test: `science/tests/dag/test_audit.py`
+- Modify: `science/src/science_tool/dag/audit.py` (drop staleness from `run_audit` + `AuditReport`; delete dead YAML-drift helpers)
+- Modify: `science/src/science_tool/dag/cli.py` (retire `staleness_cmd`; drop `--recent-days` + `_print_staleness_summary` from `audit_cmd`; delete the now-dead `_print_staleness_summary`)
+- Test: `science/tests/dag/test_cli.py` (staleness-retired test + migrate `test_dag_audit_accepts_format_json`, `test_cli_dag_audit_is_read_only_by_default`; delete `test_cli_dag_audit_fix_mutates`, `test_cli_dag_staleness_json_schema`, `test_dag_staleness_accepts_format_json`)
+- Test: `science/tests/dag/test_audit.py` (assert audit renders from propositions AND composes no staleness)
 
 - [ ] **Step 1: Add failing CLI staleness retirement test**
 
@@ -1379,12 +1538,17 @@ def test_cli_dag_staleness_is_retired(cli_project: Path) -> None:
 
 Remove or rewrite `test_cli_dag_staleness_json_schema`, `test_dag_staleness_accepts_format_json`, and `test_cli_dag_staleness_exit_code_on_clean_project`; default staleness no longer returns the old YAML report.
 
-- [ ] **Step 2: Add audit render-threading regression test**
+- [ ] **Step 2: Add audit render-threading + no-staleness regression test**
 
-In `science/tests/dag/test_audit.py`, add:
+In `science/tests/dag/test_audit.py`, add. This asserts both halves of the design
+goal: audit renders from proposition edges AND composes no YAML staleness. Do NOT
+monkeypatch `check_staleness` — after this task `run_audit` must not call it, and
+`AuditReport` must not carry a `staleness` field.
 
 ```python
-def test_audit_threads_proposition_edges_into_render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_audit_renders_from_propositions_and_composes_no_staleness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from science_tool.dag import audit as audit_mod
     from science_tool.dag.paths import DagPaths
 
@@ -1395,6 +1559,11 @@ def test_audit_threads_proposition_edges_into_render(tmp_path: Path, monkeypatch
     tasks_dir.mkdir()
     (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
     (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    # A stray retired YAML must be ignored by audit entirely.
+    (dag_dir / "h1.edges.yaml").write_text(
+        "dag: h1\nedges:\n  - id: 1\n    source: a\n    target: b\n    edge_status: supported\n",
+        encoding="utf-8",
+    )
 
     seen = {}
 
@@ -1402,23 +1571,19 @@ def test_audit_threads_proposition_edges_into_render(tmp_path: Path, monkeypatch
         seen["edges"] = proposition_edges
 
     monkeypatch.setattr(audit_mod, "render_all", fake_render_all)
-    monkeypatch.setattr(audit_mod, "load_proposition_edges", lambda _project: [{"source": "a", "target": "b"}])
     monkeypatch.setattr(
-        audit_mod,
-        "check_staleness",
-        lambda paths, **kwargs: audit_mod.StalenessReport(
-            today=date(2026, 4, 20),
-            recent_days=28,
-            drifted_edges=(),
-            under_reviewed_edges=(),
-            unresolved_refs=(),
-            unpropagated_tasks=(),
-        ),
+        audit_mod, "load_proposition_edges", lambda _project: [{"source": "a", "target": "b"}]
+    )
+    # check_staleness must no longer be imported/called by audit; guard against it.
+    assert not hasattr(audit_mod, "check_staleness")
+
+    report = audit_mod.run_audit(
+        DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None, project_root=project)
     )
 
-    audit_mod.run_audit(DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None))
-
     assert seen["edges"] == [{"source": "a", "target": "b"}]
+    assert not hasattr(report, "staleness")
+    assert "staleness" not in report.to_json()
 ```
 
 - [ ] **Step 3: Run RED tests**
@@ -1426,10 +1591,13 @@ def test_audit_threads_proposition_edges_into_render(tmp_path: Path, monkeypatch
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/dag/test_cli.py::test_cli_dag_staleness_is_retired science/tests/dag/test_audit.py::test_audit_threads_proposition_edges_into_render -q
+rtk uv run --frozen --project science pytest science/tests/dag/test_cli.py::test_cli_dag_staleness_is_retired science/tests/dag/test_audit.py::test_audit_renders_from_propositions_and_composes_no_staleness -q
 ```
 
-Expected: FAIL because staleness still runs YAML drift and audit calls `render_all(paths)` without proposition edges.
+Expected: FAIL because `staleness_cmd` still runs the YAML report, and `run_audit`
+still imports/calls `check_staleness` and returns an `AuditReport` with a
+`staleness` field (so the `not hasattr(...)` / `"staleness" not in to_json()`
+assertions fail).
 
 - [ ] **Step 4: Retire staleness CLI**
 
@@ -1445,38 +1613,75 @@ In `science/src/science_tool/dag/cli.py`, replace `staleness_cmd` body after pat
 
 Keep the command registered so existing callers get an actionable failure instead of "unknown command."
 
-- [ ] **Step 5: Thread proposition edges through audit render**
+- [ ] **Step 5: Remove YAML staleness composition from audit**
 
-In `science/src/science_tool/dag/audit.py`, import:
+The render-threading was already added in Task 4 (Step 5c). This step removes the
+staleness composition so audit stops reading retired YAML.
+
+In `science/src/science_tool/dag/audit.py`:
+
+1. Drop the staleness import. Change
+   `from science_tool.dag.staleness import (DriftedEdge, StalenessReport, UnpropagatedTask, check_staleness)`
+   to remove `StalenessReport` and `check_staleness` (and `DriftedEdge` /
+   `UnpropagatedTask` once their only users — the mutation helpers below — are
+   gone). After this, `hasattr(audit_mod, "check_staleness")` is False (the Step 2
+   guard).
+2. Remove the `staleness` field from `AuditReport`; make `has_findings` return
+   `not self.validation.ok`; drop the `"staleness"` key from `to_json`.
+3. In `run_audit`, delete the `check_staleness(...)` call and the entire `fix=True`
+   mutation block (it consumed `staleness.drifted_edges` / `unpropagated_tasks`).
+   Drop the now-unused `recent_days` and `include_curation_freshness` params.
+   `run_audit` becomes:
 
 ```python
-from science_tool.dag.proposition_edges import load_proposition_edges
+def run_audit(paths, *, today=None, fix=False, strict=False) -> AuditReport:
+    if today is None:
+        today = date.today()
+    validation = validate_project(paths, strict=strict, today=today)
+    if fix and not validation.ok:
+        blocking = [f for f in validation.findings if validation._blocks(f)]
+        raise RuntimeError(
+            "dag audit --fix refused: validation failed with "
+            f"{len(blocking)} blocking finding(s). Run `science dag validate` first."
+        )
+    project_root = paths.project_root or paths.dag_dir.parents[2]
+    render_all(paths, proposition_edges=load_proposition_edges(project_root))
+    # --fix is a no-op in Phase 5f: no proposition-backed mutation model exists yet.
+    return AuditReport(validation=validation, mutations=())
 ```
 
-In `run_audit`, before render:
+4. Delete the now-dead helpers `_build_drift_mutation`, `_build_unpropagated_mutation`,
+   `_open_review_task`, and `_write_unpropagated_log` (verify no other module
+   imports them), plus any now-unused imports (`_tasks_mod`, `UnpropagatedTask`,
+   `DriftedEdge`).
 
-```python
-    project_root = paths.dag_dir.parents[2]
-    proposition_edges = load_proposition_edges(project_root)
-```
+- [ ] **Step 5b: Drop staleness from the audit CLI**
 
-Then call:
+`staleness_cmd` was already retired in Step 4. Additionally, in
+`science/src/science_tool/dag/cli.py`:
 
-```python
-    render_all(paths, proposition_edges=proposition_edges)
-```
-
-Remove `_build_drift_mutation`, `_build_unpropagated_mutation`, `_open_review_task`, and `_write_unpropagated_log` call sites from `run_audit` if their only caller is the retired YAML staleness path. After Phase 5f, `run_audit(..., fix=True)` should execute no edge-review task mutations because there is no proposition-backed mutation model in scope.
+1. In `audit_cmd`, remove the `_print_staleness_summary(audit.staleness)` call
+   (~line 271) and remove the `--recent-days` option and its `recent_days`
+   parameter (staleness is gone; update the `run_audit(...)` call to drop it). The
+   audit docstring/help should no longer mention staleness.
+2. Delete the now-dead `_print_staleness_summary` helper (~line 495); its only two
+   callers (`staleness_cmd`, `audit_cmd`) no longer reference it.
 
 - [ ] **Step 6: Run GREEN audit/staleness tests**
 
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/dag/test_cli.py::test_cli_dag_staleness_is_retired science/tests/dag/test_audit.py -q
+rtk uv run --frozen --project science pytest science/tests/dag/test_audit.py science/tests/dag/test_cli.py science/tests/dag/test_staleness.py -q
 ```
 
-Expected: PASS after updating stale YAML-drift tests to the retired behavior.
+Expected: PASS after (a) migrating the `test_cli.py` audit/staleness tests per the
+Existing Test Disposition section (delete `test_cli_dag_audit_fix_mutates`,
+`test_cli_dag_staleness_json_schema`, `test_dag_staleness_accepts_format_json`;
+rewrite `test_dag_audit_accepts_format_json` and
+`test_cli_dag_audit_is_read_only_by_default` without a `staleness` key), and (b)
+confirming `test_staleness.py` is still GREEN unchanged — the `check_staleness`
+function is retained, only its default surface retired.
 
 - [ ] **Step 7: Commit Task 7**
 
@@ -1655,8 +1860,11 @@ rtk uv run --frozen --project science pytest \
   science/tests/dag/test_retired_edges.py \
   science/tests/dag/test_render.py \
   science/tests/dag/test_validate.py \
+  science/tests/dag/test_validate_cli.py \
   science/tests/dag/test_number.py \
   science/tests/dag/test_cli.py \
+  science/tests/dag/test_audit.py \
+  science/tests/dag/test_staleness.py \
   science/tests/dag/test_dag_inventory.py \
   science/tests/test_entities_inventory.py \
   -q
@@ -1749,6 +1957,10 @@ Expected: status clean; recent commits correspond to Tasks 1-9 plus optional ver
 
 - The plan implements the spec's sequencing requirement by adding `retired-edges` before flipping render/validate/audit defaults.
 - The plan removes the empty-list-to-`None` sentinel so zero compiled propositions fails loudly instead of selecting retired YAML.
-- `dag audit` is explicitly wired to proposition edges; this closes the design's audit fallback gap.
-- `dag schema` is not deleted, but its output is reframed as retired migration schema only.
-- YAML-heavy tests are not blindly deleted; default tests move to proposition/DOT behavior, while retired inspection owns the explicit YAML read path.
+- `dag audit` is fully de-YAML'd: Task 4 threads proposition edges into its render, and Task 7 REMOVES the `check_staleness` composition and the `AuditReport.staleness` field so audit no longer reads retired YAML. `--fix` becomes a no-op. The `check_staleness` function is retained for its own unit tests only.
+- `dag schema` is not deleted; its JSON output stays pure (banner to stderr) so the schema-drift guard and `test_validate_cli.py` schema tests stay green, while the terminal message states the schema is retired.
+- Ordering is explicit: making `proposition_edges` required (Task 4) is paired with threading it into `run_audit` in the SAME task, so no commit leaves the suite red between Task 4 and Task 7.
+- Project root is threaded via `DagPaths.project_root` (set by `load_dag_paths`) rather than reverse-derived from `dag_dir` depth, which would break under a configured `dag_dir`.
+- Render's fail-loud preflight reuses `validate._parse_dot_topology`; there is exactly one DOT-edge parser, so render and validate agree on "what is a DOT edge."
+- The 59 existing YAML-default tests are not blindly deleted: the Existing Test Disposition section assigns each a fate (DEL / DOT / PROP) inside the owning task's commit, and the two previously-missed files (`test_validate_cli.py`, `test_staleness.py`) are now in scope.
+- The `entities/propositions/*.md` fixture assumption in Task 6 was verified live against `load_local_entity_index` before relying on it.
