@@ -1851,6 +1851,13 @@ benchmark:
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:mmrf-like", "count": 1}],
     }
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["task_id"] == "dataset:mmrf-like#overall-survival"
+    assert rollups[0]["task_support_state"] is None
+    assert rollups[0]["task_support_reason"] == ""
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["example_entities"] == ["hypothesis:0103-generic"]
     assert "include_blocked_fallback" not in payload["filters"]
 
 
@@ -1901,6 +1908,14 @@ benchmark:
     payload = benchmark_test_triage_report(tmp_path, source="gap-fallback", include_blocked_fallback=True)
 
     assert len(payload["buckets"]["fallback-diagnostic"]) == 1
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["task_id"] == "dataset:blocked-fallback#progression-risk"
+    assert rollups[0]["task_support_state"] == "blocked"
+    assert rollups[0]["task_support_reason"] == "open-metadata-missing-progression-endpoint"
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["example_entities"] == ["hypothesis:0104-generic"]
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" in rollups[0]["reason_notes"]
     assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
     assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
     assert payload["filters"]["include_blocked_fallback"] is True
