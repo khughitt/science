@@ -5866,6 +5866,11 @@ def _format_count_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
     return ", ".join(values) if values else "-"
 
 
+def _format_count_map(counts: Mapping[str, int]) -> str:
+    rows = [{"key": key, "count": count} for key, count in counts.items() if count]
+    return _format_count_rows(rows, key="key") if rows else "-"
+
+
 def _format_share_rows(rows: list[dict[str, Any]], *, key: str) -> str:
     values = [f"{row[key]}:{row['count']} ({row['share']})" for row in rows]
     return ", ".join(values) if values else "-"
@@ -6254,12 +6259,15 @@ def benchmark_test_triage(
     if fallback_count:
         diagnostics = payload["fallback_diagnostics"]
         table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
-        for col in ("rows", "top benchmarks", "top facets"):
+        for col in ("rows", "top benchmarks", "top facets", "readiness", "class", "support"):
             table.add_column(col, overflow="fold", no_wrap=False)
         table.add_row(
             f"{fallback_count} fallback rows",
             _format_count_rows(diagnostics["top_benchmarks"], key="benchmark_id"),
             _format_count_rows(diagnostics["top_facets"], key="facet"),
+            _format_count_map(diagnostics["readiness_counts"]),
+            _format_count_map(diagnostics["dataset_class_counts"]),
+            _format_count_map(diagnostics["task_support_counts"]),
         )
         Console(width=200).print(table)
         visible_rows += 1
