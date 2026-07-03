@@ -574,6 +574,41 @@ def test_declared_unresolved_proxy_passes_provenance_when_roles_are_routed() -> 
     assert list(evaluate_identity_provenance([source, via, derived])) == []
 
 
+def test_declared_unresolved_transform_passes_provenance_when_roles_are_routed() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_37")
+    b = _with_assembly("dataset:source-b", "DIGEST_38")
+    liftover = _ds("science-pkg-entity-1.0", id="dataset:liftover-chain")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:liftover-chain",
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a", "dataset:source-b"],
+            "transformations": [
+                {
+                    "kind": "identity_transform",
+                    "target": "assembly",
+                    "dataset": "dataset:liftover-chain",
+                    "type": "liftover",
+                }
+            ],
+        },
+    )
+
+    assert list(evaluate_identity_provenance([a, b, liftover, derived])) == []
+
+
 def test_transform_dataset_missing_real_dataset_entity_errors() -> None:
     source = _with_assembly("dataset:source-a", "DIGEST_37")
     derived = _derived_with_identity(
@@ -707,6 +742,27 @@ def test_mixed_build_derived_output_without_proxy_or_transform_errors() -> None:
                 "label": "UNKNOWN",
                 "registry": _REGISTRY,
                 "resolution_status": "declared_unresolved",
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+
+
+def test_mixed_build_derived_output_with_empty_proxy_errors_as_unstructured() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_38")
+    b = _with_assembly("dataset:source-b", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "proxy": {},
             },
         },
         derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},

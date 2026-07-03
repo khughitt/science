@@ -389,7 +389,18 @@ def _assembly_has_structured_lineage(identity_context: Any) -> bool:
     if not isinstance(identity_context, dict):
         return False
     assembly = identity_context.get("assembly")
-    return isinstance(assembly, dict) and ("proxy" in assembly or "transform" in assembly)
+    if not isinstance(assembly, dict):
+        return False
+    transform = assembly.get("transform")
+    if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
+        return True
+    proxy = assembly.get("proxy")
+    if not isinstance(proxy, dict) or not isinstance(proxy.get("via"), str):
+        return False
+    sources = proxy.get("sources")
+    return isinstance(sources, list) and any(
+        isinstance(source, dict) and isinstance(source.get("dataset"), str) for source in sources
+    )
 
 
 def _is_declared_unresolved_assembly(identity_context: Any) -> bool:
