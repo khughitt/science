@@ -134,8 +134,12 @@ def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
     assert payload["mutations"] == []
 
 
-def test_audit_smoke_on_mm30_fixture() -> None:
-    """Real mm30 fixture runs end-to-end without error."""
+def test_audit_smoke_on_mm30_fixture_invokes_render_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real mm30 fixture audits without running the render implementation."""
+    from science_tool.dag import audit as audit_mod
+
+    render_calls: list[DagPaths] = []
+    monkeypatch.setattr(audit_mod, "render_all", lambda paths: render_calls.append(paths))
     paths = DagPaths(
         dag_dir=FIXTURE_ROOT / "doc/figures/dags",
         tasks_dir=FIXTURE_ROOT / "tasks",
@@ -143,6 +147,7 @@ def test_audit_smoke_on_mm30_fixture() -> None:
     )
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     assert isinstance(report, AuditReport)
+    assert render_calls == [paths]
 
 
 # ---------------------------------------------------------------------------

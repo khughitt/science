@@ -35,6 +35,13 @@ def cli_project(tmp_path: Path) -> Path:
     return project
 
 
+@pytest.fixture
+def skip_audit_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.dag import audit as audit_mod
+
+    monkeypatch.setattr(audit_mod, "render_all", lambda paths: None)
+
+
 def test_cli_dag_render_writes_auto_artifacts(cli_project: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["dag", "render", "--project", str(cli_project)])
@@ -88,7 +95,7 @@ def test_dag_staleness_accepts_format_json(cli_project: Path) -> None:
     assert "drifted_edges" in payload
 
 
-def test_dag_audit_accepts_format_json(cli_project: Path) -> None:
+def test_dag_audit_accepts_format_json(cli_project: Path, skip_audit_render: None) -> None:
     runner = CliRunner()
 
     result = runner.invoke(main, ["dag", "audit", "--project", str(cli_project), "--format", "json"])
@@ -110,7 +117,7 @@ def test_cli_dag_staleness_exit_code_on_clean_project(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
-def test_cli_dag_audit_is_read_only_by_default(cli_project: Path) -> None:
+def test_cli_dag_audit_is_read_only_by_default(cli_project: Path, skip_audit_render: None) -> None:
     """dag audit without --fix must not mutate tasks/active.md or edges.yaml."""
     active_before = (cli_project / "tasks/active.md").read_text()
     runner = CliRunner()
@@ -119,7 +126,7 @@ def test_cli_dag_audit_is_read_only_by_default(cli_project: Path) -> None:
     assert (cli_project / "tasks/active.md").read_text() == active_before
 
 
-def test_cli_dag_audit_fix_mutates(cli_project: Path) -> None:
+def test_cli_dag_audit_fix_mutates(cli_project: Path, skip_audit_render: None) -> None:
     """dag audit --fix opens tasks (we'll only check that it doesn't error;
     actual mutation behavior is unit-tested in test_audit.py)."""
     runner = CliRunner()
