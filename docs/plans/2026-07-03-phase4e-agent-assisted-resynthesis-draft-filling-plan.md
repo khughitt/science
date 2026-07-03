@@ -16,7 +16,7 @@
   - Add context constants.
   - Add `build_resynthesis_context_packet`.
   - Add `resynthesis_context_to_markdown`.
-  - Reuse `_live_action_for_draft`, `_current_action_annotations`, `_live_annotation_index`, `_resolve_paper_ref`, `_replacement_path`, `draft_to_json`, `RESYNTHESIS_DISPOSITIONS`, and `ALLOWED_REPLACEMENT_FRONTMATTER_KEYS`.
+  - Reuse `_live_action_for_draft`, `_current_action_annotations`, `_live_annotation_index`, `_resolve_paper_ref`, `find_entity`, `draft_to_json`, `RESYNTHESIS_DISPOSITIONS`, and `ALLOWED_REPLACEMENT_FRONTMATTER_KEYS`.
 - Modify `science/src/science_tool/annotation/cli.py`
   - Add flat command `resynthesis-draft-context`.
   - Support `--format json|markdown`, `--output`, `--root`, and `--input`.
@@ -69,12 +69,20 @@ def test_build_resynthesis_context_packet_expands_scaffold_with_live_context(tmp
     assert packet["original_proposition"]["id"] == "proposition:broad"
     assert packet["original_proposition"]["title"] == "BES behaves like pooled meta-analysis"
     assert "Claim body." in packet["original_proposition"]["body"]
-    assert packet["original_proposition"]["frontmatter"]["source_refs"] == [
-        "paper:A2020",
-        "annotation:entities/papers/A2020.source#a1",
-        "paper:B2021",
-        "annotation:entities/papers/B2021.source#b1",
-    ]
+    assert packet["original_proposition"]["frontmatter"] == {
+        "subject": None,
+        "predicate": None,
+        "object": None,
+        "polarity": None,
+        "claim_layer": None,
+        "identification_strength": None,
+        "source_refs": [
+            "paper:A2020",
+            "annotation:entities/papers/A2020.source#a1",
+            "paper:B2021",
+            "annotation:entities/papers/B2021.source#b1",
+        ],
+    }
     assert packet["review"] == {
         "decision": "factorization_needs_resynthesis",
         "confidence": "high",
@@ -154,11 +162,10 @@ Then add this helper after `_jsonable`:
 
 ```python
 def _selected_original_frontmatter(frontmatter: Mapping[str, Any]) -> dict[str, Any]:
-    selected: dict[str, Any] = {}
-    for key in RESYNTHESIS_CONTEXT_FRONTMATTER_KEYS:
-        if key in frontmatter:
-            selected[key] = _jsonable(frontmatter[key])
-    return selected
+    return {
+        key: _jsonable(frontmatter.get(key))
+        for key in RESYNTHESIS_CONTEXT_FRONTMATTER_KEYS
+    }
 ```
 
 - [ ] **Step 4: Add hint-index and context-row helpers**
@@ -214,7 +221,7 @@ Do not add `predicate` to the row. The current reconciliation hint model does no
 
 - [ ] **Step 5: Add `build_resynthesis_context_packet`**
 
-In `science/src/science_tool/annotation/proposition_resynthesis.py`, after `_context_annotation_row`, add:
+In `science/src/science_tool/annotation/proposition_resynthesis.py`, import `EntityCommandError` and `find_entity` from `science_tool.entities`, then add this after `_context_annotation_row`:
 
 ```python
 def build_resynthesis_context_packet(
@@ -228,10 +235,9 @@ def build_resynthesis_context_packet(
     if draft.input_annotations != current_annotations:
         raise ResynthesisDraftError("input_annotations are stale")
 
-    original_path = _replacement_path(project_root, draft.original_proposition)
     try:
-        original_frontmatter, original_body = parse_markdown_entity_file(original_path)
-    except OSError as exc:
+        original_location = find_entity(project_root, draft.original_proposition)
+    except (EntityCommandError, OSError) as exc:
         raise ResynthesisDraftError(str(exc)) from exc
 
     hints_by_annotation = _observed_hint_index(action)
@@ -267,9 +273,9 @@ def build_resynthesis_context_packet(
         "judgment_id": draft.judgment_id,
         "original_proposition": {
             "id": draft.original_proposition,
-            "title": original_frontmatter.get("title"),
-            "body": original_body,
-            "frontmatter": _selected_original_frontmatter(original_frontmatter),
+            "title": original_location.title,
+            "body": original_location.body,
+            "frontmatter": _selected_original_frontmatter(original_location.frontmatter),
         },
         "review": {
             "decision": action.decision,
@@ -300,18 +306,46 @@ def build_resynthesis_context_packet(
 
 This function intentionally returns a plain JSON-ready `dict[str, Any]`. Do not add dataclasses unless implementation pressure proves they remove real complexity.
 
-- [ ] **Step 6: Run the new test and verify GREEN**
+- [ ] **Step 6: Add original-proposition lookup regression test**
+
+Append this test to `science/tests/test_proposition_resynthesis.py` after the Task 1 packet-content test:
+
+```python
+def test_resynthesis_context_finds_original_proposition_by_id_not_replacement_path(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    original_path = tmp_path / "entities" / "propositions" / "broad.md"
+    relocated_path = tmp_path / "entities" / "propositions" / "legacy" / "broad-legacy-layout.md"
+    relocated_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.rename(relocated_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    packet = build_resynthesis_context_packet(tmp_path, draft, draft_path="draft.json")
+
+    assert packet["original_proposition"]["id"] == "proposition:broad"
+    assert packet["original_proposition"]["title"] == "BES behaves like pooled meta-analysis"
+    assert "Claim body." in packet["original_proposition"]["body"]
+```
+
+This regression must fail against any implementation that uses `_replacement_path(project_root, draft.original_proposition)` to locate the original. Existing propositions are found by id with `find_entity`; `_replacement_path` is only for authoring replacement ids.
+
+- [ ] **Step 7: Run the new tests and verify GREEN**
 
 Run:
 
 ```bash
 rtk uv run --frozen --project science pytest \
-  science/tests/test_proposition_resynthesis.py::test_build_resynthesis_context_packet_expands_scaffold_with_live_context -q
+  science/tests/test_proposition_resynthesis.py::test_build_resynthesis_context_packet_expands_scaffold_with_live_context \
+  science/tests/test_proposition_resynthesis.py::test_resynthesis_context_finds_original_proposition_by_id_not_replacement_path -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 8: Commit Task 1**
 
 Run:
 
@@ -456,7 +490,49 @@ def test_resynthesis_context_excludes_annotationless_hints_from_assignment_rows(
     assert all(row.get("exact") != "This hint has no annotation ref." for row in packet["input_annotations"])
 ```
 
-- [ ] **Step 5: Run the invariant tests and verify GREEN**
+- [ ] **Step 5: Add non-null subject/object hint preservation test**
+
+Append this test to `science/tests/test_proposition_resynthesis.py`:
+
+```python
+def test_resynthesis_context_preserves_subject_object_hint_fields(tmp_path: Path, monkeypatch):
+    from science_tool.annotation.proposition_reconciliation_plan import ReconciliationActionPlan
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+    import science_tool.annotation.proposition_resynthesis as resynthesis
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    draft = parse_resynthesis_draft(payload)
+    hints = tuple(
+        {
+            **hint,
+            "subject": "BES",
+            "object": "meta-analysis behavior",
+            "subject_concept": "concept:bes",
+            "object_concept": "concept:meta-analysis",
+        }
+        if hint.get("annotation") == "annotation:entities/papers/A2020.source#a1"
+        else hint
+        for hint in ctx["action"].inputs["observed_statement_hints"]
+    )
+    action = replace(ctx["action"], inputs={**ctx["action"].inputs, "observed_statement_hints": hints})
+    plan = ReconciliationActionPlan(schema_version=1, source_reviews=(str(ctx["review_path"]),), actions=(action,))
+    monkeypatch.setattr(resynthesis, "build_live_action_plan", lambda _root, _review: plan)
+
+    packet = build_resynthesis_context_packet(tmp_path, draft)
+    row = packet["input_annotations"][0]
+
+    assert row["annotation"] == "annotation:entities/papers/A2020.source#a1"
+    assert row["subject"] == "BES"
+    assert row["object"] == "meta-analysis behavior"
+    assert row["subject_concept"] == "concept:bes"
+    assert row["object_concept"] == "concept:meta-analysis"
+```
+
+- [ ] **Step 6: Run the invariant tests and verify GREEN**
 
 Run:
 
@@ -464,12 +540,13 @@ Run:
 rtk uv run --frozen --project science pytest \
   science/tests/test_proposition_resynthesis.py::test_resynthesis_context_derives_constraints_has_no_timestamps_and_echoes_progress \
   science/tests/test_proposition_resynthesis.py::test_resynthesis_context_rejects_missing_observed_hint_for_input_annotation \
-  science/tests/test_proposition_resynthesis.py::test_resynthesis_context_excludes_annotationless_hints_from_assignment_rows -q
+  science/tests/test_proposition_resynthesis.py::test_resynthesis_context_excludes_annotationless_hints_from_assignment_rows \
+  science/tests/test_proposition_resynthesis.py::test_resynthesis_context_preserves_subject_object_hint_fields -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 7: Commit Task 2**
 
 Run:
 
@@ -529,7 +606,7 @@ In `science/src/science_tool/annotation/proposition_resynthesis.py`, after `buil
 
 ```python
 def resynthesis_context_to_markdown(packet: Mapping[str, Any]) -> str:
-    json_text = json.dumps(_jsonable(packet), indent=2, sort_keys=True)
+    json_text = json.dumps(packet, indent=2, sort_keys=True)
     return (
         "# Proposition Resynthesis Draft Context\n\n"
         "## Instructions\n\n"
@@ -602,7 +679,7 @@ def test_resynthesis_draft_context_cli_prints_json_packet(tmp_path: Path):
     payload = json.loads(result.output)
     assert payload["schema_version"] == 1
     assert payload["source"] == "derived:proposition-resynthesis-context-v1"
-    assert payload["draft_path"] == str(draft_path)
+    assert payload["draft_path"] == "resynthesis-draft.json"
     assert payload["action_id"] == ctx["action"].action_id
     assert payload["original_proposition"]["id"] == "proposition:broad"
     assert [row["annotation"] for row in payload["input_annotations"]] == list(ctx["action"].inputs["annotations"])
@@ -657,10 +734,11 @@ def resynthesis_draft_context_cmd(
     project_root = (root or Path.cwd()).resolve()
     try:
         draft = parse_resynthesis_draft(_read_json_object_for_cli(input_path))
+        draft_ref = _project_relative_or_absolute(project_root, input_path)
         packet = build_resynthesis_context_packet(
             project_root,
             draft,
-            draft_path=str(input_path),
+            draft_path=draft_ref,
         )
         if fmt == "json":
             output_text = json.dumps(packet, indent=2, sort_keys=True) + "\n"

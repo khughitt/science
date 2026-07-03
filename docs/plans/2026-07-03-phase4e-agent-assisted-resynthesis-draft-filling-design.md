@@ -204,11 +204,22 @@ The packet intentionally repeats the Half D identity fields so an agent can dete
 is filling the intended draft. The Half D validator still checks those fields against
 live state; the packet is guidance, not authority.
 
+`draft_path` is rendered project-relative when the draft lives under the project root,
+matching the existing resynthesis scaffold's path normalization.
+
 `original_proposition` is deliberately expanded in the context packet. In the Half D
 draft schema, `original_proposition` is only the proposition id string. In this
 packet, the same key names an object containing that id plus title, body, and selected
 frontmatter so an agent can inspect the claim it is replacing. The packet `source`
 discriminator distinguishes the two schemas.
+
+The original proposition is located with the same id-based entity lookup used by Half
+D apply. It must not be located with the replacement-proposition path policy, because
+existing propositions may live in nested or older layouts that do not match today's
+authoring path.
+
+The selected `original_proposition.frontmatter` object has a stable shape: every key
+shown in the example is present, with `null` when absent from the original file.
 
 The new command's delta over the existing Half D scaffold is intentionally small:
 
@@ -369,6 +380,8 @@ Core tests:
   subject/object hints, and current `promoted_to`;
 - context generation fails when an input annotation has no matching observed
   statement hint;
+- context packet excludes observed statement hints that carry no `annotation` ref
+  from `input_annotations`;
 - context packet omits non-input annotations from the same sidecar;
 - context packet derives allowed dispositions and frontmatter keys from the existing
   Half D constants;
