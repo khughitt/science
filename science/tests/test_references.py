@@ -14,6 +14,7 @@ from science_tool.references import (
     DuplicateCitekeyError,
     MarkdownPayload,
     UnresolvedCitationError,
+    UnresolvedSemanticRefError,
     UnsupportedCitationSyntaxError,
     build_reference_bundle,
     format_authors,
@@ -191,6 +192,51 @@ def test_validate_passes_known_keys() -> None:
 
 def test_validate_treats_known_colon_key_as_bibliography() -> None:
     assert validate_exported_markdown(_payload("ok [@author:2020]"), {"author:2020"}) == {}
+
+
+def test_validate_treats_known_semantic_namespace_key_as_bibliography() -> None:
+    assert validate_exported_markdown(_payload("ok [@prim:2020]"), {"prim:2020"}) == {}
+
+
+def test_validate_fails_unknown_colon_key_as_unsupported_semantic_ref() -> None:
+    with pytest.raises(UnsupportedCitationSyntaxError) as exc:
+        validate_exported_markdown(_payload("bad [@unknownns:item]"), {"Smith2020"})
+
+    assert "unknownns:item" in str(exc.value)
+
+
+def test_validate_ignores_known_semantic_refs_when_resolver_supplies_them() -> None:
+    assert (
+        validate_exported_markdown(
+            _payload("ok [@Smith2020; @prim:diffusion]"),
+            {"Smith2020"},
+            known_semantic_refs={"prim:diffusion"},
+        )
+        == {}
+    )
+
+
+def test_validate_fails_unknown_semantic_refs_distinctly() -> None:
+    with pytest.raises(UnresolvedSemanticRefError) as exc:
+        validate_exported_markdown(
+            _payload("bad [@prim:missing]"),
+            {"Smith2020"},
+            known_semantic_refs={"prim:diffusion"},
+        )
+
+    assert "prim:missing" in exc.value.unresolved
+
+
+def test_validate_fails_unknown_semantic_refs_even_with_partial() -> None:
+    with pytest.raises(UnresolvedSemanticRefError) as exc:
+        validate_exported_markdown(
+            _payload("bad [@Missing2026; @prim:missing]"),
+            {"Smith2020"},
+            allow_partial=True,
+            known_semantic_refs={"prim:diffusion"},
+        )
+
+    assert "prim:missing" in exc.value.unresolved
 
 
 def test_validate_fails_closed_on_unknown_key() -> None:

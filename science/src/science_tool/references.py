@@ -249,6 +249,8 @@ def _semantic_ref_for_key(
     known_citekeys: set[str] | None = None,
     semantic_namespaces: set[str] | None = None,
 ) -> SemanticRef | None:
+    if known_citekeys and key in known_citekeys:
+        return None
     match = _SEMANTIC_REF_RE.match(key)
     if not match:
         return None
@@ -399,6 +401,15 @@ class UnresolvedCitationError(ValueError):
         super().__init__(f"unresolved citation keys in exported prose: {keys}")
 
 
+class UnresolvedSemanticRefError(ValueError):
+    """Raised when exported prose uses a semantic ref unknown to the source project."""
+
+    def __init__(self, unresolved: dict[str, list[dict]]) -> None:
+        self.unresolved = unresolved
+        refs = ", ".join(sorted(unresolved))
+        super().__init__(f"unresolved semantic refs in exported prose: {refs}")
+
+
 @dataclass(frozen=True)
 class MarkdownPayload:
     path: str
@@ -420,6 +431,8 @@ def validate_exported_markdown(
     known_citekeys: set[str],
     *,
     allow_partial: bool = False,
+    known_semantic_refs: set[str] | None = None,
+    semantic_namespaces: set[str] | None = None,
 ) -> dict[str, list[dict]]:
     """Scan exported Markdown for citation keys (design §7). Fail-closed.
 
@@ -427,11 +440,19 @@ def validate_exported_markdown(
       UnsupportedCitationSyntaxError regardless of allow_partial.
     - Unknown citekeys raise UnresolvedCitationError unless allow_partial, in
       which case the design §7 `unresolved` map is returned instead.
+    - Unknown semantic refs raise UnresolvedSemanticRefError; they are never
+      merged into partial bibliography unresolved blocks.
     """
     unsupported_hits: list[str] = []
     unresolved: dict[str, list[dict]] = {}
+    semantic_unresolved: dict[str, list[dict]] = {}
+    known_semantic_refs = known_semantic_refs or set()
     for payload in payloads:
-        scan = parse_citations(payload.text, known_citekeys=known_citekeys)
+        scan = parse_citations(
+            payload.text,
+            known_citekeys=known_citekeys,
+            semantic_namespaces=semantic_namespaces,
+        )
         for token in scan.unsupported:
             unsupported_hits.append(f"{payload.path}:{payload.field} @{token}")
         for cite in scan.citations:
@@ -446,13 +467,28 @@ def validate_exported_markdown(
                     "snippet": _snippet(payload.text, cite.citekey),
                 }
             )
+        for semantic_ref in scan.semantic_refs:
+            if semantic_ref.ref in known_semantic_refs:
+                continue
+            semantic_unresolved.setdefault(semantic_ref.ref, []).append(
+                {
+                    "ref": semantic_ref.ref,
+                    "reason": "unknown-semantic-ref",
+                    "path": payload.path,
+                    "field": payload.field,
+                    "snippet": _snippet(payload.text, semantic_ref.ref),
+                }
+            )
     if unsupported_hits:
         raise UnsupportedCitationSyntaxError(
             "unsupported citation syntax (use [@key] only): " + "; ".join(unsupported_hits)
         )
+    if semantic_unresolved:
+        raise UnresolvedSemanticRefError(semantic_unresolved)
     if unresolved and not allow_partial:
         raise UnresolvedCitationError(unresolved)
     return unresolved
+
 
 
 class DuplicateCitekeyError(ValueError):
