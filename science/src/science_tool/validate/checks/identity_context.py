@@ -54,6 +54,8 @@ from science_tool.validate.result import Result, Severity
 
 # bio extensions whose data are assembly-anchored (coordinate-bearing).
 _COORDINATE_EXTENSIONS = ("bio.rnaseq", "bio.scrna", "bio.cna")
+_GENE_TIER_EXTENSIONS = ("bio.geneset", "bio.gene_crosswalk")
+_PROTEIN_TIER_EXTENSIONS = ("bio.protein_crosswalk",)
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -64,6 +66,84 @@ def _is_coordinate_bearing(profile: str) -> bool:
     return any(f"+{ext}/" in f"+{profile}" for ext in _COORDINATE_EXTENSIONS)
 
 
+def _has_profile_token(profile: str, extension: str) -> bool:
+    return f"+{extension}/" in f"+{profile}"
+
+
+def _has_variant_key(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    mids = identity_context.get("molecular_ids")
+    return isinstance(mids, dict) and "variant" in mids
+
+
+def required_identity_tiers(schema_profile: str, identity_context: Any) -> set[str]:
+    """Return identity tiers that must be declared for this dataset profile.
+
+    The profile signal is intentionally read from the composed `schema_profile`
+    token string, not from any expanded `profiles` list. Register-run-derived
+    datasets do not stamp bio schema_profile tokens yet; P3 will add that
+    propagation, so this gate does not try to infer bio identity from derivation.
+    """
+    profile = str(schema_profile or "")
+    required: set[str] = set()
+    if _is_coordinate_bearing(profile):
+        required.add("assembly")
+    if any(_has_profile_token(profile, extension) for extension in _GENE_TIER_EXTENSIONS):
+        required.add("gene")
+    if any(_has_profile_token(profile, extension) for extension in _PROTEIN_TIER_EXTENSIONS):
+        required.add("protein")
+    if _has_variant_key(identity_context):
+        required.add("variant")
+    return required
+
+
+def _has_taxon_decl(idc: Any) -> bool:
+    return isinstance(idc, dict) and "taxon" in idc and idc["taxon"] not in (None, "")
+
+
+def _has_tier_decl(idc: Any, tier: str) -> bool:
+    if not isinstance(idc, dict):
+        return False
+    if tier == "assembly":
+        return idc.get("assembly") is not None
+    mids = idc.get("molecular_ids")
+    return isinstance(mids, dict) and mids.get(tier) is not None
+
+
+def _tier_decl_path(tier: str) -> str:
+    if tier == "assembly":
+        return "identity_context.assembly"
+    return f"identity_context.molecular_ids.{tier}"
+
+
+def _declaration_gate_results(
+    *,
+    fm: dict[str, Any],
+    required_tiers: set[str],
+    identity_context: Any,
+) -> Iterator[Result]:
+    if not required_tiers:
+        return
+    path = fm.get("_path")
+    ident = fm.get("id", "?")
+    if not _has_taxon_decl(identity_context):
+        yield _result(
+            Severity.ERROR,
+            path,
+            f"{ident}: identity-bearing dataset does not declare identity_context.taxon",
+            "identity.taxon-undeclared",
+        )
+    for tier in sorted(required_tiers):
+        if not _has_tier_decl(identity_context, tier):
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: identity-bearing dataset does not declare {_tier_decl_path(tier)}",
+                f"identity.{tier}-undeclared",
+            )
+
+
 def _assembly_defect(assembly: Any) -> str | None:
     """Return a defect message if the raw assembly block is malformed, else None.
 
@@ -72,14 +152,17 @@ def _assembly_defect(assembly: Any) -> str | None:
     """
     if not isinstance(assembly, dict):
         return "not an object"
-    digest = assembly.get("seqcol_digest")
-    if not isinstance(digest, str) or not digest.strip():
-        return "missing or blank seqcol_digest"
     registry = assembly.get("registry")
     if not isinstance(registry, str) or not registry.startswith("dataset:"):
         return "missing or malformed registry (must be a dataset: reference)"
-    if assembly.get("resolution_status") not in ("resolved", "declared_unresolved"):
+    status = assembly.get("resolution_status")
+    if status not in ("resolved", "declared_unresolved"):
         return "resolution_status must be 'resolved' or 'declared_unresolved'"
+    digest = assembly.get("seqcol_digest")
+    if status == "declared_unresolved" and digest is None:
+        return None
+    if not isinstance(digest, str) or not digest.strip() or digest.strip().upper() == "UNKNOWN":
+        return "missing, blank, or UNKNOWN seqcol_digest"
     return None
 
 
@@ -99,22 +182,18 @@ def evaluate_identity_context(
     for fm in datasets:
         if fm.get("type") != "dataset":
             continue
-        if not _is_coordinate_bearing(str(fm.get("schema_profile") or "")):
+        schema_profile = str(fm.get("schema_profile") or "")
+        idc = fm.get("identity_context") or {}
+        required_tiers = required_identity_tiers(schema_profile, idc)
+        yield from _declaration_gate_results(fm=fm, required_tiers=required_tiers, identity_context=idc)
+
+        if "assembly" not in required_tiers:
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")
-        idc = fm.get("identity_context") or {}
         assembly = idc.get("assembly") if isinstance(idc, dict) else None
 
         if assembly is None:
-            has_freetext = bool(fm.get("reference_genome"))
-            detail = (
-                "free-text reference_genome is set but identity_context.assembly is not; "
-                "migrate to a structured seqcol_digest declaration"
-                if has_freetext
-                else "coordinate-bearing dataset does not declare identity_context.assembly"
-            )
-            yield _result(Severity.WARN, path, f"{ident}: {detail}", "identity.assembly-undeclared")
             continue
 
         defect = _assembly_defect(assembly)
@@ -127,9 +206,18 @@ def evaluate_identity_context(
             )
             continue
 
-        digest = str(assembly["seqcol_digest"])
         registry_id = str(assembly["registry"])
         status = assembly["resolution_status"]
+        digest_value = assembly.get("seqcol_digest")
+        if status == "declared_unresolved" and (not isinstance(digest_value, str) or not digest_value.strip()):
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: assembly seqcol_digest declared_unresolved (honoured, RCM-D2)",
+                "identity.assembly-declared-unresolved",
+            )
+            continue
+        digest = str(digest_value)
 
         known = registry_id in registry_keys_by_id and registry_keys_by_id[registry_id] is not None
         available = registry_keys_by_id[registry_id] if known else None
@@ -218,10 +306,7 @@ def _has_liftover_remedy(
         relations = relations_by_dataset_id.get(dataset_id)
         if relations is None:
             continue
-        if (
-            relation_for(relations, source_seqcol_digest=from_digest, target_seqcol_digest=to_digest)
-            is not None
-        ):
+        if relation_for(relations, source_seqcol_digest=from_digest, target_seqcol_digest=to_digest) is not None:
             return True
     return False
 
