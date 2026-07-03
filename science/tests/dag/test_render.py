@@ -26,7 +26,14 @@ def render_workspace(tmp_path: Path) -> Path:
     return dst
 
 
-def test_render_all_byte_identical_dot_vs_mm30_reference(render_workspace: Path) -> None:
+@pytest.fixture
+def skip_png_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.dag import render as render_mod
+
+    monkeypatch.setattr(render_mod, "render_png", lambda dot_path, png_path, dpi=150: None)
+
+
+def test_render_all_byte_identical_dot_vs_mm30_reference(render_workspace: Path, skip_png_render: None) -> None:
     paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
     render_all(paths)
     for slug in SLUGS:
@@ -35,7 +42,7 @@ def test_render_all_byte_identical_dot_vs_mm30_reference(render_workspace: Path)
         assert produced == expected, f"{slug}: .dot drifted from mm30 reference"
 
 
-def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
+def test_render_one_handles_eliminated_edge(render_workspace: Path, skip_png_render: None) -> None:
     # h1-h2-bridge fixture has 2 eliminated edges (state->rib, state->e2f).
     render_one(render_workspace, "h1-h2-bridge")
     dot = (render_workspace / "h1-h2-bridge-auto.dot").read_text()
@@ -44,7 +51,7 @@ def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
     assert dot.count("[✗]") >= 2, "expected at least 2 [✗] eliminated markers"
 
 
-def test_render_one_uses_compact_inline_legend(render_workspace: Path) -> None:
+def test_render_one_uses_compact_inline_legend(render_workspace: Path, skip_png_render: None) -> None:
     render_one(render_workspace, "h1-prognosis")
     dot = (render_workspace / "h1-prognosis-auto.dot").read_text()
 
@@ -56,7 +63,7 @@ def test_render_one_uses_compact_inline_legend(render_workspace: Path) -> None:
     assert '<font color="#2e7d32">&#9473;&#9473;&#8857;</font> longitudinal' in dot
 
 
-def test_render_one_structural_invariants(render_workspace: Path) -> None:
+def test_render_one_structural_invariants(render_workspace: Path, skip_png_render: None) -> None:
     render_one(render_workspace, "h1-progression")
     yaml_path = render_workspace / "h1-progression.edges.yaml"
     dot = (render_workspace / "h1-progression-auto.dot").read_text()
@@ -65,7 +72,7 @@ def test_render_one_structural_invariants(render_workspace: Path) -> None:
         assert f"[{edge['id']}]" in dot, f"edge id [{edge['id']}] missing from rendered .dot"
 
 
-def test_render_one_ignores_claim_only_yaml_edges(render_workspace: Path) -> None:
+def test_render_one_ignores_claim_only_yaml_edges(render_workspace: Path, skip_png_render: None) -> None:
     dot_path = render_workspace / "claim-only.dot"
     dot_path.write_text(
         """digraph claim_only {
@@ -108,7 +115,7 @@ edges:
     assert "[2]" not in dot
 
 
-def test_render_discovers_slugs_when_whitelist_absent(render_workspace: Path) -> None:
+def test_render_discovers_slugs_when_whitelist_absent(render_workspace: Path, skip_png_render: None) -> None:
     paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
     render_all(paths)
     for slug in SLUGS:

@@ -42,7 +42,14 @@ def skip_audit_render(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(audit_mod, "render_all", lambda paths: None)
 
 
-def test_cli_dag_render_writes_auto_artifacts(cli_project: Path) -> None:
+@pytest.fixture
+def skip_png_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.dag import render as render_mod
+
+    monkeypatch.setattr(render_mod, "render_png", lambda dot_path, png_path, dpi=150: None)
+
+
+def test_cli_dag_render_writes_auto_artifacts(cli_project: Path, skip_png_render: None) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["dag", "render", "--project", str(cli_project)])
     assert result.exit_code == 0, result.output
@@ -50,7 +57,7 @@ def test_cli_dag_render_writes_auto_artifacts(cli_project: Path) -> None:
         assert (cli_project / f"doc/figures/dags/{slug}-auto.dot").exists()
 
 
-def test_cli_dag_render_single_slug(cli_project: Path) -> None:
+def test_cli_dag_render_single_slug(cli_project: Path, skip_png_render: None) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["dag", "render", "--dag", "h1-progression", "--project", str(cli_project)])
     assert result.exit_code == 0
