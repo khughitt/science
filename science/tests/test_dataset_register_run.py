@@ -247,6 +247,34 @@ def test_register_run_copies_literal_output_identity_to_derived_entity(tmp_path:
     assert frontmatter["identity_context"] == identity
 
 
+def test_register_run_rejects_profile_required_identity_after_resolution_before_writing(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.cna/1.0",
+                "identity": {"taxon": 9606},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "identity" in res.output
+    assert "assembly" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
 def test_register_run_rejects_blank_output_schema_profile(tmp_path: Path) -> None:
     _seed_workflow_and_run(
         tmp_path,
@@ -379,6 +407,73 @@ def test_register_run_bare_inherit_errors_when_input_identities_disagree(tmp_pat
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
 
 
+def test_register_run_bare_inherit_errors_when_selected_input_lacks_identity_context(tmp_path: Path) -> None:
+    _seed_dataset(tmp_path, "identified", {"taxon": 9606})
+    _seed_dataset(tmp_path, "unidentified")
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:identified", "dataset:unidentified"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"taxon": "inherit"},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "inherit" in res.output
+    assert "identity_context" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
+def test_register_run_bare_inherit_errors_when_selected_input_lacks_requested_tier(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "assembled",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh38",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "taxon-only", {"taxon": 9606})
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:assembled", "dataset:taxon-only"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"assembly": "inherit"},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "inherit" in res.output
+    assert "assembly" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
 def test_register_run_inherit_from_selects_named_input_identity(tmp_path: Path) -> None:
     _seed_dataset(tmp_path, "human", {"taxon": 9606})
     _seed_dataset(tmp_path, "mouse", {"taxon": 10090})
@@ -403,6 +498,40 @@ def test_register_run_inherit_from_selects_named_input_identity(tmp_path: Path) 
     assert res.exit_code == 0, res.output
     entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
     assert entity["identity_context"] == {"taxon": 10090}
+
+
+def test_register_run_literal_identity_does_not_load_input_identities(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "label": "UNKNOWN",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "declared_unresolved",
+        },
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:missing-upstream"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.cna/1.0",
+                "identity": identity,
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert entity["identity_context"] == identity
+    assert entity["derivation"]["inputs"] == ["dataset:missing-upstream"]
 
 
 def test_register_run_proxy_output_preserves_unresolved_proxy_and_routes_sources(tmp_path: Path) -> None:

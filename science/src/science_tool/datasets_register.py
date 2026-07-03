@@ -13,7 +13,7 @@ import yaml
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.commons.identity_stamp import derive_stamp
-from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE
+from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
 
 
 def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
@@ -287,10 +287,11 @@ def _resolve_bare_inherit(
     for input_id in selected_inputs:
         source_identity = identities.get(input_id)
         if source_identity is None:
-            continue
+            raise ValueError(f"output {out_slug!r} {tier_name} inherit source {input_id!r} has no identity_context")
         inherited = _lookup_identity_value(source_identity, tier_path)
-        if inherited is not None:
-            inherited_values.append(inherited)
+        if inherited is None:
+            raise ValueError(f"output {out_slug!r} {tier_name} inherit source {input_id!r} lacks {tier_name}")
+        inherited_values.append(inherited)
     if not inherited_values:
         raise ValueError(f"output {out_slug!r} {tier_name} inherit has no usable input identity")
     first = inherited_values[0]
@@ -306,6 +307,28 @@ def _is_inherit_from_contract(value: Any) -> bool:
         and isinstance(value.get("inherit"), dict)
         and isinstance(value["inherit"].get("from"), str)
     )
+
+
+def _uses_inherited_identity_source(value: Any) -> bool:
+    return value == "inherit" or _is_inherit_from_contract(value)
+
+
+def _contract_needs_input_identities(identity_contract: dict[str, Any]) -> bool:
+    if _uses_inherited_identity_source(identity_contract.get("taxon")):
+        return True
+    assembly_contract = identity_contract.get("assembly")
+    if _uses_inherited_identity_source(assembly_contract):
+        return True
+    if (
+        isinstance(assembly_contract, dict)
+        and ("transform" in assembly_contract or "proxy" in assembly_contract)
+        and "registry" not in assembly_contract
+    ):
+        return True
+    molecular_contract = identity_contract.get("molecular_ids")
+    if isinstance(molecular_contract, dict):
+        return any(_uses_inherited_identity_source(value) for value in molecular_contract.values())
+    return False
 
 
 def _resolve_identity_value(
@@ -415,7 +438,11 @@ def _resolve_output_identity(
     out_slug = str(out.get("slug"))
     proxy_sources = _proxy_source_datasets(identity_contract)
     selected_inputs = _dedupe_preserving_order([*run_inputs, *proxy_sources])
-    identities = _input_identity_map(project_root, selected_inputs)
+    identities = (
+        _input_identity_map(project_root, selected_inputs)
+        if _contract_needs_input_identities(identity_contract)
+        else {}
+    )
     identity_context: dict[str, Any] = {}
 
     if "taxon" in identity_contract:
@@ -494,7 +521,12 @@ def preflight_register_run_identity(project_root: Path, workflow_run_id: str) ->
     for out in outputs:
         _output_schema_profile(out)
         _validate_output_identity(out)
-    _resolve_output_identities(project_root, run_fm, outputs)
+    resolutions = _resolve_output_identities(project_root, run_fm, outputs)
+    for out in outputs:
+        resolved_identity = resolutions.get(str(out["slug"]))
+        identity_context = resolved_identity.identity_context if resolved_identity is not None else None
+        schema_profile = _schema_profile_with_identity_extension(_output_schema_profile(out), identity_context)
+        require_profile_identity(schema_profile, identity_context)
 
 
 def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> list[tuple[Path, str]]:
