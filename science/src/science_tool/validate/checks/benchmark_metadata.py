@@ -7,6 +7,12 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from science_model.packages.schema import (
+    BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_FIELDS,
+    BENCHMARK_TASK_SUPPORT_REASON_RE,
+    BENCHMARK_TASK_SUPPORT_STATES,
+)
 from science_tool.datasets.semantics import dataset_class_for
 from science_tool.validate._helpers import dataset_frontmatters
 from science_tool.validate.checks import Check
@@ -43,6 +49,19 @@ def _task_mappings(value: object) -> list[Mapping[str, Any]]:
     if not isinstance(value, list):
         return []
     return [task for task in value if isinstance(task, Mapping)]
+
+
+def _task_support_mapping(task: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    support = task.get("support")
+    if support is None:
+        return None
+    if isinstance(support, Mapping):
+        return support
+    return {}
+
+
+def _nonempty_string_items(value: object) -> bool:
+    return isinstance(value, list) and all(_nonempty_str(item) for item in value)
 
 
 def _dataset_class(fm: Mapping[str, Any]) -> str:
@@ -122,6 +141,77 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
             )
 
         for task in valid_tasks:
+            support = _task_support_mapping(task)
+            if support is not None:
+                for key in sorted(set(support) - BENCHMARK_TASK_SUPPORT_FIELDS):
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support field {key!r} is invalid",
+                        "benchmark.task-support-field-invalid",
+                    )
+
+                state = support.get("state")
+                if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support state {state!r} is invalid",
+                        "benchmark.task-support-state-invalid",
+                    )
+
+                has_reason = "reason" in support
+                reason = support.get("reason")
+                reason_text = reason.strip() if isinstance(reason, str) else ""
+                if state in {"candidate", "blocked"} and not reason_text:
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support reason is required for state {state!r}",
+                        "benchmark.task-support-reason-required",
+                    )
+                if has_reason and not isinstance(reason, str):
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support reason {reason!r} must be a string",
+                        "benchmark.task-support-reason-invalid",
+                    )
+                elif reason_text and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(reason_text) is None:
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support reason {reason_text!r} must be lowercase kebab-case",
+                        "benchmark.task-support-reason-invalid",
+                    )
+
+                has_checked_at = "checked_at" in support
+                checked_at = support.get("checked_at")
+                checked_at_text = checked_at.strip() if isinstance(checked_at, str) else ""
+                if has_checked_at and not isinstance(checked_at, str):
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support checked_at {checked_at!r} must be a string",
+                        "benchmark.task-support-checked-at-invalid",
+                    )
+                elif checked_at_text and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(checked_at_text) is None:
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support checked_at {checked_at_text!r} must be an ISO date",
+                        "benchmark.task-support-checked-at-invalid",
+                    )
+
+                for key in ("evidence", "notes"):
+                    if key in support and not _nonempty_string_items(support.get(key)):
+                        yield _result(
+                            Severity.ERROR,
+                            path,
+                            f"{ident}: benchmark task {task['id']!r} support {key} must be a list of nonempty strings",
+                            f"benchmark.task-support-{key}-invalid",
+                        )
+
             if not (_nonempty_str(task.get("task_type")) and _nonempty_str(task.get("prediction_target"))):
                 yield _result(
                     Severity.WARN,

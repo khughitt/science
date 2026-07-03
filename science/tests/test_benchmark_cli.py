@@ -32,6 +32,15 @@ def _invoke(tmp_path: Path, *args: str):
     )
 
 
+def _invoke_opportunities(tmp_path: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "opportunities", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+
 def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
     return CliRunner().invoke(
         science_cli,
@@ -867,6 +876,254 @@ benchmark:
     assert payload["benchmark_tests"][0]["priority_source"] == "opportunity-relative"
 
 
+def test_benchmark_tests_cli_projects_task_support_fields(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0301-progression",
+        """
+id: hypothesis:0301-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked in multiple myeloma.",
+    )
+    _write_dataset(
+        tmp_path,
+        "mmrf-commpass",
+        """
+id: dataset:mmrf-commpass
+type: dataset
+title: MMRF CoMMpass
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: survival prediction
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression-free survival endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-02'
+        evidence:
+          - recipe/reports/validation.json#task_support.progression-risk
+        notes:
+          - Open metadata lacks progression endpoint coverage.
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    row = payload["benchmark_tests"][0]
+    assert row["benchmark_id"] == "dataset:mmrf-commpass"
+    assert row["task_id"] == "dataset:mmrf-commpass#progression-risk"
+    assert row["readiness_label"] == "metadata-only"
+    assert row["task_support_state"] == "blocked"
+    assert row["task_support_reason"] == "open-metadata-missing-progression-endpoint"
+    assert row["task_support_checked_at"] == "2026-07-02"
+    assert row["task_support_evidence"] == ["recipe/reports/validation.json#task_support.progression-risk"]
+    assert row["task_support_notes"] == ["Open metadata lacks progression endpoint coverage."]
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" in row["reason_notes"]
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" not in row["needs"]
+
+
+def test_benchmark_tests_cli_rejects_invalid_task_support_state(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0302-progression",
+        """
+id: hypothesis:0302-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support",
+        """
+id: dataset:bad-support
+type: dataset
+title: Bad Support
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blockd
+        reason: open-metadata-missing-progression-endpoint
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code != 0
+    assert "benchmark task support state" in result.output
+    assert "blockd" in result.output
+
+
+def test_benchmark_tests_cli_rejects_scalar_task_support_evidence(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0304-progression",
+        """
+id: hypothesis:0304-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support-evidence",
+        """
+id: dataset:bad-support-evidence
+type: dataset
+title: Bad Support Evidence
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        evidence: recipe/reports/validation.json#x
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code != 0
+    assert "benchmark task support evidence" in result.output
+    assert "dataset:bad-support-evidence#progression-risk" in result.output
+
+
+def test_benchmark_tests_cli_rejects_unknown_task_support_key(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0305-progression",
+        """
+id: hypothesis:0305-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support-field",
+        """
+id: dataset:bad-support-field
+type: dataset
+title: Bad Support Field
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: supported
+        reviewer: analyst
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code != 0
+    assert "benchmark task support field" in result.output
+    assert "reviewer" in result.output
+    assert "dataset:bad-support-field#progression-risk" in result.output
+
+
+def test_benchmark_opportunities_cli_rejects_invalid_task_support_cleanly(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0303-progression",
+        """
+id: hypothesis:0303-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support-opportunities",
+        """
+id: dataset:bad-support-opportunities
+type: dataset
+title: Bad Support Opportunities
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      support:
+        state: blockd
+        reason: open-metadata-missing-progression-endpoint
+""",
+    )
+
+    result = _invoke_opportunities(tmp_path, "--format", "json")
+
+    assert result.exit_code != 0
+    assert "benchmark task support state" in result.output
+    assert "blockd" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_benchmark_tests_cli_table_output(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
@@ -1162,6 +1419,117 @@ benchmark:
         "notes": "",
     }
     assert payload["filters"] == {}
+
+
+def test_benchmark_test_triage_routes_blocked_task_support_to_blocked_bucket(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0303-progression",
+        """
+id: hypothesis:0303-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked with bulk RNA-seq time-series survival data.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-progress",
+        """
+id: dataset:blocked-progress
+type: dataset
+title: Blocked Progression
+dataset_class: deposit
+local_path: data/blocked-progress
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: survival prediction
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-02'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    row = payload["buckets"]["blocked-or-reference"][0]
+    assert row["benchmark_id"] == "dataset:blocked-progress"
+    assert row["readiness_label"] == "runnable"
+    assert row["task_support_state"] == "blocked"
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" in row["reason_notes"]
+    assert payload["summary"]["bucket_counts"]["run-now"] == 0
+
+
+def test_benchmark_test_triage_candidate_support_does_not_enter_run_now(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0304-survival",
+        """
+id: hypothesis:0304-survival
+type: hypothesis
+title: Survival benchmark hypothesis
+""",
+        body="Overall survival should be benchmarked with bulk RNA-seq time-series expression data.",
+    )
+    _write_dataset(
+        tmp_path,
+        "candidate-survival",
+        """
+id: dataset:candidate-survival
+type: dataset
+title: Candidate Survival
+dataset_class: deposit
+local_path: data/candidate-survival
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: overall-survival
+      task_type: survival prediction
+      prediction_target: overall survival
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: overall survival endpoint
+      support:
+        state: candidate
+        reason: open-metadata-survival-endpoint-present
+        checked_at: '2026-07-02'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["bucket_counts"]["run-now"] == 0
+    row = payload["buckets"]["metadata-needed"][0]
+    assert row["benchmark_id"] == "dataset:candidate-survival"
+    assert row["readiness_label"] == "runnable"
+    assert row["test_plan_state"] == "concrete"
+    assert row["task_support_state"] == "candidate"
+    assert "task-support:candidate:open-metadata-survival-endpoint-present" in row["reason_notes"]
 
 
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:

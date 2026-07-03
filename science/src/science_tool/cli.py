@@ -5748,13 +5748,16 @@ def benchmark_opportunities(
         except EntityCommandError as exc:
             raise click.ClickException(str(exc)) from exc
 
-    payload = opportunity_report(
-        root,
-        include_commons=include_commons,
-        entity_id=entity_id,
-        domain=domain,
-        calibration_report=calibration_report,
-    )
+    try:
+        payload = opportunity_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            calibration_report=calibration_report,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     notice = payload["commons_notice"]
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)

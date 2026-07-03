@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -275,6 +275,61 @@ class GroundTruth(BaseModel):
     description: str = ""
 
 
+BenchmarkTaskSupportState = Literal["supported", "candidate", "blocked"]
+BENCHMARK_TASK_SUPPORT_FIELDS: frozenset[str] = frozenset({"state", "reason", "checked_at", "evidence", "notes"})
+BENCHMARK_TASK_SUPPORT_STATES: frozenset[str] = frozenset(get_args(BenchmarkTaskSupportState))
+BENCHMARK_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+BENCHMARK_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_support_string_items(field: str, values: list[str]) -> list[str]:
+    for value in values:
+        if not value.strip():
+            raise ValueError(f"support.{field} items must be nonempty strings")
+    return values
+
+
+class BenchmarkTaskSupport(BaseModel):
+    """Durable task-local support assessment for benchmark report actionability."""
+
+    state: BenchmarkTaskSupportState
+    reason: str = ""
+    checked_at: str = ""
+    evidence: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_reason(cls, value: str) -> str:
+        if value and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(value) is None:
+            raise ValueError("support.reason must be lowercase kebab-case")
+        return value
+
+    @field_validator("checked_at")
+    @classmethod
+    def _validate_checked_at(cls, value: str) -> str:
+        if value and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(value) is None:
+            raise ValueError("support.checked_at must be YYYY-MM-DD")
+        return value
+
+    @field_validator("evidence")
+    @classmethod
+    def _validate_evidence_items(cls, values: list[str]) -> list[str]:
+        return _validate_support_string_items("evidence", values)
+
+    @field_validator("notes")
+    @classmethod
+    def _validate_notes_items(cls, values: list[str]) -> list[str]:
+        return _validate_support_string_items("notes", values)
+
+    @model_validator(mode="after")
+    def _validate_state_requirements(self) -> "BenchmarkTaskSupport":
+        if self.state in {"candidate", "blocked"} and not self.reason:
+            raise ValueError("support.reason is required when support.state is candidate or blocked")
+        return self
+
+
 class BenchmarkTask(BaseModel):
     """A locally named evaluation task inside a dataset benchmark block.
 
@@ -290,6 +345,7 @@ class BenchmarkTask(BaseModel):
     metric: str = ""
     baseline: str = ""
     ground_truth: GroundTruth | None = None
+    support: BenchmarkTaskSupport | None = None
     interpretation_limits: list[str] = Field(default_factory=list)
     intervention: str = ""
     timepoints: list[str] = Field(default_factory=list)

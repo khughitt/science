@@ -15,16 +15,19 @@
 - `science/model/src/science_model/packages/schema.py`
   - Add `BenchmarkTaskSupport` and attach it to `BenchmarkTask`.
   - Enforce support state enum, reason code format, `checked_at` date format, and required reason for `candidate` / `blocked`.
+  - Export the shared constants (`BenchmarkTaskSupportState`, `BENCHMARK_TASK_SUPPORT_STATES`, `BENCHMARK_TASK_SUPPORT_REASON_RE`, `BENCHMARK_TASK_SUPPORT_DATE_RE`) that the report parser and validate check import — single source of truth, no re-declared copies.
 - `science/model/src/science_model/schemas/mixin-dataset-1.0.json`
   - Add the matching JSON Schema under `benchmark_task.support`.
 - `science/model/tests/test_dataset_models.py`
   - Cover entity parsing for valid support and schema-model failures.
 - `science/src/science_tool/benchmark_opportunities.py`
-  - Add report-local task support types, strict raw-frontmatter parser, row projection fields, support reason notes, and triage bucket branches.
+  - Import the shared support constants from the model. Add report-local task support type, strict raw-frontmatter parser, row projection fields, support reason notes, and triage bucket branches.
+- `science/src/science_tool/cli.py`
+  - Wrap the `benchmark opportunities` command's `opportunity_report(...)` call in a `ValueError → ClickException` guard so a malformed commons support block fails cleanly instead of raising an uncaught traceback (the other loader-backed commands already have this guard).
 - `science/tests/test_benchmark_cli.py`
-  - Cover JSON row projection, invalid raw support failure, blocked/candidate triage routing, and candidate-not-run-now behavior.
+  - Cover JSON row projection, invalid raw support failure (via both `tests` and `opportunities`), blocked/candidate triage routing, and candidate-not-run-now behavior.
 - `science/src/science_tool/validate/checks/benchmark_metadata.py`
-  - Add validation diagnostics for malformed task support metadata on raw frontmatter.
+  - Import the shared support constants from the model. Add validation diagnostics for malformed task support metadata on raw frontmatter.
 - `science/tests/validate/test_checks_benchmark_metadata.py`
   - Cover support reason/state validation diagnostics.
 - `~/d/science-commons/datasets/mmrf-commpass/entity.md`
@@ -136,12 +139,13 @@ Expected: failures mention extra field `support` or missing `BenchmarkTask.suppo
 
 - [ ] **Step 3: Add model implementation**
 
-In `science/model/src/science_model/packages/schema.py`, add this near `GroundTruth`:
+In `science/model/src/science_model/packages/schema.py`, add this near `GroundTruth`. These constants are the **single source of truth** for benchmark task support states and formats; the benchmark report parser (Task 2) and the validate check (Task 4) import them rather than re-declaring their own copies. The state set is derived from the `Literal` via `get_args` so there is exactly one place states are spelled out:
 
 ```python
 BenchmarkTaskSupportState = Literal["supported", "candidate", "blocked"]
-_BENCHMARK_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_BENCHMARK_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BENCHMARK_TASK_SUPPORT_STATES: frozenset[str] = frozenset(get_args(BenchmarkTaskSupportState))
+BENCHMARK_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+BENCHMARK_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class BenchmarkTaskSupport(BaseModel):
@@ -157,14 +161,14 @@ class BenchmarkTaskSupport(BaseModel):
     @field_validator("reason")
     @classmethod
     def _validate_reason(cls, value: str) -> str:
-        if value and _BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(value) is None:
+        if value and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(value) is None:
             raise ValueError("support.reason must be lowercase kebab-case")
         return value
 
     @field_validator("checked_at")
     @classmethod
     def _validate_checked_at(cls, value: str) -> str:
-        if value and _BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(value) is None:
+        if value and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(value) is None:
             raise ValueError("support.checked_at must be YYYY-MM-DD")
         return value
 
@@ -177,7 +181,7 @@ class BenchmarkTaskSupport(BaseModel):
 
 Add `support: BenchmarkTaskSupport | None = None` to `BenchmarkTask`.
 
-If `Literal` or `model_validator` are not already imported in this file, update imports to include them.
+If `Literal`, `get_args`, or `model_validator` are not already imported in this file, update imports to include them (`from typing import ..., Literal, get_args`).
 
 - [ ] **Step 4: Add JSON Schema implementation**
 
@@ -362,6 +366,60 @@ benchmark:
     assert result.exit_code != 0
     assert "benchmark task support state" in result.output
     assert "blockd" in result.output
+
+
+def test_benchmark_opportunities_cli_rejects_invalid_task_support_state(tmp_path: Path) -> None:
+    """The shared loader raises on malformed support; every command that uses it
+    must surface a clean ClickException, not an uncaught traceback."""
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0302-progression",
+        """
+id: hypothesis:0302-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support",
+        """
+id: dataset:bad-support
+type: dataset
+title: Bad Support
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blockd
+        reason: open-metadata-missing-progression-endpoint
+""",
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "opportunities", "--format", "json"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code != 0
+    assert "benchmark task support state" in result.output
+    assert "blockd" in result.output
 ```
 
 - [ ] **Step 2: Run tests and verify they fail**
@@ -369,22 +427,30 @@ benchmark:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_benchmark_cli.py -k "task_support" -v
+uv run --frozen pytest science/tests/test_benchmark_cli.py -k "task_support or opportunities_cli_rejects" -v
 ```
 
-Expected: the projection test fails because support fields are missing, and the invalid state test fails because invalid support is silently ignored or not surfaced.
+Expected: the projection test fails because support fields are missing; the `tests` invalid-state test fails because invalid support is silently ignored; and the `opportunities` invalid-state test fails with an **uncaught `ValueError`** (the `opportunities` command does not yet wrap the shared loader in a `ValueError` guard). Because these tests use `catch_exceptions=False`, an unguarded raise surfaces as a test error rather than `exit_code != 0` — that is the failure this step proves, and Step 5b fixes it.
 
 - [ ] **Step 3: Add report-local support types**
 
-In `science/src/science_tool/benchmark_opportunities.py`, add these definitions near `OpportunityTask`:
+In `science/src/science_tool/benchmark_opportunities.py`, import the shared support constants from the model (add to the existing `from science_model.packages.schema import ...` group, or add a new import if none exists yet):
 
 ```python
-TaskSupportState = Literal["supported", "candidate", "blocked"]
+from science_model.packages.schema import (
+    BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_REASON_RE,
+    BENCHMARK_TASK_SUPPORT_STATES,
+    BenchmarkTaskSupportState,
+)
+```
 
+Then add these definitions near `OpportunityTask` (reuse the model's state type — do not re-declare a local `Literal`):
 
+```python
 @dataclass(frozen=True)
 class OpportunityTaskSupport:
-    state: TaskSupportState
+    state: BenchmarkTaskSupportState
     reason: str
     checked_at: str
     evidence: list[str]
@@ -405,14 +471,9 @@ Add these fields to `BenchmarkTestRow`:
 
 - [ ] **Step 4: Add strict raw support parser**
 
-Add these helpers before `_task_from_mapping`:
+Add this helper before `_task_from_mapping`. It reuses the shared constants imported in Step 3 (`BENCHMARK_TASK_SUPPORT_STATES`, `BENCHMARK_TASK_SUPPORT_REASON_RE`, `BENCHMARK_TASK_SUPPORT_DATE_RE`) — do not re-declare local copies:
 
 ```python
-_TASK_SUPPORT_STATES: set[str] = {"supported", "candidate", "blocked"}
-_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-
 def _task_support_from_mapping(dataset_id: str, task_id: str, value: object) -> OpportunityTaskSupport | None:
     if value is None:
         return None
@@ -420,21 +481,21 @@ def _task_support_from_mapping(dataset_id: str, task_id: str, value: object) -> 
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support must be a mapping")
 
     state = value.get("state")
-    if not isinstance(state, str) or state not in _TASK_SUPPORT_STATES:
+    if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support state {state!r} is invalid")
 
     reason = str(value.get("reason") or "")
     if state in {"candidate", "blocked"} and not reason:
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support reason is required for {state}")
-    if reason and _TASK_SUPPORT_REASON_RE.fullmatch(reason) is None:
+    if reason and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(reason) is None:
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support reason must be lowercase kebab-case")
 
     checked_at = str(value.get("checked_at") or "")
-    if checked_at and _TASK_SUPPORT_DATE_RE.fullmatch(checked_at) is None:
+    if checked_at and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(checked_at) is None:
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support checked_at must be YYYY-MM-DD")
 
     return OpportunityTaskSupport(
-        state=cast("TaskSupportState", state),
+        state=cast("BenchmarkTaskSupportState", state),
         reason=reason,
         checked_at=checked_at,
         evidence=_string_list(value.get("evidence")),
@@ -442,7 +503,7 @@ def _task_support_from_mapping(dataset_id: str, task_id: str, value: object) -> 
     )
 ```
 
-If `re` or `cast` are not already imported, add them to the imports.
+If `cast` is not already imported, add it to the imports.
 
 - [ ] **Step 5: Thread support through tasks and rows**
 
@@ -485,20 +546,52 @@ Add these fields to the returned row:
 
 Do not add support reason notes to `_task_needs`; `needs` remains only missing test-plan metadata.
 
+- [ ] **Step 5b: Guard the `benchmark opportunities` command**
+
+The new strict parser makes `_task_from_mapping` raise, and that loader
+(`_opportunity_analysis` → `load_opportunity_datasets` → `_dataset_from_source`
+→ `_task_from_mapping`) backs several commands. Most already wrap their report
+call in `try/except ValueError → click.ClickException` (`tests`, `test-triage`,
+`gaps`, `hint-candidates`, `gap-calibration`), but `benchmark opportunities`
+calls `opportunity_report` unguarded and would emit a raw traceback on a
+malformed commons `support` block.
+
+In `science/src/science_tool/cli.py`, in the `benchmark opportunities` command,
+wrap the `opportunity_report(...)` call:
+
+```python
+    try:
+        payload = opportunity_report(
+            root,
+            include_commons=include_commons,
+            entity_id=entity_id,
+            domain=domain,
+            calibration_report=calibration_report,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+```
+
+Do not touch `tests`, `test-triage`, `gaps`, `hint-candidates`, or
+`gap-calibration` — verify by inspection that each already has a `ValueError`
+guard around its report call; if any is missing one, add the same wrapper.
+`benchmark list` uses `benchmark_catalog.list_benchmarks`, a separate path that
+never reaches this parser, so it needs no change.
+
 - [ ] **Step 6: Run focused tests**
 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_benchmark_cli.py -k "task_support" -v
+uv run --frozen pytest science/tests/test_benchmark_cli.py -k "task_support or opportunities_cli_rejects" -v
 ```
 
-Expected: PASS.
+Expected: PASS, including `test_benchmark_opportunities_cli_rejects_invalid_task_support_state` (now a clean `exit_code != 0`).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/benchmark_opportunities.py science/tests/test_benchmark_cli.py
+git add science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/tests/test_benchmark_cli.py
 git commit -m "feat: project benchmark task support in reports"
 ```
 
@@ -810,12 +903,14 @@ Expected: FAIL because the new validation rules do not exist.
 
 - [ ] **Step 3: Add validation helpers**
 
-In `science/src/science_tool/validate/checks/benchmark_metadata.py`, add module constants near `_TASK_ID_RE`:
+In `science/src/science_tool/validate/checks/benchmark_metadata.py`, import the shared support constants from the model (do not re-declare local copies of the state set or regexes):
 
 ```python
-_TASK_SUPPORT_STATES = {"supported", "candidate", "blocked"}
-_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+from science_model.packages.schema import (
+    BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_REASON_RE,
+    BENCHMARK_TASK_SUPPORT_STATES,
+)
 ```
 
 Add this helper after `_task_mappings`:
@@ -839,13 +934,17 @@ Inside `for task in valid_tasks:`, before the sparse task warning, add:
             if support is not None:
                 state = support.get("state")
                 task_id = task["id"]
-                if not isinstance(state, str) or state not in _TASK_SUPPORT_STATES:
+                if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:
                     yield _result(
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task_id!r} support state {state!r} is invalid",
                         "benchmark.task-support-state-invalid",
                     )
+                    # An invalid state makes the remaining support fields
+                    # unclassifiable, so skip the rest of this task's checks
+                    # (including the sparse/perturbation warnings below). The
+                    # state error is the actionable finding.
                     continue
 
                 reason = support.get("reason")
@@ -857,7 +956,7 @@ Inside `for task in valid_tasks:`, before the sparse task warning, add:
                         f"{ident}: benchmark task {task_id!r} support reason is required for state {state!r}",
                         "benchmark.task-support-reason-required",
                     )
-                if has_reason and _TASK_SUPPORT_REASON_RE.fullmatch(str(reason)) is None:
+                if has_reason and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(str(reason)) is None:
                     yield _result(
                         Severity.ERROR,
                         path,
@@ -866,7 +965,7 @@ Inside `for task in valid_tasks:`, before the sparse task warning, add:
                     )
 
                 checked_at = support.get("checked_at")
-                if _nonempty_str(checked_at) and _TASK_SUPPORT_DATE_RE.fullmatch(str(checked_at)) is None:
+                if _nonempty_str(checked_at) and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(str(checked_at)) is None:
                     yield _result(
                         Severity.ERROR,
                         path,
@@ -875,7 +974,7 @@ Inside `for task in valid_tasks:`, before the sparse task warning, add:
                     )
 ```
 
-This intentionally treats a non-mapping `support` as an invalid state diagnostic rather than ignoring it.
+This intentionally treats a non-mapping `support` as an invalid state diagnostic rather than ignoring it. Note that support validation runs inside `for task in valid_tasks:`, so it only covers tasks whose id already passed validation; a support block on an invalid-id task is not separately checked (the id error dominates).
 
 - [ ] **Step 5: Run validation tests**
 
@@ -1032,7 +1131,23 @@ Expected:
 - They include structured task-support fields and the support reason note.
 - Candidate `overall-survival` rows, if authored in Task 5, do not appear under `run-now`.
 
-- [ ] **Step 5: Commit science repo changes**
+**Caveat — this smoke check is weak evidence for the new routing.** MMRF is
+`dataset_class: pointer`, so its rows already resolve to `readiness_label:
+metadata-only` and land in `blocked-or-reference` regardless of any support
+metadata. The new `task_support_state == "blocked"` triage branch is therefore
+*not* exercised by MMRF here — it only bites once MMRF is promoted past
+pointer. The authoritative proof that blocked/candidate support routing works is
+the Task 3 unit tests, which use `deposit`/`runnable` fixtures. Treat this step
+as confirming the structured fields and reason note surface on MMRF, not as
+validating the triage branch.
+
+- [ ] **Step 5: Confirm the working tree is clean**
+
+Tasks 1–4 already committed every science-repo file (schema, JSON schema, model
+tests, `benchmark_opportunities.py`, `cli.py`, `benchmark_metadata.py`, and both
+tool test files). This step only verifies nothing is left uncommitted — do not
+create a second, redundant "feat: add benchmark task support reporting" commit
+over files already captured by the per-task commits.
 
 Run:
 
@@ -1040,22 +1155,20 @@ Run:
 git status --short
 ```
 
-Expected: only intentional science repo files are changed; unrelated untracked files such as `docs/plans/2026-07-02-bio-identity-adoption-layer-*.md` remain uncommitted unless explicitly requested.
-
-Run:
-
-```bash
-git add science/model/src/science_model/packages/schema.py science/model/src/science_model/schemas/mixin-dataset-1.0.json science/model/tests/test_dataset_models.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/validate/checks/benchmark_metadata.py science/tests/test_benchmark_cli.py science/tests/validate/test_checks_benchmark_metadata.py
-git commit -m "feat: add benchmark task support reporting"
-```
-
-Expected: if earlier task commits were already made, this final commit may have nothing to commit. Do not amend earlier commits unless the branch workflow requires squashing.
+Expected: no benchmark task-support source or test files remain staged or
+modified. Any untracked files (e.g. `docs/plans/2026-07-02-bio-identity-adoption-layer-*.md`)
+are unrelated and must stay uncommitted unless explicitly requested. If a
+task-support file *is* unexpectedly dirty, trace it to the owning task (1–4) and
+amend/commit there rather than opening a catch-all commit here.
 
 ## Self-Review
 
 - **Spec coverage:** The plan covers the schema, raw report parser, additive report fields, triage behavior, validation diagnostics, and MMRF metadata application. It explicitly keeps `readiness_label` as dataset readiness and avoids reading local recipe artifacts.
 - **Placeholder scan:** The plan contains no placeholder steps, no open-ended "handle errors" step, and no unnamed test instructions. Task 5 has an explicit branch for `overall-survival`: add it only when the existing entity already describes it; otherwise leave it out.
-- **Type consistency:** `OpportunityTaskSupport`, `task_support_*` row keys, and triage support-state checks use the same state values: `supported`, `candidate`, and `blocked`.
+- **Single source of truth:** The state set and the reason/date regexes live only in `schema.py`; the report parser (`benchmark_opportunities.py`) and the validate check (`benchmark_metadata.py`) import them, and the runtime state set is derived from the `Literal` via `get_args`, so there is no copy-paste drift risk across the three enforcement points.
+- **Fail-loud blast radius:** The strict parser lives in the shared loader (`_task_from_mapping`), so every loader-backed command must convert its `ValueError` to a `ClickException`. Task 2 Step 5b adds the missing guard to `benchmark opportunities` and a regression test; `tests`, `test-triage`, `gaps`, `hint-candidates`, and `gap-calibration` were verified to already have it, and `benchmark list` uses a separate path.
+- **Commit hygiene:** Tasks 1–4 own their own commits; Task 6 only verifies a clean tree rather than opening a redundant catch-all commit. Commons metadata (Task 5) is committed to `~/d/science-commons` but not pushed.
+- **Type consistency:** `OpportunityTaskSupport`, `task_support_*` row keys, and triage support-state checks use the same state values: `supported`, `candidate`, and `blocked`, sourced from the model's `BenchmarkTaskSupportState`.
 
 ## Execution Handoff
 

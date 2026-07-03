@@ -140,6 +140,206 @@ def test_task_id_lowercase_kebab_case_edges_are_errors() -> None:
     ]
 
 
+def test_task_support_invalid_state_is_error() -> None:
+    results = _results(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "blockd",
+                                "reason": "open-metadata-missing-progression-endpoint",
+                            },
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert any(
+        result.severity is Severity.ERROR
+        and result.rule == "benchmark.task-support-state-invalid"
+        and "blockd" in result.message
+        for result in results
+    )
+
+
+def test_task_support_candidate_and_blocked_require_reason() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {"id": "overall-survival", "support": {"state": "candidate"}},
+                        {"id": "progression-risk", "support": {"state": "blocked"}},
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert rules.count((Severity.ERROR, "benchmark.task-support-reason-required")) == 2
+
+
+def test_task_support_reason_must_be_lowercase_kebab_case() -> None:
+    results = _results(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "blocked",
+                                "reason": "Missing Endpoint",
+                            },
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert any(
+        result.severity is Severity.ERROR
+        and result.rule == "benchmark.task-support-reason-invalid"
+        and "lowercase kebab-case" in result.message
+        for result in results
+    )
+
+
+def test_task_support_reason_must_be_string_when_present() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "supported",
+                                "reason": 123,
+                            },
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-reason-invalid") in rules
+
+
+def test_task_support_checked_at_must_be_iso_date() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "blocked",
+                                "reason": "open-metadata-missing-progression-endpoint",
+                                "checked_at": "07/02/2026",
+                            },
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-checked-at-invalid") in rules
+
+
+def test_task_support_checked_at_must_be_string_when_present() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "supported",
+                                "checked_at": 123,
+                            },
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-checked-at-invalid") in rules
+
+
+def test_task_support_must_be_mapping() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {"id": "progression-risk", "support": "blocked"},
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-state-invalid") in rules
+
+
+def test_task_support_evidence_and_notes_must_be_string_lists() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "supported",
+                                "evidence": ["ok", 3],
+                                "notes": "manual review",
+                            },
+                        },
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-evidence-invalid") in rules
+    assert (Severity.ERROR, "benchmark.task-support-notes-invalid") in rules
+
+
+def test_task_support_unknown_key_is_invalid() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "supported",
+                                "reviewer": "analyst",
+                            },
+                        },
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-field-invalid") in rules
+
+
 def test_task_missing_core_evaluation_fields_warns() -> None:
     assert (Severity.WARN, "benchmark.task-sparse") in _rules(
         [_ds(benchmark={"tasks": [{"id": "rank-genes", "task_type": "ranking"}]})]
