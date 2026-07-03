@@ -501,7 +501,9 @@ def _is_proxy_mediated(entity: Entity, text: str) -> bool:
 
 
 def _is_mechanistic(entity: Entity, text: str) -> bool:
-    return str(entity.claim_layer) == "mechanistic_narrative" or bool(_MECHANISTIC_RE.search(text))
+    if entity.claim_layer is not None:
+        return str(entity.claim_layer) == "mechanistic_narrative"
+    return bool(_MECHANISTIC_RE.search(text))
 
 
 def _has_lower_layer_support(entity: Entity) -> bool:

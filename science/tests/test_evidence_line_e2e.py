@@ -166,6 +166,42 @@ def test_entity_create_evidence_line_writes_template(tmp_path: Path) -> None:
         assert "direct_test" in text
 
 
+def test_evidence_lines_create_accepts_independence_group_and_belief_eligible(tmp_path: Path) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "evidence-lines",
+                "create",
+                "Staged same-cohort evidence",
+                "--target",
+                "proposition:p1",
+                "--stance",
+                "supports",
+                "--source",
+                "paper:x",
+                "--independence",
+                "shared-source",
+                "--independence-group",
+                "dataset-derived:gse216571",
+                "--no-belief-eligible",
+                "--id",
+                "evidence-line:0001-staged",
+                "--no-hints",
+            ],
+        )
+
+        assert result.exit_code == 0, f"evidence-lines create failed:\n{result.output}"
+        dest = root / "entities" / "evidence-lines" / "0001-staged.md"
+        payload = yaml.safe_load(dest.read_text(encoding="utf-8").split("---", 2)[1])
+        assert payload["independence_group"] == "dataset-derived:gse216571"
+        assert payload["belief_eligible"] is False
+
+
 # ---------------------------------------------------------------------------
 # Part A: graph build — cito edge, provenance, line metadata
 # ---------------------------------------------------------------------------

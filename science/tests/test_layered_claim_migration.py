@@ -521,6 +521,31 @@ def test_layered_claim_migration_report_warns_on_proxy_overclaim(tmp_path: Path)
     assert row["todos"]
 
 
+def test_layered_claim_migration_respects_authored_non_mechanistic_layer(tmp_path: Path) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p04",
+                "title": "Authored empirical proposition",
+                "body": "This empirical progression agreement is discussed in mechanistic context.",
+                "frontmatter": {
+                    "claim_layer": "empirical_regularity",
+                    "identification_strength": "observational",
+                    "proxy_directness": "direct",
+                },
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["authored_claim_layer"] == "empirical_regularity"
+    assert row["warnings"] == []
+    assert "mechanistic" not in " ".join(row["todos"]).lower()
+
+
 def test_layered_claim_migration_report_warns_on_unsupported_mechanistic_claim(tmp_path: Path) -> None:
     project = _write_scan_project(
         tmp_path / "scan-project",

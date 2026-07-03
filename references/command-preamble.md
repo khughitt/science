@@ -58,6 +58,14 @@ Before executing any research command:
    This assumes the root `pyproject.toml` includes `science` as a dev
    dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
    (the distribution is `science`; the entry point it installs is `science`).
+   If you are operating from a git worktree and `uv run --frozen science ...`
+   fails because a relative editable `tool.uv.sources` path resolves to a
+   nonexistent checkout, use the main checkout's synced environment while
+   keeping the worktree as the current directory:
+   `$MAIN/.venv/bin/science <command>`. For wrappers or rules that shell out to
+   nested `uv run --frozen ...`, export `UV_PROJECT=$MAIN` so dependencies
+   resolve from the main checkout while cwd-relative project files still come
+   from the worktree.
    If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
    `uv run --with ${CLAUDE_PLUGIN_ROOT}/science science <command>`

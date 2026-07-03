@@ -503,6 +503,17 @@ class TestNumericAnchor:
         )
         assert detect_numeric_anchor(path, anchor_patterns=[]) == []
 
+    def test_no_flag_version_labels(self, tmp_path):
+        path = _write(tmp_path, "The import uses SomaMutDB 2.0 as the source release.\n")
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
+    def test_no_flag_numeric_segments_inside_accession_like_identifiers(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Database identifiers accession 88990062094364789, sample 0001, and aliquot 012 are listed.\n",
+        )
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
 
 class TestArchivedTaskAliases:
     def test_reads_archived_task_ids(self, tmp_path):
