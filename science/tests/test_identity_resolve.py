@@ -9,7 +9,7 @@ from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
 from science_tool.commons.identity_resolve import resolve_assembly_label, resolve_identity, resolve_namespace
 
 
-_HG38_DIGEST = "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
+_HG38_DIGEST = "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a"
 _AVAILABLE_GENE_REGISTRY = {GENE_CROSSWALK_ID: {"available": True, "tier": "gene"}}
 _FIXTURES = Path(__file__).parent / "fixtures" / "commons"
 _ASSEMBLY_COMMONS = _FIXTURES / "assembly"
@@ -28,8 +28,8 @@ def test_resolve_assembly_label_with_fixture_registry(monkeypatch) -> None:
             accession="GCF_000001405.40",
             n_sequences=455,
             naming="ucsc",
-            source_collection_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
-            source_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
+            source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+            source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
         )
 
     monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
@@ -95,8 +95,8 @@ def test_resolve_identity_never_uses_network(monkeypatch) -> None:
             accession="GCF_000001405.40",
             n_sequences=455,
             naming="ucsc",
-            source_collection_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
-            source_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
+            source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+            source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
         )
 
     monkeypatch.setattr(socket, "socket", fake_socket)

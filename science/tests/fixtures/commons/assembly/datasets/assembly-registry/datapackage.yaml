@@ -5,5 +5,17 @@ resources:
     path: assemblies.csv
     format: csv
     mediatype: text/csv
-    hash: "sha256:e24f1ff30d7e6cc3af860ad1756e99c9dccc4fa2777761935e9110f1d6b1af31"
-    bytes: 540
+    hash: "sha256:bd2e8db7e43e8e865a03ffc0020137609b236bbc23d9f623eb87320277e64d15"
+    bytes: 543
+  - name: contigs
+    path: contigs.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:7335a886584a8c296949db5f99882d83cb14a08cae3087a23bfcdb4fd707ee9a"
+    bytes: 149
+  - name: contig_aliases
+    path: contig_aliases.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:7ddd3387ebc418ff95514f676668a0e34a5292e5b1f0647f41f0a832189cd91c"
+    bytes: 449

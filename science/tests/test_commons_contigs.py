@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,8 @@ from science_tool.commons.contigs import (
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "commons"
+_BUILT_COMMONS = _FIXTURES / "assembly"
+_BUILT_DATA = _FIXTURES / "assembly-data"
 
 
 def _kw() -> dict[str, Path]:
@@ -30,6 +33,36 @@ def _kw() -> dict[str, Path]:
         "commons_root": _FIXTURES / "assembly-c4a",
         "data_root": _FIXTURES / "assembly-c4a-data",
     }
+
+
+def test_built_artifact_fixture_resolves_grch38_chr1_alias() -> None:
+    with (_BUILT_DATA / "assembly-registry" / "assemblies.csv").open(newline="") as handle:
+        grch38 = next(row for row in csv.DictReader(handle) if row["label"] == "GRCh38")
+    with (_BUILT_DATA / "assembly-registry" / "contigs.csv").open(newline="") as handle:
+        contig = next(
+            row
+            for row in csv.DictReader(handle)
+            if row["seqcol_digest"] == grch38["seqcol_digest"] and row["name"] == "NC_000001.11"
+        )
+    with (_BUILT_DATA / "assembly-registry" / "contig_aliases.csv").open(newline="") as handle:
+        aliases = [
+            row
+            for row in csv.DictReader(handle)
+            if row["seqcol_digest"] == grch38["seqcol_digest"] and row["refget_digest"] == contig["refget_digest"]
+        ]
+
+    match = resolve_contig(
+        "chr1",
+        seqcol_digest=grch38["seqcol_digest"],
+        commons_root=_BUILT_COMMONS,
+        data_root=_BUILT_DATA,
+    )
+
+    assert match.refget_digest == contig["refget_digest"]
+    assert match.name == "NC_000001.11"
+    assert match.alias_kind == "ucsc"
+    assert any(row["alias"] == "chr1" and row["alias_kind"] == "ucsc" for row in aliases)
+    assert any(row["alias"] == "1" and row["alias_kind"] == "seqcol_name" for row in aliases)
 
 
 def test_resolve_by_refseq_accession() -> None:

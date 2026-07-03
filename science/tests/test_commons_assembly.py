@@ -28,31 +28,31 @@ def test_load_returns_entries() -> None:
 
 def test_available_keys_are_the_seqcol_digests() -> None:
     keys = available_assembly_keys(**_kw())
-    assert "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp" in keys
-    assert "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2" in keys
+    assert "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a" in keys
+    assert "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA" in keys
     assert len(keys) == 2
 
 
 def test_resolve_by_exact_digest() -> None:
-    entry = resolve_assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp", **_kw())
+    entry = resolve_assembly("XemD97fxYMS4q-FBm_n5CHQgmzh1_67a", **_kw())
     assert entry is not None and entry.label == "GRCh38"
 
 
 def test_resolve_by_label() -> None:
     entry = resolve_assembly("GRCh37", **_kw())
-    assert entry is not None and entry.seqcol_digest == "5K4odB173rjao1Cnbk5BnvLt9V7aPAa2"
+    assert entry is not None and entry.seqcol_digest == "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA"
 
 
 def test_entry_carries_row_bound_aliases_and_metadata() -> None:
     assert resolve_assembly("GRCh38.p14", **_kw()) == AssemblyEntry(
-        seqcol_digest="g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
+        seqcol_digest="XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
         label="GRCh38",
         aliases=("GRCh38.p14",),
         accession="GCA_000001405.15",
         n_sequences=455,
         naming="ncbi",
-        source_collection_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
-        source_url="https://seqcolapi.databio.org/collection/g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp",
+        source_collection_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
+        source_url="https://seqcolapi.databio.org/collection/XemD97fxYMS4q-FBm_n5CHQgmzh1_67a",
     )
 
 
