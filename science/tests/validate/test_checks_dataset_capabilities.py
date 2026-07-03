@@ -104,6 +104,63 @@ def test_unreached_dataset_without_provided_capabilities_does_not_warn() -> None
     assert _rules([dataset]) == []
 
 
+def test_provided_missing_suppressed_when_all_reached_targets_demand_closed() -> None:
+    dataset = _dataset()
+    dataset.pop("provided_capabilities")
+    answered = _question(status="answered")
+
+    rules = _rules([dataset, answered])
+
+    assert (Severity.WARN, "dataset-capabilities.provided-missing") not in rules
+
+
+def test_provided_missing_kept_when_any_reached_target_is_live() -> None:
+    dataset = _dataset(related=["question:q1", "question:q2"])
+    dataset.pop("provided_capabilities")
+    answered = _question(id="question:q1", _path="entities/questions/q1.md", status="answered", datasets=[])
+    active = _question(id="question:q2", _path="entities/questions/q2.md", status="active", datasets=[])
+
+    rules = _rules([dataset, answered, active])
+
+    assert (Severity.WARN, "dataset-capabilities.provided-missing") in rules
+
+
+def test_supported_hypothesis_keeps_provided_missing_warn() -> None:
+    # A `supported` hypothesis can still be strengthened, so it stays LIVE — a
+    # candidate reaching only it must keep warning (conservative suppression).
+    dataset = _dataset(related=["hypothesis:h1"])
+    dataset.pop("provided_capabilities")
+    hypothesis = {
+        "id": "hypothesis:h1",
+        "type": "hypothesis",
+        "_path": "entities/hypotheses/h1.md",
+        "status": "supported",
+        "required_capabilities": [{"assay": "gene-expression"}],
+    }
+
+    rules = _rules([dataset, hypothesis])
+
+    assert (Severity.WARN, "dataset-capabilities.provided-missing") in rules
+
+
+def test_required_missing_suppressed_when_target_demand_closed() -> None:
+    question = _question(status="answered")
+    question.pop("required_capabilities")
+
+    rules = _rules([_dataset(), question])
+
+    assert (Severity.WARN, "dataset-capabilities.required-missing") not in rules
+
+
+def test_required_missing_kept_when_target_live() -> None:
+    question = _question(status="active")
+    question.pop("required_capabilities")
+
+    rules = _rules([_dataset(), question])
+
+    assert (Severity.WARN, "dataset-capabilities.required-missing") in rules
+
+
 def test_module_is_registered() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS
 

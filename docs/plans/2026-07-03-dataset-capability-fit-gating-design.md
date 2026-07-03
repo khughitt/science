@@ -221,3 +221,44 @@ Add focused tests before implementation:
 Dataset ranking can remain unchanged until coverage gating proves stable. If
 future ranking should prefer capability-fit datasets, add that as a separate
 design because it changes prioritization rather than coverage truth.
+
+## Follow-up: closed-reach WARN scoping (2026-07-03)
+
+The adoption-window validation warnings above fire regardless of the reached
+target's lifecycle. In the first project-wide rollout (MM30 t833/t834) this
+surfaced a false-signal problem: of 184 capability warnings, ~29 were pure noise
+because the only questions/hypotheses driving them were already concluded, while
+the remaining 155 were a legitimate "characterize this candidate before staging
+it" queue against *live* targets. Bulk-suppressing all candidate warnings would
+have destroyed that live signal.
+
+`evaluate_dataset_capabilities` now scopes the two *missing* warnings by whether
+the reached target still exerts live data demand:
+
+- `provided-missing` is suppressed only when the dataset's **entire** reach is
+  demand-closed; a single live reached target keeps it firing.
+- `required-missing` is suppressed when the target itself is demand-closed.
+
+Demand-closed is a distinct axis from entity *visibility* (`_LIVE_STATUSES` in
+`entities.py`, which keeps `answered`/`refuted` visible for the record). A
+concluded target is still shown to users but no longer needs capability
+annotation to gate a decision. The demand-closed set is deliberately
+conservative — a suppressor should fail toward keeping the warning, since a
+false-suppress hides a real gap while a false-keep only leaves a low-value
+warning:
+
+- **Closed:** `answered`, `resolved`, `closed`, `rejected`, `duplicate`
+  (questions concluded); `refuted` (hypothesis verdict settled); `superseded`,
+  `retired`, `archived`, `abandoned`, `deprecated` (terminal/abandoned lifecycle).
+- **Live (keeps warning):** `active`, `open`, `proposed`, `under-investigation`,
+  `deferred`, `partially-answered`, `partially-supported`, `weakened`, and
+  notably `supported` — a supported hypothesis can still be strengthened, so a
+  candidate reaching only it is not yet noise.
+
+The malformed warnings are unaffected — a malformed capability field is an
+authoring error regardless of target lifecycle.
+
+Rejected alternative: suppress all `provided-missing` warnings on
+`status: candidate` datasets wholesale. That clears every warning but also
+destroys the 155 live-target nudges, which are the entire point of the
+adoption-window signal.
