@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -81,6 +82,43 @@ def _project_root_from_paths(paths: DagPaths) -> Path:
 
 _DOT_NODE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
 _DOT_EDGE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*->\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
+_DOT_EDGE_OCCURRENCE_RE = re.compile(
+    r"^\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*->\s*"
+    r"(?P<tgt>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[(?P<attrs>[^\]]*)\])?\s*;?\s*$"
+)
+
+
+def _flatten_multiline_attrs(text: str) -> str:
+    buf = ""
+    depth = 0
+    for ch in text:
+        if ch == "[":
+            depth += 1
+            buf += ch
+        elif ch == "]":
+            depth -= 1
+            buf += ch
+        elif ch == "\n" and depth > 0:
+            buf += " "
+        else:
+            buf += ch
+    return buf
+
+
+def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
+    """Return DOT edge occurrences in source order for the simple edge syntax render supports."""
+    text = dot_path.read_text(encoding="utf-8")
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    text = _flatten_multiline_attrs(text)
+
+    occurrences: list[tuple[str, str]] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"/\*.*?\*/", "", raw_line)
+        line = re.sub(r"//.*$", "", line)
+        edge_m = _DOT_EDGE_OCCURRENCE_RE.match(line)
+        if edge_m:
+            occurrences.append((edge_m.group("src"), edge_m.group("tgt")))
+    return occurrences
 
 
 def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
@@ -312,7 +350,7 @@ def validate_project(
     project_root = _project_root_from_paths(paths)
     dot_files = _discover_dot_files(paths)
     propositions = load_relational_propositions(project_root)
-    proposition_pairs = {(prop.subject, prop.object) for prop in propositions}
+    proposition_pair_counts = Counter((prop.subject, prop.object) for prop in propositions)
 
     findings: list[ValidationFinding] = []
     per_dag_nodes: dict[str, frozenset[str]] = {}
@@ -334,6 +372,7 @@ def validate_project(
             continue
 
         dot_nodes, dot_edges = _parse_dot_topology(dot_path)
+        dot_edge_counts = Counter(_dot_edge_occurrences(dot_path))
         per_dag_nodes[dag] = dot_nodes
         per_dag_edges[dag] = dot_edges
 
@@ -341,8 +380,8 @@ def validate_project(
         if strict:
             findings.extend(_check_orphan_dot_nodes_for_dot(dag, dot_nodes, dot_edges, dot_path))
 
-        for source, target in sorted(dot_edges):
-            if (source, target) in proposition_pairs:
+        for (source, target), dot_count in sorted(dot_edge_counts.items()):
+            if proposition_pair_counts[(source, target)] >= dot_count:
                 continue
             findings.append(
                 ValidationFinding(

@@ -65,6 +65,7 @@ from collections import Counter, defaultdict, deque
 from pathlib import Path
 
 from science_tool.dag.paths import DagPaths
+from science_tool.dag.validate import _dot_edge_occurrences
 from science_tool.graph.derived_status import derived_edge_status
 
 log = logging.getLogger(__name__)
@@ -459,21 +460,6 @@ def _discover_slugs(dag_dir: Path) -> list[str]:
             or p.name.endswith(".reference")
         )
     )
-
-
-def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
-    """Return DOT edge occurrences in source order for the simple edge syntax render supports."""
-    text = dot_path.read_text(encoding="utf-8")
-    # Keep comment handling aligned with validate._parse_dot_topology while
-    # retaining per-occurrence counts for duplicate DOT edges.
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    text = _flatten_multiline_attrs(text)
-    occurrences: list[tuple[str, str]] = []
-    for raw_line in text.splitlines():
-        em = _match_dot_edge_line(raw_line)
-        if em:
-            occurrences.append((em.group("src"), em.group("tgt")))
-    return occurrences
 
 
 def _assert_dot_edges_backed(slug: str, dot_path: Path, edges: list[dict]) -> None:  # type: ignore[type-arg]

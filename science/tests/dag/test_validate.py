@@ -142,6 +142,20 @@ def test_validate_flags_dot_edge_without_matching_proposition(tmp_path: Path) ->
     assert "a -> b" in finding.message
 
 
+def test_validate_counts_duplicate_dot_edge_occurrences_for_proposition_backing(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;\n  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
+
+    assert not report.ok
+    finding = next(f for f in report.findings if f.rule == "proposition_edge_missing")
+    assert finding.dag == "h1"
+    assert "a -> b" in finding.message
+
+
 def test_validate_ignores_malformed_edges_yaml_when_dot_and_proposition_are_valid(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_project_manifest(project)
