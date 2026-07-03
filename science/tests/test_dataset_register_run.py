@@ -217,6 +217,35 @@ def test_register_run_copies_literal_output_identity_to_derived_entity(tmp_path:
     assert frontmatter["identity_context"] == identity
 
 
+def test_register_run_rejects_blank_output_schema_profile(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": "",
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = CliRunner().invoke(
+        science_cli,
+        ["dataset", "register-run", "workflow-run:wf-r1"],
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+    )
+
+    assert res.exit_code != 0
+    assert "schema_profile" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
 # ── Task 7.4: symmetric edges ──────────────────────────────────────────────
 
 

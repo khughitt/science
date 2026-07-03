@@ -11,6 +11,7 @@ BASE_DATASET_SCHEMA_PROFILE = "science-entity-base/1.0+dataset/1.0"
 ASSEMBLY_REGISTRY_ID = "dataset:assembly-registry"
 GENE_CROSSWALK_ID = "dataset:gene-crosswalk-hgnc"
 PROTEIN_CROSSWALK_ID = "dataset:protein-crosswalk-uniprot"
+IDENTITY_CONTEXT_EXTENSION = "bio.identity_context"
 
 _TIER_FLAG_BY_NAME = {
     "assembly": "--assembly",
@@ -92,7 +93,8 @@ def require_profile_identity(schema_profile: str, identity_context: Any) -> None
     from science_tool.validate.checks.identity_context import required_identity_tiers
 
     required_tiers = required_identity_tiers(schema_profile, identity_context)
-    if not required_tiers:
+    requires_taxon = required_tiers or any(ext.name == IDENTITY_CONTEXT_EXTENSION for ext in profile.extensions)
+    if not requires_taxon:
         return
 
     missing: list[str] = []

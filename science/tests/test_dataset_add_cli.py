@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from science_tool.cli import main as science_cli
 
 BIO_CNA_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
+BIO_IDENTITY_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.identity_context/1.0"
 
 
 def _add(tmp_path: Path, *args: str):
@@ -48,6 +49,14 @@ def test_add_refuses_identity_bearing_profile_without_identity(tmp_path: Path) -
     assert "--taxon" in res.output
     assert "--assembly" in res.output
     assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
+
+
+def test_add_refuses_identity_context_profile_without_taxon(tmp_path: Path) -> None:
+    res = _add(tmp_path, "identity-only", "--title", "Identity only", "--schema-profile", BIO_IDENTITY_PROFILE)
+
+    assert res.exit_code == 1
+    assert "--taxon" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "identity-only.md").exists()
 
 
 def test_add_refuses_blank_assembly_for_identity_bearing_profile(tmp_path: Path) -> None:

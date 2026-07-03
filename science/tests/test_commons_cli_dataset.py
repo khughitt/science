@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from science_tool.commons.cli import commons_group
 
 BIO_CNA_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
+BIO_IDENTITY_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.identity_context/1.0"
 
 
 def test_dataset_init_creates_package(tmp_path: Path, monkeypatch) -> None:
@@ -64,6 +65,27 @@ def test_dataset_init_refuses_identity_bearing_profile_without_identity(tmp_path
     assert "--taxon" in result.output
     assert "--assembly" in result.output
     assert not (root / "datasets" / "copy-number").exists()
+
+
+def test_dataset_init_refuses_identity_context_profile_without_taxon(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "identity-only",
+            "--schema-profile",
+            BIO_IDENTITY_PROFILE,
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--taxon" in result.output
+    assert not (root / "datasets" / "identity-only").exists()
 
 
 def test_dataset_init_refuses_blank_assembly_for_identity_bearing_profile(tmp_path: Path, monkeypatch) -> None:

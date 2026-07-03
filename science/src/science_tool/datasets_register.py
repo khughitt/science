@@ -162,6 +162,15 @@ def _entity_yaml_block(
     )
 
 
+def _output_schema_profile(out: dict) -> str:
+    if "schema_profile" not in out:
+        return BASE_DATASET_SCHEMA_PROFILE
+    value = out["schema_profile"]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"output {out.get('slug')!r} has blank schema_profile")
+    return value
+
+
 def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> list[tuple[Path, str]]:
     """Returns list of (path, dataset_id) tuples for written entities."""
     _, run_fm = _read_run(project_root, workflow_run_id)
@@ -198,7 +207,7 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
             inputs=inputs,
             dp_path_rel=dp_rel,
             ontology_terms=list(out.get("ontology_terms") or []),
-            schema_profile=str(out.get("schema_profile") or BASE_DATASET_SCHEMA_PROFILE),
+            schema_profile=_output_schema_profile(out),
             identity_context=out.get("identity") if isinstance(out.get("identity"), dict) else None,
         )
         # Idempotent: skip writing if existing content matches new content exactly.
