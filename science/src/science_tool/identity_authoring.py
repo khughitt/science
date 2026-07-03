@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from science_model.entity_schema.profile import ProfileParseError, parse_profile
+
 from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID
 from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
 from science_tool.commons.identity_resolve import resolve_identity
@@ -36,6 +38,9 @@ def build_identity_context(
     if taxon is not None:
         identity_context["taxon"] = taxon
     if assembly is not None:
+        assembly = assembly.strip()
+        if not assembly:
+            raise IdentityAuthoringError("--assembly must be a non-blank label, digest, or UNKNOWN")
         identity_context["assembly"] = {
             "label": assembly,
             "registry": ASSEMBLY_REGISTRY_ID,
@@ -69,6 +74,13 @@ def build_identity_context(
 
 def require_profile_identity(schema_profile: str, identity_context: Any) -> None:
     """Fail when an identity-bearing profile lacks its required declarations."""
+    try:
+        profile = parse_profile(schema_profile)
+    except ProfileParseError as exc:
+        raise IdentityAuthoringError(f"invalid schema_profile: {exc}") from exc
+    if profile.mixin is None or profile.mixin.name != "dataset":
+        raise IdentityAuthoringError("invalid schema_profile: dataset lifecycle requires a dataset schema_profile")
+
     required_tiers = required_identity_tiers(schema_profile, identity_context)
     if not required_tiers:
         return

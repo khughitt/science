@@ -50,6 +50,34 @@ def test_add_refuses_identity_bearing_profile_without_identity(tmp_path: Path) -
     assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
 
 
+def test_add_refuses_blank_assembly_for_identity_bearing_profile(tmp_path: Path) -> None:
+    res = _add(
+        tmp_path,
+        "copy-number",
+        "--title",
+        "Copy number",
+        "--schema-profile",
+        BIO_CNA_PROFILE,
+        "--taxon",
+        "9606",
+        "--assembly",
+        "",
+    )
+
+    assert res.exit_code == 1
+    assert "--assembly" in res.output
+    assert "Traceback" not in res.output
+    assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
+
+
+def test_add_refuses_malformed_schema_profile(tmp_path: Path) -> None:
+    res = _add(tmp_path, "bad-profile", "--title", "Bad", "--schema-profile", "not-a-profile")
+
+    assert res.exit_code == 1
+    assert "invalid schema_profile" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "bad-profile.md").exists()
+
+
 def test_add_writes_declared_unresolved_identity_for_unknown_assembly(tmp_path: Path) -> None:
     res = _add(
         tmp_path,
