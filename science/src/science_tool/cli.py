@@ -7242,6 +7242,7 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
     and updates symmetric edges (produces/consumed_by).
     """
     from science_tool.datasets_register import (
+        preflight_register_run_identity,
         write_derived_dataset_entities,
         write_per_output_datapackages,
         write_symmetric_edges,
@@ -7249,6 +7250,7 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
+        preflight_register_run_identity(root, workflow_run_id)
         dp_paths = write_per_output_datapackages(root, workflow_run_id)
     except (FileNotFoundError, ValueError) as exc:
         click.echo(str(exc), err=True)

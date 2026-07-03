@@ -243,6 +243,7 @@ def test_register_run_rejects_blank_output_schema_profile(tmp_path: Path) -> Non
 
     assert res.exit_code != 0
     assert "schema_profile" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
 
 
