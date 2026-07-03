@@ -55,6 +55,92 @@ def test_build_contig_alias_rows_joins_by_sequence_name_and_rejects_unmatched() 
         build_contig_alias_rows(contig_rows=_CONTIGS[:1], report_rows=parse_assembly_report(_REPORT))
 
 
+def test_build_contig_alias_rows_can_join_by_refseq_accession() -> None:
+    from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
+
+    contigs = [
+        {
+            "seqcol_digest": "DIGEST38",
+            "sequence_index": 0,
+            "name": "NC_000001.11",
+            "refget_digest": "SQ.refseq-chr1",
+            "length": 248956422,
+        },
+        {
+            "seqcol_digest": "DIGEST38",
+            "sequence_index": 1,
+            "name": "NC_012920.1",
+            "refget_digest": "SQ.refseq-mt",
+            "length": 16569,
+        },
+    ]
+
+    aliases = build_contig_alias_rows(
+        contig_rows=contigs,
+        report_rows=parse_assembly_report(_REPORT),
+        match_column="RefSeq-Accn",
+    )
+
+    chr1_aliases = {
+        (alias["alias"], alias["alias_kind"], alias["refget_digest"])
+        for alias in aliases
+        if alias["refget_digest"] == "SQ.refseq-chr1"
+    }
+    assert ("chr1", "ucsc", "SQ.refseq-chr1") in chr1_aliases
+    assert ("1", "seqcol_name", "SQ.refseq-chr1") in chr1_aliases
+
+
+def test_build_contig_alias_rows_rejects_missing_refseq_match_key() -> None:
+    from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
+
+    report = (
+        "# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\t"
+        "GenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name\n"
+        "1\tassembled-molecule\t1\tChromosome\tCM000663.2\t=\tna\tPrimary Assembly\t248956422\tchr1\n"
+    )
+
+    with pytest.raises(ValueError, match=r"RefSeq-Accn.*(?:missing|blank).*na"):
+        build_contig_alias_rows(
+            contig_rows=[
+                {
+                    "seqcol_digest": "DIGEST38",
+                    "sequence_index": 0,
+                    "name": "NC_000001.11",
+                    "refget_digest": "SQ.refseq-chr1",
+                    "length": 248956422,
+                },
+            ],
+            report_rows=parse_assembly_report(report),
+            match_column="RefSeq-Accn",
+        )
+
+
+def test_build_contig_alias_rows_rejects_duplicate_refseq_match_key_across_sequences() -> None:
+    from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
+
+    report = (
+        "# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\t"
+        "GenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name\n"
+        "1\tassembled-molecule\t1\tChromosome\tCM000663.2\t=\tNC_000001.11\tPrimary Assembly\t248956422\tchr1\n"
+        "2\tassembled-molecule\t2\tChromosome\tCM000664.2\t=\tNC_000001.11\tPrimary Assembly\t242193529\tchr2\n"
+    )
+
+    with pytest.raises(ValueError, match="duplicate.*RefSeq-Accn"):
+        build_contig_alias_rows(
+            contig_rows=[
+                {
+                    "seqcol_digest": "DIGEST38",
+                    "sequence_index": 0,
+                    "name": "NC_000001.11",
+                    "refget_digest": "SQ.refseq-chr1",
+                    "length": 248956422,
+                },
+            ],
+            report_rows=parse_assembly_report(report),
+            match_column="RefSeq-Accn",
+        )
+
+
 def test_build_contig_alias_rows_rejects_contig_name_missing_from_report() -> None:
     from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
 
@@ -71,6 +157,17 @@ def test_build_contig_alias_rows_rejects_contig_name_missing_from_report() -> No
                 },
             ],
             report_rows=parse_assembly_report(_REPORT),
+        )
+
+
+def test_build_contig_alias_rows_rejects_unknown_match_column() -> None:
+    from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
+
+    with pytest.raises(ValueError, match="assembly report match_column 'Alias' is not available"):
+        build_contig_alias_rows(
+            contig_rows=_CONTIGS,
+            report_rows=parse_assembly_report(_REPORT),
+            match_column="Alias",
         )
 
 
