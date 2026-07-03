@@ -139,6 +139,16 @@ def test_render_fails_before_partial_write_when_dot_edge_unbacked(tmp_path: Path
     assert not (dag_dir / "claim-auto.dot").exists()
 
 
+def test_render_fails_before_partial_write_when_block_commented_dot_edge_unbacked(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "claim.dot").write_text("digraph claim {\n  a -> b; /* comment */\n}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="a -> b"):
+        render_one(dag_dir, "claim", proposition_edges=[])
+    assert not (dag_dir / "claim-auto.dot").exists()
+
+
 def test_render_fails_before_partial_write_when_duplicate_dot_edge_occurrence_unbacked(tmp_path: Path) -> None:
     dag_dir = tmp_path / "doc/figures/dags"
     dag_dir.mkdir(parents=True)

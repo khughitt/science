@@ -424,7 +424,11 @@ def _discover_slugs(dag_dir: Path) -> list[str]:
 
 def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
     """Return DOT edge occurrences in source order for the simple edge syntax render supports."""
-    text = _flatten_multiline_attrs(dot_path.read_text(encoding="utf-8"))
+    text = dot_path.read_text(encoding="utf-8")
+    # Keep comment handling aligned with validate._parse_dot_topology while
+    # retaining per-occurrence counts for duplicate DOT edges.
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    text = _flatten_multiline_attrs(text)
     occurrences: list[tuple[str, str]] = []
     for raw_line in text.splitlines():
         line = re.sub(r"//.*$", "", raw_line)
