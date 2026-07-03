@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import re
 from pathlib import Path
@@ -19,6 +20,7 @@ from science_tool.commons.protein_crosswalk import PROTEIN_CROSSWALK_ID
 
 
 _LOCAL_DATASET_SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_DATAPACKAGE_FORMAT_BY_SUFFIX = {".json": "json", ".yaml": "yaml", ".yml": "yaml"}
 
 
 def _project_root_from_env() -> Path:
@@ -181,7 +183,13 @@ def _stamp_datapackage(project_root: Path, frontmatter: dict[str, Any]) -> bool:
     if datapackage_path is None:
         click.echo(f"warning: datapackage not stamped; missing or unsafe path {datapackage!r}", err=True)
         return False
-    loaded = yaml.safe_load(datapackage_path.read_text(encoding="utf-8")) or {}
+    descriptor_format = _DATAPACKAGE_FORMAT_BY_SUFFIX.get(datapackage_path.suffix)
+    if descriptor_format is None:
+        click.echo(f"warning: datapackage not stamped; unsupported extension {datapackage_path.suffix!r}", err=True)
+        return False
+    before = datapackage_path.read_text(encoding="utf-8")
+    loaded = json.loads(before) if descriptor_format == "json" else yaml.safe_load(before)
+    loaded = loaded or {}
     if not isinstance(loaded, dict):
         click.echo(f"warning: datapackage not stamped; top level is not a mapping: {datapackage}", err=True)
         return False
@@ -190,8 +198,11 @@ def _stamp_datapackage(project_root: Path, frontmatter: dict[str, Any]) -> bool:
         science = {}
     science["identity_context"] = derive_stamp(identity_context)
     loaded["science"] = science
-    text = yaml.safe_dump(loaded, sort_keys=False, allow_unicode=True, default_flow_style=False)
-    before = datapackage_path.read_text(encoding="utf-8")
+    text = (
+        json.dumps(loaded, indent=2, ensure_ascii=False) + "\n"
+        if descriptor_format == "json"
+        else yaml.safe_dump(loaded, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    )
     if text != before:
         _atomic_write(datapackage_path, text)
     return True

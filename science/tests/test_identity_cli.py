@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -222,6 +223,19 @@ def test_stamp_updates_datapackage_only_when_requested(tmp_path: Path) -> None:
     assert with_stamp.exit_code == 0, with_stamp.output
     assert "science" not in dp_after_without_stamp
     assert dp_after_stamp["science"]["identity_context"] == _frontmatter(path)["identity_context"]
+
+
+def test_stamp_preserves_json_datapackage_format(tmp_path: Path) -> None:
+    dp = tmp_path / "data" / "x" / "datapackage.json"
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    dp.write_text(json.dumps({"name": "x", "resources": []}, indent=2) + "\n", encoding="utf-8")
+    path = _write_dataset(tmp_path, "x", frontmatter={"datapackage": "data/x/datapackage.json"})
+
+    res = _run(tmp_path, "resolve", "dataset:x", "--taxon", "9606", "--stamp")
+
+    assert res.exit_code == 0, res.output
+    loaded = json.loads(dp.read_text(encoding="utf-8"))
+    assert loaded["science"]["identity_context"] == _frontmatter(path)["identity_context"]
 
 
 def test_missing_dataset_exits_nonzero_with_clear_message(tmp_path: Path) -> None:
