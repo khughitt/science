@@ -130,6 +130,12 @@ For each input data source identified in Step 2:
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
      `science dataset register-run <run-slug>`."
+   - For identity-bearing inputs, require an `identity_context` declaration.
+     Coordinate- or bio identity-bearing profiles need `taxon` plus the
+     relevant assembly or molecular tier declaration, or an explicit
+     UNKNOWN/unresolved declaration. Exact identity resolution is required at
+     the publish/promote boundary; initial planning may proceed only when the
+     unresolved identity is recorded as a blocker or caveat.
 2. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.

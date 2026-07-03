@@ -790,6 +790,11 @@ molecular tiers, declare the `namespace`, optional `registry`, and
 at a later resolver or publish boundary; do not invent placeholder digests to
 make an in-progress dataset look resolved.
 
+Planning and acquisition gates require the declaration for identity-bearing
+inputs, not necessarily full resolution. Coordinate and bio identity-bearing
+profiles must declare `taxon` plus the relevant assembly or molecular tier, or
+explicitly carry UNKNOWN/unresolved where resolution is pending.
+
 ### Origin
 
 Every dataset has an `origin`:
@@ -884,8 +889,15 @@ outputs:
   - slug: "<output-slug>"
     title: "<Output title>"
     resource_names: ["<frictionless-resource-name>"]
+    identity: {}
     ontology_terms: []
 ```
+
+For identity-bearing outputs, `outputs[].identity` is the workflow contract,
+colocated with `resource_names`. It may inherit or transform input identity, but
+it is the authority that `science dataset register-run` reads; an optional
+output `identity_context.yaml` sidecar is assertion-only and must agree with the
+contract.
 
 A completed workflow run lives under `entities/workflow-runs/` and lists its
 upstream dataset inputs. After the run writes its aggregate runtime
@@ -897,13 +909,16 @@ science dataset register-run workflow-run:<slug>
 
 Registration writes one per-output `datapackage.yaml` under the run results
 tree, creates one `origin: derived` dataset entity per declared workflow output,
-and updates symmetric edges:
+propagates resolved identity to the derived entity's `identity_context`, writes
+the derived datapackage stamp, and updates symmetric edges:
 
 - the workflow run's `produces:` lists each derived dataset;
 - each upstream dataset's `consumed_by:` includes the workflow run.
 
 Per-output datapackages are views into the run output, not relocated copies of
-the resources.
+the resources. In derived lineage, `proxy.sources[].dataset` entries are data
+ancestors recorded in `derivation.inputs`; `transform.dataset` and `proxy.via`
+entries are reference artifacts recorded in `derivation.transformations[]`.
 
 ### Runtime State And Inspection
 

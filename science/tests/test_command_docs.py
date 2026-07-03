@@ -210,6 +210,14 @@ def test_plan_analysis_requires_per_input_data_profile() -> None:
     assert "checksum or immutable identifier" in text
 
 
+def test_plan_analysis_data_profile_mentions_identity_declarations() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    assert "identity-bearing inputs" in text
+    assert "taxon and assembly/tier declarations" in text
+    assert "UNKNOWN/unresolved" in text
+
+
 def test_plan_analysis_preserves_locked_pre_registration_criteria() -> None:
     text = _read("commands/plan-analysis.md")
 
@@ -227,6 +235,24 @@ def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
     assert "PASS/DEFER only for the named public slice" in text
     assert "controlled or commercial siblings remain out of scope" in text
     assert "HALT if the plan would consume any restricted sibling" in text
+
+
+def test_plan_pipeline_data_gate_mentions_identity_publish_boundary() -> None:
+    text = _read("commands/plan-pipeline.md")
+
+    assert "identity-bearing inputs" in text
+    assert "publish/promote boundary" in text
+    assert "initial planning" in text
+
+
+def test_entities_doc_documents_workflow_identity_contract() -> None:
+    text = _read("docs/user-guide/entities.md")
+
+    assert "outputs[].identity" in text
+    assert "colocated with `resource_names`" in text
+    assert "propagates resolved identity" in text
+    assert "identity_context.yaml" in text
+    assert "assertion-only" in text
 
 
 def test_plan_pipeline_does_not_invent_validation_concepts() -> None:
