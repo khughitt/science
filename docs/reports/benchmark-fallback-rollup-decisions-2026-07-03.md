@@ -30,8 +30,8 @@ Rollup totals from the fresh snapshots:
 | Benchmark task | Observed projects | Current state | Decision | Metadata change |
 | --- | --- | --- | --- | --- |
 | `dataset:ccle-proteomics-nusinow-2020#protein-lineage-association` | `cbioportal:36`, `multiple-myeloma:307`, `natural-systems:104`, `post-acute-infection:47` | `supported` / `runnable` / `deposit` | `keep-supported-fallback` | none |
-| `dataset:cptac-proteogenomics#protein-rna-cross-modal` | `cbioportal:34`, `multiple-myeloma:297`, `natural-systems:113`, `post-acute-infection:47` | `candidate:requires-study-specific-staging` / `metadata-only` / `reference` | `needs-staging-recipe` | none, unless Task 3 finds a more precise durable reason |
-| `dataset:dream4-in-silico-network#network-reconstruction` | `cbioportal:42`, `multiple-myeloma:294`, `natural-systems:101`, `post-acute-infection:46` | `candidate:requires-challenge-package-staging` / `metadata-only` / `pointer` | `valid-reference-only` | none, unless Task 3 confirms a concrete stageable package |
+| `dataset:cptac-proteogenomics#protein-rna-cross-modal` | `cbioportal:34`, `multiple-myeloma:297`, `natural-systems:113`, `post-acute-infection:47` | `candidate:requires-study-specific-staging` / `metadata-only` / `reference` | `needs-staging-recipe` | none |
+| `dataset:dream4-in-silico-network#network-reconstruction` | `cbioportal:42`, `multiple-myeloma:294`, `natural-systems:101`, `post-acute-infection:46` | `candidate:requires-challenge-package-staging` / `metadata-only` / `pointer` | `valid-reference-only` | none |
 | `dataset:mmrf-commpass#progression-risk` | Suppressed in all sampled projects | `blocked:open-metadata-missing-progression-endpoint` | `keep-blocked-support` | none |
 
 ## Per-Benchmark Notes
