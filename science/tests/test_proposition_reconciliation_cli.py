@@ -1326,6 +1326,230 @@ def test_scaffold_proposition_resynthesis_cli_writes_project_relative_source_rev
     assert validated.exit_code == 0, validated.output
 
 
+def test_resynthesis_cli_loop_scaffolds_context_and_validates_filled_draft(
+    tmp_path: Path,
+):
+    ctx = _factorization_project(tmp_path)
+    runner = CliRunner()
+    scaffold_path = tmp_path / "draft.scaffold.json"
+
+    scaffolded = runner.invoke(
+        annotate_group,
+        [
+            "scaffold-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(ctx["review_path"]),
+            "--output",
+            str(scaffold_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert scaffolded.exit_code == 0, scaffolded.output
+
+    contextualized = runner.invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(scaffold_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert contextualized.exit_code == 0, contextualized.output
+    packet = json.loads(contextualized.output)
+    assert packet["draft_path"] == "draft.scaffold.json"
+
+    draft = json.loads(scaffold_path.read_text(encoding="utf-8"))
+    filled_fields = _draft_payload(ctx)
+    draft["new_propositions"] = filled_fields["new_propositions"]
+    draft["annotation_assignments"] = filled_fields["annotation_assignments"]
+    draft["context"] = {
+        **draft["context"],
+        "resynthesis_context_source": packet["source"],
+    }
+    filled_path = tmp_path / "draft.filled.json"
+    filled_path.write_text(json.dumps(draft), encoding="utf-8")
+
+    validated = runner.invoke(
+        annotate_group,
+        [
+            "validate-proposition-resynthesis",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(filled_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert validated.exit_code == 0, validated.output
+    payload = json.loads(validated.output)
+    assert payload["status"] == "ok"
+    assert payload["summary"]["replacement_propositions"] == 2
+    assert payload["summary"]["moved_annotations"] == 2
+
+
+def test_resynthesis_draft_context_cli_prints_json_packet(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
+    assert payload["source"] == "derived:proposition-resynthesis-context-v1"
+    assert payload["draft_path"] == "resynthesis-draft.json"
+    assert payload["action_id"] == ctx["action"].action_id
+    assert payload["original_proposition"]["id"] == "proposition:broad"
+    assert [row["annotation"] for row in payload["input_annotations"]] == list(
+        ctx["action"].inputs["annotations"]
+    )
+
+
+def test_resynthesis_draft_context_cli_writes_output_and_keeps_stdout(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    output_path = tmp_path / "resynthesis-context.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+            "--output",
+            str(output_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    stdout_payload = json.loads(result.output)
+    file_payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert stdout_payload == file_payload
+    assert file_payload["draft_progress"]["new_propositions"] == _draft_payload(ctx)[
+        "new_propositions"
+    ]
+
+
+def test_resynthesis_draft_context_cli_prints_markdown_packet(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+            "--format",
+            "markdown",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("# Proposition Resynthesis Draft Context\n")
+    assert "```json" in result.output
+    assert "annotation:entities/papers/A2020.source#a1" in result.output
+
+
+def test_resynthesis_draft_context_cli_includes_input_path_on_malformed_json(tmp_path: Path):
+    draft_path = tmp_path / "malformed-context-input.json"
+    draft_path.write_text("{not json", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert str(draft_path) in result.output
+    assert "is not valid JSON" in result.output
+
+
+def test_resynthesis_draft_context_cli_reports_stale_input_annotations(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["input_annotations"] = payload["input_annotations"][:1]
+    draft_path = tmp_path / "stale-resynthesis-draft.json"
+    draft_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "input_annotations are stale" in result.output
+
+
+def test_resynthesis_draft_context_cli_reports_malformed_live_sidecar(tmp_path: Path, monkeypatch):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar_path.write_text("this is not valid TriG", encoding="utf-8")
+    monkeypatch.setattr(
+        "science_tool.annotation.proposition_resynthesis.build_live_action_plan",
+        lambda _project_root, _source_review: ctx["plan"],
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "failed to parse sidecar" in result.output
+    assert str(sidecar_path) in result.output
+    assert "Traceback" not in result.output
+
+
 def test_validate_proposition_resynthesis_cli_reports_valid_draft(tmp_path: Path):
     ctx = _factorization_project(tmp_path)
     draft_path = tmp_path / "resynthesis-draft.json"

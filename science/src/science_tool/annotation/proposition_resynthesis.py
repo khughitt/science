@@ -22,13 +22,26 @@ from science_tool.annotation.proposition_reconciliation_plan import (
     build_reconciliation_action_plan,
 )
 from science_tool.entities import (
+    EntityCommandError,
     _render_markdown,
+    find_entity,
     local_part_conforms,
     parse_markdown_entity_file,
     resolve_path_policy,
 )
 
 RESYNTHESIS_SCHEMA_VERSION = 1
+RESYNTHESIS_CONTEXT_SCHEMA_VERSION = 1
+RESYNTHESIS_CONTEXT_SOURCE = "derived:proposition-resynthesis-context-v1"
+RESYNTHESIS_CONTEXT_FRONTMATTER_KEYS = (
+    "subject",
+    "predicate",
+    "object",
+    "polarity",
+    "claim_layer",
+    "identification_strength",
+    "source_refs",
+)
 RESYNTHESIS_SOURCE_RE = re.compile(r"^llm-review:[A-Za-z0-9._-]+:proposition-resynthesis-v1$")
 DEFAULT_RESYNTHESIS_SOURCE_MODEL = "codex-gpt-5"
 RESYNTHESIS_DISPOSITIONS = frozenset({"replace", "split_partial"})
@@ -223,6 +236,10 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_jsonable(item) for item in value]
     return value
+
+
+def _selected_original_frontmatter(frontmatter: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: _jsonable(frontmatter.get(key)) for key in RESYNTHESIS_CONTEXT_FRONTMATTER_KEYS}
 
 
 def draft_to_json(draft: ResynthesisDraft) -> dict[str, Any]:
@@ -476,6 +493,145 @@ def _current_action_annotations(action: ReconciliationAction) -> tuple[str, ...]
         current_annotations.append(annotation)
         seen_annotations.add(annotation)
     return tuple(current_annotations)
+
+
+def _observed_hint_index(action: ReconciliationAction) -> dict[str, Mapping[str, Any]]:
+    raw_hints = action.inputs.get("observed_statement_hints", ())
+    if isinstance(raw_hints, str) or not isinstance(raw_hints, Sequence):
+        raise ResynthesisDraftError(f"{action.action_id} has malformed observed statement hints")
+
+    by_annotation: dict[str, Mapping[str, Any]] = {}
+    for hint in raw_hints:
+        if not isinstance(hint, Mapping):
+            raise ResynthesisDraftError(f"{action.action_id} has malformed observed statement hints")
+        annotation = hint.get("annotation")
+        if annotation is None:
+            continue
+        if not isinstance(annotation, str) or not annotation or annotation != annotation.strip():
+            raise ResynthesisDraftError(f"{action.action_id} has malformed observed statement hints")
+        if annotation in by_annotation:
+            raise ResynthesisDraftError(f"{action.action_id} has duplicate observed hint for {annotation}")
+        by_annotation[annotation] = hint
+    return by_annotation
+
+
+def _context_annotation_row(
+    annotation_ref: str,
+    hint: Mapping[str, Any],
+    *,
+    paper_ref: str,
+    promoted_to: str | None,
+) -> dict[str, Any]:
+    return {
+        "annotation": annotation_ref,
+        "paper": paper_ref,
+        "stance": hint.get("stance"),
+        "section": hint.get("section"),
+        "exact": hint.get("exact"),
+        "subject": hint.get("subject"),
+        "object": hint.get("object"),
+        "subject_concept": hint.get("subject_concept"),
+        "object_concept": hint.get("object_concept"),
+        "current_promoted_to": promoted_to,
+    }
+
+
+def build_resynthesis_context_packet(
+    project_root: Path,
+    draft: ResynthesisDraft,
+    *,
+    draft_path: str | None = None,
+) -> dict[str, Any]:
+    action = _live_action_for_draft(project_root, draft)
+    current_annotations = _current_action_annotations(action)
+    if draft.input_annotations != current_annotations:
+        raise ResynthesisDraftError("input_annotations are stale")
+
+    try:
+        original_location = find_entity(project_root, draft.original_proposition)
+    except (EntityCommandError, OSError) as exc:
+        raise ResynthesisDraftError(str(exc)) from exc
+
+    hints_by_annotation = _observed_hint_index(action)
+    live_index = _live_annotation_index(project_root)
+    input_rows: list[dict[str, Any]] = []
+    for annotation_ref in current_annotations:
+        hint = hints_by_annotation.get(annotation_ref)
+        if hint is None:
+            raise ResynthesisDraftError(f"{annotation_ref} has no observed statement hint")
+        indexed = live_index.get(annotation_ref)
+        if indexed is None:
+            raise ResynthesisDraftError(f"{annotation_ref} resolves to no live sidecar annotation")
+        sidecar_path, _sidecar, promoted_to = indexed
+        paper_ref = _resolve_paper_ref(sidecar_path)
+        if paper_ref is None:
+            raise ResynthesisDraftError(f"{annotation_ref} resolves to no paper ref")
+        input_rows.append(
+            _context_annotation_row(
+                annotation_ref,
+                hint,
+                paper_ref=paper_ref,
+                promoted_to=promoted_to,
+            )
+        )
+
+    draft_payload = draft_to_json(draft)
+    validate_input = draft_path or "<draft>"
+    return {
+        "schema_version": RESYNTHESIS_CONTEXT_SCHEMA_VERSION,
+        "source": RESYNTHESIS_CONTEXT_SOURCE,
+        "draft_path": draft_path,
+        "action_id": draft.action_id,
+        "candidate_id": draft.candidate_id,
+        "judgment_id": draft.judgment_id,
+        "original_proposition": {
+            "id": draft.original_proposition,
+            "title": original_location.title,
+            "body": original_location.body,
+            "frontmatter": _selected_original_frontmatter(original_location.frontmatter),
+        },
+        "review": {
+            "decision": action.decision,
+            "confidence": action.confidence,
+            "rationale": action.rationale,
+        },
+        "input_annotations": input_rows,
+        "draft_progress": {
+            "disposition": draft.disposition,
+            "new_propositions": draft_payload["new_propositions"],
+            "annotation_assignments": draft_payload["annotation_assignments"],
+            "notes": draft.notes,
+        },
+        "constraints": {
+            "allowed_dispositions": sorted(RESYNTHESIS_DISPOSITIONS),
+            "required_assignment_annotations": list(current_annotations),
+            "replacement_id_prefix": "proposition:",
+            "replacement_id_policy": "canonical proposition local part; lowercase words joined by hyphens",
+            "allowed_replacement_frontmatter_keys": sorted(ALLOWED_REPLACEMENT_FRONTMATTER_KEYS),
+        },
+        "output_contract": {
+            "write": "a Half D proposition resynthesis draft JSON",
+            "validate_with": f"science annotate validate-proposition-resynthesis --input {validate_input}",
+            "do_not_write": ["proposition files", "annotation sidecars", "archive rows"],
+        },
+    }
+
+
+def resynthesis_context_to_markdown(packet: Mapping[str, Any]) -> str:
+    json_text = json.dumps(packet, indent=2, sort_keys=True)
+    return (
+        "# Proposition Resynthesis Draft Context\n\n"
+        "## Instructions\n\n"
+        "- Use this packet to fill a Half D proposition resynthesis draft JSON.\n"
+        "- Preserve action identity fields from the draft.\n"
+        "- Assign every required input annotation exactly once.\n"
+        "- Do not edit proposition files or annotation sidecars directly.\n"
+        "- Validate the filled draft with `science annotate validate-proposition-resynthesis`.\n\n"
+        "## Context JSON\n\n"
+        "```json\n"
+        f"{json_text}\n"
+        "```\n"
+    )
 
 
 def validate_resynthesis_draft(
