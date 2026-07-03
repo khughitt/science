@@ -130,6 +130,15 @@ def test_declared_unresolved_unsupported_namespace_still_reports_error() -> None
     assert "unsupported namespace" in resolved.messages[0].message
 
 
+def test_variant_declaration_is_preserved_without_gene_protein_namespace_error() -> None:
+    ctx = {"molecular_ids": {"variant": {"namespace": "vrs", "resolution_status": "declared_unresolved"}}}
+
+    resolved = resolve_identity(ctx)
+
+    assert resolved.identity_context["molecular_ids"]["variant"] == ctx["molecular_ids"]["variant"]
+    assert all("unsupported namespace" not in message.message for message in resolved.messages)
+
+
 def test_padded_supported_namespace_is_normalized_in_identity_context() -> None:
     resolved = resolve_identity(
         {"molecular_ids": {"gene": {"namespace": " hgnc_id ", "registry": GENE_CROSSWALK_ID}}},

@@ -296,7 +296,8 @@ def _resolve_assembly_decl(
     if label is None:
         return
 
-    registry = decl.get("registry") if isinstance(decl.get("registry"), str) else ASSEMBLY_REGISTRY_ID
+    registry_value = decl.get("registry")
+    registry = registry_value if isinstance(registry_value, str) else ASSEMBLY_REGISTRY_ID
     resolution = _resolve_assembly_label(
         label.strip(),
         registry,
@@ -326,6 +327,8 @@ def _resolve_molecular_id_decls(
     for tier, decl in molecular_ids.items():
         if not isinstance(decl, dict):
             continue
+        if tier == "variant":
+            continue
         if decl.get("resolution_status") == "resolved":
             continue
         namespace = decl.get("namespace")
@@ -334,8 +337,10 @@ def _resolve_molecular_id_decls(
             decl["resolution_status"] = "declared_unresolved"
             messages.append(_message("error", path, "missing or blank namespace"))
             continue
-        registry = decl.get("registry")
-        if not isinstance(registry, str) or not registry.strip():
+        registry_value = decl.get("registry")
+        if isinstance(registry_value, str) and registry_value.strip():
+            registry = registry_value
+        else:
             registry = _default_registry_for_namespace(namespace)
         resolution = resolve_namespace(namespace, registry, registries=registries, path=path)
         decl["namespace"] = resolution.namespace
