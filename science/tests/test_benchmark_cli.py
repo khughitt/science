@@ -749,9 +749,7 @@ title: Cytogenetic benchmark gap
     assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
 
 
-def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     _write_entity(
         tmp_path,
@@ -1627,7 +1625,7 @@ def test_benchmark_test_triage_cli_table_output_shows_suppression_diagnostic(tmp
     assert "No benchmark test triage rows." not in result.output
 
 
-def test_benchmark_test_triage_cli_table_output_shows_fallback_breakdowns(tmp_path: Path) -> None:
+def test_benchmark_test_triage_cli_table_output_shows_fallback_rollups(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -1655,6 +1653,7 @@ benchmark:
   benchmark_kinds: [static-association]
   tasks:
     - id: ready
+      task_type: protein-lineage-association
       prediction_target: label
       held_out_unit: cohort
       metric: auroc
@@ -1662,6 +1661,9 @@ benchmark:
       ground_truth:
         type: measured-outcome
         description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
 """,
     )
 
@@ -1669,12 +1671,125 @@ benchmark:
 
     assert result.exit_code == 0
     assert "Benchmark Test Triage: fallback-diagnostic" in result.output
-    assert "readiness" in result.output
-    assert "class" in result.output
-    assert "support" in result.output
-    assert "runnable:1" in result.output
-    assert "deposit:1" in result.output
-    assert "none:1" in result.output
+    assert "1 fallback rows grouped into 1 rollups" in result.output
+    assert "visible-fallback" in result.output
+    assert "ready (protein-lineage-association)" in result.output
+    assert "supported" in result.output
+    assert "runnable" in result.output
+    assert "deposit" in result.output
+    assert "proteomics:1" in result.output
+    assert "hypothesis:0306-generic" in result.output
+    assert "top benchmarks" not in result.output
+    assert "runnable:1" not in result.output
+    assert "deposit:1" not in result.output
+    assert "none:1" not in result.output
+
+
+def test_benchmark_test_triage_cli_table_output_shows_hidden_fallback_rollup_count(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    rollups = [
+        {
+            "benchmark_id": f"dataset:fallback-{index:02d}",
+            "benchmark_title": f"Fallback {index:02d}",
+            "task_id": f"dataset:fallback-{index:02d}#ready",
+            "task_type": "",
+            "count": 1,
+            "task_support_state": "supported",
+            "task_support_reason": "",
+            "readiness_label": "runnable",
+            "dataset_class": "deposit",
+            "test_plan_state": "concrete",
+            "top_facets": [{"facet": "proteomics", "count": 1}],
+            "example_entities": [f"hypothesis:{index:02d}"],
+            "reason_notes": ["fallback:high-baseline"],
+        }
+        for index in range(12)
+    ]
+
+    def fake_benchmark_test_triage_report(*args, **kwargs):
+        return {
+            "summary": {
+                "bucket_counts": {
+                    "run-now": 0,
+                    "stage-next": 0,
+                    "metadata-needed": 0,
+                    "blocked-or-reference": 0,
+                    "fallback-diagnostic": 12,
+                }
+            },
+            "buckets": {
+                "run-now": [],
+                "stage-next": [],
+                "metadata-needed": [],
+                "blocked-or-reference": [],
+                "fallback-diagnostic": [],
+            },
+            "fallback_diagnostics": {"rollups": rollups},
+            "commons_notice": "",
+            "filters": {},
+            "review_file": None,
+        }
+
+    monkeypatch.setattr(
+        "science_tool.benchmark_opportunities.benchmark_test_triage_report",
+        fake_benchmark_test_triage_report,
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code == 0
+    assert "12 fallback rows grouped into 12 rollups (showing 10, 2 hidden)" in result.output
+    assert "dataset:fallback-00" in result.output
+    assert "dataset:fallback-09" in result.output
+    assert "dataset:fallback-10" not in result.output
+
+
+def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path: Path, monkeypatch) -> None:
+    def fake_benchmark_test_triage_report(*args, **kwargs):
+        return {
+            "summary": {
+                "bucket_counts": {
+                    "run-now": 0,
+                    "stage-next": 0,
+                    "metadata-needed": 0,
+                    "blocked-or-reference": 0,
+                    "fallback-diagnostic": 1,
+                }
+            },
+            "buckets": {
+                "run-now": [],
+                "stage-next": [],
+                "metadata-needed": [],
+                "blocked-or-reference": [],
+                "fallback-diagnostic": [],
+            },
+            "fallback_diagnostics": {"rollups": []},
+            "commons_notice": "",
+            "filters": {},
+            "review_file": None,
+        }
+
+    monkeypatch.setattr(
+        "science_tool.benchmark_opportunities.benchmark_test_triage_report",
+        fake_benchmark_test_triage_report,
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code != 0
+    assert "fallback diagnostics rollups missing for fallback rows" in result.output
 
 
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
@@ -1814,12 +1929,72 @@ benchmark:
             "reference": [],
             "pointer": [],
         },
+        "rollups": [],
     }
 
 
-def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(
-    tmp_path: Path, monkeypatch
+def test_benchmark_test_triage_review_file_includes_visible_fallback_rollups(
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0307-generic",
+        """
+id: hypothesis:0307-generic
+type: hypothesis
+title: Generic fallback hypothesis
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "visible-review-fallback",
+        """
+id: dataset:visible-review-fallback
+type: dataset
+title: Visible Review Fallback
+dataset_class: deposit
+local_path: data/visible-review-fallback
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      task_type: protein-lineage-association
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback", "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / f"2026-07-03-{tmp_path.name}.yaml"
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    rollups = written["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["benchmark_id"] == "dataset:visible-review-fallback"
+    assert rollups[0]["task_id"] == "dataset:visible-review-fallback#ready"
+    assert rollups[0]["task_type"] == "protein-lineage-association"
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["task_support_state"] == "supported"
+    assert rollups[0]["example_entities"] == ["hypothesis:0307-generic"]
+
+
+def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
     _write_entity(
         tmp_path,
@@ -1876,11 +2051,10 @@ benchmark:
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:blocked-fallback", "count": 1}],
     }
+    assert written["fallback_diagnostics"]["rollups"] == []
 
 
-def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     result = _invoke_test_triage(

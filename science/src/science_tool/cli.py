@@ -1184,9 +1184,7 @@ def evidence_line_group() -> None:
 @click.option(
     "--evidence-role",
     default=None,
-    type=click.Choice(
-        ["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]
-    ),
+    type=click.Choice(["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]),
 )
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--id", "entity_id")
@@ -1823,7 +1821,9 @@ def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, projec
     if output_format == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        rows: list[dict[str, str]] = [{"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files]
+        rows: list[dict[str, str]] = [
+            {"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files
+        ]
         rows.extend(
             {
                 "kind": "conflict",
@@ -4601,10 +4601,7 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     except SerializeError as exc:
         raise click.ClickException(str(exc)) from exc
     suffix = " [forced]" if result.forced else ""
-    click.echo(
-        f"Serialized {result.file_count} file(s), {result.payload_count} payload(s)"
-        f"{suffix} → {result.out_path}"
-    )
+    click.echo(f"Serialized {result.file_count} file(s), {result.payload_count} payload(s){suffix} → {result.out_path}")
 
 
 @project.command("verify")
@@ -4888,9 +4885,7 @@ def health_command(
         else []
     )
     cross_paper_evidence = report.get("cross_paper_evidence") or {}
-    raw_cross_paper_findings = (
-        cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
-    )
+    raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
     cross_paper_findings: list[dict[str, object]] = (
         [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
         if isinstance(raw_cross_paper_findings, list)
@@ -6002,7 +5997,9 @@ def benchmark_gap_calibration(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
+)
 @click.option(
     "--source",
     "priority_source",
@@ -6116,7 +6113,9 @@ def benchmark_tests(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
+)
 @click.option(
     "--source",
     "priority_source",
@@ -6270,19 +6269,30 @@ def benchmark_test_triage(
     fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
     if fallback_count:
         diagnostics = payload["fallback_diagnostics"]
+        rollups = diagnostics["rollups"]
+        visible_rollups = rollups[:10]
+        if not visible_rollups:
+            raise click.ClickException("fallback diagnostics rollups missing for fallback rows")
         table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
-        for col in ("rows", "top benchmarks", "top facets", "readiness", "class", "support"):
+        for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
             table.add_column(col, overflow="fold", no_wrap=False)
-        table.add_row(
-            f"{fallback_count} fallback rows",
-            _format_count_rows(diagnostics["top_benchmarks"], key="benchmark_id"),
-            _format_count_rows(diagnostics["top_facets"], key="facet"),
-            _format_count_map(diagnostics["readiness_counts"]),
-            _format_count_map(diagnostics["dataset_class_counts"]),
-            _format_count_map(diagnostics["task_support_counts"]),
-        )
+        row_label = f"{fallback_count} fallback rows grouped into {len(rollups)} rollups"
+        if len(visible_rollups) < len(rollups):
+            hidden_rollups = len(rollups) - len(visible_rollups)
+            row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
+        for index, rollup in enumerate(visible_rollups):
+            table.add_row(
+                row_label if index == 0 else "",
+                str(rollup.get("benchmark_id") or "-"),
+                _format_test_triage_rollup_task(rollup),
+                _format_test_triage_rollup_support(rollup),
+                str(rollup.get("readiness_label") or "-"),
+                str(rollup.get("dataset_class") or "-"),
+                _format_test_triage_rollup_facets(rollup),
+                _format_test_triage_rollup_examples(rollup),
+            )
         Console(width=200).print(table)
-        visible_rows += 1
+        visible_rows += len(visible_rollups)
     suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
     if suppressed:
         table = Table(
@@ -6329,6 +6339,30 @@ def _format_test_triage_facets(row: Mapping[str, Any]) -> str:
     return ", ".join(str(facet) for facet in facets) if facets else "-"
 
 
+def _format_test_triage_rollup_task(rollup: Mapping[str, Any]) -> str:
+    task_id = rollup.get("task_id")
+    if not task_id:
+        return "-"
+    task = str(task_id).split("#", 1)[-1]
+    task_type = str(rollup.get("task_type") or "")
+    return f"{task} ({task_type})" if task_type else task
+
+
+def _format_test_triage_rollup_support(rollup: Mapping[str, Any]) -> str:
+    state = str(rollup.get("task_support_state") or "none")
+    reason = str(rollup.get("task_support_reason") or "")
+    return f"{state}: {reason}" if reason else state
+
+
+def _format_test_triage_rollup_facets(rollup: Mapping[str, Any]) -> str:
+    return _format_count_rows(rollup.get("top_facets", []), key="facet")
+
+
+def _format_test_triage_rollup_examples(rollup: Mapping[str, Any]) -> str:
+    examples = [str(entity_id) for entity_id in rollup.get("example_entities", [])]
+    return ", ".join(examples) if examples else "-"
+
+
 def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
     count = row["count"]
     return "-" if count is None else str(count)
@@ -6355,12 +6389,7 @@ def _default_hint_candidates_review_path(project_root: Path, generated: date) ->
     from science_tool.paths import resolve_paths
 
     doc_dir = resolve_paths(project_root).doc_dir
-    return (
-        doc_dir
-        / "audits"
-        / "benchmark-hint-candidates"
-        / f"{generated.isoformat()}-{project_root.name}.yaml"
-    )
+    return doc_dir / "audits" / "benchmark-hint-candidates" / f"{generated.isoformat()}-{project_root.name}.yaml"
 
 
 def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
@@ -6440,12 +6469,7 @@ def _default_test_triage_review_path(project_root: Path, generated: date) -> Pat
     from science_tool.paths import resolve_paths
 
     doc_dir = resolve_paths(project_root).doc_dir
-    return (
-        doc_dir
-        / "audits"
-        / "benchmark-test-triage"
-        / f"{generated.isoformat()}-{project_root.name}.yaml"
-    )
+    return doc_dir / "audits" / "benchmark-test-triage" / f"{generated.isoformat()}-{project_root.name}.yaml"
 
 
 def _resolve_test_triage_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
@@ -6538,7 +6562,9 @@ def _write_test_triage_review_file(
 @benchmark_group.command("hint-candidates")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
-@click.option("--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count.")
+@click.option(
+    "--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count."
+)
 @click.option("--include-existing", is_flag=True, help="Include terms already mapped by the benchmark hint lexicon.")
 @click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
 @click.option(

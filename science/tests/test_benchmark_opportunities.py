@@ -1153,7 +1153,9 @@ benchmark:
 
     datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
     labels = {
-        dataset.id: _readiness_label(_dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks))
+        dataset.id: _readiness_label(
+            _dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks)
+        )
         for dataset in datasets
     }
 
@@ -1202,7 +1204,8 @@ def _benchmark_test_row_for_triage(
             "type": "measured-outcome" if task_id else "",
             "description": "label" if task_id else "",
         },
-        "needs": needs or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
+        "needs": needs
+        or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
     }
 
 
@@ -1479,6 +1482,236 @@ benchmark:
     assert payload["filters"]["source"] == "gap-fallback"
 
 
+def test_benchmark_test_triage_fallback_diagnostics_roll_up_visible_fallback_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    for slug, title, body in (
+        ("0106-generic-a", "Generic fallback A", "Homeostatic recovery remains under-tested."),
+        ("0107-generic-b", "Generic fallback B", "Adaptive recovery remains under-tested."),
+    ):
+        _write_entity(
+            tmp_path,
+            "hypotheses",
+            slug,
+            f"""
+id: hypothesis:{slug}
+type: hypothesis
+title: {title}
+""",
+            body=body,
+        )
+    _write_dataset(
+        tmp_path,
+        "supported-fallback-rollup",
+        """
+id: dataset:supported-fallback-rollup
+type: dataset
+title: Supported Fallback Rollup
+dataset_class: deposit
+local_path: data/supported-fallback-rollup
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      task_type: protein-lineage-association
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback")
+
+    fallback_rows = payload["buckets"]["fallback-diagnostic"]
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert len(fallback_rows) == 2
+    assert len(rollups) == 1
+    assert sum(rollup["count"] for rollup in rollups) == payload["summary"]["bucket_counts"]["fallback-diagnostic"]
+    assert rollups[0] == {
+        "benchmark_id": "dataset:supported-fallback-rollup",
+        "benchmark_title": "Supported Fallback Rollup",
+        "task_id": "dataset:supported-fallback-rollup#ready",
+        "task_type": "protein-lineage-association",
+        "count": 2,
+        "task_support_state": "supported",
+        "task_support_reason": "",
+        "readiness_label": "runnable",
+        "dataset_class": "deposit",
+        "test_plan_state": "concrete",
+        "top_facets": [
+            {"facet": "proteomics", "count": 2},
+            {"facet": "multimodal", "count": 2},
+            {"facet": "time-series", "count": 2},
+        ],
+        "example_entities": [
+            "hypothesis:0106-generic-a",
+            "hypothesis:0107-generic-b",
+        ],
+        "reason_notes": [
+            "fallback:baseline-quality",
+            "fallback:task-ready",
+            "selected:generic-baseline",
+        ],
+    }
+
+
+def test_benchmark_test_triage_fallback_rollups_sort_and_cap_examples(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    for index in range(4):
+        _write_entity(
+            tmp_path,
+            "hypotheses",
+            f"0110-generic-{index}",
+            f"""
+id: hypothesis:0110-generic-{index}
+type: hypothesis
+title: Generic fallback {index}
+""",
+            body=f"Recovery pattern {index} remains under-tested.",
+        )
+    _write_dataset(
+        tmp_path,
+        "fallback-small",
+        """
+id: dataset:fallback-small
+type: dataset
+title: Fallback Small
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: candidate
+        reason: requires-study-specific-staging
+        checked_at: '2026-07-03'
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "fallback-large",
+        """
+id: dataset:fallback-large
+type: dataset
+title: Fallback Large
+dataset_class: deposit
+local_path: data/fallback-large
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback")
+
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert [rollup["benchmark_id"] for rollup in rollups] == [
+        "dataset:fallback-large",
+        "dataset:fallback-small",
+    ]
+    assert rollups[0]["count"] == 4
+    assert rollups[0]["example_entities"] == [
+        "hypothesis:0110-generic-0",
+        "hypothesis:0110-generic-1",
+        "hypothesis:0110-generic-2",
+    ]
+    assert rollups[1]["task_support_state"] == "candidate"
+    assert rollups[1]["task_support_reason"] == "requires-study-specific-staging"
+    assert rollups[1]["readiness_label"] == "metadata-only"
+    assert rollups[1]["dataset_class"] == "reference"
+
+
+def test_benchmark_test_fallback_rollups_raise_on_inconsistent_support_reason() -> None:
+    from science_tool.benchmark_opportunities import _benchmark_test_fallback_rollups
+
+    base = {
+        "benchmark_id": "dataset:drift",
+        "benchmark_title": "Drift",
+        "task_id": "dataset:drift#ready",
+        "task_type": "protein-lineage-association",
+        "task_support_state": "candidate",
+        "readiness_label": "runnable",
+        "dataset_class": "deposit",
+        "test_plan_state": "concrete",
+        "matched_facets": ["proteomics"],
+        "reason_notes": ["fallback:high-baseline"],
+    }
+    rows = [
+        {**base, "entity_id": "hypothesis:a", "task_support_reason": "reason-one"},
+        {**base, "entity_id": "hypothesis:b", "task_support_reason": "reason-two"},
+    ]
+
+    with pytest.raises(ValueError, match="dataset:drift#ready") as excinfo:
+        _benchmark_test_fallback_rollups(cast("list[Any]", rows))
+
+    message = str(excinfo.value)
+    assert "dataset:drift#ready" in message
+    assert "dataset:drift#dataset:drift#ready" not in message
+
+
+def test_benchmark_test_fallback_rollups_raise_on_empty_and_nonempty_support_reason() -> None:
+    from science_tool.benchmark_opportunities import _benchmark_test_fallback_rollups
+
+    base = {
+        "benchmark_id": "dataset:drift-empty",
+        "benchmark_title": "Drift Empty",
+        "task_id": "dataset:drift-empty#ready",
+        "task_type": "protein-lineage-association",
+        "task_support_state": "candidate",
+        "readiness_label": "runnable",
+        "dataset_class": "deposit",
+        "test_plan_state": "concrete",
+        "matched_facets": ["proteomics"],
+        "reason_notes": ["fallback:high-baseline"],
+    }
+    rows = [
+        {**base, "entity_id": "hypothesis:a", "task_support_reason": ""},
+        {**base, "entity_id": "hypothesis:b", "task_support_reason": "has-note"},
+    ]
+
+    with pytest.raises(ValueError, match="dataset:drift-empty#ready") as excinfo:
+        _benchmark_test_fallback_rollups(cast("list[Any]", rows))
+
+    message = str(excinfo.value)
+    assert "dataset:drift-empty#ready" in message
+    assert "dataset:drift-empty#dataset:drift-empty#ready" not in message
+
+
 def test_benchmark_test_triage_fallback_diagnostics_count_supported_task_support(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_test_triage_report
 
@@ -1597,9 +1830,7 @@ benchmark:
     assert [row["task_id"] for row in payload["buckets"]["fallback-diagnostic"]] == [
         "dataset:mmrf-like#overall-survival"
     ]
-    assert payload["fallback_diagnostics"]["top_benchmarks"] == [
-        {"benchmark_id": "dataset:mmrf-like", "count": 1}
-    ]
+    assert payload["fallback_diagnostics"]["top_benchmarks"] == [{"benchmark_id": "dataset:mmrf-like", "count": 1}]
     assert payload["fallback_diagnostics"]["readiness_counts"] == {
         "runnable": 1,
         "stage-needed": 0,
@@ -1621,6 +1852,13 @@ benchmark:
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:mmrf-like", "count": 1}],
     }
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["task_id"] == "dataset:mmrf-like#overall-survival"
+    assert rollups[0]["task_support_state"] is None
+    assert rollups[0]["task_support_reason"] == ""
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["example_entities"] == ["hypothesis:0103-generic"]
     assert "include_blocked_fallback" not in payload["filters"]
 
 
@@ -1671,6 +1909,14 @@ benchmark:
     payload = benchmark_test_triage_report(tmp_path, source="gap-fallback", include_blocked_fallback=True)
 
     assert len(payload["buckets"]["fallback-diagnostic"]) == 1
+    rollups = payload["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["task_id"] == "dataset:blocked-fallback#progression-risk"
+    assert rollups[0]["task_support_state"] == "blocked"
+    assert rollups[0]["task_support_reason"] == "open-metadata-missing-progression-endpoint"
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["example_entities"] == ["hypothesis:0104-generic"]
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" in rollups[0]["reason_notes"]
     assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
     assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
     assert payload["filters"]["include_blocked_fallback"] is True
@@ -1732,6 +1978,7 @@ benchmark:
     assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
     assert not payload["buckets"]["fallback-diagnostic"]
     assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
+    assert payload["fallback_diagnostics"]["rollups"] == []
     assert payload["fallback_diagnostics"]["top_benchmarks"] == []
     assert payload["fallback_diagnostics"]["top_facets"] == []
     assert payload["fallback_diagnostics"]["readiness_counts"] == {
@@ -3485,8 +3732,7 @@ type: hypothesis
 title: Report prose
 """,
         body=(
-            "Related details banner demonstrates promoted evidence. "
-            "Any current model over baseline should be reviewed."
+            "Related details banner demonstrates promoted evidence. Any current model over baseline should be reviewed."
         ),
     )
 
@@ -3924,10 +4170,7 @@ benchmark:
     assert len(candidates) == 3
     assert all(candidate["candidate_score"] > 0 for candidate in candidates)
     assert all("fallback:task-ready" in candidate["reason_notes"] for candidate in candidates)
-    assert all(
-        any(note.startswith("selected:") for note in candidate["reason_notes"])
-        for candidate in candidates
-    )
+    assert all(any(note.startswith("selected:") for note in candidate["reason_notes"]) for candidate in candidates)
     assert all(candidate["matched_hint_facets"] == [] for candidate in candidates)
     assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
 
@@ -4052,10 +4295,7 @@ benchmark:
 
     payload = gaps_report(tmp_path)
 
-    assert all(
-        row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:highest"
-        for row in payload["benchmark_gaps"]
-    )
+    assert all(row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:highest" for row in payload["benchmark_gaps"])
 
 
 def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
@@ -4455,9 +4695,7 @@ title: Temporal benchmark gap
     assert payload["aggregate"]["top_matched_hint_facets"] == [{"facet": "perturbation", "count": 1}]
 
 
-def test_gap_calibration_batch_preserves_commons_notices(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gap_calibration_batch_preserves_commons_notices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
 
     project = tmp_path / "project"
@@ -4527,12 +4765,8 @@ benchmark:
     payload = benchmark_gap_calibration_batch(projects)
 
     assert payload["aggregate"]["fallback_candidate_rows"] == 2
-    assert payload["aggregate"]["top_fallback_reasons"] == [
-        {"reason": "fallback:task-ready", "count": 2}
-    ]
-    assert payload["aggregate"]["top_fallback_selection_reasons"] == [
-        {"reason": "selected:task-ready", "count": 2}
-    ]
+    assert payload["aggregate"]["top_fallback_reasons"] == [{"reason": "fallback:task-ready", "count": 2}]
+    assert payload["aggregate"]["top_fallback_selection_reasons"] == [{"reason": "selected:task-ready", "count": 2}]
     assert payload["aggregate"]["top_fallback_benchmark_shares"] == [
         {"benchmark_id": "dataset:ready", "count": 2, "share": 1.0}
     ]
