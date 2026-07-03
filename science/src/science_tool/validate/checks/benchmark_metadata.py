@@ -9,6 +9,7 @@ from typing import Any
 
 from science_model.packages.schema import (
     BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_FIELDS,
     BENCHMARK_TASK_SUPPORT_REASON_RE,
     BENCHMARK_TASK_SUPPORT_STATES,
 )
@@ -142,6 +143,14 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
         for task in valid_tasks:
             support = _task_support_mapping(task)
             if support is not None:
+                for key in sorted(set(support) - BENCHMARK_TASK_SUPPORT_FIELDS):
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: benchmark task {task['id']!r} support field {key!r} is invalid",
+                        "benchmark.task-support-field-invalid",
+                    )
+
                 state = support.get("state")
                 if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:
                     yield _result(

@@ -13,6 +13,7 @@ from typing import Any, Literal, NotRequired, TypedDict, cast
 import yaml
 from science_model.packages.schema import (
     BENCHMARK_TASK_SUPPORT_DATE_RE,
+    BENCHMARK_TASK_SUPPORT_FIELDS,
     BENCHMARK_TASK_SUPPORT_REASON_RE,
     BENCHMARK_TASK_SUPPORT_STATES,
     BenchmarkTaskSupportState,
@@ -797,6 +798,11 @@ def _task_support_from_mapping(
         return None
     if not isinstance(value, Mapping):
         raise ValueError(f"{dataset_id}#{task_id}: benchmark task support must be a mapping")
+
+    unknown_fields = sorted(set(value) - BENCHMARK_TASK_SUPPORT_FIELDS)
+    if unknown_fields:
+        field_list = ", ".join(repr(field) for field in unknown_fields)
+        raise ValueError(f"{dataset_id}#{task_id}: benchmark task support field {field_list} is invalid")
 
     state = value.get("state")
     if not isinstance(state, str) or state not in BENCHMARK_TASK_SUPPORT_STATES:

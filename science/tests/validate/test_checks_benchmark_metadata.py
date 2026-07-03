@@ -318,6 +318,28 @@ def test_task_support_evidence_and_notes_must_be_string_lists() -> None:
     assert (Severity.ERROR, "benchmark.task-support-notes-invalid") in rules
 
 
+def test_task_support_unknown_key_is_invalid() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {
+                            "id": "progression-risk",
+                            "support": {
+                                "state": "supported",
+                                "reviewer": "analyst",
+                            },
+                        },
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-support-field-invalid") in rules
+
+
 def test_task_missing_core_evaluation_fields_warns() -> None:
     assert (Severity.WARN, "benchmark.task-sparse") in _rules(
         [_ds(benchmark={"tasks": [{"id": "rank-genes", "task_type": "ranking"}]})]

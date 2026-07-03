@@ -15,6 +15,7 @@ from science_model.packages.schema import (
     AccessReproducibility,
     BenchmarkBlock,
     BenchmarkTask,
+    BenchmarkTaskSupport,
     DatasetUsage,
     DerivationBlock,
     GroundTruth,
@@ -647,6 +648,23 @@ def test_parse_dataset_benchmark_task_support_unknown_state_raises(tmp_path: Pat
 
     with pytest.raises(ValidationError, match="support"):
         parse_entity_file(md, project_slug="testproj")
+
+
+@pytest.mark.parametrize(
+    ("field", "items"),
+    [
+        ("evidence", ["recipe/reports/validation.json#x", " "]),
+        ("notes", ["Manual review.", ""]),
+    ],
+)
+def test_benchmark_task_support_rejects_blank_string_items(field: str, items: list[str]) -> None:
+    values = {
+        "state": "supported",
+        field: items,
+    }
+
+    with pytest.raises(ValidationError, match=f"support.{field}"):
+        BenchmarkTaskSupport(**values)
 
 
 def test_parse_dataset_benchmark_task_support_candidate_requires_reason(tmp_path: Path) -> None:

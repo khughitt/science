@@ -254,6 +254,33 @@ def test_dataset_benchmark_task_rejects_invalid_support_fields(base_entity: dict
         EntityValidator().validate(entity)
 
 
+@pytest.mark.parametrize(
+    "support",
+    [
+        {"state": "supported", "evidence": ["recipe/reports/validation.json#x", ""]},
+        {"state": "supported", "evidence": ["recipe/reports/validation.json#x", "   "]},
+        {"state": "supported", "notes": ["Manual review.", ""]},
+        {"state": "supported", "notes": ["Manual review.", "\t"]},
+    ],
+)
+def test_dataset_benchmark_task_rejects_blank_support_list_items(base_entity: dict, support: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "tasks": [
+                {
+                    "id": "progression-risk",
+                    "support": support,
+                }
+            ],
+        },
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
+
+
 @pytest.mark.parametrize("task_id", ["Bad Task", "a-", "a--b"])
 def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict, task_id: str) -> None:
     entity = base_entity | {

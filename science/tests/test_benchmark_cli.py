@@ -1034,6 +1034,54 @@ benchmark:
     assert "dataset:bad-support-evidence#progression-risk" in result.output
 
 
+def test_benchmark_tests_cli_rejects_unknown_task_support_key(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0305-progression",
+        """
+id: hypothesis:0305-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "bad-support-field",
+        """
+id: dataset:bad-support-field
+type: dataset
+title: Bad Support Field
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: supported
+        reviewer: analyst
+""",
+    )
+
+    result = _invoke_tests(tmp_path, "--format", "json")
+
+    assert result.exit_code != 0
+    assert "benchmark task support field" in result.output
+    assert "reviewer" in result.output
+    assert "dataset:bad-support-field#progression-risk" in result.output
+
+
 def test_benchmark_opportunities_cli_rejects_invalid_task_support_cleanly(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,

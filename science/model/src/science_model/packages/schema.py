@@ -276,9 +276,17 @@ class GroundTruth(BaseModel):
 
 
 BenchmarkTaskSupportState = Literal["supported", "candidate", "blocked"]
+BENCHMARK_TASK_SUPPORT_FIELDS: frozenset[str] = frozenset({"state", "reason", "checked_at", "evidence", "notes"})
 BENCHMARK_TASK_SUPPORT_STATES: frozenset[str] = frozenset(get_args(BenchmarkTaskSupportState))
 BENCHMARK_TASK_SUPPORT_REASON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BENCHMARK_TASK_SUPPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_support_string_items(field: str, values: list[str]) -> list[str]:
+    for value in values:
+        if not value.strip():
+            raise ValueError(f"support.{field} items must be nonempty strings")
+    return values
 
 
 class BenchmarkTaskSupport(BaseModel):
@@ -304,6 +312,16 @@ class BenchmarkTaskSupport(BaseModel):
         if value and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(value) is None:
             raise ValueError("support.checked_at must be YYYY-MM-DD")
         return value
+
+    @field_validator("evidence")
+    @classmethod
+    def _validate_evidence_items(cls, values: list[str]) -> list[str]:
+        return _validate_support_string_items("evidence", values)
+
+    @field_validator("notes")
+    @classmethod
+    def _validate_notes_items(cls, values: list[str]) -> list[str]:
+        return _validate_support_string_items("notes", values)
 
     @model_validator(mode="after")
     def _validate_state_requirements(self) -> "BenchmarkTaskSupport":

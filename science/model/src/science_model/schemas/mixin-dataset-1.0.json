@@ -133,8 +133,8 @@
             {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
           ]
         },
-        "evidence": {"type": "array", "items": {"type": "string"}},
-        "notes": {"type": "array", "items": {"type": "string"}}
+        "evidence": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+        "notes": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}
       },
       "allOf": [
         {
