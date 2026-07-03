@@ -209,9 +209,18 @@ def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
 
         Double-backtick HTML stays intact: ``<!-- keep double -->``.
 
+        Multiline inline HTML stays intact: `<!-- keep
+        multiline -->`.
+
         ```html
         <!-- keep fenced -->
         ```
+
+        ````markdown
+        ```html
+        <!-- keep nested fenced -->
+        ```
+        ````
 
         # Evidence
 
@@ -228,7 +237,9 @@ def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
     assert "[@Smith2020]" in record["markdown"]
     assert "`<!-- keep -->`" in record["markdown"]
     assert "``<!-- keep double -->``" in record["markdown"]
+    assert "`<!-- keep\nmultiline -->`" in record["markdown"]
     assert "<!-- keep fenced -->" in record["markdown"]
+    assert "<!-- keep nested fenced -->" in record["markdown"]
     for section in record["sections"]:
         assert "Author note" not in section["markdown"]
 

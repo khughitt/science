@@ -234,6 +234,26 @@ def test_parse_citations_ignores_comment_marker_inside_multibacktick_inline_code
     assert _citation_pairs(markdown) == [("Smith2020", None)]
 
 
+def test_parse_citations_ignores_comment_marker_inside_multiline_inline_code() -> None:
+    markdown = "Use `<!--\nas literal text` and cite [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_ignores_citations_inside_longer_fenced_code() -> None:
+    markdown = """````markdown
+```
+Code cites [@Missing2026].
+```
+````
+Visible [@Smith2020]."""
+    assert _citation_pairs(markdown) == [("Smith2020", None)]
+
+
+def test_parse_citations_treats_comment_closer_inside_comment_as_visible_boundary() -> None:
+    markdown = "Before <!-- author `-->` after [@Jones2021] --> visible [@Smith2020]."
+    assert _citation_pairs(markdown) == [("Jones2021", None), ("Smith2020", None)]
+
+
 def test_parse_citations_fails_closed_on_unterminated_html_comment() -> None:
     with pytest.raises(UnterminatedHtmlCommentError, match="unterminated HTML comment"):
         parse_citations("Visible [@Smith2020].\n<!-- author note [@citekey]\nVisible [@Jones2021].")

@@ -19,10 +19,7 @@ from science_tool.markdown_utils import (
     frontmatter_line_numbers as _frontmatter_line_numbers,
 )
 from science_tool.markdown_utils import (
-    is_fence_line as _is_fence_line,
-)
-from science_tool.markdown_utils import (
-    strip_inline_code as _strip_inline_code,
+    rendered_prose as _rendered_prose,
 )
 from science_tool.project_config import DEFAULT_DOI_PMID_EXEMPT_DIRS, load_project_config
 
@@ -368,16 +365,10 @@ def _scan_body_typed_refs(
     refs (those have a peer `<project-id>:` prefix and are validated separately).
     """
     issues: list[RefIssue] = []
-    in_fence = False
-    for line_num, line in enumerate(lines, start=1):
-        if line_num in frontmatter_lines:
-            continue
-        if _is_fence_line(line):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        scan_line = _strip_inline_code(line)
+    rendered_lines = _rendered_prose(
+        "\n".join("" if line_num in frontmatter_lines else line for line_num, line in enumerate(lines, start=1))
+    ).splitlines()
+    for line_num, scan_line in enumerate(rendered_lines, start=1):
         for match in _TYPED_ENTITY_REF_RE.finditer(scan_line):
             kind, slug = match.group(1), match.group(2)
             ref = f"{kind}:{slug}"
@@ -659,17 +650,10 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
         # Configurable via refs.doi_pmid_exempt_dirs (see project_config).
         skip_doi_pmid_check = any(rel_path.startswith(p) for p in doi_pmid_exempt_prefixes)
 
-        in_fenced_code = False
-        for line_num, line in enumerate(lines, start=1):
-            if line_num in frontmatter_lines:
-                continue
-            if _is_fence_line(line):
-                in_fenced_code = not in_fenced_code
-                continue
-            if in_fenced_code:
-                continue
-
-            scan_line = _strip_inline_code(line)
+        rendered_lines = _rendered_prose(
+            "\n".join("" if line_num in frontmatter_lines else line for line_num, line in enumerate(lines, start=1))
+        ).splitlines()
+        for line_num, scan_line in enumerate(rendered_lines, start=1):
 
             # Skip headings and frontmatter for hypothesis checks
             if _is_heading_line(scan_line):
