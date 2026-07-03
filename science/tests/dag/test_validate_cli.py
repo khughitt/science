@@ -3,14 +3,51 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from science_tool.dag.cli import dag_group
+from science_tool.dag.validate import _parse_dot_topology
 
 FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 FIXTURE_MM30 = Path(__file__).parent / "fixtures" / "mm30"
+
+
+def _write_proposition(project: Path, slug: str, source: str, target: str) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / f"{slug}.md").write_text(
+        f"""---
+id: proposition:{slug}
+type: proposition
+title: {source} affects {target}
+status: active
+subject: {source}
+predicate: affects
+object: {target}
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+legacy_relation_label: affects
+---
+
+{source} affects {target}.
+""",
+        encoding="utf-8",
+    )
+
+
+def _copy_fixture_with_propositions(source: Path, target: Path) -> Path:
+    shutil.copytree(source, target)
+    for edge_yaml in target.glob("doc/figures/dags/*.edges.yaml"):
+        edge_yaml.unlink()
+    for dot_path in sorted((target / "doc/figures/dags").glob("*.dot")):
+        _, dot_edges = _parse_dot_topology(dot_path)
+        for index, (source_node, target_node) in enumerate(sorted(dot_edges), start=1):
+            _write_proposition(target, f"{dot_path.stem}-{index}", source_node, target_node)
+    return target
 
 
 def test_schema_stdout_is_valid_json() -> None:
@@ -112,15 +149,16 @@ def test_validate_dag_scope() -> None:
     assert result.exit_code == 0
 
 
-def test_audit_json_includes_validation() -> None:
+def test_audit_json_includes_validation(tmp_path: Path) -> None:
     import json
 
+    project = _copy_fixture_with_propositions(FIXTURE_MINIMAL / "clean", tmp_path / "clean")
     runner = CliRunner()
     result = runner.invoke(
         dag_group,
-        ["audit", "--json", "--project", str(FIXTURE_MINIMAL / "clean")],
+        ["audit", "--json", "--project", str(project)],
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert "validation" in data
     assert data["validation"]["ok"] is True

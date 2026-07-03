@@ -124,6 +124,34 @@ def _match_dot_edge_line(line: str) -> re.Match[str] | None:
     return EDGE_RE.match(comment_stripped)
 
 
+def _strip_dot_comments_from_line(line: str, *, in_block_comment: bool) -> tuple[str, bool]:
+    stripped = []
+    i = 0
+    while i < len(line):
+        if in_block_comment:
+            end = line.find("*/", i)
+            if end == -1:
+                return "".join(stripped), True
+            i = end + 2
+            in_block_comment = False
+            continue
+
+        line_comment = line.find("//", i)
+        block_comment = line.find("/*", i)
+        if line_comment == -1 and block_comment == -1:
+            stripped.append(line[i:])
+            break
+        if line_comment != -1 and (block_comment == -1 or line_comment < block_comment):
+            stripped.append(line[i:line_comment])
+            break
+
+        stripped.append(line[i:block_comment])
+        i = block_comment + 2
+        in_block_comment = True
+
+    return "".join(stripped), in_block_comment
+
+
 def _flatten_multiline_attrs(text: str) -> str:
     buf = ""
     depth = 0
@@ -312,10 +340,15 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
 
     # Inject a header banner so the auto-styled version is visually distinct.
     banner_inserted = False
+    in_block_comment = False
     for line in lines:
+        uncommented_line, in_block_comment = _strip_dot_comments_from_line(
+            line,
+            in_block_comment=in_block_comment,
+        )
         # Replace graph-level label with an auto-styling banner.
-        if not banner_inserted and re.match(r"\s*label=<", line):
-            m = re.match(r"(\s*)(label=<.+?>);?\s*$", line)
+        if not banner_inserted and re.match(r"\s*label=<", uncommented_line):
+            m = re.match(r"(\s*)(label=<.+?>);?\s*$", uncommented_line)
             if m:
                 indent = m.group(1)
                 original = m.group(2)
@@ -331,7 +364,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
                 banner_inserted = True
                 continue
 
-        em = _match_dot_edge_line(line)
+        em = EDGE_RE.match(uncommented_line)
         if em:
             queue = edges_by_pair[(em.group("src"), em.group("tgt"))]
             if not queue:
