@@ -12,6 +12,8 @@ from science_model.reasoning import SIGN_MEANINGFUL_PREDICATES
 Priority = Literal["high", "medium", "low"]
 LANE_SAME_CLAIM = "same_claim"
 LANE_FACTORIZATION = "factorization_disagreement"
+DECISION_ACCEPTED_SPARSE_HINTS = "accepted_sparse_hints"
+SPARSE_HINT_DISAGREEMENT = "multiple assertions have insufficient factorization hints"
 MAX_RECONCILIATION_COMPONENT_SIZE = 25
 LANE_ID_TOKENS = {
     LANE_SAME_CLAIM: "same-claim",
@@ -27,6 +29,15 @@ DECISIONS = frozenset(
         "stance_review_needed",
         "split_possible",
         "insufficient_hints",
+        DECISION_ACCEPTED_SPARSE_HINTS,
+        "needs_human",
+    }
+)
+LANE_A_DECISIONS = frozenset(
+    {
+        "same_claim",
+        "related_but_distinct",
+        "conflict_or_negation",
         "needs_human",
     }
 )
@@ -36,6 +47,7 @@ LANE_B_DECISIONS = frozenset(
         "stance_review_needed",
         "split_possible",
         "insufficient_hints",
+        DECISION_ACCEPTED_SPARSE_HINTS,
         "needs_human",
     }
 )
@@ -150,6 +162,39 @@ def _require(condition: bool, message: str) -> None:
 
 def _digest(parts: list[str]) -> str:
     return hashlib.sha256("\0".join(parts).encode()).hexdigest()
+
+
+def _fingerprint_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def factorization_assertion_fingerprint(candidate: FactorizationCandidate) -> str:
+    rows: list[str] = []
+    for hint in candidate.observed_statement_hints:
+        rows.append(
+            "\0".join(
+                [
+                    _fingerprint_text(hint.get("annotation")),
+                    _fingerprint_text(hint.get("paper")),
+                    _fingerprint_text(hint.get("stance")),
+                    _fingerprint_text(hint.get("subject")),
+                    _fingerprint_text(hint.get("object")),
+                    _fingerprint_text(hint.get("subject_concept")),
+                    _fingerprint_text(hint.get("object_concept")),
+                    _fingerprint_text(hint.get("exact")),
+                ]
+            )
+        )
+    digest = _digest(
+        [
+            "factorization-assertions-v1",
+            candidate.proposition,
+            *sorted(rows),
+        ]
+    )
+    return f"sha256:{digest}"
 
 
 def candidate_id(lane: str, refs: Sequence[str]) -> str:
@@ -720,6 +765,10 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
         _require_non_empty_string(judgment.get("rationale"), f"judgments[{idx}].rationale")
 
         if lane == LANE_SAME_CLAIM:
+            _require(
+                decision in LANE_A_DECISIONS,
+                f"judgments[{idx}] Lane A decision is not allowed",
+            )
             members = judgment.get("members")
             _require(
                 isinstance(members, list)
@@ -786,6 +835,14 @@ def validate_review_doc(doc: Any, report: ReconciliationReport) -> dict[str, Any
                 proposition == candidate.proposition,
                 f"judgments[{idx}].proposition does not match candidate",
             )
+            if decision == DECISION_ACCEPTED_SPARSE_HINTS:
+                _require(
+                    candidate.recommended_action == "insufficient_hints"
+                    and tuple(candidate.disagreement) == (SPARSE_HINT_DISAGREEMENT,),
+                    "judgments["
+                    f"{idx}"
+                    "].accepted_sparse_hints requires a current insufficient_hints candidate",
+                )
             expected_judgment = judgment_id(lane, decision, [proposition])
             _require(
                 judgment.get("judgment_id") == expected_judgment,

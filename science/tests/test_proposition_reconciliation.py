@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 import pytest
 
@@ -9,10 +10,12 @@ from science_tool.annotation.proposition_reconciliation import (
     PropositionSnapshot,
     ReconciliationReport,
     ReconciliationValidationError,
+    SameClaimCandidate,
     build_factorization_disagreements,
     build_same_claim_candidates,
     candidate_id,
     candidate_to_json,
+    factorization_assertion_fingerprint,
     judgment_id,
     normalize_phrase,
     polarity_compatible,
@@ -498,6 +501,162 @@ def test_validate_review_doc_rejects_lane_b_same_claim_decision():
 
     with pytest.raises(ReconciliationValidationError, match="Lane B"):
         validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_rejects_same_claim_sparse_hint_decision():
+    candidate = SameClaimCandidate(
+        candidate_id=candidate_id("same_claim", ["proposition:a", "proposition:b"]),
+        propositions=("proposition:a", "proposition:b"),
+        priority="high",
+        splittable=False,
+        flags=(),
+        signals={},
+        explanation=(),
+    )
+    report = ReconciliationReport(same_claim_candidates=(candidate,))
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgment_id": judgment_id(
+                    "same_claim",
+                    "accepted_sparse_hints",
+                    list(candidate.propositions),
+                ),
+                "lane": "same_claim",
+                "decision": "accepted_sparse_hints",
+                "members": list(candidate.propositions),
+                "rationale": "Sparse hint closure is not valid for same-claim review.",
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    with pytest.raises(ReconciliationValidationError, match="Lane A"):
+        validate_review_doc(doc, report)
+
+
+def test_validate_review_doc_accepts_sparse_hint_closure_for_insufficient_hints():
+    factor = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="low",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(),
+        disagreement=("multiple assertions have insufficient factorization hints",),
+        recommended_action="insufficient_hints",
+    )
+    report = ReconciliationReport(factorization_disagreements=(factor,))
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": factor.candidate_id,
+                "judgment_id": judgment_id(
+                    "factorization_disagreement",
+                    "accepted_sparse_hints",
+                    ["proposition:p"],
+                ),
+                "lane": "factorization_disagreement",
+                "decision": "accepted_sparse_hints",
+                "proposition": "proposition:p",
+                "rationale": "The sparse statement hints are expected for this candidate.",
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    result = validate_review_doc(doc, report)
+
+    assert result["status"] == "ok"
+    assert result["judgments"] == 1
+    assert result["errors"] == []
+
+
+def test_validate_review_doc_rejects_sparse_hint_closure_for_non_sparse_candidate():
+    factor = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="medium",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(),
+        disagreement=("object differs",),
+        recommended_action="factorization_needs_resynthesis",
+    )
+    report = ReconciliationReport(factorization_disagreements=(factor,))
+    doc = {
+        "source": "llm-review:claude:proposition-reconcile-v1",
+        "judgments": [
+            {
+                "candidate_id": factor.candidate_id,
+                "judgment_id": judgment_id(
+                    "factorization_disagreement",
+                    "accepted_sparse_hints",
+                    ["proposition:p"],
+                ),
+                "lane": "factorization_disagreement",
+                "decision": "accepted_sparse_hints",
+                "proposition": "proposition:p",
+                "rationale": "This candidate should not use sparse hint closure.",
+                "confidence": "medium",
+            }
+        ],
+    }
+
+    with pytest.raises(
+        ReconciliationValidationError,
+        match="accepted_sparse_hints requires a current insufficient_hints candidate",
+    ):
+        validate_review_doc(doc, report)
+
+
+def test_factorization_assertion_fingerprint_changes_when_subject_hint_changes():
+    base = FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", ["proposition:p"]),
+        proposition="proposition:p",
+        priority="low",
+        papers=("paper:A2020",),
+        current={},
+        observed_statement_hints=(
+            {
+                "annotation": "annotation:a",
+                "paper": "paper:A2020",
+                "stance": "supports",
+                "subject": "BRCA1",
+                "object": "genomic instability",
+                "subject_concept": "HGNC:1100",
+                "object_concept": "MESH:D005822",
+                "exact": "BRCA1 affects genomic instability",
+            },
+        ),
+        disagreement=("multiple assertions have insufficient factorization hints",),
+        recommended_action="insufficient_hints",
+    )
+    subject_changed = FactorizationCandidate(
+        **{
+            **base.__dict__,
+            "observed_statement_hints": (
+                {**base.observed_statement_hints[0], "subject": "BRCA1 loss"},
+            ),
+        }
+    )
+    object_changed = FactorizationCandidate(
+        **{
+            **base.__dict__,
+            "observed_statement_hints": (
+                {**base.observed_statement_hints[0], "object": "DNA damage"},
+            ),
+        }
+    )
+
+    fingerprint = factorization_assertion_fingerprint(base)
+
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", fingerprint)
+    assert factorization_assertion_fingerprint(subject_changed) != fingerprint
+    assert factorization_assertion_fingerprint(object_changed) != fingerprint
 
 
 def test_reconciliation_report_can_carry_proposition_snapshots():
