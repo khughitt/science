@@ -36,7 +36,7 @@ For local Claude development:
 claude --plugin-dir /path/to/science
 ```
 
-For Codex, see [docs/README.codex.md](docs/README.codex.md). Codex support uses
+For Codex, see [docs/user-guide/codex.md](docs/user-guide/codex.md). Codex support uses
 generated `science-*` skills from `codex-skills/`.
 
 The main manual is [docs/user-guide/index.md](docs/user-guide/index.md).
@@ -122,7 +122,7 @@ custom checks.
 - [docs/user-guide/evidence-lines.md](docs/user-guide/evidence-lines.md): evidence-line authoring and evidence vocabulary
 - [docs/federation.md](docs/federation.md): peers, composite graphs, and cross-project references
 - [docs/conventions/validate.md](docs/conventions/validate.md): validation conventions
-- [docs/README.codex.md](docs/README.codex.md): Codex skill generation and installation
+- [docs/user-guide/codex.md](docs/user-guide/codex.md): Codex skill generation and installation
 
 ## Development
 

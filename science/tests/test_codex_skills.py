@@ -109,7 +109,7 @@ def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
 
 def test_codex_install_docs_use_codex_home_skills() -> None:
     install_text = (ROOT / "codex-skills" / "INSTALL.codex.md").read_text(encoding="utf-8")
-    readme_text = (ROOT / "docs" / "README.codex.md").read_text(encoding="utf-8")
+    readme_text = (ROOT / "docs" / "user-guide" / "codex.md").read_text(encoding="utf-8")
 
     for text in (install_text, readme_text):
         assert "${CODEX_HOME:-$HOME/.codex}/skills" in text

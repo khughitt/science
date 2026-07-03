@@ -33,6 +33,7 @@ cross-project work.
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
 | [CLI And Workflows](cli-and-workflows.md) | Command families, write classes, canonical vs migration surfaces, and shared CLI behavior. |
 | [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
+| [Codex](codex.md) | Using Science with OpenAI Codex via native skill discovery: install and skill generation. |
 | [Feedback And Telemetry](feedback-and-telemetry.md) | Feedback entries, concern taxonomy, local telemetry, redaction, reporting, pruning, and telemetry-assisted triage. |
 | [Benchmarking](benchmarking.md) | Benchmark metadata, validation, catalog coverage, opportunities, gaps, calibration, and read-only test projections. |
 | [Project Packaging](project-packaging.md) | Deterministic project bundles, manifest payload inventories, verification, extraction, and exit-code semantics. |
