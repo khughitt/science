@@ -20,7 +20,7 @@ def load_dag_paths(project_root: Path) -> DagPaths:
     """Load DAG path configuration from science.yaml.
 
     Falls back to defaults when the ``dag:`` block is absent. A project with
-    no ``dag:`` block and no ``*.edges.yaml`` files is a valid empty state:
+    no ``dag:`` block and no ``*.dot`` files is a valid empty state:
     auto-discover yields zero slugs and audit/validate return clean results.
     """
     cfg: dict = yaml.safe_load((project_root / "science.yaml").read_text()) or {}

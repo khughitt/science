@@ -2,45 +2,111 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
-import pytest
-
-from science_tool.dag.paths import load_dag_paths
+from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.validate import (
     ValidationFinding,
     ValidationReport,
     validate_project,
 )
 
-FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
+
+def _write_project_manifest(project: Path) -> None:
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "science.yaml").write_text(
+        "name: dag-validation-test\nknowledge_profiles:\n  local: local\n",
+        encoding="utf-8",
+    )
 
 
-@pytest.fixture
-def _schema_cache_isolation() -> Iterator[None]:
-    """Clear the _load_schema cache after the test so monkeypatched _SCHEMA_PATH
-    doesn't leak stale schema bytes into subsequent tests."""
-    yield
-    import science_tool.dag.validate as v
+def _write_project_manifest_with_dags(project: Path, dags: list[str]) -> None:
+    project.mkdir(parents=True, exist_ok=True)
+    dag_lines = "\n".join(f"    - {dag}" for dag in dags)
+    (project / "science.yaml").write_text(
+        f"""name: dag-validation-test
+knowledge_profiles:
+  local: local
+dag:
+  dags:
+{dag_lines}
+""",
+        encoding="utf-8",
+    )
 
-    v._load_schema.cache_clear()
+
+def _write_dot(project: Path, slug: str, body: str) -> Path:
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True, exist_ok=True)
+    dot_path = dag_dir / f"{slug}.dot"
+    dot_path.write_text(f"digraph {slug.replace('-', '_')} {{\n{body}\n}}\n", encoding="utf-8")
+    return dot_path
 
 
-def test_validation_report_ok_on_clean_fixture() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
+def _write_proposition(
+    project: Path,
+    slug: str,
+    subject: str,
+    obj: str,
+    *,
+    legacy_patch: str | None = None,
+    legacy_edge_id: int | None = None,
+) -> None:
+    prop = project / "entities/propositions" / f"{slug}.md"
+    prop.parent.mkdir(parents=True, exist_ok=True)
+    extra = ""
+    if legacy_patch is not None:
+        extra += f"legacy_patch: {legacy_patch}\n"
+    if legacy_edge_id is not None:
+        extra += f"legacy_edge_id: {legacy_edge_id}\n"
+    prop.write_text(
+        f"""---
+kind: proposition
+id: proposition:{slug}
+type: proposition
+subject: {subject}
+predicate: affects
+object: {obj}
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+{extra}---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_propositions(project: Path, edges: list[tuple[str, str]]) -> None:
+    for index, (subject, obj) in enumerate(edges, start=1):
+        _write_proposition(project, f"{subject}-affects-{obj}-{index}", subject, obj)
+
+
+def test_validation_report_ok_on_clean_project(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
+
     assert isinstance(report, ValidationReport)
     assert report.ok, f"unexpected findings: {report.findings}"
     assert report.strict is False
     assert report.findings == ()
 
 
-def test_validation_report_to_json_shape() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
+def test_validation_report_to_json_shape(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
     js = report.to_json()
+
     assert js["ok"] is True
     assert js["strict"] is False
     assert js["findings"] == []
@@ -48,193 +114,207 @@ def test_validation_report_to_json_shape() -> None:
 
 
 def test_validation_finding_severity_literal() -> None:
-    # strict_error findings must not block when strict=False
     finding = ValidationFinding(
         dag="x",
         edge_id=1,
-        rule="identification_missing",
+        rule="dot_nodes_unused",
         severity="strict_error",
         message="missing",
-        location="x.edges.yaml",
+        location="x.dot",
     )
     report = ValidationReport(today=date.today(), strict=False, findings=(finding,))
-    assert report.ok is True  # strict_error does not block when strict=False
+    assert report.ok is True
 
     strict_report = ValidationReport(today=date.today(), strict=True, findings=(finding,))
-    assert strict_report.ok is False  # strict_error blocks when strict=True
+    assert strict_report.ok is False
 
 
-def test_posterior_beta_must_be_finite() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-infinite")
-    report = validate_project(paths)
+def test_validate_flags_dot_edge_without_matching_proposition(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+
+    report = validate_project(load_dag_paths(project))
+
     assert not report.ok
-    rules = {f.rule for f in report.findings}
-    assert "posterior_finite" in rules
-    finite_finding = next(f for f in report.findings if f.rule == "posterior_finite")
-    assert finite_finding.severity == "error"
-    assert finite_finding.edge_id == 1
+    finding = next(f for f in report.findings if f.rule == "proposition_edge_missing")
+    assert finding.dag == "h1"
+    assert "a -> b" in finding.message
 
 
-def test_posterior_hdi_must_be_ordered() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-hdi-order")
-    report = validate_project(paths)
+def test_validate_ignores_malformed_edges_yaml_when_dot_and_proposition_are_valid(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    dag_dir = project / "doc/figures/dags"
+    _write_dot(project, "h1", "  a -> b;")
+    (dag_dir / "h1.edges.yaml").write_text("not: [valid", encoding="utf-8")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
+
+
+def test_validate_legacy_patch_edge_mismatch_when_referenced_dot_exists(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h2", "  x -> y;")
+    _write_proposition(project, "x-affects-y", "x", "y")
+    _write_proposition(project, "a-affects-b", "a", "b", legacy_patch="h2", legacy_edge_id=1)
+
+    report = validate_project(load_dag_paths(project))
+
     assert not report.ok
-    rules = {f.rule for f in report.findings}
-    assert "posterior_hdi_ordered" in rules
+    finding = next(f for f in report.findings if f.rule == "legacy_dag_edge_unresolved")
+    assert "h2#1" in finding.message
 
 
-def test_posterior_prob_sign_must_be_in_unit_interval() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-prob-sign")
-    report = validate_project(paths)
+def test_validate_legacy_patch_skipped_when_referenced_dot_absent(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b", legacy_patch="h2", legacy_edge_id=1)
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
+    assert not any(f.rule == "legacy_dag_edge_unresolved" for f in report.findings)
+
+
+def test_validate_legacy_patch_matching_dot_edge_is_clean(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b", legacy_patch="h1", legacy_edge_id=1)
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
+
+
+def test_validate_empty_project_with_no_dot_files_is_clean(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
+    assert report.findings == ()
+
+
+def test_validate_configured_missing_dot_is_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest_with_dags(project, ["h1"])
+
+    report = validate_project(load_dag_paths(project))
+
     assert not report.ok
-    rules = {f.rule for f in report.findings}
-    assert "posterior_prob_sign_range" in rules
+    finding = next(f for f in report.findings if f.rule == "source_dot_missing")
+    assert finding.dag == "h1"
 
 
-def test_yaml_missing_edge_present_in_dot() -> None:
-    # .dot has a->c; YAML does not.
-    paths = load_dag_paths(FIXTURE_MINIMAL / "yaml-dot-mismatch")
-    report = validate_project(paths)
-    rules = {f.rule for f in report.findings}
-    assert "topology_missing_in_yaml" in rules
+def test_validate_configured_dot_needs_no_edges_yaml_when_backed_by_proposition(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest_with_dags(project, ["h1"])
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
+    assert not (project / "doc/figures/dags/h1.edges.yaml").exists()
 
 
-def test_yaml_edge_not_in_dot() -> None:
-    # YAML has edge id=2 with target=zzz; .dot has no such node.
-    paths = load_dag_paths(FIXTURE_MINIMAL / "yaml-dot-mismatch")
-    report = validate_project(paths)
-    rules = {f.rule for f in report.findings}
-    # zzz is missing from .dot; check surfaces as topology_node_mismatch
-    # (the node doesn't exist) rather than topology_missing_in_dot.
-    assert "topology_node_mismatch" in rules
+def test_validate_ignores_generated_dot_files_during_auto_discovery(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "h1-auto.dot").write_text("digraph h1 {\n  missing -> edge;\n}\n", encoding="utf-8")
+    (dag_dir / "h1-numbered.dot").write_text("digraph h1 {\n  missing -> edge;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.dot.reference").write_text("digraph h1 {\n  missing -> edge;\n}\n", encoding="utf-8")
+
+    report = validate_project(load_dag_paths(project))
+
+    assert report.ok, report.findings
 
 
-def test_clean_fixture_has_no_topology_findings() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
-    topology_rules = {
-        "topology_missing_in_yaml",
-        "topology_missing_in_dot",
-        "topology_node_mismatch",
-    }
-    assert not topology_rules.intersection(f.rule for f in report.findings)
+def test_acyclicity_flags_cycle(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    edges = [("a", "b"), ("b", "c"), ("c", "a")]
+    _write_dot(project, "h1", "  a -> b;\n  b -> c;\n  c -> a;")
+    _write_propositions(project, edges)
 
+    report = validate_project(load_dag_paths(project))
 
-def test_acyclicity_flags_cycle() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
-    report = validate_project(paths)
     acyclicity_findings = [f for f in report.findings if f.rule == "acyclicity"]
     assert len(acyclicity_findings) == 1
     msg = acyclicity_findings[0].message
-    # The cycle path must mention all three nodes.
     assert "a" in msg and "b" in msg and "c" in msg
 
 
-def test_acyclicity_passes_on_clean() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
+def test_acyclicity_passes_on_clean(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    report = validate_project(load_dag_paths(project))
+
     assert not any(f.rule == "acyclicity" for f in report.findings)
 
 
-def test_jsonschema_conformance_passes_on_clean() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
-    assert not any(f.rule == "jsonschema_conformance" for f in report.findings)
+def test_strict_flags_orphan_dot_node(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;\n  orphan;")
+    _write_proposition(project, "a-affects-b", "a", "b")
 
+    strict = validate_project(load_dag_paths(project), strict=True)
 
-def test_jsonschema_conformance_runs_on_mm30_fixture() -> None:
-    # Primary value is proving the check runs on a real multi-edge fixture
-    # without falsely flagging. If the committed schema drifts, this also
-    # catches that (though test_committed_schema_matches_pydantic_emit is the
-    # dedicated drift-guard).
-    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
-    report = validate_project(paths)
-    jsonschema_findings = [f for f in report.findings if f.rule == "jsonschema_conformance"]
-    assert jsonschema_findings == []
-
-
-def test_jsonschema_conformance_catches_drift(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _schema_cache_isolation
-) -> None:
-    # Point the schema loader at a bogus schema that rejects everything, then
-    # ensure at least one finding with rule=jsonschema_conformance appears.
-    bogus = tmp_path / "bogus.schema.json"
-    bogus.write_text(
-        '{"type": "object", "properties": {"dag": {"type": "number"}}, "required": ["dag"]}',
-        encoding="utf-8",
-    )
-    import science_tool.dag.validate as v
-
-    monkeypatch.setattr(v, "_SCHEMA_PATH", bogus)
-    # Re-clear the cache so the bogus schema is picked up.
-    v._load_schema.cache_clear()
-
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
-    report = validate_project(paths)
-    rules = {f.rule for f in report.findings}
-    assert "jsonschema_conformance" in rules
-
-
-def test_strict_flags_missing_identification() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "missing-identification")
-    # Non-strict: deprecation warning only, no strict_error exit.
-    non_strict = validate_project(paths, strict=False)
-    assert non_strict.ok, non_strict.findings
-
-    strict = validate_project(paths, strict=True)
-    assert not strict.ok
-    rules_strict = {f.rule for f in strict.findings if f.severity == "strict_error"}
-    assert "identification_missing" in rules_strict
-
-
-def test_strict_flags_empty_description() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "empty-description")
-    strict = validate_project(paths, strict=True)
-    rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
-    assert "description_nonempty" in rules
-
-
-def test_strict_flags_orphan_dot_node() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "orphan-dot-node")
-    strict = validate_project(paths, strict=True)
     rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
     assert "dot_nodes_unused" in rules
     msg = next(f.message for f in strict.findings if f.rule == "dot_nodes_unused")
     assert "orphan" in msg
 
 
-def test_strict_flags_cross_dag_node_case_mismatch() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "cross-dag-inconsistent")
-    strict = validate_project(paths, strict=True)
+def test_non_strict_does_not_emit_strict_orphan_dot_node(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "h1", "  a -> b;\n  orphan;")
+    _write_proposition(project, "a-affects-b", "a", "b")
+
+    non_strict = validate_project(load_dag_paths(project), strict=False)
+
+    assert non_strict.ok, non_strict.findings
+    assert not any(f.rule == "dot_nodes_unused" for f in non_strict.findings)
+
+
+def test_strict_flags_cross_dag_node_case_mismatch(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    _write_dot(project, "first", "  prc2 -> ifn;")
+    _write_dot(project, "second", "  PRC2 -> other;")
+    _write_propositions(project, [("prc2", "ifn"), ("PRC2", "other")])
+
+    strict = validate_project(load_dag_paths(project), strict=True)
+
     rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
     assert "cross_dag_node_consistency" in rules
-    # And the non-strict variant should NOT block on this.
-    non_strict = validate_project(paths, strict=False)
-    assert non_strict.ok
+
+    non_strict = validate_project(load_dag_paths(project), strict=False)
+    assert non_strict.ok, non_strict.findings
 
 
-def test_non_strict_does_not_emit_strict_errors_as_blocking() -> None:
-    # missing-identification fixture: strict_error exists but doesn't block
-    # non-strict run.
-    paths = load_dag_paths(FIXTURE_MINIMAL / "missing-identification")
-    non_strict = validate_project(paths, strict=False)
-    assert non_strict.ok
-    # The strict_error finding may still be emitted for JSON surface.
-    all_rules = {f.rule for f in non_strict.findings}
-    # Emitting strict_errors in non-strict output is allowed but not required;
-    # we only assert that non-strict exits OK.
-    _ = all_rules  # suppress "unused variable" warning
+def test_project_root_fallback_supports_default_layout_tests(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    dag_dir = project / "doc/figures/dags"
+    tasks_dir = project / "tasks"
+    _write_dot(project, "h1", "  a -> b;")
+    _write_proposition(project, "a-affects-b", "a", "b")
 
+    report = validate_project(DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None))
 
-def test_mm30_fixture_validates_non_strict() -> None:
-    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
-    report = validate_project(paths)
-    assert report.ok, "\n".join(str(f) for f in report.findings)
-
-
-def test_mm30_fixture_validates_strict() -> None:
-    # Per Phase 1, every mm30 fixture edge has explicit identification:.
-    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
-    report = validate_project(paths, strict=True)
-    blocking = [f for f in report.findings if report._blocks(f)]
-    assert not blocking, "\n".join(str(f) for f in blocking)
+    assert report.ok, report.findings
