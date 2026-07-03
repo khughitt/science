@@ -50,8 +50,11 @@ def proposition_to_edge(prop: PropositionEntity) -> dict:  # type: ignore[type-a
     )
 
     edge: dict = {  # type: ignore[type-arg]
+        "proposition_id": prop.id,
         "source": prop.subject,
         "target": prop.object,
+        "legacy_patch": prop.legacy_patch,
+        "legacy_edge_id": prop.legacy_edge_id,
         # Channel fields (authored axes only). Their presence forces channel
         # mode in style_for_edge; edge_status is intentionally absent.
         "polarity": polarity,
@@ -84,14 +87,24 @@ def edges_from_propositions(propositions: list[PropositionEntity]) -> list[dict]
     return edges
 
 
+def load_relational_propositions(project_root: Path) -> list[PropositionEntity]:
+    """Load compiled relational propositions that can back DOT DAG edges."""
+    from science_tool.entities import load_local_entity_index
+
+    index = load_local_entity_index(project_root)
+    return [
+        entity
+        for entity in index.values()
+        if isinstance(entity, PropositionEntity)
+        and entity.subject is not None
+        and entity.object is not None
+    ]
+
+
 def load_proposition_edges(project_root: Path) -> list[dict]:  # type: ignore[type-arg]
     """Load compiled ``PropositionEntity`` records and project them to edges.
 
     Reads the project's entity index (the canonical ``entities/propositions/``
     store written by ``compile_workbench``) and returns channel-mode edge dicts.
     """
-    from science_tool.entities import load_local_entity_index
-
-    index = load_local_entity_index(project_root)
-    propositions = [e for e in index.values() if isinstance(e, PropositionEntity)]
-    return edges_from_propositions(propositions)
+    return edges_from_propositions(load_relational_propositions(project_root))

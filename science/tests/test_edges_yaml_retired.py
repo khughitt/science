@@ -157,3 +157,21 @@ def test_no_deprecation_warning_for_proposition_sourced_edges() -> None:
         edges = edges_from_propositions([prop])
         style_for_edge(edges[0])
     assert edges
+
+
+def test_proposition_edge_carries_identity_and_legacy_dag_metadata() -> None:
+    prop = PropositionEntity(
+        id="proposition:edge-one",
+        subject="a",
+        object="b",
+        predicate="affects",
+        polarity="positive",
+        legacy_patch="h1",
+        legacy_edge_id=7,
+    )
+
+    edge = edges_from_propositions([prop])[0]
+
+    assert edge["proposition_id"] == "proposition:edge-one"
+    assert edge["legacy_patch"] == "h1"
+    assert edge["legacy_edge_id"] == 7
