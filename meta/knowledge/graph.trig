@@ -13,9 +13,9 @@
 <http://example.org/project/graph/knowledge> {
     <http://example.org/project/annotation/entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
     <http://example.org/project/annotation/entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
-    <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> .
-    <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> .
-    <http://example.org/project/annotation/entities/papers/Volker2023.source#bes-not-data-pooling> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> .
+    <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> .
+    <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> .
+    <http://example.org/project/annotation/entities/papers/Volker2023.source#bes-not-data-pooling> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> .
     <http://example.org/project/bears-on-edge/0146c753d9e72e40> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/ed0fd99ce0d2a3eb> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
@@ -124,9 +124,9 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/161719a25644a568> ;
         sci:bearsOnTarget <http://example.org/project/paper/semochkina2025> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/0f885bec2690d774> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/14e8570c0652157913529ad90d2991bcd79a8a627324255290b12f6c357c39a0> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
+    <http://example.org/project/bears-on-edge/0f098f1e0c8f94fe> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/a12e5fc0d8f608be> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/0fd27f550cc334c1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t028> ;
@@ -283,10 +283,6 @@
     <http://example.org/project/bears-on-edge/20309518d2f4295d> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t069> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0007-working-model> ;
-        a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/20ec03ff536cf89e> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/20e7aa9cc3fd9909e9a81f39145b0166efcfa3b72f95dff0329c05bb009d3eb7> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/20f9b0226cfcb054> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/2f5802732fecd4f9> ;
@@ -512,10 +508,6 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/27bd5a098f8c4720> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/3acecb7d607dd0f4> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/3ae080dbf2d697e6> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/9b674827a22acd08> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation> ;
@@ -535,10 +527,6 @@
     <http://example.org/project/bears-on-edge/3ca5fd83d57458d2> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/fedak2015> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
-        a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/3cb9109b4ce25f4c> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/Volker2023.source#bes-not-data-pooling> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/3d894828c3cb8306> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/ding2025> ;
@@ -563,10 +551,6 @@
     <http://example.org/project/bears-on-edge/3fada98c7cd91619> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t042> ;
         sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
-        a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/40ccfc6531b28d87> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/paper/volker2023> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/41570d67e57cebc8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/vahabi2022> ;
@@ -616,10 +600,6 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/d0436c2423de4302> ;
         sci:bearsOnTarget <http://example.org/project/paper/li2016> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/455c712ed99e96b5> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/455efe6f3bc28ff1> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e977325facf329a5> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
@@ -663,6 +643,10 @@
     <http://example.org/project/bears-on-edge/486238fb056ad837> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/zheng2024> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/495233a569124203> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/9cf6c1b37017aadf> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/495d32593d2baa9a> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/9d97543844db68ea> ;
@@ -756,6 +740,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/9d97543844db68ea> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/5437f6d840145030> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/5575ec39b7d2a239> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/yu2026> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
@@ -771,10 +759,6 @@
     <http://example.org/project/bears-on-edge/569e817ced66c1d2> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/mohammadi2025> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
-        a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/56f55983975e2456> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/paper/vanwonderen2024> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/58978d26c4081dfa> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/8ac838df9d5cc786> ;
@@ -883,10 +867,6 @@
     <http://example.org/project/bears-on-edge/6483ac07327b6488> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e9a7c181412bc394> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
-        a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/649f8958a995d467> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/4133ccacb45853620ebb0509347e10e7b148c048f69dac2b326ded33ac62034b> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/64d1d6d33079ddf0> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/vahabi2022> ;
@@ -1000,9 +980,9 @@
         sci:bearsOnSource <http://example.org/project/task/t032> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/722bebd73ddfb90b> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/source/entities_propositions_bes-behaves-like-pooled-meta-analysis.md> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
+    <http://example.org/project/bears-on-edge/72a5913cc69acc14> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/af122de935eb4eb3> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/72e057515cab9fdb> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source/entities_questions_0011-graph-valued-synthesis-artifacts.md> ;
@@ -1080,6 +1060,14 @@
         sci:bearsOnSource <http://example.org/project/task/t033> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/7dce13e44edbf4a1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_propositions_bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/7e1846c2a576202e> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/a548cea58faa6a97> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/7e1b1075f700e93a> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/d0436c2423de4302> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> ;
@@ -1139,6 +1127,14 @@
     <http://example.org/project/bears-on-edge/83c702dd59799f17> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source/entities_synthesis_0003-synthesis-causal-graph-construction-and-discovery.md> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/83e179a300c142a4> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/paper/vanwonderen2024> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/842b515582c15969> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_propositions_bes-does-not-rescue-underpowered-studies-by-pooling-data.md> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/84c5fc5f46596e69> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t039> ;
@@ -1372,10 +1368,6 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/fea9aee3cf657511> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/a561933ad9a11a8e> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/source-snapshot/b88f70c08cf96053> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/a593986be394281a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/dong2023> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -1412,10 +1404,6 @@
         sci:bearsOnSource <http://example.org/project/paper/faller2024> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/aa12d42967f7dae3> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/source-snapshot/af122de935eb4eb3> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/aa21ed30d5aac707> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/c58ade737248b8d6> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -1444,6 +1432,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/63a1a051389a038d> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/afc21e262526efed> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/aff745ece6d69c6e> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/376814ac7028eca8> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
@@ -1471,6 +1463,10 @@
     <http://example.org/project/bears-on-edge/b3428467d5ad53b1> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/522140a3cb70c25e> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/b3996e701cbf80ed> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/a548cea58faa6a97> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/b4321e6c065f60de> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/deleu2023> ;
@@ -1508,6 +1504,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/d6b4cfa02b477e10> ;
         sci:bearsOnTarget <http://example.org/project/paper/deleu2023> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/b6c63c0f2822a466> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/3fce16101268e33f4ce5951e7cca780607ab2bbf035ff994b6577a38edb471f5> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/b722c98c015664fe> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/zhang2021jointgraphical> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
@@ -1528,6 +1528,10 @@
         sci:bearsOnSource <http://example.org/project/paper/maity2020> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/b92ef79e13bdb0d7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/paper/volker2023> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/b93973177a04a522> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/f9b4c26c015db108> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> ;
@@ -1547,6 +1551,10 @@
     <http://example.org/project/bears-on-edge/ba065eab219f4459> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/cb768c74beee4692> ;
         sci:bearsOnTarget <http://example.org/project/paper/linkov2017> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/ba71cbb86dad06ab> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/44108b97854a8a0ef16dd6ee8234c61329f525199dadb3d53397a888b9b993ee> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/bae9b53fc88cd29c> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t027> ;
@@ -1840,10 +1848,6 @@
         sci:bearsOnSource <http://example.org/project/task/t034> ;
         sci:bearsOnTarget <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         a sci:BearsOnEdge .
-    <http://example.org/project/bears-on-edge/d9b9120a5e59d5b7> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
-        sci:bearsOnSource <http://example.org/project/source-snapshot/a548cea58faa6a97> ;
-        sci:bearsOnTarget <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/da3100f44bdb1e61> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/522140a3cb70c25e> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> ;
@@ -2020,6 +2024,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/ee568822fb9e3bb5> ;
         sci:bearsOnTarget <http://example.org/project/question/0012-agent-tool-kg-operations> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/ec8843af64b2106c> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/paper/vanwonderen2024> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/ecc9f0e352e09ff0> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t038> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
@@ -2107,6 +2115,14 @@
     <http://example.org/project/bears-on-edge/f3452f3179fdfdeb> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/gronau2021> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/f372712c5e6ad6c2> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/f419fd7189484469> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/annotation/entities/papers/Volker2023.source#bes-not-data-pooling> ;
+        sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/f43166b124928cbc> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/dai2023> ;
@@ -2280,14 +2296,14 @@
         a sci:CodeFile ;
         skos:prefLabel "t034_validator/loader.py" ;
         schema:identifier "code-file:t034_validator/loader.py" .
-    <http://example.org/project/evidence-line/lit-assertion/14e8570c0652157913529ad90d2991bcd79a8a627324255290b12f6c357c39a0> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        cito:disputes <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
+    <http://example.org/project/evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        cito:supports <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:EvidenceLine .
-    <http://example.org/project/evidence-line/lit-assertion/20e7aa9cc3fd9909e9a81f39145b0166efcfa3b72f95dff0329c05bb009d3eb7> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        cito:supports <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
+    <http://example.org/project/evidence-line/lit-assertion/3fce16101268e33f4ce5951e7cca780607ab2bbf035ff994b6577a38edb471f5> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
+        cito:supports <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> ;
         a sci:EvidenceLine .
-    <http://example.org/project/evidence-line/lit-assertion/4133ccacb45853620ebb0509347e10e7b148c048f69dac2b326ded33ac62034b> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
-        cito:disputes <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> ;
+    <http://example.org/project/evidence-line/lit-assertion/44108b97854a8a0ef16dd6ee8234c61329f525199dadb3d53397a888b9b993ee> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        cito:supports <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:EvidenceLine .
     <http://example.org/project/evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
         cito:supports <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> ;
@@ -3109,7 +3125,8 @@
         skos:related <http://example.org/project/topic/bayesian-methods-continuous-belief> ;
         schema:identifier "paper:VanLissa2024" .
     <http://example.org/project/paper/vanwonderen2024> sci:bearsOn <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
-            <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis>,
+            <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative>,
+            <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
@@ -3126,7 +3143,7 @@
         skos:related <http://example.org/project/question/0001-bioinformatics-generalizability> ;
         schema:identifier "paper:Vasilevsky2022" .
     <http://example.org/project/paper/volker2023> sci:bearsOn <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
-            <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis>,
+            <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
@@ -3253,15 +3270,26 @@
         skos:prefLabel "Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis of Multiple Exposures and Outcomes" ;
         skos:related <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         schema:identifier "paper:Zuber2025" .
-    <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> sci:freshnessState "fresh" ;
+    <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> sci:freshnessState "fresh" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
         a sci:Proposition ;
-        skos:prefLabel "BES behaves like pooled meta-analysis" ;
-        skos:related <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses>,
-            <http://example.org/project/topic/bayesian-methods-continuous-belief> ;
-        schema:identifier "proposition:bes-behaves-like-pooled-meta-analysis" .
+        skos:prefLabel "BES behaves like meta-analysis when study evidence is informative" ;
+        schema:identifier "proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative" .
+    <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> sci:archived "true"^^<http://www.w3.org/2001/XMLSchema#boolean> ;
+        sci:entityKind "proposition" ;
+        sci:supersededBy <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative>,
+            <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
+        a sci:ArchivedEntity ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "BES behaves like pooled meta-analysis" .
+    <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> sci:freshnessState "fresh" ;
+        sci:profile "core" ;
+        sci:projectStatus "active" ;
+        sci:scope "project" ;
+        a sci:Proposition ;
+        skos:prefLabel "BES does not rescue underpowered studies by pooling data" ;
+        schema:identifier "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data" .
     <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> sci:freshnessState "fresh" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
@@ -3625,24 +3653,27 @@
             <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
             <http://example.org/project/paper/freiesleben2023>,
             <http://example.org/project/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation> .
+    <http://example.org/project/source-snapshot/9cf6c1b37017aadf> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> .
     <http://example.org/project/source-snapshot/9d97543844db68ea> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
             <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
             <http://example.org/project/paper/zhao2012>,
             <http://example.org/project/question/0004-source-and-pipeline-provenance>,
             <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> .
     <http://example.org/project/source-snapshot/9d9aa4436679f97f> sci:bearsOn <http://example.org/project/hypothesis/0007-working-model> .
+    <http://example.org/project/source-snapshot/a12e5fc0d8f608be> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> .
     <http://example.org/project/source-snapshot/a44f2849fd817cbc> sci:bearsOn <http://example.org/project/question/0001-bioinformatics-generalizability> .
     <http://example.org/project/source-snapshot/a4b72766d12ca8c6> sci:bearsOn <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/a548cea58faa6a97> sci:bearsOn <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
             <http://example.org/project/paper/vanwonderen2024>,
-            <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis>,
+            <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative>,
+            <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/a738d9318d9d67e9> sci:bearsOn <http://example.org/project/paper/zhang2025scientificmethod>,
             <http://example.org/project/question/0004-source-and-pipeline-provenance>,
             <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> .
     <http://example.org/project/source-snapshot/af122de935eb4eb3> sci:bearsOn <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
             <http://example.org/project/paper/volker2023>,
-            <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis>,
+            <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source-snapshot/b2544826dbef5626> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
             <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting>,
@@ -3658,7 +3689,6 @@
     <http://example.org/project/source-snapshot/b4f0ccf578a1d083> sci:bearsOn <http://example.org/project/synthesis/0010-rich-evidence-payloads-improve-graph-calibration> .
     <http://example.org/project/source-snapshot/b67e6dc565e3de70> sci:bearsOn <http://example.org/project/paper/dugourd2021>,
             <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> .
-    <http://example.org/project/source-snapshot/b88f70c08cf96053> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> .
     <http://example.org/project/source-snapshot/c0d5ce0d679f342a> sci:bearsOn <http://example.org/project/paper/liu2020>,
             <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> .
     <http://example.org/project/source-snapshot/c2db0ac12df13819> sci:bearsOn <http://example.org/project/paper/williams2018>,
@@ -3747,7 +3777,8 @@
     <http://example.org/project/source/entities_interpretations_0002-l1-patch-prototype-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0002-l1-patch-prototype-2026-06-01> .
     <http://example.org/project/source/entities_interpretations_0003-t066-latent-correction-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0003-t066-latent-correction-2026-06-01> .
     <http://example.org/project/source/entities_interpretations_0004-t067-patch-federation-2026-06-01.md> sci:bearsOn <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> .
-    <http://example.org/project/source/entities_propositions_bes-behaves-like-pooled-meta-analysis.md> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> .
+    <http://example.org/project/source/entities_propositions_bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md> sci:bearsOn <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> .
+    <http://example.org/project/source/entities_propositions_bes-does-not-rescue-underpowered-studies-by-pooling-data.md> sci:bearsOn <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> .
     <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> sci:bearsOn <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> .
     <http://example.org/project/source/entities_questions_0001-bioinformatics-generalizability.md> sci:bearsOn <http://example.org/project/question/0001-bioinformatics-generalizability> .
     <http://example.org/project/source/entities_questions_0002-evidence-payload-schema.md> sci:bearsOn <http://example.org/project/question/0002-evidence-payload-schema> .
@@ -4701,19 +4732,19 @@
     <http://example.org/project/code-file/t034_validator/__init__.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator___init__.py> .
     <http://example.org/project/code-file/t034_validator/__main__.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator___main__.py> .
     <http://example.org/project/code-file/t034_validator/loader.py> prov:wasDerivedFrom <http://example.org/project/source/src_t034_validator_loader.py> .
-    <http://example.org/project/evidence-line/lit-assertion/14e8570c0652157913529ad90d2991bcd79a8a627324255290b12f6c357c39a0> sci:evidenceIndependence "independent" ;
+    <http://example.org/project/evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23> sci:evidenceIndependence "independent" ;
         sci:evidenceRole "proxy_support" ;
         sci:evidenceStrength "moderate" ;
         sci:evidenceType "literature" ;
         sci:independenceGroup "literature-paper:VanWonderen2024" ;
         prov:wasDerivedFrom <http://example.org/project/paper/vanwonderen2024> .
-    <http://example.org/project/evidence-line/lit-assertion/20e7aa9cc3fd9909e9a81f39145b0166efcfa3b72f95dff0329c05bb009d3eb7> sci:evidenceIndependence "independent" ;
+    <http://example.org/project/evidence-line/lit-assertion/3fce16101268e33f4ce5951e7cca780607ab2bbf035ff994b6577a38edb471f5> sci:evidenceIndependence "independent" ;
         sci:evidenceRole "proxy_support" ;
         sci:evidenceStrength "moderate" ;
         sci:evidenceType "literature" ;
         sci:independenceGroup "literature-paper:VanWonderen2024" ;
         prov:wasDerivedFrom <http://example.org/project/paper/vanwonderen2024> .
-    <http://example.org/project/evidence-line/lit-assertion/4133ccacb45853620ebb0509347e10e7b148c048f69dac2b326ded33ac62034b> sci:evidenceIndependence "independent" ;
+    <http://example.org/project/evidence-line/lit-assertion/44108b97854a8a0ef16dd6ee8234c61329f525199dadb3d53397a888b9b993ee> sci:evidenceIndependence "independent" ;
         sci:evidenceRole "proxy_support" ;
         sci:evidenceStrength "moderate" ;
         sci:evidenceType "literature" ;
@@ -4732,10 +4763,10 @@
         sci:independenceGroup "literature-paper:VanLissa2024" ;
         prov:wasDerivedFrom <http://example.org/project/paper/vanlissa2024> .
     <http://example.org/project/graph_revision> a prov:Entity ;
-        schema:dateModified "2026-07-01T20:22:18+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+        schema:dateModified "2026-07-03T14:18:06+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
         schema:name "graph-revision" ;
-        schema:sha256 "dd8c0248db4e908a927d2ae00090e2839832a9581a65263d350e62b81759f1eb" ;
-        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"6babce772eaf1e47b2cfc1df1845254479af54b459cb838e0341cc473d93251f\"},\"CLAUDE.md\":{\"mtime_ns\":1776995988800669311,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1782910655391527307,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1782937338680390614,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1782910655394395590,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1781978375291040115,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0caa0677399891a74199124ffac98a5a87c9eb664cb98bc52961bc900a675d69\"},\"src/.gitkeep\":{\"mtime_ns\":1776996015722667356,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1780153231143867959,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1780153274380869571,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1780153239632868275,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1780153247867868583,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1780153254574868833,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1780153260792869064,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1780153266677869284,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1780153299835870520,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1780153292864870260,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1782937338682390614,\"sha256\":\"06227894e266f5ab884d8f9c1a741d17d2b7d3b3d84d47b0f070ae93280b47a9\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1782926092096971227,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1782937338683390614,\"sha256\":\"fc73f16c788f11c0deaa7457942e6008693d4db7b8340c37a11582e6a5a14485\"}}" .
+        schema:sha256 "5d16fae44257707e8f41733108e92c25d530e58f6620c5258a15269e07782c1a" ;
+        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1783088286757876874,\"sha256\":\"6babce772eaf1e47b2cfc1df1845254479af54b459cb838e0341cc473d93251f\"},\"CLAUDE.md\":{\"mtime_ns\":1783088286757876874,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1783088286758296100,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1783088286768770570,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1783088286768841102,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1783088286818019493,\"sha256\":\"0caa0677399891a74199124ffac98a5a87c9eb664cb98bc52961bc900a675d69\"},\"src/.gitkeep\":{\"mtime_ns\":1783088286818019493,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1783088286819019493,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"06227894e266f5ab884d8f9c1a741d17d2b7d3b3d84d47b0f070ae93280b47a9\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1783088286819810021,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1783088286819953590,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1783088286820019493,\"sha256\":\"fc73f16c788f11c0deaa7457942e6008693d4db7b8340c37a11582e6a5a14485\"}}" .
     <http://example.org/project/hypothesis/0001-stochastic-revisiting> prov:wasDerivedFrom <http://example.org/project/source/entities_hypotheses_0001-stochastic-revisiting.md> .
     <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> prov:wasDerivedFrom <http://example.org/project/paper/allen2017>,
             <http://example.org/project/paper/alnajjar2026>,
@@ -4895,12 +4926,16 @@
     <http://example.org/project/paper/zhao2012> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zhao2012.md> .
     <http://example.org/project/paper/zheng2024> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zheng2024.md> .
     <http://example.org/project/paper/zuber2025> prov:wasDerivedFrom <http://example.org/project/source/entities_papers_zuber2025.md> .
-    <http://example.org/project/proposition/bes-behaves-like-pooled-meta-analysis> prov:wasDerivedFrom <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered>,
-            <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis>,
+    <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> sci:polarity "positive" ;
+        prov:wasDerivedFrom <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-similar-meta-analysis>,
+            <http://example.org/project/paper/vanwonderen2024>,
+            <http://example.org/project/source/entities_propositions_bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md> .
+    <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> sci:polarity "negative" ;
+        prov:wasDerivedFrom <http://example.org/project/annotation/entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered>,
             <http://example.org/project/annotation/entities/papers/Volker2023.source#bes-not-data-pooling>,
             <http://example.org/project/paper/vanwonderen2024>,
             <http://example.org/project/paper/volker2023>,
-            <http://example.org/project/source/entities_propositions_bes-behaves-like-pooled-meta-analysis.md> .
+            <http://example.org/project/source/entities_propositions_bes-does-not-rescue-underpowered-studies-by-pooling-data.md> .
     <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> prov:wasDerivedFrom <http://example.org/project/annotation/entities/papers/Klugkist2023.source#bes-informative-hypothesis-aggregation>,
             <http://example.org/project/annotation/entities/papers/VanLissa2024.source#pbf-informative-hypothesis-aggregation>,
             <http://example.org/project/paper/klugkist2023>,
@@ -5163,6 +5198,9 @@
     <http://example.org/project/source-snapshot/9b674827a22acd08> sci:sourcePath "entities/papers/Freiesleben2023.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "8f7f802a59a5c37976fe7346ef174939873c51ed233299111b1520eb24a75f12" .
+    <http://example.org/project/source-snapshot/9cf6c1b37017aadf> sci:sourcePath "entities/propositions/bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "a8dfbaa725500dd1b436278d1925943b208162355b9f975b50d7fed5798d17cd" .
     <http://example.org/project/source-snapshot/9d97543844db68ea> sci:sourcePath "entities/papers/Zhao2012.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "ccc99118634fab829150d7c8558e704e21babc38429b0f29b1ea0b5092bdf6ee" .
@@ -5170,6 +5208,9 @@
         sci:sourcePath "entities/hypotheses/0007-working-model.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "e3a812573d4291eda3944690557d639dddd2470644b64bb14769839d8751573f" .
+    <http://example.org/project/source-snapshot/a12e5fc0d8f608be> sci:sourcePath "entities/propositions/bes-does-not-rescue-underpowered-studies-by-pooling-data.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "f524e0b5449f4a0cc9373b0337f2e0dfea7bc53ace28a75881d0c3e4f69461e0" .
     <http://example.org/project/source-snapshot/a44f2849fd817cbc> sci:sourcePath "entities/questions/0001-bioinformatics-generalizability.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "9a447e4215778035fba01868ccadbfc470eb9b78d043484a385a6b6cb11090a7" .
@@ -5201,9 +5242,6 @@
     <http://example.org/project/source-snapshot/b67e6dc565e3de70> sci:sourcePath "entities/papers/Dugourd2021.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "33a8693d52648f771290a14a6739aeab24be2ee5ac94ea8c01f0ea6448aa1400" .
-    <http://example.org/project/source-snapshot/b88f70c08cf96053> sci:sourcePath "entities/propositions/bes-behaves-like-pooled-meta-analysis.md" ;
-        a sci:SourceSnapshot ;
-        schema:sha256 "d49b9235a1c46692d7062f33ca207ca7105a075552be011eda3636e6d8dbea2f" .
     <http://example.org/project/source-snapshot/c0d5ce0d679f342a> sci:sourcePath "entities/papers/Liu2020.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "fb243e7d0908704a538f9405f50f9b708e0079decf428e7430553e29fd4df688" .
@@ -5441,8 +5479,10 @@
         schema:identifier "entities/papers/Zheng2024.md" .
     <http://example.org/project/source/entities_papers_zuber2025.md> a prov:Entity ;
         schema:identifier "entities/papers/Zuber2025.md" .
-    <http://example.org/project/source/entities_propositions_bes-behaves-like-pooled-meta-analysis.md> a prov:Entity ;
-        schema:identifier "entities/propositions/bes-behaves-like-pooled-meta-analysis.md" .
+    <http://example.org/project/source/entities_propositions_bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md> a prov:Entity ;
+        schema:identifier "entities/propositions/bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md" .
+    <http://example.org/project/source/entities_propositions_bes-does-not-rescue-underpowered-studies-by-pooling-data.md> a prov:Entity ;
+        schema:identifier "entities/propositions/bes-does-not-rescue-underpowered-studies-by-pooling-data.md" .
     <http://example.org/project/source/entities_propositions_conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md> a prov:Entity ;
         schema:identifier "entities/propositions/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md" .
     <http://example.org/project/source/entities_questions_0001-bioinformatics-generalizability.md> a prov:Entity ;

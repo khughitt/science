@@ -155,7 +155,8 @@ Conceptual shape:
     {
       "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
       "from": "proposition:bes-behaves-like-pooled-meta-analysis",
-      "to": "proposition:bes-behaves-like-meta-analysis-under-adequate-study-information"
+      "to": "proposition:bes-behaves-like-meta-analysis-under-adequate-study-information",
+      "to_stance": "asserted"
     }
   ],
   "context": {
@@ -218,10 +219,19 @@ names:
 - the annotation ref;
 - the expected current target in `from`;
 - the requested target in `to`.
+- optional `to_stance`, when retargeting changes the proposition polarity enough that
+  the annotation's statement stance must be normalized for 4d evidence derivation.
 
 The target may be a new proposition id from the draft. For `split_partial`, it may also
 be the original proposition id, which records that the annotation has been reviewed and
 intentionally left in place.
+
+`to_stance` uses the existing statement stance vocabulary. It is intentionally explicit:
+Half D does not infer that moving a `negated` assertion onto a negatively worded
+replacement should become `asserted`; the reviewer records that semantic flip in the
+draft. Apply rewrites both `sci:promotedTo` and the annotation JSON body's `stance`
+for those assignments, so 4d literature evidence supports or disputes the replacement
+proposition according to the reviewed target claim.
 
 ## 7. Validation
 

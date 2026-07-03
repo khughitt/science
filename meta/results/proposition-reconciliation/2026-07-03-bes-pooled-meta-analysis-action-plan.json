@@ -1,0 +1,90 @@
+{
+  "actions": [
+    {
+      "action_id": "reconcile-action:202e96c08faed3d7ab68aa2d520efe01cde36a6e87c8c06dda56b6e4dcb315ff",
+      "blockers": [],
+      "candidate_id": "reconcile:factorization/b5053575c4f70203eb346acdc3e124e7063ed43c7ed6a9f0d4e6ab1ba593ff7d",
+      "confidence": "high",
+      "decision": "factorization_needs_resynthesis",
+      "inputs": {
+        "annotations": [
+          "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+          "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+          "annotation:entities/papers/Volker2023.source#bes-not-data-pooling"
+        ],
+        "disagreement": [
+          "stance mix requires review"
+        ],
+        "observed_statement_hints": [
+          {
+            "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+            "exact": "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative.",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:VanWonderen2024",
+            "section": "key-findings",
+            "stance": "negated",
+            "subject": null,
+            "subject_concept": null
+          },
+          {
+            "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+            "exact": "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies.",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:VanWonderen2024",
+            "section": "key-findings",
+            "stance": "asserted",
+            "subject": null,
+            "subject_concept": null
+          },
+          {
+            "annotation": "annotation:entities/papers/Volker2023.source#bes-not-data-pooling",
+            "exact": "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis.",
+            "object": null,
+            "object_concept": null,
+            "paper": "paper:Volker2023",
+            "section": "key-findings",
+            "stance": "negated",
+            "subject": null,
+            "subject_concept": null
+          }
+        ],
+        "papers": [
+          "paper:VanWonderen2024",
+          "paper:Volker2023"
+        ]
+      },
+      "judgment_id": "reconcile:judgment/027c49e1e3cbbfd09e158b8e06ae02631eaf7fbb54aa7bdd03f9f849d9c7521c",
+      "kind": "resynthesize_proposition",
+      "preconditions": [],
+      "proposition": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "rationale": "The current proposition bundles two distinct claims: BES can behave similarly to meta-analysis in some settings, but BES is not data pooling and can diverge when studies are underpowered or boundary-adjacent. The mixed asserted/negated literature annotations are therefore better handled by resynthesizing the proposition into narrower condition-aware claims than by treating the negated annotations as simple disputes of one stable proposition.",
+      "review_source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+      "source_review": "meta/results/proposition-reconciliation/2026-07-01-bes-pooled-meta-analysis-review.json",
+      "status": "ready",
+      "suggested_operations": [
+        {
+          "detail": "Draft one or more narrower proposition records from the observed hints.",
+          "kind": "draft_proposition"
+        },
+        {
+          "detail": "Confirm source annotations align to the revised proposition scope.",
+          "kind": "review_factorization"
+        }
+      ],
+      "writes": []
+    }
+  ],
+  "errors": [],
+  "schema_version": 1,
+  "source_reviews": [
+    "meta/results/proposition-reconciliation/2026-07-01-bes-pooled-meta-analysis-review.json"
+  ],
+  "summary": {
+    "advisory_actions": 0,
+    "blocked_actions": 0,
+    "errors": 0,
+    "ready_actions": 1
+  }
+}

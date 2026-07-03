@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from science_model.propositions import PropositionEntity
-from science_tool.annotation.cross_paper_evidence import _resolve_paper_ref
+from science_tool.annotation.cross_paper_evidence import KNOWN_STANCES, _resolve_paper_ref
 from science_tool.annotation.proposition_reconciliation import (
     ReconciliationValidationError,
     build_reconciliation_report,
@@ -80,7 +80,7 @@ ALLOWED_DRAFT_KEYS = frozenset(
     }
 )
 ALLOWED_NEW_PROPOSITION_KEYS = frozenset({"id", "title", "body", "frontmatter"})
-ALLOWED_ASSIGNMENT_KEYS = frozenset({"annotation", "from", "to"})
+ALLOWED_ASSIGNMENT_KEYS = frozenset({"annotation", "from", "to", "to_stance"})
 
 
 class ResynthesisDraftError(ValueError):
@@ -100,6 +100,7 @@ class AnnotationAssignment:
     annotation: str
     from_proposition: str
     to_proposition: str
+    to_stance: str | None = None
 
 
 @dataclass(frozen=True)
@@ -262,17 +263,21 @@ def draft_to_json(draft: ResynthesisDraft) -> dict[str, Any]:
             }
             for row in draft.new_propositions
         ],
-        "annotation_assignments": [
-            {
-                "annotation": row.annotation,
-                "from": row.from_proposition,
-                "to": row.to_proposition,
-            }
-            for row in draft.annotation_assignments
-        ],
+        "annotation_assignments": [_assignment_to_json(row) for row in draft.annotation_assignments],
         "context": _jsonable(draft.context),
         "notes": draft.notes,
     }
+
+
+def _assignment_to_json(row: AnnotationAssignment) -> dict[str, str]:
+    payload = {
+        "annotation": row.annotation,
+        "from": row.from_proposition,
+        "to": row.to_proposition,
+    }
+    if row.to_stance is not None:
+        payload["to_stance"] = row.to_stance
+    return payload
 
 
 def validation_report_to_json(report: ResynthesisValidationReport) -> dict[str, Any]:
@@ -397,11 +402,20 @@ def parse_resynthesis_draft(payload: Any) -> ResynthesisDraft:
         if not isinstance(row, Mapping):
             raise ResynthesisDraftError(f"annotation_assignments[{index}] must be an object")
         _reject_unknown_keys(row, ALLOWED_ASSIGNMENT_KEYS, f"annotation_assignments[{index}]")
+        to_stance = row.get("to_stance")
+        if to_stance is not None:
+            if not isinstance(to_stance, str) or not to_stance or to_stance != to_stance.strip():
+                raise ResynthesisDraftError(f"annotation_assignments[{index}].to_stance must be a stance string")
+            if to_stance not in KNOWN_STANCES:
+                raise ResynthesisDraftError(
+                    f"annotation_assignments[{index}].to_stance must be one of {sorted(KNOWN_STANCES)}"
+                )
         assignments.append(
             AnnotationAssignment(
                 annotation=_required_str(row, "annotation"),
                 from_proposition=_required_str(row, "from"),
                 to_proposition=_required_str(row, "to"),
+                to_stance=to_stance,
             )
         )
 

@@ -32,6 +32,16 @@ def _snapshot_path(tmp_path: Path, action_id: str) -> Path:
     return tmp_path / "results" / "annotation" / "proposition-resynthesis" / f"{digest}.json"
 
 
+def _annotation_stance(sidecar_path: Path, annotation_id: str) -> str:
+    sidecar = read_sidecar_strict(sidecar_path)
+    annotation = next(annotation for annotation in sidecar.annotations if annotation.id == annotation_id)
+    for body in annotation.bodies:
+        if getattr(body, "format", None) == "application/json":
+            payload = json.loads(body.value)
+            return payload["stance"]
+    raise AssertionError(f"{annotation_id} has no JSON body")
+
+
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
     tmp_path: Path,
 ):
@@ -1327,6 +1337,32 @@ def test_apply_resynthesis_draft_cross_paper_evidence_moves_to_replacements(
     broad = build_cross_paper_evidence_report(tmp_path, proposition_ref="proposition:broad")
     assert len(positive["units"]) == 1
     assert len(broad["units"]) == 0
+
+
+def test_apply_resynthesis_draft_rewrites_stance_before_cross_paper_evidence(
+    tmp_path: Path,
+):
+    from science_tool.annotation.proposition_resynthesis_apply import apply_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][1]["to_stance"] = "asserted"
+    draft = parse_resynthesis_draft(payload)
+
+    apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert _annotation_stance(tmp_path / "entities" / "papers" / "B2021.source.anno.trig", "b1") == "asserted"
+    negative = build_cross_paper_evidence_report(tmp_path, proposition_ref="proposition:broad-negative")
+    assert negative["units"] == [
+        {
+            "edge": "supports",
+            "independence_group": "literature-paper:B2021",
+            "paper": "paper:B2021",
+            "role": "proxy_support",
+            "stance": "asserted",
+            "strength": "moderate",
+        }
+    ]
 
 
 def test_apply_resynthesis_draft_preflight_failure_writes_nothing(

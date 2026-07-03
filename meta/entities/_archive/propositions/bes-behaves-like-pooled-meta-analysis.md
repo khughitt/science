@@ -1,9 +1,9 @@
 ---
 type: proposition
 title: BES behaves like pooled meta-analysis
-status: active
+status: superseded
 created: '2026-06-30'
-updated: '2026-06-30'
+updated: '2026-07-03'
 id: proposition:bes-behaves-like-pooled-meta-analysis
 ontology_terms: []
 source_refs:
@@ -15,6 +15,9 @@ source_refs:
 related:
 - topic:bayesian-methods-continuous-belief
 - proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses
+resynthesized_into:
+- proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative
+- proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data
 ---
 
 # BES behaves like pooled meta-analysis

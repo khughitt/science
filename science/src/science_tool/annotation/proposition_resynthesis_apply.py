@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from science_tool.annotation.io import atomic_write_text, serialize_sidecar
-from science_tool.annotation.model import Sidecar
+from science_tool.annotation.model import Sidecar, TextualBody
 from science_tool.annotation.cross_paper_evidence import _resolve_paper_ref
 from science_tool.annotation.proposition_reconciliation_apply import (
     PlannedFileEdit,
@@ -174,14 +174,21 @@ def _resume_snapshot_payload(draft: ResynthesisDraft) -> dict[str, Any]:
         "input_annotations": list(draft.input_annotations),
         "replacement_propositions": [replacement.id for replacement in draft.new_propositions],
         "annotation_assignments": [
-            {
-                "annotation": assignment.annotation,
-                "from": assignment.from_proposition,
-                "to": assignment.to_proposition,
-            }
+            _assignment_snapshot_row(assignment)
             for assignment in draft.annotation_assignments
         ],
     }
+
+
+def _assignment_snapshot_row(assignment: AnnotationAssignment) -> dict[str, str]:
+    row = {
+        "annotation": assignment.annotation,
+        "from": assignment.from_proposition,
+        "to": assignment.to_proposition,
+    }
+    if assignment.to_stance is not None:
+        row["to_stance"] = assignment.to_stance
+    return row
 
 
 def _resume_snapshot_text(draft: ResynthesisDraft) -> str:
@@ -371,7 +378,7 @@ def _sidecar_final_texts_for_assignments(
     except ReconciliationApplyError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
 
-    targets: dict[Path, dict[str, tuple[str, str, str]]] = {}
+    targets: dict[Path, dict[str, tuple[str, str, str, str | None]]] = {}
     for assignment in assignments:
         indexed = live_index.get(assignment.annotation)
         if indexed is None:
@@ -384,7 +391,7 @@ def _sidecar_final_texts_for_assignments(
 
         sidecar_targets = targets.setdefault(sidecar_path, {})
         other = sidecar_targets.get(assignment.annotation)
-        if other is not None and other[2] != assignment.to_proposition:
+        if other is not None and (other[2], other[3]) != (assignment.to_proposition, assignment.to_stance):
             raise ResynthesisApplyError(
                 f"{assignment.annotation} has incompatible resynthesis targets: "
                 f"{other[2]}, {assignment.to_proposition}"
@@ -393,6 +400,7 @@ def _sidecar_final_texts_for_assignments(
             assignment.from_proposition,
             assignment.annotation.rsplit("#", 1)[-1],
             assignment.to_proposition,
+            assignment.to_stance,
         )
 
     final_texts: dict[Path, str] = {}
@@ -405,15 +413,15 @@ def _sidecar_final_texts_for_assignments(
         seen: set[str] = set()
         annotations = []
         targets_by_id = {
-            annotation_id: (annotation_ref, to_proposition)
-            for annotation_ref, (_from_proposition, annotation_id, to_proposition) in sidecar_targets.items()
+            annotation_id: (annotation_ref, to_proposition, to_stance)
+            for annotation_ref, (_from_proposition, annotation_id, to_proposition, to_stance) in sidecar_targets.items()
         }
         for annotation in sidecar.annotations:
             target = targets_by_id.get(annotation.id)
             if target is None:
                 annotations.append(annotation)
                 continue
-            annotation_ref, to_proposition = target
+            annotation_ref, to_proposition, to_stance = target
             seen.add(annotation.id)
             current = annotation.promoted_to
             from_proposition = sidecar_targets[annotation_ref][0]
@@ -421,7 +429,8 @@ def _sidecar_final_texts_for_assignments(
                 raise ResynthesisApplyError(
                     f"{annotation_ref} promoted_to {current!r} is not from or to proposition"
                 )
-            annotations.append(replace(annotation, promoted_to=to_proposition))
+            updated = replace(annotation, promoted_to=to_proposition)
+            annotations.append(_annotation_with_stance(updated, to_stance, annotation_ref))
 
         missing = sorted(set(targets_by_id) - seen)
         if missing:
@@ -436,6 +445,32 @@ def _sidecar_final_texts_for_assignments(
             )
         )
     return final_texts
+
+
+def _annotation_with_stance(annotation, to_stance: str | None, annotation_ref: str):
+    if to_stance is None:
+        return annotation
+
+    bodies = []
+    rewritten = False
+    for body in annotation.bodies:
+        if not isinstance(body, TextualBody) or body.format != "application/json":
+            bodies.append(body)
+            continue
+        try:
+            payload = json.loads(body.value)
+        except json.JSONDecodeError as exc:
+            raise ResynthesisApplyError(f"{annotation_ref} has invalid JSON body for stance rewrite") from exc
+        if not isinstance(payload, Mapping):
+            raise ResynthesisApplyError(f"{annotation_ref} JSON body is not an object")
+        updated = dict(payload)
+        updated["stance"] = to_stance
+        bodies.append(replace(body, value=json.dumps(updated, sort_keys=True)))
+        rewritten = True
+
+    if not rewritten:
+        raise ResynthesisApplyError(f"{annotation_ref} has no JSON body for stance rewrite")
+    return replace(annotation, bodies=tuple(bodies))
 
 
 def _original_updates(draft: ResynthesisDraft) -> dict[str, object]:

@@ -1,0 +1,114 @@
+{
+  "action_id": "reconcile-action:202e96c08faed3d7ab68aa2d520efe01cde36a6e87c8c06dda56b6e4dcb315ff",
+  "candidate_id": "reconcile:factorization/b5053575c4f70203eb346acdc3e124e7063ed43c7ed6a9f0d4e6ab1ba593ff7d",
+  "constraints": {
+    "allowed_dispositions": [
+      "replace",
+      "split_partial"
+    ],
+    "allowed_replacement_frontmatter_keys": [
+      "claim_layer",
+      "discusses",
+      "identification_strength",
+      "kind",
+      "object",
+      "ontology_terms",
+      "polarity",
+      "predicate",
+      "related",
+      "source_refs",
+      "status",
+      "subject",
+      "type"
+    ],
+    "replacement_id_policy": "canonical proposition local part; lowercase words joined by hyphens",
+    "replacement_id_prefix": "proposition:",
+    "required_assignment_annotations": [
+      "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+      "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+      "annotation:entities/papers/Volker2023.source#bes-not-data-pooling"
+    ]
+  },
+  "draft_path": "results/proposition-reconciliation/2026-07-03-bes-pooled-meta-analysis-resynthesis-draft.json",
+  "draft_progress": {
+    "annotation_assignments": [],
+    "disposition": "replace",
+    "new_propositions": [],
+    "notes": ""
+  },
+  "input_annotations": [
+    {
+      "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+      "current_promoted_to": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "exact": "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative.",
+      "object": null,
+      "object_concept": null,
+      "paper": "paper:VanWonderen2024",
+      "section": "key-findings",
+      "stance": "negated",
+      "subject": null,
+      "subject_concept": null
+    },
+    {
+      "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+      "current_promoted_to": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "exact": "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies.",
+      "object": null,
+      "object_concept": null,
+      "paper": "paper:VanWonderen2024",
+      "section": "key-findings",
+      "stance": "asserted",
+      "subject": null,
+      "subject_concept": null
+    },
+    {
+      "annotation": "annotation:entities/papers/Volker2023.source#bes-not-data-pooling",
+      "current_promoted_to": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "exact": "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis.",
+      "object": null,
+      "object_concept": null,
+      "paper": "paper:Volker2023",
+      "section": "key-findings",
+      "stance": "negated",
+      "subject": null,
+      "subject_concept": null
+    }
+  ],
+  "judgment_id": "reconcile:judgment/027c49e1e3cbbfd09e158b8e06ae02631eaf7fbb54aa7bdd03f9f849d9c7521c",
+  "original_proposition": {
+    "body": "# BES behaves like pooled meta-analysis\n\nBayesian Evidence Synthesis behaves like pooled meta-analysis when aggregating\nstudy evidence.\n\nThis proposition is intentionally broad enough to be contested by the existing\nBES summaries: the literature notes similarity in some settings, while also\nwarning that BES is not data pooling and can diverge when studies are weak or\nboundary-adjacent.\n",
+    "frontmatter": {
+      "claim_layer": null,
+      "identification_strength": null,
+      "object": null,
+      "polarity": null,
+      "predicate": null,
+      "source_refs": [
+        "paper:VanWonderen2024",
+        "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+        "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+        "paper:Volker2023",
+        "annotation:entities/papers/Volker2023.source#bes-not-data-pooling"
+      ],
+      "subject": null
+    },
+    "id": "proposition:bes-behaves-like-pooled-meta-analysis",
+    "title": "BES behaves like pooled meta-analysis"
+  },
+  "output_contract": {
+    "do_not_write": [
+      "proposition files",
+      "annotation sidecars",
+      "archive rows"
+    ],
+    "validate_with": "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/2026-07-03-bes-pooled-meta-analysis-resynthesis-draft.json",
+    "write": "a Half D proposition resynthesis draft JSON"
+  },
+  "review": {
+    "confidence": "high",
+    "decision": "factorization_needs_resynthesis",
+    "rationale": "The current proposition bundles two distinct claims: BES can behave similarly to meta-analysis in some settings, but BES is not data pooling and can diverge when studies are underpowered or boundary-adjacent. The mixed asserted/negated literature annotations are therefore better handled by resynthesizing the proposition into narrower condition-aware claims than by treating the negated annotations as simple disputes of one stable proposition."
+  },
+  "schema_version": 1,
+  "source": "derived:proposition-resynthesis-context-v1"
+}

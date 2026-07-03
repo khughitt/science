@@ -20,13 +20,13 @@ anno:annotations {
     oa:hasBody         [
       a oa:TextualBody ;
       dc:format        "application/json" ;
-      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"negated\"}"
+      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"asserted\"}"
     ] ;
     oa:motivatedBy     oa:classifying ;
     sci:annotationType "proposition" ;
     sci:source         "manual:phase4d-contested-smoke" ;
     sci:status         "open" ;
-    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:promotedTo     "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data" ;
     sci:matchText      "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis." ;
     dc:creator         "curator" ;
     dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .

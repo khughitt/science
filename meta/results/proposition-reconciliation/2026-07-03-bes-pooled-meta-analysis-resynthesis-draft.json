@@ -1,0 +1,101 @@
+{
+  "action_id": "reconcile-action:202e96c08faed3d7ab68aa2d520efe01cde36a6e87c8c06dda56b6e4dcb315ff",
+  "annotation_assignments": [
+    {
+      "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+      "from": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "to": "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data",
+      "to_stance": "asserted"
+    },
+    {
+      "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+      "from": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "to": "proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative"
+    },
+    {
+      "annotation": "annotation:entities/papers/Volker2023.source#bes-not-data-pooling",
+      "from": "proposition:bes-behaves-like-pooled-meta-analysis",
+      "to": "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data",
+      "to_stance": "asserted"
+    }
+  ],
+  "candidate_id": "reconcile:factorization/b5053575c4f70203eb346acdc3e124e7063ed43c7ed6a9f0d4e6ab1ba593ff7d",
+  "context": {
+    "observed_statement_hints": [
+      {
+        "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+        "exact": "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative.",
+        "object": null,
+        "object_concept": null,
+        "paper": "paper:VanWonderen2024",
+        "section": "key-findings",
+        "stance": "negated",
+        "subject": null,
+        "subject_concept": null
+      },
+      {
+        "annotation": "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+        "exact": "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies.",
+        "object": null,
+        "object_concept": null,
+        "paper": "paper:VanWonderen2024",
+        "section": "key-findings",
+        "stance": "asserted",
+        "subject": null,
+        "subject_concept": null
+      },
+      {
+        "annotation": "annotation:entities/papers/Volker2023.source#bes-not-data-pooling",
+        "exact": "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis.",
+        "object": null,
+        "object_concept": null,
+        "paper": "paper:Volker2023",
+        "section": "key-findings",
+        "stance": "negated",
+        "subject": null,
+        "subject_concept": null
+      }
+    ],
+    "papers": [
+      "paper:VanWonderen2024",
+      "paper:Volker2023"
+    ],
+    "rationale": "The current proposition bundles two distinct claims: BES can behave similarly to meta-analysis in some settings, but BES is not data pooling and can diverge when studies are underpowered or boundary-adjacent. The mixed asserted/negated literature annotations are therefore better handled by resynthesizing the proposition into narrower condition-aware claims than by treating the negated annotations as simple disputes of one stable proposition."
+  },
+  "disposition": "replace",
+  "input_annotations": [
+    "annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered",
+    "annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis",
+    "annotation:entities/papers/Volker2023.source#bes-not-data-pooling"
+  ],
+  "judgment_id": "reconcile:judgment/027c49e1e3cbbfd09e158b8e06ae02631eaf7fbb54aa7bdd03f9f849d9c7521c",
+  "new_propositions": [
+    {
+      "body": "Bayesian Evidence Synthesis can behave similarly to meta-analysis in settings where study evidence is informative: support for a correct hypothesis tends to increase with larger samples and more studies.",
+      "frontmatter": {
+        "object": "meta-analysis-like accumulation of support under informative study evidence",
+        "polarity": "positive",
+        "predicate": "associates_with",
+        "subject": "Bayesian Evidence Synthesis"
+      },
+      "id": "proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative",
+      "title": "BES behaves like meta-analysis when study evidence is informative"
+    },
+    {
+      "body": "Bayesian Evidence Synthesis is not data pooling: when individual studies are underpowered, adding more such studies can strengthen support for the null or an unconstrained alternative rather than rescue a weak true hypothesis.",
+      "frontmatter": {
+        "object": "data-pooling rescue of underpowered studies",
+        "polarity": "negative",
+        "predicate": "associates_with",
+        "subject": "Bayesian Evidence Synthesis"
+      },
+      "id": "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data",
+      "title": "BES does not rescue underpowered studies by pooling data"
+    }
+  ],
+  "notes": "Resynthesizes the broad BES/meta-analysis proposition into a positive similarity claim and a negative non-pooling/underpowered-study claim.",
+  "original_proposition": "proposition:bes-behaves-like-pooled-meta-analysis",
+  "schema_version": 1,
+  "source": "llm-review:codex-gpt-5:proposition-resynthesis-v1",
+  "source_review": "results/proposition-reconciliation/2026-07-01-bes-pooled-meta-analysis-review.json"
+}

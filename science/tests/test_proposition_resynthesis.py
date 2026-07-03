@@ -666,6 +666,30 @@ def test_parse_resynthesis_draft_rejects_unknown_assignment_key(tmp_path: Path):
         parse_resynthesis_draft(payload)
 
 
+def test_parse_resynthesis_draft_accepts_assignment_stance_rewrite(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import draft_to_json, parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][1]["to_stance"] = "asserted"
+
+    draft = parse_resynthesis_draft(payload)
+
+    assert draft.annotation_assignments[1].to_stance == "asserted"
+    assert draft_to_json(draft)["annotation_assignments"][1]["to_stance"] == "asserted"
+
+
+def test_parse_resynthesis_draft_rejects_invalid_assignment_stance_rewrite(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
+
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["annotation_assignments"][1]["to_stance"] = "not-a-stance"
+
+    with pytest.raises(ResynthesisDraftError, match="to_stance"):
+        parse_resynthesis_draft(payload)
+
+
 def test_parse_resynthesis_draft_rejects_non_mapping_context(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft
 

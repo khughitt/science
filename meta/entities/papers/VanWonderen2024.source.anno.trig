@@ -20,13 +20,13 @@ anno:annotations {
     oa:hasBody         [
       a oa:TextualBody ;
       dc:format        "application/json" ;
-      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"negated\"}"
+      rdf:value        "{\"section\": \"key-findings\", \"stance\": \"asserted\"}"
     ] ;
     oa:motivatedBy     oa:classifying ;
     sci:annotationType "proposition" ;
     sci:source         "manual:phase4d-contested-smoke" ;
     sci:status         "open" ;
-    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:promotedTo     "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data" ;
     sci:matchText      "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative." ;
     dc:creator         "curator" ;
     dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
@@ -50,7 +50,7 @@ anno:annotations {
     sci:annotationType "proposition" ;
     sci:source         "manual:phase4d-contested-smoke" ;
     sci:status         "open" ;
-    sci:promotedTo     "proposition:bes-behaves-like-pooled-meta-analysis" ;
+    sci:promotedTo     "proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative" ;
     sci:matchText      "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies." ;
     dc:creator         "curator" ;
     dc:created         "2026-06-30T00:00:00+00:00"^^xsd:dateTime .
