@@ -58,6 +58,11 @@ calibration. It affects only triage output. It does not affect
 `science benchmark tests`, `science benchmark gaps`, or any matching/scoring
 helpers.
 
+This is a global default behavior change for `science benchmark test-triage`,
+not an MMRF-specific special case. Any blocked task-support fallback row is
+hidden from the default action queue and accounted for in suppression
+diagnostics.
+
 The existing `--exclude-fallback` flag still wins by removing all fallback rows
 before triage bucket assignment. If `--exclude-fallback` is set,
 `--include-blocked-fallback` has no visible effect because there are no fallback
@@ -80,6 +85,12 @@ The partition happens only inside triage. It should not be pushed down into
 `_filter_benchmark_test_rows()` because that helper is shared by the raw test
 report and should keep source semantics simple.
 
+`summary.test_plan_rows`, `source_counts`, `fallback_rows`,
+`fallback_row_ratio`, and `readiness_counts` are computed over the upstream
+`benchmark_tests_report()` rows after normal filters, before blocked-fallback
+suppression. `bucket_counts` is computed over displayed triage buckets after
+suppression.
+
 ## JSON Contract
 
 Additive fields:
@@ -90,7 +101,6 @@ Additive fields:
     "bucket_counts": {
       "fallback-diagnostic": 27
     },
-    "suppressed_fallback_rows": 449,
     "suppressed_blocked_support_fallback_rows": 449
   },
   "fallback_diagnostics": {
@@ -100,14 +110,10 @@ Additive fields:
       "rows": 449,
       "top_benchmarks": [
         {"benchmark_id": "dataset:mmrf-commpass", "count": 449}
-      ],
-      "top_reasons": [
-        {"reason": "open-metadata-missing-progression-endpoint", "count": 449}
       ]
     }
   },
   "filters": {
-    "include_blocked_fallback": false
   }
 }
 ```
@@ -115,8 +121,22 @@ Additive fields:
 `summary.test_plan_rows`, `source_counts`, `fallback_rows`, and
 `fallback_row_ratio` continue to describe the upstream `benchmark_tests_report()`
 row set after normal filters. `bucket_counts` describes the displayed triage
-buckets after blocked-fallback suppression. The new suppression counts explain
+buckets after blocked-fallback suppression. The new suppression count explains
 the difference between those populations.
+
+Only `summary.suppressed_blocked_support_fallback_rows` is added for v1. A
+generic `suppressed_fallback_rows` field would be identical in this slice
+because blocked task support is the only suppression reason; do not add it until
+there is a second suppression class.
+
+`fallback_diagnostics.suppressed_blocked_support.top_benchmarks` aggregates by
+`benchmark_id`, which is a stable row field. Do not add `top_reasons` in v1:
+`task_support_reason` is free text, and `reason_notes` are mixed-purpose notes,
+so neither is a clean controlled histogram source.
+
+`filters` keeps the existing sparse-filter convention. Add
+`include_blocked_fallback: true` only when the flag is provided; omit it for the
+default false case.
 
 When `--include-blocked-fallback` is used:
 
@@ -134,11 +154,12 @@ fallback diagnostics:
 ```text
 Suppressed 449 fallback rows for blocked task support
 top benchmarks: dataset:mmrf-commpass (449)
-top reasons: open-metadata-missing-progression-endpoint (449)
 ```
 
 This keeps the existence of the data visible without letting it dominate the
-work queue.
+work queue. Render this suppression note behind its own
+`suppressed_blocked_support_fallback_rows > 0` gate, independent of whether the
+visible `fallback-diagnostic` bucket is empty.
 
 ## Review Artifact
 
@@ -175,7 +196,10 @@ Add focused tests for:
 - Non-blocked fallback rows still appear in `fallback-diagnostic`.
 - Summary suppression counts explain the gap between upstream fallback counts
   and displayed fallback bucket counts.
-- CLI `--include-blocked-fallback` is reflected in JSON `filters`.
+- `readiness_counts` still include suppressed rows because they describe the
+  upstream post-filter row set, not only visible buckets.
+- CLI `--include-blocked-fallback` is reflected in JSON `filters` when true and
+  omitted when false.
 - Table output includes a compact suppression diagnostic when rows are hidden.
 - Review YAML includes suppression diagnostics and does not expand suppressed
   rows by default.
@@ -199,4 +223,3 @@ Expected qualitative result:
   progression task;
 - suppression diagnostics report the hidden blocked-support fallback rows;
 - `--include-blocked-fallback` restores the previous diagnostic volume.
-
