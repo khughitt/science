@@ -482,6 +482,27 @@ def test_resynthesis_context_finds_original_proposition_by_id_not_replacement_pa
     assert "Claim body." in packet["original_proposition"]["body"]
 
 
+def test_resynthesis_context_markdown_renders_same_packet_as_json_block(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+        resynthesis_context_to_markdown,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    packet = build_resynthesis_context_packet(tmp_path, draft, draft_path="draft.json")
+
+    rendered = resynthesis_context_to_markdown(packet)
+
+    assert rendered.startswith("# Proposition Resynthesis Draft Context\n")
+    assert "## Instructions" in rendered
+    assert "Do not edit proposition files or annotation sidecars directly." in rendered
+    assert "## Context JSON" in rendered
+    json_block = rendered.split("```json\n", 1)[1].split("\n```", 1)[0]
+    assert json.loads(json_block) == packet
+
+
 def _draft_payload(ctx: dict) -> dict:
     return {
         "schema_version": 1,

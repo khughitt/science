@@ -617,6 +617,23 @@ def build_resynthesis_context_packet(
     }
 
 
+def resynthesis_context_to_markdown(packet: Mapping[str, Any]) -> str:
+    json_text = json.dumps(packet, indent=2, sort_keys=True)
+    return (
+        "# Proposition Resynthesis Draft Context\n\n"
+        "## Instructions\n\n"
+        "- Use this packet to fill a Half D proposition resynthesis draft JSON.\n"
+        "- Preserve action identity fields from the draft.\n"
+        "- Assign every required input annotation exactly once.\n"
+        "- Do not edit proposition files or annotation sidecars directly.\n"
+        "- Validate the filled draft with `science annotate validate-proposition-resynthesis`.\n\n"
+        "## Context JSON\n\n"
+        "```json\n"
+        f"{json_text}\n"
+        "```\n"
+    )
+
+
 def validate_resynthesis_draft(
     project_root: Path,
     draft: ResynthesisDraft,
