@@ -37,6 +37,10 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
     ),
+    "dag retired-edges": (
+        "older DAG filesystem-root flag for explicit retired YAML migration inspection",
+        "project root",
+    ),
     "dag staleness": (
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
@@ -82,6 +86,7 @@ _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
     "dag init",
     "dag number",
     "dag render",
+    "dag retired-edges",
     "dag staleness",
     "dag validate",
     "data audit",

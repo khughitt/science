@@ -116,7 +116,8 @@ plausible narrative.
 For claim and evidence structure, use the highest-priority source with content:
 
 1. Graph claim/proposition surfaces when present.
-2. Structured DAG edge files under `doc/figures/dags/*.edges.yaml`.
+2. Relational propositions compiled from patch workbenches; DAG DOT files are
+   view topology only.
 3. Authored frontmatter relations among hypotheses, questions,
    interpretations, tasks, and digests.
 4. Summary surfaces such as uncertainty, gaps, attention samples, and dashboard

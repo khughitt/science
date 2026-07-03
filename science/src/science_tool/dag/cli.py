@@ -61,7 +61,7 @@ def _print_validation_findings(report: ValidationReport, *, strict: bool) -> Non
     help="Project root (default: current working directory).",
 )
 def render_cmd(slug: str | None, project_path: Path | None) -> None:
-    """Render DAG(s) to <slug>-auto.dot and <slug>-auto.png.
+    """Render DAG(s) from compiled relational propositions.
 
     Edge SEMANTICS are SOURCED from compiled relational propositions (the
     epistemic source-of-truth, Task 5f); ``edge_status`` is DERIVED via
@@ -127,7 +127,7 @@ def _source_proposition_edges(project: Path) -> list[dict]:  # type: ignore[type
     help="Project root (default: current working directory).",
 )
 def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -> None:
-    """Assign sequential edge IDs and write <slug>-numbered.dot."""
+    """Assign sequential edge IDs and write numbered DOT only."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -439,7 +439,7 @@ def validate_cmd(
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Validate DAG YAML + .dot files for schema, topology, and curation."""
+    """Validate DOT topology against compiled relational propositions."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)

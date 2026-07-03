@@ -182,7 +182,14 @@ The local `validate.sh` is 931 lines (canonical `meta/validate.sh` is similar). 
 - **`doc/issues/` refactor staging** — 4 files in pairs (`*-desired_file_structure.md` + `*-files_to_remove.md`). Matches the user-global CLAUDE.md "Refactoring" instructions ("Prior to refactoring, document desired file structure and clean-up steps"). *project-grown* but driven by a global user convention.
 - **`docs/superpowers/{plans,specs}/`** — agent-authored, very-long-form (568–3,421 lines) implementation plans + design specs, kept separate from human-curated `doc/plans/` and `doc/specs/`. *useful for ≥2 projects* if other projects also use Superpowers; *likely missing upstream support* (Science's `doc/` model doesn't cleanly partition human vs agent authoring).
 - **`papers/references.bib` + `cite:Year` namespace** — top-level BibTeX file backing all `cite:Author2025` references in entity frontmatter. *recurring candidate convention*; this is how research projects naturally connect to a literature graph.
-- **`doc/figures/dags/` with `<slug>.dot` + `<slug>.edges.yaml`** — DAG figures kept in DOT plus a structured edges.yaml carrying `relation, edge_status, identification, description, data_support: [{task, description}], lit_support: [{paper, description}]`. *project-grown* causal-DAG companion data. *worth a future design pass* — this is more structured than a typical plot.
+- **Retired `doc/figures/dags/*.edges.yaml` migration inputs** — DAG
+  figures keep DOT topology under `doc/figures/dags/`; sibling
+  `<slug>.edges.yaml` files carry retired migration data such as `relation,
+  edge_status, identification, description, data_support: [{task,
+  description}], lit_support: [{paper, description}]`. *Project-grown*
+  causal-DAG companion data from the pre-retirement surface. DAG semantics now
+  come from compiled relational propositions, with DOT files carrying view
+  topology.
 - **`spec:` two-file convention at the project root** — `specs/research-question.md` + `specs/scope-boundaries.md` as canonical project-wide statements. *recurring candidate convention*; cross-check with peer projects.
 
 ## 10. Candidate Upstream Changes
