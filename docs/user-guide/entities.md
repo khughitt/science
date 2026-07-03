@@ -991,9 +991,38 @@ evidence line, workflow-derived row, or virtual row records actual use.
 `science dataset prioritize --coverage --format json` inverts the view to one
 row per question or hypothesis. Coverage states are `covered-runnable`,
 `covered-unstaged`, `covered-reference`, `covered-pointer`, `blocked-access`,
-`unverified`, and `no-candidate`. Gap reasons include `unstaged-deposit`,
-`only-reference`, `only-pointer`, `only-gated`, `only-unverified`, and
-`no-candidate`.
+`unverified`, `missing-required-capabilities`,
+`missing-provided-capabilities`, `capability-mismatch`, and `no-candidate`.
+Gap reasons include `unstaged-deposit`, `only-reference`, `only-pointer`,
+`only-gated`, `only-unverified`, `missing-required-capabilities`,
+`missing-provided-capabilities`, `capability-mismatch`, and `no-candidate`.
+
+Capability fields keep topical reach separate from evidence fit. A question or
+hypothesis that names datasets should declare the data capability it needs:
+
+```yaml
+required_capabilities:
+  - assay: gene-expression
+    modality: bulk-rna
+```
+
+A dataset that reaches questions or hypotheses should declare what it can
+provide:
+
+```yaml
+provided_capabilities:
+  - assay: gene-expression
+    modality: bulk-rna
+  - assay: chromatin-accessibility
+    modality: scATAC
+```
+
+Within one capability set, all key/value pairs must match. Across sets, any one
+matching set is enough. A dataset linked to a target still appears in
+`datasets`, but only compatible datasets appear in `compatible_datasets` and
+contribute runtime-state coverage credit. `science validate` warns when
+capability-relevant targets or datasets omit these fields, or when the fields
+are not non-empty lists of non-empty string mappings.
 
 Treat a flood of `no-candidate` rows as a curation-design signal, not only as a
 filtering problem. Especially when the missing rows are internal,

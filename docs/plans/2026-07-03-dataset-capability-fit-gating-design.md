@@ -2,8 +2,8 @@
 
 ## Status
 
-Implemented for coverage gating. Validation warnings and user-guide examples
-remain follow-up rollout work.
+Implemented. Coverage gating, validation warnings, and user-guide examples are
+in place.
 
 ## Context
 
@@ -188,8 +188,9 @@ Add lightweight validation in the existing checks layer after implementation:
   `required_capabilities`.
 - Warn when a dataset has runtime artifacts or is linked to targets but no
   `provided_capabilities`.
-- Error only for malformed capability structures, not for absence during the
-  adoption window.
+- Warn for malformed capability structures and absence during the adoption
+  window. The warnings make unassessed fit visible without turning existing
+  projects red by default.
 
 This lets projects migrate incrementally while making unassessed fit visible.
 
