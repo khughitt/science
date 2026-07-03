@@ -498,6 +498,26 @@ def test_citation_like_tokens_in_fenced_code_are_ignored() -> None:
         assert issues == []
 
 
+def test_citation_like_tokens_in_longer_fenced_code_are_ignored() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\n"
+            "````markdown\n"
+            "```\n"
+            "Broken example [@Missing2024], t99, and [missing](nope.md).\n"
+            "```\n"
+            "````\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert issues == []
+
+
 def test_citation_like_tokens_in_inline_code_are_ignored() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
@@ -505,6 +525,21 @@ def test_citation_like_tokens_in_inline_code_are_ignored() -> None:
         _scaffold(root)
         (root / "doc" / "background" / "topics" / "test.md").write_text(
             "# Test\nUse `[@Missing2024]` as a placeholder example.\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert [issue for issue in issues if issue.ref_type == "citation"] == []
+
+
+def test_citation_like_tokens_in_html_comments_are_ignored() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\n<!-- draft citation [@Missing2024] -->\nVisible [@Smith2024].\n",
             encoding="utf-8",
         )
 

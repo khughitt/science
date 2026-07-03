@@ -15,7 +15,7 @@ from science_tool.project_package.core import content_version, file_resource
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
-from science_tool.markdown_utils import parse_frontmatter
+from science_tool.markdown_utils import parse_frontmatter, strip_html_comments_preserving_code
 from science_tool.project_config import load_project_config
 from science_tool.references import MarkdownPayload, build_reference_bundle, validate_exported_markdown
 from science_tool.entity_scan import iter_entity_markdown
@@ -556,18 +556,20 @@ def _entity_bundle(entities: list[ExportedEntity]) -> dict[str, Any]:
 
 
 def _prose_bundle(entities: list[ExportedEntity]) -> dict[str, Any]:
+    records: dict[str, Any] = {}
+    for entity in entities:
+        markdown = strip_html_comments_preserving_code(entity.markdown)
+        if not markdown.strip():
+            continue
+        records[entity.record["id"]] = {
+            "markdown": markdown,
+            "sections": _sections_from_markdown(markdown),
+            "source_path": entity.source_path,
+        }
     return {
         "contract": PROSE_CONTRACT,
         "schema_version": BUNDLE_SCHEMA_VERSION,
-        "entities": {
-            entity.record["id"]: {
-                "markdown": entity.markdown,
-                "sections": _sections_from_markdown(entity.markdown),
-                "source_path": entity.source_path,
-            }
-            for entity in entities
-            if entity.markdown.strip()
-        },
+        "entities": records,
     }
 
 
