@@ -427,6 +427,13 @@ _IDENTIFIER_SPAN_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_IDENTIFIER_LABEL_SPAN_RE = re.compile(
+    r"\b(?:accessions?|identifiers?|samples?|aliquots?|runs?|barcodes?)\s*:?\s*[A-Z]*\d[A-Z0-9_.-]*\b",
+    re.IGNORECASE,
+)
+_VERSION_LABEL_SPAN_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9_-]*(?:DB|db|[A-Z][A-Za-z0-9_-]*)\s+v?\d+(?:\.\d+)+\b"
+)
 # Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
 _HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
 _LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
@@ -450,6 +457,8 @@ def _mask_numeric_identifier_spans(line: str) -> str:
     """Blank identifier spans, preserving columns for remaining numeric claims."""
     line = _DOI_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
     line = _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    line = _IDENTIFIER_LABEL_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    line = _VERSION_LABEL_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
     return _mask_canonical_id_spans(line)
 
 

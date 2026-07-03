@@ -1170,6 +1170,12 @@ def evidence_line_group() -> None:
     ),
 )
 @click.option("--independence", default=None, type=click.Choice(["independent", "shared-source", "circular"]))
+@click.option("--independence-group", default=None, help="Independence group key for shared-source/circular evidence")
+@click.option(
+    "--belief-eligible/--no-belief-eligible",
+    default=None,
+    help="Whether the line can contribute to belief aggregation; use --no-belief-eligible for staged lines",
+)
 @click.option(
     "--dispute-scope",
     default=None,
@@ -1197,6 +1203,8 @@ def evidence_line_create(
     strength: str | None,
     evidence_type: str | None,
     independence: str | None,
+    independence_group: str | None,
+    belief_eligible: bool | None,
     dispute_scope: str | None,
     evidence_role: str | None,
     related_refs: tuple[str, ...],
@@ -1224,6 +1232,10 @@ def evidence_line_create(
         extra_frontmatter["evidence_type"] = evidence_type
     if independence:
         extra_frontmatter["independence"] = independence
+    if independence_group:
+        extra_frontmatter["independence_group"] = independence_group
+    if belief_eligible is not None:
+        extra_frontmatter["belief_eligible"] = belief_eligible
     if dispute_scope:
         extra_frontmatter["dispute_scope"] = dispute_scope
     if evidence_role:
