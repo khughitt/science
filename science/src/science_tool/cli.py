@@ -6258,19 +6258,29 @@ def benchmark_test_triage(
     fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
     if fallback_count:
         diagnostics = payload["fallback_diagnostics"]
+        rollups = diagnostics["rollups"]
+        visible_rollups = rollups[:10]
+        if not visible_rollups:
+            raise click.ClickException("fallback diagnostics rollups missing for fallback rows")
         table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
-        for col in ("rows", "top benchmarks", "top facets", "readiness", "class", "support"):
+        for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
             table.add_column(col, overflow="fold", no_wrap=False)
-        table.add_row(
-            f"{fallback_count} fallback rows",
-            _format_count_rows(diagnostics["top_benchmarks"], key="benchmark_id"),
-            _format_count_rows(diagnostics["top_facets"], key="facet"),
-            _format_count_map(diagnostics["readiness_counts"]),
-            _format_count_map(diagnostics["dataset_class_counts"]),
-            _format_count_map(diagnostics["task_support_counts"]),
-        )
+        row_label = f"{fallback_count} fallback rows grouped into {len(rollups)} rollups"
+        if len(visible_rollups) < len(rollups):
+            row_label = f"{row_label} (showing {len(visible_rollups)})"
+        for index, rollup in enumerate(visible_rollups):
+            table.add_row(
+                row_label if index == 0 else "",
+                str(rollup.get("benchmark_id") or "-"),
+                _format_test_triage_rollup_task(rollup),
+                _format_test_triage_rollup_support(rollup),
+                str(rollup.get("readiness_label") or "-"),
+                str(rollup.get("dataset_class") or "-"),
+                _format_test_triage_rollup_facets(rollup),
+                _format_test_triage_rollup_examples(rollup),
+            )
         Console(width=200).print(table)
-        visible_rows += 1
+        visible_rows += len(visible_rollups)
     suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
     if suppressed:
         table = Table(
@@ -6315,6 +6325,28 @@ def _format_test_triage_needs(row: Mapping[str, Any]) -> str:
 def _format_test_triage_facets(row: Mapping[str, Any]) -> str:
     facets = row.get("matched_facets") or []
     return ", ".join(str(facet) for facet in facets) if facets else "-"
+
+
+def _format_test_triage_rollup_task(rollup: Mapping[str, Any]) -> str:
+    task_id = rollup.get("task_id")
+    if not task_id:
+        return "-"
+    return str(task_id).split("#", 1)[-1]
+
+
+def _format_test_triage_rollup_support(rollup: Mapping[str, Any]) -> str:
+    state = str(rollup.get("task_support_state") or "none")
+    reason = str(rollup.get("task_support_reason") or "")
+    return f"{state}: {reason}" if reason else state
+
+
+def _format_test_triage_rollup_facets(rollup: Mapping[str, Any]) -> str:
+    return _format_count_rows(rollup.get("top_facets", []), key="facet")
+
+
+def _format_test_triage_rollup_examples(rollup: Mapping[str, Any]) -> str:
+    examples = [str(entity_id) for entity_id in rollup.get("example_entities", [])]
+    return ", ".join(examples) if examples else "-"
 
 
 def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:

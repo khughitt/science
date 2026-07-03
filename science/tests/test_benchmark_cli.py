@@ -1627,7 +1627,7 @@ def test_benchmark_test_triage_cli_table_output_shows_suppression_diagnostic(tmp
     assert "No benchmark test triage rows." not in result.output
 
 
-def test_benchmark_test_triage_cli_table_output_shows_fallback_breakdowns(tmp_path: Path) -> None:
+def test_benchmark_test_triage_cli_table_output_shows_fallback_rollups(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -1662,6 +1662,9 @@ benchmark:
       ground_truth:
         type: measured-outcome
         description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
 """,
     )
 
@@ -1669,12 +1672,62 @@ benchmark:
 
     assert result.exit_code == 0
     assert "Benchmark Test Triage: fallback-diagnostic" in result.output
-    assert "readiness" in result.output
-    assert "class" in result.output
-    assert "support" in result.output
-    assert "runnable:1" in result.output
-    assert "deposit:1" in result.output
-    assert "none:1" in result.output
+    assert "1 fallback rows grouped into 1 rollups" in result.output
+    assert "visible-fallback" in result.output
+    assert "ready" in result.output
+    assert "ready (" not in result.output
+    assert "supported" in result.output
+    assert "runnable" in result.output
+    assert "deposit" in result.output
+    assert "proteomics:1" in result.output
+    assert "hypothesis:0306-generic" in result.output
+    assert "top benchmarks" not in result.output
+    assert "runnable:1" not in result.output
+    assert "deposit:1" not in result.output
+    assert "none:1" not in result.output
+
+
+def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def fake_benchmark_test_triage_report(*args, **kwargs):
+        return {
+            "summary": {
+                "bucket_counts": {
+                    "run-now": 0,
+                    "stage-next": 0,
+                    "metadata-needed": 0,
+                    "blocked-or-reference": 0,
+                    "fallback-diagnostic": 1,
+                }
+            },
+            "buckets": {
+                "run-now": [],
+                "stage-next": [],
+                "metadata-needed": [],
+                "blocked-or-reference": [],
+                "fallback-diagnostic": [],
+            },
+            "fallback_diagnostics": {"rollups": []},
+            "commons_notice": "",
+            "filters": {},
+            "review_file": None,
+        }
+
+    monkeypatch.setattr(
+        "science_tool.benchmark_opportunities.benchmark_test_triage_report",
+        fake_benchmark_test_triage_report,
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code != 0
+    assert "fallback diagnostics rollups missing for fallback rows" in result.output
 
 
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
