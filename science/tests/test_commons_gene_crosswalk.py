@@ -178,3 +178,19 @@ def test_parse_rejects_merged_with_multiple_replacements() -> None:
                 }
             ]
         )
+
+
+def test_parse_rejects_missing_replacement_target() -> None:
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    rows = [
+        {
+            "gene_key": "9606|hgnc|HGNC:1",
+            "symbol": "OLD1",
+            "status": "merged",
+            "replacement_gene_keys": "9606|hgnc|HGNC:2",
+        }
+    ]
+
+    with pytest.raises(GeneCrosswalkError, match="missing replacement_gene_key target"):
+        _parse_crosswalk_rows(rows)
