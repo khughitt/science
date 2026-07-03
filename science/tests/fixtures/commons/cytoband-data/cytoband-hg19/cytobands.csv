@@ -1,0 +1,5 @@
+chrom,start,end,name,gie_stain
+chr1,0,2300000,p36.33,gneg
+chr1,2300000,5300000,p36.32,gpos25
+chr1,5300000,7100000,p36.31,gneg
+chr2,0,4400000,p25.3,gneg
