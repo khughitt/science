@@ -9,6 +9,7 @@ from science_tool.commons.assembly_registry_build import (
     build_registry_row,
     compute_seqcol_digest,
     fetch_seqcol_level2,
+    validate_registry_label_bindings,
 )
 
 _L2 = {
@@ -40,11 +41,92 @@ def test_sequences_change_the_digest() -> None:
     assert compute_seqcol_digest(_L2) != compute_seqcol_digest(other)
 
 
+def test_build_row_includes_row_bound_alias_and_source_metadata(monkeypatch) -> None:
+    import science_tool.commons.assembly_registry_build as build
+
+    monkeypatch.setattr(build, "compute_seqcol_digest", lambda level2: "DIGEST38")
+
+    row = build_registry_row(
+        level2=_L2,
+        label="GRCh38",
+        aliases=("GRCh38.p14",),
+        accession="GCA_000001405.15",
+        naming="ncbi",
+        server_digest="DIGEST38",
+        source_collection_url="https://seqcolapi.databio.org/collection/DIGEST38",
+        source_url="https://seqcolapi.databio.org/collection/DIGEST38",
+    )
+
+    assert row == {
+        "seqcol_digest": "DIGEST38",
+        "label": "GRCh38",
+        "aliases": "GRCh38.p14",
+        "accession": "GCA_000001405.15",
+        "n_sequences": 2,
+        "naming": "ncbi",
+        "source_collection_url": "https://seqcolapi.databio.org/collection/DIGEST38",
+        "source_url": "https://seqcolapi.databio.org/collection/DIGEST38",
+    }
+
+
+def test_validate_registry_label_bindings_rejects_duplicate_label_and_alias() -> None:
+    with pytest.raises(ValueError, match="duplicate assembly label"):
+        validate_registry_label_bindings(
+            [
+                {"label": "GRCh38", "aliases": ""},
+                {"label": "GRCh38", "aliases": "GRCh38.p14"},
+            ]
+        )
+
+    with pytest.raises(ValueError, match="duplicate assembly alias"):
+        validate_registry_label_bindings(
+            [
+                {"label": "GRCh38", "aliases": "GRCh38.p14"},
+                {"label": "hg38", "aliases": "GRCh38.p14"},
+            ]
+        )
+
+
+def test_validate_registry_label_bindings_rejects_label_alias_collision() -> None:
+    with pytest.raises(ValueError, match="duplicate assembly label or alias"):
+        validate_registry_label_bindings(
+            [
+                {"label": "GRCh38", "aliases": ""},
+                {"label": "hg38", "aliases": "GRCh38"},
+            ]
+        )
+
+
+def test_validate_registry_label_bindings_rejects_same_row_label_alias_collision() -> None:
+    with pytest.raises(ValueError, match="duplicate assembly label or alias"):
+        validate_registry_label_bindings(
+            [
+                {"label": "GRCh38", "aliases": "GRCh38"},
+            ]
+        )
+
+
+def test_validate_registry_label_bindings_rejects_blank_alias_token() -> None:
+    with pytest.raises(ValueError):
+        validate_registry_label_bindings(
+            [
+                {"label": "GRCh38", "aliases": "GRCh38.p14|"},
+            ]
+        )
+
+
 def test_build_row_round_trips_when_digest_matches() -> None:
     pytest.importorskip("refget")
     digest = compute_seqcol_digest(_L2)
     row = build_registry_row(
-        level2=_L2, label="TEST", accession="GCA_TEST.1", server_digest=digest, source_url="https://x"
+        level2=_L2,
+        label="TEST",
+        aliases=(),
+        accession="GCA_TEST.1",
+        naming="test",
+        server_digest=digest,
+        source_collection_url="https://x/collection",
+        source_url="https://x",
     )
     assert row["seqcol_digest"] == digest
     assert row["label"] == "TEST"
@@ -58,8 +140,11 @@ def test_build_row_raises_on_digest_mismatch() -> None:
         build_registry_row(
             level2=_L2,
             label="TEST",
+            aliases=(),
             accession="GCA_TEST.1",
+            naming="test",
             server_digest="not-the-real-digest",
+            source_collection_url="https://x/collection",
             source_url="https://x",
         )
 

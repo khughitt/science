@@ -17,6 +17,7 @@ _SEQCOL_SERVER = "https://seqcolapi.databio.org"
 
 
 _INHERENT_ATTRS = ["names", "sequences"]  # GA4GH seqcol v1.0.0; lengths is NOT inherent
+_ALIAS_SEPARATOR = "|"
 
 
 def compute_seqcol_digest(level2: dict[str, Any]) -> str:
@@ -38,22 +39,102 @@ def compute_seqcol_digest(level2: dict[str, Any]) -> str:
     )
 
 
+def _clean_required_text(value: Any, *, field: str, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"invalid {field} for {label!r}: expected string, got {type(value).__name__}")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"blank {field} for {label!r}")
+    if cleaned != value:
+        raise ValueError(f"invalid {field} for {label!r}: leading/trailing whitespace in {value!r}")
+    return cleaned
+
+
+def _clean_aliases(aliases: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    if not isinstance(aliases, (tuple, list)):
+        raise ValueError(f"invalid aliases for 'assembly': expected tuple or list, got {type(aliases).__name__}")
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        cleaned = _clean_required_text(alias, field="alias", label="assembly")
+        if _ALIAS_SEPARATOR in cleaned:
+            raise ValueError(f"invalid alias for 'assembly': contains {_ALIAS_SEPARATOR!r}: {cleaned!r}")
+        if cleaned in seen:
+            raise ValueError(f"duplicate assembly alias {cleaned!r}")
+        seen.add(cleaned)
+        out.append(cleaned)
+    return tuple(out)
+
+
+def validate_registry_label_bindings(rows: list[dict[str, Any]]) -> None:
+    labels_by_token: dict[str, int] = {}
+    aliases_by_token: dict[str, int] = {}
+
+    for row_index, row in enumerate(rows):
+        label = _clean_required_text(row.get("label"), field="label", label="assembly")
+        aliases_raw = row.get("aliases", "")
+        if not isinstance(aliases_raw, str):
+            raise ValueError(
+                f"invalid aliases for assembly {label!r} at row {row_index}: "
+                f"expected string, got {type(aliases_raw).__name__}"
+            )
+        aliases = () if aliases_raw == "" else tuple(aliases_raw.split(_ALIAS_SEPARATOR))
+        aliases = _clean_aliases(list(aliases))
+
+        if label in aliases:
+            raise ValueError(f"duplicate assembly label or alias {label!r}")
+
+        if label in labels_by_token:
+            raise ValueError(f"duplicate assembly label {label!r}")
+        labels_by_token[label] = row_index
+
+        for alias in aliases:
+            if alias in aliases_by_token:
+                raise ValueError(f"duplicate assembly alias {alias!r}")
+            aliases_by_token[alias] = row_index
+
+    collisions = set(labels_by_token) & set(aliases_by_token)
+    for token in sorted(collisions):
+        if labels_by_token[token] != aliases_by_token[token]:
+            raise ValueError(f"duplicate assembly label or alias {token!r}")
+
+
 def build_registry_row(
-    *, level2: dict[str, Any], label: str, accession: str, server_digest: str, source_url: str
+    *,
+    level2: dict[str, Any],
+    label: str,
+    aliases: tuple[str, ...] | list[str] = (),
+    accession: str,
+    naming: str,
+    server_digest: str,
+    source_collection_url: str,
+    source_url: str,
 ) -> dict[str, Any]:
     """Build one registry row, asserting the recomputed digest matches the server.
 
     The recompute-and-assert is the integrity gate: it proves the pinned
     level-2 record reproduces the canonical identifier with zero FASTA.
     """
+    label = _clean_required_text(label, field="label", label="assembly")
+    aliases_clean = _clean_aliases(aliases)
+    accession = _clean_required_text(accession, field="accession", label=label)
+    naming = _clean_required_text(naming, field="naming", label=label)
+    server_digest = _clean_required_text(server_digest, field="server_digest", label=label)
+    source_collection_url = _clean_required_text(source_collection_url, field="source_collection_url", label=label)
+    source_url = _clean_required_text(source_url, field="source_url", label=label)
+
     computed = compute_seqcol_digest(level2)
     if computed != server_digest:
         raise ValueError(f"seqcol digest mismatch for {label!r}: server={server_digest!r} computed={computed!r}")
     return {
         "seqcol_digest": server_digest,
         "label": label,
+        "aliases": _ALIAS_SEPARATOR.join(aliases_clean),
         "accession": accession,
         "n_sequences": len(level2["names"]),
+        "naming": naming,
+        "source_collection_url": source_collection_url,
         "source_url": source_url,
     }
 
