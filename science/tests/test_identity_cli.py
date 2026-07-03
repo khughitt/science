@@ -74,14 +74,59 @@ def test_resolve_writes_seqcol_digest_for_resolved_assembly(tmp_path: Path, monk
 
     monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
 
+    res = _run(tmp_path, "resolve", "dataset:x", "--taxon", "9606", "--assembly", "hg38")
+
+    assert res.exit_code == 0, res.output
+    assert _frontmatter(path)["identity_context"] == {
+        "taxon": 9606,
+        "assembly": {
+            "label": "hg38",
+            "registry": ASSEMBLY_REGISTRY_ID,
+            "seqcol_digest": _HG38_DIGEST,
+            "resolution_status": "resolved",
+        },
+    }
+
+
+def test_resolve_refuses_identity_flags_without_taxon(tmp_path: Path, monkeypatch) -> None:
+    path = _write_dataset(tmp_path, "x")
+    before = path.read_text(encoding="utf-8")
+
+    def fake_resolve_assembly(label_or_digest: str, *, registry_id: str, commons_root=None, data_root=None):
+        assert label_or_digest == "hg38"
+        assert registry_id == ASSEMBLY_REGISTRY_ID
+        return AssemblyEntry(seqcol_digest=_HG38_DIGEST, label="hg38", accession="GCF_000001405.40")
+
+    monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
+
+    res = _run(tmp_path, "resolve", "dataset:x", "--assembly", "hg38")
+
+    assert res.exit_code != 0
+    assert "--taxon" in res.output
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_resolve_preserves_existing_taxon_when_updating_identity(tmp_path: Path, monkeypatch) -> None:
+    path = _write_dataset(tmp_path, "x", frontmatter={"identity_context": {"taxon": 9606}})
+
+    def fake_resolve_assembly(label_or_digest: str, *, registry_id: str, commons_root=None, data_root=None):
+        assert label_or_digest == "hg38"
+        assert registry_id == ASSEMBLY_REGISTRY_ID
+        return AssemblyEntry(seqcol_digest=_HG38_DIGEST, label="hg38", accession="GCF_000001405.40")
+
+    monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
+
     res = _run(tmp_path, "resolve", "dataset:x", "--assembly", "hg38")
 
     assert res.exit_code == 0, res.output
-    assert _frontmatter(path)["identity_context"]["assembly"] == {
-        "label": "hg38",
-        "registry": ASSEMBLY_REGISTRY_ID,
-        "seqcol_digest": _HG38_DIGEST,
-        "resolution_status": "resolved",
+    assert _frontmatter(path)["identity_context"] == {
+        "taxon": 9606,
+        "assembly": {
+            "label": "hg38",
+            "registry": ASSEMBLY_REGISTRY_ID,
+            "seqcol_digest": _HG38_DIGEST,
+            "resolution_status": "resolved",
+        },
     }
 
 
@@ -95,7 +140,17 @@ def test_resolve_summary_reports_unresolved_when_any_tier_is_unresolved(tmp_path
 
     monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
 
-    res = _run(tmp_path, "resolve", "dataset:x", "--assembly", "hg38", "--gene-namespace", "hgnc_id")
+    res = _run(
+        tmp_path,
+        "resolve",
+        "dataset:x",
+        "--taxon",
+        "9606",
+        "--assembly",
+        "hg38",
+        "--gene-namespace",
+        "hgnc_id",
+    )
 
     assert res.exit_code == 0, res.output
     assert "resolution=declared_unresolved" in res.output
@@ -109,6 +164,8 @@ def test_resolve_writes_molecular_id_namespaces(tmp_path: Path) -> None:
         tmp_path,
         "resolve",
         "dataset:x",
+        "--taxon",
+        "9606",
         "--gene-namespace",
         "hgnc_id",
         "--protein-namespace",
@@ -116,16 +173,19 @@ def test_resolve_writes_molecular_id_namespaces(tmp_path: Path) -> None:
     )
 
     assert res.exit_code == 0, res.output
-    assert _frontmatter(path)["identity_context"]["molecular_ids"] == {
-        "gene": {
-            "namespace": "hgnc_id",
-            "registry": GENE_CROSSWALK_ID,
-            "resolution_status": "declared_unresolved",
-        },
-        "protein": {
-            "namespace": "uniprot",
-            "registry": PROTEIN_CROSSWALK_ID,
-            "resolution_status": "declared_unresolved",
+    assert _frontmatter(path)["identity_context"] == {
+        "taxon": 9606,
+        "molecular_ids": {
+            "gene": {
+                "namespace": "hgnc_id",
+                "registry": GENE_CROSSWALK_ID,
+                "resolution_status": "declared_unresolved",
+            },
+            "protein": {
+                "namespace": "uniprot",
+                "registry": PROTEIN_CROSSWALK_ID,
+                "resolution_status": "declared_unresolved",
+            },
         },
     }
 

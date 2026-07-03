@@ -275,6 +275,33 @@ def test_register_run_rejects_profile_required_identity_after_resolution_before_
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
 
 
+def test_register_run_rejects_invalid_literal_output_identity_contract(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"taxon": 9606, "assembly": {"label": "GRCh38"}},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "assembly identity requires registry and resolution_status" in res.output
+    assert "Traceback" not in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
 def test_register_run_rejects_blank_output_schema_profile(tmp_path: Path) -> None:
     _seed_workflow_and_run(
         tmp_path,
@@ -772,6 +799,54 @@ def test_register_run_rejects_transform_from_input_with_multiple_inputs(tmp_path
     assert res.exit_code != 0
     assert "from: input" in res.output
     assert "multiple inputs" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "lifted" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-lifted.md").exists()
+
+
+def test_register_run_rejects_transform_from_dataset_outside_run_inputs(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "seqcol_digest": "SQ.GRCh37",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "resolved",
+        },
+    }
+    _seed_dataset(tmp_path, "source-a", identity)
+    _seed_dataset(tmp_path, "source-b", identity)
+    _seed_dataset(tmp_path, "liftover-chain")
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source-a", "dataset:source-b"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": {"inherit": {"from": "dataset:source-a"}},
+                    "assembly": {
+                        "label": "GRCh38",
+                        "transform": {
+                            "type": "liftover",
+                            "from": "dataset:misspelled",
+                            "method": "ucsc_chain",
+                            "dataset": "dataset:liftover-chain",
+                        },
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "dataset:misspelled" in res.output
+    assert "run inputs" in res.output
     assert not (tmp_path / "results" / "wf" / "r1" / "lifted" / "datapackage.yaml").exists()
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-lifted.md").exists()
 

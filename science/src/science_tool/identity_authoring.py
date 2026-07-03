@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError
 from science_model.entity_schema.loader import SchemaLoader, SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileParseError, parse_profile
+from science_model.packages.schema import IdentityContext
 
 BASE_DATASET_SCHEMA_PROFILE = "science-entity-base/1.0+dataset/1.0"
 ASSEMBLY_REGISTRY_ID = "dataset:assembly-registry"
@@ -72,7 +74,21 @@ def build_identity_context(
     if errors:
         details = "; ".join(f"{message.path}: {message.message}" for message in errors)
         raise IdentityAuthoringError(details)
-    return resolved.identity_context
+    return validate_identity_context_declaration(resolved.identity_context)
+
+
+def validate_identity_context_declaration(identity_context: dict[str, Any]) -> dict[str, Any]:
+    """Validate an authored ``identity_context`` before writing it to disk."""
+    if not identity_context:
+        return {}
+    if not _has_taxon(identity_context):
+        raise IdentityAuthoringError("identity_context declarations require --taxon")
+    try:
+        IdentityContext.model_validate(identity_context)
+    except ValidationError as exc:
+        details = "; ".join(f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}" for error in exc.errors())
+        raise IdentityAuthoringError(details) from exc
+    return identity_context
 
 
 def require_profile_identity(schema_profile: str, identity_context: Any) -> None:

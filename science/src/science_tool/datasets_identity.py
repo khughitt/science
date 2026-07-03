@@ -17,6 +17,7 @@ from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
 from science_tool.commons.identity_resolve import IdentityResolutionMessage, resolve_identity
 from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.commons.protein_crosswalk import PROTEIN_CROSSWALK_ID
+from science_tool.identity_authoring import IdentityAuthoringError, validate_identity_context_declaration
 
 
 _LOCAL_DATASET_SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -252,7 +253,11 @@ def resolve_cmd(
             )
             _echo_messages(resolved.messages)
             raise click.ClickException(f"identity resolution failed for {dataset_id}")
-        frontmatter["identity_context"] = resolved.identity_context
+        try:
+            identity_context = validate_identity_context_declaration(resolved.identity_context)
+        except IdentityAuthoringError as exc:
+            raise click.ClickException(str(exc)) from exc
+        frontmatter["identity_context"] = identity_context
         next_text = _render_entity(frontmatter, body_suffix)
         before = path.read_text(encoding="utf-8")
         dataset_id = frontmatter.get("id") if isinstance(frontmatter.get("id"), str) else _dataset_id_from_path(path)

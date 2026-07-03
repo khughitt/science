@@ -9,14 +9,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
 import yaml
 from science_model.frontmatter import parse_frontmatter
+from science_model.packages.schema import IdentityContext, WorkflowOutput
 
 from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
 
 
-def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
+def _format_validation_error(exc: ValidationError) -> str:
+    return "; ".join(f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}" for error in exc.errors())
+
+
+def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict[str, Any]]:
     """Return the workflow's `outputs:` block. Raises FileNotFoundError if missing."""
     slug = workflow_id.removeprefix("workflow:")
     wf_path = project_root / "entities" / "workflows" / f"{slug}.md"
@@ -24,7 +30,21 @@ def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
         raise FileNotFoundError(f"workflow entity not found: {wf_path}")
     result = parse_frontmatter(wf_path)
     fm = result[0] if result else {}
-    return list(fm.get("outputs") or [])
+    raw_outputs = fm.get("outputs") or []
+    if not isinstance(raw_outputs, list):
+        raise ValueError(f"workflow {workflow_id} outputs must be a list")
+    outputs: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_outputs):
+        if not isinstance(raw, dict):
+            raise ValueError(f"workflow {workflow_id} outputs[{index}] must be a mapping")
+        try:
+            output = WorkflowOutput.model_validate(raw)
+        except ValidationError as exc:
+            raise ValueError(
+                f"workflow {workflow_id} outputs[{index}] invalid: {_format_validation_error(exc)}"
+            ) from exc
+        outputs.append(output.model_dump(mode="json", by_alias=True, exclude_none=True))
+    return outputs
 
 
 def _read_run(project_root: Path, run_id: str) -> tuple[Path, dict]:
@@ -199,35 +219,48 @@ def _validate_output_identity(out: dict) -> None:
         raise ValueError(f"output {out.get('slug')!r} identity must be a mapping")
 
 
-def _transform_from_input_paths(identity_contract: dict[str, Any]) -> list[str]:
-    paths: list[str] = []
+def _transform_from_values(identity_contract: dict[str, Any]) -> list[tuple[str, str]]:
+    values: list[tuple[str, str]] = []
     assembly = identity_contract.get("assembly")
     if isinstance(assembly, dict):
         transform = assembly.get("transform")
-        if isinstance(transform, dict) and transform.get("from") == "input":
-            paths.append("identity.assembly.transform.from")
+        from_value = transform.get("from") if isinstance(transform, dict) else None
+        if isinstance(from_value, str):
+            values.append(("identity.assembly.transform.from", from_value))
     molecular_ids = identity_contract.get("molecular_ids")
     if isinstance(molecular_ids, dict):
         for tier, tier_identity in molecular_ids.items():
             if not isinstance(tier_identity, dict):
                 continue
             transform = tier_identity.get("transform")
-            if isinstance(transform, dict) and transform.get("from") == "input":
-                paths.append(f"identity.molecular_ids.{tier}.transform.from")
-    return paths
+            from_value = transform.get("from") if isinstance(transform, dict) else None
+            if isinstance(from_value, str):
+                values.append((f"identity.molecular_ids.{tier}.transform.from", from_value))
+    return values
 
 
-def _validate_transform_from_input(out: dict, run_inputs: list[str]) -> None:
+def _validate_transform_sources(out: dict, run_inputs: list[str]) -> None:
     identity_contract = out.get("identity")
-    if not isinstance(identity_contract, dict) or len(run_inputs) <= 1:
+    if not isinstance(identity_contract, dict):
         return
-    paths = _transform_from_input_paths(identity_contract)
-    if not paths:
-        return
-    joined = ", ".join(paths)
-    raise ValueError(
-        f"output {out.get('slug')!r} uses from: input at {joined} with multiple inputs; use from: dataset:X"
-    )
+    for path, from_value in _transform_from_values(identity_contract):
+        if from_value == "input":
+            if len(run_inputs) > 1:
+                raise ValueError(
+                    f"output {out.get('slug')!r} uses from: input at {path} with multiple inputs; use from: dataset:X"
+                )
+            continue
+        if from_value.startswith("dataset:"):
+            if from_value not in run_inputs:
+                raise ValueError(
+                    f"output {out.get('slug')!r} uses {path}: {from_value!r}, "
+                    "but that dataset is not in the workflow-run inputs"
+                )
+            continue
+        if len(run_inputs) > 1:
+            raise ValueError(
+                f"output {out.get('slug')!r} uses {path}: {from_value!r} with multiple inputs; use from: dataset:X"
+            )
 
 
 def _dataset_frontmatter(project_root: Path, dataset_id: str) -> dict:
@@ -278,6 +311,14 @@ def _proxy_source_datasets(identity_contract: dict[str, Any]) -> list[str]:
         if isinstance(dataset_id, str) and dataset_id.startswith("dataset:"):
             dataset_ids.append(dataset_id)
     return dataset_ids
+
+
+def _transform_source_datasets(identity_contract: dict[str, Any]) -> list[str]:
+    return [
+        from_value
+        for _path, from_value in _transform_from_values(identity_contract)
+        if from_value.startswith("dataset:")
+    ]
 
 
 def _lookup_identity_value(identity_context: dict[str, Any], tier_path: tuple[str, ...]) -> Any:
@@ -352,16 +393,18 @@ def _identity_lookup_sources(identity_contract: dict[str, Any], selected_inputs:
     sources = _identity_lookup_sources_for_value(identity_contract.get("taxon"), selected_inputs)
     assembly_contract = identity_contract.get("assembly")
     sources.extend(_identity_lookup_sources_for_value(assembly_contract, selected_inputs))
+    transform_sources = _transform_source_datasets(identity_contract)
     if (
         isinstance(assembly_contract, dict)
         and ("transform" in assembly_contract or "proxy" in assembly_contract)
         and "registry" not in assembly_contract
     ):
-        sources.extend(selected_inputs)
+        sources.extend(transform_sources or selected_inputs)
     molecular_contract = identity_contract.get("molecular_ids")
     if isinstance(molecular_contract, dict):
         for value in molecular_contract.values():
             sources.extend(_identity_lookup_sources_for_value(value, selected_inputs))
+    sources.extend(transform_sources)
     return _dedupe_preserving_order(sources)
 
 
@@ -512,9 +555,13 @@ def _resolve_output_identity(
                 selected_inputs=selected_inputs,
                 identities=identities,
             )
-        if molecular_ids:
-            identity_context["molecular_ids"] = molecular_ids
+    if molecular_ids:
+        identity_context["molecular_ids"] = molecular_ids
 
+    try:
+        IdentityContext.model_validate(identity_context)
+    except ValidationError as exc:
+        raise ValueError(f"output {out_slug!r} identity_context invalid: {_format_validation_error(exc)}") from exc
     return _ResolvedOutputIdentity(
         identity_context=identity_context,
         data_inputs=selected_inputs,
@@ -580,7 +627,7 @@ def preflight_register_run_identity(project_root: Path, workflow_run_id: str) ->
     for out in outputs:
         _output_schema_profile(out)
         _validate_output_identity(out)
-        _validate_transform_from_input(out, run_inputs)
+        _validate_transform_sources(out, run_inputs)
     resolutions = _resolve_output_identities(project_root, run_fm, outputs)
     for out in outputs:
         resolved_identity = resolutions.get(str(out["slug"]))

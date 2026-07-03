@@ -98,6 +98,14 @@ def test_add_refuses_non_positive_taxon(tmp_path: Path) -> None:
     assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
 
 
+def test_add_refuses_identity_flags_without_taxon(tmp_path: Path) -> None:
+    res = _add(tmp_path, "assembly-only", "--title", "Assembly only", "--assembly", "UNKNOWN")
+
+    assert res.exit_code == 1
+    assert "--taxon" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "assembly-only.md").exists()
+
+
 def test_add_refuses_malformed_schema_profile(tmp_path: Path) -> None:
     res = _add(tmp_path, "bad-profile", "--title", "Bad", "--schema-profile", "not-a-profile")
 
