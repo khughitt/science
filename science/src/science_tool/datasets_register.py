@@ -477,7 +477,9 @@ def _normalize_assembly_contract(
 
 def _assembly_seqcol_digest(identity_context: dict[str, Any] | None) -> str | None:
     assembly = identity_context.get("assembly") if isinstance(identity_context, dict) else None
-    seqcol_digest = assembly.get("seqcol_digest") if isinstance(assembly, dict) else None
+    if not isinstance(assembly, dict) or assembly.get("resolution_status") != "resolved":
+        return None
+    seqcol_digest = assembly.get("seqcol_digest")
     if not isinstance(seqcol_digest, str):
         return None
     seqcol_digest = seqcol_digest.strip()
