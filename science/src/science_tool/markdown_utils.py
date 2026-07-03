@@ -58,12 +58,12 @@ def _strip_comments_and_inline_code(text: str, *, preserve_inline_code: bool) ->
             out.extend(char for char in text[index : end + 3] if char == "\n")
             index = end + 3
             continue
-        if text[index] == "`":
+        if text[index] == "`" and not _is_escaped(text, index):
             end = index + 1
             while end < len(text) and text[end] == "`":
                 end += 1
             delimiter = text[index:end]
-            close = text.find(delimiter, end)
+            close = _find_unescaped(text, delimiter, end)
             if close != -1:
                 span = text[index : close + len(delimiter)]
                 if preserve_inline_code:
@@ -75,6 +75,26 @@ def _strip_comments_and_inline_code(text: str, *, preserve_inline_code: bool) ->
         out.append(text[index])
         index += 1
     return "".join(out)
+
+
+def _is_escaped(text: str, index: int) -> bool:
+    backslashes = 0
+    cursor = index - 1
+    while cursor >= 0 and text[cursor] == "\\":
+        backslashes += 1
+        cursor -= 1
+    return backslashes % 2 == 1
+
+
+def _find_unescaped(text: str, needle: str, start: int) -> int:
+    cursor = start
+    while True:
+        found = text.find(needle, cursor)
+        if found == -1:
+            return -1
+        if not _is_escaped(text, found):
+            return found
+        cursor = found + len(needle)
 
 
 def strip_html_comments_and_inline_code(text: str) -> str:

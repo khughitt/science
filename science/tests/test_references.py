@@ -318,6 +318,17 @@ def test_parse_citations_ignores_comment_marker_inside_multiline_inline_code() -
     assert _citation_pairs(markdown) == [("Smith2020", None)]
 
 
+def test_parse_citations_ignores_escaped_backticks_inside_inline_code() -> None:
+    markdown = """Aliases use escaped backticks inside inline code: `SkeletonId = \\`skel:${string}\\``.
+Later prose names a literal annotation `@deprecated` and then cites [@Smith2020]."""
+    scan = parse_citations(markdown)
+
+    assert scan.unsupported == []
+    assert [(citation.citekey, citation.locator) for citation in scan.citations] == [
+        ("Smith2020", None)
+    ]
+
+
 def test_parse_citations_ignores_citations_inside_longer_fenced_code() -> None:
     markdown = """````markdown
 ```
