@@ -217,6 +217,7 @@ def resolve_namespace(
     namespace: str,
     registry: str,
     *,
+    declared_tier: str | None = None,
     registries: Mapping[str, Any] | None = None,
     path: str = "identity_context.molecular_ids",
 ) -> NamespaceResolution:
@@ -225,6 +226,9 @@ def resolve_namespace(
     ``registries`` is an explicit availability map keyed by registry id. Values
     must use ``RegistryAvailability`` or mappings with ``{"available": bool,
     "tier": "gene"}``/``{"available": bool, "tier": "protein"}``.
+    ``declared_tier`` validates that a tier-specific molecular_ids declaration
+    uses a namespace from the same molecular tier. Omit it for namespace-only
+    resolution.
     """
     namespace = namespace.strip()
     spec = _namespace_spec(namespace)
@@ -239,6 +243,19 @@ def resolve_namespace(
                     path,
                     f"unsupported namespace {namespace!r}; expected one of "
                     f"{sorted(SUPPORTED_GENE_NAMESPACES | SUPPORTED_PROTEIN_NAMESPACES)}",
+                ),
+            ),
+        )
+    if declared_tier is not None and spec.tier != declared_tier:
+        return NamespaceResolution(
+            namespace=namespace,
+            registry=registry,
+            resolution_status="declared_unresolved",
+            messages=(
+                _message(
+                    "error",
+                    path,
+                    f"namespace tier {spec.tier!r} does not match declared molecular tier {declared_tier!r}",
                 ),
             ),
         )
@@ -325,14 +342,15 @@ def _resolve_molecular_id_decls(
     if not isinstance(molecular_ids, dict):
         return
     for tier, decl in molecular_ids.items():
+        tier_name = str(tier)
         if not isinstance(decl, dict):
             continue
-        if tier == "variant":
+        if tier_name == "variant":
             continue
         if decl.get("resolution_status") == "resolved":
             continue
         namespace = decl.get("namespace")
-        path = f"identity_context.molecular_ids.{tier}"
+        path = f"identity_context.molecular_ids.{tier_name}"
         if not isinstance(namespace, str) or not namespace.strip():
             decl["resolution_status"] = "declared_unresolved"
             messages.append(_message("error", path, "missing or blank namespace"))
@@ -342,7 +360,13 @@ def _resolve_molecular_id_decls(
             registry = registry_value
         else:
             registry = _default_registry_for_namespace(namespace)
-        resolution = resolve_namespace(namespace, registry, registries=registries, path=path)
+        resolution = resolve_namespace(
+            namespace,
+            registry,
+            declared_tier=tier_name,
+            registries=registries,
+            path=path,
+        )
         decl["namespace"] = resolution.namespace
         decl["registry"] = resolution.registry
         decl["resolution_status"] = resolution.resolution_status

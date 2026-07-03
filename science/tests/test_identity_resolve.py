@@ -130,6 +130,27 @@ def test_declared_unresolved_unsupported_namespace_still_reports_error() -> None
     assert "unsupported namespace" in resolved.messages[0].message
 
 
+def test_molecular_id_declared_tier_must_match_namespace_tier() -> None:
+    ctx = {
+        "molecular_ids": {
+            "protein": {
+                "namespace": "hgnc_id",
+                "registry": GENE_CROSSWALK_ID,
+            }
+        }
+    }
+
+    resolved = resolve_identity(ctx, registries=_AVAILABLE_GENE_REGISTRY)
+
+    assert resolved.identity_context["molecular_ids"]["protein"] == {
+        "namespace": "hgnc_id",
+        "registry": GENE_CROSSWALK_ID,
+        "resolution_status": "declared_unresolved",
+    }
+    assert [(m.level, m.path) for m in resolved.messages] == [("error", "identity_context.molecular_ids.protein")]
+    assert "namespace tier 'gene' does not match declared molecular tier 'protein'" in resolved.messages[0].message
+
+
 def test_variant_declaration_is_preserved_without_gene_protein_namespace_error() -> None:
     ctx = {"molecular_ids": {"variant": {"namespace": "vrs", "resolution_status": "declared_unresolved"}}}
 
