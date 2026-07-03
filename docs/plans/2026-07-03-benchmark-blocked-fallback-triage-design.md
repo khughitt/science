@@ -138,10 +138,22 @@ so neither is a clean controlled histogram source.
 `include_blocked_fallback: true` only when the flag is provided; omit it for the
 default false case.
 
+The zero-suppression shape is fixed so JSON consumers see a stable schema.
+`summary` and `filters` follow opposite conventions here, so state each
+explicitly:
+
+- `summary.suppressed_blocked_support_fallback_rows` is always present, like the
+  other `summary` counts (`bucket_counts`, `readiness_counts`). It is `0` when
+  nothing is suppressed, including under `--include-blocked-fallback`. It does
+  not follow the sparse-filter convention.
+- `fallback_diagnostics.suppressed_blocked_support` is present only when
+  `rows > 0`, and is omitted otherwise. This matches the table note gate below.
+
 When `--include-blocked-fallback` is used:
 
 - `filters.include_blocked_fallback` is `true`;
-- suppressed counts are zero;
+- `summary.suppressed_blocked_support_fallback_rows` is `0`;
+- `fallback_diagnostics.suppressed_blocked_support` is omitted;
 - blocked-support fallback rows appear in `fallback-diagnostic` as they do
   today.
 
@@ -194,6 +206,11 @@ Add focused tests for:
 - The same rows are restored with `include_blocked_fallback=True`.
 - Non-fallback blocked rows still route to `blocked-or-reference`.
 - Non-blocked fallback rows still appear in `fallback-diagnostic`.
+- A multi-task benchmark where only one task is blocked suppresses only that
+  task's fallback row; fallback rows for its other (non-blocked) tasks stay in
+  `fallback-diagnostic`. `_rows_for_gap_candidate()` emits one fallback row per
+  dataset task, so this pins the predicate as `source AND state`, not
+  `source AND (dataset has any blocked task)`.
 - Summary suppression counts explain the gap between upstream fallback counts
   and displayed fallback bucket counts.
 - `readiness_counts` still include suppressed rows because they describe the
