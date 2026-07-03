@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
+from pathlib import Path
+
 import pytest
 
+from science_tool.commons.assembly_compatibility import load_compatibility_relations, relation_for
 from science_tool.commons.liftover import (
     ChainFormatError,
     LiftedInterval,
     LiftoverDefect,
     lift_interval,
+    load_chain,
     parse_chain_text,
 )
 
@@ -15,6 +21,66 @@ chain 1000 chr1 1000 + 500 630 chr1 2000 + 1000 1140 7
 50 10 20
 70
 """
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "commons"
+_LIFTOVER_COMMONS_ROOT = _FIXTURES / "liftover"
+_LIFTOVER_DATA_ROOT = _FIXTURES / "liftover-data"
+_GRCH37_DIGEST = "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA"
+_GRCH38_DIGEST = "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a"
+_LIFTOVER_DATASET = "dataset:assembly-liftover-grch37-grch38"
+
+
+def _write_liftover_dataset(tmp_path: Path, chain_bytes: bytes) -> tuple[Path, Path]:
+    commons_root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    dataset_dir = commons_root / "datasets" / "test-liftover"
+    chain_path = data_root / "test-liftover" / "chains" / "test.chain.gz"
+    dataset_dir.mkdir(parents=True)
+    chain_path.parent.mkdir(parents=True)
+
+    chain_path.write_bytes(chain_bytes)
+    chain_sha256 = hashlib.sha256(chain_bytes).hexdigest()
+    (dataset_dir / "entity.md").write_text(
+        """\
+---
+schema_profile: science-entity-base/1.0+dataset/1.0
+id: dataset:test-liftover
+type: dataset
+title: Test liftover chains
+version: "1.0.0"
+created: "2026-05-31"
+updated: "2026-05-31"
+status: active
+origin: external
+source_class: reference
+tier: use-now
+access:
+  level: public
+  availability: available
+  verified: true
+  verification_method: retrieved
+datapackage: datapackage.yaml
+---
+
+# Test liftover chains
+""",
+        encoding="utf-8",
+    )
+    (dataset_dir / "datapackage.yaml").write_text(
+        f"""\
+name: test-liftover
+profile: data-package
+resources:
+  - name: test_chain
+    path: chains/test.chain.gz
+    format: chain.gz
+    mediatype: application/gzip
+    hash: "sha256:{chain_sha256}"
+    bytes: {len(chain_bytes)}
+""",
+        encoding="utf-8",
+    )
+    return commons_root, data_root
 
 
 def test_parse_chain_text_reads_blocks() -> None:
@@ -152,3 +218,125 @@ def test_lift_interval_reports_strand_ambiguous_for_unsupported_strand_covering_
     )
     assert isinstance(result, LiftoverDefect)
     assert result.status == "strand_ambiguous"
+
+
+def test_load_chain_reads_gzipped_commons_resource() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    relation = relation_for(relations, source_seqcol_digest=_GRCH37_DIGEST, target_seqcol_digest=_GRCH38_DIGEST)
+    assert relation is not None
+
+    chains = load_chain(
+        dataset_id=_LIFTOVER_DATASET,
+        chain_resource=relation.chain_resource,
+        expected_sha256=relation.chain_sha256,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+
+    assert len(chains) == 1
+    assert chains[0].source_name == "chr1"
+    assert chains[0].target_name == "chr1"
+    assert chains[0].chain_id == 7
+
+
+def test_load_chain_accepts_uppercase_expected_sha256_digest() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    relation = relation_for(relations, source_seqcol_digest=_GRCH37_DIGEST, target_seqcol_digest=_GRCH38_DIGEST)
+    assert relation is not None
+    expected_sha256 = "sha256:" + relation.chain_sha256.removeprefix("sha256:").upper()
+
+    chains = load_chain(
+        dataset_id=_LIFTOVER_DATASET,
+        chain_resource=relation.chain_resource,
+        expected_sha256=expected_sha256,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+
+    assert len(chains) == 1
+    assert chains[0].chain_id == 7
+
+
+@pytest.mark.parametrize(
+    "chain_bytes",
+    [
+        b"\x1f\x8b\x08\x00",
+        gzip.compress(b"\xff"),
+    ],
+)
+def test_load_chain_wraps_gzip_read_errors(tmp_path: Path, chain_bytes: bytes) -> None:
+    commons_root, data_root = _write_liftover_dataset(tmp_path, chain_bytes)
+
+    with pytest.raises(ChainFormatError, match="cannot read gzipped chain resource"):
+        load_chain(
+            dataset_id="dataset:test-liftover",
+            chain_resource="chains/test.chain.gz",
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+
+
+def test_loaded_chain_lifts_interval_offline() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    relation = relation_for(relations, source_seqcol_digest=_GRCH37_DIGEST, target_seqcol_digest=_GRCH38_DIGEST)
+    assert relation is not None
+    chains = load_chain(
+        dataset_id=_LIFTOVER_DATASET,
+        chain_resource=relation.chain_resource,
+        expected_sha256=relation.chain_sha256,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+
+    result = lift_interval(
+        chains,
+        source_seqcol_digest=_GRCH37_DIGEST,
+        target_seqcol_digest=_GRCH38_DIGEST,
+        source_contig="chr1",
+        start=510,
+        end=511,
+    )
+
+    assert result == LiftedInterval(
+        source_seqcol_digest=_GRCH37_DIGEST,
+        target_seqcol_digest=_GRCH38_DIGEST,
+        source_contig="chr1",
+        target_contig="chr1",
+        source_start=510,
+        source_end=511,
+        target_start=1010,
+        target_end=1011,
+        target_strand="+",
+        chain_id=7,
+    )
+
+
+def test_load_chain_rejects_relation_hash_mismatch() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    relation = relation_for(relations, source_seqcol_digest=_GRCH37_DIGEST, target_seqcol_digest=_GRCH38_DIGEST)
+    assert relation is not None
+
+    with pytest.raises(ChainFormatError, match="does not match compatibility chain_sha256"):
+        load_chain(
+            dataset_id=_LIFTOVER_DATASET,
+            chain_resource=relation.chain_resource,
+            expected_sha256="sha256:" + "a" * 64,
+            commons_root=_LIFTOVER_COMMONS_ROOT,
+            data_root=_LIFTOVER_DATA_ROOT,
+        )

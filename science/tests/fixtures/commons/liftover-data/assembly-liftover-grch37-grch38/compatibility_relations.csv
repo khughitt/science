@@ -1,0 +1,2 @@
+source_seqcol_digest,target_seqcol_digest,relation,method,chain_resource,direction,source_label,target_label,source_url,chain_sha256
+XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA,XemD97fxYMS4q-FBm_n5CHQgmzh1_67a,liftover_possible,ucsc_chain,chains/hg19ToHg38.over.chain.gz,forward,GRCh37,GRCh38,https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz,sha256:5ec7528c49d2a189294a4a342022420cd3f364ae7d1b202858af4a6a16dc78f3

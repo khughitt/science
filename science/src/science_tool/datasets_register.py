@@ -272,10 +272,15 @@ def _dataset_frontmatter(project_root: Path, dataset_id: str) -> dict:
     return result[0] if result else {}
 
 
-def _input_identity_map(project_root: Path, dataset_ids: list[str]) -> dict[str, dict[str, Any]]:
+def _input_identity_map(project_root: Path, dataset_ids: list[str], *, strict: bool = False) -> dict[str, dict[str, Any]]:
     identities: dict[str, dict[str, Any]] = {}
     for dataset_id in dataset_ids:
-        fm = _dataset_frontmatter(project_root, dataset_id)
+        try:
+            fm = _dataset_frontmatter(project_root, dataset_id)
+        except ValueError:
+            if strict:
+                raise
+            continue
         identity_context = fm.get("identity_context")
         if isinstance(identity_context, dict):
             identities[dataset_id] = identity_context
@@ -470,7 +475,36 @@ def _normalize_assembly_contract(
     return normalized
 
 
-def _transform_entry(transform: dict[str, Any], target: str) -> dict[str, Any]:
+def _assembly_seqcol_digest(identity_context: dict[str, Any] | None) -> str | None:
+    assembly = identity_context.get("assembly") if isinstance(identity_context, dict) else None
+    if not isinstance(assembly, dict) or assembly.get("resolution_status") != "resolved":
+        return None
+    seqcol_digest = assembly.get("seqcol_digest")
+    if not isinstance(seqcol_digest, str):
+        return None
+    seqcol_digest = seqcol_digest.strip()
+    if not seqcol_digest or seqcol_digest == "UNKNOWN":
+        return None
+    return seqcol_digest
+
+
+def _liftover_transform_source_dataset(transform: dict[str, Any], selected_inputs: list[str]) -> str | None:
+    from_value = transform.get("from")
+    if from_value == "input" and len(selected_inputs) == 1:
+        return selected_inputs[0]
+    if isinstance(from_value, str) and from_value.startswith("dataset:"):
+        return from_value
+    return None
+
+
+def _transform_entry(
+    transform: dict[str, Any],
+    target: str,
+    *,
+    identity_context: dict[str, Any] | None = None,
+    selected_inputs: list[str] | None = None,
+    identities: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "kind": "identity_transform",
         "target": target,
@@ -480,16 +514,36 @@ def _transform_entry(transform: dict[str, Any], target: str) -> dict[str, Any]:
     for key in ("from", "to", "method"):
         if key in transform:
             entry[key] = transform[key]
+    if target == "assembly" and transform.get("type") == "liftover":
+        source_id = _liftover_transform_source_dataset(transform, selected_inputs or [])
+        source_digest = _assembly_seqcol_digest((identities or {}).get(source_id)) if source_id is not None else None
+        target_digest = _assembly_seqcol_digest(identity_context)
+        if source_digest is not None and target_digest is not None:
+            entry["from_seqcol_digest"] = source_digest
+            entry["to_seqcol_digest"] = target_digest
     return entry
 
 
-def _identity_transformations(identity_context: dict[str, Any]) -> list[dict[str, Any]]:
+def _identity_transformations(
+    identity_context: dict[str, Any],
+    *,
+    selected_inputs: list[str],
+    identities: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
     transformations: list[dict[str, Any]] = []
     assembly = identity_context.get("assembly")
     if isinstance(assembly, dict):
         transform = assembly.get("transform")
         if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
-            transformations.append(_transform_entry(transform, "assembly"))
+            transformations.append(
+                _transform_entry(
+                    transform,
+                    "assembly",
+                    identity_context=identity_context,
+                    selected_inputs=selected_inputs,
+                    identities=identities,
+                )
+            )
         proxy = assembly.get("proxy")
         if isinstance(proxy, dict) and isinstance(proxy.get("via"), str):
             transformations.append({"kind": "proxy_via", "dataset": proxy["via"], "type": proxy.get("type", "proxy")})
@@ -516,7 +570,7 @@ def _resolve_output_identity(
     proxy_sources = _proxy_source_datasets(identity_contract)
     selected_inputs = _dedupe_preserving_order([*run_inputs, *proxy_sources])
     identity_sources = _identity_lookup_sources(identity_contract, selected_inputs)
-    identities = _input_identity_map(project_root, identity_sources) if identity_sources else {}
+    identities = _input_identity_map(project_root, identity_sources, strict=True) if identity_sources else {}
     identity_context: dict[str, Any] = {}
 
     if "taxon" in identity_contract:
@@ -565,7 +619,11 @@ def _resolve_output_identity(
     return _ResolvedOutputIdentity(
         identity_context=identity_context,
         data_inputs=selected_inputs,
-        transformations=_identity_transformations(identity_context),
+        transformations=_identity_transformations(
+            identity_context,
+            selected_inputs=selected_inputs,
+            identities=_input_identity_map(project_root, selected_inputs),
+        ),
     )
 
 

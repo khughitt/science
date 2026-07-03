@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import gzip
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Literal, cast
+
+from science_tool.commons.resolver import resolve
 
 LiftoverStatus = Literal["lifted", "unliftable", "multi_mapping", "strand_ambiguous"]
 ChainStrand = Literal["+", "-"]
@@ -90,6 +94,39 @@ def parse_chain_text(text: str) -> list[Chain]:
         chains.append(_close_chain(current, blocks, last_line_number + 1))
 
     return chains
+
+
+def load_chain(
+    *,
+    dataset_id: str,
+    chain_resource: str,
+    expected_sha256: str | None = None,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> list[Chain]:
+    resolved = resolve(dataset_id, chain_resource, commons_root=commons_root, data_root=data_root)
+    if expected_sha256 is not None and not _same_sha256_resource_hash(resolved.hash, expected_sha256):
+        raise ChainFormatError(
+            f"resolved chain hash {resolved.hash!r} does not match compatibility chain_sha256 {expected_sha256!r}"
+        )
+
+    try:
+        with gzip.open(resolved.path, "rt", encoding="utf-8", newline="") as handle:
+            text = handle.read()
+    except (OSError, EOFError, UnicodeDecodeError) as exc:
+        raise ChainFormatError(f"cannot read gzipped chain resource {chain_resource!r} at {resolved.path}: {exc}") from exc
+
+    return parse_chain_text(text)
+
+
+def _same_sha256_resource_hash(resolved_hash: str, expected_sha256: str) -> bool:
+    resolved_algorithm, _, resolved_digest = resolved_hash.partition(":")
+    expected_algorithm, _, expected_digest = expected_sha256.partition(":")
+    return (
+        resolved_algorithm == "sha256"
+        and expected_algorithm == "sha256"
+        and resolved_digest.lower() == expected_digest.lower()
+    )
 
 
 def _parse_header(fields: list[str], line_number: int) -> Chain:

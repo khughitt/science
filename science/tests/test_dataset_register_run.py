@@ -715,6 +715,233 @@ def test_register_run_transform_dataset_routes_to_transformations_not_data_input
     )
 
 
+def test_register_run_liftover_transform_emits_exact_seqcol_digests(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "dataset:source",
+        "method": "ucsc_chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": "inherit",
+                    "assembly": {
+                        "label": "GRCh38",
+                        "seqcol_digest": "SQ.GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "resolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")
+    assert entity["derivation"]["transformations"] == [
+        {
+            "kind": "identity_transform",
+            "target": "assembly",
+            "dataset": "dataset:liftover-chain",
+            "type": "liftover",
+            "from": "dataset:source",
+            "method": "ucsc_chain",
+            "from_seqcol_digest": "SQ.GRCh37",
+            "to_seqcol_digest": "SQ.GRCh38",
+        }
+    ]
+
+
+def test_register_run_liftover_transform_does_not_fabricate_unresolved_digests(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "dataset:source",
+        "method": "ucsc_chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": "inherit",
+                    "assembly": {
+                        "label": "GRCh38",
+                        "seqcol_digest": "SQ.GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "declared_unresolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")
+    transformation = entity["derivation"]["transformations"][0]
+    assert transformation["from"] == "dataset:source"
+    assert "from_seqcol_digest" not in transformation
+    assert "to_seqcol_digest" not in transformation
+
+
+def test_register_run_liftover_transform_does_not_emit_unresolved_source_digest(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "declared_unresolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "dataset:source",
+        "method": "ucsc_chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": "inherit",
+                    "assembly": {
+                        "label": "GRCh38",
+                        "seqcol_digest": "SQ.GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "resolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")
+    transformation = entity["derivation"]["transformations"][0]
+    assert transformation["from"] == "dataset:source"
+    assert "from_seqcol_digest" not in transformation
+    assert "to_seqcol_digest" not in transformation
+
+
+def test_register_run_liftover_transform_emits_digests_with_explicit_taxon(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "dataset:source",
+        "method": "ucsc_chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": 9606,
+                    "assembly": {
+                        "label": "GRCh38",
+                        "seqcol_digest": "SQ.GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "resolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")
+    transformation = entity["derivation"]["transformations"][0]
+    assert transformation["from_seqcol_digest"] == "SQ.GRCh37"
+    assert transformation["to_seqcol_digest"] == "SQ.GRCh38"
+
+
 def test_register_run_rejects_sidecar_identity_context_mismatch_before_writing(tmp_path: Path) -> None:
     identity = {
         "taxon": 9606,
