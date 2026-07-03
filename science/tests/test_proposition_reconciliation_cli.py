@@ -1410,6 +1410,49 @@ def test_resynthesis_draft_context_cli_prints_markdown_packet(tmp_path: Path):
     assert "annotation:entities/papers/A2020.source#a1" in result.output
 
 
+def test_resynthesis_draft_context_cli_includes_input_path_on_malformed_json(tmp_path: Path):
+    _factorization_project(tmp_path)
+    draft_path = tmp_path / "malformed-context-input.json"
+    draft_path.write_text("{not json", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert str(draft_path) in result.output
+    assert "is not valid JSON" in result.output
+
+
+def test_resynthesis_draft_context_cli_reports_stale_input_annotations(tmp_path: Path):
+    ctx = _factorization_project(tmp_path)
+    payload = _draft_payload(ctx)
+    payload["input_annotations"] = payload["input_annotations"][:1]
+    draft_path = tmp_path / "stale-resynthesis-draft.json"
+    draft_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "input_annotations are stale" in result.output
+
+
 def test_validate_proposition_resynthesis_cli_reports_valid_draft(tmp_path: Path):
     ctx = _factorization_project(tmp_path)
     draft_path = tmp_path / "resynthesis-draft.json"

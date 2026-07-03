@@ -724,6 +724,44 @@ def test_validate_resynthesis_draft_accepts_complete_replace(tmp_path: Path):
     }
 
 
+def test_resynthesis_context_loop_supports_existing_validate_path(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+        validate_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    scaffold = draft_to_json(
+        build_resynthesis_scaffold(
+            ctx["plan"],
+            requested_action_id=ctx["action"].action_id,
+            source_review=str(ctx["review_path"]),
+            model="codex-gpt-5",
+        )
+    )
+    scaffold_draft = parse_resynthesis_draft(scaffold)
+    packet = build_resynthesis_context_packet(
+        tmp_path,
+        scaffold_draft,
+        draft_path="draft.scaffold.json",
+    )
+
+    filled = dict(scaffold)
+    filled["new_propositions"] = _draft_payload(ctx)["new_propositions"]
+    filled["annotation_assignments"] = _draft_payload(ctx)["annotation_assignments"]
+    filled["context"] = {
+        **filled["context"],
+        "resynthesis_context_source": packet["source"],
+    }
+    draft = parse_resynthesis_draft(filled)
+    report = validate_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert report.status == "ok"
+    assert report.replacement_propositions == 2
+    assert report.moved_annotations == 2
+
+
 def test_validate_resynthesis_draft_rejects_conflicting_existing_replacement_file(tmp_path: Path):
     from science_tool.annotation.proposition_resynthesis import parse_resynthesis_draft, validate_resynthesis_draft
 
