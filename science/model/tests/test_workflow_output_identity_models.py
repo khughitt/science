@@ -115,6 +115,47 @@ def test_workflow_output_identity_accepts_liftover_assembly_transform() -> None:
     assert identity.molecular_ids["variant"] == "inherit"
 
 
+def test_workflow_output_identity_accepts_transform_only_assembly_contract() -> None:
+    identity = WorkflowOutputIdentity.model_validate(
+        {
+            "assembly": {
+                "transform": {
+                    "type": "liftover",
+                    "from": "input",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:assembly-liftover-grch37-grch38",
+                },
+            },
+        }
+    )
+
+    assert isinstance(identity.assembly, WorkflowOutputAssemblyIdentity)
+    assert identity.assembly.transform is not None
+    assert identity.assembly.registry is None
+    assert identity.assembly.resolution_status is None
+
+
+def test_workflow_output_identity_accepts_proxy_only_assembly_contract() -> None:
+    identity = WorkflowOutputIdentity.model_validate(
+        {
+            "assembly": {
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:cytoband-hg19",
+                    "sources": [
+                        {"dataset": "dataset:gse131651-shah2019-nsd2", "assembly": "inherit"},
+                    ],
+                },
+            },
+        }
+    )
+
+    assert isinstance(identity.assembly, WorkflowOutputAssemblyIdentity)
+    assert identity.assembly.proxy is not None
+    assert identity.assembly.registry is None
+    assert identity.assembly.resolution_status is None
+
+
 def test_workflow_output_identity_accepts_cytoband_proxy_with_sources() -> None:
     identity = WorkflowOutputIdentity.model_validate(
         {
@@ -159,3 +200,18 @@ def test_workflow_output_identity_rejects_proxy_with_empty_sources() -> None:
                 },
             }
         )
+
+
+@pytest.mark.parametrize(
+    "assembly",
+    [
+        {},
+        {"registry": "dataset:assembly-registry"},
+        {"resolution_status": "declared_unresolved"},
+        {"resolution_status": "resolved", "seqcol_digest": "abc"},
+        {"seqcol_digest": "abc"},
+    ],
+)
+def test_workflow_output_identity_rejects_partial_literal_assembly_contracts(assembly: dict) -> None:
+    with pytest.raises(ValidationError, match="assembly identity requires registry and resolution_status"):
+        WorkflowOutputIdentity.model_validate({"assembly": assembly})

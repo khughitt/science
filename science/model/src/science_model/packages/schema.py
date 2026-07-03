@@ -415,8 +415,16 @@ class WorkflowOutputAssemblyIdentity(BaseModel):
     def _validate_resolution(self) -> "WorkflowOutputAssemblyIdentity":
         if self.resolution_status == "resolved" and (self.seqcol_digest is None or self.seqcol_digest == "UNKNOWN"):
             raise ValueError("resolved assembly requires seqcol_digest other than UNKNOWN")
-        if self.proxy is not None and self.resolution_status != "declared_unresolved":
+        if (
+            self.proxy is not None
+            and self.resolution_status is not None
+            and self.resolution_status != "declared_unresolved"
+        ):
             raise ValueError("assembly proxy requires resolution_status declared_unresolved")
+        if self.transform is not None or self.proxy is not None:
+            return self
+        if self.registry is None or self.resolution_status is None:
+            raise ValueError("assembly identity requires registry and resolution_status")
         return self
 
 
