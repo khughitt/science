@@ -1178,9 +1178,7 @@ def evidence_line_group() -> None:
 @click.option(
     "--evidence-role",
     default=None,
-    type=click.Choice(
-        ["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]
-    ),
+    type=click.Choice(["direct_test", "proxy_support", "background_constraint", "negative_control", "model_criticism"]),
 )
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--id", "entity_id")
@@ -1811,7 +1809,9 @@ def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, projec
     if output_format == "json":
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        rows: list[dict[str, str]] = [{"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files]
+        rows: list[dict[str, str]] = [
+            {"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files
+        ]
         rows.extend(
             {
                 "kind": "conflict",
@@ -4589,10 +4589,7 @@ def project_serialize(project_root: Path, out_archive: Path, force: bool) -> Non
     except SerializeError as exc:
         raise click.ClickException(str(exc)) from exc
     suffix = " [forced]" if result.forced else ""
-    click.echo(
-        f"Serialized {result.file_count} file(s), {result.payload_count} payload(s)"
-        f"{suffix} → {result.out_path}"
-    )
+    click.echo(f"Serialized {result.file_count} file(s), {result.payload_count} payload(s){suffix} → {result.out_path}")
 
 
 @project.command("verify")
@@ -4876,9 +4873,7 @@ def health_command(
         else []
     )
     cross_paper_evidence = report.get("cross_paper_evidence") or {}
-    raw_cross_paper_findings = (
-        cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
-    )
+    raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
     cross_paper_findings: list[dict[str, object]] = (
         [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
         if isinstance(raw_cross_paper_findings, list)
@@ -5990,7 +5985,9 @@ def benchmark_gap_calibration(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
+)
 @click.option(
     "--source",
     "priority_source",
@@ -6104,7 +6101,9 @@ def benchmark_tests(
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
 @click.option("--facet", default=None, help="Limit plans to a benchmark facet.")
-@click.option("--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state.")
+@click.option(
+    "--state", type=click.Choice(["concrete", "draft-needed"]), default=None, help="Filter by test plan state."
+)
 @click.option(
     "--source",
     "priority_source",
@@ -6375,12 +6374,7 @@ def _default_hint_candidates_review_path(project_root: Path, generated: date) ->
     from science_tool.paths import resolve_paths
 
     doc_dir = resolve_paths(project_root).doc_dir
-    return (
-        doc_dir
-        / "audits"
-        / "benchmark-hint-candidates"
-        / f"{generated.isoformat()}-{project_root.name}.yaml"
-    )
+    return doc_dir / "audits" / "benchmark-hint-candidates" / f"{generated.isoformat()}-{project_root.name}.yaml"
 
 
 def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
@@ -6460,12 +6454,7 @@ def _default_test_triage_review_path(project_root: Path, generated: date) -> Pat
     from science_tool.paths import resolve_paths
 
     doc_dir = resolve_paths(project_root).doc_dir
-    return (
-        doc_dir
-        / "audits"
-        / "benchmark-test-triage"
-        / f"{generated.isoformat()}-{project_root.name}.yaml"
-    )
+    return doc_dir / "audits" / "benchmark-test-triage" / f"{generated.isoformat()}-{project_root.name}.yaml"
 
 
 def _resolve_test_triage_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
@@ -6558,7 +6547,9 @@ def _write_test_triage_review_file(
 @benchmark_group.command("hint-candidates")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
-@click.option("--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count.")
+@click.option(
+    "--min-count", default=1, type=click.IntRange(min=1), show_default=True, help="Minimum visible term count."
+)
 @click.option("--include-existing", is_flag=True, help="Include terms already mapped by the benchmark hint lexicon.")
 @click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
 @click.option(

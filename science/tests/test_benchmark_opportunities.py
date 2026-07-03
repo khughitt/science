@@ -1153,7 +1153,9 @@ benchmark:
 
     datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
     labels = {
-        dataset.id: _readiness_label(_dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks))
+        dataset.id: _readiness_label(
+            _dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks)
+        )
         for dataset in datasets
     }
 
@@ -1202,7 +1204,8 @@ def _benchmark_test_row_for_triage(
             "type": "measured-outcome" if task_id else "",
             "description": "label" if task_id else "",
         },
-        "needs": needs or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
+        "needs": needs
+        or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
     }
 
 
@@ -1827,9 +1830,7 @@ benchmark:
     assert [row["task_id"] for row in payload["buckets"]["fallback-diagnostic"]] == [
         "dataset:mmrf-like#overall-survival"
     ]
-    assert payload["fallback_diagnostics"]["top_benchmarks"] == [
-        {"benchmark_id": "dataset:mmrf-like", "count": 1}
-    ]
+    assert payload["fallback_diagnostics"]["top_benchmarks"] == [{"benchmark_id": "dataset:mmrf-like", "count": 1}]
     assert payload["fallback_diagnostics"]["readiness_counts"] == {
         "runnable": 1,
         "stage-needed": 0,
@@ -3731,8 +3732,7 @@ type: hypothesis
 title: Report prose
 """,
         body=(
-            "Related details banner demonstrates promoted evidence. "
-            "Any current model over baseline should be reviewed."
+            "Related details banner demonstrates promoted evidence. Any current model over baseline should be reviewed."
         ),
     )
 
@@ -4170,10 +4170,7 @@ benchmark:
     assert len(candidates) == 3
     assert all(candidate["candidate_score"] > 0 for candidate in candidates)
     assert all("fallback:task-ready" in candidate["reason_notes"] for candidate in candidates)
-    assert all(
-        any(note.startswith("selected:") for note in candidate["reason_notes"])
-        for candidate in candidates
-    )
+    assert all(any(note.startswith("selected:") for note in candidate["reason_notes"]) for candidate in candidates)
     assert all(candidate["matched_hint_facets"] == [] for candidate in candidates)
     assert all(candidate["matched_missing_facets"] == [] for candidate in candidates)
 
@@ -4298,10 +4295,7 @@ benchmark:
 
     payload = gaps_report(tmp_path)
 
-    assert all(
-        row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:highest"
-        for row in payload["benchmark_gaps"]
-    )
+    assert all(row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:highest" for row in payload["benchmark_gaps"])
 
 
 def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
@@ -4701,9 +4695,7 @@ title: Temporal benchmark gap
     assert payload["aggregate"]["top_matched_hint_facets"] == [{"facet": "perturbation", "count": 1}]
 
 
-def test_gap_calibration_batch_preserves_commons_notices(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gap_calibration_batch_preserves_commons_notices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.benchmark_opportunities import benchmark_gap_calibration_batch
 
     project = tmp_path / "project"
@@ -4773,12 +4765,8 @@ benchmark:
     payload = benchmark_gap_calibration_batch(projects)
 
     assert payload["aggregate"]["fallback_candidate_rows"] == 2
-    assert payload["aggregate"]["top_fallback_reasons"] == [
-        {"reason": "fallback:task-ready", "count": 2}
-    ]
-    assert payload["aggregate"]["top_fallback_selection_reasons"] == [
-        {"reason": "selected:task-ready", "count": 2}
-    ]
+    assert payload["aggregate"]["top_fallback_reasons"] == [{"reason": "fallback:task-ready", "count": 2}]
+    assert payload["aggregate"]["top_fallback_selection_reasons"] == [{"reason": "selected:task-ready", "count": 2}]
     assert payload["aggregate"]["top_fallback_benchmark_shares"] == [
         {"benchmark_id": "dataset:ready", "count": 2, "share": 1.0}
     ]

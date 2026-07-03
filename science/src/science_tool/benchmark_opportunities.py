@@ -985,7 +985,9 @@ def baseline_score(dataset: OpportunityDataset, *, readiness: tuple[float, list[
     task = _task_completeness(dataset)
     signal, signal_notes = _facet_points(dataset.signal_types, HIGH_VALUE_SIGNAL_POINTS, 25)
     modality, modality_notes = _facet_points(dataset.modalities, HIGH_VALUE_MODALITY_POINTS, 20)
-    readiness_float, readiness_flags = readiness if readiness is not None else readiness_weight(dict(dataset.frontmatter))
+    readiness_float, readiness_flags = (
+        readiness if readiness is not None else readiness_weight(dict(dataset.frontmatter))
+    )
     readiness_points = round(readiness_float * 15)
     limitations = 10 if dataset.limitations else 0
     components = {
@@ -1312,7 +1314,9 @@ def _coverage_gaps(
     gaps: list[CoverageGapRow] = []
     for entity in entities:
         matched_facets = matched_by_entity.get(entity.id, set())
-        missing_modalities = sorted(token for token in GAP_MODALITIES if token in entity.tokens and token not in matched_facets)
+        missing_modalities = sorted(
+            token for token in GAP_MODALITIES if token in entity.tokens and token not in matched_facets
+        )
         missing_signal_types = sorted(
             token for token in GAP_SIGNAL_TYPES if token in entity.tokens and token not in matched_facets
         )
@@ -1380,8 +1384,7 @@ def _entity_facet_hints(entity: ProjectBenchmarkEntity) -> list[str]:
     for phrase, hint in FACET_HINT_PHRASES:
         phrase_len = len(phrase)
         has_phrase = any(
-            tuple(sequence[index : index + phrase_len]) == phrase
-            for index in range(len(sequence) - phrase_len + 1)
+            tuple(sequence[index : index + phrase_len]) == phrase for index in range(len(sequence) - phrase_len + 1)
         )
         if has_phrase:
             hints.add(hint)
@@ -1450,9 +1453,7 @@ class GapCandidateCounts(TypedDict):
 def _gap_candidate_counts(rows: list[BenchmarkGapRow]) -> GapCandidateCounts:
     candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
     entity_specific_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
+        candidate for candidate in candidates if candidate["matched_missing_facets"] or candidate["matched_hint_facets"]
     ]
     fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
     mode_counts: dict[CandidateMode, int] = {
@@ -1511,11 +1512,7 @@ _WORKFLOW_OR_MODELING_TERMS = frozenset(
 
 
 def _tokens_from_label(value: str) -> set[str]:
-    return {
-        token
-        for token in re.split(r"[^A-Za-z0-9]+", value.lower())
-        if token and len(token) > 1
-    }
+    return {token for token in re.split(r"[^A-Za-z0-9]+", value.lower()) if token and len(token) > 1}
 
 
 def _project_identity_tokens(project_root: Path) -> set[str]:
@@ -1580,8 +1577,7 @@ def _top_unmapped_terms(by_entity: dict[str, list[str]], *, top: int = 10) -> li
 
 def _term_rows_for_terms(by_entity: dict[str, list[str]], terms: set[str], *, top: int = 10) -> list[TermCountRow]:
     filtered = {
-        entity_id: [term for term in entity_terms if term in terms]
-        for entity_id, entity_terms in by_entity.items()
+        entity_id: [term for term in entity_terms if term in terms] for entity_id, entity_terms in by_entity.items()
     }
     return _top_unmapped_terms(filtered, top=top)
 
@@ -1945,16 +1941,8 @@ def _select_fallback_rows(
     while ordered and remaining > 0:
         first = ordered[0]
         tier_key = (first["candidate_score"], first["baseline_score"])
-        tier = [
-            row
-            for row in ordered
-            if (row["candidate_score"], row["baseline_score"]) == tier_key
-        ]
-        ordered = [
-            row
-            for row in ordered
-            if (row["candidate_score"], row["baseline_score"]) != tier_key
-        ]
+        tier = [row for row in ordered if (row["candidate_score"], row["baseline_score"]) == tier_key]
+        ordered = [row for row in ordered if (row["candidate_score"], row["baseline_score"]) != tier_key]
         rotated_tier, rotated = _rotated(tier, entity_id=entity_id)
         for row in rotated_tier[:remaining]:
             selected.append(_with_selection_reason(row, rotated=rotated and len(tier) > remaining))
@@ -2130,10 +2118,7 @@ def _display_path(path: Path) -> str:
 def _merged_top_facets(rows: list[BenchmarkGapRow], *, top: int) -> tuple[list[FacetCountRow], list[FacetCountRow]]:
     suggested = Counter(facet for row in rows for facet in row["suggested_search_facets"])
     matched = Counter(
-        facet
-        for row in rows
-        for candidate in row["candidate_benchmarks"]
-        for facet in candidate["matched_hint_facets"]
+        facet for row in rows for candidate in row["candidate_benchmarks"] for facet in candidate["matched_hint_facets"]
     )
     return _top_facet_counts(suggested, top=top), _top_facet_counts(matched, top=top)
 
@@ -2149,12 +2134,7 @@ def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[B
 
 
 def _fallback_candidates_from_rows(rows: list[BenchmarkGapRow]) -> list[GapCandidateBenchmarkRow]:
-    return [
-        candidate
-        for row in rows
-        for candidate in row["candidate_benchmarks"]
-        if _is_fallback_candidate(candidate)
-    ]
+    return [candidate for row in rows for candidate in row["candidate_benchmarks"] if _is_fallback_candidate(candidate)]
 
 
 def benchmark_gap_calibration_batch(
@@ -2329,14 +2309,10 @@ def _calibration_payload(
         for context in contexts
     }
     entity_tokens = {entity.id: sorted(entity.tokens) for entity in entities}
-    benchmark_tokens = {
-        context.dataset.id: sorted(_calibration_benchmark_tokens(context)) for context in contexts
-    }
+    benchmark_tokens = {context.dataset.id: sorted(_calibration_benchmark_tokens(context)) for context in contexts}
     matched_evidence = _calibration_match_evidence(entities, contexts, matched_rows)
     benchmark_broad_facets = {
-        stable_id: sorted(evidence.broad)
-        for stable_id, evidence in benchmark_facet_evidence.items()
-        if evidence.broad
+        stable_id: sorted(evidence.broad) for stable_id, evidence in benchmark_facet_evidence.items() if evidence.broad
     }
     return {
         "enabled": True,
@@ -2933,7 +2909,9 @@ def _benchmark_test_fallback_rollups(
 
         task_types = _distinct_row_strings(group_rows, lambda row: row["task_type"])
         if len(task_types) > 1:
-            raise ValueError(f"fallback rollup has inconsistent task types for {_rollup_task_label(benchmark_id, task_id)}")
+            raise ValueError(
+                f"fallback rollup has inconsistent task types for {_rollup_task_label(benchmark_id, task_id)}"
+            )
 
         support_reasons = _distinct_row_strings(group_rows, lambda row: row["task_support_reason"])
         if len(support_reasons) > 1:

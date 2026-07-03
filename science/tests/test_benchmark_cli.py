@@ -749,9 +749,7 @@ title: Cytogenetic benchmark gap
     assert f"wrote benchmark hint candidate review file: {review_path}" in result.stderr
 
 
-def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     _write_entity(
         tmp_path,
@@ -1687,9 +1685,7 @@ benchmark:
     assert "none:1" not in result.output
 
 
-def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path: Path, monkeypatch) -> None:
     def fake_benchmark_test_triage_report(*args, **kwargs):
         return {
             "summary": {
@@ -1871,9 +1867,7 @@ benchmark:
     }
 
 
-def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
     _write_entity(
         tmp_path,
@@ -1933,9 +1927,7 @@ benchmark:
     assert written["fallback_diagnostics"]["rollups"] == []
 
 
-def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     result = _invoke_test_triage(
