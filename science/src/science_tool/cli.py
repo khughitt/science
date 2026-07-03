@@ -25,6 +25,7 @@ from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
 from science_tool.datasets.validate import validate_path
+from science_tool.datasets_identity import identity_group as dataset_identity_group
 from science_tool.doi_cli import doi_group
 from science_tool.distill_cli import distill_group
 from science_tool.entities import (
@@ -6696,6 +6697,9 @@ def benchmark_gaps(
 @main.group("dataset")
 def dataset_group() -> None:
     """Dataset entity lifecycle commands (list, register-run, reconcile)."""
+
+
+dataset_group.add_command(dataset_identity_group)
 
 
 @dataset_group.command("list")
