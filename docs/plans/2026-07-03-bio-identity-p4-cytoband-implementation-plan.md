@@ -175,6 +175,7 @@ Create `datasets/cytoband-hg19/recipe/fetch.py` with the same operator-run shape
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import os
 import urllib.parse
@@ -235,6 +236,7 @@ def fetch_source(
     output_path = output_dir / SOURCE_RESOURCE_PATH
     candidate_path = output_path.with_name(output_path.name + ".candidate")
     sha256, byte_count = _download(normalized_url, candidate_path)
+    decompressed_rows = count_source_rows(candidate_path)
     observed_lock = {
         "resources": {
             RESOURCE_NAME: {
@@ -242,6 +244,7 @@ def fetch_source(
                 "path": SOURCE_RESOURCE_PATH.as_posix(),
                 "sha256": sha256,
                 "bytes": byte_count,
+                "decompressed_rows": decompressed_rows,
             }
         }
     }
@@ -290,6 +293,11 @@ def _download(url: str, output_path: Path) -> tuple[str, int]:
             fh.write(chunk)
     tmp_path.replace(output_path)
     return digest.hexdigest(), byte_count
+
+
+def count_source_rows(path: Path) -> int:
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+        return sum(1 for line in handle if line.rstrip("\n"))
 
 
 def main() -> None:
@@ -374,8 +382,10 @@ def build_dataset(
     cytobands_path = data_dir / CYTOBANDS_RESOURCE_PATH
     write_cytobands(cytobands_path, rows)
     cytobands_hash, cytobands_bytes = stream_sha256_and_bytes(cytobands_path)
-    write_datapackage(datapackage_path, cytobands_hash=cytobands_hash, cytobands_bytes=cytobands_bytes)
-    update_entity(entity_path, row_count=len(rows))
+    previous_hash = read_existing_cytobands_hash(datapackage_path)
+    if previous_hash != cytobands_hash:
+        write_datapackage(datapackage_path, cytobands_hash=cytobands_hash, cytobands_bytes=cytobands_bytes)
+        update_entity(entity_path, row_count=len(rows))
 
 
 def parse_source_rows(path: Path) -> list[dict[str, str]]:
@@ -469,6 +479,22 @@ def write_datapackage(path: Path, *, cytobands_hash: str, cytobands_bytes: int) 
         ],
     }
     path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+
+
+def read_existing_cytobands_hash(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return None
+    resources = raw.get("resources")
+    if not isinstance(resources, list):
+        return None
+    for resource in resources:
+        if isinstance(resource, dict) and resource.get("name") == "cytobands":
+            value = resource.get("hash")
+            return value if isinstance(value, str) else None
+    return None
 
 
 def update_entity(path: Path, *, row_count: int) -> None:
@@ -739,6 +765,8 @@ sed -n '1,20p' science/tests/fixtures/commons/cytoband-data/cytoband-hg19/cytoba
 ```
 
 Expected: three fixture files exist and `cytobands.csv` has four data rows.
+
+This reduced fixture intentionally omits the real datapackage resource `source` block. `science_tool.commons.resolver.resolve` reads `path`, `hash`, and `bytes`; keeping `source` out of the reduced fixture avoids duplicating production metadata that the runtime does not consume.
 
 - [ ] **Step 3: Commit fixture**
 
@@ -1040,9 +1068,9 @@ assert derived["derivation"]["transformations"] == [
 assert "workflow-run:wf-r1" not in _frontmatter(tmp_path / "entities" / "datasets" / "cytoband-hg19.md")["consumed_by"]
 ```
 
-- [ ] **Step 2: Add or update validation happy-path test for the real slug**
+- [ ] **Step 2: Update the validation happy path to use the real slug**
 
-In `science/tests/validate/test_checks_identity_context.py`, update the proxy happy-path test so the reference dataset is:
+In `science/tests/validate/test_checks_identity_context.py`, update exactly `test_declared_unresolved_proxy_passes_provenance_when_roles_are_routed` so the reference dataset is:
 
 ```python
 via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-hg19")
@@ -1058,7 +1086,12 @@ and the derived identity/provenance use:
 "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-hg19", "type": "cytoband_proxy"}]
 ```
 
-Keep negative tests with synthetic/missing slugs if they are specifically testing missing-reference behavior.
+Do not migrate the negative proxy tests:
+
+- `test_proxy_via_missing_real_dataset_entity_errors` keeps `dataset:missing-cytoband-map` because it proves missing reference detection.
+- `test_proxy_source_absent_from_derivation_inputs_errors` keeps `dataset:cytoband-map` because it isolates missing source-role behavior.
+- `test_proxy_source_only_in_transformations_not_inputs_errors` keeps `dataset:cytoband-map` because it isolates source/reference role separation.
+- `test_mixed_build_proxy_with_blank_source_dataset_errors_as_unstructured` keeps `dataset:proxy` because the proxy shape is intentionally malformed.
 
 - [ ] **Step 3: Run proxy provenance tests**
 
@@ -1139,13 +1172,13 @@ Run from `~/d/science/.worktrees/bio-identity-p4-cytoband`:
 ```bash
 uv run --frozen pytest \
   science/tests/test_commons_cytoband.py \
-  science/tests/test_dataset_register_run.py::test_register_run_proxy_output_preserves_unresolved_proxy_and_routes_sources \
+  science/tests/test_dataset_register_run.py \
   science/tests/validate/test_checks_identity_context.py -q
 ```
 
 Expected: all selected tests pass.
 
-- [ ] **Step 3: Run Ruff on changed Python files**
+- [ ] **Step 3: Run Ruff and Pyright on changed Python surfaces**
 
 Run:
 
@@ -1155,9 +1188,10 @@ uv run --frozen ruff check \
   science/tests/test_commons_cytoband.py \
   science/tests/test_dataset_register_run.py \
   science/tests/validate/test_checks_identity_context.py
+uv run --frozen pyright science/src/science_tool/commons/cytoband.py science/tests/test_commons_cytoband.py
 ```
 
-Expected: Ruff exits 0.
+Expected: Ruff and Pyright exit 0.
 
 - [ ] **Step 4: Check docs and worktree state**
 
