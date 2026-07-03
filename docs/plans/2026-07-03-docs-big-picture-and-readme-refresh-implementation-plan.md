@@ -18,30 +18,23 @@
 - **datasets phrasing (verbatim):** runtime surface is `datapackage.yaml`; `datapackage.json` is also accepted. Never say only "JSON".
 - **Content source of truth:** the design doc sections A–F. Do not invent content that contradicts them.
 
-**Reusable verification snippets** (run from worktree root):
+**Working directory (verbatim):** Every command block in this plan is written to run from the **worktree root** (`.worktrees/docs-big-picture-readme-refresh/`). `cd` there once at the start of a work session; the blocks below do **not** re-`cd` into the worktree (that path does not exist *from* the worktree root). Blocks that need a package dir use a relative `cd science` / `cd science/model`, which resolves correctly from the worktree root.
+
+**Reusable link-check helper.** Verification blocks that need it **define it inline** (each block is self-contained — do not rely on a definition from an earlier block). The canonical definition to paste is:
 
 ```bash
-# LINK-CHECK: every relative .md link in FILE resolves (links are relative to FILE's dir)
+# check_links FILE — every relative .md link in FILE resolves (links are relative to FILE's dir)
 check_links() {
-  local f="$1"; local d; d="$(dirname "$f")"
+  local f="$1" d; d="$(dirname "$f")"
   grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' \
     | grep -E '\.md$' | while read -r l; do
         case "$l" in /*|http*) continue;; esac
         [ -f "$d/$l" ] || echo "MISSING from $f -> $l"
       done
 }
-# CMD-DRIFT: every `science <word>` in FILE is a real top-level CLI group/command
-check_cmds() {
-  local f="$1"
-  comm -23 \
-    <(grep -oE 'science [a-z][a-z-]+' "$f" | awk '{print $2}' | sort -u) \
-    <(grep -oE '@main\.(group|command)\("?[a-z-]+' science/src/science_tool/cli.py \
-        | sed -E 's/.*"([a-z-]+).*/\1/' | sort -u) \
-  | grep -v -E '^(bib|validate|health|graph|tasks|sync|peers)$' || true   # allowlist known multi-word/aliased
-}
 ```
 
-> Note on `check_cmds`: it prints command tokens present in the doc but not found as a literal `@main.group/command` name. A non-empty result is a prompt to hand-verify (some real commands are subcommands or use `name=`/aliases), not an automatic failure. The allowlist covers tokens known-good from the current README.
+**CLI command verification.** README CLI commands are verified per full command with `--help` (see Task 5), NOT by token matching — a typo like `science graph buidl` must fail. Slash commands (`/science:*`) are verified by the existence of their `commands/<name>.md` file, since they are not CLI subcommands.
 
 ---
 
@@ -75,10 +68,10 @@ Content per design section A. Requirements the file MUST satisfy (verified below
 - [ ] **Step 3: Verify links + naming guard**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
-source /dev/stdin <<'EOF'
-<paste the check_links function from Global Constraints>
-EOF
+# run from worktree root
+check_links() { local f="$1" d; d="$(dirname "$f")"; \
+  grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
+  | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 check_links docs/user-guide/big-picture.md      # expect: no output
 check_links docs/user-guide/index.md            # expect: no output
 grep -c 'big-picture-synthesis.md' docs/user-guide/index.md   # expect: >=1 (row preserved)
@@ -110,7 +103,7 @@ Implements design **B** and the Codex half of **F**.
 - [ ] **Step 1: Move the file (preserve history)**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
+# run from worktree root
 git mv docs/README.codex.md docs/user-guide/codex.md
 ```
 
@@ -134,6 +127,10 @@ Add near the Agent Workflows row:
 - [ ] **Step 5: Verify no dangling old path + links resolve**
 
 ```bash
+# run from worktree root
+check_links() { local f="$1" d; d="$(dirname "$f")"; \
+  grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
+  | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 rg -n 'README\.codex\.md' . -g '!.git'          # expect: no output
 check_links docs/user-guide/codex.md             # expect: no output
 check_links docs/user-guide/index.md             # expect: no output
@@ -183,7 +180,10 @@ Exactly one line:
 - [ ] **Step 3: Verify**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
+# run from worktree root
+check_links() { local f="$1" d; d="$(dirname "$f")"; \
+  grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
+  | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 test "$(cat CLAUDE.md)" = "@AGENTS.md" && echo OK-pointer
 grep -q 'no root `pyproject.toml`' AGENTS.md && echo OK-nested-note
 grep -q 'cd science && uv run --frozen pytest' AGENTS.md && echo OK-test-cmd
@@ -215,7 +215,7 @@ Implements design **D**.
 - [ ] **Step 1: Read current state**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
+# run from worktree root
 sed -n '1,90p' templates/agents-md.md
 rg -n -i 'agents\.md|curate|decisions' commands/create-project.md
 ```
@@ -232,14 +232,22 @@ Add a short, explicit note — same substance in both places:
 - In `templates/agents-md.md` top comment (or a `<!-- -->` note): `/science:curate` refreshes the load-bearing-constraints digest from `core/decisions.md`, but the **static body of this template only applies at create/import time** — there is no push-to-existing-projects mechanism for the boilerplate; edit your project's `AGENTS.md` directly for body changes.
 - In `commands/create-project.md`, in the AGENTS.md scaffold guidance, state the same: the scaffold is written once at project creation; ongoing changes to the template do not propagate to existing projects; `/science:curate` only manages the constraints digest.
 
-- [ ] **Step 4: Verify**
+- [ ] **Step 4: Verify (each claim proven by its own grep, not a lax OR)**
 
 ```bash
+# run from worktree root
+# managed block preserved
 grep -q 'BEGIN: load-bearing-constraints' templates/agents-md.md && echo OK-managed-block
-grep -qi 'create/import time\|does not propagate\|only applies at create' templates/agents-md.md && echo OK-tmpl-note
-grep -qi 'curate\|does not propagate\|written once' commands/create-project.md && echo OK-cmd-note
+# template note asserts BOTH: curate manages only the digest AND the body does not propagate
+grep -qi 'curate' templates/agents-md.md && echo OK-tmpl-curate
+grep -qiE 'create/import time|only applies at create|written once' templates/agents-md.md && echo OK-tmpl-once
+grep -qiE 'does not propagate|no push|not.*propagate' templates/agents-md.md && echo OK-tmpl-nopush
+# create-project.md note asserts the SAME three facts, independently
+grep -qi 'curate' commands/create-project.md && echo OK-cmd-curate
+grep -qiE 'create/import time|only applies at create|written once' commands/create-project.md && echo OK-cmd-once
+grep -qiE 'does not propagate|no push|not.*propagate' commands/create-project.md && echo OK-cmd-nopush
 ```
-Expected: all three `OK-*`.
+Expected: all seven `OK-*` lines print. Any missing line means that specific claim is absent — add it.
 
 - [ ] **Step 5: Commit**
 
@@ -276,17 +284,34 @@ Sections in order, per design E:
 
 Remove: the full Command Map table and the Canonical References wall (both now live in the guide).
 
-- [ ] **Step 2: Verify command drift + links + datapackage phrasing**
+- [ ] **Step 2: Verify command drift (full commands via `--help`), links, phrasing**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
-check_cmds README.md         # inspect any output; hand-verify each token is a real command/subcommand
+# run from worktree root
+check_links() { local f="$1" d; d="$(dirname "$f")"; \
+  grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
+  | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 check_links README.md        # expect: no MISSING
+
+# Each CLI command in the shortlist must resolve as a FULL command (group + subcommand),
+# not just a valid group — a typo like "graph buidl" must fail here.
+# Edit this list to match the exact CLI commands you put in the README shortlist.
+( cd science && for c in "graph build" "evidence-lines create" "validate"; do
+    uv run --frozen science $c --help >/dev/null 2>&1 \
+      && echo "OK-cli: science $c" || echo "BAD-cli: science $c"
+  done )
+
+# Each slash command in the shortlist must have a backing command file.
+# Edit this list to match the slash commands you put in the README shortlist.
+for s in create-project status next-steps; do
+  [ -f "commands/$s.md" ] && echo "OK-slash: /science:$s" || echo "MISSING-slash: /science:$s"
+done
+
 grep -q 'datapackage.yaml' README.md && echo OK-yaml
 ! grep -qE '\| Intent \| Claude \| Codex \| CLI \|' README.md && echo OK-table-removed
 grep -q 'evidence-lines create' README.md && echo OK-first-class-wrapper
 ```
-Expected: `check_cmds` output empty or all-hand-verified; no `MISSING`; `OK-yaml`, `OK-table-removed`, `OK-first-class-wrapper`.
+Expected: no `MISSING` links; every `OK-cli:` / `OK-slash:` prints with **no** `BAD-cli:` or `MISSING-slash:` lines; `OK-yaml`, `OK-table-removed`, `OK-first-class-wrapper`.
 
 - [ ] **Step 3: Commit**
 
@@ -307,7 +332,10 @@ Catches drift introduced across tasks (index completeness, dangling links repo-w
 - [ ] **Step 1: Repo-wide link + reference audit**
 
 ```bash
-cd .worktrees/docs-big-picture-readme-refresh
+# run from worktree root
+check_links() { local f="$1" d; d="$(dirname "$f")"; \
+  grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
+  | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 for f in README.md AGENTS.md docs/user-guide/*.md; do check_links "$f"; done   # expect: no MISSING
 rg -n 'README\.codex\.md' . -g '!.git'          # expect: no output
 # every user-guide .md (except index) appears in the index chapter table:
@@ -344,6 +372,8 @@ git commit -m "docs: cross-doc consistency pass for guide restructure"   # skip 
 
 **Placeholder scan:** No "TBD"/"handle edge cases"/"similar to". Prose content is specified as concrete required-content bullets + verifiable assertions, deferring full paragraphs to the design doc (the content SSOT) by explicit section reference — not a placeholder. ✓
 
-**Consistency:** File paths, the `check_links`/`check_cmds` helpers, the `datapackage.yaml` phrasing, the `science evidence-lines create` wrapper, and the "Big Picture" vs "Big-Picture Synthesis" names are used identically across tasks. ✓
+**Consistency:** File paths, the inlined self-contained `check_links` helper, the `datapackage.yaml` phrasing, the `science evidence-lines create` wrapper, and the "Big Picture" vs "Big-Picture Synthesis" names are used identically across tasks. ✓
 
-**Note:** Verification is grep-based (no markdown test runner exists); each task's verify step asserts the concrete facts that must appear, which is the doc-work analogue of a passing test.
+**Executability:** All command blocks run from the worktree root with no `cd` into a nonexistent nested worktree path; each verification block defines any helper it uses inline (no cross-block dependency, no placeholders). CLI commands are verified per full command via `--help` (so a subcommand typo fails), and slash commands via their `commands/<name>.md` file. ✓
+
+**Note:** Verification is grep/`--help`-based (no markdown test runner exists); each task's verify step asserts the concrete facts that must appear, which is the doc-work analogue of a passing test.
