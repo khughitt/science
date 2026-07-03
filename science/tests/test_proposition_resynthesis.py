@@ -215,6 +215,119 @@ def test_build_resynthesis_scaffold_emits_identity_context_and_empty_review_fiel
     assert payload["context"]["observed_statement_hints"] == list(ctx["action"].inputs["observed_statement_hints"])
 
 
+def test_build_resynthesis_context_packet_expands_scaffold_with_live_context(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(
+        draft_to_json(
+            build_resynthesis_scaffold(
+                ctx["plan"],
+                requested_action_id=ctx["action"].action_id,
+                source_review=str(ctx["review_path"]),
+                model="codex-gpt-5",
+            )
+        )
+    )
+
+    packet = build_resynthesis_context_packet(
+        tmp_path,
+        draft,
+        draft_path="resynthesis-draft.json",
+    )
+
+    assert packet["schema_version"] == 1
+    assert packet["source"] == "derived:proposition-resynthesis-context-v1"
+    assert packet["draft_path"] == "resynthesis-draft.json"
+    assert packet["action_id"] == ctx["action"].action_id
+    assert packet["candidate_id"] == ctx["action"].candidate_id
+    assert packet["judgment_id"] == ctx["action"].judgment_id
+    assert packet["original_proposition"]["id"] == "proposition:broad"
+    assert packet["original_proposition"]["title"] == "BES behaves like pooled meta-analysis"
+    assert "Claim body." in packet["original_proposition"]["body"]
+    assert packet["original_proposition"]["frontmatter"] == {
+        "subject": None,
+        "predicate": None,
+        "object": None,
+        "polarity": None,
+        "claim_layer": None,
+        "identification_strength": None,
+        "source_refs": [
+            "paper:A2020",
+            "annotation:entities/papers/A2020.source#a1",
+            "paper:B2021",
+            "annotation:entities/papers/B2021.source#b1",
+        ],
+    }
+    assert packet["review"] == {
+        "decision": "factorization_needs_resynthesis",
+        "confidence": "high",
+        "rationale": "The broad proposition mixes distinct literature claims.",
+    }
+    assert packet["input_annotations"] == [
+        {
+            "annotation": "annotation:entities/papers/A2020.source#a1",
+            "paper": "paper:A2020",
+            "stance": "asserted",
+            "section": "results",
+            "exact": "a1",
+            "subject": None,
+            "object": None,
+            "subject_concept": None,
+            "object_concept": None,
+            "current_promoted_to": "proposition:broad",
+        },
+        {
+            "annotation": "annotation:entities/papers/B2021.source#b1",
+            "paper": "paper:B2021",
+            "stance": "negated",
+            "section": "results",
+            "exact": "b1",
+            "subject": None,
+            "object": None,
+            "subject_concept": None,
+            "object_concept": None,
+            "current_promoted_to": "proposition:broad",
+        },
+    ]
+    assert packet["draft_progress"] == {
+        "disposition": "replace",
+        "new_propositions": [],
+        "annotation_assignments": [],
+        "notes": "",
+    }
+    assert packet["constraints"]["required_assignment_annotations"] == [
+        "annotation:entities/papers/A2020.source#a1",
+        "annotation:entities/papers/B2021.source#b1",
+    ]
+    assert packet["output_contract"]["validate_with"] == (
+        "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/resynthesis-draft.json"
+    )
+
+
+def test_resynthesis_context_finds_original_proposition_by_id_not_replacement_path(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    original_path = tmp_path / "entities" / "propositions" / "broad.md"
+    relocated_path = tmp_path / "entities" / "propositions" / "legacy" / "broad-legacy-layout.md"
+    relocated_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.rename(relocated_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    packet = build_resynthesis_context_packet(tmp_path, draft, draft_path="draft.json")
+
+    assert packet["original_proposition"]["id"] == "proposition:broad"
+    assert packet["original_proposition"]["title"] == "BES behaves like pooled meta-analysis"
+    assert "Claim body." in packet["original_proposition"]["body"]
+
+
 def _draft_payload(ctx: dict) -> dict:
     return {
         "schema_version": 1,
