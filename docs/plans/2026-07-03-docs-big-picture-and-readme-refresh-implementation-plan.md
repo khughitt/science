@@ -131,7 +131,7 @@ Add near the Agent Workflows row:
 check_links() { local f="$1" d; d="$(dirname "$f")"; \
   grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
   | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
-rg -n 'README\.codex\.md' . -g '!.git'          # expect: no output
+rg -n 'README\.codex\.md' . -g '!.git' -g '!docs/plans/**' -g '!docs/audits/**'   # expect: no output (this plan, the design doc, and audit logs legitimately record the old->new move)
 check_links docs/user-guide/codex.md             # expect: no output
 check_links docs/user-guide/index.md             # expect: no output
 ```
@@ -337,7 +337,7 @@ check_links() { local f="$1" d; d="$(dirname "$f")"; \
   grep -oE '\]\(([^)]+)\)' "$f" | sed -E 's/^\]\(([^)#]+).*/\1/' | grep -E '\.md$' \
   | while read -r l; do case "$l" in /*|http*) continue;; esac; [ -f "$d/$l" ] || echo "MISSING from $f -> $l"; done; }
 for f in README.md AGENTS.md docs/user-guide/*.md; do check_links "$f"; done   # expect: no MISSING
-rg -n 'README\.codex\.md' . -g '!.git'          # expect: no output
+rg -n 'README\.codex\.md' . -g '!.git' -g '!docs/plans/**' -g '!docs/audits/**'   # expect: no output (this plan, the design doc, and audit logs legitimately record the old->new move)
 # every user-guide .md (except index) appears in the index chapter table:
 for f in docs/user-guide/*.md; do b="$(basename "$f")"; [ "$b" = index.md ] && continue; \
   grep -q "($b)" docs/user-guide/index.md || echo "NOT IN INDEX: $b"; done
