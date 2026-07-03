@@ -41,8 +41,11 @@ pointer down into the existing detailed chapters.
      analyses
    - uncertainty, contestation, and fragility stay visible (fail-early,
      explicit-over-defensive)
-2. **The substrate** — authored markdown/YAML entity files are the source of
-   truth; graph, summaries, snapshots, and health are *derived views*;
+   → full detail: `introduction.md`, `epistemic-model.md`
+2. **The substrate** — authored project files (especially Markdown/YAML entity
+   files, but also bibliography, source records, sidecar annotations, terms,
+   and manifests) are the source of truth; graph, summaries, snapshots, and
+   health are *derived views*;
    **heterogeneous patchwork** of small epistemic neighborhoods; **commons**
    (shared datasets / reference graphs, peers & sync); fix-the-source-then-
    rebuild-the-graph (never patch generated TriG).
@@ -86,7 +89,13 @@ project's guide). Contents:
 - **Nested packages, no root `pyproject.toml`.** CLI / package work runs from
   `science/`; model work from `science/model/`. State this explicitly — it is
   the most common orientation mistake.
-- **Validation / tests** — how to run the suite.
+- **Validation / tests** — concrete command patterns (there is no root
+  `pyproject.toml`, so tests run from each package dir):
+  - CLI package: `cd science && uv run --frozen pytest`
+  - Model package: `cd science/model && uv run --frozen pytest`
+  - Default pytest excludes the `snapshot` and `real_projects` markers; name
+    the opt-in forms (`-m snapshot`, `-m real_projects`).
+  - Lint / types under `science/`: `uv run ruff check` and `uv run pyright`.
 - **Conventions** — reference (do not duplicate) the global rules:
   composition > inheritance, explicit > defensive, fail-early / no silent
   fallbacks, no "legacy"/"compat" layers unless asked, no `Unified` prefix,
