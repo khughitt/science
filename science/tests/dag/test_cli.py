@@ -168,3 +168,61 @@ def test_cli_dag_number_is_idempotent(cli_project: Path) -> None:
     assert r2.exit_code == 0
     second = (cli_project / "doc/figures/dags/h1-progression-numbered.dot").read_text()
     assert first == second
+
+
+def test_cli_dag_retired_edges_json_reports_migration_summary(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    description: Retired edge text.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edges", "--project", str(project), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["files"] == 1
+    assert payload["summary"]["migration_worthy_edges"] == 1
+    assert "RETIRED" not in result.stderr
+
+
+def test_cli_dag_retired_edges_table_reports_orphans(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "orphan.edges.yaml").write_text(
+        "dag: orphan\nedges:\n  - id: 1\n    source: a\n    target: b\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["dag", "retired-edges", "--project", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert "orphan" in result.output
+    assert "orphan-dot" in result.output
+
+
+def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
+    # Banner goes to STDERR so stdout stays pure JSON.
+    result = CliRunner().invoke(main, ["dag", "schema"])
+
+    assert result.exit_code == 0
+    assert "RETIRED" in result.stderr
+    assert "edges.yaml" in result.stderr
+    json.loads(result.stdout)

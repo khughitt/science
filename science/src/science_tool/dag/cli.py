@@ -321,6 +321,58 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# retired-edges
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("retired-edges")
+@click.option(
+    "--dag",
+    "slug",
+    default=None,
+    help="Inspect one retired DAG edge file. Defaults to every *.edges.yaml file.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def retired_edges_cmd(slug: str | None, output_format: str, project_path: Path | None) -> None:
+    """Inspect retired *.edges.yaml files for migration diagnostics."""
+    from science_tool.dag.retired_edges import build_retired_edges_report
+
+    project = (project_path or Path.cwd()).resolve()
+    report = build_retired_edges_report(project, dag=slug)
+    payload = report.to_json()
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "Retired DAG edges: "
+        f"{summary['files']} file(s), {summary['edges']} edge(s), "
+        f"{summary['migration_worthy_edges']} migration-worthy edge(s)."
+    )
+    for file in payload["files"]:
+        flags = []
+        if file["orphan_dot"]:
+            flags.append("orphan-dot")
+        flag_text = f" [{' '.join(flags)}]" if flags else ""
+        click.echo(f"  {file['dag']}: {file['edge_count']} edge(s){flag_text}")
+
+
+# ---------------------------------------------------------------------------
 # schema
 # ---------------------------------------------------------------------------
 
@@ -334,14 +386,19 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
     help="Write the JSON Schema to this file; default: stdout.",
 )
 def schema_cmd(output_path: Path | None) -> None:
-    """Emit the JSON Schema for edges.yaml files."""
+    """Emit the JSON Schema for retired edges.yaml migration inspection."""
     schema = EdgesYamlFile.model_json_schema()
     canonical = json.dumps(schema, indent=2, sort_keys=True) + "\n"
+    banner = (
+        "RETIRED: this schema describes the retired *.edges.yaml migration surface, "
+        "not an active DAG authoring input.\n"
+    )
+    click.echo(banner, nl=False, err=True)
     if output_path is None:
         click.echo(canonical, nl=False)
     else:
         output_path.write_text(canonical, encoding="utf-8")
-        click.echo(f"Wrote {output_path}")
+        click.echo(f"Wrote retired edges.yaml schema to {output_path}")
 
 
 # ---------------------------------------------------------------------------
