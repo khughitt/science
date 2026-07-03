@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict, cast
@@ -573,6 +573,11 @@ class HintCandidatesReport(TypedDict):
 TestPlanState = Literal["concrete", "draft-needed"]
 PrioritySource = Literal["opportunity-relative", "gap-candidate", "gap-fallback"]
 ReadinessLabel = Literal["runnable", "stage-needed", "metadata-only", "blocked"]
+TaskSupportCountKey = Literal["supported", "candidate", "blocked", "none"]
+
+READINESS_LABELS: tuple[ReadinessLabel, ...] = ("runnable", "stage-needed", "metadata-only", "blocked")
+DATASET_CLASSES: tuple[DatasetClass, ...] = ("deposit", "reference", "pointer")
+TASK_SUPPORT_COUNT_KEYS: tuple[TaskSupportCountKey, ...] = ("supported", "candidate", "blocked", "none")
 
 
 class BenchmarkTestScoreComponents(TypedDict):
@@ -669,6 +674,11 @@ class BenchmarkTestSuppressedBlockedSupportDiagnostics(TypedDict):
 class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
     top_benchmarks: list[BenchmarkCountRow]
     top_facets: list[FacetCountRow]
+    readiness_counts: dict[ReadinessLabel, int]
+    dataset_class_counts: dict[DatasetClass, int]
+    task_support_counts: dict[TaskSupportCountKey, int]
+    top_benchmarks_by_readiness: dict[ReadinessLabel, list[BenchmarkCountRow]]
+    top_benchmarks_by_dataset_class: dict[DatasetClass, list[BenchmarkCountRow]]
     suppressed_blocked_support: NotRequired[BenchmarkTestSuppressedBlockedSupportDiagnostics]
 
 
@@ -2756,7 +2766,7 @@ def _benchmark_test_triage_bucket_counts(
     return {bucket: len(buckets[bucket]) for bucket in BENCHMARK_TEST_TRIAGE_BUCKETS}
 
 
-def _benchmark_test_readiness_counts(rows: list[BenchmarkTestRow]) -> dict[ReadinessLabel, int]:
+def _benchmark_test_readiness_counts(rows: Sequence[BenchmarkTestRow]) -> dict[ReadinessLabel, int]:
     counts: dict[ReadinessLabel, int] = {
         "runnable": 0,
         "stage-needed": 0,
@@ -2782,6 +2792,67 @@ def _top_triage_facet_counts(rows: list[BenchmarkTestTriageRow], *, top: int = 1
         {"facet": facet, "count": count}
         for facet, count in sorted(counter.items(), key=lambda item: (-item[1], _facet_sort_key(item[0])))[:top]
     ]
+
+
+def _benchmark_test_dataset_class_counts(rows: list[BenchmarkTestTriageRow]) -> dict[DatasetClass, int]:
+    counts: dict[DatasetClass, int] = {dataset_class: 0 for dataset_class in DATASET_CLASSES}
+    for row in rows:
+        counts[row["dataset_class"]] += 1
+    return counts
+
+
+def _task_support_count_key(row: BenchmarkTestTriageRow) -> TaskSupportCountKey:
+    state = row["task_support_state"]
+    return state if state is not None else "none"
+
+
+def _benchmark_test_task_support_counts(rows: list[BenchmarkTestTriageRow]) -> dict[TaskSupportCountKey, int]:
+    counts: dict[TaskSupportCountKey, int] = {key: 0 for key in TASK_SUPPORT_COUNT_KEYS}
+    for row in rows:
+        counts[_task_support_count_key(row)] += 1
+    return counts
+
+
+def _top_triage_benchmark_counts_by_readiness(
+    rows: list[BenchmarkTestTriageRow],
+    *,
+    top: int = 10,
+) -> dict[ReadinessLabel, list[BenchmarkCountRow]]:
+    return {
+        readiness: _top_triage_benchmark_counts(
+            [row for row in rows if row["readiness_label"] == readiness],
+            top=top,
+        )
+        for readiness in READINESS_LABELS
+    }
+
+
+def _top_triage_benchmark_counts_by_dataset_class(
+    rows: list[BenchmarkTestTriageRow],
+    *,
+    top: int = 10,
+) -> dict[DatasetClass, list[BenchmarkCountRow]]:
+    return {
+        dataset_class: _top_triage_benchmark_counts(
+            [row for row in rows if row["dataset_class"] == dataset_class],
+            top=top,
+        )
+        for dataset_class in DATASET_CLASSES
+    }
+
+
+def _benchmark_test_fallback_diagnostics(
+    rows: list[BenchmarkTestTriageRow],
+) -> BenchmarkTestTriageFallbackDiagnostics:
+    return {
+        "top_benchmarks": _top_triage_benchmark_counts(rows),
+        "top_facets": _top_triage_facet_counts(rows),
+        "readiness_counts": _benchmark_test_readiness_counts(rows),
+        "dataset_class_counts": _benchmark_test_dataset_class_counts(rows),
+        "task_support_counts": _benchmark_test_task_support_counts(rows),
+        "top_benchmarks_by_readiness": _top_triage_benchmark_counts_by_readiness(rows),
+        "top_benchmarks_by_dataset_class": _top_triage_benchmark_counts_by_dataset_class(rows),
+    }
 
 
 def _is_blocked_support_fallback(row: BenchmarkTestRow) -> bool:
@@ -3124,10 +3195,7 @@ def benchmark_test_triage_report(
         buckets[bucket].append(_benchmark_test_triage_row(row))
 
     fallback_rows = buckets["fallback-diagnostic"]
-    fallback_diagnostics: BenchmarkTestTriageFallbackDiagnostics = {
-        "top_benchmarks": _top_triage_benchmark_counts(fallback_rows),
-        "top_facets": _top_triage_facet_counts(fallback_rows),
-    }
+    fallback_diagnostics = _benchmark_test_fallback_diagnostics(fallback_rows)
     if suppressed_blocked_support_rows:
         suppressed_triage_rows = [_benchmark_test_triage_row(row) for row in suppressed_blocked_support_rows]
         fallback_diagnostics["suppressed_blocked_support"] = {

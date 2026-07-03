@@ -1448,7 +1448,89 @@ benchmark:
     assert payload["summary"]["bucket_counts"]["fallback-diagnostic"] == len(fallback_rows)
     assert payload["fallback_diagnostics"]["top_benchmarks"][0]["benchmark_id"].startswith("dataset:fallback-")
     assert payload["fallback_diagnostics"]["top_facets"][0] == {"facet": "proteomics", "count": 2}
+    assert payload["fallback_diagnostics"]["readiness_counts"] == {
+        "runnable": 2,
+        "stage-needed": 0,
+        "metadata-only": 0,
+        "blocked": 0,
+    }
+    assert payload["fallback_diagnostics"]["dataset_class_counts"] == {
+        "deposit": 2,
+        "reference": 0,
+        "pointer": 0,
+    }
+    assert payload["fallback_diagnostics"]["task_support_counts"] == {
+        "supported": 0,
+        "candidate": 0,
+        "blocked": 0,
+        "none": 2,
+    }
+    assert sum(payload["fallback_diagnostics"]["readiness_counts"].values()) == len(fallback_rows)
+    assert sum(payload["fallback_diagnostics"]["dataset_class_counts"].values()) == len(fallback_rows)
+    assert sum(payload["fallback_diagnostics"]["task_support_counts"].values()) == len(fallback_rows)
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_readiness"]["runnable"][0]["benchmark_id"].startswith(
+        "dataset:fallback-"
+    )
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_readiness"]["metadata-only"] == []
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_dataset_class"]["deposit"][0]["benchmark_id"].startswith(
+        "dataset:fallback-"
+    )
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_dataset_class"]["reference"] == []
     assert payload["filters"]["source"] == "gap-fallback"
+
+
+def test_benchmark_test_triage_fallback_diagnostics_count_supported_task_support(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0102-supported-generic",
+        """
+id: hypothesis:0102-supported-generic
+type: hypothesis
+title: Generic supported benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "supported-fallback",
+        """
+id: dataset:supported-fallback
+type: dataset
+title: Supported Fallback
+dataset_class: deposit
+local_path: data/supported-fallback
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback")
+
+    assert payload["summary"]["bucket_counts"]["fallback-diagnostic"] == 1
+    assert payload["fallback_diagnostics"]["task_support_counts"] == {
+        "supported": 1,
+        "candidate": 0,
+        "blocked": 0,
+        "none": 0,
+    }
 
 
 def test_benchmark_test_triage_report_suppresses_blocked_support_fallback_by_default(tmp_path: Path) -> None:
@@ -1518,6 +1600,23 @@ benchmark:
     assert payload["fallback_diagnostics"]["top_benchmarks"] == [
         {"benchmark_id": "dataset:mmrf-like", "count": 1}
     ]
+    assert payload["fallback_diagnostics"]["readiness_counts"] == {
+        "runnable": 1,
+        "stage-needed": 0,
+        "metadata-only": 0,
+        "blocked": 0,
+    }
+    assert payload["fallback_diagnostics"]["dataset_class_counts"] == {
+        "deposit": 1,
+        "reference": 0,
+        "pointer": 0,
+    }
+    assert payload["fallback_diagnostics"]["task_support_counts"] == {
+        "supported": 0,
+        "candidate": 0,
+        "blocked": 0,
+        "none": 1,
+    }
     assert payload["fallback_diagnostics"]["suppressed_blocked_support"] == {
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:mmrf-like", "count": 1}],
@@ -1633,6 +1732,36 @@ benchmark:
     assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
     assert not payload["buckets"]["fallback-diagnostic"]
     assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
+    assert payload["fallback_diagnostics"]["top_benchmarks"] == []
+    assert payload["fallback_diagnostics"]["top_facets"] == []
+    assert payload["fallback_diagnostics"]["readiness_counts"] == {
+        "runnable": 0,
+        "stage-needed": 0,
+        "metadata-only": 0,
+        "blocked": 0,
+    }
+    assert payload["fallback_diagnostics"]["dataset_class_counts"] == {
+        "deposit": 0,
+        "reference": 0,
+        "pointer": 0,
+    }
+    assert payload["fallback_diagnostics"]["task_support_counts"] == {
+        "supported": 0,
+        "candidate": 0,
+        "blocked": 0,
+        "none": 0,
+    }
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_readiness"] == {
+        "runnable": [],
+        "stage-needed": [],
+        "metadata-only": [],
+        "blocked": [],
+    }
+    assert payload["fallback_diagnostics"]["top_benchmarks_by_dataset_class"] == {
+        "deposit": [],
+        "reference": [],
+        "pointer": [],
+    }
     assert payload["filters"]["exclude_fallback"] is True
     assert payload["filters"]["include_blocked_fallback"] is True
 

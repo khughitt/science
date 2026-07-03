@@ -1733,7 +1733,38 @@ benchmark:
     assert written["source_command"].startswith("science benchmark test-triage")
     assert written["summary"]["bucket_counts"]["run-now"] == 1
     assert written["buckets"]["run-now"][0]["review"]["decision"] == ""
-    assert written["fallback_diagnostics"] == {"top_benchmarks": [], "top_facets": []}
+    assert written["fallback_diagnostics"] == {
+        "top_benchmarks": [],
+        "top_facets": [],
+        "readiness_counts": {
+            "runnable": 0,
+            "stage-needed": 0,
+            "metadata-only": 0,
+            "blocked": 0,
+        },
+        "dataset_class_counts": {
+            "deposit": 0,
+            "reference": 0,
+            "pointer": 0,
+        },
+        "task_support_counts": {
+            "supported": 0,
+            "candidate": 0,
+            "blocked": 0,
+            "none": 0,
+        },
+        "top_benchmarks_by_readiness": {
+            "runnable": [],
+            "stage-needed": [],
+            "metadata-only": [],
+            "blocked": [],
+        },
+        "top_benchmarks_by_dataset_class": {
+            "deposit": [],
+            "reference": [],
+            "pointer": [],
+        },
+    }
 
 
 def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(
