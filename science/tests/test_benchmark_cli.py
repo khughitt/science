@@ -1930,6 +1930,7 @@ benchmark:
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:blocked-fallback", "count": 1}],
     }
+    assert written["fallback_diagnostics"]["rollups"] == []
 
 
 def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(
