@@ -15,6 +15,7 @@ def _seed_workflow_and_run(
     *,
     run_resources: list[dict],
     workflow_outputs: list[dict] | None = None,
+    run_inputs: list[str] | None = None,
 ) -> None:
     """Seed a workflow + run fixture.
 
@@ -48,7 +49,7 @@ def _seed_workflow_and_run(
         'title: "WF r1"\n'
         'workflow: "workflow:wf"\n'
         "produces: []\n"
-        "inputs: []\n"
+        f"inputs: {run_inputs or []!r}\n"
         "---\n",
         encoding="utf-8",
     )
@@ -70,6 +71,35 @@ def _seed_resource_files(root: Path, names: list[str]) -> None:
     rt_root = root / "results" / "wf" / "r1"
     for name in names:
         (rt_root / f"{name}.csv").write_text("col\nval\n", encoding="utf-8")
+
+
+def _seed_dataset(root: Path, slug: str, identity_context: dict | None = None) -> None:
+    dataset: dict = {
+        "schema_profile": "science-entity-base/1.0+dataset/1.0",
+        "id": f"dataset:{slug}",
+        "type": "dataset",
+        "title": slug,
+        "origin": "external",
+        "consumed_by": [],
+    }
+    if identity_context is not None:
+        dataset["identity_context"] = identity_context
+    body = yaml.safe_dump(dataset, sort_keys=False)
+    path = root / "entities" / "datasets" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{body}---\n", encoding="utf-8")
+
+
+def _frontmatter(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8").split("---", 2)[1])
+
+
+def _run_register(root: Path):
+    return CliRunner().invoke(
+        science_cli,
+        ["dataset", "register-run", "workflow-run:wf-r1"],
+        env={"SCIENCE_PROJECT_ROOT": str(root)},
+    )
 
 
 # ── Task 7.2: per-output datapackages ──────────────────────────────────────
@@ -276,6 +306,231 @@ def test_register_run_rejects_non_mapping_output_identity_before_writing(tmp_pat
     assert "Traceback" not in res.output
     assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
+# ── Task P3.2: register-run identity resolution/propagation ───────────────
+
+
+def test_register_run_bare_inherit_uses_shared_input_identity(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "seqcol_digest": "SQ.GRCh38",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "resolved",
+        },
+    }
+    _seed_dataset(tmp_path, "up-a", identity)
+    _seed_dataset(tmp_path, "up-b", identity)
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:up-a", "dataset:up-b"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.cna/1.0",
+                "identity": {"taxon": "inherit", "assembly": "inherit"},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert entity["identity_context"] == identity
+    assert entity["schema_profile"] == ("science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0")
+    datapackage = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert datapackage["science"]["identity_context"] == identity
+
+
+def test_register_run_bare_inherit_errors_when_input_identities_disagree(tmp_path: Path) -> None:
+    _seed_dataset(tmp_path, "human", {"taxon": 9606})
+    _seed_dataset(tmp_path, "mouse", {"taxon": 10090})
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:human", "dataset:mouse"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"taxon": "inherit"},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "inherit" in res.output
+    assert "disagree" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
+def test_register_run_inherit_from_selects_named_input_identity(tmp_path: Path) -> None:
+    _seed_dataset(tmp_path, "human", {"taxon": 9606})
+    _seed_dataset(tmp_path, "mouse", {"taxon": 10090})
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:human", "dataset:mouse"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"taxon": {"inherit": {"from": "dataset:mouse"}}},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert entity["identity_context"] == {"taxon": 10090}
+
+
+def test_register_run_proxy_output_preserves_unresolved_proxy_and_routes_sources(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source-segments",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh38",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "cytoband-map")
+    proxy = {
+        "type": "cytoband_proxy",
+        "via": "dataset:cytoband-map",
+        "sources": [{"dataset": "dataset:source-segments", "assembly": "inherit"}],
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "bands", "path": "bands.csv", "format": "csv"}],
+        workflow_outputs=[
+            {
+                "slug": "bands",
+                "title": "Bands",
+                "resource_names": ["bands"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": {"inherit": {"from": "dataset:source-segments"}},
+                    "assembly": {
+                        "label": "UNKNOWN",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "declared_unresolved",
+                        "proxy": proxy,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["bands"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-bands.md")
+    assert entity["identity_context"]["assembly"]["resolution_status"] == "declared_unresolved"
+    assert entity["identity_context"]["assembly"]["proxy"] == proxy
+    assert entity["derivation"]["inputs"] == ["dataset:source-segments"]
+    assert entity["derivation"]["transformations"] == [
+        {"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}
+    ]
+    assert (
+        "workflow-run:wf-r1" in _frontmatter(tmp_path / "entities" / "datasets" / "source-segments.md")["consumed_by"]
+    )
+    assert (
+        "workflow-run:wf-r1" not in _frontmatter(tmp_path / "entities" / "datasets" / "cytoband-map.md")["consumed_by"]
+    )
+
+
+def test_register_run_transform_dataset_routes_to_transformations_not_data_inputs(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "GRCh37",
+        "method": "chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": "inherit",
+                    "assembly": {
+                        "label": "GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "declared_unresolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")
+    assert entity["identity_context"]["assembly"]["resolution_status"] == "declared_unresolved"
+    assert entity["identity_context"]["assembly"]["transform"] == transform
+    assert entity["derivation"]["inputs"] == ["dataset:source"]
+    assert entity["derivation"]["transformations"] == [
+        {
+            "kind": "identity_transform",
+            "target": "assembly",
+            "dataset": "dataset:liftover-chain",
+            "type": "liftover",
+            "from": "GRCh37",
+            "method": "chain",
+        }
+    ]
+    assert "dataset:liftover-chain" not in entity["derivation"]["inputs"]
+    assert (
+        "workflow-run:wf-r1"
+        not in _frontmatter(tmp_path / "entities" / "datasets" / "liftover-chain.md")["consumed_by"]
+    )
 
 
 # ── Task 7.4: symmetric edges ──────────────────────────────────────────────
