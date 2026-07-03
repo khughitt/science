@@ -39,6 +39,7 @@ from science_tool.commons.gene_crosswalk import (
 from science_tool.commons.gene_crosswalk import (
     MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
 )
+from science_tool.commons.identity_stamp import stamp_agrees
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution
 from science_tool.commons.protein_crosswalk import (
     MEMBER_KEY_COLUMN as _PROTEIN_KEY_COLUMN,
@@ -247,6 +248,66 @@ def evaluate_identity_context(
                 "identity.registry-unavailable",
             )
         # RESOLVED passes silently.
+
+
+def evaluate_datapackage_identity_stamps(
+    datasets: Iterable[dict[str, Any]],
+    datapackages_by_dataset_id: Mapping[str, tuple[str, dict[str, Any]]],
+) -> Iterator[Result]:
+    """Report present datapackage identity_context stamps that disagree.
+
+    Absence is intentionally silent for P1 adoption; the entity frontmatter
+    identity_context remains authoritative.
+    """
+    for fm in datasets:
+        if fm.get("type") != "dataset":
+            continue
+        ident = fm.get("id")
+        if not isinstance(ident, str) or not ident:
+            continue
+        idc = fm.get("identity_context")
+        if not isinstance(idc, dict):
+            continue
+        datapackage_ref = datapackages_by_dataset_id.get(ident)
+        if datapackage_ref is None:
+            continue
+        datapackage_path, datapackage = datapackage_ref
+        if stamp_agrees(idc, datapackage):
+            continue
+        yield _result(
+            Severity.ERROR,
+            datapackage_path,
+            f"{ident}: datapackage science.identity_context disagrees with owning entity identity_context",
+            "identity.datapackage-stamp-disagreement",
+        )
+
+
+def _local_datapackage_path(fm: dict[str, Any]) -> Path | None:
+    datapackage = fm.get("datapackage")
+    if isinstance(datapackage, str) and datapackage.strip():
+        return Path(datapackage)
+    raw_path = fm.get("_path")
+    if isinstance(raw_path, str) and Path(raw_path).name in {"datapackage.yaml", "datapackage.yml"}:
+        return Path(raw_path)
+    return None
+
+
+@Check(section="identity datapackage stamps", order=24)
+def check_datapackage_identity_stamps(ctx: ValidateContext) -> Iterator[Result]:
+    datasets = dataset_frontmatters(ctx)
+    datapackages_by_dataset_id: dict[str, tuple[str, dict[str, Any]]] = {}
+    for fm in datasets:
+        ident = fm.get("id")
+        if not isinstance(ident, str) or not ident:
+            continue
+        rel_path = _local_datapackage_path(fm)
+        if rel_path is None:
+            continue
+        abs_path = ctx.project_root / rel_path
+        if not abs_path.is_file():
+            continue
+        datapackages_by_dataset_id[ident] = (str(rel_path), raw_frontmatter(abs_path))
+    yield from evaluate_datapackage_identity_stamps(datasets, datapackages_by_dataset_id)
 
 
 @Check(section="assembly identity", order=25)

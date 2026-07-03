@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 from science_model.frontmatter import parse_frontmatter
 
+from science_tool.commons.identity_stamp import derive_stamp
+
 
 def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
     """Return the workflow's `outputs:` block. Raises FileNotFoundError if missing."""
@@ -99,6 +101,8 @@ def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> l
         }
         if out.get("ontology_terms"):
             out_dp["ontology_terms"] = list(out["ontology_terms"])
+        if "identity" in out:
+            out_dp["science"] = {"identity_context": derive_stamp(out["identity"])}
         out_dp_path.write_text(yaml.safe_dump(out_dp, sort_keys=False), encoding="utf-8")
         written.append(out_dp_path)
     return written

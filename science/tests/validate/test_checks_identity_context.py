@@ -3,6 +3,7 @@ from __future__ import annotations
 from science_tool.commons.assembly_compatibility import CompatibilityRelation
 from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
+    evaluate_datapackage_identity_stamps,
     evaluate_gene_identity,
     evaluate_identity_context,
     evaluate_protein_identity,
@@ -22,6 +23,36 @@ def _ds(profile: str, **fm) -> dict:
 
 def _assembly(digest: str, *, status: str = "resolved", registry: str = _REGISTRY) -> dict:
     return {"seqcol_digest": digest, "registry": registry, "resolution_status": status}
+
+
+def _identity() -> dict:
+    return {
+        "taxon": 9606,
+        "assembly": _assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"),
+        "molecular_ids": {
+            "gene": {
+                "namespace": "hgnc_id",
+                "registry": "dataset:hgnc",
+                "resolution_status": "resolved",
+            }
+        },
+    }
+
+
+def test_datapackage_identity_stamp_disagreement_errors() -> None:
+    identity = _identity()
+    ds = _ds("science-pkg-entity-1.0", identity_context=identity)
+    datapackage = {"science": {"identity_context": {**identity, "taxon": 10090}}}
+
+    results = list(evaluate_datapackage_identity_stamps([ds], {"dataset:x": ("data/x/datapackage.yaml", datapackage)}))
+
+    assert [(r.severity, r.rule) for r in results] == [(Severity.ERROR, "identity.datapackage-stamp-disagreement")]
+
+
+def test_datapackage_identity_stamp_absent_is_skipped() -> None:
+    ds = _ds("science-pkg-entity-1.0", identity_context=_identity())
+
+    assert list(evaluate_datapackage_identity_stamps([ds], {"dataset:x": ("data/x/datapackage.yaml", {})})) == []
 
 
 def test_resolved_assembly_passes_silently() -> None:
