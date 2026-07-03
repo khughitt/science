@@ -77,8 +77,8 @@
 
 ## Existing Test Disposition
 
-The new RED/GREEN tests in each task are ADDITIVE. Separately, **59 existing
-`*.edges.yaml`-default tests across six files** exercise behavior this phase
+The new RED/GREEN tests in each task are ADDITIVE. Separately, **60 existing
+`*.edges.yaml`-dependent tests across six files** exercise behavior this phase
 retires and will fail once render/number/validate/audit stop reading YAML. Each
 behavioral task below MUST migrate or delete its file's YAML-default tests in the
 same commit, or the suite stays red until Task 10. Legend: **DEL** = delete
@@ -86,11 +86,21 @@ same commit, or the suite stays red until Task 10. Legend: **DEL** = delete
 unit tests); **DOT** = rewrite against DOT-only topology; **PROP** = rewrite against
 a proposition-backed fixture.
 
+Two mechanical reminders for every migrated/added test: (1) ensure the file
+imports what the new blocks use (`from science_tool.dag.paths import DagPaths`,
+`pytest`, `json`, `render_one`/`render_all`) — several appended blocks assume these.
+(2) The `mm30`-fixture tests (`test_mm30_fixture_validates_*`,
+`test_jsonschema_conformance_runs_on_mm30_fixture`,
+`test_render_all_byte_identical_dot_vs_mm30_reference`, staleness
+`test_mm30_fixture_runs_without_error`) default to **DELETE** unless the mm30 test
+fixture actually ships compiled propositions; do not block on trying to PROP-migrate
+them.
+
 - `test_render.py` (7 → **Task 4**): `test_render_all_byte_identical_dot_vs_mm30_reference` DEL-or-PROP; `test_render_one_handles_eliminated_edge` PROP (eliminated now derives from the `refuted` channel); `test_render_one_uses_compact_inline_legend` PROP; `test_render_one_structural_invariants` PROP; `test_render_one_ignores_claim_only_yaml_edges` DEL (claim-only propositions are already skipped by `edges_from_propositions`); `test_render_discovers_slugs_when_whitelist_absent` DOT; `test_render_png_failure_is_non_fatal` PROP.
 - `test_number.py` (5 → **Task 5**): `test_number_one_is_idempotent` DOT; `test_number_all_processes_multiple_slugs` DOT; `test_numbered_dot_has_edge_labels` DOT; `test_number_one_preserves_existing_curation` DEL; `test_number_one_force_stubs_resets_curation` DEL (replaced by `test_number_one_force_stubs_is_retired`).
 - `test_validate.py` (20 → **Task 6**): posterior ×3 (`test_posterior_beta_must_be_finite`, `test_posterior_hdi_must_be_ordered`, `test_posterior_prob_sign_must_be_in_unit_interval`) DEL; jsonschema ×3 (`test_jsonschema_conformance_passes_on_clean`, `test_jsonschema_conformance_runs_on_mm30_fixture`, `test_jsonschema_conformance_catches_drift`) DEL; strict-curation ×2 (`test_strict_flags_missing_identification`, `test_strict_flags_empty_description`) DEL; yaml/dot reconciliation ×2 (`test_yaml_missing_edge_present_in_dot`, `test_yaml_edge_not_in_dot`) DEL (replaced by `test_validate_flags_dot_edge_without_matching_proposition`); topology ×5 (`test_clean_fixture_has_no_topology_findings`, `test_acyclicity_flags_cycle`, `test_acyclicity_passes_on_clean`, `test_strict_flags_orphan_dot_node`, `test_strict_flags_cross_dag_node_case_mismatch`) DOT; report-shape ×2 (`test_validation_report_ok_on_clean_fixture`, `test_validation_report_to_json_shape`) PROP; non-strict blocking (`test_non_strict_does_not_emit_strict_errors_as_blocking`) DOT; mm30 ×2 (`test_mm30_fixture_validates_non_strict`, `test_mm30_fixture_validates_strict`) DEL-or-PROP (only if mm30 has compiled propositions). `test_validation_finding_severity_literal` KEEP.
 - `test_validate_cli.py` (7 → **Task 6**): `test_validate_clean_exits_zero` PROP; `test_validate_cyclic_exits_one` DOT; `test_validate_json_shape` PROP; `test_validate_dag_scope` PROP; `test_validate_missing_identification_non_strict_exits_zero` + `test_validate_missing_identification_strict_exits_one` DEL; `test_audit_json_includes_validation` PROP (audit JSON no longer has a `staleness` key — see Task 7). **KEEP but VERIFY:** `test_schema_stdout_is_valid_json` and `test_schema_write_to_file` stay green ONLY because Task 2 emits the retired banner to STDERR, keeping stdout/file pure JSON.
-- `test_cli.py` (10 → **Tasks 4/5/7**): `test_cli_dag_render_writes_auto_artifacts` PROP (T4); `test_cli_dag_render_single_slug` PROP (T4); `test_dag_validate_accepts_format_json` PROP (T6); `test_cli_dag_number_is_idempotent` DOT (T5); `test_cli_dag_init_scaffolds_new_dag` rewritten in T5; `test_cli_dag_staleness_json_schema` + `test_dag_staleness_accepts_format_json` DEL (T7, replaced by `test_cli_dag_staleness_is_retired`); `test_dag_audit_accepts_format_json` PROP (fixture-migrated in T4, drop staleness key in T7); `test_cli_dag_audit_is_read_only_by_default` PROP (fixture-migrated in T4, finalized in T7); `test_cli_dag_audit_fix_mutates` DEL (T7 — `--fix` is now a no-op).
+- `test_cli.py` (11 → **Tasks 4/5/7**): `test_cli_dag_render_writes_auto_artifacts` PROP (T4); `test_cli_dag_render_single_slug` PROP (T4); `test_dag_validate_accepts_format_json` PROP (T6); `test_cli_dag_number_is_idempotent` DOT (T5); `test_cli_dag_init_scaffolds_new_dag` rewritten in T5; `test_cli_dag_staleness_json_schema` + `test_dag_staleness_accepts_format_json` + `test_cli_dag_staleness_exit_code_on_clean_project` DEL (T7 — `dag staleness` now always raises, even on a clean project; replaced by `test_cli_dag_staleness_is_retired`); `test_dag_audit_accepts_format_json` PROP (fixture-migrated in T4, drop staleness key in T7); `test_cli_dag_audit_is_read_only_by_default` PROP (fixture-migrated in T4, finalized in T7); `test_cli_dag_audit_fix_mutates` DEL (T7 — `--fix` is now a no-op).
 - Fully unaffected (no change): `test_refs_validation.py`, `test_schema.py`, `test_schema_artifact.py`, `test_dag_render_status_adapter.py`, `test_staleness.py` (function retained).
 
 ---
@@ -1048,7 +1058,9 @@ section, in this commit: DELETE `test_number_one_preserves_existing_curation` an
 curation; the latter is replaced by `test_number_one_force_stubs_is_retired`);
 rewrite `test_number_one_is_idempotent`, `test_number_all_processes_multiple_slugs`,
 and `test_numbered_dot_has_edge_labels` to DOT-only fixtures (no `.edges.yaml`
-sibling). `number` now discovers via the DOT-based `_discover_slugs` inherited from
+sibling). Also rewrite `test_cli_dag_number_is_idempotent` in `test_cli.py` to a
+DOT-only fixture — it is YAML-default today and the Step 5 GREEN run below exercises
+it. `number` now discovers via the DOT-based `_discover_slugs` inherited from
 render (Task 4), so number fixtures need a `<slug>.dot` present.
 
 In `science/tests/dag/test_cli.py`, update `test_cli_dag_init_scaffolds_new_dag`:
@@ -1113,7 +1125,11 @@ def number_one(
     _emit_numbered_dot(dot_path, parsed, dag_dir / f"{slug}-numbered.dot")
 ```
 
-Update the local `_discover_slugs` import usage so it uses the DOT-based version from `render.py` after Task 4.
+No `_discover_slugs` change is needed in `number.py`: it already imports
+`_discover_slugs` from `render.py`, so `number_all` automatically inherits the
+DOT-based discovery introduced in Task 4. `number_all` also still accepts and
+forwards `force_stubs`/`proposition_edges` to `number_one`, so the CLI
+`--force-stubs` path reaches the new hard error unchanged.
 
 - [ ] **Step 4: Implement DOT-only init**
 
@@ -1209,7 +1225,7 @@ def _write_project_manifest(project: Path) -> None:
 
 def _write_proposition(project: Path, slug: str, subject: str, obj: str, *, legacy_patch: str | None = None, legacy_edge_id: int | None = None) -> None:
     prop = project / "entities/propositions" / f"{slug}.md"
-    prop.parent.mkdir(parents=True)
+    prop.parent.mkdir(parents=True, exist_ok=True)  # exist_ok: tests may write >1 proposition
     extra = ""
     if legacy_patch is not None:
         extra += f"legacy_patch: {legacy_patch}\n"
@@ -1263,7 +1279,29 @@ def test_validate_ignores_malformed_edges_yaml_when_dot_and_proposition_are_vali
     assert report.ok, report.findings
 
 
-def test_validate_legacy_patch_edge_id_must_resolve_to_dot_edge(tmp_path: Path) -> None:
+def test_validate_legacy_patch_edge_mismatch_when_referenced_dot_exists(tmp_path: Path) -> None:
+    # h2.dot EXISTS but does not contain the proposition's a -> b edge → error.
+    project = tmp_path / "project"
+    _write_project_manifest(project)
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "h2.dot").write_text("digraph h2 {\n  x -> y;\n}\n", encoding="utf-8")
+    # Back h2's own DOT edge so proposition_edge_missing does not fire for x -> y.
+    _write_proposition(project, "x-affects-y", "x", "y")
+    # This proposition claims legacy identity in h2 but its edge is not in h2.dot.
+    _write_proposition(project, "a-affects-b", "a", "b", legacy_patch="h2", legacy_edge_id=1)
+
+    report = validate_project(load_dag_paths(project))
+
+    assert not report.ok
+    finding = next(f for f in report.findings if f.rule == "legacy_dag_edge_unresolved")
+    assert "h2#1" in finding.message
+
+
+def test_validate_legacy_patch_skipped_when_referenced_dot_absent(tmp_path: Path) -> None:
+    # legacy_patch names a DAG with NO .dot in this project → design says skip, no error.
+    # (Migrated propositions routinely carry legacy_patch provenance for DAGs that are
+    # not currently rendered; that must not fail validation.)
     project = tmp_path / "project"
     _write_project_manifest(project)
     dag_dir = project / "doc/figures/dags"
@@ -1273,9 +1311,8 @@ def test_validate_legacy_patch_edge_id_must_resolve_to_dot_edge(tmp_path: Path) 
 
     report = validate_project(load_dag_paths(project))
 
-    assert not report.ok
-    finding = next(f for f in report.findings if f.rule == "legacy_dag_edge_unresolved")
-    assert "h2#1" in finding.message
+    assert report.ok, report.findings
+    assert not any(f.rule == "legacy_dag_edge_unresolved" for f in report.findings)
 ```
 
 - [ ] **Step 2: Run RED validation tests**
@@ -1283,7 +1320,7 @@ def test_validate_legacy_patch_edge_id_must_resolve_to_dot_edge(tmp_path: Path) 
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/dag/test_validate.py::test_validate_flags_dot_edge_without_matching_proposition science/tests/dag/test_validate.py::test_validate_ignores_malformed_edges_yaml_when_dot_and_proposition_are_valid science/tests/dag/test_validate.py::test_validate_legacy_patch_edge_id_must_resolve_to_dot_edge -q
+rtk uv run --frozen --project science pytest science/tests/dag/test_validate.py::test_validate_flags_dot_edge_without_matching_proposition science/tests/dag/test_validate.py::test_validate_ignores_malformed_edges_yaml_when_dot_and_proposition_are_valid science/tests/dag/test_validate.py::test_validate_legacy_patch_edge_mismatch_when_referenced_dot_exists science/tests/dag/test_validate.py::test_validate_legacy_patch_skipped_when_referenced_dot_absent -q
 ```
 
 Expected: FAIL because validation still reads YAML and does not check proposition backing.
@@ -1446,24 +1483,24 @@ def _check_legacy_dag_metadata(
     propositions: list,
     per_dag_edges: dict[str, frozenset[tuple[str, str]]],
 ) -> list[ValidationFinding]:
+    """Validate a proposition's claimed legacy DAG identity ONLY when the
+    referenced DOT exists in this project.
+
+    Design contract: a proposition that claims a migrated DAG identity via
+    ``legacy_patch``/``legacy_edge_id`` "must resolve to a real DOT edge IF the
+    referenced DOT exists." Migrated propositions routinely carry ``legacy_patch``
+    provenance for DAGs that are no longer rendered as ``.dot`` files — those MUST
+    be skipped, not flagged, or ``dag validate`` fails on every mid-migration
+    project. So: no ``legacy_patch`` → skip; ``legacy_patch`` names no known DOT →
+    skip; DOT exists but the proposition's ``(subject, object)`` is not one of its
+    edges → error.
+    """
     findings: list[ValidationFinding] = []
     for prop in propositions:
         patch = getattr(prop, "legacy_patch", None)
+        if patch is None or patch not in per_dag_edges:
+            continue  # no claimed identity, or the referenced DOT does not exist here
         edge_id = getattr(prop, "legacy_edge_id", None)
-        if patch is None and edge_id is None:
-            continue
-        if patch is None or edge_id is None or patch not in per_dag_edges:
-            findings.append(
-                ValidationFinding(
-                    dag=str(patch or ""),
-                    edge_id=edge_id if isinstance(edge_id, int) else None,
-                    rule="legacy_dag_edge_unresolved",
-                    severity="error",
-                    message=f"proposition {prop.id} references unresolved legacy DAG edge {patch}#{edge_id}",
-                    location=None,
-                )
-            )
-            continue
         if (prop.subject, prop.object) not in per_dag_edges[patch]:
             findings.append(
                 ValidationFinding(
@@ -1472,14 +1509,21 @@ def _check_legacy_dag_metadata(
                     rule="legacy_dag_edge_unresolved",
                     severity="error",
                     message=(
-                        f"proposition {prop.id} legacy DAG edge {patch}#{edge_id} "
-                        f"does not match any DOT edge {prop.subject!r} -> {prop.object!r}"
+                        f"proposition {prop.id} claims legacy DAG identity {patch}#{edge_id} "
+                        f"but its edge {prop.subject!r} -> {prop.object!r} is not in {patch}.dot"
                     ),
                     location=None,
                 )
             )
     return findings
 ```
+
+> Note: `legacy_edge_id` is carried into the message for traceability but is NOT
+> used to resolve the edge — resolution is by `(subject, object)` against the DOT
+> topology, matching how `proposition_edge_missing` matches. A proposition with a
+> `legacy_patch` whose DOT exists but no `legacy_edge_id` is still checked by edge
+> membership; the design does not require erroring on missing `legacy_edge_id`
+> alone.
 
 - [ ] **Step 5: Run GREEN validation tests**
 
@@ -1963,4 +2007,5 @@ Expected: status clean; recent commits correspond to Tasks 1-9 plus optional ver
 - Project root is threaded via `DagPaths.project_root` (set by `load_dag_paths`) rather than reverse-derived from `dag_dir` depth, which would break under a configured `dag_dir`.
 - Render's fail-loud preflight reuses `validate._parse_dot_topology`; there is exactly one DOT-edge parser, so render and validate agree on "what is a DOT edge."
 - The 59 existing YAML-default tests are not blindly deleted: the Existing Test Disposition section assigns each a fate (DEL / DOT / PROP) inside the owning task's commit, and the two previously-missed files (`test_validate_cli.py`, `test_staleness.py`) are now in scope.
-- The `entities/propositions/*.md` fixture assumption in Task 6 was verified live against `load_local_entity_index` before relying on it.
+- The `entities/propositions/*.md` fixture assumption in Task 6 was verified live against `load_local_entity_index` before relying on it (both a `profile: research` and a `knowledge_profiles` manifest load cleanly, returning an empty index rather than raising).
+- Legacy-metadata validation honors the design's "if the referenced DOT exists" guard: `_check_legacy_dag_metadata` SKIPS a proposition whose `legacy_patch` names no current `.dot` (the common mid-migration provenance case) and errors only on a genuine edge mismatch when the DOT is present. Two tests lock both branches. The `_write_proposition` helper uses `exist_ok=True` so a test can write more than one proposition.
