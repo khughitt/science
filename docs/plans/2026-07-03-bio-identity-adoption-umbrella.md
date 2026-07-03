@@ -12,7 +12,7 @@ MM30 can declare, resolve, propagate, stamp, validate, and use biological identi
 
 Concretely:
 
-- every identity-bearing dataset has an entity-authoritative `identity_context`;
+- every identity-bearing dataset (coordinate/gene/protein/variant profile; see the design's profile-to-tier table) has an entity-authoritative `identity_context`;
 - every coordinate- or feature-emitting workflow output has an `outputs[].identity` contract;
 - datapackages carry only a derived `science.identity_context` stamp;
 - `science validate` catches missing declarations, entity/stamp disagreement, unmarked cross-build joins, missing transform/proxy provenance, and unsafe inheritance;
@@ -48,7 +48,7 @@ Work packages:
 - **P4.1 assembly-registry build entrypoint.** Wire the existing assembly registry builder into a `science-commons` dataset recipe/entrypoint and add a Science resolver integration fixture proving `hg38` resolves to a seqcol digest from the pinned artifact.
 - **P4.2 gene-crosswalk-hgnc build entrypoint.** Wire the HGNC/NCBI/Ensembl crosswalk artifact so MM30's symbol-space remaps can become structured and reproducible.
 - **P4.3 liftover-chain consumption.** Confirm `transform: liftover` consumes the already-pinned GRCh37-GRCh38 chain dataset through provenance checks and resolver/remedy surfaces.
-- **P4.4 cytoband-hg19 proxy reference.** Decide and implement the home for `cytoband-hg19`, preferably a commons reference dataset usable as `proxy.via`.
+- **P4.4 cytoband-hg19 proxy reference.** Decide and implement the home for `cytoband-hg19`, preferably a commons reference dataset usable as `proxy.via` (this is the tracked work package for the open fork below).
 
 P4 is not a broad reference-data program. It is the minimum artifact substrate needed for MM30 to move from declaration-level identity to resolved identity where it matters.
 
@@ -73,6 +73,7 @@ P5 is the definition-of-done for the larger effort. P1-P4 are enabling layers; t
 - **Entity source of truth.** Dataset entity `identity_context` is authoritative. Datapackage `science.identity_context` is derived and read-only.
 - **Profile-scoped mandatory declarations.** Coordinate assays require assembly; gene/protein/variant datasets require the relevant molecular tier; all identity-bearing datasets require `taxon`; non-bio datasets are exempt.
 - **Two-level strictness.** Declaration is strict at authoring time. Full resolution is required at promote/publish time or by explicit project policy.
+- **Migration window discipline.** New/touched identity-bearing entities should be strict immediately, but the untouched backlog moves through a timed warn-then-error window surfaced by batch reporting. Missing derived datapackage stamps remain non-fatal during adoption; present stamps that disagree with the entity always error.
 - **Offline reproducibility.** Resolution uses pinned commons artifacts only. No live MyGene, Ensembl REST, refgenie, UniProt, or other network fallbacks in reproducible paths.
 - **Structured unresolved state.** `declared_unresolved` is legal only when explicit. Cross-build/proxy outputs keep assembly honest and carry a structured `proxy`.
 - **Tier-general transforms.** `liftover`, `symbol_remap`, and `namespace_map` can apply to assembly or molecular tiers.
@@ -80,6 +81,11 @@ P5 is the definition-of-done for the larger effort. P1-P4 are enabling layers; t
 - **Strict inheritance.** Bare `inherit` requires all selected inputs to agree. `inherit: {from: dataset:X}` must name a real source.
 
 ## Open forks
+
+### Closed P1-P3 forks
+
+- **Multi-input `transform.from: input`: closed.** Bare `from: input` is legal only for a single input; `dataset register-run` rejects it when multiple run inputs exist. Covered by `science/tests/test_dataset_register_run.py::test_register_run_rejects_transform_from_input_with_multiple_inputs`.
+- **Migration-window strictness: partially closed.** P1-P3 implement the non-fatal missing-stamp adoption rule and strict present-stamp disagreement rule. P5 still owns the timed warn-then-error policy and batch reporting for the untouched MM30 backlog.
 
 ### `cytoband-hg19` home
 
@@ -98,7 +104,8 @@ The framework has provenance hooks for liftover remedies. P4.3 should confirm wh
 ## Progress ledger
 
 - 2026-07-02: Bio identity adoption layer design and implementation plan written.
-- 2026-07-03: P1-P3 framework adoption layer merged to `main`.
+- 2026-07-03: P1-P3 framework adoption layer merged to `main` (`9f52b81d`). The merged state includes late planning/contract-validation fixes from `57fb4b96`, `815ba885`, and `aa362aec`; it is not just the original plan text.
+- 2026-07-03: P1-P3 completion verification included `science/model` pytest, `science` pytest, `science/model` Ruff, targeted Ruff over changed Science files, and `git diff --check HEAD`.
 - Next: P4.1 assembly-registry build entrypoint + resolver integration fixture.
 
 ## How to use this doc
