@@ -103,6 +103,16 @@ def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     return DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None, project_root=tmp_path)
 
 
+def _build_project_without_propositions(tmp_path: Path) -> DagPaths:
+    (tmp_path / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    return DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None, project_root=tmp_path)
+
+
 def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
     """Audit must not mutate tasks/ or create retired edge YAML without fix=True."""
     paths = _build_project(tmp_path, with_drift=True)
@@ -136,6 +146,17 @@ def test_audit_no_findings_on_clean_project(tmp_path: Path) -> None:
     assert not report.has_findings
 
 
+def test_audit_returns_blocking_validation_findings_without_rendering(tmp_path: Path) -> None:
+    paths = _build_project_without_propositions(tmp_path)
+
+    report = run_audit(paths, today=date(2026, 4, 20), fix=False)
+
+    assert report.has_findings
+    assert report.mutations == ()
+    assert [finding.rule for finding in report.validation.findings] == ["proposition_edge_missing"]
+    assert not (paths.dag_dir / "h1-auto.dot").exists()
+
+
 def test_audit_to_json_is_stable(tmp_path: Path) -> None:
     paths = _build_project(tmp_path, with_drift=True)
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
@@ -158,6 +179,7 @@ def test_audit_renders_from_propositions_and_composes_no_staleness(
     tasks_dir.mkdir()
     (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
     (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    _write_proposition(project, "h1-1", "a", "b")
     (dag_dir / "h1.edges.yaml").write_text(
         "dag: h1\nedges:\n  - id: 1\n    source: a\n    target: b\n    edge_status: supported\n",
         encoding="utf-8",

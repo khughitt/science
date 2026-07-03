@@ -97,7 +97,10 @@ def run_audit(
 
     validation = validate_project(paths, strict=strict, today=today)
 
-    if fix and not validation.ok:
+    if not validation.ok:
+        if not fix:
+            return AuditReport(validation=validation, mutations=())
+
         blocking = [f for f in validation.findings if validation._blocks(f)]
         raise RuntimeError(
             "dag audit --fix refused: validation failed with "

@@ -83,6 +83,16 @@ def _copy_minimal_fixture_with_propositions(source: Path, target: Path) -> Path:
     return target
 
 
+def _build_project_without_propositions(tmp_path: Path) -> Path:
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (project / "tasks").mkdir()
+    return project
+
+
 @pytest.fixture
 def cli_project(tmp_path: Path) -> Path:
     """Copy the mm30 fixture to tmp for CLI tests.
@@ -196,6 +206,33 @@ def test_cli_dag_audit_table_prints_validation_findings(tmp_path: Path) -> None:
     assert "acyclicity" in result.output
     assert "cycle detected" in result.output
     assert "staleness" not in result.output.lower()
+
+
+def test_cli_dag_audit_json_reports_missing_proposition_without_render_traceback(tmp_path: Path) -> None:
+    project = _build_project_without_propositions(tmp_path)
+
+    result = CliRunner().invoke(main, ["dag", "audit", "--format", "json", "--project", str(project)])
+
+    assert result.exit_code == 1
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ == "SystemExit"
+    assert "no compiled proposition edge" not in result.output.lower()
+    payload = json.loads(result.output)
+    findings = payload["validation"]["findings"]
+    assert [finding["rule"] for finding in findings] == ["proposition_edge_missing"]
+
+
+def test_cli_dag_audit_table_reports_missing_proposition_without_render_traceback(tmp_path: Path) -> None:
+    project = _build_project_without_propositions(tmp_path)
+
+    result = CliRunner().invoke(main, ["dag", "audit", "--project", str(project)])
+
+    assert result.exit_code == 1
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ == "SystemExit"
+    assert "ERROR: [proposition_edge_missing]" in result.output
+    assert "a -> b" in result.output
+    assert "no compiled proposition edge" not in result.output.lower()
 
 
 def test_cli_dag_audit_fix_validation_failure_is_click_error(tmp_path: Path) -> None:
