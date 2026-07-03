@@ -1448,6 +1448,192 @@ benchmark:
     assert payload["filters"]["source"] == "gap-fallback"
 
 
+def test_benchmark_test_triage_report_suppresses_blocked_support_fallback_by_default(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0103-generic",
+        """
+id: hypothesis:0103-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "mmrf-like",
+        """
+id: dataset:mmrf-like
+type: dataset
+title: MMRF Like
+dataset_class: deposit
+local_path: data/mmrf-like
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [time-to-event]
+  benchmark_kinds: [prognostic-modeling]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical-risk-score
+      ground_truth:
+        type: measured-outcome
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-03'
+    - id: overall-survival
+      prediction_target: survival
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical-risk-score
+      ground_truth:
+        type: measured-outcome
+        description: survival endpoint
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback")
+
+    summary = payload["summary"]
+    assert summary["test_plan_rows"] == 2
+    assert summary["source_counts"]["gap-fallback"] == 2
+    assert summary["fallback_rows"] == 2
+    assert sum(summary["readiness_counts"].values()) == 2
+    assert summary["suppressed_blocked_support_fallback_rows"] == 1
+    assert summary["bucket_counts"]["fallback-diagnostic"] == 1
+    assert [row["task_id"] for row in payload["buckets"]["fallback-diagnostic"]] == [
+        "dataset:mmrf-like#overall-survival"
+    ]
+    assert payload["fallback_diagnostics"]["top_benchmarks"] == [
+        {"benchmark_id": "dataset:mmrf-like", "count": 1}
+    ]
+    assert payload["fallback_diagnostics"]["suppressed_blocked_support"] == {
+        "rows": 1,
+        "top_benchmarks": [{"benchmark_id": "dataset:mmrf-like", "count": 1}],
+    }
+    assert "include_blocked_fallback" not in payload["filters"]
+
+
+def test_benchmark_test_triage_report_include_blocked_fallback_restores_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0104-generic",
+        """
+id: hypothesis:0104-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-fallback",
+        """
+id: dataset:blocked-fallback
+type: dataset
+title: Blocked Fallback
+dataset_class: deposit
+local_path: data/blocked-fallback
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [time-to-event]
+  benchmark_kinds: [prognostic-modeling]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical-risk-score
+      ground_truth:
+        type: measured-outcome
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-03'
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path, source="gap-fallback", include_blocked_fallback=True)
+
+    assert len(payload["buckets"]["fallback-diagnostic"]) == 1
+    assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
+    assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
+    assert payload["filters"]["include_blocked_fallback"] is True
+
+
+def test_benchmark_test_triage_report_exclude_fallback_prevents_suppression(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0105-generic",
+        """
+id: hypothesis:0105-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "excluded-fallback",
+        """
+id: dataset:excluded-fallback
+type: dataset
+title: Excluded Fallback
+dataset_class: deposit
+local_path: data/excluded-fallback
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [time-to-event]
+  benchmark_kinds: [prognostic-modeling]
+  tasks:
+    - id: progression-risk
+      prediction_target: progression
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical-risk-score
+      ground_truth:
+        type: measured-outcome
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-03'
+""",
+    )
+
+    payload = benchmark_test_triage_report(
+        tmp_path,
+        source="gap-fallback",
+        exclude_fallback=True,
+        include_blocked_fallback=True,
+    )
+
+    assert payload["summary"]["test_plan_rows"] == 0
+    assert payload["summary"]["fallback_rows"] == 0
+    assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
+    assert not payload["buckets"]["fallback-diagnostic"]
+    assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
+    assert payload["filters"]["exclude_fallback"] is True
+    assert payload["filters"]["include_blocked_fallback"] is True
+
+
 def test_opportunity_report_matches_prefixed_shorthand_related_belief(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 

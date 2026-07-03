@@ -660,9 +660,15 @@ class BenchmarkTestTriageRow(BenchmarkTestRow):
     review: BenchmarkTestReviewFields
 
 
+class BenchmarkTestSuppressedBlockedSupportDiagnostics(TypedDict):
+    rows: int
+    top_benchmarks: list[BenchmarkCountRow]
+
+
 class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
     top_benchmarks: list[BenchmarkCountRow]
     top_facets: list[FacetCountRow]
+    suppressed_blocked_support: NotRequired[BenchmarkTestSuppressedBlockedSupportDiagnostics]
 
 
 class BenchmarkTestTriageReport(TypedDict):
@@ -2776,15 +2782,39 @@ def _top_triage_facet_counts(rows: list[BenchmarkTestTriageRow], *, top: int = 1
     ]
 
 
+def _is_blocked_support_fallback(row: BenchmarkTestRow) -> bool:
+    return row["priority_source"] == "gap-fallback" and row["task_support_state"] == "blocked"
+
+
+def _partition_blocked_support_fallback_rows(
+    rows: list[BenchmarkTestRow],
+    *,
+    include_blocked_fallback: bool,
+) -> tuple[list[BenchmarkTestRow], list[BenchmarkTestRow]]:
+    if include_blocked_fallback:
+        return rows, []
+
+    visible: list[BenchmarkTestRow] = []
+    suppressed: list[BenchmarkTestRow] = []
+    for row in rows:
+        if _is_blocked_support_fallback(row):
+            suppressed.append(row)
+        else:
+            visible.append(row)
+    return visible, suppressed
+
+
 def _benchmark_test_triage_summary(
     report_summary: BenchmarkTestSummary,
     *,
     rows: list[BenchmarkTestRow],
     buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]],
+    suppressed_blocked_support_fallback_rows: int,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = dict(report_summary)
     summary["bucket_counts"] = _benchmark_test_triage_bucket_counts(buckets)
     summary["readiness_counts"] = _benchmark_test_readiness_counts(rows)
+    summary["suppressed_blocked_support_fallback_rows"] = suppressed_blocked_support_fallback_rows
     return summary
 
 
@@ -2797,6 +2827,7 @@ def _benchmark_test_triage_filters(
     state: TestPlanState | None,
     source: PrioritySource | None,
     exclude_fallback: bool,
+    include_blocked_fallback: bool,
     readiness: ReadinessLabel | None,
     benchmark_id: str | None,
 ) -> dict[str, Any]:
@@ -2815,6 +2846,8 @@ def _benchmark_test_triage_filters(
         filters["source"] = source
     if exclude_fallback:
         filters["exclude_fallback"] = True
+    if include_blocked_fallback:
+        filters["include_blocked_fallback"] = True
     if readiness is not None:
         filters["readiness"] = readiness
     if benchmark_id is not None:
@@ -3061,6 +3094,7 @@ def benchmark_test_triage_report(
     state: TestPlanState | None = None,
     source: PrioritySource | None = None,
     exclude_fallback: bool = False,
+    include_blocked_fallback: bool = False,
     readiness: ReadinessLabel | None = None,
     benchmark_id: str | None = None,
     review_file: str | None = None,
@@ -3078,19 +3112,36 @@ def benchmark_test_triage_report(
         benchmark_id=benchmark_id,
     )
     rows = report["benchmark_tests"]
+    visible_rows, suppressed_blocked_support_rows = _partition_blocked_support_fallback_rows(
+        rows,
+        include_blocked_fallback=include_blocked_fallback,
+    )
     buckets = _empty_benchmark_test_triage_buckets()
-    for row in rows:
+    for row in visible_rows:
         bucket = _benchmark_test_triage_bucket(row)
         buckets[bucket].append(_benchmark_test_triage_row(row))
 
     fallback_rows = buckets["fallback-diagnostic"]
+    fallback_diagnostics: BenchmarkTestTriageFallbackDiagnostics = {
+        "top_benchmarks": _top_triage_benchmark_counts(fallback_rows),
+        "top_facets": _top_triage_facet_counts(fallback_rows),
+    }
+    if suppressed_blocked_support_rows:
+        suppressed_triage_rows = [_benchmark_test_triage_row(row) for row in suppressed_blocked_support_rows]
+        fallback_diagnostics["suppressed_blocked_support"] = {
+            "rows": len(suppressed_blocked_support_rows),
+            "top_benchmarks": _top_triage_benchmark_counts(suppressed_triage_rows),
+        }
+
     return {
-        "summary": _benchmark_test_triage_summary(report["summary"], rows=rows, buckets=buckets),
+        "summary": _benchmark_test_triage_summary(
+            report["summary"],
+            rows=rows,
+            buckets=buckets,
+            suppressed_blocked_support_fallback_rows=len(suppressed_blocked_support_rows),
+        ),
         "buckets": buckets,
-        "fallback_diagnostics": {
-            "top_benchmarks": _top_triage_benchmark_counts(fallback_rows),
-            "top_facets": _top_triage_facet_counts(fallback_rows),
-        },
+        "fallback_diagnostics": fallback_diagnostics,
         "filters": _benchmark_test_triage_filters(
             include_commons=include_commons,
             entity_id=entity_id,
@@ -3099,6 +3150,7 @@ def benchmark_test_triage_report(
             state=state,
             source=source,
             exclude_fallback=exclude_fallback,
+            include_blocked_fallback=include_blocked_fallback,
             readiness=readiness,
             benchmark_id=benchmark_id,
         ),
