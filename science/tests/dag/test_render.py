@@ -149,6 +149,24 @@ def test_render_fails_before_partial_write_when_block_commented_dot_edge_unbacke
     assert not (dag_dir / "claim-auto.dot").exists()
 
 
+@pytest.mark.parametrize("comment", ["/* comment */", "// comment"])
+def test_render_styles_backed_dot_edge_with_trailing_comment(tmp_path: Path, comment: str) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    raw_edge_line = f"  a -> b; {comment}"
+    (dag_dir / "claim.dot").write_text(f"digraph claim {{\n{raw_edge_line}\n}}\n", encoding="utf-8")
+
+    render_one(
+        dag_dir,
+        "claim",
+        proposition_edges=[_proposition_edge("a", "b", edge_id=1)],
+    )
+
+    dot = (dag_dir / "claim-auto.dot").read_text(encoding="utf-8")
+    assert raw_edge_line not in dot
+    assert 'a -> b [color="#2e7d32", penwidth=2.5, style="solid"' in dot
+
+
 def test_render_fails_before_partial_write_when_duplicate_dot_edge_occurrence_unbacked(tmp_path: Path) -> None:
     dag_dir = tmp_path / "doc/figures/dags"
     dag_dir.mkdir(parents=True)

@@ -118,6 +118,12 @@ EDGE_RE = re.compile(
 )
 
 
+def _match_dot_edge_line(line: str) -> re.Match[str] | None:
+    comment_stripped = re.sub(r"/\*.*?\*/", "", line)
+    comment_stripped = re.sub(r"//.*$", "", comment_stripped)
+    return EDGE_RE.match(comment_stripped)
+
+
 def _flatten_multiline_attrs(text: str) -> str:
     buf = ""
     depth = 0
@@ -325,7 +331,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
                 banner_inserted = True
                 continue
 
-        em = EDGE_RE.match(line)
+        em = _match_dot_edge_line(line)
         if em:
             queue = edges_by_pair[(em.group("src"), em.group("tgt"))]
             if not queue:
@@ -431,8 +437,7 @@ def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
     text = _flatten_multiline_attrs(text)
     occurrences: list[tuple[str, str]] = []
     for raw_line in text.splitlines():
-        line = re.sub(r"//.*$", "", raw_line)
-        em = EDGE_RE.match(line)
+        em = _match_dot_edge_line(raw_line)
         if em:
             occurrences.append((em.group("src"), em.group("tgt")))
     return occurrences
