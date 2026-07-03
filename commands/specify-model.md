@@ -113,7 +113,7 @@ For each important variable:
 
 For inquiry-patch projects, record durable variable refs in
 `entities/patches/<slug>.md`. Make sure those refs resolve through source
-records, lightweight term rows, or concept entity owners before rebuilding the
+records, `science terms add` rows, or concept entity owners before rebuilding the
 graph from source. Use a more specific registered source kind when one exists;
 use `science entity create concept "<title>"` only for reusable project-local
 concepts that need a full Markdown owner.

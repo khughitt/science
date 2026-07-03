@@ -55,6 +55,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `dag` | Derived-state | Mixed | Render, number, validate, and audit DAG views. This is an older family-local surface and uses `--project` for project roots. |
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
+| `terms` | Canonical | Source-write | Creates lightweight local semantic term rows in the configured local profile's `terms.yaml`. |
 | `patch` | Derived-state | Read-only | Explain or check derived patch membership. |
 | `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |

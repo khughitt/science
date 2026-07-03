@@ -117,6 +117,7 @@ from science_tool.styles import (
     set_color_policy,
 )
 from science_tool.telemetry_cli import telemetry_group
+from science_tool.terms import TermsCommandError, add_term
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.wander.cli import wander_command
@@ -247,6 +248,50 @@ def main(ctx: click.Context, color_policy: str | None) -> None:
 @main.result_callback()
 def _record_cli_success(_: object, **__: object) -> None:
     _record_telemetry_finish()
+
+
+@main.group("terms")
+def terms_group() -> None:
+    """Author structured local terms."""
+
+
+@terms_group.command("add")
+@click.argument("term_id")
+@click.option("--title", required=True, help="Display title for the term.")
+@click.option("--description", default=None, help="Optional term description.")
+@click.option("--alias", "aliases", multiple=True, help="Alias to add. May be repeated.")
+@click.option("--same-as", "same_as", multiple=True, help="Equivalent external identifier. May be repeated.")
+@click.option("--ontology-term", "ontology_terms", multiple=True, help="External ontology CURIE. May be repeated.")
+@click.option(
+    "--project-root",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    default=Path("."),
+    show_default=True,
+    help="Project root.",
+)
+def terms_add(
+    term_id: str,
+    title: str,
+    description: str | None,
+    aliases: tuple[str, ...],
+    same_as: tuple[str, ...],
+    ontology_terms: tuple[str, ...],
+    project_root: Path,
+) -> None:
+    project_path = project_root.resolve()
+    try:
+        result = add_term(
+            term_id,
+            title=title,
+            description=description,
+            aliases=aliases,
+            same_as=same_as,
+            ontology_terms=ontology_terms,
+            project_root=project_path,
+        )
+    except TermsCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Added {result.term_id} at {result.path.relative_to(project_path.resolve())}")
 
 
 def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
