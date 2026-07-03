@@ -1,0 +1,228 @@
+# Bio Identity P4.4 Cytoband Proxy Reference - Design
+
+- **Status:** Draft for review
+- **Date:** 2026-07-03
+- **Scope:** P4.4 of the bio identity adoption umbrella: promote `dataset:cytoband-hg19` as a pinned commons reference dataset usable as `identity_context.assembly.proxy.via`, and add a small Science runtime reader for cytoband rows plus interval overlap lookup.
+- **Umbrella:** `docs/plans/2026-07-03-bio-identity-adoption-umbrella.md`
+- **Depends on:** P1-P3 proxy provenance/routing support, P4.1 assembly-registry artifact shape, and P4.3 reference-artifact consumption patterns.
+
+## Purpose
+
+P4.4 makes the structured proxy path real for the t665 motivating case. After this slice, a derived mixed-build dataset can declare a `cytoband_proxy` assembly with `proxy.via: dataset:cytoband-hg19`, validation can prove that the reference artifact is a real dataset routed through `derivation.transformations[]`, and Science can load a pinned hg19 cytoband table offline to answer small interval-overlap questions.
+
+The invariant is unchanged from the bio identity adoption layer: a proxy does not create assembly equality. The output assembly remains `declared_unresolved`; `proxy` explains why that unresolved state is intentional and machine-visible.
+
+## Current State
+
+Science already has most framework support:
+
+- `science-model` accepts `identity_context.assembly.proxy` with `type` in `cytoband_proxy | interval_overlap_proxy | symbol_space_proxy`, `via`, and `sources`.
+- `dataset register-run` routes `proxy.sources[].dataset` into `derivation.inputs` and routes `proxy.via` into `derivation.transformations[]` as `kind: proxy_via`.
+- `science_tool.validate.checks.identity_context` enforces that `proxy.via` resolves to a dataset entity, appears in `derivation.transformations[]`, and does not need to appear in `derivation.inputs`.
+- Existing tests use synthetic `dataset:cytoband-map` examples to prove reference-vs-source routing.
+
+The missing piece is the concrete reference artifact. The umbrella still carries the fork "is `cytoband-hg19` a commons dataset or MM30-local?" and P5 needs a stable `proxy.via` target before t665 can replace its prose caveat with structured identity.
+
+`~/d/science-commons` does not currently contain `datasets/cytoband-hg19/`.
+
+## Decision
+
+Create `~/d/science-commons/datasets/cytoband-hg19/` as the authoritative reference artifact home, backed by UCSC hg19 `cytoBand.txt.gz`.
+
+The artifact contract is deliberately small:
+
+- Resource name: `cytobands`
+- Resource path: `cytobands.csv`
+- Columns: `chrom,start,end,name,gie_stain`
+- Coordinates: UCSC hg19, zero-based half-open intervals, preserving UCSC chromosome names such as `chr1`.
+- Rows: normalized from UCSC `cytoBand.txt.gz`, not from `cytoBandIdeo.txt.gz`.
+
+Science adds a small runtime reader in `science_tool.commons.cytoband`:
+
+- `CytobandRow(chrom: str, start: int, end: int, name: str, gie_stain: str)`
+- `load_cytobands(dataset_id="dataset:cytoband-hg19", commons_root=None, data_root=None) -> list[CytobandRow]`
+- `bands_for_interval(rows, *, chrom: str, start: int, end: int) -> list[CytobandRow]`
+
+`bands_for_interval` uses the standard half-open overlap rule: `row.start < end and start < row.end`. It fails early on invalid query intervals (`start < 0` or `end <= start`) and on unknown query chromosomes. It returns every overlapping band in artifact order, which the builder pins to coordinate order. It does not choose a single "best" band. Point queries are represented by the caller as one-base half-open intervals such as `[p, p + 1)`.
+
+## Source Choice
+
+Use UCSC's hg19 database table:
+
+```text
+https://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/cytoBand.txt.gz
+```
+
+Do not use `cytoBandIdeo.txt.gz` for this artifact. UCSC support history describes `cytoBandIdeo` as modified for ideogram display, while `cytoBand` underlies the main data track and is the better source for data workflows. P4.4's reference artifact should therefore pin `cytoBand.txt.gz`.
+
+The recipe is operator-run and may use the network at fetch time. Runtime Science readers and validators remain fully offline.
+
+## Built Artifact Contract
+
+`~/d/science-commons/datasets/cytoband-hg19/` owns:
+
+- `entity.md`
+- `datapackage.yaml`
+- `cytobands.csv`
+- `recipe/fetch.py`
+- `recipe/build.py`
+- `recipe/lockfile.yaml`
+- `recipe/README.md`
+
+Build-time inputs:
+
+- pinned UCSC URL in `recipe/lockfile.yaml`;
+- pinned source SHA-256 and byte count;
+- fetched `cytoBand.txt.gz` bytes;
+- fixed output schema.
+
+Build-time checks:
+
+- reject mutable URL segments such as `latest` or `current`;
+- verify fetched or installed source bytes against the lockfile;
+- parse exactly five tab-separated source fields per non-empty row;
+- require non-empty `chrom`, `name`, and `gie_stain`;
+- require integer `start` and `end` with `0 <= start < end`;
+- require `gie_stain` in `gneg | gpos25 | gpos50 | gpos75 | gpos100 | acen | gvar | stalk`;
+- reject duplicate `(chrom, start, end, name, gie_stain)` rows;
+- write deterministic CSV with fixed column order and fixed row order sorted by a UCSC hg19 chromosome key (`chr1`-`chr22`, `chrX`, `chrY`, `chrM`, then lexical fallback) plus `(start, end, name, gie_stain)`;
+- update datapackage `hash` and `bytes`;
+- update `entity.md` with row count and `updated:` when generated bytes change.
+
+Runtime checks:
+
+- `commons.resolver.resolve` verifies the datapackage resource hash before reading `cytobands.csv`;
+- the Science reader fails early on malformed rows, invalid coordinates, duplicate rows, and unknown query chromosomes;
+- runtime requires `gie_stain` to be non-empty but does not re-check the hg19 stain enum; the enum is a build-time source validation contract so a future upstream vocabulary change requires artifact rebuild/review, not a Science code change for hash-verified bytes;
+- runtime code never fetches from UCSC or any other network source.
+
+## Runtime Reader
+
+The reader is intentionally a row reader and overlap helper, not a coordinate reconciliation engine.
+
+Direct API behavior:
+
+- `load_cytobands(...)` resolves resource `cytobands` from `dataset:cytoband-hg19` and parses CSV rows into `CytobandRow`.
+- duplicate rows raise `CytobandError`; hg19 `cytoBand` is expected to have no duplicates, and duplicates are more likely to indicate a build or parse bug than meaningful data.
+- malformed CSV headers, blank required fields, bad integers, or invalid interval order raise `CytobandError`.
+- `bands_for_interval(...)` returns all bands whose interval overlaps the query on the same `chrom`.
+- `bands_for_interval(...)` raises `CytobandError` when `chrom` is absent from the loaded table. Returning `[]` is reserved for a known chromosome with no overlapping band, so namespace mistakes such as `1` or `NC_000001.10` against a UCSC-named table fail loudly.
+
+The function is enough to support t665-oriented assertions such as "this hg19 interval overlaps cytoband 1q21.3" without deciding how to summarize multi-band intervals or how to translate RefSeq-accession contigs to UCSC names.
+
+## Proxy Provenance Shape
+
+A derived proxy output keeps assembly unresolved and carries structured proxy provenance:
+
+```yaml
+identity_context:
+  taxon: 9606
+  assembly:
+    label: mixed-build-cytoband-proxy
+    registry: dataset:assembly-registry
+    resolution_status: declared_unresolved
+    proxy:
+      type: cytoband_proxy
+      via: dataset:cytoband-hg19
+      sources:
+        - dataset: dataset:gse131651-shah2019-nsd2
+          assembly: GRCh38
+        - dataset: dataset:gse87585-wu2017
+          assembly: hg19
+```
+
+`register-run` provenance keeps the reference artifact separate from data ancestors:
+
+```yaml
+derivation:
+  inputs:
+    - dataset:gse131651-shah2019-nsd2
+    - dataset:gse87585-wu2017
+  transformations:
+    - kind: proxy_via
+      dataset: dataset:cytoband-hg19
+      type: cytoband_proxy
+```
+
+P4.4 does not need a new provenance kind. It proves the existing `proxy_via` role against a real commons artifact instead of a synthetic `dataset:cytoband-map`.
+
+## Alternatives Considered
+
+### A. Promote UCSC hg19 cytoBand as `science-commons` `dataset:cytoband-hg19`
+
+Chosen. This gives MM30 and any other project one stable `proxy.via` target, keeps reference bytes under the commons lifecycle, and makes validation/provenance examples concrete before P5.
+
+### B. Keep cytobands MM30-local for t665 only
+
+Rejected for P4.4. It would unblock one workflow, but it would leave the umbrella fork unresolved and force the first P5 consumer to invent a local reference artifact instead of testing the framework's shared-reference path.
+
+### C. Expose only raw UCSC `cytoBand.txt.gz`
+
+Rejected. The raw source remains pinned in the recipe, but Science runtime readers should consume a deterministic normalized CSV with an explicit schema and datapackage hash.
+
+### D. Add a full cytoband mapping policy now
+
+Rejected. Choosing one label for an interval, summarizing multi-band overlaps, translating contig namespaces, or reconciling GRCh37/GRCh38 coordinates are larger workflow-policy questions. P4.4 only needs parse + overlap lookup.
+
+## Cross-Repo Ownership
+
+`~/d/science-commons` owns the built bytes and recipe:
+
+- `datasets/cytoband-hg19/recipe/lockfile.yaml`
+- `datasets/cytoband-hg19/recipe/fetch.py`
+- `datasets/cytoband-hg19/recipe/build.py`
+- `datasets/cytoband-hg19/recipe/README.md`
+- `datasets/cytoband-hg19/cytobands.csv`
+- `datasets/cytoband-hg19/datapackage.yaml`
+- `datasets/cytoband-hg19/entity.md`
+
+`~/d/science` owns the reader contract, validation fixtures, and umbrella update:
+
+- `science/src/science_tool/commons/cytoband.py`
+- `science/tests/test_commons_cytoband.py`
+- `science/tests/validate/test_checks_identity_context.py`
+- `science/tests/test_dataset_register_run.py`
+- `science/tests/fixtures/commons/cytoband/`
+- `science/tests/fixtures/commons/cytoband-data/`
+- `docs/plans/2026-07-03-bio-identity-adoption-umbrella.md`
+
+If implementation requires a `science-commons` worktree, create it under `~/d/science-commons/.worktrees/` and keep commits split by repo.
+
+## Integration Fixture
+
+Science should carry a reduced commons-style fixture parallel to P4.1-P4.3:
+
+1. `dataset:cytoband-hg19` entity + datapackage under `science/tests/fixtures/commons/cytoband/`.
+2. A small `cytobands.csv` under `science/tests/fixtures/commons/cytoband-data/`.
+3. Rows copied from or shaped like the built artifact, including at least one chromosome with adjacent bands and one query interval that overlaps multiple bands.
+4. Tests proving `load_cytobands(..., commons_root=..., data_root=...)` reads through datapackage hashes.
+5. Tests proving `bands_for_interval` returns same-chrom overlapping rows and rejects invalid intervals.
+6. Validation/register-run tests proving `dataset:cytoband-hg19` works as `proxy.via`, remains in `derivation.transformations[]`, and does not become a data ancestor.
+
+The fixture should stay small. It proves the reader and provenance contract; it does not duplicate the full hg19 table in Science.
+
+## Error Handling
+
+Builder errors are operator errors and should fail early with row numbers or resource names in the message.
+
+Reader errors should raise `CytobandError` at the direct API boundary. Validation surfaces should preserve existing proxy provenance behavior: missing `proxy.via` artifacts are validation errors, while missing commons data for unrelated checks should not create live network fallback behavior.
+
+## Non-Goals
+
+- No new identity model and no assertion that cytoband proxy output has a single seqcol digest.
+- No MM30/t665 entity or workflow retrofit; that is P5.
+- No contig alias translation between RefSeq accession names and UCSC chromosome names.
+- No liftover, BED/VCF projection, allele reminting, or coordinate normalization.
+- No CLI command for cytoband lookup unless later P5 work proves a workflow need.
+- No runtime network fallback.
+
+## Acceptance Criteria
+
+- `~/d/science-commons/datasets/cytoband-hg19/` exists with pinned UCSC hg19 `cytoBand.txt.gz` source metadata and deterministic `cytobands.csv`.
+- `datapackage.yaml` resource hashes and byte counts match generated bytes.
+- `entity.md` records the dataset as a public reference artifact and reports the row count.
+- Science has `science_tool.commons.cytoband` with `load_cytobands` and `bands_for_interval`.
+- Science tests prove cytoband rows load offline through commons datapackage/resource hashes.
+- Science tests prove interval overlap lookup behavior and invalid-interval errors.
+- Proxy provenance tests use `dataset:cytoband-hg19` as the real reference slug and preserve reference-vs-data ancestor routing.
+- The umbrella doc records P4.4 completion and moves the effort to P5 re-planning.

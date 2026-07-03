@@ -641,12 +641,14 @@ def _derived_with_identity(identity_context: dict, *, derivation: dict) -> dict:
 
 def test_declared_unresolved_proxy_passes_provenance_when_roles_are_routed() -> None:
     source = _with_assembly("dataset:source-a", "DIGEST_38")
-    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-hg19")
+    assembly = _declared_unresolved_proxy_assembly()
+    assembly["proxy"]["via"] = "dataset:cytoband-hg19"
     derived = _derived_with_identity(
-        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        {"taxon": 9606, "assembly": assembly},
         derivation={
             "inputs": ["dataset:source-a"],
-            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-hg19", "type": "cytoband_proxy"}],
         },
     )
 

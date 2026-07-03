@@ -1,0 +1,9 @@
+name: cytoband-hg19
+profile: data-package
+resources:
+  - name: cytobands
+    path: cytobands.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:05b4c26eb112f0d8e46ddf3c5e95551b320c5609e77e51f3523166ae8340c2bc"
+    bytes: 152
