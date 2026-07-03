@@ -706,10 +706,19 @@ Pass:
         ),
 ```
 
-In `record_from_action_payload`, for Lane B:
+In `record_from_action_payload`, initialize `assertion_fingerprint` **before** the
+`if decision in _LANE_A_DECISIONS: ... elif decision in _LANE_B_DECISIONS: ...`
+branch so it is in scope on every path (Lane A and the `DecisionRecord(...)`
+construction), then populate it only in the Lane B sparse-hint case:
 
 ```python
-        assertion_fingerprint: str | None = None
+    # before the Lane A / Lane B branch:
+    assertion_fingerprint: str | None = None
+```
+
+```python
+    # inside the `elif decision in _LANE_B_DECISIONS:` branch, replacing
+    # `record_refs = (proposition,)`:
         if decision == DECISION_ACCEPTED_SPARSE_HINTS:
             inputs = action.get("inputs")
             if not isinstance(inputs, Mapping):
@@ -723,7 +732,11 @@ In `record_from_action_payload`, for Lane B:
             record_refs = (proposition,)
 ```
 
-For Lane A, set `assertion_fingerprint = None`.
+Leave the Lane A branch alone; `assertion_fingerprint` stays `None` there.
+
+Note that `expected_judgment = judgment_id(lane, decision, [proposition])` is
+**unchanged** — the fingerprint is part of `record_refs` (which feeds
+`decision_id`) but never part of `judgment_id`.
 
 Pass `assertion_fingerprint=assertion_fingerprint` into `DecisionRecord`.
 
@@ -741,27 +754,70 @@ In `_validate_record_shape`, add:
             raise DecisionRecordError("assertion_fingerprint must be sha256: followed by 64 hex chars")
 ```
 
-Then in the Lane A branch require it absent:
+**Split the reconstruction refs.** The existing `_validate_record_shape` uses a
+single `refs` variable to rebuild **both** `judgment_id` and `decision_id`:
+
+```python
+    expected_judgment = judgment_id(record.lane, record.decision, refs)
+    ...
+    expected_decision = decision_record_id(
+        record.lane, record.decision, record.judgment_id, record.candidate_id, refs,
+    )
+```
+
+For `accepted_sparse_hints` these two diverge: `judgment_id` is authored from
+`[proposition]` only (the reviewer never sees the fingerprint, and
+`validate_review_doc` / `record_from_action_payload` both compute it that way),
+while `decision_id` must include the fingerprint. Reusing one `refs` for both
+would make `expected_judgment` mismatch the stored `judgment_id` and raise
+`"judgment_id does not match decision inputs"` for every closure record — and
+because `_validate_record_shape` runs inside `decision_record_to_json`,
+`evaluate_decision_records`, and `append_decision_records`, this breaks the
+Task 3 round-trip, evaluate, and suppress tests despite their "Expected: PASS".
+
+So replace the single `refs` with `judgment_refs` (never includes the
+fingerprint) and `decision_refs` (includes it for closure records).
+
+Lane A branch — require the fingerprint absent, and set both refs to members:
 
 ```python
         if record.assertion_fingerprint is not None:
             raise DecisionRecordError("same_claim record must not have assertion_fingerprint")
+        judgment_refs: Sequence[str] = record.members
+        decision_refs: Sequence[str] = record.members
 ```
 
-In the Lane B branch:
+Lane B branch:
 
 ```python
         if record.decision == DECISION_ACCEPTED_SPARSE_HINTS:
             if record.assertion_fingerprint is None:
                 raise DecisionRecordError("accepted_sparse_hints record must have assertion_fingerprint")
-            refs = (record.proposition, record.assertion_fingerprint)
+            judgment_refs = (record.proposition,)
+            decision_refs = (record.proposition, record.assertion_fingerprint)
         else:
             if record.assertion_fingerprint is not None:
                 raise DecisionRecordError("factorization record must not have assertion_fingerprint")
-            refs = (record.proposition,)
+            judgment_refs = (record.proposition,)
+            decision_refs = (record.proposition,)
 ```
 
-This ensures `decision_id` includes the fingerprint for closure records.
+Then use each ref set with the matching id:
+
+```python
+    expected_judgment = judgment_id(record.lane, record.decision, judgment_refs)
+    if record.judgment_id != expected_judgment:
+        raise DecisionRecordError("judgment_id does not match decision inputs")
+    expected_decision = decision_record_id(
+        record.lane, record.decision, record.judgment_id, record.candidate_id, decision_refs,
+    )
+    if record.decision_id != expected_decision:
+        raise DecisionRecordError("decision_id does not match decision inputs")
+```
+
+This ensures `decision_id` includes the fingerprint for closure records while
+`judgment_id` stays fingerprint-free, so re-review after fingerprint drift mints a
+distinct `decision_id` and the record still shape-validates.
 
 - [ ] **Step 4: Implement sparse-hint evaluation freshness**
 
