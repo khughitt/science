@@ -12,6 +12,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from click.testing import CliRunner
+
+from science_tool.cli import main
+
 # Path to the science project (parent of tests/) — needed to run the CLI
 # via `python -m science_tool` and to locate the canonical bytes for the shim
 # equivalence test.
@@ -20,13 +24,10 @@ _REPO_ROOT = _SCIENCE_TOOL_PROJECT.parent
 
 
 def _run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "science_tool", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    if cwd is not None:
+        raise ValueError("in-process CLI helper does not support cwd")
+    result = CliRunner().invoke(main, args)
+    return subprocess.CompletedProcess(args, result.exit_code, result.output, "")
 
 
 def _write_full_science_yaml(project: Path, name: str = "acceptance") -> None:

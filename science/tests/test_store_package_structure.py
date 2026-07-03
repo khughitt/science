@@ -15,8 +15,11 @@ def _names_imported_from_store() -> set[str]:
     names: set[str] = set()
     for root in SEARCH_ROOTS:
         for py in root.rglob("*.py"):
+            source = py.read_text(encoding="utf-8")
+            if "science_tool.graph.store" not in source:
+                continue
             try:
-                tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
+                tree = ast.parse(source, filename=str(py))
             except SyntaxError:
                 continue
             for node in ast.walk(tree):
