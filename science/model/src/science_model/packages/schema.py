@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -362,6 +362,80 @@ class IdentityContext(BaseModel):
     molecular_ids: dict[str, MolecularTierIdentity] = Field(default_factory=dict)
     assembly: AssemblyIdentity | None = None
     model_config = ConfigDict(extra="allow")
+
+
+class WorkflowOutputIdentityInheritSelector(BaseModel):
+    """Explicit workflow output inheritance source selector."""
+
+    from_: str = Field(alias="from", min_length=1)
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_by_alias=True,
+        validate_by_name=False,
+        serialize_by_alias=True,
+    )
+
+    @field_validator("from_")
+    @classmethod
+    def _from_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "inherit.from")
+
+
+class WorkflowOutputIdentityInheritFrom(BaseModel):
+    """Explicit workflow output inheritance declaration."""
+
+    inherit: WorkflowOutputIdentityInheritSelector
+    model_config = ConfigDict(extra="forbid")
+
+
+class WorkflowOutputAssemblyIdentity(BaseModel):
+    """Workflow output assembly identity contract.
+
+    Literal assembly declarations use the same fields as ``AssemblyIdentity``.
+    Transform-only contracts may omit registry/resolution fields because P3.2
+    resolves them from inputs when materializing the derived entity.
+    """
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    registry: str | None = None
+    resolution_status: Literal["resolved", "declared_unresolved"] | None = None
+    proxy: IdentityProxy | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_dataset_ref(value, "registry")
+
+    @model_validator(mode="after")
+    def _validate_resolution(self) -> "WorkflowOutputAssemblyIdentity":
+        if self.resolution_status == "resolved" and (self.seqcol_digest is None or self.seqcol_digest == "UNKNOWN"):
+            raise ValueError("resolved assembly requires seqcol_digest other than UNKNOWN")
+        if self.proxy is not None and self.resolution_status != "declared_unresolved":
+            raise ValueError("assembly proxy requires resolution_status declared_unresolved")
+        return self
+
+
+WorkflowOutputTaxonIdentity = (
+    Annotated[int, Field(strict=True, ge=1)] | Literal["inherit"] | WorkflowOutputIdentityInheritFrom
+)
+WorkflowOutputAssemblyIdentityValue = (
+    Literal["inherit"] | WorkflowOutputIdentityInheritFrom | WorkflowOutputAssemblyIdentity
+)
+WorkflowOutputMolecularTierIdentity = Literal["inherit"] | WorkflowOutputIdentityInheritFrom | MolecularTierIdentity
+
+
+class WorkflowOutputIdentity(BaseModel):
+    """Identity contract declared on a workflow ``outputs[]`` entry."""
+
+    taxon: WorkflowOutputTaxonIdentity | None = None
+    assembly: WorkflowOutputAssemblyIdentityValue | None = None
+    molecular_ids: dict[str, WorkflowOutputMolecularTierIdentity] = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
 
 
 class DatasetUsage(BaseModel):
