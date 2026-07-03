@@ -466,4 +466,6 @@ def render_all(
     """
     slugs = list(paths.dags) if paths.dags else _discover_slugs(paths.dag_dir)
     for slug in slugs:
+        _assert_dot_edges_backed(slug, paths.dag_dir / f"{slug}.dot", proposition_edges)
+    for slug in slugs:
         render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)

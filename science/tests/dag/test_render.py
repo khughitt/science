@@ -139,6 +139,35 @@ def test_render_fails_before_partial_write_when_dot_edge_unbacked(tmp_path: Path
     assert not (dag_dir / "claim-auto.dot").exists()
 
 
+def test_render_all_fails_before_any_partial_write_when_later_dot_edge_unbacked(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "a.dot").write_text("digraph a {\n  a_source -> a_target;\n}\n", encoding="utf-8")
+    (dag_dir / "b.dot").write_text("digraph b {\n  b_source -> b_target;\n}\n", encoding="utf-8")
+
+    paths = DagPaths(dag_dir=dag_dir, tasks_dir=tmp_path / "tasks", dags=["a", "b"])
+
+    with pytest.raises(ValueError, match="b_source -> b_target"):
+        render_all(
+            paths,
+            proposition_edges=[
+                {
+                    "source": "a_source",
+                    "target": "a_target",
+                    "polarity": "positive",
+                    "belief_magnitude": "speculative",
+                    "claim_layer": "causal_effect",
+                    "refuted": False,
+                    "has_grounding_evidence": False,
+                    "identification": "observational",
+                }
+            ],
+        )
+
+    assert not (dag_dir / "a-auto.dot").exists()
+    assert not (dag_dir / "b-auto.dot").exists()
+
+
 def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
     # h1-h2-bridge fixture has 2 eliminated edges (state->rib, state->e2f).
     render_one(

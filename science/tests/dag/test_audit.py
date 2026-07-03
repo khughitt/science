@@ -155,7 +155,9 @@ def test_audit_no_findings_on_clean_project(tmp_path: Path) -> None:
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     # with_drift=False → t001 citation is stale by age but drift rule doesn't fire
     # because no newer task names the hypothesis.
-    assert not report.staleness.has_findings or report.staleness.has_findings  # smoke
+    assert report.validation.ok
+    assert not report.staleness.has_findings
+    assert not report.has_findings
 
 
 def test_audit_to_json_is_stable(tmp_path: Path) -> None:
