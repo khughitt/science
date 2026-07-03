@@ -38,6 +38,27 @@ legacy_relation_label: affects
     )
 
 
+def _write_malformed_proposition(project: Path) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / "malformed.md").write_text(
+        """---
+id: proposition:malformed
+type: proposition
+title: Malformed
+status: active
+subject: a
+predicate: affects
+object: b
+polarity: not_a_real_polarity
+---
+
+Malformed proposition entity.
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_propositions_for_dot(project: Path, dot_path: Path, slug_prefix: str) -> None:
     _, dot_edges = _parse_dot_topology(dot_path)
     for index, (source, target) in enumerate(sorted(dot_edges), start=1):
@@ -242,6 +263,19 @@ def test_cli_dag_number_is_idempotent(cli_project: Path) -> None:
     _assert_no_retired_edge_yaml(cli_project)
 
 
+def test_cli_dag_number_does_not_load_propositions(cli_project: Path) -> None:
+    _remove_retired_edge_yaml(cli_project)
+    _write_malformed_proposition(cli_project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "number", "--dag", "h1-progression", "--project", str(cli_project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (cli_project / "doc/figures/dags/h1-progression-numbered.dot").exists()
+
+
 def test_cli_dag_number_force_stubs_is_retired(cli_project: Path) -> None:
     result = CliRunner().invoke(
         main,
@@ -250,6 +284,19 @@ def test_cli_dag_number_force_stubs_is_retired(cli_project: Path) -> None:
 
     assert result.exit_code != 0
     assert "retired" in result.output.lower()
+
+
+def test_cli_dag_number_force_stubs_is_retired_before_loading_propositions(cli_project: Path) -> None:
+    _write_malformed_proposition(cli_project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "number", "--force-stubs", "--project", str(cli_project)],
+    )
+
+    assert result.exit_code != 0
+    assert "retired" in result.output.lower()
+    assert "not_a_real_polarity" not in result.output
 
 
 def test_cli_dag_retired_edges_json_reports_migration_summary(tmp_path: Path) -> None:

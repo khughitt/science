@@ -123,16 +123,12 @@ def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    proposition_edges = _source_proposition_edges(project)
-
     try:
         if slug is not None:
-            number_one(
-                paths.dag_dir, slug, force_stubs=force_stubs, proposition_edges=proposition_edges
-            )
+            number_one(paths.dag_dir, slug, force_stubs=force_stubs)
             click.echo(f"Numbered {slug}-numbered.dot")
         else:
-            number_all(paths, force_stubs=force_stubs, proposition_edges=proposition_edges)
+            number_all(paths, force_stubs=force_stubs)
             click.echo("Numbered all DAGs.")
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
