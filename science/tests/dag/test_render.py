@@ -139,13 +139,38 @@ def test_render_fails_before_partial_write_when_dot_edge_unbacked(tmp_path: Path
     assert not (dag_dir / "claim-auto.dot").exists()
 
 
+def test_render_fails_before_partial_write_when_duplicate_dot_edge_occurrence_unbacked(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "claim.dot").write_text("digraph claim {\n  a -> b;\n  a -> b;\n}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="a -> b"):
+        render_one(
+            dag_dir,
+            "claim",
+            proposition_edges=[
+                {
+                    "source": "a",
+                    "target": "b",
+                    "polarity": "positive",
+                    "belief_magnitude": "speculative",
+                    "claim_layer": "causal_effect",
+                    "refuted": False,
+                    "has_grounding_evidence": False,
+                    "identification": "observational",
+                }
+            ],
+        )
+    assert not (dag_dir / "claim-auto.dot").exists()
+
+
 def test_render_all_fails_before_any_partial_write_when_later_dot_edge_unbacked(tmp_path: Path) -> None:
     dag_dir = tmp_path / "doc/figures/dags"
     dag_dir.mkdir(parents=True)
     (dag_dir / "a.dot").write_text("digraph a {\n  a_source -> a_target;\n}\n", encoding="utf-8")
     (dag_dir / "b.dot").write_text("digraph b {\n  b_source -> b_target;\n}\n", encoding="utf-8")
 
-    paths = DagPaths(dag_dir=dag_dir, tasks_dir=tmp_path / "tasks", dags=["a", "b"])
+    paths = DagPaths(dag_dir=dag_dir, tasks_dir=tmp_path / "tasks", dags=("a", "b"))
 
     with pytest.raises(ValueError, match="b_source -> b_target"):
         render_all(

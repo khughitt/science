@@ -61,11 +61,10 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 
 from science_tool.dag.paths import DagPaths
-from science_tool.dag.validate import _parse_dot_topology
 from science_tool.graph.derived_status import derived_edge_status
 
 log = logging.getLogger(__name__)
@@ -423,11 +422,27 @@ def _discover_slugs(dag_dir: Path) -> list[str]:
     )
 
 
+def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
+    """Return DOT edge occurrences in source order for the simple edge syntax render supports."""
+    text = _flatten_multiline_attrs(dot_path.read_text(encoding="utf-8"))
+    occurrences: list[tuple[str, str]] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"//.*$", "", raw_line)
+        em = EDGE_RE.match(line)
+        if em:
+            occurrences.append((em.group("src"), em.group("tgt")))
+    return occurrences
+
+
 def _assert_dot_edges_backed(slug: str, dot_path: Path, edges: list[dict]) -> None:  # type: ignore[type-arg]
-    """Fail before writing if a DOT edge lacks a compiled proposition edge."""
-    _, dot_edges = _parse_dot_topology(dot_path)
-    available = {(str(edge["source"]), str(edge["target"])) for edge in edges}
-    missing = sorted(dot_edges - available)
+    """Fail before writing if any DOT edge occurrence lacks a compiled proposition edge."""
+    dot_edge_counts = Counter(_dot_edge_occurrences(dot_path))
+    available_counts = Counter((str(edge["source"]), str(edge["target"])) for edge in edges)
+    missing = sorted(
+        edge_pair
+        for edge_pair, dot_count in dot_edge_counts.items()
+        if available_counts[edge_pair] < dot_count
+    )
     if missing:
         missing_text = ", ".join(f"{source} -> {target}" for source, target in missing)
         raise ValueError(f"{slug}: no compiled proposition edge for DOT edge(s): {missing_text}")
