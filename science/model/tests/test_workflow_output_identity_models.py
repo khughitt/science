@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from science_model.packages.schema import (
     MolecularTierIdentity,
+    WorkflowOutput,
     WorkflowOutputAssemblyIdentity,
     WorkflowOutputIdentity,
     WorkflowOutputIdentityInheritFrom,
@@ -23,6 +24,30 @@ def test_workflow_output_identity_accepts_pass_through_inherit() -> None:
     assert identity.taxon == "inherit"
     assert identity.assembly == "inherit"
     assert identity.molecular_ids["gene"] == "inherit"
+
+
+def test_workflow_output_coerces_identity_contract() -> None:
+    output = WorkflowOutput.model_validate(
+        {
+            "slug": "normalized-expression",
+            "title": "Normalized expression matrix",
+            "resource_names": ["expression"],
+            "ontology_terms": ["EFO:0002770"],
+            "schema_profile": "science-pkg-entity-1.0+bio.rnaseq/1.0",
+            "identity": {
+                "taxon": "inherit",
+                "assembly": "inherit",
+                "molecular_ids": {"gene": "inherit"},
+            },
+        }
+    )
+
+    assert output.slug == "normalized-expression"
+    assert output.resource_names == ["expression"]
+    assert output.ontology_terms == ["EFO:0002770"]
+    assert output.schema_profile == "science-pkg-entity-1.0+bio.rnaseq/1.0"
+    assert output.identity is not None
+    assert output.identity.assembly == "inherit"
 
 
 def test_workflow_output_identity_accepts_explicit_inherit_from() -> None:

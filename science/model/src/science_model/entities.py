@@ -20,6 +20,7 @@ from science_model.packages.schema import (
     DerivationBlock,
     IdentityContext,
     MemberOfDerivationBlock,
+    WorkflowOutput,
     WorkflowRecipeDerivationBlock,
 )
 from science_model.reasoning import (
@@ -801,6 +802,12 @@ class WorkflowRunEntity(ProjectEntity):
         if self.status == "complete":
             return Readiness(ready=True, state="complete")
         return Readiness(ready=False, state=self.status or "unknown")
+
+
+class WorkflowEntity(ProjectEntity):
+    """Workflow definition with declared logical outputs."""
+
+    outputs: list[WorkflowOutput] = Field(default_factory=list)
 
 
 class ResearchPackageEntity(ProjectEntity):

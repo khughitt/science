@@ -438,6 +438,18 @@ class WorkflowOutputIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class WorkflowOutput(BaseModel):
+    """Logical output declared by a workflow entity."""
+
+    slug: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    resource_names: list[str] = Field(default_factory=list)
+    ontology_terms: list[str] = Field(default_factory=list)
+    schema_profile: str | None = Field(default=None, min_length=1)
+    identity: WorkflowOutputIdentity | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
 class DatasetUsage(BaseModel):
     """Forward-provenance: a consumer's declared use of one dataset (Pillar A/B).
 

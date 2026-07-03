@@ -14,6 +14,7 @@ from science_model.entities import (
     EpistemicReviewState,
     EvidenceLineEntity,
     MechanismEntity,
+    WorkflowEntity,
     core_entity_type_for_kind,
 )
 from science_model.identity import EntityScope, ExternalId
@@ -445,5 +446,10 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             shared_cohort=fm.get("shared_cohort"),
             evidence_role=fm.get("evidence_role"),  # optional; pydantic coerces or None
             evidence_type=fm.get("evidence_type"),
+        )
+    if kind == EntityType.WORKFLOW.value:
+        return WorkflowEntity(
+            **entity_kwargs,
+            outputs=list(fm.get("outputs") or []),
         )
     return Entity(**entity_kwargs)
