@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict, cast
@@ -671,6 +671,22 @@ class BenchmarkTestSuppressedBlockedSupportDiagnostics(TypedDict):
     top_benchmarks: list[BenchmarkCountRow]
 
 
+class BenchmarkTestFallbackRollup(TypedDict):
+    benchmark_id: str
+    benchmark_title: str
+    task_id: str | None
+    task_type: str
+    count: int
+    task_support_state: BenchmarkTaskSupportState | None
+    task_support_reason: str
+    readiness_label: ReadinessLabel
+    dataset_class: DatasetClass
+    test_plan_state: TestPlanState
+    top_facets: list[FacetCountRow]
+    example_entities: list[str]
+    reason_notes: list[str]
+
+
 class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
     top_benchmarks: list[BenchmarkCountRow]
     top_facets: list[FacetCountRow]
@@ -679,6 +695,7 @@ class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
     task_support_counts: dict[TaskSupportCountKey, int]
     top_benchmarks_by_readiness: dict[ReadinessLabel, list[BenchmarkCountRow]]
     top_benchmarks_by_dataset_class: dict[DatasetClass, list[BenchmarkCountRow]]
+    rollups: list[BenchmarkTestFallbackRollup]
     suppressed_blocked_support: NotRequired[BenchmarkTestSuppressedBlockedSupportDiagnostics]
 
 
@@ -2841,6 +2858,118 @@ def _top_triage_benchmark_counts_by_dataset_class(
     }
 
 
+_TASK_SUPPORT_ROLLUP_ORDER: dict[BenchmarkTaskSupportState | None, int] = {
+    "supported": 0,
+    "candidate": 1,
+    "blocked": 2,
+    None: 3,
+}
+
+
+def _benchmark_test_fallback_rollup_sort_key(
+    rollup: BenchmarkTestFallbackRollup,
+) -> tuple[int, str, str, int, int, int, int]:
+    return (
+        -rollup["count"],
+        rollup["benchmark_id"],
+        rollup["task_id"] or "",
+        _TASK_SUPPORT_ROLLUP_ORDER[rollup["task_support_state"]],
+        READINESS_LABELS.index(rollup["readiness_label"]),
+        DATASET_CLASSES.index(rollup["dataset_class"]),
+        ("concrete", "draft-needed").index(rollup["test_plan_state"]),
+    )
+
+
+def _rollup_task_label(benchmark_id: str, task_id: str | None) -> str:
+    return task_id or benchmark_id
+
+
+def _distinct_row_strings(
+    rows: Sequence[BenchmarkTestTriageRow],
+    value: Callable[[BenchmarkTestTriageRow], str],
+) -> set[str]:
+    return {value(row) for row in rows}
+
+
+def _benchmark_test_fallback_rollups(
+    rows: list[BenchmarkTestTriageRow],
+    *,
+    examples: int = 3,
+) -> list[BenchmarkTestFallbackRollup]:
+    grouped: dict[
+        tuple[
+            str,
+            str | None,
+            BenchmarkTaskSupportState | None,
+            ReadinessLabel,
+            DatasetClass,
+            TestPlanState,
+        ],
+        list[BenchmarkTestTriageRow],
+    ] = {}
+    for row in rows:
+        key = (
+            row["benchmark_id"],
+            row["task_id"],
+            row["task_support_state"],
+            row["readiness_label"],
+            row["dataset_class"],
+            row["test_plan_state"],
+        )
+        grouped.setdefault(key, []).append(row)
+
+    rollups: list[BenchmarkTestFallbackRollup] = []
+    for (
+        benchmark_id,
+        task_id,
+        task_support_state,
+        readiness_label,
+        dataset_class,
+        test_plan_state,
+    ), group_rows in grouped.items():
+        benchmark_titles = _distinct_row_strings(group_rows, lambda row: row["benchmark_title"])
+        if len(benchmark_titles) > 1:
+            raise ValueError(f"fallback rollup has inconsistent benchmark titles for {benchmark_id}")
+
+        task_types = _distinct_row_strings(group_rows, lambda row: row["task_type"])
+        if len(task_types) > 1:
+            raise ValueError(f"fallback rollup has inconsistent task types for {_rollup_task_label(benchmark_id, task_id)}")
+
+        support_reasons = _distinct_row_strings(group_rows, lambda row: row["task_support_reason"])
+        if len(support_reasons) > 1:
+            raise ValueError(
+                f"fallback rollup has inconsistent task support reasons for {_rollup_task_label(benchmark_id, task_id)}"
+            )
+
+        example_entities: list[str] = []
+        for row in group_rows:
+            if row["entity_id"] not in example_entities:
+                example_entities.append(row["entity_id"])
+            if len(example_entities) == examples:
+                break
+
+        reason_notes = sorted({note for row in group_rows for note in row["reason_notes"]}, key=_reason_note_sort_key)
+        rollups.append(
+            {
+                "benchmark_id": benchmark_id,
+                "benchmark_title": next(iter(benchmark_titles)) if benchmark_titles else "",
+                "task_id": task_id,
+                "task_type": next(iter(task_types)) if task_types else "",
+                "count": len(group_rows),
+                "task_support_state": task_support_state,
+                "task_support_reason": next(iter(support_reasons)) if support_reasons else "",
+                "readiness_label": readiness_label,
+                "dataset_class": dataset_class,
+                "test_plan_state": test_plan_state,
+                "top_facets": _top_triage_facet_counts(group_rows),
+                "example_entities": example_entities,
+                "reason_notes": reason_notes,
+            }
+        )
+
+    return sorted(rollups, key=_benchmark_test_fallback_rollup_sort_key)
+
+
 def _benchmark_test_fallback_diagnostics(
     rows: list[BenchmarkTestTriageRow],
 ) -> BenchmarkTestTriageFallbackDiagnostics:
@@ -2852,6 +2981,7 @@ def _benchmark_test_fallback_diagnostics(
         "task_support_counts": _benchmark_test_task_support_counts(rows),
         "top_benchmarks_by_readiness": _top_triage_benchmark_counts_by_readiness(rows),
         "top_benchmarks_by_dataset_class": _top_triage_benchmark_counts_by_dataset_class(rows),
+        "rollups": _benchmark_test_fallback_rollups(rows),
     }
 
 
