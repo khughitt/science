@@ -101,3 +101,9 @@ Recommended next slice:
 1. Audit CPTAC proteogenomics for a concrete study/package that can support `protein-rna-cross-modal`.
 2. Audit DREAM4 access/package layout only if synthetic network reconstruction is a near-term priority.
 3. Do not build extra review tooling until more than these recurring rollups require manual decisions.
+
+## Commons Metadata Audit
+
+No commons metadata edits were made in this slice. The sampled dominant rollups
+already carry explicit task-support metadata, and the remaining actionability
+work is staging/audit work rather than report metadata cleanup.
