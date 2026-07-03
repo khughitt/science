@@ -118,6 +118,20 @@ Retired YAML fallback is removed. A project with `foo.dot` and
 `foo.edges.yaml`, but no compiled proposition edge for `foo.dot`, fails. It does
 not render from `foo.edges.yaml`.
 
+The fallback trigger changes, not just the fallback body. Today the legacy read
+is selected on *emptiness*: `_source_proposition_edges` returns `None` when
+`load_proposition_edges` yields an empty list, and `render_one` treats
+`proposition_edges is None` as "load legacy YAML." Phase 5f retires that
+sentinel collapse. A project with zero compiled relational propositions must hit
+the actionable per-edge error, not silently fall back with only a
+`DeprecationWarning`. "No propositions compiled" and "no proposition matches
+this DOT edge" both fail loudly.
+
+Discovery moves from a `*.edges.yaml` glob to a `*.dot` glob (or explicit
+config). A DAG that has an `.edges.yaml` but no `.dot` sibling must not silently
+vanish from discovery — the retired-edge inspection command reports it as an
+orphan so migration can create the DOT topology.
+
 ### `science dag number`
 
 Numbering remains a DOT-only operation. It writes `<slug>-numbered.dot` from the
@@ -175,6 +189,13 @@ task mutation. The normal audit path should be read-only and should compose:
 - render regeneration from proposition edges;
 - any non-YAML topology checks already available.
 
+Note this is a wiring change, not only a deletion. `run_audit` currently calls
+`render_all(paths)` with no `proposition_edges` argument, so audit's
+regeneration always takes the retired-YAML fallback even when propositions
+exist — unlike the `render` / `number` CLI paths, which already source
+proposition edges. Phase 5f must thread `load_proposition_edges` into the audit
+render path.
+
 `--fix` should not open edge-review tasks from retired YAML drift. If retained,
 it must only perform mutations backed by the new proposition-edge model.
 
@@ -187,6 +208,16 @@ Claim-bearing inventory should come from propositions and evidence entities,
 not from retired edge `interpretation`, `finding`, or `claim` fields. A DOT-only
 view address such as `dag-view:<slug>` may be added later if needed, but Phase
 5f does not need it to finish edge retirement.
+
+### `science dag schema`
+
+The `dag schema` subcommand serializes `EdgesYamlFile.model_json_schema()` — it
+exists only to regenerate the retired `edges.schema.json`. Since the schema now
+describes a retired surface, `dag schema` must not present itself as an active
+authoring aid. Fold it under the retired-inspection surface: hide it from normal
+help, or keep it only as a migration guard for the explicit inspection path, and
+have it state that its output describes the retired YAML shape. It must not read
+as the schema for a live DAG input.
 
 ## Explicit Retired-Edge Inspection
 
@@ -214,6 +245,17 @@ It must not make retired YAML authoritative. Its output is a migration report,
 not a validation pass. It may parse with the existing retired YAML model, but
 the command itself should state that the input is retired rather than relying on
 warning spam.
+
+### Implementation sequencing
+
+The fail-loud defaults must not land before the migration debt is sized. The
+whole reason to stage retirement (approach C) rather than hard-delete (approach
+B) is that unmigrated curation still lives in downstream `.edges.yaml`
+(`mm30`, `protein-landscape`, `natural-systems`). Ship `dag retired-edges`
+first and run it across those real projects to quantify remaining content and
+orphan YAML (edges files with no `.dot` sibling). Only then flip the default
+render / validate / audit paths to fail loudly. Flipping first would break live
+downstream DAG commands with no prior inventory of what they still depend on.
 
 ## Test Strategy
 
@@ -272,6 +314,14 @@ The new docs should say:
 - Inventory no longer creates `dag-edge:` addresses from retired YAML.
 - The explicit retired-edge inspection command can still find and summarize
   remaining YAML curation content.
+- A project with zero compiled propositions fails render loudly instead of
+  silently falling back to retired YAML (the `None`/empty sentinel no longer
+  selects the legacy read).
+- A DAG with an `.edges.yaml` but no `.dot` sibling is reported as an orphan by
+  the inspection command, not silently dropped from discovery.
+- `dag audit` regenerates from proposition edges, not from the retired-YAML
+  fallback.
+- `dag schema` no longer presents itself as an active DAG input schema.
 - User-facing docs no longer present `*.edges.yaml` as an active source of DAG
   truth.
 
