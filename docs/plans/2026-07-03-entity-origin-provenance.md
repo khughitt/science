@@ -166,18 +166,26 @@ added_by: user
   allowlist (`science-model/.../templates.py`). The `_template.frontmatter`
   `{ from: <field> }` mappings validate against this set — omit it and the
   templates fail to render.
-- Add both fields to the JSON schemas backing the four v1 kinds
-  (`overlay-*`, `mixin-topic-*`, `mixin-theme-*`), with schema **version bumps**
-  where the schema is versioned. The additions are additive. **Not** in scope:
-  `science-pkg-entity-*` (dataset/datapackage-specific) and other kind schemas —
-  they get no v1 surfacing.
-- Satisfy the **strict 3-way reconciliation gate** (Pydantic model ↔ templates
-  ↔ JSON schemas) from the Kind Descriptor keystone: all three must agree or the
-  build fails. **Caveat for the implementation plan:** because the fields sit on
-  the base model, if the gate requires every base field to appear in a kind's
-  schema, additional schemas (e.g. `science-pkg-entity-*`) may need the fields
-  as a *mechanical* consequence — resolve this when writing the plan. Even if a
-  schema must list them, no dataset template or prompt is added.
+- **JSON-schema edits are narrower than the entity set.** The
+  `EntityValidator` (`entity_schema/validator.py`) only validates kinds that
+  declare a **type mixin** — today dataset/paper/topic/theme. **Hypothesis and
+  question have no mixin**; they are validated by the Pydantic `Entity` model
+  and the template renderer, *not* by JSON schema. So:
+  - `mixin-topic-*.json` and `mixin-theme-*.json` gain `origins` (array of
+    objects) and `added_by` (string), matching how those mixins already declare
+    `source_refs` — with a `science:merge` policy (`origins: append`,
+    `added_by: project_only`).
+  - **No** `overlay-*` edit — `overlay-1.1.json` is the unrelated *cross-project
+    overlay* schema (`overlay_of`/pin), not an entity schema.
+  - **No** hypothesis/question JSON-schema edit (no mixin exists) and **no**
+    `science-pkg-entity-*`/`mixin-dataset` edit — datasets are out of the v1
+    authoring surface.
+  - Additions are optional/additive → **no version bump** (bumping would force
+    re-pinning every topic/theme `schema_profile`). Confirm via the schema
+    tests; bump only if a test demands it.
+- The real cross-surface consistency for hypothesis/question is **Pydantic model
+  ↔ templates ↔ `VALID_FIELD_NAMES`**; for topic/theme it additionally includes
+  the two mixins. All must agree or the model/template tests fail.
 
 ## Graph materialization (minimal PROV-O → `provenance` graph)
 
