@@ -765,17 +765,75 @@ def test_register_run_liftover_transform_does_not_fabricate_unresolved_digests(t
     assert "to_seqcol_digest" not in transformation
 ```
 
-- [ ] **Step 3: Run tests and verify intended failure**
+- [ ] **Step 3: Add emission test for a resolved source with an explicit (non-inherit) taxon**
+
+This is the test that actually pins acceptance criterion #6: emission must not depend on any tier using `inherit`. Append it next:
+
+```python
+def test_register_run_liftover_transform_emits_digests_with_explicit_taxon(tmp_path: Path) -> None:
+    _seed_dataset(
+        tmp_path,
+        "source",
+        {
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "SQ.GRCh37",
+                "registry": "dataset:assembly-registry",
+                "resolution_status": "resolved",
+            },
+        },
+    )
+    _seed_dataset(tmp_path, "liftover-chain")
+    transform = {
+        "type": "liftover",
+        "from": "dataset:source",
+        "method": "ucsc_chain",
+        "dataset": "dataset:liftover-chain",
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": 9606,
+                    "assembly": {
+                        "label": "GRCh38",
+                        "seqcol_digest": "SQ.GRCh38",
+                        "registry": "dataset:assembly-registry",
+                        "resolution_status": "resolved",
+                        "transform": transform,
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    transformation = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-lifted.md")["derivation"]["transformations"][0]
+    assert transformation["from_seqcol_digest"] == "SQ.GRCh37"
+    assert transformation["to_seqcol_digest"] == "SQ.GRCh38"
+```
+
+- [ ] **Step 4: Run tests and verify intended failure**
 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_exact_seqcol_digests science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_does_not_fabricate_unresolved_digests -q
+uv run --frozen pytest science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_exact_seqcol_digests science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_digests_with_explicit_taxon science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_does_not_fabricate_unresolved_digests -q
 ```
 
-Expected: first test FAILS because `from_seqcol_digest` / `to_seqcol_digest` are absent. The second may pass or fail depending on implementation state; after this task both must pass.
+Expected: the two emission tests FAIL because `from_seqcol_digest` / `to_seqcol_digest` are absent (the explicit-taxon one is the case the narrow `identities` map misses). The non-fabrication test already PASSES before the change — its `declared_unresolved` output has no target seqcol digest, so nothing is emitted regardless — and must stay passing after.
 
-- [ ] **Step 4: Implement digest helpers**
+- [ ] **Step 5: Implement digest helpers**
 
 In `science/src/science_tool/datasets_register.py`, add these helpers immediately before `_transform_entry`:
 
@@ -795,7 +853,7 @@ def _liftover_transform_source_dataset(transform: dict[str, Any], selected_input
     return None
 ```
 
-- [ ] **Step 5: Update `_transform_entry` to optionally add liftover digests**
+- [ ] **Step 6: Update `_transform_entry` to optionally add liftover digests**
 
 Replace `_transform_entry` with:
 
@@ -830,7 +888,7 @@ def _transform_entry(
 
 This preserves `from` as the dataset id and adds separate digest fields only when both sides are resolved.
 
-- [ ] **Step 6: Thread identity context through `_identity_transformations`**
+- [ ] **Step 7: Thread identity context through `_identity_transformations`**
 
 Replace `_identity_transformations` with:
 
@@ -869,7 +927,9 @@ def _identity_transformations(
     return transformations
 ```
 
-- [ ] **Step 7: Pass selected inputs and identities from `_resolve_output_identity`**
+- [ ] **Step 8: Pass selected inputs and a full input-identity map from `_resolve_output_identity`**
+
+Do **not** reuse the existing `identities` variable here. `identities` is populated only for inputs referenced by an `inherit` (`_identity_lookup_sources`), so a liftover output authored with an explicit `taxon` (rather than `taxon: inherit`) would have an empty map and the digest lookup would find nothing — silently skipping emission even when both source and target are resolved. Build a separate map over **all** selected inputs for the transformation lookup.
 
 In `_resolve_output_identity`, replace:
 
@@ -883,21 +943,23 @@ with:
         transformations=_identity_transformations(
             identity_context,
             selected_inputs=selected_inputs,
-            identities=identities,
+            identities=_input_identity_map(project_root, selected_inputs),
         ),
 ```
 
-- [ ] **Step 8: Run focused register-run tests**
+`_input_identity_map` over all selected inputs is only consumed by the liftover digest lookup in `_transform_entry`; it does not affect inherit resolution, which continues to use the narrow `identities` variable computed earlier in this function.
+
+- [ ] **Step 9: Run focused register-run tests**
 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_register_run.py::test_register_run_transform_dataset_routes_to_transformations_not_data_inputs science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_exact_seqcol_digests science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_does_not_fabricate_unresolved_digests -q
+uv run --frozen pytest science/tests/test_dataset_register_run.py::test_register_run_transform_dataset_routes_to_transformations_not_data_inputs science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_exact_seqcol_digests science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_emits_digests_with_explicit_taxon science/tests/test_dataset_register_run.py::test_register_run_liftover_transform_does_not_fabricate_unresolved_digests -q
 ```
 
 Expected: PASS. Existing `transform.dataset` routing behavior must stay unchanged: liftover chain remains in `derivation.transformations[]`, not `derivation.inputs`.
 
-- [ ] **Step 9: Run full register-run test file**
+- [ ] **Step 10: Run full register-run test file**
 
 Run:
 
@@ -907,7 +969,7 @@ uv run --frozen pytest science/tests/test_dataset_register_run.py -q
 
 Expected: all tests pass.
 
-- [ ] **Step 10: Commit register-run provenance emission**
+- [ ] **Step 11: Commit register-run provenance emission**
 
 Run:
 
