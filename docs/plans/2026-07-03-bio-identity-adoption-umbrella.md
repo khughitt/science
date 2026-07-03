@@ -39,7 +39,7 @@ P1-P3 make identity declaration strict and ergonomic. They do not make resolutio
 
 ### P4 - MM30-critical pinned commons artifacts
 
-**Status:** P4.1-P4.2 landed; P4.3 next.
+**Status:** P4.1-P4.3 landed; P4.4 next.
 
 Purpose: make the resolver's offline path real for the artifacts MM30 needs first.
 
@@ -47,7 +47,7 @@ Work packages:
 
 - **P4.1 assembly-registry build entrypoint.** Landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes. Science resolver tests exercise the on-disk artifact offline using a reduced fixture copied from the built artifact.
 - **P4.2 gene-crosswalk-hgnc build entrypoint.** Landed. `science-commons` now has a hardened pinned HGNC crosswalk artifact with validated `gene_key` lifecycle semantics, deterministic `crosswalk.csv`, and updated datapackage metadata. Science resolver tests exercise built-artifact rows offline through a reduced fixture.
-- **P4.3 liftover-chain consumption.** Confirm `transform: liftover` consumes the already-pinned GRCh37-GRCh38 chain dataset through provenance checks and resolver/remedy surfaces.
+- **P4.3 liftover-chain consumption.** Landed. Science now fixture-tests `dataset:assembly-liftover-grch37-grch38` through commons-style compatibility rows and gzipped chain bytes, validates cross-dataset liftover remedies against exact `from_seqcol_digest -> to_seqcol_digest` relations, and emits exact liftover seqcol provenance from `register-run` when source and target assemblies are resolved.
 - **P4.4 cytoband-hg19 proxy reference.** Decide and implement the home for `cytoband-hg19`, preferably a commons reference dataset usable as `proxy.via` (this is the tracked work package for the open fork below).
 
 P4 is not a broad reference-data program. It is the minimum artifact substrate needed for MM30 to move from declaration-level identity to resolved identity where it matters.
@@ -108,7 +108,8 @@ The framework has provenance hooks for liftover remedies. P4.3 should confirm wh
 - 2026-07-03: P1-P3 completion verification included `science/model` pytest, `science` pytest, `science/model` Ruff, targeted Ruff over changed Science files, and `git diff --check HEAD`.
 - 2026-07-03: P4.1 assembly-registry landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with GRCh38 `XemD97fxYMS4q-FBm_n5CHQgmzh1_67a` and GRCh37 `XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA`, row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes; Science resolver tests exercise the on-disk artifact offline through a reduced built-artifact fixture.
 - 2026-07-03: P4.2 gene-crosswalk-hgnc landed. `science-commons` has a pinned HGNC 2025-04-01 crosswalk artifact with validated opaque `gene_key` rows, hash-verified datapackage metadata, and Science offline resolver coverage for HGNC id/current symbol/previous symbol/alias ambiguity using built-artifact fixture rows.
-- Next: P4.3 liftover-chain consumption.
+- 2026-07-03: P4.3 liftover-chain consumption landed. The explicit `from_seqcol_digest` / `to_seqcol_digest` provenance decision is closed for v1; the transform block records intent, while `derivation.transformations[]` records the exact lifted source-target pair. Science proves offline compatibility loading and a tiny gzipped-chain interval lift through a reduced built-artifact fixture.
+- Next: P4.4 cytoband-hg19 proxy reference.
 
 ## How to use this doc
 
