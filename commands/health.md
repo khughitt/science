@@ -103,7 +103,7 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
-- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight `terms.yaml` row for stable concepts, create a full concept owner with `science entity create concept "<title>"`, rewrite as `meta:` or `tag:` when the mention is classification metadata, or leave prose-only notes out of the graph
+- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight term with `science terms add`, create a full concept entity with `science entity create concept "<title>"`, rewrite as `meta:` or field-scoped `tag:` when the mention is classification metadata, or remove the graph ref and keep prose-only notes out of the graph.
 - Cleaning up lingering tags: remove the `tags:` lines from the frontmatter, or replace each with the intended `meta:` or field-scoped `tag:` ref, by hand
 
 ### 6. Verify

@@ -174,9 +174,10 @@ science entity create <kind> "<title>" --id "<kind>:<slug>"
 ```
 
 Use `science entity create concept "<title>"` when the model genuinely needs a
-reusable project-local concept with a full Markdown owner. Use a lightweight
-`terms.yaml` row when the term only needs a resolvable identity. Keep weak ideas
-in prose when they do not need graph refs yet.
+reusable project-local concept with a full Markdown owner. Use
+`science terms add concept:<slug> --title "<title>"` when the term only needs a
+resolvable lightweight identity. Keep weak ideas in prose when they do not need
+graph refs yet.
 
 Do not invent unsupported `variable` or `unknown` entity files just to satisfy a
 sketch. If no supported durable source kind exists yet, describe the term in the

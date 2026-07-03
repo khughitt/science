@@ -467,7 +467,7 @@ Use these destinations instead of new semantic `topic:*` refs:
 |---|---|
 | Catalog-backed thing | Domain kind such as `gene`, `protein`, `disease`, `pathway`, or another declared catalog kind. |
 | Analytical procedure | `method`. |
-| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref only needs a lightweight identity, use a row in `knowledge/sources/<profile>/terms.yaml`; when it needs prose, lifecycle status, source refs, aliases, same-as links, or relationships, create a Markdown owner with `science entity create concept ...`. |
+| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref only needs a lightweight identity, use `science terms add concept:<slug> --title "<title>"`; when it needs body prose, lifecycle or status work, source refs, or structured relationships, create a Markdown owner with `science entity create concept ...`. |
 | Cross-cutting organizing lens | `theme`. |
 | Conjecture under investigation | `hypothesis`. |
 | Analysis-session narrative | `interpretation`. |
@@ -479,21 +479,29 @@ Use these destinations instead of new semantic `topic:*` refs:
 ### Lightweight Semantic Terms
 
 `terms.yaml` is for lightweight semantic rows that are more durable than a
-one-off prose label but do not yet deserve a full Markdown owner:
+one-off prose label but do not yet deserve a full Markdown owner. Use
+`science terms add <id> --title "<title>"` for routine lightweight term
+creation:
+
+```bash
+science terms add concept:treatment-response --title "Treatment response"
+science terms add method:cox-regression --title "Cox proportional-hazards regression" --ontology-term "biolink:StatisticalMethod"
+```
+
+The command writes to the configured local profile's `terms.yaml`, usually
+`knowledge/sources/local/terms.yaml`, and appends a minimal row:
 
 ```yaml
 terms:
-  - id: "concept:treatment-response"
-    title: "Treatment response"
-  - id: "method:cox-regression"
-    title: "Cox proportional-hazards regression"
-    ontology_terms: ["biolink:StatisticalMethod"]
+  - id: concept:treatment-response
+    title: Treatment response
 ```
 
-Keep entries minimal: `id` and `title` are required; `aliases`, `same_as`,
-`ontology_terms`, and short descriptions are optional. Promote the row to a
-Markdown entity owner when it accumulates body prose, structured relations, or
-lifecycle work.
+Keep entries minimal: `id` and `title` are required; `--alias`, `--same-as`,
+`--ontology-term`, and `--description` are optional. Do not pass external
+ontology CURIEs as the term id; put them in `--ontology-term`. Promote the row
+to a Markdown entity owner when it accumulates body prose, structured
+relations, or lifecycle work.
 
 ### Source-Authored Concepts
 
@@ -502,7 +510,8 @@ and core reference kinds such as `gene`, `protein`, `disease`, `pathway`,
 `dataset`, `method`, `construct`, or `outcome` carry more meaning than a generic
 `concept:*` owner.
 
-`terms.yaml` is the lightweight concept tier. Use it when a term needs a stable
+`terms.yaml` is the lightweight concept tier. Use
+`science terms add concept:<slug> --title "<title>"` when a term needs a stable
 resolvable `concept:*` identity but does not need body prose, lifecycle work, or
 structured relationships.
 

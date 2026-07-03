@@ -35,8 +35,9 @@ Before adding new entities, check the cross-project registry for existing defini
 
 For every new entity, read `docs/process/entity-creation-cookbook.md` and
 check shared kinds before creating project-local entries. If no shared identity fits,
-prefer the most specific registered kind. Use a lightweight `terms.yaml` row for
-simple project-scoped concepts, or `science entity create concept "<title>"` when
+prefer the most specific registered kind. Use
+`science terms add <id> --title "<title>"` for simple project-scoped concepts, or
+`science entity create concept "<title>"` when
 the concept needs a full Markdown owner.
 
 ## Canonical Inputs
@@ -47,6 +48,7 @@ Build the graph from these upstream sources:
 - Task files in `tasks/active.md` and `tasks/done/*.md`
 - Structured local extensions in:
   - `knowledge/sources/<local-profile>/entities.yaml`
+  - `knowledge/sources/<local-profile>/terms.yaml`
   - `knowledge/sources/<local-profile>/relations.yaml`
   - `knowledge/sources/<local-profile>/mappings.yaml`
 
@@ -78,6 +80,7 @@ For each project entity:
 2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
    - `entities.yaml` for local entities such as project topics or legacy questions not yet migrated into standalone docs
+   - `terms.yaml` for lightweight local semantic term rows
    - `mappings.yaml` for explicit aliases during migration
    - `relations.yaml` only when you need project-local relation declarations
 
