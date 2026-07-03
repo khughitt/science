@@ -1412,6 +1412,7 @@ benchmark:
     assert payload["review_file"] is None
     assert payload["summary"]["bucket_counts"]["run-now"] == 1
     assert payload["buckets"]["run-now"][0]["benchmark_id"] == "dataset:sciplex3"
+    assert payload["buckets"]["run-now"][0]["dataset_class"] == "deposit"
     assert payload["buckets"]["run-now"][0]["review"] == {
         "decision": "",
         "owner": "",
@@ -1626,6 +1627,56 @@ def test_benchmark_test_triage_cli_table_output_shows_suppression_diagnostic(tmp
     assert "No benchmark test triage rows." not in result.output
 
 
+def test_benchmark_test_triage_cli_table_output_shows_fallback_breakdowns(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0306-generic",
+        """
+id: hypothesis:0306-generic
+type: hypothesis
+title: Generic fallback hypothesis
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "visible-fallback",
+        """
+id: dataset:visible-fallback
+type: dataset
+title: Visible Fallback
+dataset_class: deposit
+local_path: data/visible-fallback
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback")
+
+    assert result.exit_code == 0
+    assert "Benchmark Test Triage: fallback-diagnostic" in result.output
+    assert "readiness" in result.output
+    assert "class" in result.output
+    assert "support" in result.output
+    assert "runnable:1" in result.output
+    assert "deposit:1" in result.output
+    assert "none:1" in result.output
+
+
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
@@ -1732,7 +1783,38 @@ benchmark:
     assert written["source_command"].startswith("science benchmark test-triage")
     assert written["summary"]["bucket_counts"]["run-now"] == 1
     assert written["buckets"]["run-now"][0]["review"]["decision"] == ""
-    assert written["fallback_diagnostics"] == {"top_benchmarks": [], "top_facets": []}
+    assert written["fallback_diagnostics"] == {
+        "top_benchmarks": [],
+        "top_facets": [],
+        "readiness_counts": {
+            "runnable": 0,
+            "stage-needed": 0,
+            "metadata-only": 0,
+            "blocked": 0,
+        },
+        "dataset_class_counts": {
+            "deposit": 0,
+            "reference": 0,
+            "pointer": 0,
+        },
+        "task_support_counts": {
+            "supported": 0,
+            "candidate": 0,
+            "blocked": 0,
+            "none": 0,
+        },
+        "top_benchmarks_by_readiness": {
+            "runnable": [],
+            "stage-needed": [],
+            "metadata-only": [],
+            "blocked": [],
+        },
+        "top_benchmarks_by_dataset_class": {
+            "deposit": [],
+            "reference": [],
+            "pointer": [],
+        },
+    }
 
 
 def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(
