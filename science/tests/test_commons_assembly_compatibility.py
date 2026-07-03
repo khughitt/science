@@ -94,7 +94,7 @@ def test_load_compatibility_relations_from_commons_fixture() -> None:
             source_label="GRCh37",
             target_label="GRCh38",
             source_url="https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz",
-            chain_sha256=relations[0].chain_sha256,
+            chain_sha256="sha256:5ec7528c49d2a189294a4a342022420cd3f364ae7d1b202858af4a6a16dc78f3",
         )
     ]
     assert (
