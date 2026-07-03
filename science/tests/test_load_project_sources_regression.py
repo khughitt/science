@@ -8,7 +8,8 @@ not exist on the unified Entity family (`provider`, `description`). It also
 excludes a handful of Entity-only fields that only matter for typed subclass
 invariants (`accessions`, `consumed_by`, `local_path`, `siblings`, `derivation`,
 `access`, `datapackage`, `parent_dataset`, `datasets`, `maturity`, `rival_model_packet_ref`,
-`created`, `updated`, `pre_registered`, `pre_registered_date`, `sync_source`) so
+`created`, `updated`, `pre_registered`, `pre_registered_date`, `sync_source`,
+`identity_context`) so
 the snapshot stays focused on the load-path fields this regression cares about.
 """
 
@@ -43,6 +44,7 @@ _EXCLUDED_FIELDS = frozenset(
         "dataset_class",
         "maturity",
         "benchmark",
+        "identity_context",
         "rival_model_packet_ref",
         "created",
         "updated",
