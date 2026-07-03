@@ -74,6 +74,11 @@ task support state for a task; the rollup should fail loudly if a group contains
 multiple non-empty reasons. That protects against accidental metadata drift
 instead of silently picking one.
 
+Introduce a `BenchmarkTestFallbackRollup` row type and make
+`BenchmarkTestTriageFallbackDiagnostics.rollups` a required field. The existing
+`suppressed_blocked_support` field remains optional because it is emitted only
+when rows are actually suppressed.
+
 Each rollup row has this shape:
 
 ```json
@@ -83,7 +88,6 @@ Each rollup row has this shape:
   "task_id": "dataset:cptac-proteogenomics#protein-rna-cross-modal",
   "task_type": "cross-modal-prediction",
   "count": 297,
-  "entity_count": 297,
   "task_support_state": "candidate",
   "task_support_reason": "requires-study-specific-staging",
   "readiness_label": "metadata-only",
@@ -107,9 +111,6 @@ Each rollup row has this shape:
 Field notes:
 
 - `count` is the number of fallback rows in the group.
-- `entity_count` is the number of distinct `entity_id` values in the group.
-  It usually equals `count`, but keeping it explicit prevents ambiguity if
-  future multi-task rows create repeated entity/group combinations.
 - `top_facets` is computed from `matched_facets` inside the group, sorted by
   count descending and existing facet ordering.
 - `example_entities` is capped at three distinct entity ids, sorted by existing
@@ -147,6 +148,8 @@ rows are visible and therefore included in `rollups`.
 The existing optional `fallback_diagnostics.suppressed_blocked_support` remains
 unchanged and continues to describe rows hidden by default. Suppressed rows do
 not appear in `rollups` unless `--include-blocked-fallback` makes them visible.
+Because it is optional, `suppressed_blocked_support` is intentionally omitted
+from the minimal JSON example above.
 
 ## Table Output
 
@@ -169,12 +172,20 @@ show, for example:
 
 The table should render at most 10 rollups, sorted by `count` descending with
 stable tie-breakers. If total fallback rows exceed visible rollup rows, the
-table title or first column text should make the grouping obvious, for example:
-`898 fallback rows grouped into 3 rollups`.
+table title or first column text should make the grouping obvious. If rollups
+are truncated, the output must also show the hidden rollup count. Examples:
+
+- `898 fallback rows grouped into 3 rollups`
+- `1,420 fallback rows grouped into 23 rollups (showing 10)`
 
 The current aggregate counts remain available in JSON and the review artifact.
 The table may omit the old aggregate counts because the rollups now carry the
 actionable summary.
+
+This is an intentional terminal UX change: users lose the old one-row
+`readiness`/`class`/`support` count maps in the default table, but gain the
+benchmark/task groups needed for action. JSON consumers can still read the
+aggregate count maps unchanged.
 
 ## Review Artifact
 
@@ -193,6 +204,8 @@ Rollups sort by:
 3. task id, with `null` rendered/sorted as empty string.
 4. support state sort order: `supported`, `candidate`, `blocked`, `none`.
 5. readiness order: `runnable`, `stage-needed`, `metadata-only`, `blocked`.
+6. dataset class order: `deposit`, `reference`, `pointer`.
+7. test-plan state order: `concrete`, `draft-needed`.
 
 This prioritizes repeated fallback patterns while keeping output stable.
 
@@ -219,6 +232,8 @@ Add focused tests for:
 
 - Fallback rollups group repeated fallback rows by benchmark/task and preserve
   existing per-entity rows.
+- Rollup counts partition the visible fallback bucket exactly:
+  `sum(rollup["count"] for rollup in rollups) == summary["bucket_counts"]["fallback-diagnostic"]`.
 - Rollups carry support state, support reason, readiness label, dataset class,
   test-plan state, top facets, and capped example entities.
 - `--exclude-fallback` produces empty rollups.
