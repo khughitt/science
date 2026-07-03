@@ -26,6 +26,11 @@ from science_tool.commons.errors import (
     DataLogicalPathError,
 )
 from science_tool.data_policy import DEFAULT_DATA_POLICY, FileClass, classify
+from science_tool.identity_authoring import (
+    BASE_DATASET_SCHEMA_PROFILE,
+    IdentityAuthoringError,
+    require_profile_identity,
+)
 from science_tool.markdown_utils import parse_frontmatter
 
 
@@ -278,22 +283,27 @@ def scaffold_dataset_package(
     *,
     title: str | None = None,
     version: str = "0.1.0",
+    schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,
+    identity_context: dict[str, Any] | None = None,
     today: str | None = None,
 ) -> ScaffoldResult:
     slug = validate_dataset_slug(slug)
     version = validate_dataset_version(version)
     paths = dataset_paths(Path(commons_root), slug)
     if paths.dataset_dir.exists():
-        raise DatasetLifecycleError(
-            f"dataset {slug!r} already exists at {paths.dataset_dir}"
-        )
+        raise DatasetLifecycleError(f"dataset {slug!r} already exists at {paths.dataset_dir}")
+    identity_context = identity_context or {}
+    try:
+        require_profile_identity(schema_profile, identity_context)
+    except IdentityAuthoringError as exc:
+        raise DatasetLifecycleError(str(exc)) from exc
 
     paths.snakefile_path.parent.mkdir(parents=True)
     created_date = today or date.today().isoformat()
     dataset_title = title or slug
 
     files = (
-        (paths.entity_path, _entity_text(slug, dataset_title, version, created_date)),
+        (paths.entity_path, _entity_text(slug, dataset_title, version, created_date, schema_profile, identity_context)),
         (paths.datapackage_path, _datapackage_text(slug)),
         (paths.snakefile_path, _snakefile_text(slug)),
         (paths.readme_path, _readme_text(slug)),
@@ -556,12 +566,32 @@ def _is_placeholder_resource(resource: dict[str, object]) -> bool:
     )
 
 
-def _entity_text(slug: str, title: str, version: str, today: str) -> str:
+def _entity_text(
+    slug: str,
+    title: str,
+    version: str,
+    today: str,
+    schema_profile: str,
+    identity_context: dict[str, Any],
+) -> str:
+    schema_profile_text = yaml.safe_dump(
+        {"schema_profile": schema_profile},
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
     yaml_title = yaml.safe_dump(title, default_style='"').strip()
     yaml_today = yaml.safe_dump(today, default_style='"').strip()
+    identity_text = ""
+    if identity_context:
+        identity_text = yaml.safe_dump(
+            {"identity_context": identity_context},
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
     return f"""---
-schema_profile: science-entity-base/1.0+dataset/1.0
-id: dataset:{slug}
+{schema_profile_text}id: dataset:{slug}
 type: dataset
 title: {yaml_title}
 version: "{version}"
@@ -576,7 +606,7 @@ access:
   availability: available
   verified: false
 datapackage: datapackage.yaml
----
+{identity_text}---
 
 Commons-born dataset package scaffold.
 """

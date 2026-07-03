@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main as science_cli
+
+BIO_CNA_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
 
 
 def _add(tmp_path: Path, *args: str):
@@ -30,6 +33,64 @@ def test_add_creates_candidate_entity(tmp_path: Path) -> None:
     assert "dataset_class: deposit" in text
     assert "license: unknown" in text
     assert "verified: false" in text
+
+
+def _frontmatter(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    return yaml.safe_load(text.split("---", 2)[1])
+
+
+def test_add_refuses_identity_bearing_profile_without_identity(tmp_path: Path) -> None:
+    res = _add(tmp_path, "copy-number", "--title", "Copy number", "--schema-profile", BIO_CNA_PROFILE)
+
+    assert res.exit_code == 1
+    assert "identity-bearing" in res.output
+    assert "--taxon" in res.output
+    assert "--assembly" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
+
+
+def test_add_writes_declared_unresolved_identity_for_unknown_assembly(tmp_path: Path) -> None:
+    res = _add(
+        tmp_path,
+        "copy-number",
+        "--title",
+        "Copy number",
+        "--schema-profile",
+        BIO_CNA_PROFILE,
+        "--taxon",
+        "9606",
+        "--assembly",
+        "UNKNOWN",
+        "--gene-namespace",
+        "hgnc_symbol",
+        "--protein-namespace",
+        "uniprot",
+    )
+
+    assert res.exit_code == 0, res.output
+    fm = _frontmatter(tmp_path / "entities" / "datasets" / "copy-number.md")
+    assert fm["schema_profile"] == BIO_CNA_PROFILE
+    assert fm["identity_context"] == {
+        "taxon": 9606,
+        "assembly": {
+            "label": "UNKNOWN",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "declared_unresolved",
+        },
+        "molecular_ids": {
+            "gene": {
+                "namespace": "hgnc_symbol",
+                "registry": "dataset:gene-crosswalk-hgnc",
+                "resolution_status": "declared_unresolved",
+            },
+            "protein": {
+                "namespace": "uniprot",
+                "registry": "dataset:protein-crosswalk-uniprot",
+                "resolution_status": "declared_unresolved",
+            },
+        },
+    }
 
 
 def test_add_accepts_reference_class_with_source_url(tmp_path: Path) -> None:

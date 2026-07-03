@@ -465,6 +465,15 @@ def dataset_group() -> None:
 @click.argument("slug")
 @click.option("--title", default=None, help="Dataset title. Defaults to title-cased slug.")
 @click.option("--version", default="0.1.0", show_default=True, help="Wrapper package version.")
+@click.option(
+    "--schema-profile",
+    default=None,
+    help="Composed entity schema profile. Defaults to the base dataset profile.",
+)
+@click.option("--taxon", type=int, default=None, help="NCBI taxonomy id for identity-bearing dataset profiles.")
+@click.option("--assembly", default=None, help="Assembly label/digest, or UNKNOWN when intentionally unresolved.")
+@click.option("--gene-namespace", default=None, help="Gene identifier namespace to declare.")
+@click.option("--protein-namespace", default=None, help="Protein identifier namespace to declare.")
 @click.option("--date", "today", default=None, help="Creation/update date override for tests.")
 @click.option(
     "--format",
@@ -479,19 +488,46 @@ def dataset_init_cmd(
     slug: str,
     title: str | None,
     version: str,
+    schema_profile: str | None,
+    taxon: int | None,
+    assembly: str | None,
+    gene_namespace: str | None,
+    protein_namespace: str | None,
     today: str | None,
     output_format: str,
     as_json: bool,
 ) -> None:
     """Create a commons-born dataset package scaffold."""
+    from science_tool.identity_authoring import (
+        BASE_DATASET_SCHEMA_PROFILE,
+        IdentityAuthoringError,
+        build_identity_context,
+    )
+
     root = _require_root()
     try:
-        result = scaffold_dataset_package(root, slug, title=title, version=version, today=today)
+        identity_context = build_identity_context(
+            taxon=taxon,
+            assembly=assembly,
+            gene_namespace=gene_namespace,
+            protein_namespace=protein_namespace,
+        )
+        result = scaffold_dataset_package(
+            root,
+            slug,
+            title=title,
+            version=version,
+            schema_profile=schema_profile or BASE_DATASET_SCHEMA_PROFILE,
+            identity_context=identity_context,
+            today=today,
+        )
     except DatasetLifecycleError as exc:
         message = str(exc)
         if message.startswith("dataset version must"):
             message = f"invalid dataset version: {message}"
         raise click.ClickException(message) from exc
+    except IdentityAuthoringError as exc:
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         raise click.ClickException(str(exc)) from exc
 
