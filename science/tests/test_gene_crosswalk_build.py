@@ -3,7 +3,9 @@ from __future__ import annotations
 import csv
 import io
 
-from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows, make_gene_key
+import pytest
+
+from science_tool.commons.gene_crosswalk import GeneCrosswalkError, _parse_crosswalk_rows, make_gene_key
 from science_tool.commons.gene_crosswalk_build import (
     build_rows,
     fetch_text,
@@ -88,3 +90,20 @@ def test_parse_withdrawn_merged_split_with_no_targets_is_withdrawn() -> None:
     row = next(r for r in rows if r["gene_key"] == "9606|hgnc|HGNC:99994")
     assert row["status"] == "withdrawn"
     assert row["replacement_gene_keys"] == ""
+
+
+def test_parse_withdrawn_rejects_unknown_status() -> None:
+    bad_withdrawn = "HGNC_ID\tSTATUS\tWITHDRAWN_SYMBOL\tMERGED_INTO_REPORT(S)\nHGNC:99994\tOther\tBAD\t\n"
+
+    with pytest.raises(GeneCrosswalkError, match="unknown withdrawn status"):
+        parse_withdrawn(bad_withdrawn)
+
+
+def test_build_rows_rejects_missing_replacement_target() -> None:
+    bad_withdrawn = (
+        "HGNC_ID\tSTATUS\tWITHDRAWN_SYMBOL\tMERGED_INTO_REPORT(S)\n"
+        "HGNC:99991\tMerged/Split\tOLDA\tHGNC:99995|MISSING|Approved\n"
+    )
+
+    with pytest.raises(GeneCrosswalkError, match="missing replacement_gene_key target"):
+        build_rows(complete_set_text=_COMPLETE, withdrawn_text=bad_withdrawn)

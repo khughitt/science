@@ -14,7 +14,7 @@ access:
   level: public
   verified: true
 member_key_column: gene_key
-gene_count: 4
+gene_count: 5
 ---
 
 # HGNC gene crosswalk (test fixture)

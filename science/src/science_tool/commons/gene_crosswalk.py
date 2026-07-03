@@ -101,6 +101,14 @@ def _split_multi(cell: str) -> tuple[str, ...]:
     return tuple(part for part in (cell or "").split(_MULTIVALUE_SEP) if part)
 
 
+def _validate_replacement_targets(rows: list[CrosswalkRow]) -> None:
+    keys = {row.gene_key for row in rows}
+    for row in rows:
+        for replacement in row.replacement_gene_keys:
+            if replacement not in keys:
+                raise GeneCrosswalkError(f"{row.gene_key}: missing replacement_gene_key target {replacement!r}")
+
+
 def _parse_crosswalk_rows(rows: Iterable[dict[str, Any]]) -> list[CrosswalkRow]:
     """Validate + parse raw CSV rows; fail early on a broken collection (RCM-D1/D6).
 
@@ -147,6 +155,7 @@ def _parse_crosswalk_rows(rows: Iterable[dict[str, Any]]) -> list[CrosswalkRow]:
                 replacement_gene_keys=replacements,
             )
         )
+    _validate_replacement_targets(out)
     return out
 
 

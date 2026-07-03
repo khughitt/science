@@ -15,10 +15,11 @@ import csv
 import io
 from typing import Any
 
-from science_tool.commons.gene_crosswalk import make_gene_key
+from science_tool.commons.gene_crosswalk import GeneCrosswalkError, _parse_crosswalk_rows, make_gene_key
 
 _HUMAN_TAXON = 9606
 _OUT_SEP = ";"  # within-cell multi-value separator; NOT '|' (gene_key uses '|')
+_WITHDRAWN_STATUSES = frozenset({"Entry Withdrawn", "Merged/Split"})
 
 
 def _recode(cell: str) -> str:
@@ -65,6 +66,8 @@ def parse_withdrawn(tsv_text: str) -> list[dict[str, Any]]:
         if not hgnc_id:
             continue
         raw_status = (rec.get("STATUS") or "").strip()
+        if raw_status not in _WITHDRAWN_STATUSES:
+            raise GeneCrosswalkError(f"{hgnc_id}: unknown withdrawn status {raw_status!r}")
         targets: list[str] = []
         for entry in (rec.get("MERGED_INTO_REPORT(S)") or "").split(","):
             entry = entry.strip()
@@ -99,8 +102,11 @@ def parse_withdrawn(tsv_text: str) -> list[dict[str, Any]]:
 
 
 def build_rows(*, complete_set_text: str, withdrawn_text: str) -> list[dict[str, Any]]:
-    """Merge approved + withdrawn rows into the full crosswalk row list."""
-    return parse_complete_set(complete_set_text) + parse_withdrawn(withdrawn_text)
+    """Merge approved + withdrawn rows into validated deterministic crosswalk rows."""
+    rows = parse_complete_set(complete_set_text) + parse_withdrawn(withdrawn_text)
+    rows.sort(key=lambda row: row["gene_key"])
+    _parse_crosswalk_rows(rows)
+    return rows
 
 
 def fetch_text(url: str) -> str:

@@ -39,14 +39,14 @@ P1-P3 make identity declaration strict and ergonomic. They do not make resolutio
 
 ### P4 - MM30-critical pinned commons artifacts
 
-**Status:** P4.1 landed; P4.2 next.
+**Status:** P4.1-P4.2 landed; P4.3 next.
 
 Purpose: make the resolver's offline path real for the artifacts MM30 needs first.
 
 Work packages:
 
 - **P4.1 assembly-registry build entrypoint.** Landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes. Science resolver tests exercise the on-disk artifact offline using a reduced fixture copied from the built artifact.
-- **P4.2 gene-crosswalk-hgnc build entrypoint.** Wire the HGNC/NCBI/Ensembl crosswalk artifact so MM30's symbol-space remaps can become structured and reproducible.
+- **P4.2 gene-crosswalk-hgnc build entrypoint.** Landed. `science-commons` now has a hardened pinned HGNC crosswalk artifact with validated `gene_key` lifecycle semantics, deterministic `crosswalk.csv`, and updated datapackage metadata. Science resolver tests exercise built-artifact rows offline through a reduced fixture.
 - **P4.3 liftover-chain consumption.** Confirm `transform: liftover` consumes the already-pinned GRCh37-GRCh38 chain dataset through provenance checks and resolver/remedy surfaces.
 - **P4.4 cytoband-hg19 proxy reference.** Decide and implement the home for `cytoband-hg19`, preferably a commons reference dataset usable as `proxy.via` (this is the tracked work package for the open fork below).
 
@@ -107,7 +107,8 @@ The framework has provenance hooks for liftover remedies. P4.3 should confirm wh
 - 2026-07-03: P1-P3 framework adoption layer merged to `main` (`9f52b81d`). The merged state includes late planning/contract-validation fixes from `57fb4b96`, `815ba885`, and `aa362aec`; it is not just the original plan text.
 - 2026-07-03: P1-P3 completion verification included `science/model` pytest, `science` pytest, `science/model` Ruff, targeted Ruff over changed Science files, and `git diff --check HEAD`.
 - 2026-07-03: P4.1 assembly-registry landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with GRCh38 `XemD97fxYMS4q-FBm_n5CHQgmzh1_67a` and GRCh37 `XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA`, row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes; Science resolver tests exercise the on-disk artifact offline through a reduced built-artifact fixture.
-- Next: P4.2 gene-crosswalk-hgnc build entrypoint.
+- 2026-07-03: P4.2 gene-crosswalk-hgnc landed. `science-commons` has a pinned HGNC 2025-04-01 crosswalk artifact with validated opaque `gene_key` rows, hash-verified datapackage metadata, and Science offline resolver coverage for HGNC id/current symbol/previous symbol/alias ambiguity using built-artifact fixture rows.
+- Next: P4.3 liftover-chain consumption.
 
 ## How to use this doc
 

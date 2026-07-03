@@ -135,6 +135,49 @@ def test_identity_resolver_reads_on_disk_assembly_registry_without_network(monke
     assert resolved.messages == ()
 
 
+def test_gene_identity_resolution_uses_on_disk_crosswalk_without_network(monkeypatch) -> None:
+    from science_tool.commons.gene_crosswalk import ResolvedGeneMatch, to_canonical
+
+    def fail_socket(*args, **kwargs):
+        raise AssertionError("runtime gene identity resolution must not open network sockets")
+
+    monkeypatch.setattr(socket, "socket", fail_socket)
+    commons_root = _FIXTURES / "gene-crosswalk"
+    data_root = _FIXTURES / "gene-crosswalk-data"
+
+    match = to_canonical(
+        taxon=9606,
+        namespace="hgnc_symbol",
+        gene_id="A1BGAS",
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+    assert isinstance(match, ResolvedGeneMatch)
+    assert match.gene_key == "9606|hgnc|HGNC:37133"
+    assert match.match_type == "prev_symbol"
+
+    resolved = resolve_identity(
+        {
+            "taxon": 9606,
+            "molecular_ids": {
+                "gene": {
+                    "namespace": "hgnc_symbol",
+                    "registry": GENE_CROSSWALK_ID,
+                }
+            },
+        },
+        registries={GENE_CROSSWALK_ID: {"available": True, "tier": "gene"}},
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+    assert resolved.identity_context["molecular_ids"]["gene"] == {
+        "namespace": "hgnc_symbol",
+        "registry": GENE_CROSSWALK_ID,
+        "resolution_status": "resolved",
+    }
+    assert resolved.messages == ()
+
+
 def test_resolve_namespace_supported_gene_namespace() -> None:
     resolution = resolve_namespace("hgnc_id", GENE_CROSSWALK_ID, registries=_AVAILABLE_GENE_REGISTRY)
 
