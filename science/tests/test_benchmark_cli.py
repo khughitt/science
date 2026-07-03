@@ -1735,6 +1735,67 @@ benchmark:
     assert written["fallback_diagnostics"] == {"top_benchmarks": [], "top_facets": []}
 
 
+def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0308-generic",
+        """
+id: hypothesis:0308-generic
+type: hypothesis
+title: Generic benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-fallback",
+        """
+id: dataset:blocked-fallback
+type: dataset
+title: Blocked Fallback
+dataset_class: deposit
+local_path: data/blocked-fallback
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: survival prediction
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-03'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback", "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / f"2026-07-03-{tmp_path.name}.yaml"
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    assert written["summary"]["fallback_rows"] == 1
+    assert written["summary"]["bucket_counts"]["fallback-diagnostic"] == 0
+    assert written["summary"]["suppressed_blocked_support_fallback_rows"] == 1
+    assert written["buckets"]["fallback-diagnostic"] == []
+    assert written["fallback_diagnostics"]["suppressed_blocked_support"] == {
+        "rows": 1,
+        "top_benchmarks": [{"benchmark_id": "dataset:blocked-fallback", "count": 1}],
+    }
+
+
 def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(
     tmp_path: Path, monkeypatch
 ) -> None:
