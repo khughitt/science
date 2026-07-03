@@ -282,6 +282,14 @@ on initial scaffold; `/science:curate` populates it once `core/decisions.md`
 has entries. See `core/` in
 `${CLAUDE_PLUGIN_ROOT}/references/project-structure.md` for the conventions.
 
+This scaffold is written once, at create/import time, from the canonical
+template. Ongoing edits to `templates/agents-md.md` do not propagate to
+already-scaffolded projects — there is no push-to-existing mechanism for the
+boilerplate. After creation, `/science:curate` manages only the
+load-bearing-constraints digest between the BEGIN/END markers (refreshed from
+that project's `core/decisions.md`); everything else in the project's
+`AGENTS.md` is that project's own file to edit directly.
+
 Offer to scaffold `core/overview.md` and `core/decisions.md` from
 `${CLAUDE_PLUGIN_ROOT}/templates/core-overview.md` and
 `${CLAUDE_PLUGIN_ROOT}/templates/core-decisions.md`. Skip if the user declines.

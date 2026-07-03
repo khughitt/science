@@ -9,6 +9,16 @@ the Pointers section, NOT as `@`-includes (those would inline hundreds of
 lines per turn). The Load-bearing constraints section between the BEGIN/END
 markers is managed by `/science:curate` — edit core/decisions.md instead and
 let curate refresh the digest.
+
+Update mechanism (read this before "fixing" the template for an existing
+project): `/science:curate` only refreshes the load-bearing-constraints
+digest between the BEGIN/END markers below, from that project's
+`core/decisions.md`. The static body of this template — everything else on
+this page — only applies at create/import time; it is written once when a
+project is scaffolded via `/science:create-project` or `/science:import-project`.
+There is no push-to-existing-projects mechanism for the boilerplate, and it
+does not propagate to projects that already exist. To change an existing
+project's `AGENTS.md` body, edit that project's file directly.
 -->
 
 # <project> — Agent Guide
