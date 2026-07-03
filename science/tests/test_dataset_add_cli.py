@@ -97,6 +97,21 @@ def test_add_refuses_malformed_schema_profile(tmp_path: Path) -> None:
     assert not (tmp_path / "entities" / "datasets" / "bad-profile.md").exists()
 
 
+def test_add_refuses_unknown_schema_profile_extension(tmp_path: Path) -> None:
+    res = _add(
+        tmp_path,
+        "bad-profile",
+        "--title",
+        "Bad",
+        "--schema-profile",
+        "science-entity-base/1.0+dataset/1.0+bio.bogus/1.0",
+    )
+
+    assert res.exit_code == 1
+    assert "unknown schema_profile component" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "bad-profile.md").exists()
+
+
 def test_add_refuses_blank_schema_profile(tmp_path: Path) -> None:
     res = _add(tmp_path, "bad-profile", "--title", "Bad", "--schema-profile", "")
 

@@ -33,13 +33,8 @@ def _seed_workflow_and_run(
         ]
     wf_dir = root / "entities" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
-    outputs_yaml = "".join(
-        f'  - slug: "{o["slug"]}"\n'
-        f'    title: "{o["title"]}"\n'
-        f"    resource_names: {o['resource_names']!r}\n"
-        f"    ontology_terms: {o.get('ontology_terms', [])!r}\n"
-        for o in workflow_outputs
-    )
+    outputs_yaml = yaml.safe_dump(workflow_outputs, sort_keys=False)
+    outputs_yaml = "".join(f"  {line}" if line.strip() else line for line in outputs_yaml.splitlines(True))
     (wf_dir / "wf.md").write_text(
         f'---\nid: "workflow:wf"\ntype: "workflow"\ntitle: "WF"\noutputs:\n{outputs_yaml}---\n',
         encoding="utf-8",
@@ -178,6 +173,48 @@ def test_register_run_writes_dataset_entities(tmp_path: Path) -> None:
     assert 'origin: "derived"' in body
     assert 'workflow_run: "workflow-run:wf-r1"' in body
     assert 'datapackage: "results/wf/r1/kappa/datapackage.yaml"' in body
+
+
+def test_register_run_copies_literal_output_identity_to_derived_entity(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "label": "UNKNOWN",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "declared_unresolved",
+        },
+    }
+    schema_profile = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": schema_profile,
+                "identity": identity,
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = CliRunner().invoke(
+        science_cli,
+        ["dataset", "register-run", "workflow-run:wf-r1"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+    )
+
+    assert res.exit_code == 0, res.output
+    ds_path = tmp_path / "entities" / "datasets" / "wf-r1-kappa.md"
+    frontmatter = yaml.safe_load(ds_path.read_text(encoding="utf-8").split("---", 2)[1])
+    assert frontmatter["schema_profile"] == schema_profile
+    assert frontmatter["identity_context"] == identity
 
 
 # ── Task 7.4: symmetric edges ──────────────────────────────────────────────

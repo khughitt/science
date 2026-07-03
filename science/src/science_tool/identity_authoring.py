@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from science_model.entity_schema.loader import SchemaLoader, SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileParseError, parse_profile
 
 BASE_DATASET_SCHEMA_PROFILE = "science-entity-base/1.0+dataset/1.0"
@@ -81,6 +82,12 @@ def require_profile_identity(schema_profile: str, identity_context: Any) -> None
         raise IdentityAuthoringError(f"invalid schema_profile: {exc}") from exc
     if profile.mixin is None or profile.mixin.name != "dataset":
         raise IdentityAuthoringError("invalid schema_profile: dataset lifecycle requires a dataset schema_profile")
+    loader = SchemaLoader()
+    for component in (profile.base, profile.mixin, *profile.extensions):
+        try:
+            loader.load(component)
+        except SchemaNotFoundError as exc:
+            raise IdentityAuthoringError(f"unknown schema_profile component {component.render()!r}: {exc}") from exc
 
     from science_tool.validate.checks.identity_context import required_identity_tiers
 

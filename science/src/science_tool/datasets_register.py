@@ -10,6 +10,7 @@ import yaml
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.commons.identity_stamp import derive_stamp
+from science_tool.identity_authoring import BASE_DATASET_SCHEMA_PROFILE
 
 
 def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
@@ -120,10 +121,21 @@ def _entity_yaml_block(
     inputs: list[str],
     dp_path_rel: str,
     ontology_terms: list[str],
+    schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,
+    identity_context: dict | None = None,
 ) -> str:
     entity_id = f"dataset:{slug}"
+    identity_text = ""
+    if identity_context:
+        identity_text = yaml.safe_dump(
+            {"identity_context": identity_context},
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
     return (
         "---\n"
+        f'schema_profile: "{schema_profile}"\n'
         f'id: "{entity_id}"\n'
         'type: "dataset"\n'
         f'title: "{title}"\n'
@@ -143,6 +155,7 @@ def _entity_yaml_block(
         f'  produced_at: "{produced_at}"\n'
         f"  inputs: {inputs!r}\n"
         "consumed_by: []\n"
+        f"{identity_text}"
         f'created: "{produced_at[:10]}"\n'
         f'updated: "{produced_at[:10]}"\n'
         "---\n"
@@ -185,6 +198,8 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
             inputs=inputs,
             dp_path_rel=dp_rel,
             ontology_terms=list(out.get("ontology_terms") or []),
+            schema_profile=str(out.get("schema_profile") or BASE_DATASET_SCHEMA_PROFILE),
+            identity_context=out.get("identity") if isinstance(out.get("identity"), dict) else None,
         )
         # Idempotent: skip writing if existing content matches new content exactly.
         if ds_path.exists() and ds_path.read_text(encoding="utf-8") == body:
