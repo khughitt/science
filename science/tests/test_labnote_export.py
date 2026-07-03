@@ -181,6 +181,58 @@ def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -
     assert views["views"][0]["route"] == "/findings/proposition"
 
 
+def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "propositions" / "0001-example-proposition.md",
+        """
+        ---
+        id: proposition:0001-example-proposition
+        type: proposition
+        title: Example proposition
+        status: active
+        confidence: supported
+        sensitivity: public
+        discusses:
+          - frame: synthesis:0001-example-synthesis
+            role: mechanism
+        ---
+        # Story
+
+        This public proposition cites [@Smith2020].
+
+        <!-- Author note: cite as [@citekey] once the source lands. -->
+
+        Inline HTML stays intact: `<!-- keep -->`.
+
+        Double-backtick HTML stays intact: ``<!-- keep double -->``.
+
+        ```html
+        <!-- keep fenced -->
+        ```
+
+        # Evidence
+
+        Evidence prose is preserved as a second section.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")["entities"]
+    record = prose["proposition:0001-example-proposition"]
+
+    assert "Author note" not in record["markdown"]
+    assert "[@citekey]" not in record["markdown"]
+    assert "[@Smith2020]" in record["markdown"]
+    assert "`<!-- keep -->`" in record["markdown"]
+    assert "``<!-- keep double -->``" in record["markdown"]
+    assert "<!-- keep fenced -->" in record["markdown"]
+    for section in record["sections"]:
+        assert "Author note" not in section["markdown"]
+
+
 def test_export_labnote_package_fails_on_unresolved_public_citation(tmp_path: Path) -> None:
     project_root = tmp_path / "pais"
     out = tmp_path / "out"
