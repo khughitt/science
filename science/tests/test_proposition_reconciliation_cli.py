@@ -538,6 +538,142 @@ def test_reconcile_propositions_suppresses_reviewed_factorization_decision(
     assert shown_payload["factorization_disagreements"][0]["reviewed_decision_id"] == record.decision_id
 
 
+def test_sparse_hint_closure_review_records_and_suppresses_candidate(tmp_path: Path):
+    runner = CliRunner()
+    _manifest(tmp_path)
+    _proposition(
+        tmp_path,
+        "broad",
+        "BES does not rescue underpowered studies by pooling data",
+        subject="Bayesian Evidence Synthesis",
+        predicate="associates_with",
+        object="data-pooling rescue of underpowered studies",
+        polarity="negative",
+        source_refs=(
+            "paper:A2020",
+            "annotation:entities/papers/A2020.source#a1",
+            "paper:B2021",
+            "annotation:entities/papers/B2021.source#b1",
+        ),
+    )
+    _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:broad"),))
+    _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:broad"),))
+
+    generated = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    assert generated.exit_code == 0, generated.output
+    candidate = json.loads(generated.output)["factorization_disagreements"][0]
+    assert candidate["recommended_action"] == "insufficient_hints"
+
+    review_path = tmp_path / "review.json"
+    review_path.write_text(
+        json.dumps(
+            {
+                "source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+                "judgments": [
+                    {
+                        "candidate_id": candidate["candidate_id"],
+                        "judgment_id": judgment_id(
+                            "factorization_disagreement",
+                            "accepted_sparse_hints",
+                            [candidate["proposition"]],
+                        ),
+                        "lane": "factorization_disagreement",
+                        "decision": "accepted_sparse_hints",
+                        "proposition": candidate["proposition"],
+                        "rationale": "Already factored sparse statement hints explain this broad proposition.",
+                        "confidence": "high",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    validated = runner.invoke(
+        annotate_group,
+        [
+            "validate-proposition-reconciliation",
+            "--root",
+            str(tmp_path),
+            str(review_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert validated.exit_code == 0, validated.output
+
+    plan_path = tmp_path / "plan.json"
+    planned = runner.invoke(
+        annotate_group,
+        [
+            "plan-proposition-reconciliation",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(review_path),
+            "--output",
+            str(plan_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert planned.exit_code == 0, planned.output
+    plan_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert len(plan_payload["actions"]) == 1
+    action = plan_payload["actions"][0]
+    assert action["kind"] == "record_reconciliation_decision"
+    assert action["inputs"]["assertion_fingerprint"].startswith("sha256:")
+
+    recorded = runner.invoke(
+        annotate_group,
+        [
+            "record-proposition-reconciliation-decisions",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(plan_path),
+            "--apply",
+            "--format",
+            "json",
+        ],
+    )
+    assert recorded.exit_code == 0, recorded.output
+    assert json.loads(recorded.output)["summary"]["appended"] == 1
+
+    suppressed = runner.invoke(
+        annotate_group,
+        ["reconcile-propositions", "--all", "--root", str(tmp_path), "--format", "json"],
+    )
+    assert suppressed.exit_code == 0, suppressed.output
+    suppressed_payload = json.loads(suppressed.output)
+    assert suppressed_payload["summary"]["generated_factorization_disagreements"] == 1
+    assert suppressed_payload["summary"]["factorization_disagreements"] == 0
+    assert suppressed_payload["summary"]["reviewed_decisions"] == 1
+    assert suppressed_payload["factorization_disagreements"] == []
+
+    shown = runner.invoke(
+        annotate_group,
+        [
+            "reconcile-propositions",
+            "--all",
+            "--show-reviewed",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert shown.exit_code == 0, shown.output
+    shown_payload = json.loads(shown.output)
+    assert shown_payload["summary"]["factorization_disagreements"] == 1
+    assert shown_payload["factorization_disagreements"][0]["reviewed_decision_id"].startswith(
+        "reconcile-decision:"
+    )
+
+
 def test_reconcile_propositions_table(tmp_path: Path):
     _manifest(tmp_path)
     _proposition(tmp_path, "a", "BRCA1 loss increases genomic instability")

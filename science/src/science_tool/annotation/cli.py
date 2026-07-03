@@ -638,15 +638,25 @@ def reconcile_propositions_cmd(
 
 
 @annotate_group.command("validate-proposition-reconciliation")
+@click.argument(
+    "review_path",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option(
     "--input",
     "input_path",
-    required=True,
+    required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
-def validate_proposition_reconciliation_cmd(input_path: Path, root: Path | None, fmt: str) -> None:
+def validate_proposition_reconciliation_cmd(
+    review_path: Path | None,
+    input_path: Path | None,
+    root: Path | None,
+    fmt: str,
+) -> None:
     """Validate an agent-reviewed proposition reconciliation artifact."""
     from science_tool.annotation.proposition_reconciliation import (
         ReconciliationValidationError,
@@ -654,11 +664,15 @@ def validate_proposition_reconciliation_cmd(input_path: Path, root: Path | None,
         validate_review_doc,
     )
 
+    if (input_path is None) == (review_path is None):
+        raise click.ClickException("provide exactly one review path: REVIEW_PATH or --input")
+    selected_path = input_path or review_path
+    assert selected_path is not None
     project_root = (root or Path.cwd()).resolve()
     try:
-        doc = json.loads(input_path.read_text(encoding="utf-8"))
+        doc = json.loads(selected_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise click.ClickException(f"--input is not valid JSON: {exc}") from exc
+        raise click.ClickException(f"{selected_path} is not valid JSON: {exc}") from exc
     report = build_reconciliation_report(project_root)
     try:
         payload = validate_review_doc(doc, report)
