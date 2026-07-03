@@ -1933,6 +1933,67 @@ benchmark:
     }
 
 
+def test_benchmark_test_triage_review_file_includes_visible_fallback_rollups(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0307-generic",
+        """
+id: hypothesis:0307-generic
+type: hypothesis
+title: Generic fallback hypothesis
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "visible-review-fallback",
+        """
+id: dataset:visible-review-fallback
+type: dataset
+title: Visible Review Fallback
+dataset_class: deposit
+local_path: data/visible-review-fallback
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      task_type: protein-lineage-association
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback", "--write-review-file", "--format", "json")
+
+    assert result.exit_code == 0
+    review_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / f"2026-07-03-{tmp_path.name}.yaml"
+    written = yaml.safe_load(review_path.read_text(encoding="utf-8"))
+    rollups = written["fallback_diagnostics"]["rollups"]
+    assert len(rollups) == 1
+    assert rollups[0]["benchmark_id"] == "dataset:visible-review-fallback"
+    assert rollups[0]["task_id"] == "dataset:visible-review-fallback#ready"
+    assert rollups[0]["task_type"] == "protein-lineage-association"
+    assert rollups[0]["count"] == 1
+    assert rollups[0]["task_support_state"] == "supported"
+    assert rollups[0]["example_entities"] == ["hypothesis:0307-generic"]
+
+
 def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
     _write_entity(
