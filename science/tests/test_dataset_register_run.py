@@ -600,10 +600,10 @@ def test_register_run_proxy_output_preserves_unresolved_proxy_and_routes_sources
             },
         },
     )
-    _seed_dataset(tmp_path, "cytoband-map")
+    _seed_dataset(tmp_path, "cytoband-hg19")
     proxy = {
         "type": "cytoband_proxy",
-        "via": "dataset:cytoband-map",
+        "via": "dataset:cytoband-hg19",
         "sources": [{"dataset": "dataset:source-segments", "assembly": "inherit"}],
     }
     _seed_workflow_and_run(
@@ -637,13 +637,15 @@ def test_register_run_proxy_output_preserves_unresolved_proxy_and_routes_sources
     assert entity["identity_context"]["assembly"]["proxy"] == proxy
     assert entity["derivation"]["inputs"] == ["dataset:source-segments"]
     assert entity["derivation"]["transformations"] == [
-        {"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}
+        {"kind": "proxy_via", "dataset": "dataset:cytoband-hg19", "type": "cytoband_proxy"}
     ]
     assert (
         "workflow-run:wf-r1" in _frontmatter(tmp_path / "entities" / "datasets" / "source-segments.md")["consumed_by"]
     )
     assert (
-        "workflow-run:wf-r1" not in _frontmatter(tmp_path / "entities" / "datasets" / "cytoband-map.md")["consumed_by"]
+        "workflow-run:wf-r1" not in _frontmatter(tmp_path / "entities" / "datasets" / "cytoband-hg19.md")[
+            "consumed_by"
+        ]
     )
 
 
