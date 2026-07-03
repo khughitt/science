@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from urllib.parse import quote
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
@@ -17,7 +18,13 @@ from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
 from science_tool.markdown_utils import parse_frontmatter, strip_html_comments_preserving_code
 from science_tool.project_config import load_project_config
-from science_tool.references import MarkdownPayload, build_reference_bundle, validate_exported_markdown
+from science_tool.references import (
+    MarkdownPayload,
+    SemanticRef,
+    build_reference_bundle,
+    parse_citations,
+    validate_exported_markdown,
+)
 from science_tool.entity_scan import iter_entity_markdown
 
 PROJECT_SCHEMA_VERSION = "science-project-package.v1"
@@ -170,6 +177,73 @@ class ExportedEntity:
     markdown: str
     frontmatter: dict[str, Any]
     source_path: str
+
+
+@dataclass(frozen=True)
+class SourceSemanticRecord:
+    entity_id: str
+    entity_type: str
+    label: str
+    source_path: str
+
+
+def _readable_ref_label(entity_id: str) -> str:
+    local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
+    return local.replace("-", " ").replace("_", " ")
+
+
+def _source_semantic_record(entity_id: str, raw: dict[str, Any], source_path: str) -> SourceSemanticRecord:
+    entity_type = entity_id.split(":", 1)[0] if ":" in entity_id else "semantic_ref"
+    label = raw.get("title") or raw.get("name") or raw.get("label") or _readable_ref_label(entity_id)
+    return SourceSemanticRecord(
+        entity_id=entity_id,
+        entity_type=entity_type,
+        label=str(label),
+        source_path=source_path,
+    )
+
+
+def _content_prose_semantic_records(project_root: Path) -> dict[str, SourceSemanticRecord]:
+    content_root = project_root / "content" / "prose"
+    if not content_root.exists():
+        return {}
+    records: dict[str, SourceSemanticRecord] = {}
+    normalized: dict[str, tuple[str, str, str]] = {}
+    for path in sorted([*content_root.rglob("*.yml"), *content_root.rglob("*.yaml")]):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            continue
+        entity_id = raw.get("entityRef")
+        if not isinstance(entity_id, str) or not entity_id:
+            continue
+        source_path = path.relative_to(project_root).as_posix()
+        record = _source_semantic_record(entity_id, raw, source_path)
+        key = (record.entity_type, record.label, record.source_path)
+        if entity_id in normalized and normalized[entity_id] != key:
+            raise ValueError(f"duplicate source semantic entityRef with different records: {entity_id}")
+        normalized[entity_id] = key
+        records[entity_id] = record
+    return records
+
+
+def _graph_semantic_records(project_root: Path) -> dict[str, SourceSemanticRecord]:
+    graph_path = project_root / "knowledge" / "graph.trig"
+    if not graph_path.exists():
+        return {}
+    payload = export_graph_payload(graph_path, overlays=[])
+    records: dict[str, SourceSemanticRecord] = {}
+    for node in payload.nodes:
+        entity_id = canonical_id_from_entity_uri(node.id)
+        if entity_id is None:
+            continue
+        entity_type = entity_id.split(":", 1)[0] if ":" in entity_id else "semantic_ref"
+        records[entity_id] = SourceSemanticRecord(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            label=node.label or _readable_ref_label(entity_id),
+            source_path="knowledge/graph.trig",
+        )
+    return records
 
 
 def _json_write(path: Path, payload: dict[str, Any]) -> None:
@@ -417,10 +491,6 @@ def _discover_entities(
             continue
         entity_type = _entity_type_for_path(path, frontmatter)
         source_path = path.relative_to(project_root).as_posix()
-        validate_exported_markdown(
-            [MarkdownPayload(path=source_path, field="body", text=body)],
-            known_citekeys,
-        )
         _validate_source_refs(frontmatter, known_citekeys, source_path)
         metadata = {
             key: value
@@ -465,7 +535,12 @@ def _discover_entities(
     return exported, restricted_present, restricted_ids
 
 
-def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list[ExportedEntity]) -> str:
+def _data_version(
+    project_root: Path,
+    raw_config: dict[str, Any],
+    entities: list[ExportedEntity],
+    source_records: dict[str, SourceSemanticRecord] | None = None,
+) -> str:
     base = str(raw_config.get("last_modified") or raw_config.get("version") or "0")
 
     def chunks() -> Iterator[bytes]:
@@ -476,6 +551,16 @@ def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list
         graph = project_root / "knowledge" / "graph.trig"
         if graph.exists():
             yield graph.read_bytes()
+        for record in sorted((source_records or {}).values(), key=lambda item: item.entity_id):
+            yield json.dumps(
+                {
+                    "entity_id": record.entity_id,
+                    "entity_type": record.entity_type,
+                    "label": record.label,
+                    "source_path": record.source_path,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
         for entity in entities:
             yield entity.source_path.encode("utf-8")
             yield json.dumps(entity.frontmatter, sort_keys=True, default=str).encode("utf-8")
@@ -555,22 +640,163 @@ def _entity_bundle(entities: list[ExportedEntity]) -> dict[str, Any]:
     }
 
 
-def _prose_bundle(entities: list[ExportedEntity]) -> dict[str, Any]:
+def _exported_semantic_records(entities: list[ExportedEntity]) -> dict[str, SourceSemanticRecord]:
+    records: dict[str, SourceSemanticRecord] = {}
+    for entity in entities:
+        entity_id = entity.record["id"]
+        entity_type = entity.record["type"]
+        label = entity.record.get("display_name") or _readable_ref_label(entity_id)
+        records[entity_id] = SourceSemanticRecord(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            label=str(label),
+            source_path=entity.source_path,
+        )
+    return records
+
+
+def _semantic_route_for_entity(entity_id: str, entity_type: str, raw_config: dict[str, Any]) -> str:
+    route_base = _view_config_for_type(entity_type, raw_config)["route"]
+    return f"{route_base}?id={quote(entity_id, safe='')}"
+
+
+def _semantic_detail_for_ref(
+    semantic_ref: SemanticRef,
+    *,
+    exported_records: dict[str, SourceSemanticRecord],
+    source_records: dict[str, SourceSemanticRecord],
+    raw_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    record = exported_records.get(semantic_ref.ref)
+    if record:
+        return {
+            "id": semantic_ref.ref,
+            "kind": "semantic_ref",
+            "label": record.label,
+            "entity_id": record.entity_id,
+            "entity_type": record.entity_type,
+            "resolution": "resolved_exported_entity",
+            "route": _semantic_route_for_entity(record.entity_id, record.entity_type, raw_config),
+        }
+    record = source_records.get(semantic_ref.ref)
+    if record:
+        return {
+            "id": semantic_ref.ref,
+            "kind": "semantic_ref",
+            "label": record.label,
+            "entity_id": record.entity_id,
+            "entity_type": record.entity_type,
+            "resolution": "known_source_entity_not_exported",
+        }
+    return None
+
+
+def _empty_semantic_ref_diagnostics() -> dict[str, Any]:
+    return {
+        "total": 0,
+        "resolved_exported_entity": 0,
+        "known_source_entity_not_exported": 0,
+        "unknown_semantic_ref": 0,
+        "examples": [],
+    }
+
+
+def _semantic_namespaces_for_records(records: dict[str, SourceSemanticRecord]) -> set[str]:
+    return {entity_id.split(":", 1)[0] for entity_id in records if ":" in entity_id}
+
+
+def _semantic_refs_for_section(
+    text: str,
+    *,
+    known_citekeys: set[str],
+    exported_records: dict[str, SourceSemanticRecord],
+    source_records: dict[str, SourceSemanticRecord],
+    semantic_diagnostics: dict[str, Any],
+    raw_config: dict[str, Any],
+    source_path: str,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    known_records = exported_records | source_records
+    scan = parse_citations(
+        text,
+        known_citekeys=known_citekeys,
+        semantic_namespaces=_semantic_namespaces_for_records(known_records),
+    )
+    refs: list[str] = []
+    details: list[dict[str, Any]] = []
+    for semantic_ref in scan.semantic_refs:
+        detail = _semantic_detail_for_ref(
+            semantic_ref,
+            exported_records=exported_records,
+            source_records=source_records,
+            raw_config=raw_config,
+        )
+        semantic_diagnostics["total"] += 1
+        if detail is None:
+            semantic_diagnostics["unknown_semantic_ref"] += 1
+            raise ValueError(f"unknown semantic ref in exported prose: {semantic_ref.ref} ({source_path})")
+        semantic_diagnostics[detail["resolution"]] += 1
+        if len(semantic_diagnostics["examples"]) < 20:
+            semantic_diagnostics["examples"].append(
+                {
+                    "ref": semantic_ref.ref,
+                    "resolution": detail["resolution"],
+                    "path": source_path,
+                }
+            )
+        refs.append(semantic_ref.ref)
+        details.append(detail)
+    return refs, details
+
+
+def _prose_bundle(
+    entities: list[ExportedEntity],
+    *,
+    known_citekeys: set[str],
+    exported_records: dict[str, SourceSemanticRecord],
+    source_records: dict[str, SourceSemanticRecord],
+    semantic_diagnostics: dict[str, Any],
+    raw_config: dict[str, Any],
+) -> dict[str, Any]:
     records: dict[str, Any] = {}
+    known_semantic_refs = set(exported_records) | set(source_records)
     for entity in entities:
         markdown = strip_html_comments_preserving_code(entity.markdown)
         if not markdown.strip():
             continue
+        validate_exported_markdown(
+            [MarkdownPayload(path=entity.source_path, field="body", text=markdown)],
+            known_citekeys,
+            known_semantic_refs=known_semantic_refs,
+            semantic_namespaces=_semantic_namespaces_for_records(exported_records | source_records),
+        )
+        sections = _sections_from_markdown(markdown)
+        for section in sections:
+            refs, details = _semantic_refs_for_section(
+                section.get("markdown") or section.get("text") or "",
+                known_citekeys=known_citekeys,
+                exported_records=exported_records,
+                source_records=source_records,
+                semantic_diagnostics=semantic_diagnostics,
+                raw_config=raw_config,
+                source_path=entity.source_path,
+            )
+            if not refs:
+                continue
+            section["semantic_refs"] = refs
+            section["source_refs"] = refs
+            section["source_ref_details"] = details
         records[entity.record["id"]] = {
             "markdown": markdown,
-            "sections": _sections_from_markdown(markdown),
+            "sections": sections,
             "source_path": entity.source_path,
         }
     return {
         "contract": PROSE_CONTRACT,
         "schema_version": BUNDLE_SCHEMA_VERSION,
+        "features": {"semantic_refs": "1"},
         "entities": records,
     }
+
 
 
 def _frontmatter_link_rows(
@@ -807,7 +1033,12 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     known_citekeys = set(load_bib_entries(project_root))
     entities, restricted_present, restricted_ids = _discover_entities(project_root, known_citekeys)
     entities = _filter_hidden_entities(entities, raw_config)
-    data_version = _data_version(project_root, raw_config, entities)
+    exported_records = _exported_semantic_records(entities)
+    source_records = {
+        **_graph_semantic_records(project_root),
+        **_content_prose_semantic_records(project_root),
+    }
+    data_version = _data_version(project_root, raw_config, entities, source_records)
     label = str(((raw_config.get("labnote") or {}).get("label")) or raw_config.get("name") or config.id)
     project = {
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -836,11 +1067,21 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     _json_write(out_dir / "project.json", project)
+    diagnostics = {"errors": [], "warnings": [], "semantic_refs": _empty_semantic_ref_diagnostics()}
     _json_write(out_dir / "views.json", views)
     _json_write(out_dir / "entities" / "index.json", _entity_bundle(entities))
-    _json_write(out_dir / "prose_bundles" / "entity_prose_bundles.json", _prose_bundle(entities))
+    _json_write(
+        out_dir / "prose_bundles" / "entity_prose_bundles.json",
+        _prose_bundle(
+            entities,
+            known_citekeys=known_citekeys,
+            exported_records=exported_records,
+            source_records=source_records,
+            semantic_diagnostics=diagnostics["semantic_refs"],
+            raw_config=raw_config,
+        ),
+    )
     _json_write(out_dir / "references" / "index.json", build_reference_bundle(project_root))
-    diagnostics = {"errors": [], "warnings": []}
     _json_write(
         out_dir / "links" / "index.json",
         _link_bundle(project_root, entities, restricted_ids, diagnostics["warnings"]),

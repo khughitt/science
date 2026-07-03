@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 
 import pytest
 
-from science_tool.labnote_export import export_labnote_package
+from science_tool import labnote_export as labnote_export_module
+from science_tool.references import UnresolvedSemanticRefError
+from science_tool.labnote_export import (
+    _content_prose_semantic_records,
+    _graph_semantic_records,
+    export_labnote_package,
+)
 
 
 def write_text(path: Path, text: str) -> None:
@@ -103,6 +110,274 @@ def write_minimal_project(root: Path) -> None:
 
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_content_prose_semantic_records_harvest_entity_ref_records(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        summary: Spatial smoothing process.
+        """,
+    )
+    write_text(
+        project_root / "content" / "prose" / "parameters" / "pattern-wavelength.yaml",
+        """
+        entityRef: param:pattern-wavelength
+        name: Pattern wavelength
+        """,
+    )
+
+    records = _content_prose_semantic_records(project_root)
+
+    assert records["prim:diffusion"].entity_type == "prim"
+    assert records["prim:diffusion"].label == "Diffusion"
+    assert records["prim:diffusion"].source_path == "content/prose/primitives/diffusion.yml"
+    assert records["param:pattern-wavelength"].entity_type == "param"
+    assert records["param:pattern-wavelength"].label == "Pattern wavelength"
+
+
+def test_graph_semantic_records_harvest_canonical_graph_nodes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = tmp_path / "natural-systems"
+    write_text(project_root / "knowledge" / "graph.trig", "")
+    monkeypatch.setattr(
+        labnote_export_module,
+        "export_graph_payload",
+        lambda _path, overlays=None: SimpleNamespace(
+            nodes=[
+                SimpleNamespace(
+                    id="https://science.local/entity/model/gray-scott",
+                    label="Gray-Scott model",
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        labnote_export_module,
+        "canonical_id_from_entity_uri",
+        lambda uri: "model:gray-scott" if uri.endswith("/model/gray-scott") else None,
+    )
+
+    records = _graph_semantic_records(project_root)
+
+    assert records["model:gray-scott"].entity_type == "model"
+    assert records["model:gray-scott"].label == "Gray-Scott model"
+    assert records["model:gray-scott"].source_path == "knowledge/graph.trig"
+
+
+def test_export_resolves_content_prose_entity_ref_with_dynamic_namespace(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "genes" / "rbl1.yml",
+        """
+        entityRef: gene:RBL1
+        title: RBL1
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-gene.md",
+        """
+        ---
+        id: question:0001-gene
+        type: question
+        title: Gene question
+        sensitivity: public
+        ---
+        This points to [@gene:RBL1].
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
+    detail = prose["entities"]["question:0001-gene"]["sections"][0]["source_ref_details"][0]
+    assert detail["id"] == "gene:RBL1"
+    assert detail["entity_type"] == "gene"
+    assert detail["resolution"] == "known_source_entity_not_exported"
+
+
+def test_data_version_changes_when_referenced_content_prose_semantic_record_changes(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    first_out = tmp_path / "first"
+    second_out = tmp_path / "second"
+    write_minimal_project(project_root)
+    prose_path = project_root / "content" / "prose" / "primitives" / "diffusion.yml"
+    write_text(
+        prose_path,
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-patterns.md",
+        """
+        ---
+        id: question:0001-patterns
+        type: question
+        title: Pattern formation
+        sensitivity: public
+        ---
+        Pattern formation uses [@prim:diffusion].
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=first_out)
+    first = read_json(first_out / "project.json")["package"]["data_version"]
+
+    write_text(
+        prose_path,
+        """
+        entityRef: prim:diffusion
+        title: Diffusive process
+        """,
+    )
+    export_labnote_package(project_root=project_root, out_dir=second_out)
+    second = read_json(second_out / "project.json")["package"]["data_version"]
+
+    assert first != second
+
+
+def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        summary: Spatial smoothing process.
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-patterns.md",
+        """
+        ---
+        id: question:0001-patterns
+        type: question
+        title: Pattern formation
+        sensitivity: public
+        ---
+        Pattern formation uses [@prim:diffusion].
+        """,
+    )
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
+    section = prose["entities"]["question:0001-patterns"]["sections"][0]
+    assert prose["features"] == {"semantic_refs": "1"}
+    assert section["semantic_refs"] == ["prim:diffusion"]
+    assert section["source_refs"] == ["prim:diffusion"]
+    assert section["source_ref_details"] == [
+        {
+            "id": "prim:diffusion",
+            "kind": "semantic_ref",
+            "label": "Diffusion",
+            "entity_id": "prim:diffusion",
+            "entity_type": "prim",
+            "resolution": "known_source_entity_not_exported",
+        }
+    ]
+    assert diagnostics["semantic_refs"]["known_source_entity_not_exported"] == 1
+    assert diagnostics["semantic_refs"]["unknown_semantic_ref"] == 0
+
+
+def test_semantic_ref_to_later_discovered_entity_gets_route(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        This points to [@question:9999-later].
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "9999-later.md",
+        """
+        ---
+        id: question:9999-later
+        type: question
+        title: Later question
+        sensitivity: public
+        ---
+        Later entity body.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
+    detail = prose["entities"]["question:0001-source"]["sections"][0]["source_ref_details"][0]
+    assert detail == {
+        "id": "question:9999-later",
+        "kind": "semantic_ref",
+        "label": "Later question",
+        "entity_id": "question:9999-later",
+        "entity_type": "question",
+        "resolution": "resolved_exported_entity",
+        "route": "/explore/question?id=question%3A9999-later",
+    }
+
+
+def test_export_fails_unknown_semantic_ref(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        This points to [@prim:not-in-source-index].
+        """,
+    )
+
+    with pytest.raises(UnresolvedSemanticRefError) as exc:
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert "prim:not-in-source-index" in exc.value.unresolved
+
+
+def test_inline_paper_prefix_is_not_treated_as_semantic_ref(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        Inline paper refs should use normal citekeys, so [@paper:Smith2020] is unsupported here.
+        """,
+    )
+
+    with pytest.raises(Exception) as exc:
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert "paper:Smith2020" in str(exc.value)
 
 
 def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -> None:

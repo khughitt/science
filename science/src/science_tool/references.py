@@ -187,38 +187,143 @@ class Citation:
     locator: str | None
 
 
+SEMANTIC_REF_NAMESPACES = frozenset(
+    {
+        "model",
+        "prim",
+        "param",
+        "math",
+        "formula",
+        "hypothesis",
+        "proposition",
+        "synthesis",
+        "question",
+        "dataset",
+        "method",
+        "workflow",
+        "workflow_run",
+        "concept",
+        "topic",
+        "lens",
+        "chapter",
+        "facet",
+        "var",
+        "sktran",
+    }
+)
+
+_SEMANTIC_REF_RE = re.compile(r"^([a-z][a-z0-9_-]*):(.+)$")
+
+
+@dataclass(frozen=True)
+class SemanticRef:
+    ref: str
+    namespace: str
+    local_part: str
+
+
+@dataclass(frozen=True)
+class CitationItem:
+    kind: str
+    value: Citation | SemanticRef
+
+
 @dataclass(frozen=True)
 class CitationScan:
     citations: list[Citation]
+    semantic_refs: list[SemanticRef]
     unsupported: list[str]
+    items: list[CitationItem]
 
 
-def _parse_block(inner: str) -> tuple[list[Citation], list[str]]:
+def _semantic_ref_namespaces(semantic_namespaces: set[str] | None = None) -> set[str]:
+    allowed = set(SEMANTIC_REF_NAMESPACES)
+    if semantic_namespaces:
+        allowed.update(semantic_namespaces)
+    return allowed
+
+
+def _semantic_ref_for_key(
+    key: str,
+    *,
+    known_citekeys: set[str] | None = None,
+    semantic_namespaces: set[str] | None = None,
+) -> SemanticRef | None:
+    if known_citekeys and key in known_citekeys:
+        return None
+    match = _SEMANTIC_REF_RE.match(key)
+    if not match:
+        return None
+    namespace, local_part = match.groups()
+    if not local_part:
+        return None
+    if namespace not in _semantic_ref_namespaces(semantic_namespaces):
+        if known_citekeys and key in known_citekeys:
+            return None
+        return None
+    return SemanticRef(ref=key, namespace=namespace, local_part=local_part)
+
+
+def _colon_namespace(key: str) -> str | None:
+    match = _SEMANTIC_REF_RE.match(key)
+    return match.group(1) if match else None
+
+
+def _parse_block(
+    inner: str,
+    *,
+    known_citekeys: set[str] | None = None,
+    semantic_namespaces: set[str] | None = None,
+) -> tuple[list[Citation], list[SemanticRef], list[str], list[CitationItem]]:
     """Parse the inside of a recognized `[@...]` block.
 
-    Returns (citations, unsupported). A `;`-separated item that does not begin
-    with `@<citekey>` is malformed (e.g. `see @Jones2021` in
-    `[@Smith2020; see @Jones2021]`). Such an item is NOT silently dropped — its
-    `@`-tokens (or, failing that, its raw text) are reported as unsupported so
-    Science export fails closed instead of losing a citation.
+    Returns (citations, semantic_refs, unsupported, items). A `;`-separated
+    item that does not begin with `@<key>` is malformed (e.g. `see @Jones2021`
+    in `[@Smith2020; see @Jones2021]`). Such an item is NOT silently dropped —
+    its `@`-tokens (or, failing that, its raw text) are reported as unsupported
+    so Science export fails closed instead of losing a citation.
     """
     citations: list[Citation] = []
+    semantic_refs: list[SemanticRef] = []
     unsupported: list[str] = []
+    items: list[CitationItem] = []
     for raw_item in inner.split(";"):
         item = raw_item.strip()
         if not item:
             continue
         key_match = _ITEM_KEY_RE.match(item)
         if key_match:
-            citekey = key_match.group(1)
+            key = key_match.group(1)
             rest = item[key_match.end():].strip()
+            semantic_ref = _semantic_ref_for_key(
+                key,
+                known_citekeys=known_citekeys,
+                semantic_namespaces=semantic_namespaces,
+            )
+            if semantic_ref:
+                if rest:
+                    unsupported.append(item.lstrip("@"))
+                    continue
+                semantic_refs.append(semantic_ref)
+                items.append(CitationItem(kind="semantic_ref", value=semantic_ref))
+                continue
+            namespace = _colon_namespace(key)
+            if (
+                namespace
+                and namespace not in _semantic_ref_namespaces(semantic_namespaces)
+                and (not known_citekeys or key not in known_citekeys)
+            ):
+                unsupported.append(key)
+                continue
             locator = None
             if rest:
                 if not rest.startswith(","):
                     unsupported.append(item.lstrip("@"))
                     continue
                 locator = rest[1:].strip() or None
-            citations.append(Citation(citekey=citekey, locator=locator))
+            citation = Citation(citekey=key, locator=locator)
+            citations.append(citation)
+            items.append(CitationItem(kind="citation", value=citation))
             continue
         ats = [
             match.group(1)
@@ -226,7 +331,7 @@ def _parse_block(inner: str) -> tuple[list[Citation], list[str]]:
             if _is_bare_citation_candidate(item, match.start())
         ]
         unsupported.extend(ats if ats else [item])
-    return citations, unsupported
+    return citations, semantic_refs, unsupported, items
 
 
 def _prose_lines(markdown: str) -> list[str]:
@@ -234,7 +339,12 @@ def _prose_lines(markdown: str) -> list[str]:
     return rendered_prose(markdown).splitlines()
 
 
-def parse_citations(markdown: str) -> CitationScan:
+def parse_citations(
+    markdown: str,
+    *,
+    known_citekeys: set[str] | None = None,
+    semantic_namespaces: set[str] | None = None,
+) -> CitationScan:
     """Parse Markdown into the v1 citation grammar (design §6).
 
     Recognizes only `[@key ...]` blocks. `@key` tokens that are not inside a
@@ -242,13 +352,21 @@ def parse_citations(markdown: str) -> CitationScan:
     unsupported syntax, never silently dropped.
     """
     citations: list[Citation] = []
+    semantic_refs: list[SemanticRef] = []
     unsupported: list[str] = []
+    items: list[CitationItem] = []
     for line in _prose_lines(markdown):
         consumed_spans: list[tuple[int, int]] = []
         for block in _BLOCK_RE.finditer(line):
-            block_citations, block_unsupported = _parse_block(block.group(0)[1:-1])
+            block_citations, block_semantic_refs, block_unsupported, block_items = _parse_block(
+                block.group(0)[1:-1],
+                known_citekeys=known_citekeys,
+                semantic_namespaces=semantic_namespaces,
+            )
             citations.extend(block_citations)
+            semantic_refs.extend(block_semantic_refs)
             unsupported.extend(block_unsupported)
+            items.extend(block_items)
             consumed_spans.append(block.span())
         for at in _BARE_AT_RE.finditer(line):
             if any(start <= at.start() < end for start, end in consumed_spans):
@@ -256,7 +374,12 @@ def parse_citations(markdown: str) -> CitationScan:
             if not _is_bare_citation_candidate(line, at.start()):
                 continue
             unsupported.append(at.group(1))
-    return CitationScan(citations=citations, unsupported=unsupported)
+    return CitationScan(
+        citations=citations,
+        semantic_refs=semantic_refs,
+        unsupported=unsupported,
+        items=items,
+    )
 
 
 def _is_bare_citation_candidate(line: str, at_index: int) -> bool:
@@ -276,6 +399,15 @@ class UnresolvedCitationError(ValueError):
         self.unresolved = unresolved
         keys = ", ".join(sorted(unresolved))
         super().__init__(f"unresolved citation keys in exported prose: {keys}")
+
+
+class UnresolvedSemanticRefError(ValueError):
+    """Raised when exported prose uses a semantic ref unknown to the source project."""
+
+    def __init__(self, unresolved: dict[str, list[dict]]) -> None:
+        self.unresolved = unresolved
+        refs = ", ".join(sorted(unresolved))
+        super().__init__(f"unresolved semantic refs in exported prose: {refs}")
 
 
 @dataclass(frozen=True)
@@ -299,6 +431,8 @@ def validate_exported_markdown(
     known_citekeys: set[str],
     *,
     allow_partial: bool = False,
+    known_semantic_refs: set[str] | None = None,
+    semantic_namespaces: set[str] | None = None,
 ) -> dict[str, list[dict]]:
     """Scan exported Markdown for citation keys (design §7). Fail-closed.
 
@@ -306,11 +440,19 @@ def validate_exported_markdown(
       UnsupportedCitationSyntaxError regardless of allow_partial.
     - Unknown citekeys raise UnresolvedCitationError unless allow_partial, in
       which case the design §7 `unresolved` map is returned instead.
+    - Unknown semantic refs raise UnresolvedSemanticRefError; they are never
+      merged into partial bibliography unresolved blocks.
     """
     unsupported_hits: list[str] = []
     unresolved: dict[str, list[dict]] = {}
+    semantic_unresolved: dict[str, list[dict]] = {}
+    known_semantic_refs = known_semantic_refs or set()
     for payload in payloads:
-        scan = parse_citations(payload.text)
+        scan = parse_citations(
+            payload.text,
+            known_citekeys=known_citekeys,
+            semantic_namespaces=semantic_namespaces,
+        )
         for token in scan.unsupported:
             unsupported_hits.append(f"{payload.path}:{payload.field} @{token}")
         for cite in scan.citations:
@@ -325,13 +467,28 @@ def validate_exported_markdown(
                     "snippet": _snippet(payload.text, cite.citekey),
                 }
             )
+        for semantic_ref in scan.semantic_refs:
+            if semantic_ref.ref in known_semantic_refs:
+                continue
+            semantic_unresolved.setdefault(semantic_ref.ref, []).append(
+                {
+                    "ref": semantic_ref.ref,
+                    "reason": "unknown-semantic-ref",
+                    "path": payload.path,
+                    "field": payload.field,
+                    "snippet": _snippet(payload.text, semantic_ref.ref),
+                }
+            )
     if unsupported_hits:
         raise UnsupportedCitationSyntaxError(
             "unsupported citation syntax (use [@key] only): " + "; ".join(unsupported_hits)
         )
+    if semantic_unresolved:
+        raise UnresolvedSemanticRefError(semantic_unresolved)
     if unresolved and not allow_partial:
         raise UnresolvedCitationError(unresolved)
     return unresolved
+
 
 
 class DuplicateCitekeyError(ValueError):
