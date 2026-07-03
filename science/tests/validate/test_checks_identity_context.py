@@ -82,6 +82,24 @@ def test_declared_unresolved_assembly_without_seqcol_digest_passes_declaration_g
     ]
 
 
+def test_declared_unresolved_assembly_with_unknown_seqcol_digest_passes_malformed_gate() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0",
+        identity_context={
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+            },
+        },
+    )
+
+    results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
+
+    assert not [r for r in results if r.severity is Severity.ERROR and r.rule == "identity.assembly-malformed"]
+
+
 def test_geneset_without_gene_tier_errors() -> None:
     ds = _ds(
         "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0+bio.identity_context/1.0",

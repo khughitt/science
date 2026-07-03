@@ -161,8 +161,10 @@ def _assembly_defect(assembly: Any) -> str | None:
     digest = assembly.get("seqcol_digest")
     if status == "declared_unresolved" and digest is None:
         return None
-    if not isinstance(digest, str) or not digest.strip() or digest.strip().upper() == "UNKNOWN":
-        return "missing, blank, or UNKNOWN seqcol_digest"
+    if not isinstance(digest, str) or not digest.strip():
+        return "missing or blank seqcol_digest"
+    if status == "resolved" and digest.strip().upper() == "UNKNOWN":
+        return "UNKNOWN seqcol_digest is invalid for resolved assembly"
     return None
 
 
