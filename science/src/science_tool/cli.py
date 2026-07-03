@@ -6266,7 +6266,8 @@ def benchmark_test_triage(
             table.add_column(col, overflow="fold", no_wrap=False)
         row_label = f"{fallback_count} fallback rows grouped into {len(rollups)} rollups"
         if len(visible_rollups) < len(rollups):
-            row_label = f"{row_label} (showing {len(visible_rollups)})"
+            hidden_rollups = len(rollups) - len(visible_rollups)
+            row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
         for index, rollup in enumerate(visible_rollups):
             table.add_row(
                 row_label if index == 0 else "",
@@ -6330,7 +6331,9 @@ def _format_test_triage_rollup_task(rollup: Mapping[str, Any]) -> str:
     task_id = rollup.get("task_id")
     if not task_id:
         return "-"
-    return str(task_id).split("#", 1)[-1]
+    task = str(task_id).split("#", 1)[-1]
+    task_type = str(rollup.get("task_type") or "")
+    return f"{task} ({task_type})" if task_type else task
 
 
 def _format_test_triage_rollup_support(rollup: Mapping[str, Any]) -> str:

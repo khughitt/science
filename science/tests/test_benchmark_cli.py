@@ -1653,6 +1653,7 @@ benchmark:
   benchmark_kinds: [static-association]
   tasks:
     - id: ready
+      task_type: protein-lineage-association
       prediction_target: label
       held_out_unit: cohort
       metric: auroc
@@ -1672,8 +1673,7 @@ benchmark:
     assert "Benchmark Test Triage: fallback-diagnostic" in result.output
     assert "1 fallback rows grouped into 1 rollups" in result.output
     assert "visible-fallback" in result.output
-    assert "ready" in result.output
-    assert "ready (" not in result.output
+    assert "ready (protein-lineage-association)" in result.output
     assert "supported" in result.output
     assert "runnable" in result.output
     assert "deposit" in result.output
@@ -1683,6 +1683,72 @@ benchmark:
     assert "runnable:1" not in result.output
     assert "deposit:1" not in result.output
     assert "none:1" not in result.output
+
+
+def test_benchmark_test_triage_cli_table_output_shows_hidden_fallback_rollup_count(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    rollups = [
+        {
+            "benchmark_id": f"dataset:fallback-{index:02d}",
+            "benchmark_title": f"Fallback {index:02d}",
+            "task_id": f"dataset:fallback-{index:02d}#ready",
+            "task_type": "",
+            "count": 1,
+            "task_support_state": "supported",
+            "task_support_reason": "",
+            "readiness_label": "runnable",
+            "dataset_class": "deposit",
+            "test_plan_state": "concrete",
+            "top_facets": [{"facet": "proteomics", "count": 1}],
+            "example_entities": [f"hypothesis:{index:02d}"],
+            "reason_notes": ["fallback:high-baseline"],
+        }
+        for index in range(12)
+    ]
+
+    def fake_benchmark_test_triage_report(*args, **kwargs):
+        return {
+            "summary": {
+                "bucket_counts": {
+                    "run-now": 0,
+                    "stage-next": 0,
+                    "metadata-needed": 0,
+                    "blocked-or-reference": 0,
+                    "fallback-diagnostic": 12,
+                }
+            },
+            "buckets": {
+                "run-now": [],
+                "stage-next": [],
+                "metadata-needed": [],
+                "blocked-or-reference": [],
+                "fallback-diagnostic": [],
+            },
+            "fallback_diagnostics": {"rollups": rollups},
+            "commons_notice": "",
+            "filters": {},
+            "review_file": None,
+        }
+
+    monkeypatch.setattr(
+        "science_tool.benchmark_opportunities.benchmark_test_triage_report",
+        fake_benchmark_test_triage_report,
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code == 0
+    assert "12 fallback rows grouped into 12 rollups (showing 10, 2 hidden)" in result.output
+    assert "dataset:fallback-00" in result.output
+    assert "dataset:fallback-09" in result.output
+    assert "dataset:fallback-10" not in result.output
 
 
 def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path: Path, monkeypatch) -> None:
