@@ -39,7 +39,7 @@ P1-P3 make identity declaration strict and ergonomic. They do not make resolutio
 
 ### P4 - MM30-critical pinned commons artifacts
 
-**Status:** P4.1-P4.3 landed; P4.4 next.
+**Status:** P4.1-P4.4 landed; P5 re-planning next.
 
 Purpose: make the resolver's offline path real for the artifacts MM30 needs first.
 
@@ -48,7 +48,7 @@ Work packages:
 - **P4.1 assembly-registry build entrypoint.** Landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes. Science resolver tests exercise the on-disk artifact offline using a reduced fixture copied from the built artifact.
 - **P4.2 gene-crosswalk-hgnc build entrypoint.** Landed. `science-commons` now has a hardened pinned HGNC crosswalk artifact with validated `gene_key` lifecycle semantics, deterministic `crosswalk.csv`, and updated datapackage metadata. Science resolver tests exercise built-artifact rows offline through a reduced fixture.
 - **P4.3 liftover-chain consumption.** Landed. Science now fixture-tests `dataset:assembly-liftover-grch37-grch38` through commons-style compatibility rows and gzipped chain bytes, validates cross-dataset liftover remedies against exact `from_seqcol_digest -> to_seqcol_digest` relations, and emits exact liftover seqcol provenance from `register-run` when source and target assemblies are resolved.
-- **P4.4 cytoband-hg19 proxy reference.** Decide and implement the home for `cytoband-hg19`, preferably a commons reference dataset usable as `proxy.via` (this is the tracked work package for the open fork below).
+- **P4.4 cytoband-hg19 proxy reference.** Landed. `science-commons` now has pinned `dataset:cytoband-hg19` bytes from UCSC hg19 `cytoBand.txt.gz`; Science has a small offline reader for parse + interval-overlap lookup, and proxy provenance tests use the real shared reference slug.
 
 P4 is not a broad reference-data program. It is the minimum artifact substrate needed for MM30 to move from declaration-level identity to resolved identity where it matters.
 
