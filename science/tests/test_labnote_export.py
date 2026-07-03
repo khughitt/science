@@ -519,6 +519,38 @@ def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
         assert "Author note" not in section["markdown"]
 
 
+def test_export_labnote_package_scrubs_internal_paths_from_public_prose(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    path = project_root / "entities" / "propositions" / "0001-example-proposition.md"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + """
+
+        # Internal Handoff
+
+        Private absolute path: `/mnt/ssd/Dropbox/natural-systems/.worktrees/example`.
+        Private home path: `/home/keith/d/natural-systems/doc/private.md`.
+        Private project path: `/data/proj/mm30/8.0/app_export`.
+        Derived Claude project path: `~/.claude/projects/-mnt-ssd-Dropbox-natural-systems/memory/`.
+        Dropbox integration is useful when discussing file-sync tools.
+        """,
+        encoding="utf-8",
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")["entities"]
+    markdown = prose["proposition:0001-example-proposition"]["markdown"]
+    assert "/mnt/ssd" not in markdown
+    assert "/home/keith" not in markdown
+    assert "/data/proj" not in markdown
+    assert "-mnt-ssd-Dropbox-natural-systems" not in markdown
+    assert "Dropbox integration is useful when discussing file-sync tools." in markdown
+    assert "[private path removed]" in markdown
+
+
 def test_export_labnote_package_fails_on_unresolved_public_citation(tmp_path: Path) -> None:
     project_root = tmp_path / "pais"
     out = tmp_path / "out"

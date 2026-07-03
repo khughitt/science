@@ -32,6 +32,10 @@ ENTITY_CONTRACT = "science.entities"
 PROSE_CONTRACT = "science.entity_prose"
 LINK_CONTRACT = "science.entity_links"
 BUNDLE_SCHEMA_VERSION = "1"
+INTERNAL_PUBLIC_PROSE_PATH_RE = re.compile(
+    r"(?:/data/proj|/home/keith|/mnt/ssd)[^\s`'\"<>)\]]*"
+    r"|~/\.claude/projects/[^\s`'\"<>)\]]*"
+)
 
 FINDING_TYPES = {"hypothesis", "proposition", "synthesis"}
 ENTITY_CLASS_BY_TYPE = {
@@ -89,6 +93,12 @@ DEFAULT_VIEW_BY_TYPE = {
         "hidden": True,
     },
 }
+
+
+def _scrub_public_prose_internal_paths(text: str) -> str:
+    return INTERNAL_PUBLIC_PROSE_PATH_RE.sub("[private path removed]", text)
+
+
 TYPE_DIR_MAP = {
     "hypotheses": "hypothesis",
     "propositions": "proposition",
@@ -760,7 +770,9 @@ def _prose_bundle(
     records: dict[str, Any] = {}
     known_semantic_refs = set(exported_records) | set(source_records)
     for entity in entities:
-        markdown = strip_html_comments_preserving_code(entity.markdown)
+        markdown = _scrub_public_prose_internal_paths(
+            strip_html_comments_preserving_code(entity.markdown)
+        )
         if not markdown.strip():
             continue
         validate_exported_markdown(
