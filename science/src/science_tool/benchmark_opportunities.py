@@ -21,7 +21,7 @@ from science_model.packages.schema import (
 
 from science_tool.benchmark_catalog import benchmark_sources
 from science_tool.dataset_prioritize import readiness_for, readiness_weight
-from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
+from science_tool.datasets.semantics import DatasetClass, dataset_class_for, runtime_state_for
 from science_tool.entities import (
     load_markdown_entities,
     numeric_variants,
@@ -256,7 +256,7 @@ class OpportunityDataset:
     id: str
     title: str
     scope: str
-    dataset_class: str
+    dataset_class: DatasetClass
     frontmatter: Mapping[str, object]
     domains: list[str]
     modalities: list[str]
@@ -590,6 +590,7 @@ class BenchmarkTestRow(TypedDict):
     entity_title: str
     benchmark_id: str
     benchmark_title: str
+    dataset_class: DatasetClass
     task_id: str | None
     test_plan_state: TestPlanState
     task_type: str
@@ -884,7 +885,7 @@ def _tasks(dataset_id: str, value: object) -> list[OpportunityTask]:
     return tasks
 
 
-def _dataset_class(fm: Mapping[str, object]) -> str:
+def _dataset_class(fm: Mapping[str, object]) -> DatasetClass:
     try:
         return dataset_class_for(fm)
     except ValueError:
@@ -2555,6 +2556,7 @@ def _benchmark_test_row(
         "entity_title": entity_title,
         "benchmark_id": context.dataset.id,
         "benchmark_title": context.dataset.title,
+        "dataset_class": context.dataset.dataset_class,
         "task_id": task.canonical_task_id if task is not None else None,
         "test_plan_state": _test_plan_state(task),
         "task_type": task.task_type if task is not None else "",

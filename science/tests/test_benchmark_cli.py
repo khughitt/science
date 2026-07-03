@@ -1412,6 +1412,7 @@ benchmark:
     assert payload["review_file"] is None
     assert payload["summary"]["bucket_counts"]["run-now"] == 1
     assert payload["buckets"]["run-now"][0]["benchmark_id"] == "dataset:sciplex3"
+    assert payload["buckets"]["run-now"][0]["dataset_class"] == "deposit"
     assert payload["buckets"]["run-now"][0]["review"] == {
         "decision": "",
         "owner": "",

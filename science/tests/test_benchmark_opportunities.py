@@ -1357,6 +1357,9 @@ benchmark:
     assert payload["summary"]["readiness_counts"]["metadata-only"] == 1
     assert [row["benchmark_id"] for row in payload["buckets"]["run-now"]] == ["dataset:runnable-perturbation"]
     assert [row["benchmark_id"] for row in payload["buckets"]["metadata-needed"]] == ["dataset:spatial-reference"]
+    assert payload["buckets"]["run-now"][0]["dataset_class"] == "deposit"
+    assert payload["buckets"]["metadata-needed"][0]["dataset_class"] == "reference"
+    assert payload["buckets"]["fallback-diagnostic"][0]["dataset_class"] == "deposit"
     assert payload["buckets"]["run-now"][0]["review"] == {
         "decision": "",
         "owner": "",
