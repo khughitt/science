@@ -92,6 +92,13 @@ def test_parse_withdrawn_merged_split_with_no_targets_is_withdrawn() -> None:
     assert row["replacement_gene_keys"] == ""
 
 
+def test_parse_withdrawn_rejects_unknown_status() -> None:
+    bad_withdrawn = "HGNC_ID\tSTATUS\tWITHDRAWN_SYMBOL\tMERGED_INTO_REPORT(S)\nHGNC:99994\tOther\tBAD\t\n"
+
+    with pytest.raises(GeneCrosswalkError, match="unknown withdrawn status"):
+        parse_withdrawn(bad_withdrawn)
+
+
 def test_build_rows_rejects_missing_replacement_target() -> None:
     bad_withdrawn = (
         "HGNC_ID\tSTATUS\tWITHDRAWN_SYMBOL\tMERGED_INTO_REPORT(S)\n"
