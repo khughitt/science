@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from science_tool.commons.assembly_compatibility import CompatibilityRelation
+from pathlib import Path
+
+from science_tool.commons.assembly_compatibility import CompatibilityRelation, load_compatibility_relations
 from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
     evaluate_datapackage_identity_stamps,
@@ -313,6 +315,11 @@ def test_no_derivation_inputs_no_warn() -> None:
 
 
 _LIFTOVER_DATASET = "dataset:assembly-liftover-grch37-grch38"
+_FIXTURES = Path(__file__).parents[1] / "fixtures" / "commons"
+_LIFTOVER_COMMONS_ROOT = _FIXTURES / "liftover"
+_LIFTOVER_DATA_ROOT = _FIXTURES / "liftover-data"
+_GRCH37_DIGEST = "XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA"
+_GRCH38_DIGEST = "XemD97fxYMS4q-FBm_n5CHQgmzh1_67a"
 
 
 def _relation(source: str, target: str) -> CompatibilityRelation:
@@ -358,6 +365,78 @@ def test_cross_dataset_mismatch_with_declared_liftover_passes() -> None:
         )
         == []
     )
+
+
+def test_cross_dataset_mismatch_with_fixture_loaded_liftover_passes() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    source = _with_assembly("dataset:source", _GRCH37_DIGEST)
+    derived = _with_assembly(
+        "dataset:derived",
+        _GRCH38_DIGEST,
+        derivation={
+            "inputs": ["dataset:source"],
+            "transformations": [
+                {
+                    "kind": "identity_transform",
+                    "target": "assembly",
+                    "type": "liftover",
+                    "from": "dataset:source",
+                    "from_seqcol_digest": _GRCH37_DIGEST,
+                    "to_seqcol_digest": _GRCH38_DIGEST,
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    assert (
+        list(
+            evaluate_cross_dataset_assembly(
+                [source, derived],
+                compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: relations},
+            )
+        )
+        == []
+    )
+
+
+def test_cross_dataset_mismatch_with_liftover_transform_but_no_exact_digests_warns() -> None:
+    relations = load_compatibility_relations(
+        dataset_id=_LIFTOVER_DATASET,
+        commons_root=_LIFTOVER_COMMONS_ROOT,
+        data_root=_LIFTOVER_DATA_ROOT,
+    )
+    source = _with_assembly("dataset:source", _GRCH37_DIGEST)
+    derived = _with_assembly(
+        "dataset:derived",
+        _GRCH38_DIGEST,
+        derivation={
+            "inputs": ["dataset:source"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from": "dataset:source",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly(
+            [source, derived],
+            compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: relations},
+        )
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
 
 
 def test_cross_dataset_mismatch_with_frontmatter_only_still_warns() -> None:
