@@ -11,6 +11,23 @@ license: ""                       # SPDX id (e.g. CC-BY-4.0) or sentinel: unknow
 update_cadence: ""                # static | rolling | monthly | ...
 ontology_terms: []                # CURIEs
 
+# Project-level biological identity context. This is authored on the dataset
+# entity; any datapackage science.identity_context stamp is derived/read-only.
+identity_context:
+  taxon:
+    ncbi_taxid: 9606              # NCBI taxid integer
+    resolution_status: resolved
+  assembly:
+    seqcol_digest: "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
+    registry: "dataset:assembly-registry"
+    resolution_status: resolved
+  molecular_ids:
+    gene:
+      namespace: hgnc
+      registry: "dataset:gene-crosswalk-hgnc"
+      resolution_status: declared_unresolved
+      unresolved_value: UNKNOWN   # Use UNKNOWN when declared but not resolved; omit digest fields until resolved.
+
 # Pointer to the runtime datapackage.yaml (entity surface does NOT carry resources[])
 datapackage: ""
 local_path: ""                    # external single-file escape hatch (mutually exclusive with datapackage)

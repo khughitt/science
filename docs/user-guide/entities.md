@@ -757,6 +757,37 @@ Dataset entities use `profiles: ["science-pkg-entity-1.0"]`. Do not put
 `resources:` on the entity; consumers that need resource details read the file
 named by `datapackage:`.
 
+### Biological Identity Context
+
+For biological datasets, the dataset entity's `identity_context` block is the
+source of truth for organism, assembly, and molecular identifier scope. A
+runtime datapackage may carry a derived `science.identity_context` stamp for
+portable validation, but that stamp is read-only from the author's perspective.
+When present, validation treats disagreement between the datapackage stamp and
+the dataset entity as an error.
+
+Mandatoryness is profile-scoped:
+
+| Dataset shape | Required identity context |
+|---|---|
+| Coordinate assays | `taxon` plus `assembly`. |
+| Gene-bearing datasets | `taxon` plus the relevant `molecular_ids.gene` tier. |
+| Protein-bearing datasets | `taxon` plus the relevant `molecular_ids.protein` tier. |
+| Variant-bearing datasets | `taxon` plus the relevant `molecular_ids.variant` tier, and `assembly` when variants are coordinate-anchored. |
+| Non-bio or base-profile datasets | Exempt unless a bio profile is declared. |
+
+Use an NCBI taxid integer for `taxon`, for example
+`ncbi_taxid: 9606`. Use dataset refs for pinned registries and crosswalks, such
+as `dataset:assembly-registry` for assembly digests or
+`dataset:gene-crosswalk-hgnc` for HGNC gene identifiers.
+
+`declared_unresolved` is the honest declaration-level state: the author knows
+which tier or namespace applies, but the exact digest or canonical mapping is
+not resolved yet. Use `UNKNOWN` for the declared unknown value where a value
+slot is required, and omit digest fields until they are actually resolved. Full
+resolution belongs at a later resolver or publish boundary; do not invent
+placeholder digests to make an in-progress dataset look resolved.
+
 ### Origin
 
 Every dataset has an `origin`:
