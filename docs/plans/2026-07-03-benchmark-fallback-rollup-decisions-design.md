@@ -25,6 +25,30 @@ represent useful broad fallback benchmarks, which need staging work, which
 should remain reference/pointer metadata, and which are poor fits for the
 projects where they appear.
 
+## Prerequisites
+
+This slice depends on the fallback-rollups feature: the
+`fallback_diagnostics.rollups` field and its `count` / `top_facets` /
+`example_entities` shape. That work is present on the current branch and must
+remain available in whichever environment runs calibration.
+
+Do not start calibration until either:
+
+- the installed `science` CLI exposes `fallback_diagnostics.rollups`, or
+- the calibration commands are run against this worktree with explicit source
+  resolution.
+
+Confirm the dependency is satisfied before proceeding:
+
+```bash
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src \
+  uv run --project science --frozen science benchmark test-triage \
+  --project-root ~/d/cancer/cancer-types/multiple-myeloma \
+  --commons --source gap-fallback --format json \
+  > /tmp/mm-fallback-rollups-check.json
+rtk python -c "import json,sys; sys.exit(0 if 'rollups' in json.load(open('/tmp/mm-fallback-rollups-check.json'))['fallback_diagnostics'] else 1)"
+```
+
 ## Goals
 
 - Calibrate the dominant fallback rollups across active projects.
@@ -60,6 +84,9 @@ For each dominant fallback rollup, assign one decision label:
   record the reason for a future suppression design.
 - `needs-task-support`: the task support metadata is missing or too vague to
   explain its actionability.
+- `keep-blocked-support`: the task is correctly marked `blocked` and already
+  suppressed from the default fallback table; no visible fallback action is
+  expected and the existing metadata is accurate.
 
 The expected initial classification is:
 
@@ -76,10 +103,10 @@ Run `science benchmark test-triage` against the active projects with commons
 enabled:
 
 ```bash
-science benchmark test-triage --project-root ~/d/cancer/cancer-types/multiple-myeloma --commons --source gap-fallback --format json
-science benchmark test-triage --project-root ~/d/health/processes/post-acute-infection --commons --source gap-fallback --format json
-science benchmark test-triage --project-root ~/d/natural-systems --commons --source gap-fallback --format json
-science benchmark test-triage --project-root ~/d/cancer/data-sources/cbioportal --commons --source gap-fallback --format json
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/cancer/cancer-types/multiple-myeloma --commons --source gap-fallback --format json
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/health/processes/post-acute-infection --commons --source gap-fallback --format json
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/natural-systems --commons --source gap-fallback --format json
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/cancer/data-sources/cbioportal --commons --source gap-fallback --format json
 ```
 
 For each rollup, inspect:
@@ -96,6 +123,29 @@ For each rollup, inspect:
 
 The first pass should produce a short decision table, not code. If a decision
 requires source checking, record the source and whether it supports staging.
+
+## Decision Record
+
+The primary deliverable of this slice is a committed decision note at:
+
+```text
+~/d/science/docs/reports/benchmark-fallback-rollup-decisions-2026-07-03.md
+```
+
+It contains one row per dominant fallback rollup, with these columns:
+
+| Column | Meaning |
+| --- | --- |
+| `benchmark_task` | `dataset:<id>#<task-id>` |
+| `count` | rollup `count` observed during calibration |
+| `current_state` | `support.state` / `dataset_class` / `readiness_label` |
+| `decision` | one of the labels defined in the Decision section |
+| `evidence` | which rollup fields or example entities drove the call |
+| `source_checked` | whether an upstream source/access audit was done, and its result |
+| `metadata_change` | the specific commons edit made, or `none` |
+
+Capture the calibration JSON alongside the note (see Validation) so each row's
+`count` and `current_state` are reproducible rather than transcribed by hand.
 
 ## Metadata Changes
 
@@ -131,15 +181,21 @@ This slice may result in no code changes. A successful pass can be:
 
 ## Validation
 
+Persist the calibration output before and after any commons metadata edits so
+the decision note's `count` / `current_state` columns are reproducible and the
+effect of each edit is a real diff. Redirect the `--format json` runs from the
+Calibration Procedure to `before.<project>.json` / `after.<project>.json` next
+to the decision note (or use `--write-review-file` for the YAML artifact).
+
 Before and after any commons metadata edits, run:
 
 ```bash
-science commons validate
-science commons index rebuild
-science benchmark test-triage --project-root ~/d/cancer/cancer-types/multiple-myeloma --commons --source gap-fallback
-science benchmark test-triage --project-root ~/d/health/processes/post-acute-infection --commons --source gap-fallback
-science benchmark test-triage --project-root ~/d/natural-systems --commons --source gap-fallback
-science benchmark test-triage --project-root ~/d/cancer/data-sources/cbioportal --commons --source gap-fallback
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science commons validate
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science commons index rebuild
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/cancer/cancer-types/multiple-myeloma --commons --source gap-fallback
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/health/processes/post-acute-infection --commons --source gap-fallback
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/natural-systems --commons --source gap-fallback
+rtk env SCIENCE_COMMONS_ROOT=~/d/science-commons PYTHONPATH=science/src:science/model/src uv run --project science --frozen science benchmark test-triage --project-root ~/d/cancer/data-sources/cbioportal --commons --source gap-fallback
 ```
 
 The expected report behavior depends on the decision:
@@ -151,6 +207,8 @@ The expected report behavior depends on the decision:
   suppression policy is designed.
 - `poor-fit-suppress-later`: no behavior change in this slice; record evidence.
 - `needs-task-support`: task-support counts should improve after metadata edits.
+- `keep-blocked-support`: row stays suppressed from the default fallback table
+  and appears only under `suppressed_blocked_support`; no visible-rollup change.
 
 ## Alternatives Considered
 
