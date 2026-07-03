@@ -45,6 +45,35 @@ def test_parse_citations_matches_shared_corpus() -> None:
         assert sorted(scan.unsupported) == sorted(case["unsupported"]), case["name"]
 
 
+def test_parse_citations_splits_semantic_refs_from_bibliography() -> None:
+    scan = parse_citations("Turing [@Turing1952] and [@prim:diffusion].")
+
+    assert [(citation.citekey, citation.locator) for citation in scan.citations] == [
+        ("Turing1952", None)
+    ]
+    assert [ref.ref for ref in scan.semantic_refs] == ["prim:diffusion"]
+    assert scan.unsupported == []
+
+
+def test_parse_citations_preserves_mixed_block_order_without_export_contract_dependency() -> None:
+    scan = parse_citations("See [@Turing1952; @prim:diffusion; @Smith2020, p. 42].")
+
+    assert [(citation.citekey, citation.locator) for citation in scan.citations] == [
+        ("Turing1952", None),
+        ("Smith2020", "p. 42"),
+    ]
+    assert [ref.ref for ref in scan.semantic_refs] == ["prim:diffusion"]
+    assert [item.kind for item in scan.items] == ["citation", "semantic_ref", "citation"]
+
+
+def test_parse_citations_rejects_semantic_ref_locator() -> None:
+    scan = parse_citations("Bad [@model:gray-scott, section 2].")
+
+    assert scan.citations == []
+    assert scan.semantic_refs == []
+    assert scan.unsupported == ["model:gray-scott, section 2"]
+
+
 def test_format_authors_last_first_with_initials() -> None:
     raw = "Williams, Donald R. and Rast, Philippe and Buerkner, Paul-Christian"
     assert format_authors(raw) == "Williams DR, Rast P, Buerkner P-C"
@@ -158,6 +187,10 @@ def _payload(text: str) -> list[MarkdownPayload]:
 
 def test_validate_passes_known_keys() -> None:
     assert validate_exported_markdown(_payload("ok [@Smith2020]"), {"Smith2020"}) == {}
+
+
+def test_validate_treats_known_colon_key_as_bibliography() -> None:
+    assert validate_exported_markdown(_payload("ok [@author:2020]"), {"author:2020"}) == {}
 
 
 def test_validate_fails_closed_on_unknown_key() -> None:
