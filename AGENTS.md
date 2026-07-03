@@ -52,6 +52,14 @@ defensive; fail early instead of silent fallbacks; no "legacy"/"compatibility"
 layers unless asked; no `Unified` prefix on component names; no
 AI-attribution trailers on commits, PRs, or comments.
 
+## Task system
+
+This repo has **no self-hosted task backlog** — there is no root `science.yaml`,
+so do not run `science tasks` against it. Toolkit work is tracked through the
+design and implementation-plan docs under `docs/plans/`. The sibling `meta/`
+project *does* self-host a `science tasks` backlog (studying this toolkit) —
+see [`meta/AGENTS.md`](meta/AGENTS.md) for that.
+
 ## Docs
 
 - User-facing manual: `docs/user-guide/`, starting at
