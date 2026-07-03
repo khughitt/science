@@ -30,6 +30,8 @@ Science already has the framework and low-level pieces:
 
 The gap is consumption hardening. Science does not yet have a built-artifact fixture for this dataset, does not prove the compatibility loader reads the commons-style datapackage/hash path, and does not prove the chain resource named by the compatibility row can be opened and used offline.
 
+Concretely, there is no chain loader that composes the existing pieces end to end: resolving the chain resource through the datapackage/hash path, gunzipping the `.chain.gz` bytes, and feeding the decompressed text to `parse_chain_text` for `lift_interval`. `liftover.py` today accepts already-decompressed chain *text*, so gzip handling is new code in this slice.
+
 ## Decision
 
 Finish P4.3 as a consumption and fixture slice over the existing `science-commons` dataset. Do not redesign the liftover model and do not add a broad interval-liftover CLI in this slice.
@@ -43,7 +45,7 @@ The built artifact contract remains:
 Science consumes this contract in two layers:
 
 1. The validation layer loads `compatibility_relations.csv` through `commons.resolver.resolve` and checks exact source-target digest compatibility.
-2. The runtime liftover layer resolves the named chain resource, verifies its hash via the datapackage resolver, decompresses/parses UCSC chain text, and uses `lift_interval` for same-strand single-block intervals.
+2. The runtime liftover layer adds a new chain loader (`load_chain`, in the Science-owned `liftover.py`) that resolves the named chain resource, verifies its hash via the datapackage resolver, gunzips and parses the UCSC chain text, and feeds the result to `lift_interval` for same-strand single-block intervals.
 
 ## Liftover Provenance Shape
 
@@ -82,7 +84,11 @@ identity_context:
       dataset: dataset:assembly-liftover-grch37-grch38
 ```
 
-The explicit digests in `derivation.transformations[]` are not a second authority. They are run provenance emitted by `register-run` from the resolved source and target identities. Keeping them explicit lets the validator check a remedy without re-inferring which parent was lifted when a derived dataset has multiple inputs.
+The explicit digests in `derivation.transformations[]` are not a second authority. They are run provenance for the specific source-target digest pair that was lifted, and keeping them explicit lets the validator check a remedy without re-inferring which parent was lifted when a derived dataset has multiple inputs.
+
+**These digests are not what `register-run` emits today.** `_transform_entry` (`datasets_register.py`) copies the identity `transform` block's `type` and `method`, and copies its `from` / `to` fields verbatim, into the derivation transformation. In the identity block, `transform.from` is the *source dataset* reference (for example `dataset:gse87585-wu2017`), not a seqcol digest. The validator's `_has_liftover_remedy` reads `from_seqcol_digest` / `to_seqcol_digest` and nothing else, so a transformation produced only by `register-run` never satisfies the remedy. **In v1 the `from_seqcol_digest` / `to_seqcol_digest` fields are hand-authored into `derivation.transformations[]`** (or produced by the optional emission below); `register-run` alone is not sufficient.
+
+If the optional auto-emission is built, it must *derive* each digest from the resolved source and output identity — it must not rename `transform.from` to `from_seqcol_digest`. `transform.from` (a dataset id) and `from_seqcol_digest` (an assembly digest) are different fields with different meanings that happen to share a prefix; conflating them would write a dataset id where a digest is required.
 
 ### The Umbrella Fork
 
@@ -94,6 +100,12 @@ The umbrella asked whether P4.3 should drop `from_seqcol_digest` / `to_seqcol_di
 - multi-input derived datasets stay unambiguous without a new inference algorithm.
 
 A future ergonomics improvement may let `register-run` synthesize these fields automatically from resolved inputs and output identity. P4.3 may add that emission if it is local and testable, but it should not remove the explicit fields from the provenance contract.
+
+## Contig Naming And v1 Scope
+
+`lift_interval` matches a query interval to a chain by contig name (`chain.source_name == source_contig`). The pinned UCSC `hg19ToHg38` chain names contigs in UCSC style (`chr1`), but the GRCh37 / GRCh38 seqcol identities from P4.1 are RefSeq-accession-named collections. A coordinate anchored to a RefSeq-named assembly therefore cannot be looked up in the chain without translating contig names — which is exactly what P4.1's `contig_aliases.csv` exists for.
+
+That translation is deliberately out of scope for v1, consistent with the BED/VCF non-goal. The v1 fixture lifts an interval using the chain's native contig name only; it does not exercise RefSeq-to-UCSC contig-name reconciliation. So the "lift one interval" acceptance proves the resolve -> gunzip -> parse -> lift path works, not that arbitrary real coordinates on a RefSeq-named assembly can be lifted. Real-coordinate lifting will consume P4.1 contig aliases and is a later C4/P5 concern.
 
 ## Artifact Boundary
 
@@ -177,6 +189,8 @@ P4.3 needs a reduced fixture parallel to P4.1 and P4.2:
 
 The fixture should not commit the full UCSC chain. A tiny synthetic chain is acceptable for Science tests as long as the compatibility row and datapackage shape mirror the built artifact contract. The full chain remains in the commons data root and is verified by the commons recipe.
 
+The synthetic chain must be forward-strand on both sides: `lift_interval` returns a `strand_ambiguous` defect for reverse-strand blocks (the real `hg19ToHg38` chain contains some), so a reverse-strand fixture would make the "lift one interval" test fail confusingly.
+
 ## Error Handling
 
 Direct reader APIs should fail early:
@@ -206,7 +220,7 @@ Authoring and validation surfaces preserve existing behavior:
 - Science has a commons-style `assembly-liftover-grch37-grch38` fixture with compatibility and chain resources resolved through datapackage hashes.
 - `load_compatibility_relations` is integration-tested against that fixture using the real GRCh37 and GRCh38 P4.1 seqcol digests.
 - Runtime chain loading and `lift_interval` are tested offline through a datapackage-resolved gzipped chain resource.
-- Cross-dataset assembly validation passes only for exact declared `from_seqcol_digest -> to_seqcol_digest` relations present in the pinned liftover dataset.
+- Cross-dataset assembly validation suppresses its mismatch **warning** only for exact declared `from_seqcol_digest -> to_seqcol_digest` relations present in the pinned liftover dataset. The mismatch is a `WARN`, not a hard failure; the ERROR path is reference-artifact misrouting in the provenance check, not this check.
 - Wrong method, wrong target digest, missing relation, missing dataset, or reference-artifact misrouting still warn/error as appropriate.
 - If `register-run` emits liftover transformations from an output contract, it includes `from_seqcol_digest` and `to_seqcol_digest` when source and target identities are resolved; unresolved sources remain explicit and do not fabricate digests.
 - The `science-commons` liftover recipe remains deterministic and verifies the pinned chain lockfile; datapackage hashes match generated resources.
