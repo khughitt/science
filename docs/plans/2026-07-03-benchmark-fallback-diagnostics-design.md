@@ -36,7 +36,7 @@ These are different action classes, but the current fallback diagnostic table re
 
 Add `dataset_class` to `BenchmarkTestRow`.
 
-The value is already available on `DatasetOpportunityContext.dataset.dataset_class` and should be emitted unchanged as one of:
+Read it directly from `context.dataset.dataset_class` in the row builder. That field is already normalized via `dataset_class_for` at dataset construction, so the row builder must not re-call `dataset_class_for(fm)` — reusing the field keeps a single classification path (see Data Flow, "No second matching path"). It is emitted unchanged as one of:
 
 - `deposit`
 - `reference`
@@ -62,9 +62,10 @@ fallback_diagnostics:
     reference: 0
     pointer: 0
   task_support_counts:
-    none: 0
+    supported: 0
     candidate: 0
     blocked: 0
+    none: 0
   top_benchmarks_by_readiness:
     runnable: []
     stage-needed: []
@@ -78,17 +79,27 @@ fallback_diagnostics:
 
 `top_benchmarks` and `top_facets` keep their existing meaning and ordering. The new counts and grouped top benchmarks are projections over the same visible fallback rows. Suppressed blocked-support fallback rows remain reported separately under `suppressed_blocked_support` and are not included in these visible fallback diagnostics.
 
-Use `none` for rows where `task_support_state` is missing.
+Each count block enumerates the *full* domain of its field so it always sums to the visible fallback row count:
+
+- `readiness_counts` — all four `ReadinessLabel` values (`runnable`, `stage-needed`, `metadata-only`, `blocked`).
+- `dataset_class_counts` — all three `DatasetClass` values (`deposit`, `reference`, `pointer`).
+- `task_support_counts` — all three `BenchmarkTaskSupportState` values (`supported`, `candidate`, `blocked`) plus `none`.
+
+`task_support_state` is `BenchmarkTaskSupportState | None`, so a visible fallback row can carry `supported` — gap-fallback rows are built from `context.dataset.tasks`, and only `blocked`-support rows are partitioned into the suppressed block. `supported` must therefore have its own bucket, not be folded into `none`; a `supported` benchmark surfacing only as a fallback match is itself a signal worth counting. Use `none` only for rows where `task_support_state` is missing (`None`).
+
+This `readiness_counts` is scoped to visible fallback rows and is intentionally distinct from the existing `summary.readiness_counts`, which is computed over all rows. Keep both; they are at different nesting levels and do not collide.
 
 ### Table Output
 
-Keep the existing compact fallback diagnostic table, but add summary columns:
+Keep the existing compact fallback diagnostic table — a single aggregate row (`rows | top benchmarks | top facets`) — and add three columns:
 
 - `readiness`
 - `class`
 - `support`
 
-The table should remain a diagnostic aggregate, not list individual fallback rows. It should make cases like these readable at a glance:
+Each new column renders its corresponding `*_counts` map inline as a compact `key:count` distribution (omit or show zero-count keys consistently, matching how `top benchmarks`/`top facets` render today). The table stays a single aggregate row; it does not enumerate individual fallback rows. Watch the fixed `Console(width=200)`: six folded columns are tight, so keep the distributions terse.
+
+It should make cases like these readable at a glance:
 
 - mostly `runnable` + `deposit`: likely valid broad fallback coverage
 - mostly `metadata-only` + `reference`: may need staged deposit alternatives or clearer reference expectations
@@ -136,12 +147,13 @@ The new diagnostics should not add new user-facing error cases.
 
 Add focused tests for:
 
-1. `BenchmarkTestRow` includes `dataset_class`.
-2. Fallback diagnostics include readiness, dataset class, and task support counts.
-3. Grouped top benchmark lists are scoped to each readiness/class group and sorted deterministically.
-4. Suppressed blocked-support fallback rows are not counted in visible fallback diagnostics.
-5. Empty visible fallback buckets still emit stable zero-count diagnostics.
-6. CLI table output includes the new aggregate columns without changing the existing suppression table behavior.
+1. `BenchmarkTestRow` includes `dataset_class` (and existing row-shape fixtures/goldens are updated for the additive key).
+2. Fallback diagnostics include readiness, dataset class, and task support counts, and each block's values sum to the visible fallback row count.
+3. A visible fallback row with `task_support_state == "supported"` is counted under `task_support_counts.supported`, not folded into `none` or dropped.
+4. Grouped top benchmark lists are scoped to each readiness/class group and sorted deterministically.
+5. Suppressed blocked-support fallback rows are not counted in visible fallback diagnostics.
+6. Empty visible fallback buckets still emit stable zero-count diagnostics.
+7. CLI table output includes the new aggregate columns without changing the existing suppression table behavior.
 
 ## Acceptance Criteria
 

@@ -56,6 +56,8 @@ Aliases live in data, not framework code:
 - `resolve_assembly` may match exact `seqcol_digest`, `label`, or an `aliases` entry, but only after parsing the artifact.
 - duplicate labels or aliases across rows are an artifact error, not an arbitrary first match.
 
+This widens the Science-owned reader contract, so the reader changes are explicit here: `AssemblyEntry` and `_parse_registry_rows` (`science_tool.commons.assembly`) gain the `aliases` field, and `resolve_assembly` extends its lookup to `aliases`. The runtime parser **raises** on a duplicate `label` or `alias` across rows — mirroring the existing `seqcol_digest` uniqueness guard — rather than returning a silent no-match. This makes the "artifact error, not an arbitrary first match" guarantee real at read time too (defense-in-depth beyond the datapackage SHA-256 check), not only at build time.
+
 This keeps future aliases under `science-commons` data ownership. Adding a new label binding updates the pinned artifact rather than requiring a Science release, and the binding remains reviewable next to the digest it names.
 
 ## Build Boundary
