@@ -247,6 +247,37 @@ def test_register_run_rejects_blank_output_schema_profile(tmp_path: Path) -> Non
     assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
 
 
+def test_register_run_rejects_non_mapping_output_identity_before_writing(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": "not-a-mapping",
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = CliRunner().invoke(
+        science_cli,
+        ["dataset", "register-run", "workflow-run:wf-r1"],
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+    )
+
+    assert res.exit_code != 0
+    assert "identity" in res.output
+    assert "Traceback" not in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
 # ── Task 7.4: symmetric edges ──────────────────────────────────────────────
 
 

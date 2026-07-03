@@ -171,12 +171,18 @@ def _output_schema_profile(out: dict) -> str:
     return value
 
 
+def _validate_output_identity(out: dict) -> None:
+    if "identity" in out and not isinstance(out["identity"], dict):
+        raise ValueError(f"output {out.get('slug')!r} identity must be a mapping")
+
+
 def preflight_register_run_identity(project_root: Path, workflow_run_id: str) -> None:
     """Validate output identity metadata before register-run writes files."""
     _, run_fm = _read_run(project_root, workflow_run_id)
     workflow_id = str(run_fm.get("workflow", ""))
     for out in _read_workflow_outputs(project_root, workflow_id):
         _output_schema_profile(out)
+        _validate_output_identity(out)
 
 
 def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> list[tuple[Path, str]]:
