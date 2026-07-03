@@ -12,7 +12,8 @@ class DagPaths:
 
     dag_dir: Path
     tasks_dir: Path
-    dags: tuple[str, ...] | None  # None = auto-discover all <slug>.edges.yaml
+    dags: tuple[str, ...] | None  # None = auto-discover all <slug>.dot files
+    project_root: Path | None = None
 
 
 def load_dag_paths(project_root: Path) -> DagPaths:
@@ -30,10 +31,12 @@ def load_dag_paths(project_root: Path) -> DagPaths:
             dag_dir=project_root / "doc/figures/dags",
             tasks_dir=project_root / "tasks",
             dags=None,
+            project_root=project_root,
         )
 
     return DagPaths(
         dag_dir=project_root / block.get("dag_dir", "doc/figures/dags"),
         tasks_dir=project_root / block.get("tasks_dir", "tasks"),
         dags=tuple(block["dags"]) if block.get("dags") else None,
+        project_root=project_root,
     )

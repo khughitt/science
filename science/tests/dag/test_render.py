@@ -4,10 +4,10 @@ import shutil
 from pathlib import Path
 
 import pytest
-import yaml
 
 from science_tool.dag.paths import DagPaths
 from science_tool.dag.render import render_all, render_one
+from science_tool.dag.validate import _parse_dot_topology
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures/mm30"
 DAGS_DIR = FIXTURE_ROOT / "doc/figures/dags"
@@ -19,25 +19,136 @@ def render_workspace(tmp_path: Path) -> Path:
     """Copy mm30 fixtures to a writable tmp location; return the dag_dir."""
     dst = tmp_path / "doc/figures/dags"
     dst.mkdir(parents=True)
-    # Copy .dot + .edges.yaml + .dot.reference (for test comparison)
     for p in DAGS_DIR.iterdir():
-        if p.suffix in {".dot", ".yaml"} or p.name.endswith(".dot.reference"):
+        if p.suffix == ".dot":
             shutil.copy2(p, dst / p.name)
     return dst
 
 
-def test_render_all_byte_identical_dot_vs_mm30_reference(render_workspace: Path) -> None:
-    paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
-    render_all(paths)
+def _proposition_edge(
+    source: str,
+    target: str,
+    *,
+    edge_id: int | None = None,
+    refuted: bool = False,
+    original_label: str = "affects",
+) -> dict:
+    edge = {
+        "source": source,
+        "target": target,
+        "polarity": "positive",
+        "belief_magnitude": "supported",
+        "claim_layer": "causal_effect",
+        "refuted": refuted,
+        "has_grounding_evidence": True,
+        "identification": "observational",
+        "original_label": original_label,
+    }
+    if edge_id is not None:
+        edge["id"] = edge_id
+    return edge
+
+
+def _proposition_edges_for_dot(
+    dot_path: Path,
+    *,
+    refuted_pairs: set[tuple[str, str]] | None = None,
+) -> list[dict]:
+    _, dot_edges = _parse_dot_topology(dot_path)
+    refuted_pairs = refuted_pairs or set()
+    return [
+        _proposition_edge(
+            source,
+            target,
+            edge_id=index,
+            refuted=(source, target) in refuted_pairs,
+        )
+        for index, (source, target) in enumerate(sorted(dot_edges), start=1)
+    ]
+
+
+def _all_mm30_proposition_edges(dag_dir: Path) -> list[dict]:
+    edges: list[dict] = []
     for slug in SLUGS:
-        produced = (render_workspace / f"{slug}-auto.dot").read_text()
-        expected = (render_workspace / f"{slug}-auto.dot.reference").read_text()
-        assert produced == expected, f"{slug}: .dot drifted from mm30 reference"
+        refuted = {("state", "rib"), ("state", "e2f")} if slug == "h1-h2-bridge" else set()
+        edges.extend(_proposition_edges_for_dot(dag_dir / f"{slug}.dot", refuted_pairs=refuted))
+    return edges
+
+
+def test_render_discovers_dot_slugs_without_edges_yaml(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "claim.dot").write_text("digraph claim {\n  a -> b;\n}\n", encoding="utf-8")
+
+    paths = DagPaths(dag_dir=dag_dir, tasks_dir=tmp_path / "tasks", dags=None)
+    render_all(
+        paths,
+        proposition_edges=[
+            {
+                "source": "a",
+                "target": "b",
+                "polarity": "positive",
+                "belief_magnitude": "speculative",
+                "claim_layer": "causal_effect",
+                "refuted": False,
+                "has_grounding_evidence": False,
+                "identification": "observational",
+                "original_label": "affects",
+            }
+        ],
+    )
+
+    assert (dag_dir / "claim-auto.dot").exists()
+
+
+def test_render_refuses_yaml_only_fallback(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "claim.dot").write_text("digraph claim {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "claim.edges.yaml").write_text(
+        "dag: claim\nedges:\n  - id: 1\n    source: a\n    target: b\n    edge_status: supported\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="no compiled proposition edge"):
+        render_one(dag_dir, "claim", proposition_edges=[])
+
+
+def test_render_fails_before_partial_write_when_dot_edge_unbacked(tmp_path: Path) -> None:
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "claim.dot").write_text("digraph claim {\n  a -> b;\n  b -> c;\n}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="b -> c"):
+        render_one(
+            dag_dir,
+            "claim",
+            proposition_edges=[
+                {
+                    "source": "a",
+                    "target": "b",
+                    "polarity": "positive",
+                    "belief_magnitude": "speculative",
+                    "claim_layer": "causal_effect",
+                    "refuted": False,
+                    "has_grounding_evidence": False,
+                    "identification": "observational",
+                }
+            ],
+        )
+    assert not (dag_dir / "claim-auto.dot").exists()
 
 
 def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
     # h1-h2-bridge fixture has 2 eliminated edges (state->rib, state->e2f).
-    render_one(render_workspace, "h1-h2-bridge")
+    render_one(
+        render_workspace,
+        "h1-h2-bridge",
+        proposition_edges=_proposition_edges_for_dot(
+            render_workspace / "h1-h2-bridge.dot",
+            refuted_pairs={("state", "rib"), ("state", "e2f")},
+        ),
+    )
     dot = (render_workspace / "h1-h2-bridge-auto.dot").read_text()
     # Both eliminated edges must carry the #9e9e9e color and [✗] marker.
     assert dot.count("#9e9e9e") >= 2, "expected at least 2 eliminated-grey edges"
@@ -45,7 +156,11 @@ def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
 
 
 def test_render_one_uses_compact_inline_legend(render_workspace: Path) -> None:
-    render_one(render_workspace, "h1-prognosis")
+    render_one(
+        render_workspace,
+        "h1-prognosis",
+        proposition_edges=_proposition_edges_for_dot(render_workspace / "h1-prognosis.dot"),
+    )
     dot = (render_workspace / "h1-prognosis-auto.dot").read_text()
 
     assert "lg_supp_a" not in dot
@@ -57,60 +172,16 @@ def test_render_one_uses_compact_inline_legend(render_workspace: Path) -> None:
 
 
 def test_render_one_structural_invariants(render_workspace: Path) -> None:
-    render_one(render_workspace, "h1-progression")
-    yaml_path = render_workspace / "h1-progression.edges.yaml"
+    proposition_edges = _proposition_edges_for_dot(render_workspace / "h1-progression.dot")
+    render_one(render_workspace, "h1-progression", proposition_edges=proposition_edges)
     dot = (render_workspace / "h1-progression-auto.dot").read_text()
-    edges = yaml.safe_load(yaml_path.read_text())["edges"]
-    for edge in edges:
+    for edge in proposition_edges:
         assert f"[{edge['id']}]" in dot, f"edge id [{edge['id']}] missing from rendered .dot"
-
-
-def test_render_one_ignores_claim_only_yaml_edges(render_workspace: Path) -> None:
-    dot_path = render_workspace / "claim-only.dot"
-    dot_path.write_text(
-        """digraph claim_only {
-  a -> b;
-  b -> c;
-}
-"""
-    )
-    yaml_path = render_workspace / "claim-only.edges.yaml"
-    yaml_path.write_text(
-        """dag: claim-only
-source_dot: doc/figures/dags/claim-only.dot
-graph_scope: figure_plus_claim_edges
-edges:
-- id: 1
-  source: a
-  target: b
-  original_label: ""
-  edge_status: supported
-  identification: observational
-- id: 2
-  source: claim
-  target: only
-  original_label: claim-only
-  edge_status: tentative
-  identification: observational
-- id: 3
-  source: b
-  target: c
-  original_label: ""
-  edge_status: structural
-  identification: structural
-"""
-    )
-    render_one(render_workspace, "claim-only")
-
-    dot = (render_workspace / "claim-only-auto.dot").read_text()
-    assert "[1]" in dot
-    assert "[3]" in dot
-    assert "[2]" not in dot
 
 
 def test_render_discovers_slugs_when_whitelist_absent(render_workspace: Path) -> None:
     paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
-    render_all(paths)
+    render_all(paths, proposition_edges=_all_mm30_proposition_edges(render_workspace))
     for slug in SLUGS:
         assert (render_workspace / f"{slug}-auto.dot").exists()
 
@@ -124,7 +195,7 @@ def test_render_png_failure_is_non_fatal(render_workspace: Path, monkeypatch: py
 
     monkeypatch.setattr(subprocess, "run", _fail)
     paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
-    render_all(paths)  # must NOT raise
+    render_all(paths, proposition_edges=_all_mm30_proposition_edges(render_workspace))  # must NOT raise
     # .dot was still written:
     for slug in SLUGS:
         assert (render_workspace / f"{slug}-auto.dot").exists()

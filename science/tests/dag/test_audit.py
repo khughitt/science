@@ -3,75 +3,107 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 
 import pytest
-import yaml
 
 from science_tool.dag.audit import AuditReport, run_audit
 from science_tool.dag.paths import DagPaths, load_dag_paths
+from science_tool.dag.validate import _parse_dot_topology
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures/mm30"
 
 
+def _write_proposition(project: Path, slug: str, source: str, target: str) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / f"{slug}.md").write_text(
+        f"""---
+id: proposition:{slug}
+type: proposition
+title: {source} affects {target}
+status: active
+subject: {source}
+predicate: affects
+object: {target}
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+legacy_relation_label: affects
+---
+
+{source} affects {target}.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_propositions_for_dot(project: Path, dot_path: Path, slug_prefix: str) -> None:
+    _, dot_edges = _parse_dot_topology(dot_path)
+    for index, (source, target) in enumerate(sorted(dot_edges), start=1):
+        _write_proposition(project, f"{slug_prefix}-{index}", source, target)
+
+
+def _write_propositions_for_all_dots(project: Path) -> None:
+    for dot_path in sorted((project / "doc/figures/dags").glob("*.dot")):
+        _write_propositions_for_dot(project, dot_path, dot_path.stem)
+
+
 def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
-    """Minimal project layout with one h1-prognosis edge + supporting tasks."""
+    """Minimal project layout with one proposition-backed DOT edge + supporting tasks."""
+    (tmp_path / "science.yaml").write_text("profile: research\n", encoding="utf-8")
     dag_dir = tmp_path / "doc/figures/dags"
     dag_dir.mkdir(parents=True)
-    # DOT must include the a -> b edge so topology validation passes.
-    (dag_dir / "h1-prognosis.dot").write_text("digraph h1_prognosis {\n  a -> b;\n}\n")
-    edges = [
-        {
-            "id": 1,
-            "source": "a",
-            "target": "b",
-            "description": "x",
-            "identification": "none",
-            "data_support": [{"task": "t001", "description": "old"}],
-        }
-    ]
-    (dag_dir / "h1-prognosis.edges.yaml").write_text(
-        yaml.safe_dump({"dag": "h1-prognosis", "edges": edges}, sort_keys=False)
-    )
+    dot_path = dag_dir / "h1-prognosis.dot"
+    dot_path.write_text("digraph h1_prognosis {\n  a -> b;\n}\n", encoding="utf-8")
+    _write_proposition(tmp_path, "h1-prognosis-1", "a", "b")
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
     (tasks_dir / "active.md").write_text("")
     done_dir = tasks_dir / "done"
     done_dir.mkdir()
-    blocks = ["## [t001] base task", "- priority: P2", "- status: done", "- completed: 2026-01-01", ""]
+    blocks = [
+        "## [t001] base task",
+        "- priority: P2",
+        "- status: done",
+        "- created: 2026-01-01",
+        "- completed: 2026-01-01",
+        "",
+    ]
     if with_drift:
         blocks += [
             "## [t100] newer related task",
             "- priority: P2",
             "- status: done",
+            "- created: 2026-04-15",
             "- completed: 2026-04-15",
             "- related: [hypothesis:h1-epigenetic-commitment]",
             "",
         ]
     (done_dir / "2026-04.md").write_text("\n".join(blocks))
-    return DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None)
+    return DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None, project_root=tmp_path)
 
 
 def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
-    """Audit must not mutate tasks/ or edges.yaml without fix=True."""
+    """Audit must not mutate tasks/ or create retired edge YAML without fix=True."""
     paths = _build_project(tmp_path, with_drift=True)
     active_before = (tmp_path / "tasks/active.md").read_text()
-    yaml_before = (paths.dag_dir / "h1-prognosis.edges.yaml").read_text()
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
 
     active_after = (tmp_path / "tasks/active.md").read_text()
-    yaml_after = (paths.dag_dir / "h1-prognosis.edges.yaml").read_text()
     assert active_before == active_after, "active.md mutated under read-only audit"
-    assert yaml_before == yaml_after, "edges.yaml mutated under read-only audit"
+    assert not (paths.dag_dir / "h1-prognosis.edges.yaml").exists()
     assert isinstance(report, AuditReport)
-    assert report.has_findings
     assert report.mutations == (), "read-only audit must not emit mutations"
 
 
-def test_audit_fix_opens_review_task_for_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With fix=True, drifted edges trigger task-creation calls."""
+def test_audit_fix_does_not_open_review_task_without_retired_edges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no retired edge YAML, Task 7 staleness removal is not needed for render."""
     paths = _build_project(tmp_path, with_drift=True)
     calls: list[dict] = []
     from science_tool.dag import audit as audit_mod
@@ -79,9 +111,8 @@ def test_audit_fix_opens_review_task_for_drift(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(audit_mod, "_open_review_task", lambda **kw: calls.append(kw))
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=True)
-    assert len(calls) == len(report.staleness.drifted_edges)
-    assert all("Review h1-prognosis#" in c["title"] for c in calls)
-    assert all(c["priority"] == "P2" for c in calls)
+    assert calls == []
+    assert all(mutation.kind != "open_review_task" for mutation in report.mutations)
 
 
 def test_audit_fix_records_unpropagated_to_log(tmp_path: Path) -> None:
@@ -91,7 +122,8 @@ def test_audit_fix_records_unpropagated_to_log(tmp_path: Path) -> None:
     done_md = tmp_path / "tasks/done/2026-04.md"
     done_md.write_text(
         done_md.read_text() + "\n## [t999] orphan task\n- priority: P2\n- status: done\n"
-        "- completed: 2026-04-15\n- related: [hypothesis:h1-epigenetic-commitment]\n"
+        "- created: 2026-04-15\n- completed: 2026-04-15\n"
+        "- related: [hypothesis:h1-epigenetic-commitment]\n"
     )
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=True)
@@ -134,13 +166,18 @@ def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
     assert payload["mutations"] == []
 
 
-def test_audit_smoke_on_mm30_fixture() -> None:
+def test_audit_smoke_on_mm30_fixture(tmp_path: Path) -> None:
     """Real mm30 fixture runs end-to-end without error."""
+    project = tmp_path / "mm30"
+    shutil.copytree(FIXTURE_ROOT, project)
     paths = DagPaths(
-        dag_dir=FIXTURE_ROOT / "doc/figures/dags",
-        tasks_dir=FIXTURE_ROOT / "tasks",
+        dag_dir=project / "doc/figures/dags",
+        tasks_dir=project / "tasks",
         dags=None,
+        project_root=project,
     )
+    for slug in ("h1-prognosis", "h1-progression", "h2-subtype-architecture", "h1-h2-bridge"):
+        _write_propositions_for_dot(project, project / f"doc/figures/dags/{slug}.dot", slug)
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     assert isinstance(report, AuditReport)
 
@@ -152,18 +189,24 @@ def test_audit_smoke_on_mm30_fixture() -> None:
 FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 
 
-def test_audit_includes_validation_section() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+def test_audit_includes_validation_section(tmp_path: Path) -> None:
+    project = tmp_path / "clean"
+    shutil.copytree(FIXTURE_MINIMAL / "clean", project)
+    _write_propositions_for_all_dots(project)
+    paths = load_dag_paths(project)
     report = run_audit(paths)
     js = report.to_json()
     assert "validation" in js
     assert js["validation"]["ok"] is True
 
 
-def test_audit_json_has_top_level_today_and_strict() -> None:
+def test_audit_json_has_top_level_today_and_strict(tmp_path: Path) -> None:
     import re
 
-    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    project = tmp_path / "clean"
+    shutil.copytree(FIXTURE_MINIMAL / "clean", project)
+    _write_propositions_for_all_dots(project)
+    paths = load_dag_paths(project)
     report = run_audit(paths)
     js = report.to_json()
     assert "today" in js
@@ -173,8 +216,11 @@ def test_audit_json_has_top_level_today_and_strict() -> None:
     assert re.match(r"^\d{4}-\d{2}-\d{2}$", js["today"])
 
 
-def test_audit_exit_code_reflects_validation_failure() -> None:
-    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
+def test_audit_exit_code_reflects_validation_failure(tmp_path: Path) -> None:
+    project = tmp_path / "cyclic"
+    shutil.copytree(FIXTURE_MINIMAL / "cyclic", project)
+    _write_propositions_for_all_dots(project)
+    paths = load_dag_paths(project)
     report = run_audit(paths)
     assert report.has_findings  # validation produced findings → audit reports them
 

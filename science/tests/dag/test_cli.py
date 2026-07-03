@@ -9,8 +9,40 @@ import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
+from science_tool.dag.validate import _parse_dot_topology
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures/mm30"
+SLUGS = ("h1-prognosis", "h1-progression", "h2-subtype-architecture", "h1-h2-bridge")
+
+
+def _write_proposition(project: Path, slug: str, source: str, target: str) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / f"{slug}.md").write_text(
+        f"""---
+id: proposition:{slug}
+type: proposition
+title: {source} affects {target}
+status: active
+subject: {source}
+predicate: affects
+object: {target}
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+legacy_relation_label: affects
+---
+
+{source} affects {target}.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_propositions_for_dot(project: Path, dot_path: Path, slug_prefix: str) -> None:
+    _, dot_edges = _parse_dot_topology(dot_path)
+    for index, (source, target) in enumerate(sorted(dot_edges), start=1):
+        _write_proposition(project, f"{slug_prefix}-{index}", source, target)
 
 
 @pytest.fixture
@@ -32,6 +64,9 @@ def cli_project(tmp_path: Path) -> Path:
         for f in dags_dir.glob(pattern):
             f.unlink()
 
+    for slug in SLUGS:
+        _write_propositions_for_dot(project, dags_dir / f"{slug}.dot", slug)
+
     return project
 
 
@@ -39,7 +74,7 @@ def test_cli_dag_render_writes_auto_artifacts(cli_project: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["dag", "render", "--project", str(cli_project)])
     assert result.exit_code == 0, result.output
-    for slug in ("h1-prognosis", "h1-progression", "h2-subtype-architecture", "h1-h2-bridge"):
+    for slug in SLUGS:
         assert (cli_project / f"doc/figures/dags/{slug}-auto.dot").exists()
 
 
@@ -50,6 +85,24 @@ def test_cli_dag_render_single_slug(cli_project: Path) -> None:
     assert (cli_project / "doc/figures/dags/h1-progression-auto.dot").exists()
     # Other DAGs should NOT be rendered:
     assert not (cli_project / "doc/figures/dags/h1-prognosis-auto.dot").exists()
+
+
+def test_cli_dag_render_zero_propositions_does_not_fallback_to_yaml(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        "dag: h1\nedges:\n  - id: 1\n    source: a\n    target: b\n    edge_status: supported\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["dag", "render", "--project", str(project)])
+
+    assert result.exit_code != 0
+    assert "no compiled proposition edge" in result.output.lower()
+    assert not (dag_dir / "h1-auto.dot").exists()
 
 
 def test_cli_dag_staleness_json_schema(cli_project: Path) -> None:

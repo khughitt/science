@@ -14,7 +14,7 @@ from science_tool.dag.audit import run_audit
 from science_tool.dag.init import init_dag
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
-from science_tool.dag.render import render_all, render_one
+from science_tool.dag.render import render_all
 from science_tool.dag.schema import EdgesYamlFile
 from science_tool.dag.staleness import check_staleness
 from science_tool.dag.validate import validate_project
@@ -53,10 +53,9 @@ def render_cmd(slug: str | None, project_path: Path | None) -> None:
     """Render DAG(s) to <slug>-auto.dot and <slug>-auto.png.
 
     Edge SEMANTICS are SOURCED from compiled relational propositions (the
-    epistemic source-of-truth, Task 5f) when any exist; ``edge_status`` is
-    DERIVED via ``derived_edge_status``. When no propositions are compiled, the
-    renderer falls back to the RETIRED ``<slug>.edges.yaml`` legacy-import
-    adapter (which emits a deprecation warning and is never a status SoT).
+    epistemic source-of-truth, Task 5f); ``edge_status`` is DERIVED via
+    ``derived_edge_status``. Every DOT edge must have a compiled proposition
+    edge.
     """
     project = (project_path or Path.cwd()).resolve()
     try:
@@ -68,7 +67,13 @@ def render_cmd(slug: str | None, project_path: Path | None) -> None:
 
     try:
         if slug is not None:
-            render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)
+            paths = DagPaths(
+                dag_dir=paths.dag_dir,
+                tasks_dir=paths.tasks_dir,
+                dags=(slug,),
+                project_root=paths.project_root,
+            )
+            render_all(paths, proposition_edges=proposition_edges)
             click.echo(f"Rendered {slug}-auto.dot")
         else:
             render_all(paths, proposition_edges=proposition_edges)
@@ -77,17 +82,11 @@ def render_cmd(slug: str | None, project_path: Path | None) -> None:
         raise click.ClickException(str(exc)) from exc
 
 
-def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: ignore[type-arg]
-    """Source channel-mode edges from compiled propositions, or None if absent.
-
-    Returns ``None`` when the project has no compiled ``PropositionEntity``
-    records, signalling render/number to fall back to the retired edges.yaml
-    legacy-import adapter (Task 5f).
-    """
+def _source_proposition_edges(project: Path) -> list[dict]:  # type: ignore[type-arg]
+    """Source channel-mode edges from compiled propositions."""
     from science_tool.dag.proposition_edges import load_proposition_edges
 
-    edges = load_proposition_edges(project)
-    return edges or None
+    return load_proposition_edges(project)
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +450,7 @@ def validate_cmd(
             dag_dir=paths.dag_dir,
             tasks_dir=paths.tasks_dir,
             dags=(slug,),
+            project_root=paths.project_root,
         )
 
     report = validate_project(paths, strict=strict)

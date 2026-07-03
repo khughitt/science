@@ -25,6 +25,7 @@ from typing import Literal
 
 from science_tool import tasks as _tasks_mod
 from science_tool.dag.paths import DagPaths
+from science_tool.dag.proposition_edges import load_proposition_edges
 from science_tool.dag.render import render_all
 from science_tool.dag.staleness import (
     DriftedEdge,
@@ -223,7 +224,8 @@ def run_audit(
         )
 
     # Re-render all DAGs — idempotent derived-artifact write, always safe.
-    render_all(paths)
+    project_root = paths.project_root or paths.dag_dir.parents[2]
+    render_all(paths, proposition_edges=load_proposition_edges(project_root))
 
     # Run staleness check.
     staleness = check_staleness(
