@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 from science_tool.annotation.proposition_reconciliation import (
+    DECISION_ACCEPTED_SPARSE_HINTS,
     LANE_FACTORIZATION,
     LANE_SAME_CLAIM,
     ReconciliationReport,
     SameClaimCandidate,
     candidate_id,
     candidate_indexes,
+    factorization_assertion_fingerprint,
     judgment_id,
     members_have_current_edge,
     resolve_same_claim_candidate,
@@ -27,7 +29,7 @@ DecisionLane = Literal["same_claim", "factorization_disagreement"]
 
 _ACTION_KIND = "record_reconciliation_decision"
 _LANE_A_DECISIONS = frozenset({"related_but_distinct", "conflict_or_negation"})
-_LANE_B_DECISIONS = frozenset({"split_possible"})
+_LANE_B_DECISIONS = frozenset({"split_possible", DECISION_ACCEPTED_SPARSE_HINTS})
 
 
 class DecisionRecordError(ValueError):
@@ -44,6 +46,7 @@ class DecisionRecord:
     decision: str
     members: tuple[str, ...]
     proposition: str | None
+    assertion_fingerprint: str | None
     confidence: str
     rationale: str
     source_review: str
@@ -110,7 +113,7 @@ def decision_record_id(
 
 def decision_record_to_json(record: DecisionRecord) -> dict[str, Any]:
     _validate_record_shape(record)
-    return {
+    payload: dict[str, Any] = {
         "schema_version": record.schema_version,
         "decision_id": record.decision_id,
         "judgment_id": record.judgment_id,
@@ -125,6 +128,9 @@ def decision_record_to_json(record: DecisionRecord) -> dict[str, Any]:
         "review_source": record.review_source,
         "recorded_at": record.recorded_at,
     }
+    if record.assertion_fingerprint is not None:
+        payload["assertion_fingerprint"] = record.assertion_fingerprint
+    return payload
 
 
 def decision_record_from_json(
@@ -148,6 +154,12 @@ def decision_record_from_json(
     proposition_value = payload.get("proposition")
     if proposition_value is not None and not isinstance(proposition_value, str):
         raise DecisionRecordError(f"{prefix}proposition must be a string or null")
+    assertion_fingerprint: str | None = None
+    if "assertion_fingerprint" in payload:
+        assertion_fingerprint = _required_assertion_fingerprint(
+            payload["assertion_fingerprint"],
+            prefix,
+        )
 
     record = DecisionRecord(
         schema_version=_required_schema_version(payload.get("schema_version"), prefix),
@@ -158,6 +170,7 @@ def decision_record_from_json(
         decision=_required_json_text(payload, "decision", prefix),
         members=members,
         proposition=proposition_value.strip() if isinstance(proposition_value, str) else None,
+        assertion_fingerprint=assertion_fingerprint,
         confidence=_required_json_text(payload, "confidence", prefix),
         rationale=_required_json_text(payload, "rationale", prefix),
         source_review=_required_json_text(payload, "source_review", prefix),
@@ -603,6 +616,13 @@ def evaluate_decision_records(
         if factor is None or factor.proposition != record.proposition:
             stale.append(StaleDecision(record, "candidate-missing"))
             continue
+        if record.decision == DECISION_ACCEPTED_SPARSE_HINTS:
+            if factor.recommended_action != "insufficient_hints":
+                stale.append(StaleDecision(record, "candidate-no-longer-sparse-hints"))
+                continue
+            if record.assertion_fingerprint != factorization_assertion_fingerprint(factor):
+                stale.append(StaleDecision(record, "assertion-fingerprint-changed"))
+                continue
         current.append(EvaluatedDecision(record, factor.candidate_id, True))
 
     conflicts = _decision_conflicts(current)
@@ -703,6 +723,7 @@ def record_from_action_payload(
     decision = _required_text(action, "decision")
     candidate_id = _required_text(action, "candidate_id")
     judgment_ref = _required_text(action, "judgment_id")
+    assertion_fingerprint: str | None = None
 
     if decision in _LANE_A_DECISIONS:
         lane: DecisionLane = LANE_SAME_CLAIM
@@ -715,7 +736,16 @@ def record_from_action_payload(
         members = ()
         proposition = _required_text(action, "proposition")
         expected_judgment = judgment_id(lane, decision, [proposition])
-        record_refs = (proposition,)
+        if decision == DECISION_ACCEPTED_SPARSE_HINTS:
+            inputs = action.get("inputs")
+            if not isinstance(inputs, Mapping):
+                raise DecisionRecordError("inputs must be an object")
+            assertion_fingerprint = _required_assertion_fingerprint(
+                inputs.get("assertion_fingerprint"),
+            )
+            record_refs = (proposition, assertion_fingerprint)
+        else:
+            record_refs = (proposition,)
     else:
         raise DecisionRecordError(f"unsupported reconciliation decision: {decision!r}")
 
@@ -737,6 +767,7 @@ def record_from_action_payload(
         decision=decision,
         members=members,
         proposition=proposition,
+        assertion_fingerprint=assertion_fingerprint,
         confidence=_required_text(action, "confidence"),
         rationale=_required_text(action, "rationale"),
         source_review=_required_text(action, "source_review"),
@@ -765,6 +796,8 @@ def _validate_record_shape(record: DecisionRecord) -> None:
         raise DecisionRecordError("members must be sorted and unique")
     if record.proposition is not None:
         _required_str(record.proposition, "proposition")
+    if record.assertion_fingerprint is not None:
+        _validate_assertion_fingerprint(record.assertion_fingerprint)
 
     if record.lane == LANE_SAME_CLAIM:
         if record.decision not in _LANE_A_DECISIONS:
@@ -773,7 +806,10 @@ def _validate_record_shape(record: DecisionRecord) -> None:
             raise DecisionRecordError("same_claim record must have members")
         if record.proposition is not None:
             raise DecisionRecordError("same_claim record must not have proposition")
-        refs: Sequence[str] = record.members
+        if record.assertion_fingerprint is not None:
+            raise DecisionRecordError("same_claim record must not have assertion_fingerprint")
+        judgment_refs: Sequence[str] = record.members
+        decision_refs: Sequence[str] = record.members
     elif record.lane == LANE_FACTORIZATION:
         if record.decision not in _LANE_B_DECISIONS:
             raise DecisionRecordError("factorization decision is not supported")
@@ -781,11 +817,23 @@ def _validate_record_shape(record: DecisionRecord) -> None:
             raise DecisionRecordError("factorization record must not have members")
         if record.proposition is None:
             raise DecisionRecordError("factorization record must have proposition")
-        refs = (record.proposition,)
+        judgment_refs = (record.proposition,)
+        if record.decision == DECISION_ACCEPTED_SPARSE_HINTS:
+            if record.assertion_fingerprint is None:
+                raise DecisionRecordError(
+                    "accepted_sparse_hints record must have assertion_fingerprint"
+                )
+            decision_refs = (record.proposition, record.assertion_fingerprint)
+        else:
+            if record.assertion_fingerprint is not None:
+                raise DecisionRecordError(
+                    "factorization record must not have assertion_fingerprint"
+                )
+            decision_refs = (record.proposition,)
     else:
         raise DecisionRecordError(f"unsupported lane: {record.lane!r}")
 
-    expected_judgment = judgment_id(record.lane, record.decision, refs)
+    expected_judgment = judgment_id(record.lane, record.decision, judgment_refs)
     if record.judgment_id != expected_judgment:
         raise DecisionRecordError("judgment_id does not match decision inputs")
     expected_decision = decision_record_id(
@@ -793,7 +841,7 @@ def _validate_record_shape(record: DecisionRecord) -> None:
         record.decision,
         record.judgment_id,
         record.candidate_id,
-        refs,
+        decision_refs,
     )
     if record.decision_id != expected_decision:
         raise DecisionRecordError("decision_id does not match decision inputs")
@@ -865,6 +913,28 @@ def _required_str(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise DecisionRecordError(f"{field_name} must be a non-empty string")
     return value.strip()
+
+
+def _required_assertion_fingerprint(value: Any, prefix: str = "") -> str:
+    try:
+        fingerprint = _required_str(value, "assertion_fingerprint")
+        _validate_assertion_fingerprint(fingerprint)
+    except DecisionRecordError as exc:
+        raise DecisionRecordError(f"{prefix}{exc}") from exc
+    return fingerprint
+
+
+def _validate_assertion_fingerprint(value: str) -> None:
+    prefix = "sha256:"
+    digest = value.removeprefix(prefix)
+    if (
+        not value.startswith(prefix)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+    ):
+        raise DecisionRecordError(
+            "assertion_fingerprint must be sha256: followed by 64 lowercase hex chars"
+        )
 
 
 def _json_members(value: Any, prefix: str) -> tuple[str, ...]:

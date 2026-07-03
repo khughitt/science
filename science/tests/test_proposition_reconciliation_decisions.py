@@ -6,10 +6,13 @@ from pathlib import Path
 import pytest
 
 from science_tool.annotation.proposition_reconciliation import (
+    DECISION_ACCEPTED_SPARSE_HINTS,
+    SPARSE_HINT_DISAGREEMENT,
     FactorizationCandidate,
     ReconciliationReport,
     SameClaimCandidate,
     candidate_id,
+    factorization_assertion_fingerprint,
     judgment_id,
 )
 from science_tool.annotation.proposition_reconciliation_decisions import (
@@ -66,6 +69,73 @@ def _same_candidate(refs=("proposition:a", "proposition:b")) -> SameClaimCandida
 
 def _report_with_same_candidate(candidate: SameClaimCandidate) -> ReconciliationReport:
     return ReconciliationReport(same_claim_candidates=(candidate,))
+
+
+def _sparse_factor_candidate(
+    proposition: str = "proposition:sparse",
+    *,
+    subject: str = "Evidence Synthesis",
+    recommended_action: str = "insufficient_hints",
+) -> FactorizationCandidate:
+    return FactorizationCandidate(
+        candidate_id=candidate_id("factorization_disagreement", [proposition]),
+        proposition=proposition,
+        priority="low",
+        papers=("paper:a", "paper:b"),
+        current={},
+        observed_statement_hints=(
+            {
+                "annotation": "annotation:a",
+                "paper": "paper:a",
+                "stance": "supports",
+                "subject": subject,
+                "object": "Clinical Outcome",
+                "subject_concept": None,
+                "object_concept": None,
+                "exact": "first sparse hint",
+            },
+            {
+                "annotation": "annotation:b",
+                "paper": "paper:b",
+                "stance": "supports",
+                "subject": subject,
+                "object": "Clinical Outcome",
+                "subject_concept": None,
+                "object_concept": None,
+                "exact": "second sparse hint",
+            },
+        ),
+        disagreement=(SPARSE_HINT_DISAGREEMENT,),
+        recommended_action=recommended_action,
+    )
+
+
+def _accepted_sparse_hints_action(candidate: FactorizationCandidate) -> dict:
+    return {
+        "action_id": "reconcile-action:sparse-hints",
+        "kind": "record_reconciliation_decision",
+        "status": "advisory",
+        "decision": DECISION_ACCEPTED_SPARSE_HINTS,
+        "candidate_id": candidate.candidate_id,
+        "judgment_id": judgment_id(
+            "factorization_disagreement",
+            DECISION_ACCEPTED_SPARSE_HINTS,
+            [candidate.proposition],
+        ),
+        "confidence": "medium",
+        "rationale": "Sparse hints are accepted for this proposition.",
+        "source_review": "results/proposition-reconciliation/review.json",
+        "review_source": "llm-review:codex-gpt-5:proposition-reconcile-v1",
+        "proposition": candidate.proposition,
+        "inputs": {
+            "assertion_fingerprint": factorization_assertion_fingerprint(candidate),
+            "observed_statement_hints": candidate.observed_statement_hints,
+        },
+        "suggested_operations": [],
+        "preconditions": [],
+        "blockers": [],
+        "writes": [],
+    }
 
 
 def test_decision_record_id_is_stable_for_sorted_refs():
@@ -315,6 +385,7 @@ def test_decision_record_to_json_rejects_malformed_primitive_field_with_record_e
         decision=record.decision,
         members=record.members,
         proposition=record.proposition,
+        assertion_fingerprint=record.assertion_fingerprint,
         confidence=record.confidence,
         rationale=record.rationale,
         source_review=record.source_review,
@@ -568,6 +639,129 @@ def test_evaluate_current_factorization_split_suppresses_candidate():
 
     assert evaluation.suppressed_factorization_candidate_ids == frozenset({factor.candidate_id})
     assert not evaluation.stale
+
+
+def test_record_from_accepted_sparse_hints_action_payload_round_trips_fingerprint():
+    candidate = _sparse_factor_candidate()
+    action = _accepted_sparse_hints_action(candidate)
+
+    record = record_from_action_payload(action, recorded_at="2026-07-03")
+    payload = decision_record_to_json(record)
+    parsed = decision_record_from_json(payload)
+
+    assert payload["assertion_fingerprint"] == factorization_assertion_fingerprint(candidate)
+    assert parsed == record
+    assert record.decision_id == decision_record_id(
+        "factorization_disagreement",
+        DECISION_ACCEPTED_SPARSE_HINTS,
+        record.judgment_id,
+        record.candidate_id,
+        [record.proposition, record.assertion_fingerprint],
+    )
+
+
+def test_record_from_sparse_hints_action_requires_fingerprint():
+    candidate = _sparse_factor_candidate()
+    action = _accepted_sparse_hints_action(candidate)
+    del action["inputs"]["assertion_fingerprint"]
+
+    with pytest.raises(DecisionRecordError, match="assertion_fingerprint"):
+        record_from_action_payload(action, recorded_at="2026-07-03")
+
+
+def test_evaluate_sparse_hint_closure_suppresses_matching_candidate():
+    candidate = _sparse_factor_candidate()
+    record = record_from_action_payload(
+        _accepted_sparse_hints_action(candidate),
+        recorded_at="2026-07-03",
+    )
+    report = ReconciliationReport(factorization_disagreements=(candidate,))
+
+    evaluation = evaluate_decision_records([record], report)
+
+    assert [item.record.decision_id for item in evaluation.active] == [record.decision_id]
+    assert evaluation.suppressed_factorization_candidate_ids == frozenset(
+        {candidate.candidate_id}
+    )
+    assert not evaluation.stale
+
+
+def test_evaluate_sparse_hint_closure_stale_when_fingerprint_changes():
+    original = _sparse_factor_candidate()
+    changed = _sparse_factor_candidate(subject="Bayesian Evidence Synthesis")
+    record = record_from_action_payload(
+        _accepted_sparse_hints_action(original),
+        recorded_at="2026-07-03",
+    )
+    report = ReconciliationReport(factorization_disagreements=(changed,))
+
+    evaluation = evaluate_decision_records([record], report)
+
+    assert evaluation.active == ()
+    assert evaluation.suppressed_factorization_candidate_ids == frozenset()
+    assert [item.reason for item in evaluation.stale] == [
+        "assertion-fingerprint-changed"
+    ]
+
+
+def test_evaluate_sparse_hint_closure_stale_when_candidate_no_longer_sparse():
+    original = _sparse_factor_candidate()
+    changed = _sparse_factor_candidate(
+        recommended_action="factorization_needs_resynthesis"
+    )
+    record = record_from_action_payload(
+        _accepted_sparse_hints_action(original),
+        recorded_at="2026-07-03",
+    )
+    report = ReconciliationReport(factorization_disagreements=(changed,))
+
+    evaluation = evaluate_decision_records([record], report)
+
+    assert evaluation.active == ()
+    assert evaluation.suppressed_factorization_candidate_ids == frozenset()
+    assert [item.reason for item in evaluation.stale] == [
+        "candidate-no-longer-sparse-hints"
+    ]
+
+
+def test_reclosing_sparse_hints_after_fingerprint_drift_appends_new_record():
+    original = _sparse_factor_candidate()
+    changed = _sparse_factor_candidate(subject="Bayesian Evidence Synthesis")
+    old_record = record_from_action_payload(
+        _accepted_sparse_hints_action(original),
+        recorded_at="2026-07-03",
+    )
+    new_action = _accepted_sparse_hints_action(changed)
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [new_action], "errors": []},
+        existing_records=(old_record,),
+        report=ReconciliationReport(factorization_disagreements=(changed,)),
+        recorded_at="2026-07-04",
+    )
+
+    assert plan.already_recorded == ()
+    assert len(plan.would_append) == 1
+    assert plan.would_append[0].decision_id != old_record.decision_id
+    assert plan.stale_existing[0].reason == "assertion-fingerprint-changed"
+
+
+def test_build_record_decision_plan_blocks_malformed_sparse_hint_fingerprint():
+    candidate = _sparse_factor_candidate()
+    action = _accepted_sparse_hints_action(candidate)
+    action["inputs"]["assertion_fingerprint"] = "sha256:ABC"
+
+    plan = build_record_decision_plan(
+        action_plan={"schema_version": 1, "actions": [action], "errors": []},
+        existing_records=(),
+        report=ReconciliationReport(factorization_disagreements=(candidate,)),
+        recorded_at="2026-07-04",
+    )
+
+    assert plan.would_append == ()
+    assert len(plan.blockers) == 1
+    assert plan.blockers[0]["reason"] == "malformed-action"
+    assert "assertion_fingerprint" in plan.blockers[0]["detail"]
 
 
 def test_build_record_decision_plan_appends_valid_despite_stale_sibling():
