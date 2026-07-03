@@ -3,10 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 
 import pytest
 
-from science_tool.labnote_export import export_labnote_package
+from science_tool import labnote_export as labnote_export_module
+from science_tool.labnote_export import (
+    _content_prose_semantic_records,
+    _graph_semantic_records,
+    export_labnote_package,
+)
 
 
 def write_text(path: Path, text: str) -> None:
@@ -103,6 +109,63 @@ def write_minimal_project(root: Path) -> None:
 
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_content_prose_semantic_records_harvest_entity_ref_records(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        summary: Spatial smoothing process.
+        """,
+    )
+    write_text(
+        project_root / "content" / "prose" / "parameters" / "pattern-wavelength.yaml",
+        """
+        entityRef: param:pattern-wavelength
+        name: Pattern wavelength
+        """,
+    )
+
+    records = _content_prose_semantic_records(project_root)
+
+    assert records["prim:diffusion"].entity_type == "prim"
+    assert records["prim:diffusion"].label == "Diffusion"
+    assert records["prim:diffusion"].source_path == "content/prose/primitives/diffusion.yml"
+    assert records["param:pattern-wavelength"].entity_type == "param"
+    assert records["param:pattern-wavelength"].label == "Pattern wavelength"
+
+
+def test_graph_semantic_records_harvest_canonical_graph_nodes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = tmp_path / "natural-systems"
+    write_text(project_root / "knowledge" / "graph.trig", "")
+    monkeypatch.setattr(
+        labnote_export_module,
+        "export_graph_payload",
+        lambda _path, overlays=None: SimpleNamespace(
+            nodes=[
+                SimpleNamespace(
+                    id="https://science.local/entity/model/gray-scott",
+                    label="Gray-Scott model",
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        labnote_export_module,
+        "canonical_id_from_entity_uri",
+        lambda uri: "model:gray-scott" if uri.endswith("/model/gray-scott") else None,
+    )
+
+    records = _graph_semantic_records(project_root)
+
+    assert records["model:gray-scott"].entity_type == "model"
+    assert records["model:gray-scott"].label == "Gray-Scott model"
+    assert records["model:gray-scott"].source_path == "knowledge/graph.trig"
 
 
 def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -> None:

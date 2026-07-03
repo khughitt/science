@@ -172,6 +172,73 @@ class ExportedEntity:
     source_path: str
 
 
+@dataclass(frozen=True)
+class SourceSemanticRecord:
+    entity_id: str
+    entity_type: str
+    label: str
+    source_path: str
+
+
+def _readable_ref_label(entity_id: str) -> str:
+    local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
+    return local.replace("-", " ").replace("_", " ")
+
+
+def _source_semantic_record(entity_id: str, raw: dict[str, Any], source_path: str) -> SourceSemanticRecord:
+    entity_type = entity_id.split(":", 1)[0] if ":" in entity_id else "semantic_ref"
+    label = raw.get("title") or raw.get("name") or raw.get("label") or _readable_ref_label(entity_id)
+    return SourceSemanticRecord(
+        entity_id=entity_id,
+        entity_type=entity_type,
+        label=str(label),
+        source_path=source_path,
+    )
+
+
+def _content_prose_semantic_records(project_root: Path) -> dict[str, SourceSemanticRecord]:
+    content_root = project_root / "content" / "prose"
+    if not content_root.exists():
+        return {}
+    records: dict[str, SourceSemanticRecord] = {}
+    normalized: dict[str, tuple[str, str, str]] = {}
+    for path in sorted([*content_root.rglob("*.yml"), *content_root.rglob("*.yaml")]):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            continue
+        entity_id = raw.get("entityRef")
+        if not isinstance(entity_id, str) or not entity_id:
+            continue
+        source_path = path.relative_to(project_root).as_posix()
+        record = _source_semantic_record(entity_id, raw, source_path)
+        key = (record.entity_type, record.label, record.source_path)
+        if entity_id in normalized and normalized[entity_id] != key:
+            raise ValueError(f"duplicate source semantic entityRef with different records: {entity_id}")
+        normalized[entity_id] = key
+        records[entity_id] = record
+    return records
+
+
+def _graph_semantic_records(project_root: Path) -> dict[str, SourceSemanticRecord]:
+    graph_path = project_root / "knowledge" / "graph.trig"
+    if not graph_path.exists():
+        return {}
+    payload = export_graph_payload(graph_path, overlays=[])
+    records: dict[str, SourceSemanticRecord] = {}
+    for node in payload.nodes:
+        entity_id = canonical_id_from_entity_uri(node.id)
+        if entity_id is None:
+            continue
+        entity_type = entity_id.split(":", 1)[0] if ":" in entity_id else "semantic_ref"
+        records[entity_id] = SourceSemanticRecord(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            label=node.label or _readable_ref_label(entity_id),
+            source_path="knowledge/graph.trig",
+        )
+    return records
+
+
 def _json_write(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
