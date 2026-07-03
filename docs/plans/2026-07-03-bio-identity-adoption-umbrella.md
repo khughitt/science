@@ -93,11 +93,11 @@ Closed in P4.4: UCSC hg19 cytoBand is promoted as `dataset:cytoband-hg19` in `sc
 
 ### Exact P4 artifact shapes
 
-P4.1 settled the assembly-registry on-disk/API contract the resolver consumes: row-bound assembly labels/aliases, RefSeq-accession named hosted seqcol rows for GRCh37/GRCh38, and assembly-report alias joins declared with `assembly_report_match_column: RefSeq-Accn`. P4.2 should do the same for gene crosswalks. The umbrella rule is simple: resolver contracts must be fixture-tested against built artifacts, not mocked-only.
+Closed across P4.1-P4.4. Assembly registry, gene crosswalk, liftover compatibility, and cytoband proxy artifacts now have concrete on-disk/API contracts exercised through reduced built-artifact fixtures. The umbrella rule remains simple: resolver contracts must be fixture-tested against built artifacts, not mocked-only.
 
 ### Liftover digest details
 
-The framework has provenance hooks for liftover remedies. P4.3 should confirm whether resolved liftover outputs need `from_seqcol_digest` / `to_seqcol_digest` emitted into `derivation.transformations[]` for older validators, or whether the current transform block is sufficient.
+Closed in P4.3. Resolved liftover outputs emit explicit `from_seqcol_digest` / `to_seqcol_digest` into `derivation.transformations[]`; the transform block records workflow intent, while run provenance records the exact lifted source-target pair.
 
 ## Progress ledger
 
