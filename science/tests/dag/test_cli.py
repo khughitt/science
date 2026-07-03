@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -206,10 +205,9 @@ def test_cli_dag_init_scaffolds_new_dag(cli_project: Path) -> None:
     dot = cli_project / "doc/figures/dags/h3-new-hypothesis.dot"
     yaml_file = cli_project / "doc/figures/dags/h3-new-hypothesis.edges.yaml"
     assert dot.exists()
-    assert yaml_file.exists()
-    data = yaml.safe_load(yaml_file.read_text())
-    assert data["dag"] == "h3-new-hypothesis"
-    assert data["edges"] == []
+    assert not yaml_file.exists()
+    assert "workbench" in result.output.lower()
+    assert "proposition" in result.output.lower()
 
 
 def test_cli_dag_init_refuses_to_overwrite_existing(cli_project: Path) -> None:
@@ -229,14 +227,29 @@ def test_cli_dag_init_refuses_to_overwrite_existing(cli_project: Path) -> None:
 
 
 def test_cli_dag_number_is_idempotent(cli_project: Path) -> None:
+    _remove_retired_edge_yaml(cli_project)
     runner = CliRunner()
     r1 = runner.invoke(main, ["dag", "number", "--project", str(cli_project)])
     assert r1.exit_code == 0, r1.output
     first = (cli_project / "doc/figures/dags/h1-progression-numbered.dot").read_text()
+    _assert_no_retired_edge_yaml(cli_project)
+
     r2 = runner.invoke(main, ["dag", "number", "--project", str(cli_project)])
     assert r2.exit_code == 0
     second = (cli_project / "doc/figures/dags/h1-progression-numbered.dot").read_text()
+
     assert first == second
+    _assert_no_retired_edge_yaml(cli_project)
+
+
+def test_cli_dag_number_force_stubs_is_retired(cli_project: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        ["dag", "number", "--force-stubs", "--project", str(cli_project)],
+    )
+
+    assert result.exit_code != 0
+    assert "retired" in result.output.lower()
 
 
 def test_cli_dag_retired_edges_json_reports_migration_summary(tmp_path: Path) -> None:

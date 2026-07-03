@@ -105,7 +105,7 @@ def _source_proposition_edges(project: Path) -> list[dict]:  # type: ignore[type
     "--force-stubs",
     is_flag=True,
     default=False,
-    help="Overwrite existing edges.yaml stubs (resets curation).",
+    help="Retired; *.edges.yaml is no longer a DAG authoring surface.",
 )
 @click.option(
     "--project-root",
@@ -297,7 +297,7 @@ def audit_cmd(
     help="Project root (default: current working directory).",
 )
 def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
-    """Scaffold a new DAG stub: <slug>.dot + <slug>.edges.yaml."""
+    """Scaffold a new DAG DOT topology file."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -310,13 +310,11 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
         raise click.ClickException(str(exc)) from exc
 
     dot_path = paths.dag_dir / f"{slug}.dot"
-    yaml_path = paths.dag_dir / f"{slug}.edges.yaml"
     click.echo(f"Created {dot_path.relative_to(project)}")
-    click.echo(f"Created {yaml_path.relative_to(project)}")
     click.echo("")
-    click.echo(f"Next steps: add nodes and edges to {slug}.dot, then run:")
+    click.echo("Next steps: add DOT topology, then author matching relational proposition rows in a workbench.")
     click.echo(f"  science dag number --dag {slug}")
-    click.echo(f"  science dag render  --dag {slug}")
+    click.echo(f"  science dag render --dag {slug}")
 
 
 # ---------------------------------------------------------------------------
