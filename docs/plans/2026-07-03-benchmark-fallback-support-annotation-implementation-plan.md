@@ -112,6 +112,11 @@ targets = {
     "dataset:cptac-proteogenomics",
     "dataset:dream4-in-silico-network",
 }
+# A target is actionable if it surfaces as a visible fallback row in AT LEAST
+# ONE project (union), not necessarily in every project. Broad benchmarks need
+# not match every domain to be worth annotating.
+present_union: set[str] = set()
+reducible_projects: list[str] = []
 for label, path in {
     "multiple-myeloma": Path("/tmp/mm-triage-fallback-before.json"),
     "natural-systems": Path("/tmp/ns-triage-fallback-before.json"),
@@ -120,18 +125,23 @@ for label, path in {
     rows = payload["buckets"]["fallback-diagnostic"]
     present = {row["benchmark_id"] for row in rows if row["benchmark_id"] in targets}
     diagnostics = payload["fallback_diagnostics"]
+    present_union |= present
     print(label, "fallback_rows", len(rows))
     print(label, "task_support_counts", diagnostics["task_support_counts"])
     print(label, "present_targets", sorted(present))
-    missing = sorted(targets - present)
-    if missing:
-        raise SystemExit(f"{label} missing expected fallback targets: {missing}")
-    if diagnostics["task_support_counts"]["none"] == 0:
-        raise SystemExit(f"{label} has no none support rows to reduce")
+    if diagnostics["task_support_counts"]["none"] > 0:
+        reducible_projects.append(label)
+
+print("present_union", sorted(present_union))
+missing = sorted(targets - present_union)
+if missing:
+    raise SystemExit(f"targets absent from every project's visible fallback rows: {missing}")
+if not reducible_projects:
+    raise SystemExit("no project has none-support fallback rows to reduce")
 PY
 ```
 
-Expected: prints each project's fallback row count, support counts, and all three target benchmark ids. If a target is missing, stop and reassess the design before editing metadata.
+Expected: prints each project's fallback row count and support counts, then a `present_union` covering all three target benchmark ids. The gate fails only if a target appears in **no** project, or if **no** project has `none`-support fallback rows to reduce. A target missing from one project but present in another is expected for domain-specific benchmarks.
 
 - [ ] **Step 4: Save the before-state summary for after-state comparison**
 
@@ -370,32 +380,65 @@ PYTHONPATH=science/src:science/model/src uv run --frozen --project science pytho
 import json
 from pathlib import Path
 
-before = json.loads(Path("/tmp/benchmark-fallback-support-before-summary.json").read_text())
-for label, after_path in {
-    "multiple-myeloma": Path("/tmp/mm-triage-after.json"),
-    "natural-systems": Path("/tmp/ns-triage-after.json"),
-}.items():
-    after = json.loads(after_path.read_text())
+# Each target's intended fallback support state. Direction assertions are
+# conditioned on which targets are actually present per project (union model):
+# a project only needs to move counts for the targets it surfaces.
+target_state = {
+    "dataset:ccle-proteomics-nusinow-2020": "supported",
+    "dataset:cptac-proteogenomics": "candidate",
+    "dataset:dream4-in-silico-network": "candidate",
+}
+projects = {
+    "multiple-myeloma": ("/tmp/mm-triage-before.json", "/tmp/mm-triage-after.json"),
+    "natural-systems": ("/tmp/ns-triage-before.json", "/tmp/ns-triage-after.json"),
+}
+
+union_none_down = union_supported_up = union_candidate_up = False
+for label, (before_path, after_path) in projects.items():
+    before = json.loads(Path(before_path).read_text())
+    after = json.loads(Path(after_path).read_text())
+    before_counts = before["fallback_diagnostics"]["task_support_counts"]
     after_counts = after["fallback_diagnostics"]["task_support_counts"]
-    before_counts = before[label]["fallback_task_support_counts"]
+    present = {
+        row["benchmark_id"]
+        for row in before["buckets"]["fallback-diagnostic"]
+        if row["benchmark_id"] in target_state
+    }
+    print(label, "present", sorted(present))
     print(label, "before", before_counts)
     print(label, "after", after_counts)
-    if after_counts["none"] >= before_counts["none"]:
-        raise SystemExit(f"{label}: expected fewer none fallback rows")
-    if after_counts["supported"] <= before_counts["supported"]:
-        raise SystemExit(f"{label}: expected more supported fallback rows")
-    if after_counts["candidate"] <= before_counts["candidate"]:
-        raise SystemExit(f"{label}: expected more candidate fallback rows")
+
+    if not present:
+        # No target here: annotation must not perturb this project's counts.
+        if after_counts != before_counts:
+            raise SystemExit(f"{label}: counts changed with no target present: {before_counts} -> {after_counts}")
+    else:
+        if after_counts["none"] >= before_counts["none"]:
+            raise SystemExit(f"{label}: expected fewer none fallback rows")
+        if any(target_state[b] == "supported" for b in present) and after_counts["supported"] <= before_counts["supported"]:
+            raise SystemExit(f"{label}: expected more supported fallback rows")
+        if any(target_state[b] == "candidate" for b in present) and after_counts["candidate"] <= before_counts["candidate"]:
+            raise SystemExit(f"{label}: expected more candidate fallback rows")
+
     after_suppressed = after["summary"]["suppressed_blocked_support_fallback_rows"]
-    before_suppressed = before[label]["suppressed_blocked_support_fallback_rows"]
+    before_suppressed = before["summary"]["suppressed_blocked_support_fallback_rows"]
     if after_suppressed != before_suppressed:
-        raise SystemExit(
-            f"{label}: suppressed blocked fallback changed {before_suppressed} -> {after_suppressed}"
-        )
+        raise SystemExit(f"{label}: suppressed blocked fallback changed {before_suppressed} -> {after_suppressed}")
+
+    union_none_down |= after_counts["none"] < before_counts["none"]
+    union_supported_up |= after_counts["supported"] > before_counts["supported"]
+    union_candidate_up |= after_counts["candidate"] > before_counts["candidate"]
+
+if not union_none_down:
+    raise SystemExit("no project reduced none-support fallback rows")
+if not union_supported_up:
+    raise SystemExit("CCLE annotation increased supported fallback rows in no project")
+if not union_candidate_up:
+    raise SystemExit("CPTAC/DREAM4 annotation increased candidate fallback rows in no project")
 PY
 ```
 
-Expected: prints before/after counts and exits 0.
+Expected: prints per-project present targets and before/after counts, and exits 0. Per-project direction checks apply only to the targets that project surfaces; the union checks confirm each intended effect landed somewhere. This step reads the raw before reports directly, so it no longer depends on the saved summary file (still useful as a human-readable record).
 
 - [ ] **Step 4: Verify fallback target rows carry the intended support states**
 
@@ -411,27 +454,32 @@ expected = {
     "dataset:cptac-proteogenomics": "candidate",
     "dataset:dream4-in-silico-network": "candidate",
 }
+confirmed: dict[str, set[str]] = {benchmark_id: set() for benchmark_id in expected}
 for label, path in {
     "multiple-myeloma": Path("/tmp/mm-triage-fallback-after.json"),
     "natural-systems": Path("/tmp/ns-triage-fallback-after.json"),
 }.items():
     payload = json.loads(path.read_text())
     rows = payload["buckets"]["fallback-diagnostic"]
-    by_benchmark = {}
+    by_benchmark: dict[str, set[str]] = {}
     for row in rows:
         if row["benchmark_id"] in expected:
             by_benchmark.setdefault(row["benchmark_id"], set()).add(row["task_support_state"])
     print(label, {key: sorted(value) for key, value in by_benchmark.items()})
-    missing = sorted(set(expected) - set(by_benchmark))
-    if missing:
-        raise SystemExit(f"{label}: missing expected fallback benchmarks after annotation: {missing}")
-    for benchmark_id, state in expected.items():
-        if by_benchmark[benchmark_id] != {state}:
-            raise SystemExit(f"{label}: {benchmark_id} expected {state}, got {by_benchmark[benchmark_id]}")
+    # Where a target appears, its support state must match exactly. Absence in a
+    # given project is allowed under the union model.
+    for benchmark_id, states in by_benchmark.items():
+        if states != {expected[benchmark_id]}:
+            raise SystemExit(f"{label}: {benchmark_id} expected {expected[benchmark_id]}, got {sorted(states)}")
+        confirmed[benchmark_id] |= states
+
+unconfirmed = sorted(benchmark_id for benchmark_id, states in confirmed.items() if not states)
+if unconfirmed:
+    raise SystemExit(f"targets never observed with intended support in any project: {unconfirmed}")
 PY
 ```
 
-Expected: both projects show CCLE as `supported`, CPTAC as `candidate`, and DREAM4 as `candidate`.
+Expected: each target shows its intended state wherever it appears, and every target is confirmed in at least one project (empirically all three appear as expected in both).
 
 - [ ] **Step 5: Verify unfiltered bucket-count guardrail**
 
