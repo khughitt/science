@@ -2698,24 +2698,28 @@ def _empty_benchmark_test_triage_buckets() -> dict[BenchmarkTestTriageBucket, li
 
 
 def _benchmark_test_triage_bucket(row: BenchmarkTestRow) -> BenchmarkTestTriageBucket:
-    if (
-        row["test_plan_state"] == "concrete"
-        and row["readiness_label"] == "runnable"
-        and row["priority_source"] != "gap-fallback"
-    ):
-        return "run-now"
-    if row["readiness_label"] == "stage-needed" and row["priority_source"] != "gap-fallback":
-        return "stage-next"
-    if (
-        row["test_plan_state"] == "draft-needed"
-        and row["priority_source"] != "gap-fallback"
-        and row["readiness_label"] != "blocked"
-    ):
-        return "metadata-needed"
-    if row["readiness_label"] in {"metadata-only", "blocked"} and row["priority_source"] != "gap-fallback":
-        return "blocked-or-reference"
     if row["priority_source"] == "gap-fallback":
         return "fallback-diagnostic"
+
+    task_support_state = row.get("task_support_state", "")
+    if task_support_state == "blocked":
+        return "blocked-or-reference"
+
+    if task_support_state == "candidate":
+        if row["readiness_label"] == "stage-needed":
+            return "stage-next"
+        if row["readiness_label"] == "runnable":
+            return "metadata-needed"
+        return "blocked-or-reference"
+
+    if row["test_plan_state"] == "concrete" and row["readiness_label"] == "runnable":
+        return "run-now"
+    if row["readiness_label"] == "stage-needed":
+        return "stage-next"
+    if row["test_plan_state"] == "draft-needed" and row["readiness_label"] != "blocked":
+        return "metadata-needed"
+    if row["readiness_label"] in {"metadata-only", "blocked"}:
+        return "blocked-or-reference"
     raise ValueError(f"unable to classify benchmark test row: {row['entity_id']} {row['benchmark_id']}")
 
 

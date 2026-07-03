@@ -1373,6 +1373,117 @@ benchmark:
     assert payload["filters"] == {}
 
 
+def test_benchmark_test_triage_routes_blocked_task_support_to_blocked_bucket(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0303-progression",
+        """
+id: hypothesis:0303-progression
+type: hypothesis
+title: Progression benchmark hypothesis
+""",
+        body="Progression risk should be benchmarked with bulk RNA-seq time-series survival data.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-progress",
+        """
+id: dataset:blocked-progress
+type: dataset
+title: Blocked Progression
+dataset_class: deposit
+local_path: data/blocked-progress
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: survival prediction
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-02'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    row = payload["buckets"]["blocked-or-reference"][0]
+    assert row["benchmark_id"] == "dataset:blocked-progress"
+    assert row["readiness_label"] == "runnable"
+    assert row["task_support_state"] == "blocked"
+    assert "task-support:blocked:open-metadata-missing-progression-endpoint" in row["reason_notes"]
+    assert payload["summary"]["bucket_counts"]["run-now"] == 0
+
+
+def test_benchmark_test_triage_candidate_support_does_not_enter_run_now(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0304-survival",
+        """
+id: hypothesis:0304-survival
+type: hypothesis
+title: Survival benchmark hypothesis
+""",
+        body="Overall survival should be benchmarked with bulk RNA-seq time-series expression data.",
+    )
+    _write_dataset(
+        tmp_path,
+        "candidate-survival",
+        """
+id: dataset:candidate-survival
+type: dataset
+title: Candidate Survival
+dataset_class: deposit
+local_path: data/candidate-survival
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: overall-survival
+      task_type: survival prediction
+      prediction_target: overall survival
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: overall survival endpoint
+      support:
+        state: candidate
+        reason: open-metadata-survival-endpoint-present
+        checked_at: '2026-07-02'
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["bucket_counts"]["run-now"] == 0
+    row = payload["buckets"]["metadata-needed"][0]
+    assert row["benchmark_id"] == "dataset:candidate-survival"
+    assert row["readiness_label"] == "runnable"
+    assert row["test_plan_state"] == "concrete"
+    assert row["task_support_state"] == "candidate"
+    assert "task-support:candidate:open-metadata-survival-endpoint-present" in row["reason_notes"]
+
+
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
