@@ -944,6 +944,66 @@ def scaffold_proposition_resynthesis_cmd(
         click.echo(f"wrote JSON draft to {output_path}")
 
 
+@annotate_group.command("resynthesis-draft-context")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--format", "fmt", type=click.Choice(("json", "markdown")), default="json")
+def resynthesis_draft_context_cmd(
+    input_path: Path,
+    root: Path | None,
+    output_path: Path | None,
+    fmt: str,
+) -> None:
+    """Emit an agent context packet for a proposition resynthesis draft."""
+    from science_tool.annotation.proposition_reconciliation import ReconciliationValidationError
+    from science_tool.annotation.proposition_resynthesis import (
+        ResynthesisDraftError,
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+        resynthesis_context_to_markdown,
+    )
+
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        draft = parse_resynthesis_draft(_read_json_object_for_cli(input_path))
+        draft_ref = _project_relative_or_absolute(project_root, input_path)
+        packet = build_resynthesis_context_packet(
+            project_root,
+            draft,
+            draft_path=draft_ref,
+        )
+        if fmt == "json":
+            output_text = json.dumps(packet, indent=2, sort_keys=True) + "\n"
+        else:
+            output_text = resynthesis_context_to_markdown(packet)
+    except (
+        ResynthesisDraftError,
+        ReconciliationValidationError,
+        ValueError,
+        OSError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_path is not None:
+        try:
+            output_path.write_text(output_text, encoding="utf-8")
+        except OSError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    click.echo(output_text, nl=False)
+
+
 @annotate_group.command("validate-proposition-resynthesis")
 @click.option(
     "--input",
