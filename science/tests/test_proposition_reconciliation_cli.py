@@ -1522,6 +1522,34 @@ def test_resynthesis_draft_context_cli_reports_stale_input_annotations(tmp_path:
     assert "input_annotations are stale" in result.output
 
 
+def test_resynthesis_draft_context_cli_reports_malformed_live_sidecar(tmp_path: Path, monkeypatch):
+    ctx = _factorization_project(tmp_path)
+    draft_path = tmp_path / "resynthesis-draft.json"
+    draft_path.write_text(json.dumps(_draft_payload(ctx)), encoding="utf-8")
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    sidecar_path.write_text("this is not valid TriG", encoding="utf-8")
+    monkeypatch.setattr(
+        "science_tool.annotation.proposition_resynthesis.build_live_action_plan",
+        lambda _project_root, _source_review: ctx["plan"],
+    )
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "resynthesis-draft-context",
+            "--root",
+            str(tmp_path),
+            "--input",
+            str(draft_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "failed to parse sidecar" in result.output
+    assert str(sidecar_path) in result.output
+    assert "Traceback" not in result.output
+
+
 def test_validate_proposition_resynthesis_cli_reports_valid_draft(tmp_path: Path):
     ctx = _factorization_project(tmp_path)
     draft_path = tmp_path / "resynthesis-draft.json"

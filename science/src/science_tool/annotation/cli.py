@@ -967,6 +967,7 @@ def resynthesis_draft_context_cmd(
 ) -> None:
     """Emit an agent context packet for a proposition resynthesis draft."""
     from science_tool.annotation.proposition_reconciliation import ReconciliationValidationError
+    from science_tool.annotation.proposition_reconciliation_apply import ReconciliationApplyError
     from science_tool.annotation.proposition_resynthesis import (
         ResynthesisDraftError,
         build_resynthesis_context_packet,
@@ -989,6 +990,7 @@ def resynthesis_draft_context_cmd(
             output_text = resynthesis_context_to_markdown(packet)
     except (
         ResynthesisDraftError,
+        ReconciliationApplyError,
         ReconciliationValidationError,
         ValueError,
         OSError,
