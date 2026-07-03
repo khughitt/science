@@ -10,7 +10,6 @@ from typing import Any
 
 import click
 import yaml
-from science_model.frontmatter import parse_frontmatter
 
 from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID
 from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
@@ -26,10 +25,9 @@ def _project_root_from_env() -> Path:
     return Path(os.environ.get("SCIENCE_PROJECT_ROOT") or ".").resolve()
 
 
-def _render_entity(frontmatter: dict[str, Any], body: str) -> str:
+def _render_entity(frontmatter: dict[str, Any], body_suffix: str) -> str:
     front = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True, default_flow_style=False)
-    body_text = body if body.endswith("\n") else f"{body}\n"
-    return f"---\n{front}---\n\n{body_text}"
+    return f"---\n{front}---{body_suffix}"
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -73,13 +71,20 @@ def _dataset_paths(project_root: Path, ref: str) -> list[Path]:
 
 
 def _load_dataset(path: Path, ref: str) -> tuple[dict[str, Any], str]:
-    parsed = parse_frontmatter(path)
-    if parsed is None:
+    if not path.is_file():
+        raise click.ClickException(f"no such dataset {ref!r}: {path} does not exist")
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
         raise click.ClickException(f"no such dataset {ref!r}: {path} has no frontmatter")
-    frontmatter, body = parsed
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        raise click.ClickException(f"no such dataset {ref!r}: {path} has invalid frontmatter")
+    frontmatter = yaml.safe_load(parts[1]) or {}
+    if not isinstance(frontmatter, dict):
+        raise click.ClickException(f"no such dataset {ref!r}: {path} frontmatter is not a mapping")
     if (frontmatter.get("kind") or frontmatter.get("type")) != "dataset":
         raise click.ClickException(f"no such dataset {ref!r}: {path} is not a dataset entity")
-    return frontmatter, body
+    return frontmatter, parts[2]
 
 
 def _matching_dataset_paths_or_exit(project_root: Path, ref: str) -> list[Path]:
@@ -128,26 +133,31 @@ def _build_identity_declaration(
 
 
 def _identity_status(identity_context: dict[str, Any]) -> str:
+    statuses: list[str] = []
     assembly = identity_context.get("assembly")
     if isinstance(assembly, dict) and isinstance(assembly.get("resolution_status"), str):
-        return assembly["resolution_status"]
+        statuses.append(assembly["resolution_status"])
     molecular_ids = identity_context.get("molecular_ids")
     if isinstance(molecular_ids, dict):
-        statuses = [
+        statuses.extend(
             decl.get("resolution_status")
             for decl in molecular_ids.values()
             if isinstance(decl, dict) and isinstance(decl.get("resolution_status"), str)
-        ]
-        if "declared_unresolved" in statuses:
-            return "declared_unresolved"
-        if statuses and all(status == "resolved" for status in statuses):
-            return "resolved"
+        )
+    if "declared_unresolved" in statuses:
+        return "declared_unresolved"
+    if statuses and all(status == "resolved" for status in statuses):
+        return "resolved"
     return "declared"
 
 
 def _echo_messages(messages: tuple[IdentityResolutionMessage, ...]) -> None:
     for message in messages:
         click.echo(f"{message.level}: {message.path}: {message.message}", err=message.level != "info")
+
+
+def _has_resolution_error(messages: tuple[IdentityResolutionMessage, ...]) -> bool:
+    return any(message.level == "error" for message in messages)
 
 
 def _project_relative_existing_path(project_root: Path, raw_path: str) -> Path | None:
@@ -216,7 +226,7 @@ def resolve_cmd(
     """Resolve or degrade a dataset identity_context declaration."""
     root = project_root.resolve() if project_root else _project_root_from_env()
     for path in _matching_dataset_paths_or_exit(root, ref):
-        frontmatter, body = _load_dataset(path, ref)
+        frontmatter, body_suffix = _load_dataset(path, ref)
         identity_context = _build_identity_declaration(
             frontmatter.get("identity_context"),
             taxon=taxon,
@@ -225,8 +235,14 @@ def resolve_cmd(
             protein_namespace=protein_namespace,
         )
         resolved = resolve_identity(identity_context)
+        if _has_resolution_error(resolved.messages):
+            dataset_id = (
+                frontmatter.get("id") if isinstance(frontmatter.get("id"), str) else _dataset_id_from_path(path)
+            )
+            _echo_messages(resolved.messages)
+            raise click.ClickException(f"identity resolution failed for {dataset_id}")
         frontmatter["identity_context"] = resolved.identity_context
-        next_text = _render_entity(frontmatter, body)
+        next_text = _render_entity(frontmatter, body_suffix)
         before = path.read_text(encoding="utf-8")
         dataset_id = frontmatter.get("id") if isinstance(frontmatter.get("id"), str) else _dataset_id_from_path(path)
         changed = next_text != before

@@ -84,6 +84,23 @@ def test_resolve_writes_seqcol_digest_for_resolved_assembly(tmp_path: Path, monk
     }
 
 
+def test_resolve_summary_reports_unresolved_when_any_tier_is_unresolved(tmp_path: Path, monkeypatch) -> None:
+    _write_dataset(tmp_path, "x")
+
+    def fake_resolve_assembly(label_or_digest: str, *, registry_id: str, commons_root=None, data_root=None):
+        assert label_or_digest == "hg38"
+        assert registry_id == ASSEMBLY_REGISTRY_ID
+        return AssemblyEntry(seqcol_digest=_HG38_DIGEST, label="hg38", accession="GCF_000001405.40")
+
+    monkeypatch.setattr("science_tool.commons.assembly.resolve_assembly", fake_resolve_assembly)
+
+    res = _run(tmp_path, "resolve", "dataset:x", "--assembly", "hg38", "--gene-namespace", "hgnc_id")
+
+    assert res.exit_code == 0, res.output
+    assert "resolution=declared_unresolved" in res.output
+    assert "resolution=resolved" not in res.output
+
+
 def test_resolve_writes_molecular_id_namespaces(tmp_path: Path) -> None:
     path = _write_dataset(tmp_path, "x")
 
@@ -112,6 +129,17 @@ def test_resolve_writes_molecular_id_namespaces(tmp_path: Path) -> None:
     }
 
 
+def test_resolve_fails_without_writing_on_resolution_error(tmp_path: Path) -> None:
+    path = _write_dataset(tmp_path, "x")
+    before = path.read_text(encoding="utf-8")
+
+    res = _run(tmp_path, "resolve", "dataset:x", "--gene-namespace", "not_a_namespace")
+
+    assert res.exit_code != 0
+    assert "unsupported namespace" in res.output
+    assert path.read_text(encoding="utf-8") == before
+
+
 def test_resolve_is_idempotent_for_same_declaration(tmp_path: Path) -> None:
     path = _write_dataset(tmp_path, "x")
 
@@ -135,6 +163,17 @@ def test_resolve_batches_over_dataset_glob(tmp_path: Path) -> None:
     assert "updated dataset:two" in res.output
     assert _frontmatter(paths[0])["identity_context"]["taxon"] == 9606
     assert _frontmatter(paths[1])["identity_context"]["taxon"] == 9606
+
+
+def test_resolve_preserves_body_bytes_after_frontmatter(tmp_path: Path) -> None:
+    body = "\n\n    code block keeps indentation\n\nBody line with trailing blank.\n\n"
+    path = _write_dataset(tmp_path, "x", body=body)
+    before_body = path.read_text(encoding="utf-8").split("---\n", 2)[2]
+
+    res = _run(tmp_path, "resolve", "dataset:x", "--taxon", "9606")
+
+    assert res.exit_code == 0, res.output
+    assert path.read_text(encoding="utf-8").split("---\n", 2)[2] == before_body
 
 
 def test_show_prints_current_identity_context(tmp_path: Path) -> None:
