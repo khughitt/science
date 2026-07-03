@@ -68,9 +68,13 @@ A few of the commands you will reach for most:
 - `/science:next-steps` — synthesize progress and suggest what to work on
 - `science graph build` — materialize the knowledge graph from sources
 - `science evidence-lines create` — author a durable evidence line
-- `science validate` — check a project against the conventions
+- [`science validate`](docs/conventions/validate.md) — check a project against the conventions
 
 Full command map in the [user guide](docs/user-guide/agent-workflows.md).
+
+project-local tooling is installed through each project's `pyproject.toml` so
+agents run the `science` CLI from the managed project environment. Validation
+also supports Python sidecar hooks for project-specific checks.
 
 ## Skills
 
