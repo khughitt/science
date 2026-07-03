@@ -5,5 +5,5 @@ resources:
     path: crosswalk.csv
     format: csv
     mediatype: text/csv
-    hash: "sha256:527fdaba5614cd422864f7616140d9f19f35c21a7fd86f7acfeba96a57133d60"
-    bytes: 376
+    hash: "sha256:d957e8843da5cf978e0c721bc1144942a06fa7c034c76a297859207a341cf923"
+    bytes: 464

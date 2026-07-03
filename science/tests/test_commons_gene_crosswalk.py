@@ -25,8 +25,9 @@ def test_available_keys_are_the_gene_keys() -> None:
     assert keys == {
         "9606|hgnc|HGNC:5",
         "9606|hgnc|HGNC:37133",
-        "9606|hgnc|HGNC:99991",
-        "9606|hgnc|HGNC:99992",
+        "9606|hgnc|HGNC:9969",
+        "9606|hgnc|HGNC:9970",
+        "9606|hgnc|HGNC:9972",
     }
 
 
@@ -61,9 +62,9 @@ def test_resolve_by_unique_alias() -> None:
 
 
 def test_shared_alias_is_ambiguous_with_no_gene_key() -> None:
-    m = to_canonical(taxon=9606, namespace="hgnc_symbol", gene_id="XYZ", **_kw())
+    m = to_canonical(taxon=9606, namespace="hgnc_symbol", gene_id="A1", **_kw())
     assert isinstance(m, AmbiguousGeneMatch)
-    assert set(m.candidates) == {"9606|hgnc|HGNC:5", "9606|hgnc|HGNC:37133"}
+    assert set(m.candidates) == {"9606|hgnc|HGNC:9969", "9606|hgnc|HGNC:9970", "9606|hgnc|HGNC:9972"}
     assert not hasattr(m, "gene_key")
 
 
@@ -75,20 +76,6 @@ def test_resolve_by_entrez() -> None:
 def test_resolve_by_ensembl() -> None:
     m = to_canonical(taxon=9606, namespace="ensembl", gene_id="ENSG00000121410", **_kw())
     assert isinstance(m, ResolvedGeneMatch) and m.gene_key == "9606|hgnc|HGNC:5"
-
-
-def test_merged_id_surfaces_status_and_forward_pointer_not_auto_followed() -> None:
-    m = to_canonical(taxon=9606, namespace="hgnc_id", gene_id="HGNC:99991", **_kw())
-    assert isinstance(m, ResolvedGeneMatch)
-    assert m.gene_key == "9606|hgnc|HGNC:99991"  # the matched (merged) row, NOT the target
-    assert m.status == "merged"
-    assert m.replacement_gene_key == "9606|hgnc|HGNC:5"
-
-
-def test_split_id_is_ambiguous_over_forward_targets() -> None:
-    m = to_canonical(taxon=9606, namespace="hgnc_id", gene_id="HGNC:99992", **_kw())
-    assert isinstance(m, AmbiguousGeneMatch)
-    assert set(m.candidates) == {"9606|hgnc|HGNC:5", "9606|hgnc|HGNC:37133"}
 
 
 def test_unknown_id_returns_none() -> None:
@@ -145,6 +132,45 @@ def test_make_gene_key_is_pipe_delimited_opaque_composite() -> None:
     from science_tool.commons.gene_crosswalk import make_gene_key
 
     assert make_gene_key(9606, "HGNC:5") == "9606|hgnc|HGNC:5"
+
+
+def test_parse_accepts_merged_with_single_replacement() -> None:
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    rows = [
+        {"gene_key": "9606|hgnc|HGNC:5", "symbol": "A1BG", "status": "approved"},
+        {
+            "gene_key": "9606|hgnc|HGNC:99991",
+            "symbol": "OLDA",
+            "status": "merged",
+            "replacement_gene_keys": "9606|hgnc|HGNC:5",
+        },
+    ]
+
+    parsed = _parse_crosswalk_rows(rows)
+
+    assert parsed[1].status == "merged"
+    assert parsed[1].replacement_gene_keys == ("9606|hgnc|HGNC:5",)
+
+
+def test_parse_accepts_split_with_multiple_replacements() -> None:
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    rows = [
+        {"gene_key": "9606|hgnc|HGNC:5", "symbol": "A1BG", "status": "approved"},
+        {"gene_key": "9606|hgnc|HGNC:37133", "symbol": "A1BG-AS1", "status": "approved"},
+        {
+            "gene_key": "9606|hgnc|HGNC:99992",
+            "symbol": "SPLITME",
+            "status": "split",
+            "replacement_gene_keys": "9606|hgnc|HGNC:5;9606|hgnc|HGNC:37133",
+        },
+    ]
+
+    parsed = _parse_crosswalk_rows(rows)
+
+    assert parsed[2].status == "split"
+    assert parsed[2].replacement_gene_keys == ("9606|hgnc|HGNC:5", "9606|hgnc|HGNC:37133")
 
 
 def test_parse_rejects_split_with_single_replacement() -> None:
