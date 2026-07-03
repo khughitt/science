@@ -21,6 +21,7 @@ from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
+from science_tool.datasets.capabilities import capability_fit
 from science_tool.datasets_catalog import GATED_LEVELS, _local_rows
 from science_tool.entity_scan import iter_entity_markdown
 
@@ -457,6 +458,19 @@ def _coverage_state_and_reason(counts: dict[str, int]) -> tuple[str, str]:
     return "no-candidate", "no-candidate"
 
 
+def _capability_gap_reason(incompatible_datasets: list[dict[str, object]]) -> str:
+    reasons = {str(row["reason"]) for row in incompatible_datasets}
+    if reasons == {"missing-required-capabilities"}:
+        return "missing-required-capabilities"
+    if reasons == {"missing-provided-capabilities"}:
+        return "missing-provided-capabilities"
+    if "capability-mismatch" in reasons:
+        return "capability-mismatch"
+    if "missing-provided-capabilities" in reasons:
+        return "missing-provided-capabilities"
+    return "missing-required-capabilities"
+
+
 def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
     """Invert prioritized dataset rows into per-question/hypothesis coverage rows."""
     targets: dict[str, dict[str, object]] = {}
@@ -466,8 +480,12 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
         targets[ent_id] = {
             "target": ent_id,
             "title": fm.get("title", ""),
+            "frontmatter": fm,
             "datasets": [],
             "dataset_count": 0,
+            "compatible_datasets": [],
+            "compatible_dataset_count": 0,
+            "incompatible_datasets": [],
             "coverage_state": "no-candidate",
             "gap_reason": "no-candidate",
             "counts": {
@@ -488,6 +506,26 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
 
     for target, target_rows in by_target.items():
         datasets = sorted(row["id"] for row in target_rows)
+        target_fm = targets[target]["frontmatter"]
+        compatible_rows: list[dict] = []
+        incompatible_datasets: list[dict[str, object]] = []
+        for row in target_rows:
+            dataset_fm = _frontmatter_for_row(project_root, row)
+            fit = capability_fit(
+                target_fm.get("required_capabilities") if isinstance(target_fm, dict) else None,
+                dataset_fm.get("provided_capabilities"),
+            )
+            if fit.compatible:
+                compatible_rows.append(row)
+                continue
+            incompatible_datasets.append(
+                {
+                    "dataset": row["id"],
+                    "reason": fit.reason,
+                    "required_capabilities": fit.required,
+                    "provided_capabilities": fit.provided,
+                }
+            )
         counts = {
             "runnable": 0,
             "unstaged_deposit": 0,
@@ -496,7 +534,7 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
             "unverified": 0,
             "gated": 0,
         }
-        for row in target_rows:
+        for row in compatible_rows:
             runtime = row.get("runtime_state")
             if runtime == "runnable":
                 counts["runnable"] += 1
@@ -511,11 +549,22 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
                     counts["gated"] += 1
                 else:
                     counts["unverified"] += 1
-        coverage_state, gap_reason = _coverage_state_and_reason(counts)
+        if compatible_rows:
+            coverage_state, gap_reason = _coverage_state_and_reason(counts)
+        elif target_rows:
+            gap_reason = _capability_gap_reason(incompatible_datasets)
+            coverage_state = gap_reason
+        else:
+            coverage_state, gap_reason = _coverage_state_and_reason(counts)
         targets[target]["datasets"] = datasets
         targets[target]["dataset_count"] = len(datasets)
+        targets[target]["compatible_datasets"] = sorted(row["id"] for row in compatible_rows)
+        targets[target]["compatible_dataset_count"] = len(compatible_rows)
+        targets[target]["incompatible_datasets"] = sorted(incompatible_datasets, key=lambda row: str(row["dataset"]))
         targets[target]["coverage_state"] = coverage_state
         targets[target]["gap_reason"] = gap_reason
         targets[target]["counts"] = counts
 
+    for target in targets.values():
+        target.pop("frontmatter", None)
     return [targets[target] for target in sorted(targets)]

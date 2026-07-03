@@ -21,6 +21,7 @@ def _seed(root: Path) -> None:
     )
     (d / "b.md").write_text(
         '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\norigin: "external"\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
     )
@@ -47,11 +48,13 @@ def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
     h.mkdir(parents=True, exist_ok=True)
     (d / "d.md").write_text(
         '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: true}\n---\n',
         encoding="utf-8",
     )
     (h / "h.md").write_text(
-        '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n',
+        '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
         encoding="utf-8",
     )
     if include_paper:
@@ -162,7 +165,8 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
     qdir = tmp_path / "entities" / "questions"
     qdir.mkdir(parents=True, exist_ok=True)
     (qdir / "q-covered.md").write_text(
-        '---\nid: "question:q-covered"\ntype: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n---\n',
+        '---\nid: "question:q-covered"\ntype: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
         encoding="utf-8",
     )
     (qdir / "q-gap.md").write_text(
@@ -181,6 +185,29 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
     assert by_id["question:q-gap"]["datasets"] == []
     assert by_id["question:q-gap"]["coverage_state"] == "no-candidate"
     assert by_id["question:q-gap"]["gap_reason"] == "no-candidate"
+
+
+def test_prioritize_coverage_json_reports_capability_fit_details(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    qdir = tmp_path / "entities" / "questions"
+    qdir.mkdir(parents=True, exist_ok=True)
+    (qdir / "q-atac.md").write_text(
+        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "ATAC"\nrelated: ["dataset:b"]\n'
+        'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n---\n',
+        encoding="utf-8",
+    )
+
+    res = _run(tmp_path, "--coverage", "--format", "json")
+
+    assert res.exit_code == 0
+    rows = _json_rows(res)
+    by_id = {row["target"]: row for row in rows}
+    row = by_id["question:q-atac"]
+    assert row["datasets"] == ["dataset:b"]
+    assert row["compatible_datasets"] == []
+    assert row["coverage_state"] == "capability-mismatch"
+    assert row["incompatible_datasets"][0]["dataset"] == "dataset:b"
+    assert row["incompatible_datasets"][0]["reason"] == "capability-mismatch"
 
 
 def test_prioritize_coverage_uses_paper_usage_frontmatter_without_graph(tmp_path: Path) -> None:

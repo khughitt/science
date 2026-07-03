@@ -208,19 +208,23 @@ def test_prioritize_excludes_reference_and_pointer_by_default(tmp_path: Path) ->
 def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/questions/q-run.md",
-        '---\nid: "question:q-run"\ntype: "question"\ntitle: "Runnable"\n---\n',
+        '---\nid: "question:q-run"\ntype: "question"\ntitle: "Runnable"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-ref.md",
-        '---\nid: "question:q-ref"\ntype: "question"\ntitle: "Reference"\n---\n',
+        '---\nid: "question:q-ref"\ntype: "question"\ntitle: "Reference"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-gated.md",
-        '---\nid: "question:q-gated"\ntype: "question"\ntitle: "Gated"\n---\n',
+        '---\nid: "question:q-gated"\ntype: "question"\ntitle: "Gated"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-unverified.md",
-        '---\nid: "question:q-unverified"\ntype: "question"\ntitle: "Unverified"\n---\n',
+        '---\nid: "question:q-unverified"\ntype: "question"\ntitle: "Unverified"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-gap.md",
@@ -230,24 +234,29 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
         tmp_path / "entities/datasets/run.md",
         '---\nid: "dataset:run"\ntype: "dataset"\ntitle: "Run"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
-        'related: ["question:q-run"]\naccess: {level: "public", verified: true}\n---\n',
+        'related: ["question:q-run"]\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'access: {level: "public", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/ref.md",
         '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
         'dataset_class: "reference"\nrelated: ["question:q-ref"]\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/gated.md",
         '---\nid: "dataset:gated"\ntype: "dataset"\ntitle: "Gated"\norigin: "external"\n'
         'dataset_class: "deposit"\nrelated: ["question:q-gated"]\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "controlled", verified: false}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/unv.md",
         '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
         'dataset_class: "deposit"\nrelated: ["question:q-unverified"]\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: false}\n---\n',
     )
 
@@ -264,3 +273,91 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
     assert by_target["question:q-unverified"]["gap_reason"] == "only-unverified"
     assert by_target["question:q-gap"]["coverage_state"] == "no-candidate"
     assert by_target["question:q-gap"]["gap_reason"] == "no-candidate"
+
+
+def test_target_coverage_rejects_runtime_dataset_with_wrong_capability(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/questions/q-atac.md",
+        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "Chromatin accessibility"\n'
+        'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n'
+        'datasets: ["dataset:scrna"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/scrna.md",
+        '---\nid: "dataset:scrna"\ntype: "dataset"\ntitle: "scRNA"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/scrna/datapackage.json"\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "scRNA"}]\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    coverage = target_coverage(rows, tmp_path)[0]
+
+    assert coverage["datasets"] == ["dataset:scrna"]
+    assert coverage["compatible_datasets"] == []
+    assert coverage["coverage_state"] == "capability-mismatch"
+    assert coverage["gap_reason"] == "capability-mismatch"
+    assert coverage["counts"]["runnable"] == 0
+    assert coverage["incompatible_datasets"][0]["dataset"] == "dataset:scrna"
+
+
+def test_target_coverage_accepts_multicapability_dataset(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/questions/q-atac.md",
+        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "Chromatin accessibility"\n'
+        'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n'
+        'datasets: ["dataset:multiome"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/multiome.md",
+        '---\nid: "dataset:multiome"\ntype: "dataset"\ntitle: "Multiome"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/multiome/datapackage.json"\n'
+        'provided_capabilities:\n'
+        '  - {assay: "gene-expression", modality: "scRNA"}\n'
+        '  - {assay: "chromatin-accessibility", modality: "scATAC"}\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    coverage = target_coverage(rows, tmp_path)[0]
+
+    assert coverage["compatible_datasets"] == ["dataset:multiome"]
+    assert coverage["incompatible_datasets"] == []
+    assert coverage["coverage_state"] == "covered-runnable"
+    assert coverage["gap_reason"] == "none"
+    assert coverage["counts"]["runnable"] == 1
+
+
+def test_target_coverage_reports_missing_capability_metadata(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/questions/q-unassessed.md",
+        '---\nid: "question:q-unassessed"\ntype: "question"\ntitle: "Unassessed"\n'
+        'datasets: ["dataset:run"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/questions/q-required.md",
+        '---\nid: "question:q-required"\ntype: "question"\ntitle: "Required"\n'
+        'required_capabilities: [{assay: "proteomics", modality: "mass-spec"}]\n'
+        'datasets: ["dataset:unknown"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/run.md",
+        '---\nid: "dataset:run"\ntype: "dataset"\ntitle: "Run"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/unknown.md",
+        '---\nid: "dataset:unknown"\ntype: "dataset"\ntitle: "Unknown"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/unknown/datapackage.json"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    by_target = {row["target"]: row for row in target_coverage(rows, tmp_path)}
+
+    assert by_target["question:q-unassessed"]["coverage_state"] == "missing-required-capabilities"
+    assert by_target["question:q-unassessed"]["gap_reason"] == "missing-required-capabilities"
+    assert by_target["question:q-required"]["coverage_state"] == "missing-provided-capabilities"
+    assert by_target["question:q-required"]["gap_reason"] == "missing-provided-capabilities"
