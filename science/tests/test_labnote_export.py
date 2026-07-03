@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from science_tool import labnote_export as labnote_export_module
+from science_tool.references import UnresolvedSemanticRefError
 from science_tool.labnote_export import (
     _content_prose_semantic_records,
     _graph_semantic_records,
@@ -331,6 +332,52 @@ def test_semantic_ref_to_later_discovered_entity_gets_route(tmp_path: Path) -> N
         "resolution": "resolved_exported_entity",
         "route": "/explore/question?id=question%3A9999-later",
     }
+
+
+def test_export_fails_unknown_semantic_ref(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        This points to [@prim:not-in-source-index].
+        """,
+    )
+
+    with pytest.raises(UnresolvedSemanticRefError) as exc:
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert "prim:not-in-source-index" in exc.value.unresolved
+
+
+def test_inline_paper_prefix_is_not_treated_as_semantic_ref(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        Inline paper refs should use normal citekeys, so [@paper:Smith2020] is unsupported here.
+        """,
+    )
+
+    with pytest.raises(Exception) as exc:
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert "paper:Smith2020" in str(exc.value)
 
 
 def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -> None:
