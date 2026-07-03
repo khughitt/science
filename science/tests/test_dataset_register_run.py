@@ -500,6 +500,32 @@ def test_register_run_inherit_from_selects_named_input_identity(tmp_path: Path) 
     assert entity["identity_context"] == {"taxon": 10090}
 
 
+def test_register_run_inherit_from_ignores_missing_unrelated_lineage_input(tmp_path: Path) -> None:
+    _seed_dataset(tmp_path, "source", {"taxon": 9606})
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        run_inputs=["dataset:source", "dataset:missing-unrelated"],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "identity": {"taxon": {"inherit": {"from": "dataset:source"}}},
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code == 0, res.output
+    entity = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert entity["identity_context"] == {"taxon": 9606}
+    assert entity["derivation"]["inputs"] == ["dataset:source", "dataset:missing-unrelated"]
+
+
 def test_register_run_literal_identity_does_not_load_input_identities(tmp_path: Path) -> None:
     identity = {
         "taxon": 9606,

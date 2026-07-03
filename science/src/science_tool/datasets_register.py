@@ -309,26 +309,29 @@ def _is_inherit_from_contract(value: Any) -> bool:
     )
 
 
-def _uses_inherited_identity_source(value: Any) -> bool:
-    return value == "inherit" or _is_inherit_from_contract(value)
+def _identity_lookup_sources_for_value(value: Any, selected_inputs: list[str]) -> list[str]:
+    if value == "inherit":
+        return selected_inputs
+    if _is_inherit_from_contract(value):
+        return [value["inherit"]["from"]]
+    return []
 
 
-def _contract_needs_input_identities(identity_contract: dict[str, Any]) -> bool:
-    if _uses_inherited_identity_source(identity_contract.get("taxon")):
-        return True
+def _identity_lookup_sources(identity_contract: dict[str, Any], selected_inputs: list[str]) -> list[str]:
+    sources = _identity_lookup_sources_for_value(identity_contract.get("taxon"), selected_inputs)
     assembly_contract = identity_contract.get("assembly")
-    if _uses_inherited_identity_source(assembly_contract):
-        return True
+    sources.extend(_identity_lookup_sources_for_value(assembly_contract, selected_inputs))
     if (
         isinstance(assembly_contract, dict)
         and ("transform" in assembly_contract or "proxy" in assembly_contract)
         and "registry" not in assembly_contract
     ):
-        return True
+        sources.extend(selected_inputs)
     molecular_contract = identity_contract.get("molecular_ids")
     if isinstance(molecular_contract, dict):
-        return any(_uses_inherited_identity_source(value) for value in molecular_contract.values())
-    return False
+        for value in molecular_contract.values():
+            sources.extend(_identity_lookup_sources_for_value(value, selected_inputs))
+    return _dedupe_preserving_order(sources)
 
 
 def _resolve_identity_value(
@@ -438,11 +441,8 @@ def _resolve_output_identity(
     out_slug = str(out.get("slug"))
     proxy_sources = _proxy_source_datasets(identity_contract)
     selected_inputs = _dedupe_preserving_order([*run_inputs, *proxy_sources])
-    identities = (
-        _input_identity_map(project_root, selected_inputs)
-        if _contract_needs_input_identities(identity_contract)
-        else {}
-    )
+    identity_sources = _identity_lookup_sources(identity_contract, selected_inputs)
+    identities = _input_identity_map(project_root, identity_sources) if identity_sources else {}
     identity_context: dict[str, Any] = {}
 
     if "taxon" in identity_contract:
