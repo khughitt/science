@@ -330,10 +330,20 @@ def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_identity_context(datasets, registry_keys_by_id=registry_keys_by_id)
 
 
+def _lineage_dataset_ref(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    if value != value.strip() or not value.startswith("dataset:"):
+        return None
+    if not value.removeprefix("dataset:").strip():
+        return None
+    return value
+
+
 def _derivation_inputs(derivation: Any) -> set[str]:
     if not isinstance(derivation, dict) or not isinstance(derivation.get("inputs"), list):
         return set()
-    return {value for value in derivation["inputs"] if isinstance(value, str)}
+    return {ref for value in derivation["inputs"] if (ref := _lineage_dataset_ref(value)) is not None}
 
 
 def _derivation_transformation_datasets(derivation: Any) -> set[str]:
@@ -343,8 +353,8 @@ def _derivation_transformation_datasets(derivation: Any) -> set[str]:
     for transformation in derivation["transformations"]:
         if not isinstance(transformation, dict):
             continue
-        dataset_id = transformation.get("dataset")
-        if isinstance(dataset_id, str):
+        dataset_id = _lineage_dataset_ref(transformation.get("dataset"))
+        if dataset_id is not None:
             dataset_ids.add(dataset_id)
     return dataset_ids
 
@@ -355,11 +365,11 @@ def _identity_reference_datasets(identity_context: Any) -> Iterator[tuple[str, s
     assembly = identity_context.get("assembly")
     if isinstance(assembly, dict):
         transform = assembly.get("transform")
-        if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
-            yield "identity_context.assembly.transform.dataset", transform["dataset"]
+        if isinstance(transform, dict) and (dataset_id := _lineage_dataset_ref(transform.get("dataset"))) is not None:
+            yield "identity_context.assembly.transform.dataset", dataset_id
         proxy = assembly.get("proxy")
-        if isinstance(proxy, dict) and isinstance(proxy.get("via"), str):
-            yield "identity_context.assembly.proxy.via", proxy["via"]
+        if isinstance(proxy, dict) and (dataset_id := _lineage_dataset_ref(proxy.get("via"))) is not None:
+            yield "identity_context.assembly.proxy.via", dataset_id
     molecular_ids = identity_context.get("molecular_ids")
     if not isinstance(molecular_ids, dict):
         return
@@ -367,8 +377,8 @@ def _identity_reference_datasets(identity_context: Any) -> Iterator[tuple[str, s
         if not isinstance(tier_identity, dict):
             continue
         transform = tier_identity.get("transform")
-        if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
-            yield f"identity_context.molecular_ids.{tier}.transform.dataset", transform["dataset"]
+        if isinstance(transform, dict) and (dataset_id := _lineage_dataset_ref(transform.get("dataset"))) is not None:
+            yield f"identity_context.molecular_ids.{tier}.transform.dataset", dataset_id
 
 
 def _identity_proxy_source_datasets(identity_context: Any) -> Iterator[tuple[str, str]]:
@@ -380,9 +390,12 @@ def _identity_proxy_source_datasets(identity_context: Any) -> Iterator[tuple[str
     if not isinstance(sources, list):
         return
     for index, source in enumerate(sources):
-        if not isinstance(source, dict) or not isinstance(source.get("dataset"), str):
+        if not isinstance(source, dict):
             continue
-        yield f"identity_context.assembly.proxy.sources[{index}].dataset", source["dataset"]
+        dataset_id = _lineage_dataset_ref(source.get("dataset"))
+        if dataset_id is None:
+            continue
+        yield f"identity_context.assembly.proxy.sources[{index}].dataset", dataset_id
 
 
 def _assembly_has_structured_lineage(identity_context: Any) -> bool:
@@ -392,14 +405,14 @@ def _assembly_has_structured_lineage(identity_context: Any) -> bool:
     if not isinstance(assembly, dict):
         return False
     transform = assembly.get("transform")
-    if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
+    if isinstance(transform, dict) and _lineage_dataset_ref(transform.get("dataset")) is not None:
         return True
     proxy = assembly.get("proxy")
-    if not isinstance(proxy, dict) or not isinstance(proxy.get("via"), str):
+    if not isinstance(proxy, dict) or _lineage_dataset_ref(proxy.get("via")) is None:
         return False
     sources = proxy.get("sources")
     return isinstance(sources, list) and any(
-        isinstance(source, dict) and isinstance(source.get("dataset"), str) for source in sources
+        isinstance(source, dict) and _lineage_dataset_ref(source.get("dataset")) is not None for source in sources
     )
 
 

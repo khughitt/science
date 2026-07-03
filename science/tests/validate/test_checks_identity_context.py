@@ -773,6 +773,35 @@ def test_mixed_build_derived_output_with_empty_proxy_errors_as_unstructured() ->
     assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
 
 
+def test_mixed_build_proxy_with_blank_source_dataset_errors_as_unstructured() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_38")
+    b = _with_assembly("dataset:b", "DIGEST_37")
+    proxy = _ds("science-pkg-entity-1.0", id="dataset:proxy")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:proxy",
+                    "sources": [{"dataset": "", "assembly": "inherit"}],
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:a", "dataset:b", ""],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:proxy", "type": "cytoband_proxy"}],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, proxy, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+
+
 def test_identity_context_not_a_dict_treated_as_undeclared_errors() -> None:
     # A coordinate-bearing dataset whose identity_context is not an object must
     # not crash; it falls through to declaration-gate errors.
