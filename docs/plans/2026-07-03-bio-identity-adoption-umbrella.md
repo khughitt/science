@@ -89,9 +89,7 @@ P5 is the definition-of-done for the larger effort. P1-P4 are enabling layers; t
 
 ### `cytoband-hg19` home
 
-Preferred: promote UCSC hg19 cytoBand as a `science-commons` reference dataset so t665 can point `proxy.via` at a stable shared artifact.
-
-Fallback: keep it MM30-local if commons promotion proves too slow, but document that as a temporary P5-local compromise.
+Closed in P4.4: UCSC hg19 cytoBand is promoted as `dataset:cytoband-hg19` in `science-commons`. MM30/t665 should use this shared reference artifact as `identity_context.assembly.proxy.via` rather than creating an MM30-local cytoband reference.
 
 ### Exact P4 artifact shapes
 
@@ -109,7 +107,8 @@ The framework has provenance hooks for liftover remedies. P4.3 should confirm wh
 - 2026-07-03: P4.1 assembly-registry landed. `science-commons` now has a pinned `dataset:assembly-registry` artifact with GRCh38 `XemD97fxYMS4q-FBm_n5CHQgmzh1_67a` and GRCh37 `XJWKh8nsSqBFfcU0DIHMZohYyCWF-vcA`, row-bound assembly labels/aliases, deterministic `assemblies.csv` / `contigs.csv` / `contig_aliases.csv`, and updated datapackage hashes; Science resolver tests exercise the on-disk artifact offline through a reduced built-artifact fixture.
 - 2026-07-03: P4.2 gene-crosswalk-hgnc landed. `science-commons` has a pinned HGNC 2025-04-01 crosswalk artifact with validated opaque `gene_key` rows, hash-verified datapackage metadata, and Science offline resolver coverage for HGNC id/current symbol/previous symbol/alias ambiguity using built-artifact fixture rows.
 - 2026-07-03: P4.3 liftover-chain consumption landed. The explicit `from_seqcol_digest` / `to_seqcol_digest` provenance decision is closed for v1; the transform block records intent, while `derivation.transformations[]` records the exact lifted source-target pair. Science proves offline compatibility loading and a tiny gzipped-chain interval lift through a reduced built-artifact fixture.
-- Next: P4.4 cytoband-hg19 proxy reference.
+- 2026-07-03: P4.4 cytoband proxy reference landed. `science-commons` now has pinned `dataset:cytoband-hg19` bytes from UCSC hg19 `cytoBand.txt.gz`; Science has an offline hash-verified `science_tool.commons.cytoband` reader with parse + interval-overlap lookup, and proxy provenance tests use the real `dataset:cytoband-hg19` reference slug.
+- Next: P5 MM30/t665 re-planning.
 
 ## How to use this doc
 
