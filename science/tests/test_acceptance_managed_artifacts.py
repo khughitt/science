@@ -14,8 +14,6 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from science_tool.cli import main
-
 # Path to the science project (parent of tests/) — needed to run the CLI
 # via `python -m science_tool` and to locate the canonical bytes for the shim
 # equivalence test.
@@ -26,6 +24,8 @@ _REPO_ROOT = _SCIENCE_TOOL_PROJECT.parent
 def _run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     if cwd is not None:
         raise ValueError("in-process CLI helper does not support cwd")
+    from science_tool.cli import main
+
     result = CliRunner().invoke(main, args)
     return subprocess.CompletedProcess(args, result.exit_code, result.output, "")
 
@@ -191,34 +191,8 @@ def test_health_surfaces_managed_artifact_status(tmp_path: Path) -> None:
     assert len(missing) >= 1
 
 
-def test_shim_invocation_matches_direct_canonical(tmp_path: Path) -> None:
-    """meta/validate.sh and direct canonical produce the same exit code on the same project."""
-    project = tmp_path / "shim"
-    project.mkdir()
-    _write_full_science_yaml(project, name="shim")
-    _scaffold_software_project(project)
-
-    env = os.environ.copy()
-    env["SCIENCE_TOOL_PATH"] = str(_SCIENCE_TOOL_PROJECT)
-
-    via_shim = subprocess.run(
-        ["bash", str(_REPO_ROOT / "meta" / "validate.sh")],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    via_canonical = subprocess.run(
-        [
-            "bash",
-            str(_SCIENCE_TOOL_PROJECT / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"),
-        ],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    # Output may differ in line ordering of warnings; the exit code is the contract.
-    assert via_shim.returncode == via_canonical.returncode
+def test_shim_invocation_matches_direct_canonical() -> None:
+    """meta/validate.sh is the same materialized script as the direct canonical."""
+    assert (_REPO_ROOT / "meta" / "validate.sh").read_bytes() == (
+        _SCIENCE_TOOL_PROJECT / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
+    ).read_bytes()

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from typing import Protocol, Sequence
 
 from science_model.ontologies import load_catalog, load_registry
-from science_model.ontologies.schema import OntologyCatalog
+from science_model.ontologies.schema import OntologyCatalog, OntologyRegistryEntry
 
 
 class _EntityLike(Protocol):
@@ -40,7 +41,7 @@ def suggest_ontologies(
     Checks CURIE prefix matches in ontology_terms and entity kind matches
     against all registered ontologies that are not already declared.
     """
-    registry = load_registry()
+    registry = _ontology_registry()
     undeclared = [entry for entry in registry if entry.name not in declared_ontologies]
     if not undeclared:
         return []
@@ -48,7 +49,7 @@ def suggest_ontologies(
     suggestions: list[OntologySuggestion] = []
 
     for entry in undeclared:
-        catalog = load_catalog(entry)
+        catalog = _ontology_catalog(entry.catalog_path)
         prefix_matches = _count_prefix_matches(entities, catalog)
         kind_matches = _count_kind_matches(entities, catalog)
         total = prefix_matches + kind_matches
@@ -69,6 +70,20 @@ def suggest_ontologies(
 
     suggestions.sort(key=lambda s: s.entity_count, reverse=True)
     return suggestions
+
+
+@cache
+def _ontology_registry() -> tuple[OntologyRegistryEntry, ...]:
+    return tuple(load_registry())
+
+
+@cache
+def _ontology_catalog(catalog_path: str) -> OntologyCatalog:
+    for entry in _ontology_registry():
+        if entry.catalog_path == catalog_path:
+            return load_catalog(entry)
+    msg = f"Unknown ontology catalog path: {catalog_path}"
+    raise ValueError(msg)
 
 
 def _count_prefix_matches(entities: Sequence[_EntityLike], catalog: OntologyCatalog) -> int:
