@@ -1532,6 +1532,100 @@ benchmark:
     assert "task-support:candidate:open-metadata-survival-endpoint-present" in row["reason_notes"]
 
 
+def _write_blocked_fallback_triage_fixture(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0305-homeostatic-recovery",
+        """
+id: hypothesis:0305-homeostatic-recovery
+type: hypothesis
+title: Homeostatic recovery hypothesis
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-fallback",
+        """
+id: dataset:blocked-fallback
+type: dataset
+title: Blocked Fallback
+dataset_class: deposit
+local_path: data/blocked-fallback
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: survival prediction
+      prediction_target: progression or relapse
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: clinical-endpoint
+        description: progression endpoint
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+        checked_at: '2026-07-03'
+""",
+    )
+
+
+def test_benchmark_test_triage_cli_suppresses_blocked_fallback_by_default(tmp_path: Path) -> None:
+    _write_blocked_fallback_triage_fixture(tmp_path)
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["fallback_rows"] == 1
+    assert payload["summary"]["bucket_counts"]["fallback-diagnostic"] == 0
+    assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 1
+    assert payload["fallback_diagnostics"]["suppressed_blocked_support"] == {
+        "rows": 1,
+        "top_benchmarks": [{"benchmark_id": "dataset:blocked-fallback", "count": 1}],
+    }
+    assert "include_blocked_fallback" not in payload["filters"]
+
+
+def test_benchmark_test_triage_cli_include_blocked_fallback_restores_json_rows(tmp_path: Path) -> None:
+    _write_blocked_fallback_triage_fixture(tmp_path)
+
+    result = _invoke_test_triage(
+        tmp_path,
+        "--source",
+        "gap-fallback",
+        "--include-blocked-fallback",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["bucket_counts"]["fallback-diagnostic"] == 1
+    assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
+    assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
+    assert payload["filters"]["include_blocked_fallback"] is True
+    assert payload["buckets"]["fallback-diagnostic"][0]["task_support_state"] == "blocked"
+
+
+def test_benchmark_test_triage_cli_table_output_shows_suppression_diagnostic(tmp_path: Path) -> None:
+    _write_blocked_fallback_triage_fixture(tmp_path)
+
+    result = _invoke_test_triage(tmp_path, "--source", "gap-fallback")
+
+    assert result.exit_code == 0
+    assert "Suppressed 1 fallback rows for blocked task support" in result.output
+    assert "dataset:blocked-fallback (1)" in result.output
+    assert "Benchmark Test Triage: fallback-diagnostic" not in result.output
+    assert "No benchmark test triage rows." not in result.output
+
+
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,

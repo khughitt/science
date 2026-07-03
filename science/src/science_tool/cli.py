@@ -5862,7 +5862,7 @@ def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path
 
 
 def _format_count_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
-    values = [f"{row[key]}:{row['count']}" for row in rows]
+    values = [f"{row[key]} ({row['count']})" for row in rows]
     return ", ".join(values) if values else "-"
 
 
@@ -6109,6 +6109,11 @@ def benchmark_tests(
 )
 @click.option("--exclude-fallback", is_flag=True, help="Drop broad fallback benchmark rows.")
 @click.option(
+    "--include-blocked-fallback",
+    is_flag=True,
+    help="Include gap-fallback rows for blocked task-support tasks in triage output.",
+)
+@click.option(
     "--readiness",
     "readiness_label",
     type=click.Choice(["runnable", "stage-needed", "metadata-only", "blocked"]),
@@ -6146,6 +6151,7 @@ def benchmark_test_triage(
     state: str | None,
     priority_source: str | None,
     exclude_fallback: bool,
+    include_blocked_fallback: bool,
     readiness_label: str | None,
     runnable_only: bool,
     benchmark_ref: str | None,
@@ -6185,6 +6191,7 @@ def benchmark_test_triage(
             state=cast("TestPlanState | None", state),
             source=cast("Any", priority_source),
             exclude_fallback=exclude_fallback,
+            include_blocked_fallback=include_blocked_fallback,
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
         )
@@ -6203,6 +6210,7 @@ def benchmark_test_triage(
                     state=state,
                     priority_source=priority_source,
                     exclude_fallback=exclude_fallback,
+                    include_blocked_fallback=include_blocked_fallback,
                     readiness_label=readiness_label,
                     runnable_only=runnable_only,
                     benchmark_ref=benchmark_ref,
@@ -6252,6 +6260,21 @@ def benchmark_test_triage(
             f"{fallback_count} fallback rows",
             _format_count_rows(diagnostics["top_benchmarks"], key="benchmark_id"),
             _format_count_rows(diagnostics["top_facets"], key="facet"),
+        )
+        Console(width=200).print(table)
+        visible_rows += 1
+    suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
+    if suppressed:
+        table = Table(
+            title="Benchmark Test Triage: suppressed blocked fallback",
+            show_header=True,
+            header_style="bold",
+        )
+        for col in ("rows", "top benchmarks"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        table.add_row(
+            f"Suppressed {suppressed['rows']} fallback rows for blocked task support",
+            _format_count_rows(suppressed["top_benchmarks"], key="benchmark_id"),
         )
         Console(width=200).print(table)
         visible_rows += 1
@@ -6428,6 +6451,7 @@ def _test_triage_source_command(
     state: str | None,
     priority_source: str | None,
     exclude_fallback: bool,
+    include_blocked_fallback: bool,
     readiness_label: str | None,
     runnable_only: bool,
     benchmark_ref: str | None,
@@ -6449,6 +6473,8 @@ def _test_triage_source_command(
         parts.extend(["--source", priority_source])
     if exclude_fallback:
         parts.append("--exclude-fallback")
+    if include_blocked_fallback:
+        parts.append("--include-blocked-fallback")
     if readiness_label is not None:
         parts.extend(["--readiness", readiness_label])
     if runnable_only:
