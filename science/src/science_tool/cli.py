@@ -5862,7 +5862,7 @@ def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path
 
 
 def _format_count_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
-    values = [f"{row[key]} ({row['count']})" for row in rows]
+    values = [f"{row[key]}:{row['count']}" for row in rows]
     return ", ".join(values) if values else "-"
 
 

@@ -1621,7 +1621,7 @@ def test_benchmark_test_triage_cli_table_output_shows_suppression_diagnostic(tmp
 
     assert result.exit_code == 0
     assert "Suppressed 1 fallback rows for blocked task support" in result.output
-    assert "dataset:blocked-fallback (1)" in result.output
+    assert "dataset:blocked-fallback:1" in result.output
     assert "Benchmark Test Triage: fallback-diagnostic" not in result.output
     assert "No benchmark test triage rows." not in result.output
 
