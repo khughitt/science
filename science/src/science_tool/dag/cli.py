@@ -16,13 +16,12 @@ from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all
 from science_tool.dag.schema import EdgesYamlFile
-from science_tool.dag.staleness import check_staleness
 from science_tool.dag.validate import validate_project
 
 
 @click.group("dag")
 def dag_group() -> None:
-    """DAG rendering, numbering, staleness, and audit tools."""
+    """DAG rendering, numbering, retired-edge inspection, and audit tools."""
 
 
 def _wants_json(*, as_json: bool, output_format: str) -> bool:
@@ -177,21 +176,19 @@ def staleness_cmd(
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Report drift, under-reviewed edges, and unpropagated tasks."""
+    """Retired YAML staleness command."""
     project = (project_path or Path.cwd()).resolve()
     try:
-        paths = load_dag_paths(project)
+        load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    report = check_staleness(paths, recent_days=recent_days)
-
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(report.to_json(), indent=2))
-    else:
-        _print_staleness_summary(report)
-
-    ctx.exit(1 if report.has_findings else 0)
+    del ctx, recent_days, as_json, output_format
+    raise click.ClickException(
+        "DAG staleness over *.edges.yaml is retired. Run `science dag retired-edges` "
+        "to inspect remaining YAML migration content. Proposition-backed freshness "
+        "will be designed separately."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -204,19 +201,13 @@ def staleness_cmd(
     "--fix",
     is_flag=True,
     default=False,
-    help="Execute mutations: open review tasks, write unpropagated-task log.",
+    help="No-op after validation succeeds; refuses validation-blocking findings.",
 )
 @click.option(
     "--strict",
     is_flag=True,
     default=False,
     help="Enable strict validation gates.",
-)
-@click.option(
-    "--recent-days",
-    default=28,
-    show_default=True,
-    help="Look-back window in days for unpropagated-task detection.",
 )
 @click.option(
     "--json",
@@ -246,24 +237,22 @@ def audit_cmd(
     ctx: click.Context,
     fix: bool,
     strict: bool,
-    recent_days: int,
     as_json: bool,
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Run full DAG audit (validate + re-render + staleness). Use --fix to open tasks."""
+    """Run DAG audit (validate + re-render proposition-backed DAGs)."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    audit = run_audit(paths, recent_days=recent_days, fix=fix, strict=strict)
+    audit = run_audit(paths, fix=fix, strict=strict)
 
     if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(audit.to_json(), indent=2))
     else:
-        _print_staleness_summary(audit.staleness)
         if fix and audit.mutations:
             click.echo(f"\nApplied {len(audit.mutations)} mutation(s):")
             for mutation in audit.mutations:
@@ -536,46 +525,3 @@ def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
         err=False,
     )
     ctx.exit(1)
-
-
-# ---------------------------------------------------------------------------
-# Internal display helpers
-# ---------------------------------------------------------------------------
-
-
-def _print_staleness_summary(report: object) -> None:  # type: ignore[type-arg]
-    """Print a human-readable staleness summary to stdout."""
-    from science_tool.dag.staleness import StalenessReport
-
-    assert isinstance(report, StalenessReport)
-
-    drifted = len(report.drifted_edges)
-    under = len(report.under_reviewed_edges)
-    unresolved = len(report.unresolved_refs)
-    unpropagated = len(report.unpropagated_tasks)
-
-    if not report.has_findings and not under:
-        click.echo("DAG staleness: no findings.")
-        return
-
-    click.echo(f"DAG staleness report ({report.today.isoformat()}, window={report.recent_days}d):")
-    click.echo(f"  Drifted edges:       {drifted}")
-    click.echo(f"  Under-reviewed:      {under}")
-    click.echo(f"  Unresolved refs:     {unresolved}")
-    click.echo(f"  Unpropagated tasks:  {unpropagated}")
-
-    if report.drifted_edges:
-        click.echo("\nDrifted edges:")
-        for edge in report.drifted_edges:
-            last = edge.last_cited_date.isoformat() if edge.last_cited_date else "never"
-            click.echo(f"  {edge.dag}#{edge.id}  ({edge.source} -> {edge.target})  last cited: {last}")
-
-    if report.unresolved_refs:
-        click.echo("\nUnresolved refs:")
-        for ref in report.unresolved_refs:
-            click.echo(f"  {ref.dag}#{ref.edge_id}  [{ref.kind}] {ref.value}  — {ref.reason}")
-
-    if report.unpropagated_tasks:
-        click.echo("\nUnpropagated tasks:")
-        for task in report.unpropagated_tasks:
-            click.echo(f"  {task.id}  {task.title}")

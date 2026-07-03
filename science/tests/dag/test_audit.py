@@ -1,4 +1,4 @@
-"""Tests for science_tool.dag.audit — read-only default + --fix mutation path."""
+"""Tests for science_tool.dag.audit."""
 
 from __future__ import annotations
 
@@ -117,46 +117,22 @@ def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
     assert report.mutations == (), "read-only audit must not emit mutations"
 
 
-def test_audit_fix_does_not_open_review_task_without_retired_edges(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """With no retired edge YAML, Task 7 staleness removal is not needed for render."""
+def test_audit_fix_is_noop_when_validation_passes(tmp_path: Path) -> None:
+    """Phase 5f keeps --fix accepted, but retired YAML drift mutation is gone."""
     paths = _build_project(tmp_path, with_drift=True)
-    calls: list[dict] = []
-    from science_tool.dag import audit as audit_mod
-
-    monkeypatch.setattr(audit_mod, "_open_review_task", lambda **kw: calls.append(kw))
+    active_before = (tmp_path / "tasks/active.md").read_text()
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=True)
-    assert calls == []
-    assert all(mutation.kind != "open_review_task" for mutation in report.mutations)
 
-
-def test_audit_fix_records_unpropagated_to_log(tmp_path: Path) -> None:
-    """fix=True writes an audit-log entry for unpropagated tasks (no auto-citation)."""
-    paths = _build_project(tmp_path, with_drift=False)
-    # Also add an unpropagated orphan not cited anywhere:
-    done_md = tmp_path / "tasks/done/2026-04.md"
-    done_md.write_text(
-        done_md.read_text() + "\n## [t999] orphan task\n- priority: P2\n- status: done\n"
-        "- created: 2026-04-15\n- completed: 2026-04-15\n"
-        "- related: [hypothesis:h1-epigenetic-commitment]\n"
-    )
-
-    report = run_audit(paths, today=date(2026, 4, 20), fix=True)
-    if report.staleness.unpropagated_tasks:
-        log_file = paths.dag_dir / ".audit-unpropagated-2026-04-20.md"
-        assert log_file.exists()
-        assert "t999" in log_file.read_text()
+    assert report.mutations == ()
+    assert (tmp_path / "tasks/active.md").read_text() == active_before
+    assert not list(paths.dag_dir.glob(".audit-unpropagated-*.md"))
 
 
 def test_audit_no_findings_on_clean_project(tmp_path: Path) -> None:
     paths = _build_project(tmp_path, with_drift=False)
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
-    # with_drift=False → t001 citation is stale by age but drift rule doesn't fire
-    # because no newer task names the hypothesis.
     assert report.validation.ok
-    assert not report.staleness.has_findings
     assert not report.has_findings
 
 
@@ -164,9 +140,47 @@ def test_audit_to_json_is_stable(tmp_path: Path) -> None:
     paths = _build_project(tmp_path, with_drift=True)
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     as_dict = report.to_json()
-    assert "staleness" in as_dict
+    assert "staleness" not in as_dict
     assert "mutations" in as_dict
     json.dumps(as_dict)  # round-trip
+
+
+def test_audit_renders_from_propositions_and_composes_no_staleness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.dag import audit as audit_mod
+    from science_tool.dag.paths import DagPaths
+
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    tasks_dir = project / "tasks"
+    tasks_dir.mkdir()
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        "dag: h1\nedges:\n  - id: 1\n    source: a\n    target: b\n    edge_status: supported\n",
+        encoding="utf-8",
+    )
+
+    seen = {}
+
+    def fake_render_all(paths, *, proposition_edges):
+        seen["edges"] = proposition_edges
+
+    monkeypatch.setattr(audit_mod, "render_all", fake_render_all)
+    monkeypatch.setattr(
+        audit_mod, "load_proposition_edges", lambda _project: [{"source": "a", "target": "b"}]
+    )
+    assert not hasattr(audit_mod, "check_staleness")
+
+    report = audit_mod.run_audit(
+        DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None, project_root=project)
+    )
+
+    assert seen["edges"] == [{"source": "a", "target": "b"}]
+    assert not hasattr(report, "staleness")
+    assert "staleness" not in report.to_json()
 
 
 def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
@@ -180,7 +194,7 @@ def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
     result = runner.invoke(audit_cmd, ["--json", "--project", str(tmp_path)])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    # No DAGs were configured or discovered → empty validation/staleness.
+    # No DAGs were configured or discovered → empty validation.
     assert payload["validation"]["ok"] is True
     assert payload["mutations"] == []
 
