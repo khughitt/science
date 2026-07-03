@@ -10,6 +10,7 @@ import pytest
 from science_model.entities import EntityType
 from science_model.frontmatter import parse_entity_file
 from science_model.identity import EntityScope, ExternalId
+from science_model.packages.schema import IdentityContext, IdentityTransform
 
 
 @pytest.fixture
@@ -183,3 +184,58 @@ def test_dataset_frontmatter_preserves_identity_metadata(tmp_md) -> None:
     assert e.scope == EntityScope.SHARED
     assert e.deprecated_ids == ["dataset:old-demo"]
     assert e.taxon == "NCBITaxon:9606"
+
+
+def test_dataset_frontmatter_coerces_identity_context(tmp_md) -> None:
+    p = tmp_md(
+        """
+        ---
+        id: "dataset:identity-context"
+        type: "dataset"
+        title: "Identity Context"
+        origin: "external"
+        access: "public"
+        identity_context:
+          taxon: 9606
+          assembly:
+            label: "hg19 cytoband proxy"
+            registry: "dataset:assembly-registry"
+            resolution_status: "declared_unresolved"
+            proxy:
+              type: "cytoband_proxy"
+              via: "dataset:ucsc-cytobands"
+              sources:
+                - dataset: "dataset:source-assembly"
+                  assembly:
+                    label: "GRCh37"
+          molecular_ids:
+            gene:
+              namespace: "hgnc_id"
+              registry: "dataset:hgnc"
+              resolution_status: "resolved"
+              transform:
+                type: "symbol_remap"
+                from: "hgnc_symbol"
+                method: "approved_symbol"
+                dataset: "dataset:hgnc-symbol-remap"
+        ---
+        Body.
+    """,
+        name="identity-context.md",
+    )
+
+    e = parse_entity_file(p, project_slug="testproj")
+
+    assert e is not None
+    assert isinstance(e.identity_context, IdentityContext)
+    assert e.identity_context.assembly is not None
+    assert e.identity_context.assembly.proxy is not None
+    assert e.identity_context.assembly.proxy.sources[0].dataset == "dataset:source-assembly"
+    assert e.identity_context.molecular_ids["gene"].transform == IdentityTransform.model_validate(
+        {
+            "type": "symbol_remap",
+            "from": "hgnc_symbol",
+            "method": "approved_symbol",
+            "dataset": "dataset:hgnc-symbol-remap",
+        }
+    )

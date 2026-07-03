@@ -46,6 +46,9 @@ route it there instead of silently re-planning around it.
 7. Before drafting the plan, run a data-availability / metric-feasibility pre-check:
    - Are the needed inputs already represented by `dataset:<slug>` entities?
    - Is each input available now, explicitly acquisition-gated, or absent?
+   - For identity-bearing inputs, is `identity_context` declared? Coordinate
+     or bio identity-bearing profiles need taxon and assembly/tier declarations,
+     or explicit UNKNOWN/unresolved declarations.
    - Can the primary metric be computed from the available columns, sample grain, and time axis?
    - If the answer is no, keep the plan in `not-ready` or design-stage mode and make acquisition/inspection the blocking checks instead of drafting a runnable analysis.
 
@@ -80,7 +83,7 @@ reason.
 1. Classify the analysis: modalities, independent unit, estimand, intended model/test, confirmatory vs exploratory status.
 2. Load the minimum relevant leaves from `skills/INDEX.md`.
 3. Identify required input inspection and preprocessing/normalization checks.
-4. Build a **Per-Input Data Profile** with one row per input artifact or dataset. Include encoding / file format, row grain, join cardinality, missing-value sentinels, provenance / source version, and checksum or immutable identifier.
+4. Build a **Per-Input Data Profile** with one row per input artifact or dataset. Include encoding / file format, row grain, join cardinality, missing-value sentinels, provenance / source version, checksum or immutable identifier, and identity declaration status for identity-bearing inputs.
 5. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules.
 6. Decide exactly one readiness state: `ready`, `ready-with-caveats`, or `not-ready`.
 7. Save the analysis plan by default.
@@ -154,10 +157,13 @@ The body must include:
 
 In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
 
-| Input | Encoding / file format | Row grain | Join cardinality | Missing-value sentinels | Provenance / source version | Checksum or immutable identifier |
-|---|---|---|---|---|---|---|
+| Input | Encoding / file format | Row grain | Join cardinality | Missing-value sentinels | Provenance / source version | Checksum or immutable identifier | Identity declaration status |
+|---|---|---|---|---|---|---|---|
 
 Treat unknown profile fields as inspection blockers for `ready` decisions, not as blanks to ignore.
+For identity-bearing inputs, exact resolution is required at the publish/promote
+boundary, not necessarily during initial planning; unresolved identity must be
+explicitly marked UNKNOWN/unresolved and carried as a caveat or blocker.
 
 For `ready-with-caveats`, include `Known Limitations To Carry Forward`.
 For `not-ready`, include `Blocking Checks Before Pre-Registration` — **but** when a

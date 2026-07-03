@@ -14,6 +14,7 @@ from science_model.entities import (
     EpistemicReviewState,
     EvidenceLineEntity,
     MechanismEntity,
+    WorkflowEntity,
     core_entity_type_for_kind,
 )
 from science_model.identity import EntityScope, ExternalId
@@ -23,6 +24,7 @@ from science_model.packages.schema import (
     AccessReproducibility,
     BenchmarkBlock,
     DerivationBlock,
+    IdentityContext,
     MemberOfDerivationBlock,
     WorkflowRecipeDerivationBlock,
 )
@@ -272,6 +274,15 @@ def _coerce_benchmark(fm: dict) -> BenchmarkBlock | None:
     return BenchmarkBlock.model_validate(raw)
 
 
+def _coerce_identity_context(fm: dict) -> IdentityContext | None:
+    raw = fm.get("identity_context")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("identity_context must be a mapping")
+    return IdentityContext.model_validate(raw)
+
+
 def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     """Build EpistemicReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
     raw = fm.get("review_state")
@@ -324,6 +335,7 @@ def _coerce_derivation(
         config_snapshot=raw.get("config_snapshot", ""),
         produced_at=raw.get("produced_at", ""),
         inputs=list(raw.get("inputs") or []),
+        transformations=list(raw.get("transformations") or []),
     )
 
 
@@ -405,6 +417,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "derived_kind": fm.get("derived_kind"),
         "dataset_usage": [] if fm.get("dataset_usage") is None else fm.get("dataset_usage"),
         "benchmark": _coerce_benchmark(fm) if kind == EntityType.DATASET.value else None,
+        "identity_context": _coerce_identity_context(fm),
         "claim_layer": fm.get("claim_layer"),
         "identification_strength": fm.get("identification_strength"),
         "proxy_directness": fm.get("proxy_directness"),
@@ -434,5 +447,10 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             shared_cohort=fm.get("shared_cohort"),
             evidence_role=fm.get("evidence_role"),  # optional; pydantic coerces or None
             evidence_type=fm.get("evidence_type"),
+        )
+    if kind == EntityType.WORKFLOW.value:
+        return WorkflowEntity(
+            **entity_kwargs,
+            outputs=list(fm.get("outputs") or []),
         )
     return Entity(**entity_kwargs)

@@ -39,6 +39,7 @@ from science_tool.commons.gene_crosswalk import (
 from science_tool.commons.gene_crosswalk import (
     MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
 )
+from science_tool.commons.identity_stamp import stamp_agrees
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution
 from science_tool.commons.protein_crosswalk import (
     MEMBER_KEY_COLUMN as _PROTEIN_KEY_COLUMN,
@@ -54,6 +55,8 @@ from science_tool.validate.result import Result, Severity
 
 # bio extensions whose data are assembly-anchored (coordinate-bearing).
 _COORDINATE_EXTENSIONS = ("bio.rnaseq", "bio.scrna", "bio.cna")
+_GENE_TIER_EXTENSIONS = ("bio.geneset", "bio.gene_crosswalk")
+_PROTEIN_TIER_EXTENSIONS = ("bio.protein_crosswalk",)
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -64,6 +67,84 @@ def _is_coordinate_bearing(profile: str) -> bool:
     return any(f"+{ext}/" in f"+{profile}" for ext in _COORDINATE_EXTENSIONS)
 
 
+def _has_profile_token(profile: str, extension: str) -> bool:
+    return f"+{extension}/" in f"+{profile}"
+
+
+def _has_variant_key(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    mids = identity_context.get("molecular_ids")
+    return isinstance(mids, dict) and "variant" in mids
+
+
+def required_identity_tiers(schema_profile: str, identity_context: Any) -> set[str]:
+    """Return identity tiers that must be declared for this dataset profile.
+
+    The profile signal is intentionally read from the composed `schema_profile`
+    token string, not from any expanded `profiles` list. Register-run-derived
+    datasets do not stamp bio schema_profile tokens yet; P3 will add that
+    propagation, so this gate does not try to infer bio identity from derivation.
+    """
+    profile = str(schema_profile or "")
+    required: set[str] = set()
+    if _is_coordinate_bearing(profile):
+        required.add("assembly")
+    if any(_has_profile_token(profile, extension) for extension in _GENE_TIER_EXTENSIONS):
+        required.add("gene")
+    if any(_has_profile_token(profile, extension) for extension in _PROTEIN_TIER_EXTENSIONS):
+        required.add("protein")
+    if _has_variant_key(identity_context):
+        required.add("variant")
+    return required
+
+
+def _has_taxon_decl(idc: Any) -> bool:
+    return isinstance(idc, dict) and "taxon" in idc and idc["taxon"] not in (None, "")
+
+
+def _has_tier_decl(idc: Any, tier: str) -> bool:
+    if not isinstance(idc, dict):
+        return False
+    if tier == "assembly":
+        return idc.get("assembly") is not None
+    mids = idc.get("molecular_ids")
+    return isinstance(mids, dict) and mids.get(tier) is not None
+
+
+def _tier_decl_path(tier: str) -> str:
+    if tier == "assembly":
+        return "identity_context.assembly"
+    return f"identity_context.molecular_ids.{tier}"
+
+
+def _declaration_gate_results(
+    *,
+    fm: dict[str, Any],
+    required_tiers: set[str],
+    identity_context: Any,
+) -> Iterator[Result]:
+    if not required_tiers:
+        return
+    path = fm.get("_path")
+    ident = fm.get("id", "?")
+    if not _has_taxon_decl(identity_context):
+        yield _result(
+            Severity.ERROR,
+            path,
+            f"{ident}: identity-bearing dataset does not declare identity_context.taxon",
+            "identity.taxon-undeclared",
+        )
+    for tier in sorted(required_tiers):
+        if not _has_tier_decl(identity_context, tier):
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: identity-bearing dataset does not declare {_tier_decl_path(tier)}",
+                f"identity.{tier}-undeclared",
+            )
+
+
 def _assembly_defect(assembly: Any) -> str | None:
     """Return a defect message if the raw assembly block is malformed, else None.
 
@@ -72,14 +153,19 @@ def _assembly_defect(assembly: Any) -> str | None:
     """
     if not isinstance(assembly, dict):
         return "not an object"
-    digest = assembly.get("seqcol_digest")
-    if not isinstance(digest, str) or not digest.strip():
-        return "missing or blank seqcol_digest"
     registry = assembly.get("registry")
     if not isinstance(registry, str) or not registry.startswith("dataset:"):
         return "missing or malformed registry (must be a dataset: reference)"
-    if assembly.get("resolution_status") not in ("resolved", "declared_unresolved"):
+    status = assembly.get("resolution_status")
+    if status not in ("resolved", "declared_unresolved"):
         return "resolution_status must be 'resolved' or 'declared_unresolved'"
+    digest = assembly.get("seqcol_digest")
+    if status == "declared_unresolved" and digest is None:
+        return None
+    if not isinstance(digest, str) or not digest.strip():
+        return "missing or blank seqcol_digest"
+    if status == "resolved" and digest.strip().upper() == "UNKNOWN":
+        return "UNKNOWN seqcol_digest is invalid for resolved assembly"
     return None
 
 
@@ -99,22 +185,18 @@ def evaluate_identity_context(
     for fm in datasets:
         if fm.get("type") != "dataset":
             continue
-        if not _is_coordinate_bearing(str(fm.get("schema_profile") or "")):
+        schema_profile = str(fm.get("schema_profile") or "")
+        idc = fm.get("identity_context") or {}
+        required_tiers = required_identity_tiers(schema_profile, idc)
+        yield from _declaration_gate_results(fm=fm, required_tiers=required_tiers, identity_context=idc)
+
+        if "assembly" not in required_tiers:
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")
-        idc = fm.get("identity_context") or {}
         assembly = idc.get("assembly") if isinstance(idc, dict) else None
 
         if assembly is None:
-            has_freetext = bool(fm.get("reference_genome"))
-            detail = (
-                "free-text reference_genome is set but identity_context.assembly is not; "
-                "migrate to a structured seqcol_digest declaration"
-                if has_freetext
-                else "coordinate-bearing dataset does not declare identity_context.assembly"
-            )
-            yield _result(Severity.WARN, path, f"{ident}: {detail}", "identity.assembly-undeclared")
             continue
 
         defect = _assembly_defect(assembly)
@@ -127,9 +209,18 @@ def evaluate_identity_context(
             )
             continue
 
-        digest = str(assembly["seqcol_digest"])
         registry_id = str(assembly["registry"])
         status = assembly["resolution_status"]
+        digest_value = assembly.get("seqcol_digest")
+        if status == "declared_unresolved" and (not isinstance(digest_value, str) or not digest_value.strip()):
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: assembly seqcol_digest declared_unresolved (honoured, RCM-D2)",
+                "identity.assembly-declared-unresolved",
+            )
+            continue
+        digest = str(digest_value)
 
         known = registry_id in registry_keys_by_id and registry_keys_by_id[registry_id] is not None
         available = registry_keys_by_id[registry_id] if known else None
@@ -159,6 +250,66 @@ def evaluate_identity_context(
         # RESOLVED passes silently.
 
 
+def evaluate_datapackage_identity_stamps(
+    datasets: Iterable[dict[str, Any]],
+    datapackages_by_dataset_id: Mapping[str, tuple[str, dict[str, Any]]],
+) -> Iterator[Result]:
+    """Report present datapackage identity_context stamps that disagree.
+
+    Absence is intentionally silent for P1 adoption; the entity frontmatter
+    identity_context remains authoritative.
+    """
+    for fm in datasets:
+        if fm.get("type") != "dataset":
+            continue
+        ident = fm.get("id")
+        if not isinstance(ident, str) or not ident:
+            continue
+        idc = fm.get("identity_context")
+        if not isinstance(idc, dict):
+            continue
+        datapackage_ref = datapackages_by_dataset_id.get(ident)
+        if datapackage_ref is None:
+            continue
+        datapackage_path, datapackage = datapackage_ref
+        if stamp_agrees(idc, datapackage):
+            continue
+        yield _result(
+            Severity.ERROR,
+            datapackage_path,
+            f"{ident}: datapackage science.identity_context disagrees with owning entity identity_context",
+            "identity.datapackage-stamp-disagreement",
+        )
+
+
+def _local_datapackage_path(fm: dict[str, Any]) -> Path | None:
+    datapackage = fm.get("datapackage")
+    if isinstance(datapackage, str) and datapackage.strip():
+        return Path(datapackage)
+    raw_path = fm.get("_path")
+    if isinstance(raw_path, str) and Path(raw_path).name in {"datapackage.yaml", "datapackage.yml"}:
+        return Path(raw_path)
+    return None
+
+
+@Check(section="identity datapackage stamps", order=24)
+def check_datapackage_identity_stamps(ctx: ValidateContext) -> Iterator[Result]:
+    datasets = dataset_frontmatters(ctx)
+    datapackages_by_dataset_id: dict[str, tuple[str, dict[str, Any]]] = {}
+    for fm in datasets:
+        ident = fm.get("id")
+        if not isinstance(ident, str) or not ident:
+            continue
+        rel_path = _local_datapackage_path(fm)
+        if rel_path is None:
+            continue
+        abs_path = ctx.project_root / rel_path
+        if not abs_path.is_file():
+            continue
+        datapackages_by_dataset_id[ident] = (str(rel_path), raw_frontmatter(abs_path))
+    yield from evaluate_datapackage_identity_stamps(datasets, datapackages_by_dataset_id)
+
+
 @Check(section="assembly identity", order=25)
 def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
     datasets = dataset_frontmatters(ctx)
@@ -177,6 +328,172 @@ def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
         except (CommonsError, AssemblyRegistryError):
             registry_keys_by_id[registry_id] = None
     yield from evaluate_identity_context(datasets, registry_keys_by_id=registry_keys_by_id)
+
+
+def _lineage_dataset_ref(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    if value != value.strip() or not value.startswith("dataset:"):
+        return None
+    if not value.removeprefix("dataset:").strip():
+        return None
+    return value
+
+
+def _derivation_inputs(derivation: Any) -> set[str]:
+    if not isinstance(derivation, dict) or not isinstance(derivation.get("inputs"), list):
+        return set()
+    return {ref for value in derivation["inputs"] if (ref := _lineage_dataset_ref(value)) is not None}
+
+
+def _derivation_transformation_datasets(derivation: Any) -> set[str]:
+    if not isinstance(derivation, dict) or not isinstance(derivation.get("transformations"), list):
+        return set()
+    dataset_ids: set[str] = set()
+    for transformation in derivation["transformations"]:
+        if not isinstance(transformation, dict):
+            continue
+        dataset_id = _lineage_dataset_ref(transformation.get("dataset"))
+        if dataset_id is not None:
+            dataset_ids.add(dataset_id)
+    return dataset_ids
+
+
+def _identity_reference_datasets(identity_context: Any) -> Iterator[tuple[str, str]]:
+    if not isinstance(identity_context, dict):
+        return
+    assembly = identity_context.get("assembly")
+    if isinstance(assembly, dict):
+        transform = assembly.get("transform")
+        if isinstance(transform, dict) and (dataset_id := _lineage_dataset_ref(transform.get("dataset"))) is not None:
+            yield "identity_context.assembly.transform.dataset", dataset_id
+        proxy = assembly.get("proxy")
+        if isinstance(proxy, dict) and (dataset_id := _lineage_dataset_ref(proxy.get("via"))) is not None:
+            yield "identity_context.assembly.proxy.via", dataset_id
+    molecular_ids = identity_context.get("molecular_ids")
+    if not isinstance(molecular_ids, dict):
+        return
+    for tier, tier_identity in molecular_ids.items():
+        if not isinstance(tier_identity, dict):
+            continue
+        transform = tier_identity.get("transform")
+        if isinstance(transform, dict) and (dataset_id := _lineage_dataset_ref(transform.get("dataset"))) is not None:
+            yield f"identity_context.molecular_ids.{tier}.transform.dataset", dataset_id
+
+
+def _identity_proxy_source_datasets(identity_context: Any) -> Iterator[tuple[str, str]]:
+    if not isinstance(identity_context, dict):
+        return
+    assembly = identity_context.get("assembly")
+    proxy = assembly.get("proxy") if isinstance(assembly, dict) else None
+    sources = proxy.get("sources") if isinstance(proxy, dict) else None
+    if not isinstance(sources, list):
+        return
+    for index, source in enumerate(sources):
+        if not isinstance(source, dict):
+            continue
+        dataset_id = _lineage_dataset_ref(source.get("dataset"))
+        if dataset_id is None:
+            continue
+        yield f"identity_context.assembly.proxy.sources[{index}].dataset", dataset_id
+
+
+def _assembly_has_structured_lineage(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    assembly = identity_context.get("assembly")
+    if not isinstance(assembly, dict):
+        return False
+    transform = assembly.get("transform")
+    if isinstance(transform, dict) and _lineage_dataset_ref(transform.get("dataset")) is not None:
+        return True
+    proxy = assembly.get("proxy")
+    if not isinstance(proxy, dict) or _lineage_dataset_ref(proxy.get("via")) is None:
+        return False
+    sources = proxy.get("sources")
+    return isinstance(sources, list) and any(
+        isinstance(source, dict) and _lineage_dataset_ref(source.get("dataset")) is not None for source in sources
+    )
+
+
+def _is_declared_unresolved_assembly(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    assembly = identity_context.get("assembly")
+    return isinstance(assembly, dict) and assembly.get("resolution_status") == "declared_unresolved"
+
+
+def _input_assembly_digests(inputs: set[str], by_id: Mapping[str, dict[str, Any]]) -> set[str]:
+    digests: set[str] = set()
+    for input_id in inputs:
+        parent = by_id.get(input_id)
+        if parent is None:
+            continue
+        digest = _declared_digest(parent)
+        if digest:
+            digests.add(digest)
+    return digests
+
+
+def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+    """Validate identity_context lineage declarations against derivation roles.
+
+    Reference machinery (`transform.dataset`, `proxy.via`) must be real dataset
+    entities and must be routed through `derivation.transformations[]`. Data
+    ancestors (`proxy.sources[].dataset`) must be routed through
+    `derivation.inputs`. Reference artifacts are intentionally not required in
+    `derivation.inputs`.
+    """
+    dataset_list = [fm for fm in datasets if fm.get("type") == "dataset"]
+    by_id = {fm["id"]: fm for fm in dataset_list if isinstance(fm.get("id"), str)}
+    for fm in dataset_list:
+        ident = fm.get("id", "?")
+        identity_context = fm.get("identity_context")
+        derivation = fm.get("derivation")
+        inputs = _derivation_inputs(derivation)
+        transformation_datasets = _derivation_transformation_datasets(derivation)
+
+        for loc, dataset_id in _identity_reference_datasets(identity_context):
+            if dataset_id not in by_id:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} does not resolve to a dataset entity",
+                    "identity.provenance-reference-missing",
+                )
+            if dataset_id not in transformation_datasets:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} must appear in derivation.transformations[].dataset",
+                    "identity.provenance-reference-role-missing",
+                )
+
+        for loc, dataset_id in _identity_proxy_source_datasets(identity_context):
+            if dataset_id not in inputs:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} must appear in derivation.inputs",
+                    "identity.provenance-source-role-missing",
+                )
+
+        if (
+            _is_declared_unresolved_assembly(identity_context)
+            and not _assembly_has_structured_lineage(identity_context)
+            and len(_input_assembly_digests(inputs, by_id)) >= 2
+        ):
+            yield _result(
+                Severity.ERROR,
+                fm.get("_path"),
+                f"{ident}: mixed-build declared_unresolved assembly requires proxy or transform provenance",
+                "identity.provenance-mixed-build-unstructured",
+            )
+
+
+@Check(section="identity provenance", order=26)
+def check_identity_provenance(ctx: ValidateContext) -> Iterator[Result]:
+    yield from evaluate_identity_provenance(dataset_frontmatters(ctx))
 
 
 def _declared_digest(fm: dict[str, Any]) -> str | None:
@@ -218,10 +535,7 @@ def _has_liftover_remedy(
         relations = relations_by_dataset_id.get(dataset_id)
         if relations is None:
             continue
-        if (
-            relation_for(relations, source_seqcol_digest=from_digest, target_seqcol_digest=to_digest)
-            is not None
-        ):
+        if relation_for(relations, source_seqcol_digest=from_digest, target_seqcol_digest=to_digest) is not None:
             return True
     return False
 

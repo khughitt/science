@@ -126,6 +126,51 @@ def test_derived_dataset_inputs_project_to_upstream_unknown() -> None:
     ]
 
 
+def test_derived_dataset_transformations_project_to_reference_unknown() -> None:
+    from science_tool.graph.dataset_usage import usage_records_for_entity
+
+    derivation = DerivationBlock(
+        workflow="workflow:w",
+        workflow_run="workflow-run:r",
+        git_commit="abc",
+        config_snapshot="cfg",
+        produced_at="2026-05-29",
+        inputs=["dataset:raw"],
+        transformations=[
+            {
+                "kind": "identity_transform",
+                "target": "assembly",
+                "dataset": "dataset:liftover-chain",
+                "type": "liftover",
+            },
+            {"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"},
+        ],
+    )
+    entity = Entity(
+        id="dataset:derived",
+        canonical_id="dataset:derived",
+        kind="dataset",
+        type=EntityType.DATASET,
+        title="Derived",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="data/derived/datapackage.yaml",
+        origin="derived",
+        derivation=derivation,
+    )
+
+    records = usage_records_for_entity(entity)
+
+    assert [(r.dataset_ref, r.role, r.overlap, r.source) for r in records] == [
+        ("dataset:raw", "upstream", "unknown", "derivation.inputs"),
+        ("dataset:liftover-chain", "reference", "unknown", "derivation.transformations"),
+        ("dataset:cytoband-map", "reference", "unknown", "derivation.transformations"),
+    ]
+
+
 def test_dataset_self_reference_is_materialization_error() -> None:
     from science_tool.graph.dataset_usage import DatasetUsageMaterializationError, usage_records_for_entity
 
@@ -415,6 +460,54 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     assert (derived_nodes[0], SCI_NS.usageRole, Literal("upstream")) in graph
     assert (derived_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
     assert (derived_nodes[0], SCI_NS.usageSource, Literal("derivation.inputs")) in graph
+
+
+def test_materialize_graph_emits_transformation_reference_usage_nodes(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "raw" / "datapackage.yaml",
+        "raw",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
+    )
+    _write_dataset(
+        tmp_path / "data" / "liftover" / "datapackage.yaml",
+        "liftover-chain",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
+    )
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "source_class: derived\n"
+        "derived_kind: transform\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:raw\n"
+        "  transformations:\n"
+        "    - kind: identity_transform\n"
+        "      target: assembly\n"
+        "      dataset: dataset:liftover-chain\n"
+        "      type: liftover\n",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+    derived_uri = PROJECT_NS["dataset/derived"]
+    nodes = list(graph.objects(derived_uri, SCI_NS.hasDatasetUsage))
+    reference_nodes = [node for node in nodes if (node, SCI_NS.dataset, PROJECT_NS["dataset/liftover-chain"]) in graph]
+
+    assert len(reference_nodes) == 1
+    assert (reference_nodes[0], RDF.type, SCI_NS.DatasetUsage) in graph
+    assert (reference_nodes[0], SCI_NS.usageRole, Literal("reference")) in graph
+    assert (reference_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
+    assert (reference_nodes[0], SCI_NS.usageSource, Literal("derivation.transformations")) in graph
 
 
 def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> None:
@@ -880,8 +973,7 @@ def _write_reference_graph_collection(root, *, with_nodes=True):
     )
     (dp_dir / "mondo.json").write_text('{"graphs":[]}\n', encoding="utf-8")
     (dp_dir / "edges.csv").write_text(
-        "subject,predicate,object,evidence,dataset_usage\n"
-        'MONDO:0005148,is_a,MONDO:0000001,,"[]"\n',
+        'subject,predicate,object,evidence,dataset_usage\nMONDO:0005148,is_a,MONDO:0000001,,"[]"\n',
         encoding="utf-8",
     )
     if with_nodes:

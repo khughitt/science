@@ -77,7 +77,7 @@
         "required": ["ref", "role"],
         "properties": {
           "ref": {"type": "string", "pattern": "^dataset:"},
-          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]},
+          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training", "reference"]},
           "overlap": {"enum": ["full", "partial", "unknown"]}
         }
       }

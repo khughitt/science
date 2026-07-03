@@ -3,9 +3,12 @@ from __future__ import annotations
 from science_tool.commons.assembly_compatibility import CompatibilityRelation
 from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
+    evaluate_datapackage_identity_stamps,
+    evaluate_identity_provenance,
     evaluate_gene_identity,
     evaluate_identity_context,
     evaluate_protein_identity,
+    required_identity_tiers,
 )
 from science_tool.validate.result import Severity
 
@@ -21,6 +24,36 @@ def _ds(profile: str, **fm) -> dict:
 
 def _assembly(digest: str, *, status: str = "resolved", registry: str = _REGISTRY) -> dict:
     return {"seqcol_digest": digest, "registry": registry, "resolution_status": status}
+
+
+def _identity() -> dict:
+    return {
+        "taxon": 9606,
+        "assembly": _assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"),
+        "molecular_ids": {
+            "gene": {
+                "namespace": "hgnc_id",
+                "registry": "dataset:hgnc",
+                "resolution_status": "resolved",
+            }
+        },
+    }
+
+
+def test_datapackage_identity_stamp_disagreement_errors() -> None:
+    identity = _identity()
+    ds = _ds("science-pkg-entity-1.0", identity_context=identity)
+    datapackage = {"science": {"identity_context": {**identity, "taxon": 10090}}}
+
+    results = list(evaluate_datapackage_identity_stamps([ds], {"dataset:x": ("data/x/datapackage.yaml", datapackage)}))
+
+    assert [(r.severity, r.rule) for r in results] == [(Severity.ERROR, "identity.datapackage-stamp-disagreement")]
+
+
+def test_datapackage_identity_stamp_absent_is_skipped() -> None:
+    ds = _ds("science-pkg-entity-1.0", identity_context=_identity())
+
+    assert list(evaluate_datapackage_identity_stamps([ds], {"dataset:x": ("data/x/datapackage.yaml", {})})) == []
 
 
 def test_resolved_assembly_passes_silently() -> None:
@@ -50,11 +83,125 @@ def test_declared_unresolved_assembly_infos() -> None:
     assert [r for r in results if r.rule == "identity.assembly-declared-unresolved"]
 
 
-def test_freetext_reference_genome_without_identity_context_warns() -> None:
+def test_cna_without_assembly_errors() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0",
+        identity_context={"taxon": 9606},
+    )
+
+    errors = [
+        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+    ]
+
+    assert [r.rule for r in errors] == ["identity.assembly-undeclared"]
+
+
+def test_declared_unresolved_assembly_without_seqcol_digest_passes_declaration_gate() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0",
+        identity_context={
+            "taxon": 9606,
+            "assembly": {"registry": _REGISTRY, "resolution_status": "declared_unresolved"},
+        },
+    )
+
+    results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
+
+    assert not [
+        r
+        for r in results
+        if r.severity is Severity.ERROR and r.rule in {"identity.assembly-undeclared", "identity.assembly-malformed"}
+    ]
+
+
+def test_declared_unresolved_assembly_with_unknown_seqcol_digest_passes_malformed_gate() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0",
+        identity_context={
+            "taxon": 9606,
+            "assembly": {
+                "seqcol_digest": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+            },
+        },
+    )
+
+    results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
+
+    assert not [r for r in results if r.severity is Severity.ERROR and r.rule == "identity.assembly-malformed"]
+
+
+def test_geneset_without_gene_tier_errors() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0+bio.identity_context/1.0",
+        identity_context={"taxon": 9606},
+    )
+
+    errors = [
+        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+    ]
+
+    assert [r.rule for r in errors] == ["identity.gene-undeclared"]
+
+
+def test_base_profile_clinical_table_requires_no_identity_context() -> None:
+    ds = _ds("science-pkg-entity-1.0")
+
+    assert list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)) == []
+
+
+def test_identity_bearing_profile_without_taxon_errors() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0",
+        identity_context={"assembly": _assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp")},
+    )
+
+    errors = [
+        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+    ]
+
+    assert [r.rule for r in errors] == ["identity.taxon-undeclared"]
+
+
+def test_variant_declaration_requires_taxon() -> None:
+    ds = _ds(
+        "science-entity-base/1.0+dataset/1.0+bio.table/1.0+bio.identity_context/1.0",
+        identity_context={
+            "molecular_ids": {"variant": {"namespace": "vrs", "resolution_status": "declared_unresolved"}}
+        },
+    )
+
+    errors = [
+        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+    ]
+
+    assert required_identity_tiers(ds["schema_profile"], ds["identity_context"]) == {"variant"}
+    assert [r.rule for r in errors] == ["identity.taxon-undeclared"]
+
+
+def test_required_identity_tiers_from_schema_profile_and_variant_presence() -> None:
+    cases = [
+        ("science-pkg-entity-1.0", {}, set()),
+        ("science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0", {}, {"assembly"}),
+        ("science-entity-base/1.0+dataset/1.0+bio.scrna/1.0", {}, {"assembly"}),
+        ("science-entity-base/1.0+dataset/1.0+bio.cna/1.0", {}, {"assembly"}),
+        ("science-entity-base/1.0+dataset/1.0+bio.geneset/1.0", {}, {"gene"}),
+        ("science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0", {}, {"gene"}),
+        ("science-entity-base/1.0+dataset/1.0+bio.protein_crosswalk/1.0", {}, {"protein"}),
+        ("science-pkg-entity-1.0", {"molecular_ids": {"variant": {}}}, {"variant"}),
+    ]
+
+    for schema_profile, identity_context, expected in cases:
+        assert required_identity_tiers(schema_profile, identity_context) == expected
+
+
+def test_freetext_reference_genome_without_identity_context_errors() -> None:
     ds = _ds("science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0", reference_genome="GRCh38")
-    warns = [r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.WARN]
-    assert len(warns) == 1
-    assert warns[0].rule == "identity.assembly-undeclared"
+    errors = [
+        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+    ]
+    assert [r.rule for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
 
 
 def test_non_coordinate_dataset_ignored() -> None:
@@ -206,9 +353,7 @@ def test_cross_dataset_mismatch_with_declared_liftover_passes() -> None:
         list(
             evaluate_cross_dataset_assembly(
                 [a, derived],
-                compatibility_relations_by_dataset_id={
-                    _LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]
-                },
+                compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]},
             )
         )
         == []
@@ -391,14 +536,279 @@ def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> No
     assert len(warns) == 1
 
 
-def test_identity_context_not_a_dict_treated_as_undeclared() -> None:
+def _declared_unresolved_proxy_assembly() -> dict:
+    return {
+        "label": "mixed-build-cytoband-proxy",
+        "registry": _REGISTRY,
+        "resolution_status": "declared_unresolved",
+        "proxy": {
+            "type": "cytoband_proxy",
+            "via": "dataset:cytoband-map",
+            "sources": [{"dataset": "dataset:source-a", "assembly": "inherit"}],
+        },
+    }
+
+
+def _derived_with_identity(identity_context: dict, *, derivation: dict) -> dict:
+    return {
+        "type": "dataset",
+        "id": "dataset:derived",
+        "schema_profile": _COORD_PROFILE,
+        "_path": "data/derived/entity.md",
+        "identity_context": identity_context,
+        "derivation": derivation,
+    }
+
+
+def test_declared_unresolved_proxy_passes_provenance_when_roles_are_routed() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}],
+        },
+    )
+
+    assert list(evaluate_identity_provenance([source, via, derived])) == []
+
+
+def test_declared_unresolved_transform_passes_provenance_when_roles_are_routed() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_37")
+    b = _with_assembly("dataset:source-b", "DIGEST_38")
+    liftover = _ds("science-pkg-entity-1.0", id="dataset:liftover-chain")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:liftover-chain",
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a", "dataset:source-b"],
+            "transformations": [
+                {
+                    "kind": "identity_transform",
+                    "target": "assembly",
+                    "dataset": "dataset:liftover-chain",
+                    "type": "liftover",
+                }
+            ],
+        },
+    )
+
+    assert list(evaluate_identity_provenance([a, b, liftover, derived])) == []
+
+
+def test_transform_dataset_missing_real_dataset_entity_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:missing-liftover-chain",
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [
+                {
+                    "kind": "identity_transform",
+                    "target": "assembly",
+                    "dataset": "dataset:missing-liftover-chain",
+                    "type": "liftover",
+                }
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+
+
+def test_proxy_via_missing_real_dataset_entity_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                **_declared_unresolved_proxy_assembly(),
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:missing-cytoband-map",
+                    "sources": [{"dataset": "dataset:source-a", "assembly": "inherit"}],
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [
+                {"kind": "proxy_via", "dataset": "dataset:missing-cytoband-map", "type": "cytoband_proxy"}
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+
+
+def test_transform_dataset_in_inputs_but_not_transformations_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_37")
+    liftover = _ds("science-pkg-entity-1.0", id="dataset:liftover-chain")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:liftover-chain",
+                },
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:liftover-chain"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, liftover, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-role-missing"]
+
+
+def test_proxy_source_absent_from_derivation_inputs_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": [],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+
+
+def test_proxy_source_only_in_transformations_not_inputs_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": [],
+            "transformations": [
+                {"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"},
+                {"kind": "identity_transform", "dataset": "dataset:source-a", "type": "source-leak"},
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+
+
+def test_mixed_build_derived_output_without_proxy_or_transform_errors() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_38")
+    b = _with_assembly("dataset:source-b", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+
+
+def test_mixed_build_derived_output_with_empty_proxy_errors_as_unstructured() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_38")
+    b = _with_assembly("dataset:source-b", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "proxy": {},
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+
+
+def test_mixed_build_proxy_with_blank_source_dataset_errors_as_unstructured() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_38")
+    b = _with_assembly("dataset:b", "DIGEST_37")
+    proxy = _ds("science-pkg-entity-1.0", id="dataset:proxy")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:proxy",
+                    "sources": [{"dataset": "", "assembly": "inherit"}],
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:a", "dataset:b", ""],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:proxy", "type": "cytoband_proxy"}],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, proxy, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+
+
+def test_identity_context_not_a_dict_treated_as_undeclared_errors() -> None:
     # A coordinate-bearing dataset whose identity_context is not an object must
-    # not crash; it falls through to the undeclared-assembly WARN.
+    # not crash; it falls through to declaration-gate errors.
     ds = _ds(_COORD_PROFILE, identity_context="GRCh38")
     results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    warns = [r for r in results if r.severity is Severity.WARN]
-    assert len(warns) == 1 and warns[0].rule == "identity.assembly-undeclared"
+    errors = [r for r in results if r.severity is Severity.ERROR]
+    assert [r.rule for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
 
 
 # ---------------------------------------------------------------------------

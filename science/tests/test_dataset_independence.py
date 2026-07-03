@@ -222,6 +222,18 @@ def test_cited_alone_is_candidate_only_and_never_commitment() -> None:
     assert [(record.kind, record.reason) for record in records] == [("candidate", "citation-only")]
 
 
+def test_reference_alone_is_candidate_only_and_never_commitment() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/liftover-chain"]
+    _add_usage(provenance, line_a, dataset, "reference", "full", "a")
+    _add_usage(provenance, line_b, dataset, "reference", "full", "b")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "citation-only")]
+    assert not any(record.kind == "commitment" for record in records)
+
+
 def test_virtual_geneset_member_is_candidate_only_even_with_full_overlap() -> None:
     knowledge, provenance, _target, line_a, line_b = _line_graph()
     dataset = PROJECT_NS["dataset/gtex-v8"]
@@ -340,7 +352,7 @@ def test_dependence_datasets_by_line_direct_dependence_only():
     p.add((line, SCI_NS.hasDatasetUsage, usage))
     p.add((usage, RDF.type, SCI_NS.DatasetUsage))
     p.add((usage, SCI_NS.dataset, ds))
-    p.add((usage, SCI_NS.usageRole, Literal("analyzed")))   # a DEPENDENCE role
+    p.add((usage, SCI_NS.usageRole, Literal("analyzed")))  # a DEPENDENCE role
     p.add((usage, SCI_NS.usageOverlap, Literal("full")))
 
     out = dependence_datasets_by_line(k, p)
@@ -363,7 +375,29 @@ def test_dependence_datasets_by_line_excludes_cited_role():
     p.add((line, SCI_NS.hasDatasetUsage, usage))
     p.add((usage, RDF.type, SCI_NS.DatasetUsage))
     p.add((usage, SCI_NS.dataset, ds))
-    p.add((usage, SCI_NS.usageRole, Literal("cited")))      # NOT a dependence role
+    p.add((usage, SCI_NS.usageRole, Literal("cited")))  # NOT a dependence role
+    p.add((usage, SCI_NS.usageOverlap, Literal("unknown")))
+
+    assert dependence_datasets_by_line(k, p).get(line, set()) == set()
+
+
+def test_dependence_datasets_by_line_excludes_reference_role():
+    from rdflib import RDF, Graph, Literal, URIRef
+
+    from science_tool.graph.dataset_independence import dependence_datasets_by_line
+    from science_tool.graph.io import CITO_NS, SCI_NS
+
+    k, p = Graph(), Graph()
+    line = URIRef("https://example.org/p/evidence-line/ev-reference")
+    target = URIRef("https://example.org/p/proposition/c-reference")
+    ds = URIRef("https://example.org/p/dataset/liftover-chain")
+    k.add((line, RDF.type, SCI_NS.EvidenceLine))
+    k.add((line, CITO_NS.supports, target))
+    usage = URIRef("https://example.org/p/usage/reference")
+    p.add((line, SCI_NS.hasDatasetUsage, usage))
+    p.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    p.add((usage, SCI_NS.dataset, ds))
+    p.add((usage, SCI_NS.usageRole, Literal("reference")))
     p.add((usage, SCI_NS.usageOverlap, Literal("unknown")))
 
     assert dependence_datasets_by_line(k, p).get(line, set()) == set()
@@ -379,11 +413,11 @@ def test_dependence_datasets_by_line_includes_virtual_member():
     k, p = Graph(), Graph()
     line = URIRef("https://example.org/p/evidence-line/ev-v")
     target = URIRef("https://example.org/p/proposition/cv")
-    consumer = URIRef("https://example.org/p/virtual/geneset-member/m1")   # virtual member URI
+    consumer = URIRef("https://example.org/p/virtual/geneset-member/m1")  # virtual member URI
     ds = URIRef("https://example.org/p/dataset/vds")
     k.add((line, RDF.type, SCI_NS.EvidenceLine))
     k.add((line, CITO_NS.supports, target))
-    p.add((line, PROV.wasDerivedFrom, consumer))                          # line derives from it
+    p.add((line, PROV.wasDerivedFrom, consumer))  # line derives from it
     usage = URIRef("https://example.org/p/usage/v")
     p.add((consumer, SCI_NS.hasDatasetUsage, usage))
     p.add((usage, RDF.type, SCI_NS.DatasetUsage))
@@ -391,7 +425,7 @@ def test_dependence_datasets_by_line_includes_virtual_member():
     p.add((usage, SCI_NS.usageRole, Literal("analyzed")))
     p.add((usage, SCI_NS.usageOverlap, Literal("full")))
 
-    assert dependence_datasets_by_line(k, p).get(line, set()) == {ds}     # virtual path INCLUDED
+    assert dependence_datasets_by_line(k, p).get(line, set()) == {ds}  # virtual path INCLUDED
 
 
 def test_dependence_datasets_by_line_includes_virtual_reference_graph_member():
@@ -428,11 +462,11 @@ def test_dependence_datasets_by_line_excludes_indirect_bears_on():
     k, p = Graph(), Graph()
     line = URIRef("https://example.org/p/evidence-line/ev-i")
     target = URIRef("https://example.org/p/proposition/ci")
-    consumer = URIRef("https://example.org/p/entity/other")               # reaches target only via bears_on
+    consumer = URIRef("https://example.org/p/entity/other")  # reaches target only via bears_on
     ds = URIRef("https://example.org/p/dataset/ids")
     k.add((line, RDF.type, SCI_NS.EvidenceLine))
     k.add((line, CITO_NS.supports, target))
-    k.add((consumer, SCI_NS.bearsOn, target))                            # indirect-bears-on path
+    k.add((consumer, SCI_NS.bearsOn, target))  # indirect-bears-on path
     usage = URIRef("https://example.org/p/usage/i")
     p.add((consumer, SCI_NS.hasDatasetUsage, usage))
     p.add((usage, RDF.type, SCI_NS.DatasetUsage))
@@ -440,4 +474,4 @@ def test_dependence_datasets_by_line_excludes_indirect_bears_on():
     p.add((usage, SCI_NS.usageRole, Literal("analyzed")))
     p.add((usage, SCI_NS.usageOverlap, Literal("full")))
 
-    assert dependence_datasets_by_line(k, p).get(line, set()) == set()   # indirect EXCLUDED
+    assert dependence_datasets_by_line(k, p).get(line, set()) == set()  # indirect EXCLUDED

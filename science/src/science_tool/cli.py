@@ -25,6 +25,7 @@ from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
 from science_tool.datasets.validate import validate_path
+from science_tool.datasets_identity import identity_group as dataset_identity_group
 from science_tool.doi_cli import doi_group
 from science_tool.distill_cli import distill_group
 from science_tool.entities import (
@@ -6746,6 +6747,9 @@ def dataset_group() -> None:
     """Dataset entity lifecycle commands (list, register-run, reconcile)."""
 
 
+dataset_group.add_command(dataset_identity_group)
+
+
 @dataset_group.command("list")
 @click.option("--origin", default=None, type=click.Choice(["external", "derived"]))
 @click.option("--status", default=None, help="Filter by status (e.g. candidate, active)")
@@ -6991,6 +6995,15 @@ def dataset_prioritize(
 @click.option("--ontology-term", "ontology_terms", multiple=True)
 @click.option("--related", "related", multiple=True, help="Related entity ref (repeatable)")
 @click.option(
+    "--schema-profile",
+    default=None,
+    help="Composed entity schema profile. Defaults to the base dataset profile.",
+)
+@click.option("--taxon", type=int, default=None, help="NCBI taxonomy id for identity-bearing dataset profiles.")
+@click.option("--assembly", default=None, help="Assembly label/digest, or UNKNOWN when intentionally unresolved.")
+@click.option("--gene-namespace", default=None, help="Gene identifier namespace to declare.")
+@click.option("--protein-namespace", default=None, help="Protein identifier namespace to declare.")
+@click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
@@ -7006,14 +7019,30 @@ def dataset_add(
     source_url: str,
     ontology_terms: tuple[str, ...],
     related: tuple[str, ...],
+    schema_profile: str | None,
+    taxon: int | None,
+    assembly: str | None,
+    gene_namespace: str | None,
+    protein_namespace: str | None,
     project_root: Path | None,
 ) -> None:
     """Author a candidate external dataset entity under entities/datasets/."""
     from science_tool.datasets_catalog import add_dataset
     from science_tool.entities import EntityCommandError
+    from science_tool.identity_authoring import (
+        BASE_DATASET_SCHEMA_PROFILE,
+        IdentityAuthoringError,
+        build_identity_context,
+    )
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
+        identity_context = build_identity_context(
+            taxon=taxon,
+            assembly=assembly,
+            gene_namespace=gene_namespace,
+            protein_namespace=protein_namespace,
+        )
         entity_id, dest, warnings = add_dataset(
             root,
             slug,
@@ -7025,8 +7054,10 @@ def dataset_add(
             source_url=source_url,
             ontology_terms=ontology_terms,
             related=related,
+            schema_profile=BASE_DATASET_SCHEMA_PROFILE if schema_profile is None else schema_profile,
+            identity_context=identity_context,
         )
-    except EntityCommandError as exc:
+    except (EntityCommandError, IdentityAuthoringError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
     for w in warnings:
@@ -7259,6 +7290,7 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
     and updates symmetric edges (produces/consumed_by).
     """
     from science_tool.datasets_register import (
+        preflight_register_run_identity,
         write_derived_dataset_entities,
         write_per_output_datapackages,
         write_symmetric_edges,
@@ -7266,6 +7298,7 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
+        preflight_register_run_identity(root, workflow_run_id)
         dp_paths = write_per_output_datapackages(root, workflow_run_id)
     except (FileNotFoundError, ValueError) as exc:
         click.echo(str(exc), err=True)

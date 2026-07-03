@@ -19,6 +19,11 @@ from science_tool.entities import (
     _validate_prospective_write,
     validate_slug,
 )
+from science_tool.identity_authoring import (
+    BASE_DATASET_SCHEMA_PROFILE,
+    IdentityAuthoringError,
+    require_profile_identity,
+)
 
 # access.level values that put a dataset behind registration, application, or
 # purchase — i.e. not something you can just download. `list`/`prioritize` hide
@@ -31,6 +36,8 @@ GATED_LEVELS = frozenset({"registration", "controlled", "commercial"})
 def _render_candidate(
     entity_id: str,
     *,
+    schema_profile: str,
+    identity_context: dict | None,
     title: str,
     origin: str,
     dataset_class: str,
@@ -46,6 +53,7 @@ def _render_candidate(
     # fields ahead of _validate_prospective_write's parse.
     iso = today.isoformat()
     fm: dict = {
+        "schema_profile": schema_profile,
         "id": entity_id,
         "type": "dataset",
         "title": title,
@@ -67,6 +75,8 @@ def _render_candidate(
         "ontology_terms": list(ontology_terms),
         "related": list(related),
     }
+    if identity_context:
+        fm["identity_context"] = identity_context
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True, default_flow_style=False)
     body = (
         f"# {title}\n\n"
@@ -90,6 +100,8 @@ def add_dataset(
     source_url: str = "",
     ontology_terms=(),
     related=(),
+    schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,
+    identity_context: dict | None = None,
     today: date | None = None,
 ) -> tuple[str, Path, list[str]]:
     if origin != "external":
@@ -108,9 +120,16 @@ def add_dataset(
     dest = project_root / rel_path
     if dest.exists():
         raise EntityCommandError(f"Destination already exists: {rel_path}")
+    identity_context = identity_context or {}
+    try:
+        require_profile_identity(schema_profile, identity_context)
+    except IdentityAuthoringError as exc:
+        raise EntityCommandError(str(exc)) from exc
 
     text = _render_candidate(
         entity_id,
+        schema_profile=schema_profile,
+        identity_context=identity_context,
         title=title,
         origin=origin,
         dataset_class=dataset_class,

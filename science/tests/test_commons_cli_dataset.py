@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
 from click.testing import CliRunner
 
 from science_tool.commons.cli import commons_group
+
+BIO_CNA_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
+BIO_IDENTITY_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.identity_context/1.0"
 
 
 def test_dataset_init_creates_package(tmp_path: Path, monkeypatch) -> None:
@@ -38,6 +42,214 @@ def test_dataset_init_creates_package(tmp_path: Path, monkeypatch) -> None:
         "datasets/dbsnp-human/recipe/README.md",
     ]
     assert (root / "datasets" / "dbsnp-human" / "recipe" / "Snakefile").is_file()
+
+
+def test_dataset_init_refuses_identity_bearing_profile_without_identity(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "copy-number",
+            "--schema-profile",
+            BIO_CNA_PROFILE,
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "identity-bearing" in result.output
+    assert "--taxon" in result.output
+    assert "--assembly" in result.output
+    assert not (root / "datasets" / "copy-number").exists()
+
+
+def test_dataset_init_refuses_identity_context_profile_without_taxon(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "identity-only",
+            "--schema-profile",
+            BIO_IDENTITY_PROFILE,
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--taxon" in result.output
+    assert not (root / "datasets" / "identity-only").exists()
+
+
+def test_dataset_init_refuses_blank_assembly_for_identity_bearing_profile(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "copy-number",
+            "--schema-profile",
+            BIO_CNA_PROFILE,
+            "--taxon",
+            "9606",
+            "--assembly",
+            "",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--assembly" in result.output
+    assert "Traceback" not in result.output
+    assert not (root / "datasets" / "copy-number").exists()
+
+
+def test_dataset_init_refuses_non_positive_taxon(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "copy-number",
+            "--schema-profile",
+            BIO_CNA_PROFILE,
+            "--taxon",
+            "0",
+            "--assembly",
+            "UNKNOWN",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--taxon" in result.output
+    assert not (root / "datasets" / "copy-number").exists()
+
+
+def test_dataset_init_refuses_malformed_schema_profile(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "bad-profile",
+            "--schema-profile",
+            "not-a-profile",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid schema_profile" in result.output
+    assert not (root / "datasets" / "bad-profile").exists()
+
+
+def test_dataset_init_refuses_unknown_schema_profile_extension(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "bad-profile",
+            "--schema-profile",
+            "science-entity-base/1.0+dataset/1.0+bio.bogus/1.0",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "unknown schema_profile component" in result.output
+    assert not (root / "datasets" / "bad-profile").exists()
+
+
+def test_dataset_init_refuses_blank_schema_profile(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "bad-profile",
+            "--schema-profile",
+            "",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid schema_profile" in result.output
+    assert not (root / "datasets" / "bad-profile").exists()
+
+
+def test_dataset_init_writes_declared_unresolved_identity_for_unknown_assembly(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "copy-number",
+            "--schema-profile",
+            BIO_CNA_PROFILE,
+            "--taxon",
+            "9606",
+            "--assembly",
+            "UNKNOWN",
+            "--gene-namespace",
+            "hgnc_symbol",
+            "--protein-namespace",
+            "uniprot",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    entity_text = (root / "datasets" / "copy-number" / "entity.md").read_text(encoding="utf-8")
+    frontmatter = yaml.safe_load(entity_text.split("---", 2)[1])
+    assert frontmatter["schema_profile"] == BIO_CNA_PROFILE
+    assert frontmatter["identity_context"] == {
+        "taxon": 9606,
+        "assembly": {
+            "label": "UNKNOWN",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "declared_unresolved",
+        },
+        "molecular_ids": {
+            "gene": {
+                "namespace": "hgnc_symbol",
+                "registry": "dataset:gene-crosswalk-hgnc",
+                "resolution_status": "declared_unresolved",
+            },
+            "protein": {
+                "namespace": "uniprot",
+                "registry": "dataset:protein-crosswalk-uniprot",
+                "resolution_status": "declared_unresolved",
+            },
+        },
+    }
 
 
 def test_dataset_init_accepts_format_json(tmp_path: Path, monkeypatch) -> None:

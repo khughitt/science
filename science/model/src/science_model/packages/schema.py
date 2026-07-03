@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def _validate_dataset_ref(value: str, field_name: str) -> str:
+    if not value.startswith("dataset:"):
+        raise ValueError(f"{field_name} must be a dataset:<slug> entity reference")
+    return value
 
 
 class ResourceSchema(BaseModel):
@@ -168,6 +174,7 @@ class DerivationBlock(BaseModel):
     config_snapshot: str
     produced_at: str
     inputs: list[str] = Field(default_factory=list)
+    transformations: list[dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("workflow")
     @classmethod
@@ -189,6 +196,15 @@ class DerivationBlock(BaseModel):
         for item in v:
             if not item.startswith("dataset:"):
                 raise ValueError(f"inputs must be dataset:<slug> entity references; got {item!r}")
+        return v
+
+    @field_validator("transformations")
+    @classmethod
+    def _transformation_dataset_ids(cls, v: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for index, item in enumerate(v):
+            dataset = item.get("dataset")
+            if not isinstance(dataset, str) or not dataset.startswith("dataset:"):
+                raise ValueError(f"transformations[{index}].dataset must be a dataset:<slug> entity reference")
         return v
 
 
@@ -244,6 +260,214 @@ class MemberOfDerivationBlock(BaseModel):
         return v
 
 
+class IdentityTransform(BaseModel):
+    """Dataset-backed identity transform used for assemblies or molecular IDs."""
+
+    type: Literal["liftover", "symbol_remap", "namespace_map"]
+    from_: str = Field(alias="from", min_length=1)
+    method: str | None = Field(default=None, min_length=1)
+    dataset: str
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_by_alias=True,
+        validate_by_name=False,
+        serialize_by_alias=True,
+    )
+
+    @field_validator("dataset")
+    @classmethod
+    def _dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "dataset")
+
+
+class ProxySourceAssembly(BaseModel):
+    """Minimal assembly descriptor accepted inside an identity proxy source."""
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_single_identifier(self) -> "ProxySourceAssembly":
+        identifiers = [value for value in (self.label, self.seqcol_digest) if value is not None]
+        if len(identifiers) != 1:
+            raise ValueError("proxy source assembly requires exactly one of label or seqcol_digest")
+        return self
+
+
+class ProxySource(BaseModel):
+    """A source dataset and assembly descriptor used by an identity proxy."""
+
+    dataset: str
+    assembly: Literal["inherit"] | ProxySourceAssembly
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("dataset")
+    @classmethod
+    def _dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "sources[].dataset")
+
+
+class IdentityProxy(BaseModel):
+    """Assembly identity proxy derived through another dataset-backed source."""
+
+    type: Literal["cytoband_proxy", "interval_overlap_proxy", "symbol_space_proxy"]
+    via: str
+    sources: list[ProxySource] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("via")
+    @classmethod
+    def _via_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "via")
+
+
+class AssemblyIdentity(BaseModel):
+    """Reference assembly identity and optional proxy/transform provenance."""
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    registry: str
+    resolution_status: Literal["resolved", "declared_unresolved"]
+    proxy: IdentityProxy | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "registry")
+
+    @model_validator(mode="after")
+    def _validate_resolution(self) -> "AssemblyIdentity":
+        if self.resolution_status == "resolved" and (self.seqcol_digest is None or self.seqcol_digest == "UNKNOWN"):
+            raise ValueError("resolved assembly requires seqcol_digest other than UNKNOWN")
+        if self.proxy is not None and self.resolution_status != "declared_unresolved":
+            raise ValueError("assembly proxy requires resolution_status declared_unresolved")
+        return self
+
+
+class MolecularTierIdentity(BaseModel):
+    """Molecular identifier tier metadata and optional transform provenance."""
+
+    namespace: str = Field(min_length=1)
+    canonical: bool | None = None
+    registry: str | None = None
+    resolution_status: Literal["resolved", "declared_unresolved"] | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_dataset_ref(value, "registry")
+
+
+class IdentityContext(BaseModel):
+    """Biological identity context block for dataset-like entities."""
+
+    taxon: int = Field(strict=True, ge=1)
+    molecular_ids: dict[str, MolecularTierIdentity] = Field(default_factory=dict)
+    assembly: AssemblyIdentity | None = None
+    model_config = ConfigDict(extra="allow")
+
+
+class WorkflowOutputIdentityInheritSelector(BaseModel):
+    """Explicit workflow output inheritance source selector."""
+
+    from_: str = Field(alias="from", min_length=1)
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_by_alias=True,
+        validate_by_name=False,
+        serialize_by_alias=True,
+    )
+
+    @field_validator("from_")
+    @classmethod
+    def _from_dataset_id(cls, value: str) -> str:
+        return _validate_dataset_ref(value, "inherit.from")
+
+
+class WorkflowOutputIdentityInheritFrom(BaseModel):
+    """Explicit workflow output inheritance declaration."""
+
+    inherit: WorkflowOutputIdentityInheritSelector
+    model_config = ConfigDict(extra="forbid")
+
+
+class WorkflowOutputAssemblyIdentity(BaseModel):
+    """Workflow output assembly identity contract.
+
+    Literal assembly declarations use the same fields as ``AssemblyIdentity``.
+    Transform-only contracts may omit registry/resolution fields because P3.2
+    resolves them from inputs when materializing the derived entity.
+    """
+
+    label: str | None = Field(default=None, min_length=1)
+    seqcol_digest: str | None = Field(default=None, min_length=1)
+    registry: str | None = None
+    resolution_status: Literal["resolved", "declared_unresolved"] | None = None
+    proxy: IdentityProxy | None = None
+    transform: IdentityTransform | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("registry")
+    @classmethod
+    def _registry_dataset_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_dataset_ref(value, "registry")
+
+    @model_validator(mode="after")
+    def _validate_resolution(self) -> "WorkflowOutputAssemblyIdentity":
+        if self.resolution_status == "resolved" and (self.seqcol_digest is None or self.seqcol_digest == "UNKNOWN"):
+            raise ValueError("resolved assembly requires seqcol_digest other than UNKNOWN")
+        if (
+            self.proxy is not None
+            and self.resolution_status is not None
+            and self.resolution_status != "declared_unresolved"
+        ):
+            raise ValueError("assembly proxy requires resolution_status declared_unresolved")
+        if self.transform is not None or self.proxy is not None:
+            return self
+        if self.registry is None or self.resolution_status is None:
+            raise ValueError("assembly identity requires registry and resolution_status")
+        return self
+
+
+WorkflowOutputTaxonIdentity = (
+    Annotated[int, Field(strict=True, ge=1)] | Literal["inherit"] | WorkflowOutputIdentityInheritFrom
+)
+WorkflowOutputAssemblyIdentityValue = (
+    Literal["inherit"] | WorkflowOutputIdentityInheritFrom | WorkflowOutputAssemblyIdentity
+)
+WorkflowOutputMolecularTierIdentity = Literal["inherit"] | WorkflowOutputIdentityInheritFrom | MolecularTierIdentity
+
+
+class WorkflowOutputIdentity(BaseModel):
+    """Identity contract declared on a workflow ``outputs[]`` entry."""
+
+    taxon: WorkflowOutputTaxonIdentity | None = None
+    assembly: WorkflowOutputAssemblyIdentityValue | None = None
+    molecular_ids: dict[str, WorkflowOutputMolecularTierIdentity] = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
+
+
+class WorkflowOutput(BaseModel):
+    """Logical output declared by a workflow entity."""
+
+    slug: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    resource_names: list[str] = Field(default_factory=list)
+    ontology_terms: list[str] = Field(default_factory=list)
+    schema_profile: str | None = Field(default=None, min_length=1)
+    identity: WorkflowOutputIdentity | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
 class DatasetUsage(BaseModel):
     """Forward-provenance: a consumer's declared use of one dataset (Pillar A/B).
 
@@ -254,7 +478,15 @@ class DatasetUsage(BaseModel):
     """
 
     ref: str
-    role: Literal["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]
+    role: Literal[
+        "analyzed",
+        "set_definition_source",
+        "validation_source",
+        "cited",
+        "upstream",
+        "training",
+        "reference",
+    ]
     overlap: Literal["full", "partial", "unknown"] = "unknown"
 
     @field_validator("ref")

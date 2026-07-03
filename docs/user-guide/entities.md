@@ -766,6 +766,44 @@ Dataset entities use `profiles: ["science-pkg-entity-1.0"]`. Do not put
 `resources:` on the entity; consumers that need resource details read the file
 named by `datapackage:`.
 
+### Biological Identity Context
+
+For biological datasets, the dataset entity's `identity_context` block is the
+source of truth for organism, assembly, and molecular identifier scope. A
+runtime datapackage may carry a derived `science.identity_context` stamp for
+portable validation, but that stamp is read-only from the author's perspective.
+When present, validation treats disagreement between the datapackage stamp and
+the dataset entity as an error.
+
+Mandatoryness is profile-scoped:
+
+| Dataset shape | Required identity context |
+|---|---|
+| Coordinate assays | `taxon` plus `assembly`. |
+| Gene-bearing datasets | `taxon` plus the relevant `molecular_ids.gene` tier. |
+| Protein-bearing datasets | `taxon` plus the relevant `molecular_ids.protein` tier. |
+| Variant-bearing datasets | `taxon` plus the relevant `molecular_ids.variant` tier, and `assembly` when variants are coordinate-anchored. |
+| Non-bio or base-profile datasets | Exempt unless a bio profile is declared. |
+
+Use an NCBI taxid integer directly as `taxon`, for example `taxon: 9606`. Use
+dataset refs for pinned registries and crosswalks, such as
+`dataset:assembly-registry` for assembly digests or
+`dataset:gene-crosswalk-hgnc` for HGNC gene identifiers.
+
+`declared_unresolved` is the honest declaration-level state: the author knows
+which tier or namespace applies, but the exact digest or canonical mapping is
+not resolved yet. For assembly, use `seqcol_digest: UNKNOWN` with
+`resolution_status: declared_unresolved` when the digest is not resolved. For
+molecular tiers, declare the `namespace`, optional `registry`, and
+`resolution_status` without adding unknown-value fields. Full resolution belongs
+at a later resolver or publish boundary; do not invent placeholder digests to
+make an in-progress dataset look resolved.
+
+Planning and acquisition gates require the declaration for identity-bearing
+inputs, not necessarily full resolution. Coordinate and bio identity-bearing
+profiles must declare `taxon` plus the relevant assembly or molecular tier, or
+explicitly carry UNKNOWN/unresolved where resolution is pending.
+
 ### Origin
 
 Every dataset has an `origin`:
@@ -860,8 +898,15 @@ outputs:
   - slug: "<output-slug>"
     title: "<Output title>"
     resource_names: ["<frictionless-resource-name>"]
+    identity: {}
     ontology_terms: []
 ```
+
+For identity-bearing outputs, `outputs[].identity` is the workflow contract,
+colocated with `resource_names`. It may inherit or transform input identity, but
+it is the authority that `science dataset register-run` reads; an optional
+output `identity_context.yaml` sidecar is assertion-only and must agree with the
+contract.
 
 A completed workflow run lives under `entities/workflow-runs/` and lists its
 upstream dataset inputs. After the run writes its aggregate runtime
@@ -873,13 +918,16 @@ science dataset register-run workflow-run:<slug>
 
 Registration writes one per-output `datapackage.yaml` under the run results
 tree, creates one `origin: derived` dataset entity per declared workflow output,
-and updates symmetric edges:
+propagates output identity to the derived entity's `identity_context`, writes
+the derived datapackage stamp, and updates symmetric edges:
 
 - the workflow run's `produces:` lists each derived dataset;
 - each upstream dataset's `consumed_by:` includes the workflow run.
 
 Per-output datapackages are views into the run output, not relocated copies of
-the resources.
+the resources. In derived lineage, `proxy.sources[].dataset` entries are data
+ancestors recorded in `derivation.inputs`; `transform.dataset` and `proxy.via`
+entries are reference artifacts recorded in `derivation.transformations[]`.
 
 ### Runtime State And Inspection
 

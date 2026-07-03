@@ -60,6 +60,15 @@ def test_external_derived_with_training_usage_no_provenance_warn() -> None:
     assert "taxonomy.external-derived-no-provenance" not in rules
 
 
+def test_reference_dataset_usage_role_is_valid() -> None:
+    ds = _ds(
+        origin="external",
+        source_class="observational",
+        dataset_usage=[{"ref": "dataset:liftover-chain", "role": "reference"}],
+    )
+    assert _rules([ds]) == []
+
+
 def test_malformed_dataset_usage_errors() -> None:
     ds = _ds(origin="external", source_class="observational", dataset_usage=[{"role": "analyzed"}])
     rules = _rules([ds])
