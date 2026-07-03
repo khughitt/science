@@ -199,6 +199,37 @@ def _validate_output_identity(out: dict) -> None:
         raise ValueError(f"output {out.get('slug')!r} identity must be a mapping")
 
 
+def _transform_from_input_paths(identity_contract: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    assembly = identity_contract.get("assembly")
+    if isinstance(assembly, dict):
+        transform = assembly.get("transform")
+        if isinstance(transform, dict) and transform.get("from") == "input":
+            paths.append("identity.assembly.transform.from")
+    molecular_ids = identity_contract.get("molecular_ids")
+    if isinstance(molecular_ids, dict):
+        for tier, tier_identity in molecular_ids.items():
+            if not isinstance(tier_identity, dict):
+                continue
+            transform = tier_identity.get("transform")
+            if isinstance(transform, dict) and transform.get("from") == "input":
+                paths.append(f"identity.molecular_ids.{tier}.transform.from")
+    return paths
+
+
+def _validate_transform_from_input(out: dict, run_inputs: list[str]) -> None:
+    identity_contract = out.get("identity")
+    if not isinstance(identity_contract, dict) or len(run_inputs) <= 1:
+        return
+    paths = _transform_from_input_paths(identity_contract)
+    if not paths:
+        return
+    joined = ", ".join(paths)
+    raise ValueError(
+        f"output {out.get('slug')!r} uses from: input at {joined} with multiple inputs; use from: dataset:X"
+    )
+
+
 def _dataset_frontmatter(project_root: Path, dataset_id: str) -> dict:
     slug = dataset_id.removeprefix("dataset:")
     path = project_root / "entities" / "datasets" / f"{slug}.md"
@@ -505,6 +536,33 @@ def _resolve_output_identities(
     return resolved
 
 
+def _identity_sidecar_path(project_root: Path, workflow_id: str, workflow_run_id: str, out_slug: str) -> Path:
+    workflow_slug = workflow_id.removeprefix("workflow:")
+    run_entity_slug = workflow_run_id.removeprefix("workflow-run:")
+    run_slug = _run_dir_slug(workflow_slug, run_entity_slug)
+    return project_root / "results" / workflow_slug / run_slug / out_slug / "identity_context.yaml"
+
+
+def _validate_identity_sidecar(
+    *,
+    project_root: Path,
+    workflow_id: str,
+    workflow_run_id: str,
+    out: dict,
+    resolved_identity: _ResolvedOutputIdentity | None,
+) -> None:
+    out_slug = str(out["slug"])
+    sidecar_path = _identity_sidecar_path(project_root, workflow_id, workflow_run_id, out_slug)
+    if not sidecar_path.exists():
+        return
+    sidecar = yaml.safe_load(sidecar_path.read_text(encoding="utf-8"))
+    if not isinstance(sidecar, dict):
+        raise ValueError(f"{sidecar_path}: identity_context.yaml must contain a mapping")
+    expected = derive_stamp(resolved_identity.identity_context) if resolved_identity is not None else {}
+    if sidecar != expected:
+        raise ValueError(f"{sidecar_path}: identity_context.yaml disagrees with workflow output identity contract")
+
+
 def _schema_profile_with_identity_extension(schema_profile: str, identity_context: dict[str, Any] | None) -> str:
     if not identity_context:
         return schema_profile
@@ -517,13 +575,22 @@ def preflight_register_run_identity(project_root: Path, workflow_run_id: str) ->
     """Validate output identity metadata before register-run writes files."""
     _, run_fm = _read_run(project_root, workflow_run_id)
     workflow_id = str(run_fm.get("workflow", ""))
+    run_inputs = list(run_fm.get("inputs") or [])
     outputs = _read_workflow_outputs(project_root, workflow_id)
     for out in outputs:
         _output_schema_profile(out)
         _validate_output_identity(out)
+        _validate_transform_from_input(out, run_inputs)
     resolutions = _resolve_output_identities(project_root, run_fm, outputs)
     for out in outputs:
         resolved_identity = resolutions.get(str(out["slug"]))
+        _validate_identity_sidecar(
+            project_root=project_root,
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
+            out=out,
+            resolved_identity=resolved_identity,
+        )
         identity_context = resolved_identity.identity_context if resolved_identity is not None else None
         schema_profile = _schema_profile_with_identity_extension(_output_schema_profile(out), identity_context)
         require_profile_identity(schema_profile, identity_context)

@@ -688,6 +688,94 @@ def test_register_run_transform_dataset_routes_to_transformations_not_data_input
     )
 
 
+def test_register_run_rejects_sidecar_identity_context_mismatch_before_writing(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "seqcol_digest": "SQ.GRCh38",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "resolved",
+        },
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        workflow_outputs=[
+            {
+                "slug": "kappa",
+                "title": "Kappa",
+                "resource_names": ["kappa"],
+                "ontology_terms": [],
+                "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.cna/1.0",
+                "identity": identity,
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+    sidecar_dir = tmp_path / "results" / "wf" / "r1" / "kappa"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "identity_context.yaml").write_text(
+        yaml.safe_dump({**identity, "taxon": 10090}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "identity_context.yaml" in res.output
+    assert "disagrees" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").exists()
+
+
+def test_register_run_rejects_transform_from_input_with_multiple_inputs(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "seqcol_digest": "SQ.GRCh37",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "resolved",
+        },
+    }
+    _seed_dataset(tmp_path, "source-a", identity)
+    _seed_dataset(tmp_path, "source-b", identity)
+    _seed_dataset(tmp_path, "liftover-chain")
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[{"name": "lifted", "path": "lifted.csv", "format": "csv"}],
+        run_inputs=["dataset:source-a", "dataset:source-b"],
+        workflow_outputs=[
+            {
+                "slug": "lifted",
+                "title": "Lifted",
+                "resource_names": ["lifted"],
+                "ontology_terms": [],
+                "identity": {
+                    "taxon": "inherit",
+                    "assembly": {
+                        "label": "GRCh38",
+                        "transform": {
+                            "type": "liftover",
+                            "from": "input",
+                            "method": "ucsc_chain",
+                            "dataset": "dataset:liftover-chain",
+                        },
+                    },
+                },
+            }
+        ],
+    )
+    _seed_resource_files(tmp_path, ["lifted"])
+
+    res = _run_register(tmp_path)
+
+    assert res.exit_code != 0
+    assert "from: input" in res.output
+    assert "multiple inputs" in res.output
+    assert not (tmp_path / "results" / "wf" / "r1" / "lifted" / "datapackage.yaml").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-r1-lifted.md").exists()
+
+
 # ── Task 7.4: symmetric edges ──────────────────────────────────────────────
 
 

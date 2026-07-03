@@ -330,6 +330,148 @@ def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_identity_context(datasets, registry_keys_by_id=registry_keys_by_id)
 
 
+def _derivation_inputs(derivation: Any) -> set[str]:
+    if not isinstance(derivation, dict) or not isinstance(derivation.get("inputs"), list):
+        return set()
+    return {value for value in derivation["inputs"] if isinstance(value, str)}
+
+
+def _derivation_transformation_datasets(derivation: Any) -> set[str]:
+    if not isinstance(derivation, dict) or not isinstance(derivation.get("transformations"), list):
+        return set()
+    dataset_ids: set[str] = set()
+    for transformation in derivation["transformations"]:
+        if not isinstance(transformation, dict):
+            continue
+        dataset_id = transformation.get("dataset")
+        if isinstance(dataset_id, str):
+            dataset_ids.add(dataset_id)
+    return dataset_ids
+
+
+def _identity_reference_datasets(identity_context: Any) -> Iterator[tuple[str, str]]:
+    if not isinstance(identity_context, dict):
+        return
+    assembly = identity_context.get("assembly")
+    if isinstance(assembly, dict):
+        transform = assembly.get("transform")
+        if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
+            yield "identity_context.assembly.transform.dataset", transform["dataset"]
+        proxy = assembly.get("proxy")
+        if isinstance(proxy, dict) and isinstance(proxy.get("via"), str):
+            yield "identity_context.assembly.proxy.via", proxy["via"]
+    molecular_ids = identity_context.get("molecular_ids")
+    if not isinstance(molecular_ids, dict):
+        return
+    for tier, tier_identity in molecular_ids.items():
+        if not isinstance(tier_identity, dict):
+            continue
+        transform = tier_identity.get("transform")
+        if isinstance(transform, dict) and isinstance(transform.get("dataset"), str):
+            yield f"identity_context.molecular_ids.{tier}.transform.dataset", transform["dataset"]
+
+
+def _identity_proxy_source_datasets(identity_context: Any) -> Iterator[tuple[str, str]]:
+    if not isinstance(identity_context, dict):
+        return
+    assembly = identity_context.get("assembly")
+    proxy = assembly.get("proxy") if isinstance(assembly, dict) else None
+    sources = proxy.get("sources") if isinstance(proxy, dict) else None
+    if not isinstance(sources, list):
+        return
+    for index, source in enumerate(sources):
+        if not isinstance(source, dict) or not isinstance(source.get("dataset"), str):
+            continue
+        yield f"identity_context.assembly.proxy.sources[{index}].dataset", source["dataset"]
+
+
+def _assembly_has_structured_lineage(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    assembly = identity_context.get("assembly")
+    return isinstance(assembly, dict) and ("proxy" in assembly or "transform" in assembly)
+
+
+def _is_declared_unresolved_assembly(identity_context: Any) -> bool:
+    if not isinstance(identity_context, dict):
+        return False
+    assembly = identity_context.get("assembly")
+    return isinstance(assembly, dict) and assembly.get("resolution_status") == "declared_unresolved"
+
+
+def _input_assembly_digests(inputs: set[str], by_id: Mapping[str, dict[str, Any]]) -> set[str]:
+    digests: set[str] = set()
+    for input_id in inputs:
+        parent = by_id.get(input_id)
+        if parent is None:
+            continue
+        digest = _declared_digest(parent)
+        if digest:
+            digests.add(digest)
+    return digests
+
+
+def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+    """Validate identity_context lineage declarations against derivation roles.
+
+    Reference machinery (`transform.dataset`, `proxy.via`) must be real dataset
+    entities and must be routed through `derivation.transformations[]`. Data
+    ancestors (`proxy.sources[].dataset`) must be routed through
+    `derivation.inputs`. Reference artifacts are intentionally not required in
+    `derivation.inputs`.
+    """
+    dataset_list = [fm for fm in datasets if fm.get("type") == "dataset"]
+    by_id = {fm["id"]: fm for fm in dataset_list if isinstance(fm.get("id"), str)}
+    for fm in dataset_list:
+        ident = fm.get("id", "?")
+        identity_context = fm.get("identity_context")
+        derivation = fm.get("derivation")
+        inputs = _derivation_inputs(derivation)
+        transformation_datasets = _derivation_transformation_datasets(derivation)
+
+        for loc, dataset_id in _identity_reference_datasets(identity_context):
+            if dataset_id not in by_id:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} does not resolve to a dataset entity",
+                    "identity.provenance-reference-missing",
+                )
+            if dataset_id not in transformation_datasets:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} must appear in derivation.transformations[].dataset",
+                    "identity.provenance-reference-role-missing",
+                )
+
+        for loc, dataset_id in _identity_proxy_source_datasets(identity_context):
+            if dataset_id not in inputs:
+                yield _result(
+                    Severity.ERROR,
+                    fm.get("_path"),
+                    f"{ident}: {loc} {dataset_id!r} must appear in derivation.inputs",
+                    "identity.provenance-source-role-missing",
+                )
+
+        if (
+            _is_declared_unresolved_assembly(identity_context)
+            and not _assembly_has_structured_lineage(identity_context)
+            and len(_input_assembly_digests(inputs, by_id)) >= 2
+        ):
+            yield _result(
+                Severity.ERROR,
+                fm.get("_path"),
+                f"{ident}: mixed-build declared_unresolved assembly requires proxy or transform provenance",
+                "identity.provenance-mixed-build-unstructured",
+            )
+
+
+@Check(section="identity provenance", order=26)
+def check_identity_provenance(ctx: ValidateContext) -> Iterator[Result]:
+    yield from evaluate_identity_provenance(dataset_frontmatters(ctx))
+
+
 def _declared_digest(fm: dict[str, Any]) -> str | None:
     idc = fm.get("identity_context") or {}
     assembly = idc.get("assembly") if isinstance(idc, dict) else None

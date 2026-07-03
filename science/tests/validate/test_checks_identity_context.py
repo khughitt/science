@@ -4,6 +4,7 @@ from science_tool.commons.assembly_compatibility import CompatibilityRelation
 from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
     evaluate_datapackage_identity_stamps,
+    evaluate_identity_provenance,
     evaluate_gene_identity,
     evaluate_identity_context,
     evaluate_protein_identity,
@@ -533,6 +534,187 @@ def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> No
         if r.rule == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
+
+
+def _declared_unresolved_proxy_assembly() -> dict:
+    return {
+        "label": "mixed-build-cytoband-proxy",
+        "registry": _REGISTRY,
+        "resolution_status": "declared_unresolved",
+        "proxy": {
+            "type": "cytoband_proxy",
+            "via": "dataset:cytoband-map",
+            "sources": [{"dataset": "dataset:source-a", "assembly": "inherit"}],
+        },
+    }
+
+
+def _derived_with_identity(identity_context: dict, *, derivation: dict) -> dict:
+    return {
+        "type": "dataset",
+        "id": "dataset:derived",
+        "schema_profile": _COORD_PROFILE,
+        "_path": "data/derived/entity.md",
+        "identity_context": identity_context,
+        "derivation": derivation,
+    }
+
+
+def test_declared_unresolved_proxy_passes_provenance_when_roles_are_routed() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}],
+        },
+    )
+
+    assert list(evaluate_identity_provenance([source, via, derived])) == []
+
+
+def test_transform_dataset_missing_real_dataset_entity_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:missing-liftover-chain",
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [
+                {
+                    "kind": "identity_transform",
+                    "target": "assembly",
+                    "dataset": "dataset:missing-liftover-chain",
+                    "type": "liftover",
+                }
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+
+
+def test_proxy_via_missing_real_dataset_entity_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                **_declared_unresolved_proxy_assembly(),
+                "proxy": {
+                    "type": "cytoband_proxy",
+                    "via": "dataset:missing-cytoband-map",
+                    "sources": [{"dataset": "dataset:source-a", "assembly": "inherit"}],
+                },
+            },
+        },
+        derivation={
+            "inputs": ["dataset:source-a"],
+            "transformations": [
+                {"kind": "proxy_via", "dataset": "dataset:missing-cytoband-map", "type": "cytoband_proxy"}
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+
+
+def test_transform_dataset_in_inputs_but_not_transformations_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_37")
+    liftover = _ds("science-pkg-entity-1.0", id="dataset:liftover-chain")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "GRCh38",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+                "transform": {
+                    "type": "liftover",
+                    "from": "dataset:source-a",
+                    "method": "ucsc_chain",
+                    "dataset": "dataset:liftover-chain",
+                },
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:liftover-chain"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, liftover, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-reference-role-missing"]
+
+
+def test_proxy_source_absent_from_derivation_inputs_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": [],
+            "transformations": [{"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"}],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+
+
+def test_proxy_source_only_in_transformations_not_inputs_errors() -> None:
+    source = _with_assembly("dataset:source-a", "DIGEST_38")
+    via = _ds("science-pkg-entity-1.0", id="dataset:cytoband-map")
+    derived = _derived_with_identity(
+        {"taxon": 9606, "assembly": _declared_unresolved_proxy_assembly()},
+        derivation={
+            "inputs": [],
+            "transformations": [
+                {"kind": "proxy_via", "dataset": "dataset:cytoband-map", "type": "cytoband_proxy"},
+                {"kind": "identity_transform", "dataset": "dataset:source-a", "type": "source-leak"},
+            ],
+        },
+    )
+
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+
+
+def test_mixed_build_derived_output_without_proxy_or_transform_errors() -> None:
+    a = _with_assembly("dataset:source-a", "DIGEST_38")
+    b = _with_assembly("dataset:source-b", "DIGEST_37")
+    derived = _derived_with_identity(
+        {
+            "taxon": 9606,
+            "assembly": {
+                "label": "UNKNOWN",
+                "registry": _REGISTRY,
+                "resolution_status": "declared_unresolved",
+            },
+        },
+        derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
+    )
+
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+
+    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
 
 
 def test_identity_context_not_a_dict_treated_as_undeclared_errors() -> None:
