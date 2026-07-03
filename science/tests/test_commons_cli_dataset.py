@@ -92,6 +92,31 @@ def test_dataset_init_refuses_blank_assembly_for_identity_bearing_profile(tmp_pa
     assert not (root / "datasets" / "copy-number").exists()
 
 
+def test_dataset_init_refuses_non_positive_taxon(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "commons"
+    (root / "datasets").mkdir(parents=True)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    result = CliRunner().invoke(
+        commons_group,
+        [
+            "dataset",
+            "init",
+            "copy-number",
+            "--schema-profile",
+            BIO_CNA_PROFILE,
+            "--taxon",
+            "0",
+            "--assembly",
+            "UNKNOWN",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--taxon" in result.output
+    assert not (root / "datasets" / "copy-number").exists()
+
+
 def test_dataset_init_refuses_malformed_schema_profile(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "commons"
     (root / "datasets").mkdir(parents=True)

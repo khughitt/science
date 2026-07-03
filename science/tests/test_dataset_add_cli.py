@@ -70,6 +70,25 @@ def test_add_refuses_blank_assembly_for_identity_bearing_profile(tmp_path: Path)
     assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
 
 
+def test_add_refuses_non_positive_taxon(tmp_path: Path) -> None:
+    res = _add(
+        tmp_path,
+        "copy-number",
+        "--title",
+        "Copy number",
+        "--schema-profile",
+        BIO_CNA_PROFILE,
+        "--taxon",
+        "0",
+        "--assembly",
+        "UNKNOWN",
+    )
+
+    assert res.exit_code == 1
+    assert "--taxon" in res.output
+    assert not (tmp_path / "entities" / "datasets" / "copy-number.md").exists()
+
+
 def test_add_refuses_malformed_schema_profile(tmp_path: Path) -> None:
     res = _add(tmp_path, "bad-profile", "--title", "Bad", "--schema-profile", "not-a-profile")
 

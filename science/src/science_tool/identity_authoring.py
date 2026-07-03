@@ -36,6 +36,8 @@ def build_identity_context(
     """Build a normalized ``identity_context`` from lifecycle CLI flags."""
     identity_context: dict[str, Any] = {}
     if taxon is not None:
+        if taxon < 1:
+            raise IdentityAuthoringError("--taxon must be a positive NCBI taxonomy id")
         identity_context["taxon"] = taxon
     if assembly is not None:
         assembly = assembly.strip()
