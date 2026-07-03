@@ -9,6 +9,7 @@ from science_tool.commons.identity_resolve import resolve_assembly_label, resolv
 
 
 _HG38_DIGEST = "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
+_AVAILABLE_GENE_REGISTRY = {GENE_CROSSWALK_ID: {"available": True, "tier": "gene"}}
 
 
 def test_resolve_assembly_label_with_fixture_registry(monkeypatch) -> None:
@@ -81,7 +82,7 @@ def test_resolve_identity_never_uses_network(monkeypatch) -> None:
 
     resolved = resolve_identity(
         {"taxon": 9606, "assembly": {"label": "hg38", "registry": ASSEMBLY_REGISTRY_ID}},
-        registries={GENE_CROSSWALK_ID: True},
+        registries=_AVAILABLE_GENE_REGISTRY,
     )
 
     assert resolved.identity_context["assembly"]["seqcol_digest"] == _HG38_DIGEST
@@ -89,7 +90,7 @@ def test_resolve_identity_never_uses_network(monkeypatch) -> None:
 
 
 def test_resolve_namespace_supported_gene_namespace() -> None:
-    resolution = resolve_namespace("hgnc_id", GENE_CROSSWALK_ID, registries={GENE_CROSSWALK_ID: True})
+    resolution = resolve_namespace("hgnc_id", GENE_CROSSWALK_ID, registries=_AVAILABLE_GENE_REGISTRY)
 
     assert resolution.resolution_status == "resolved"
     assert resolution.messages == ()
@@ -104,8 +105,59 @@ def test_resolve_namespace_missing_registry_degrades() -> None:
 
 
 def test_resolve_namespace_unsupported_namespace_reports_error() -> None:
-    resolution = resolve_namespace("refseq", GENE_CROSSWALK_ID, registries={GENE_CROSSWALK_ID: True})
+    resolution = resolve_namespace("refseq", GENE_CROSSWALK_ID, registries=_AVAILABLE_GENE_REGISTRY)
 
     assert resolution.resolution_status == "declared_unresolved"
     assert [(m.level, m.path) for m in resolution.messages] == [("error", "identity_context.molecular_ids")]
     assert "unsupported namespace" in resolution.messages[0].message
+
+
+def test_declared_unresolved_unsupported_namespace_still_reports_error() -> None:
+    ctx = {
+        "molecular_ids": {
+            "gene": {
+                "namespace": "refseq",
+                "registry": GENE_CROSSWALK_ID,
+                "resolution_status": "declared_unresolved",
+            }
+        }
+    }
+
+    resolved = resolve_identity(ctx, registries=_AVAILABLE_GENE_REGISTRY)
+
+    assert resolved.identity_context["molecular_ids"]["gene"]["resolution_status"] == "declared_unresolved"
+    assert [(m.level, m.path) for m in resolved.messages] == [("error", "identity_context.molecular_ids.gene")]
+    assert "unsupported namespace" in resolved.messages[0].message
+
+
+def test_padded_supported_namespace_is_normalized_in_identity_context() -> None:
+    resolved = resolve_identity(
+        {"molecular_ids": {"gene": {"namespace": " hgnc_id ", "registry": GENE_CROSSWALK_ID}}},
+        registries=_AVAILABLE_GENE_REGISTRY,
+    )
+
+    assert resolved.identity_context["molecular_ids"]["gene"] == {
+        "namespace": "hgnc_id",
+        "registry": GENE_CROSSWALK_ID,
+        "resolution_status": "resolved",
+    }
+
+
+def test_registry_metadata_must_be_explicit_and_match_namespace_tier() -> None:
+    bare_true = resolve_namespace("hgnc_id", GENE_CROSSWALK_ID, registries={GENE_CROSSWALK_ID: True})
+    wrong_tier = resolve_namespace(
+        "hgnc_id",
+        GENE_CROSSWALK_ID,
+        registries={GENE_CROSSWALK_ID: {"available": True, "tier": "protein"}},
+    )
+    explicit_available = resolve_namespace("hgnc_id", GENE_CROSSWALK_ID, registries=_AVAILABLE_GENE_REGISTRY)
+
+    assert bare_true.resolution_status == "declared_unresolved"
+    assert [(m.level, m.path) for m in bare_true.messages] == [("error", "identity_context.molecular_ids")]
+    assert "invalid registry metadata" in bare_true.messages[0].message
+    assert wrong_tier.resolution_status == "declared_unresolved"
+    assert [(m.level, m.path) for m in wrong_tier.messages] == [("error", "identity_context.molecular_ids")]
+    assert "metadata tier 'protein'" in wrong_tier.messages[0].message
+    assert "expected tier 'gene'" in wrong_tier.messages[0].message
+    assert explicit_available.resolution_status == "resolved"
+    assert explicit_available.messages == ()

@@ -44,6 +44,12 @@ class NamespaceResolution:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryAvailability:
+    available: bool
+    tier: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class _NamespaceSpec:
     tier: str
     registry: str
@@ -59,15 +65,87 @@ def _message(level: MessageLevel, path: str, message: str) -> IdentityResolution
     return IdentityResolutionMessage(level=level, path=path, message=message)
 
 
-def _registry_available(registry: str, registries: Mapping[str, Any] | None) -> bool:
+def _registry_available(
+    registry: str,
+    *,
+    expected_tier: str,
+    registries: Mapping[str, Any] | None,
+    path: str,
+) -> tuple[bool, tuple[IdentityResolutionMessage, ...]]:
     if registries is None or registry not in registries:
-        return False
+        return (
+            False,
+            (
+                _message(
+                    "warning",
+                    path,
+                    f"registry {registry!r} unavailable; namespace cannot be verified",
+                ),
+            ),
+        )
     entry = registries[registry]
     if entry is None or entry is False:
-        return False
-    if isinstance(entry, Mapping) and entry.get("available") is False:
-        return False
-    return True
+        return (
+            False,
+            (
+                _message(
+                    "warning",
+                    path,
+                    f"registry {registry!r} unavailable; namespace cannot be verified",
+                ),
+            ),
+        )
+    if isinstance(entry, RegistryAvailability):
+        available = entry.available
+        tier = entry.tier
+    elif isinstance(entry, Mapping):
+        available = entry.get("available")
+        tier = entry.get("tier")
+    else:
+        return (
+            False,
+            (
+                _message(
+                    "error",
+                    path,
+                    f"invalid registry metadata for {registry!r}; expected explicit availability metadata",
+                ),
+            ),
+        )
+    if not isinstance(available, bool):
+        return (
+            False,
+            (
+                _message(
+                    "error",
+                    path,
+                    f"invalid registry metadata for {registry!r}; expected boolean 'available'",
+                ),
+            ),
+        )
+    if not available:
+        return (
+            False,
+            (
+                _message(
+                    "warning",
+                    path,
+                    f"registry {registry!r} unavailable; namespace cannot be verified",
+                ),
+            ),
+        )
+    if tier != expected_tier:
+        return (
+            False,
+            (
+                _message(
+                    "error",
+                    path,
+                    f"registry {registry!r} metadata tier {tier!r} does not match expected tier {expected_tier!r}",
+                ),
+            ),
+        )
+    return True, ()
 
 
 def _namespace_spec(namespace: str) -> _NamespaceSpec | None:
@@ -145,8 +223,8 @@ def resolve_namespace(
     """Resolve a molecular-id namespace declaration against local registry identity.
 
     ``registries`` is an explicit availability map keyed by registry id. Values
-    may be truthy for available, false/None for unavailable, or a mapping with
-    ``{"available": false}``.
+    must use ``RegistryAvailability`` or mappings with ``{"available": bool,
+    "tier": "gene"}``/``{"available": bool, "tier": "protein"}``.
     """
     namespace = namespace.strip()
     spec = _namespace_spec(namespace)
@@ -177,18 +255,18 @@ def resolve_namespace(
                 ),
             ),
         )
-    if not _registry_available(registry, registries):
+    available, availability_messages = _registry_available(
+        registry,
+        expected_tier=spec.tier,
+        registries=registries,
+        path=path,
+    )
+    if not available:
         return NamespaceResolution(
             namespace=namespace,
             registry=registry,
             resolution_status="declared_unresolved",
-            messages=(
-                _message(
-                    "warning",
-                    path,
-                    f"registry {registry!r} unavailable; namespace {namespace!r} cannot be verified",
-                ),
-            ),
+            messages=availability_messages,
         )
     return NamespaceResolution(namespace=namespace, registry=registry, resolution_status="resolved")
 
@@ -248,7 +326,7 @@ def _resolve_molecular_id_decls(
     for tier, decl in molecular_ids.items():
         if not isinstance(decl, dict):
             continue
-        if decl.get("resolution_status") in {"resolved", "declared_unresolved"}:
+        if decl.get("resolution_status") == "resolved":
             continue
         namespace = decl.get("namespace")
         path = f"identity_context.molecular_ids.{tier}"
@@ -260,6 +338,7 @@ def _resolve_molecular_id_decls(
         if not isinstance(registry, str) or not registry.strip():
             registry = _default_registry_for_namespace(namespace)
         resolution = resolve_namespace(namespace, registry, registries=registries, path=path)
+        decl["namespace"] = resolution.namespace
         decl["registry"] = resolution.registry
         decl["resolution_status"] = resolution.resolution_status
         messages.extend(resolution.messages)
