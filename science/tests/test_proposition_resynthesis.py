@@ -304,7 +304,24 @@ def test_build_resynthesis_context_packet_expands_scaffold_with_live_context(tmp
         "annotation:entities/papers/B2021.source#b1",
     ]
     assert packet["output_contract"]["validate_with"] == (
-        "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/resynthesis-draft.json"
+        "science annotate validate-proposition-resynthesis --input resynthesis-draft.json"
+    )
+
+
+def test_build_resynthesis_context_packet_uses_draft_placeholder_without_path(tmp_path: Path):
+    from science_tool.annotation.proposition_resynthesis import (
+        build_resynthesis_context_packet,
+        parse_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    packet = build_resynthesis_context_packet(tmp_path, draft)
+
+    assert packet["draft_path"] is None
+    assert packet["output_contract"]["validate_with"] == (
+        "science annotate validate-proposition-resynthesis --input <draft>"
     )
 
 

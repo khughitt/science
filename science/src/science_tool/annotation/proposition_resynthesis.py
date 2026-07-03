@@ -576,6 +576,7 @@ def build_resynthesis_context_packet(
         )
 
     draft_payload = draft_to_json(draft)
+    validate_input = draft_path or "<draft>"
     return {
         "schema_version": RESYNTHESIS_CONTEXT_SCHEMA_VERSION,
         "source": RESYNTHESIS_CONTEXT_SOURCE,
@@ -610,7 +611,7 @@ def build_resynthesis_context_packet(
         },
         "output_contract": {
             "write": "a Half D proposition resynthesis draft JSON",
-            "validate_with": "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/resynthesis-draft.json",
+            "validate_with": f"science annotate validate-proposition-resynthesis --input {validate_input}",
             "do_not_write": ["proposition files", "annotation sidecars", "archive rows"],
         },
     }

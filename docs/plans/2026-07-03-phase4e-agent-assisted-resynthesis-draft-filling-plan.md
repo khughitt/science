@@ -125,7 +125,7 @@ def test_build_resynthesis_context_packet_expands_scaffold_with_live_context(tmp
         "annotation:entities/papers/B2021.source#b1",
     ]
     assert packet["output_contract"]["validate_with"] == (
-        "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/resynthesis-draft.json"
+        "science annotate validate-proposition-resynthesis --input resynthesis-draft.json"
     )
 ```
 
@@ -298,7 +298,7 @@ def build_resynthesis_context_packet(
         },
         "output_contract": {
             "write": "a Half D proposition resynthesis draft JSON",
-            "validate_with": "science annotate validate-proposition-resynthesis --input results/proposition-reconciliation/resynthesis-draft.json",
+            "validate_with": f"science annotate validate-proposition-resynthesis --input {draft_path or '<draft>'}",
             "do_not_write": ["proposition files", "annotation sidecars", "archive rows"],
         },
     }
