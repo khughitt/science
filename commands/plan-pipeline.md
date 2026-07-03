@@ -130,13 +130,13 @@ For each input data source identified in Step 2:
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
      `science dataset register-run <run-slug>`."
-   - For identity-bearing inputs, require an `identity_context` declaration.
-     Coordinate- or bio identity-bearing profiles need `taxon` plus the
-     relevant assembly or molecular tier declaration, or an explicit
-     UNKNOWN/unresolved declaration. Exact identity resolution is required at
-     the publish/promote boundary; initial planning may proceed only when the
-     unresolved identity is recorded as a blocker or caveat.
-2. Check the gate per origin:
+2. For identity-bearing inputs, require an `identity_context` declaration.
+   Coordinate- or bio identity-bearing profiles need `taxon` plus the relevant
+   assembly or molecular tier declaration, or an explicit UNKNOWN/unresolved
+   declaration. Exact identity resolution is required at the publish/promote
+   boundary; initial planning may proceed only when the unresolved identity is
+   recorded as a blocker or caveat.
+3. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.
      - PASS if `access.verified: false` AND `access.exception.mode != ""`.
@@ -169,7 +169,7 @@ For each input data source identified in Step 2:
      - Recursively check each ID in `derivation.inputs` passes the gate. HALT with the
        broken-link path if any input transitively fails. Cycle detection: maintain a
        visited-set; HALT on revisit.
-3. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
+4. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
    `check_plan_data_gate` — the access checks above **then** reproducibility enforcement. Resolve
    the effective `reproducibility_policy` (plan frontmatter merged over `science.yaml`, plan wins).
    - If **neither** project nor plan declares a policy: emit `reproducibility-policy-missing` as a
@@ -181,7 +181,7 @@ For each input data source identified in Step 2:
      - class < `bar` with a matching plan waiver (same dataset **and** `accepted_class == derived class`)
        → PASS-with-recorded-exception.
      - class < `bar` with no matching waiver → resolve by `policy.below_bar` (default HALT).
-4. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
+5. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
 
 ### Step 3: Add computational nodes to the inquiry (Inquiry mode only, optional)
 

@@ -239,10 +239,12 @@ def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
 
 def test_plan_pipeline_data_gate_mentions_identity_publish_boundary() -> None:
     text = _read("commands/plan-pipeline.md")
+    normalized = _norm(text)
 
-    assert "identity-bearing inputs" in text
-    assert "publish/promote boundary" in text
-    assert "initial planning" in text
+    assert "2. For identity-bearing inputs" in text
+    assert "3. Check the gate per origin" in text
+    assert "publish/promote boundary" in normalized
+    assert "initial planning" in normalized
 
 
 def test_entities_doc_documents_workflow_identity_contract() -> None:
@@ -250,7 +252,7 @@ def test_entities_doc_documents_workflow_identity_contract() -> None:
 
     assert "outputs[].identity" in text
     assert "colocated with `resource_names`" in text
-    assert "propagates resolved identity" in text
+    assert "propagates output identity" in text
     assert "identity_context.yaml" in text
     assert "assertion-only" in text
 

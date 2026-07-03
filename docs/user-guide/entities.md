@@ -909,7 +909,7 @@ science dataset register-run workflow-run:<slug>
 
 Registration writes one per-output `datapackage.yaml` under the run results
 tree, creates one `origin: derived` dataset entity per declared workflow output,
-propagates resolved identity to the derived entity's `identity_context`, writes
+propagates output identity to the derived entity's `identity_context`, writes
 the derived datapackage stamp, and updates symmetric edges:
 
 - the workflow run's `produces:` lists each derived dataset;
