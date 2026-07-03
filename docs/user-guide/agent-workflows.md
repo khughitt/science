@@ -23,7 +23,7 @@ intent to agent workflows and representative CLI commands.
 | Discuss critically | `/science:discuss` | `science-discuss` | `science discussions create` |
 | Audit bias | `/science:bias-audit` | `science-bias-audit` | source-authored docs |
 | Create propositions | workflow-guided | workflow-guided | `science propositions create` |
-| Add evidence lines | workflow-guided | workflow-guided | `science entity create evidence-line ...` |
+| Add evidence lines | workflow-guided | workflow-guided | `science evidence-lines create` |
 | Sketch a model | `/science:sketch-model` | `science-sketch-model` | `science inquiry init` |
 | Specify a model | `/science:specify-model` | `science-specify-model` | edit `entities/patches/<slug>.md`, then `science graph build` and `science inquiry validate` |
 | Critique approach | `/science:critique-approach` | `science-critique-approach` | `science inquiry validate` |
