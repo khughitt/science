@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.proposition_edges import load_proposition_edges
 
 
@@ -93,7 +94,7 @@ class RetiredEdgesReport:
 
 
 def build_retired_edges_report(project_root: Path, *, dag: str | None = None) -> RetiredEdgesReport:
-    dag_dir = project_root / "doc/figures/dags"
+    dag_dir = load_dag_paths(project_root).dag_dir
     yaml_paths = [dag_dir / f"{dag}.edges.yaml"] if dag else sorted(dag_dir.glob("*.edges.yaml"))
     proposition_pairs = {
         (str(edge.get("source", "")), str(edge.get("target", ""))) for edge in load_proposition_edges(project_root)

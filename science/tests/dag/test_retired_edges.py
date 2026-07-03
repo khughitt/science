@@ -61,6 +61,37 @@ edges:
     assert payload["files"][0]["edges"][0]["support_ref_count"] == 2
 
 
+def test_retired_edges_report_honors_configured_dag_dir(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "profile: research\ndag:\n  dag_dir: analysis/dags\n",
+        encoding="utf-8",
+    )
+    dag_dir = project / "analysis/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "custom.dot").write_text("digraph custom {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "custom.edges.yaml").write_text(
+        """
+dag: custom
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    description: Custom DAG dir retired edge.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = build_retired_edges_report(project)
+    payload = report.to_json()
+
+    assert payload["summary"]["files"] == 1
+    assert payload["files"][0]["path"] == "analysis/dags/custom.edges.yaml"
+    assert payload["files"][0]["dot_path"] == "analysis/dags/custom.dot"
+
+
 def test_retired_edges_report_flags_orphan_yaml_without_dot(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_manifest(project)
