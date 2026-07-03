@@ -76,8 +76,8 @@ Full command map in the [user guide](docs/user-guide/agent-workflows.md).
 
 Science ships domain skills — research methodology, statistics, data handling,
 scientific writing, and pipeline orchestration — that Claude loads on demand as
-the work calls for them. See the
-[user guide](docs/user-guide/agent-workflows.md) for the full catalog.
+the work calls for them. See the [user guide](docs/user-guide/index.md) for how
+they fit into the research workflow.
 
 ## Start Here
 
