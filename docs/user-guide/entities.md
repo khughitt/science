@@ -776,17 +776,19 @@ Mandatoryness is profile-scoped:
 | Variant-bearing datasets | `taxon` plus the relevant `molecular_ids.variant` tier, and `assembly` when variants are coordinate-anchored. |
 | Non-bio or base-profile datasets | Exempt unless a bio profile is declared. |
 
-Use an NCBI taxid integer for `taxon`, for example
-`ncbi_taxid: 9606`. Use dataset refs for pinned registries and crosswalks, such
-as `dataset:assembly-registry` for assembly digests or
+Use an NCBI taxid integer directly as `taxon`, for example `taxon: 9606`. Use
+dataset refs for pinned registries and crosswalks, such as
+`dataset:assembly-registry` for assembly digests or
 `dataset:gene-crosswalk-hgnc` for HGNC gene identifiers.
 
 `declared_unresolved` is the honest declaration-level state: the author knows
 which tier or namespace applies, but the exact digest or canonical mapping is
-not resolved yet. Use `UNKNOWN` for the declared unknown value where a value
-slot is required, and omit digest fields until they are actually resolved. Full
-resolution belongs at a later resolver or publish boundary; do not invent
-placeholder digests to make an in-progress dataset look resolved.
+not resolved yet. For assembly, use `seqcol_digest: UNKNOWN` with
+`resolution_status: declared_unresolved` when the digest is not resolved. For
+molecular tiers, declare the `namespace`, optional `registry`, and
+`resolution_status` without adding unknown-value fields. Full resolution belongs
+at a later resolver or publish boundary; do not invent placeholder digests to
+make an in-progress dataset look resolved.
 
 ### Origin
 

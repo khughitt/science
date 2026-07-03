@@ -14,19 +14,23 @@ ontology_terms: []                # CURIEs
 # Project-level biological identity context. This is authored on the dataset
 # entity; any datapackage science.identity_context stamp is derived/read-only.
 identity_context:
-  taxon:
-    ncbi_taxid: 9606              # NCBI taxid integer
-    resolution_status: resolved
+  taxon: 9606                    # NCBI taxid integer
   assembly:
+    label: "GRCh38"
     seqcol_digest: "g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp"
     registry: "dataset:assembly-registry"
     resolution_status: resolved
+  # If the assembly is declared but unresolved:
+  # assembly:
+  #   label: "GRCh38"
+  #   seqcol_digest: UNKNOWN
+  #   registry: "dataset:assembly-registry"
+  #   resolution_status: declared_unresolved
   molecular_ids:
     gene:
-      namespace: hgnc
+      namespace: hgnc_id
       registry: "dataset:gene-crosswalk-hgnc"
-      resolution_status: declared_unresolved
-      unresolved_value: UNKNOWN   # Use UNKNOWN when declared but not resolved; omit digest fields until resolved.
+      resolution_status: declared_unresolved  # No extra unknown-value fields; resolver fills canonical mappings later.
 
 # Pointer to the runtime datapackage.yaml (entity surface does NOT carry resources[])
 datapackage: ""
