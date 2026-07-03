@@ -16,7 +16,7 @@ from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all
 from science_tool.dag.schema import EdgesYamlFile
-from science_tool.dag.validate import validate_project
+from science_tool.dag.validate import ValidationFinding, ValidationReport, validate_project
 
 
 @click.group("dag")
@@ -26,6 +26,18 @@ def dag_group() -> None:
 
 def _wants_json(*, as_json: bool, output_format: str) -> bool:
     return as_json or output_format == "json"
+
+
+def _validation_finding_blocks(finding: ValidationFinding, *, strict: bool) -> bool:
+    return finding.severity == "error" or (strict and finding.severity == "strict_error")
+
+
+def _print_validation_findings(report: ValidationReport, *, strict: bool) -> None:
+    for finding in report.findings:
+        prefix = "ERROR" if _validation_finding_blocks(finding, strict=strict) else "warn"
+        loc = finding.location or ""
+        where = f"{finding.dag}#{finding.edge_id}" if finding.edge_id else finding.dag or "<project>"
+        click.echo(f"{prefix}: [{finding.rule}] {where} ({loc}): {finding.message}")
 
 
 # ---------------------------------------------------------------------------
@@ -248,11 +260,18 @@ def audit_cmd(
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    audit = run_audit(paths, fix=fix, strict=strict)
+    try:
+        audit = run_audit(paths, fix=fix, strict=strict)
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(audit.to_json(), indent=2))
     else:
+        if audit.validation.ok:
+            click.echo("DAG audit OK.")
+        else:
+            _print_validation_findings(audit.validation, strict=strict)
         if fix and audit.mutations:
             click.echo(f"\nApplied {len(audit.mutations)} mutation(s):")
             for mutation in audit.mutations:
@@ -444,12 +463,7 @@ def validate_cmd(
         if report.ok:
             click.echo("dag validate: OK")
         else:
-            for f in report.findings:
-                blocking = f.severity == "error" or (strict and f.severity == "strict_error")
-                prefix = "ERROR" if blocking else "warn"
-                loc = f.location or ""
-                where = f"{f.dag}#{f.edge_id}" if f.edge_id else f.dag or "<project>"
-                click.echo(f"{prefix}: [{f.rule}] {where} ({loc}): {f.message}")
+            _print_validation_findings(report, strict=strict)
 
     _sys.exit(0 if report.ok else 1)
 

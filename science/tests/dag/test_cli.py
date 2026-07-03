@@ -11,6 +11,7 @@ from science_tool.cli import main
 from science_tool.dag.validate import _parse_dot_topology
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures/mm30"
+FIXTURE_MINIMAL = Path(__file__).parent / "fixtures/minimal"
 SLUGS = ("h1-prognosis", "h1-progression", "h2-subtype-architecture", "h1-h2-bridge")
 
 
@@ -72,6 +73,14 @@ def _assert_no_retired_edge_yaml(project: Path) -> None:
 def _remove_retired_edge_yaml(project: Path) -> None:
     for edge_yaml in project.glob("doc/figures/dags/*.edges.yaml"):
         edge_yaml.unlink()
+
+
+def _copy_minimal_fixture_with_propositions(source: Path, target: Path) -> Path:
+    shutil.copytree(source, target)
+    _remove_retired_edge_yaml(target)
+    for dot_path in sorted((target / "doc/figures/dags").glob("*.dot")):
+        _write_propositions_for_dot(target, dot_path, dot_path.stem)
+    return target
 
 
 @pytest.fixture
@@ -168,6 +177,37 @@ def test_dag_audit_accepts_format_json(cli_audit_project: Path) -> None:
     payload = json.loads(result.stdout)
     assert "validation" in payload
     assert "staleness" not in payload
+
+
+def test_cli_dag_audit_table_prints_ok_on_clean_project(cli_audit_project: Path) -> None:
+    result = CliRunner().invoke(main, ["dag", "audit", "--project", str(cli_audit_project)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "DAG audit OK."
+    assert "staleness" not in result.output.lower()
+
+
+def test_cli_dag_audit_table_prints_validation_findings(tmp_path: Path) -> None:
+    project = _copy_minimal_fixture_with_propositions(FIXTURE_MINIMAL / "cyclic", tmp_path / "cyclic")
+
+    result = CliRunner().invoke(main, ["dag", "audit", "--project", str(project)])
+
+    assert result.exit_code == 1
+    assert "acyclicity" in result.output
+    assert "cycle detected" in result.output
+    assert "staleness" not in result.output.lower()
+
+
+def test_cli_dag_audit_fix_validation_failure_is_click_error(tmp_path: Path) -> None:
+    project = _copy_minimal_fixture_with_propositions(FIXTURE_MINIMAL / "cyclic", tmp_path / "cyclic")
+
+    result = CliRunner().invoke(main, ["dag", "audit", "--fix", "--project", str(project)])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "dag audit --fix refused" in result.output
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ != "RuntimeError"
 
 
 def test_cli_dag_audit_is_read_only_by_default(cli_audit_project: Path) -> None:
