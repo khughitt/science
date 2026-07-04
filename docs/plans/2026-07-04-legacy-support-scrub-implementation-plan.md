@@ -13,10 +13,29 @@
 ## Guardrails
 
 - Do not delete a migrator before it has run everywhere and its precheck is green.
+  Removing a migrator is a one-way door: a project archived, off-machine, or
+  reactivated later can no longer be migrated. Only remove after the coverage
+  universe (Task 1) is reconciled and green.
+- After a surface gate is green, delete its explicit migration command too. The
+  target state has one current representation, not a permanent supported path
+  for legacy state; recovery for omitted projects comes from the recorded
+  migration commits and git history.
 - Do not do broad string cleanup for `fallback`, `deprecated`, `retired`, or
   `article`; distinguish current concepts from compatibility shims.
 - Use `~/d/` paths in docs and code comments when absolute paths are needed.
 - Keep commits surface-scoped so regressions can be bisected.
+- **Run migrations with `PYTHONPATH=src:model/src`.** This work happens in the
+  `.worktrees/remove-legacy-support` worktree, but `science_model` is
+  editable-installed from `main`; without the explicit `PYTHONPATH` the stale
+  main copy shadows worktree edits and migrations silently run old code.
+- **Each project migration is a commit in a separate, Dropbox-synced git repo.**
+  Verify the branch and HEAD in each project repo before committing its
+  migration (branch/HEAD can drift mid-session on Dropbox), and path-scope any
+  stashes. The surface-scoped-commit rule above applies per project repo, not
+  just to the toolkit repo.
+- A surface's gate is not green on sentinel-absence alone: the affected projects
+  must still build. Re-run `science validate` (or `graph materialize`) on each
+  migrated project before deleting that surface's reader.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -36,24 +55,37 @@ checks precise enough to avoid current feature false positives.
 
 Create a wrapper that loads registered projects, resolves and deduplicates
 paths, skips entries without `science.yaml`, runs the single-project scanner,
-and writes markdown plus JSON output.
+and writes markdown plus JSON output. The single-project scanner must exclude
+nested `.worktrees/` and `.git/` directories so a project's own worktrees do not
+double-count entity files or sentinels.
 
-- [ ] **Step 3: Test deduplication and sentinel precision**
+- [ ] **Step 3: Reconcile the coverage universe**
+
+The safety model deletes readers once the precheck is green, so the scanned set
+must provably cover the at-risk set. Filesystem-sweep for `science.yaml` files
+outside the registry (there is a known delta — the registry lists 22 projects
+but more `science.yaml` files exist on disk). For each unregistered project,
+either register it, migrate it under this campaign, or record an explicit
+exclusion with rationale. Do not trust any zero-hit gate until this delta is
+resolved.
+
+- [ ] **Step 4: Test deduplication and sentinel precision**
 
 Add tests with tiny temporary project trees covering:
 
 - duplicate registry paths collapse to one scan target;
+- a nested `.worktrees/<name>/` copy does not double-count its sentinels;
 - top-level `profiles:` without `knowledge_profiles:` is reported;
 - ordinary `profiles` text or model/profile vocabulary is not reported;
 - `article:<bibkey>` refs are reported, while `kind: article` is not;
 - task `retired` and `deprecated_ids` are not reported.
 
-- [ ] **Step 4: Run initial inventory**
+- [ ] **Step 5: Run initial inventory**
 
 Run the wrapper against registered projects and save the baseline report under
 `docs/audits/`. This report drives the remaining task order.
 
-- [ ] **Step 5: Verify**
+- [ ] **Step 6: Verify**
 
 Run:
 
@@ -81,7 +113,9 @@ git diffs in each project and resolve collisions explicitly.
 - [ ] **Step 3: Gate**
 
 Re-run the registered-project inventory. Proceed only when `doc/specs entity`
-hits are zero.
+hits are zero **and** each affected project still builds: run `science validate`
+(or `graph materialize`) on every migrated project and confirm green. Sentinel
+absence alone does not prove a project still loads.
 
 - [ ] **Step 4: Remove reader support**
 
@@ -99,9 +133,20 @@ cd science && uv run --frozen pytest
 ## Task 3: `type:` to `kind:` Surface
 
 **Files:**
+- Create: `science/src/science_tool/` frontmatter `type:`→`kind:` migrator + CLI command
 - Modify: all entity templates in `templates/` and `science/model/src/science_model/templates/`
 - Modify after green precheck: loader/frontmatter sites using `kind`/`type` dual reads
+- Test: `science/tests/` for the new migrator
 - Tests: frontmatter, entity loader, command authoring tests
+
+> No on-disk `type:`→`kind:` rewriter exists today — this surface requires
+> building one before any data can be migrated.
+
+- [ ] **Step 0: Build the frontmatter migrator (TDD)**
+
+Write a rewriter that replaces entity-frontmatter `type:` with `kind:`,
+preserving surrounding field order and body bytes, idempotent, with a
+`--write`/dry-run split. Cover with tests before running it on any project.
 
 - [ ] **Step 1: Inventory authoring and data**
 
@@ -115,13 +160,14 @@ reader compatibility so new legacy files stop appearing.
 
 - [ ] **Step 3: Migrate project data**
 
-Rewrite on-disk entity frontmatter from `type:` to `kind:` in all registered
-projects, preserving field order as much as practical.
+Run the Step 0 migrator to rewrite on-disk entity frontmatter from `type:` to
+`kind:` in all registered projects, preserving field order.
 
 - [ ] **Step 4: Gate**
 
 Re-run the registered-project inventory. Proceed only when `type:` hits are
-zero in project entity files and toolkit templates.
+zero in project entity files and toolkit templates, **and** each migrated
+project still builds under `science validate` / `graph materialize`.
 
 - [ ] **Step 5: Remove dual-read support**
 
@@ -136,9 +182,20 @@ suites.
 ## Task 4: Scalar `access:` Surface
 
 **Files:**
+- Create: scalar-`access:`→block migrator + CLI command
 - Modify before gate: project entity files
 - Modify after gate: `science/model/src/science_model/frontmatter.py`, `science/src/science_tool/graph/health.py`
+- Test: `science/tests/` for the new migrator
 - Tests: frontmatter access parsing and health checks
+
+> No scalar-`access:` migrator exists today — build one before migrating data.
+
+- [ ] **Step 0: Build the access migrator (TDD)**
+
+Write a rewriter that converts scalar `access: <level>` to a structured block.
+It **must preserve the current coercion semantics** — `verified: false` (the
+existing `_coerce_access` behavior); a scalar value was never verified, so the
+migration must not assert `verified: true`. Cover with tests before running.
 
 - [ ] **Step 1: Inventory scalar access**
 
@@ -146,12 +203,13 @@ Report every entity with scalar `access:`.
 
 - [ ] **Step 2: Migrate data**
 
-Rewrite scalar access values to structured blocks with explicit `level` and
-`verified` fields.
+Run the Step 0 migrator to rewrite scalar access values to structured blocks
+with explicit `level` and `verified: false` fields.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when project scalar access hits are zero.
+Proceed only when project scalar access hits are zero **and** each migrated
+project still builds under `science validate` / `graph materialize`.
 
 - [ ] **Step 4: Remove scalar coercion**
 
@@ -164,8 +222,20 @@ Run frontmatter and health tests plus package suites.
 ## Task 5: `article:<bibkey>` Alias Surface
 
 **Files:**
+- Create: `article:<bibkey>`→`paper:<bibkey>` ref migrator + CLI command
 - Modify after gate: literature-prefix canonicalization and health checks
 - Do not remove: live `article` entity kind support
+- Test: `science/tests/` for the new migrator
+
+> No `article:`→`paper:` ref rewriter exists today (`add_article` is unrelated
+> entity creation) — build one before migrating refs.
+
+- [ ] **Step 0: Build the ref migrator (TDD)**
+
+Write a rewriter that rewrites `article:<bibkey>` refs (in structured sources
+and markdown frontmatter) to `paper:<bibkey>`. It must target only the alias
+prefix and must not touch `kind: article` entities or `@article` BibTeX. Cover
+with tests before running.
 
 - [ ] **Step 1: Inventory alias refs**
 
@@ -173,11 +243,14 @@ Report only `article:<bibkey>` references that are acting as paper aliases.
 
 - [ ] **Step 2: Migrate refs**
 
-Rewrite those refs to `paper:<bibkey>` across registered projects.
+Run the Step 0 migrator to rewrite those refs to `paper:<bibkey>` across
+registered projects.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when alias refs are zero and `kind: article` still passes tests.
+Proceed only when alias refs are zero, `kind: article` still passes tests,
+**and** each migrated project still builds under `science validate` /
+`graph materialize`.
 
 - [ ] **Step 4: Remove alias normalization**
 
@@ -204,7 +277,8 @@ each project.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when edge YAML hits are zero.
+Proceed only when edge YAML hits are zero **and** each migrated project still
+builds under `science validate` / `graph materialize`.
 
 - [ ] **Step 4: Remove retired-edge support**
 
@@ -232,7 +306,8 @@ entity markdown or delete retired rows.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when aggregate manifest hits are zero.
+Proceed only when aggregate manifest hits are zero **and** each migrated project
+still builds under `science validate` / `graph materialize`.
 
 - [ ] **Step 4: Remove aggregate readers**
 
@@ -259,7 +334,8 @@ research-package as appropriate.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when active data-package hits are zero.
+Proceed only when active data-package hits are zero **and** each migrated project
+still builds under `science validate` / `graph materialize`.
 
 - [ ] **Step 4: Remove legacy support**
 
@@ -287,7 +363,9 @@ Run the one-shot migrator for every project with hits.
 
 - [ ] **Step 3: Gate and remove**
 
-For each one-shot surface, delete only after its own zero-hit report.
+For each one-shot surface, delete only after its own zero-hit report **and**
+confirmation that each migrated project still builds under `science validate` /
+`graph materialize`.
 
 - [ ] **Step 4: Verify**
 
@@ -313,7 +391,9 @@ Migrate each small surface independently.
 
 - [ ] **Step 3: Gate**
 
-Proceed only when each small surface has zero downstream hits.
+Proceed only when each small surface has zero downstream hits **and** any project
+touched by that surface's migration still builds under `science validate` /
+`graph materialize`.
 
 - [ ] **Step 4: Remove support**
 
@@ -356,10 +436,13 @@ Run docs/user-guide tests if available, then full package suites.
 **Files:**
 - Output: final inventory report under `docs/audits/`
 
-- [ ] **Step 1: Run downstream precheck**
+- [ ] **Step 1: Run downstream precheck and rebuild projects**
 
 Run the registered-project inventory across all deduplicated project roots.
-Expected: zero hits for every removed surface.
+Expected: zero hits for every removed surface. Then confirm every affected
+project still builds — run `science validate` / `graph materialize` across the
+project set — so the final state proves the projects load, not only that the
+sentinels are gone.
 
 - [ ] **Step 2: Run toolkit search triage**
 
