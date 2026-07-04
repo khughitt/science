@@ -228,7 +228,7 @@ def _validate_edge_record(path: str, raw_edge: dict[str, Any], row_index: int) -
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=r"Edge is missing 'identification'.*", category=DeprecationWarning)
-            return EdgeRecord.model_validate(raw_edge)
+            return EdgeRecord.model_validate(_edge_record_payload_for_migration(raw_edge))
     except (SchemaError, TypeError, ValueError, ValidationError) as exc:
         if _invalid_identification_error(exc):
             raise _InvalidEdgeIdentification() from exc
@@ -236,6 +236,25 @@ def _validate_edge_record(path: str, raw_edge: dict[str, Any], row_index: int) -
         if missing <= {"id", "source", "target"} and missing:
             raise _MissingEdgeIdentity(missing) from exc
         raise ValueError(f"invalid retired DAG edge file {path}: edge {row_index}: {exc}") from exc
+
+
+def _edge_record_payload_for_migration(raw_edge: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(raw_edge)
+    payload.setdefault("description", "")
+
+    raw_lit_support = payload.get("lit_support")
+    if isinstance(raw_lit_support, list):
+        payload["lit_support"] = [
+            _lit_support_payload_for_migration(entry) if isinstance(entry, dict) else entry for entry in raw_lit_support
+        ]
+
+    return payload
+
+
+def _lit_support_payload_for_migration(raw_entry: dict[str, Any]) -> dict[str, Any]:
+    if any(raw_entry.get(key) is not None for key in _REF_SOURCE_KEYS):
+        return raw_entry
+    return {**raw_entry, "paper": ""}
 
 
 _MISSING_IDENTITY_BLOCKERS = {
