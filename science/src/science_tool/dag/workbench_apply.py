@@ -436,9 +436,12 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 def apply_workbench_plan(plan: WorkbenchApplyPlan) -> WorkbenchApplyResult:
     _assert_input_unchanged(plan)
-    changed_entity_edits = [edit for edit in plan.changed_edits if edit.path != plan.input_path]
-    changed_workbench_edits = [edit for edit in plan.changed_edits if edit.path == plan.input_path]
-    _assert_entity_targets_unchanged(changed_entity_edits)
+    changed_edits = plan.changed_edits
+    entity_edits = [edit for edit in plan.edits if edit.path != plan.input_path]
+    changed_entity_edits = [edit for edit in changed_edits if edit.path != plan.input_path]
+    changed_workbench_edits = [edit for edit in changed_edits if edit.path == plan.input_path]
+    if changed_edits:
+        _assert_entity_targets_unchanged(entity_edits)
     written_paths: list[Path] = []
     try:
         for edit in changed_entity_edits:

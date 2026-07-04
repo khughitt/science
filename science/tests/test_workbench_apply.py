@@ -403,6 +403,36 @@ def test_apply_workbench_plan_rejects_entity_target_hash_drift(tmp_path: Path) -
     assert "structural_claim" not in text
 
 
+def test_apply_workbench_plan_rejects_noop_entity_target_hash_drift_before_workbench_write(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    _write_workbench(workbench_path)
+    plan = build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
+    assert [edit for edit in plan.edits if edit.path != workbench_path and edit.changed] == []
+    assert [edit for edit in plan.edits if edit.path == workbench_path and edit.changed]
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    drifted_text = prop_path.read_text(encoding="utf-8").replace(
+        "## Summary\n\n",
+        "## Summary\n\nIntervening edit.\n",
+    )
+    prop_path.write_text(drifted_text, encoding="utf-8")
+
+    with pytest.raises(WorkbenchApplyError, match="entity target changed since it was planned"):
+        apply_workbench_plan(plan)
+
+    workbench_text = workbench_path.read_text(encoding="utf-8")
+    assert "Intervening edit." in prop_path.read_text(encoding="utf-8")
+    assert "source: paper:Smith2026" in workbench_text
+    assert "evidence-line:a-affects-b-ev0" not in workbench_text
+
+
 def test_build_workbench_apply_plan_rejects_duplicate_target_with_different_final_text(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
