@@ -94,6 +94,7 @@ def test_parse_markdown_entity_file_preserving_body_keeps_crlf_body_bytes(tmp_pa
 def _write_workbench(
     path: Path,
     *,
+    entity_id: str = "proposition:a-affects-b",
     claim_layer: str = "causal_effect",
     inline_evidence: bool = True,
 ) -> None:
@@ -112,7 +113,7 @@ def _write_workbench(
     )
     path.write_text(
         f"""rows:
-  - id: proposition:a-affects-b
+  - id: {entity_id}
     subject: a
     predicate: affects
     object: b
@@ -157,6 +158,19 @@ def test_apply_workbench_writes_entities_and_canonicalizes_workbench(tmp_path: P
     assert ev_path.is_file()
     assert "evidence-line:a-affects-b-ev0" in workbench_path.read_text(encoding="utf-8")
     assert _frontmatter(prop_path)["updated"] == "2026-07-04"
+
+
+def test_apply_workbench_new_proposition_body_matches_workbench_body(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path, inline_evidence=False)
+
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    _frontmatter, body = parse_markdown_entity_file_preserving_body(prop_path)
+    assert body == workbench_entity_body(_proposition())
 
 
 def test_apply_workbench_rerun_is_noop_without_timestamp_churn(tmp_path: Path) -> None:
@@ -208,7 +222,7 @@ def test_apply_workbench_preserves_authored_evidence_line_body_on_semantic_updat
 
     ev_path = tmp_path / "entities/evidence-lines/a-affects-b-ev0.md"
     ev_path.write_text(
-        ev_path.read_text(encoding="utf-8").replace("## Notes\n\n", "## Notes\n\nCurated evidence note.\n"),
+        ev_path.read_text(encoding="utf-8").replace("## Notes\n", "## Notes\n\nCurated evidence note.\n"),
         encoding="utf-8",
     )
     _write_workbench(workbench_path)
@@ -241,6 +255,24 @@ def test_apply_workbench_rejects_malformed_existing_target_before_write(tmp_path
     else:
         raise AssertionError("expected WorkbenchApplyError")
     assert "evidence-line:a-affects-b-ev0" not in workbench_path.read_text(encoding="utf-8")
+
+
+def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path, entity_id="proposition:../../../escaped", inline_evidence=False)
+
+    try:
+        build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+    except WorkbenchApplyError as exc:
+        message = str(exc)
+        assert "target" in message
+        assert "escape" in message
+    else:
+        raise AssertionError("expected WorkbenchApplyError")
+    assert not (tmp_path.parent / "escaped.md").exists()
+    assert not (tmp_path / "entities").exists()
 
 
 def test_apply_workbench_rejects_input_hash_drift(tmp_path: Path) -> None:

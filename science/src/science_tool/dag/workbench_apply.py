@@ -138,7 +138,13 @@ def _target_path(project_root: Path, entity: WorkbenchEntity) -> Path:
     except EntityCommandError as exc:
         raise WorkbenchApplyError(str(exc)) from exc
     local_part = entity.id.split(":", 1)[1]
-    return project_root / policy.root / f"{local_part}.md"
+    candidate = project_root / policy.root / f"{local_part}.md"
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(project_root.resolve())
+    except ValueError as exc:
+        raise WorkbenchApplyError(f"entity target escapes project root: {candidate}") from exc
+    return resolved
 
 
 def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str, object], str, str]:
@@ -159,16 +165,11 @@ def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str
     return frontmatter, body, current_text
 
 
-def _new_entity_body(entity: WorkbenchEntity) -> str:
-    body = workbench_entity_body(entity)
-    return body if body.endswith("\n\n") else body + "\n"
-
-
 def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) -> PlannedWorkbenchEdit:
     path = _target_path(project_root, entity)
     today = as_of.isoformat()
     if not path.exists():
-        body = _new_entity_body(entity)
+        body = workbench_entity_body(entity)
         final_text = render_entity_text(entity, body=body, created=today, updated=today)
         return PlannedWorkbenchEdit(
             path=path,
