@@ -1,16 +1,10 @@
-"""Bidirectional .dot <-> edges.yaml edge-ID sync for science DAGs.
+"""Number DAG edges in DOT topology files.
 
 Lifted from mm30's ``doc/figures/dags/_number_edges.py``.
 
 Reads each source ``.dot`` file, assigns sequential edge IDs in order of
 appearance, writes a ``<slug>-numbered.dot`` variant with ``[N]`` prefixed on
-every edge label, and emits a ``<slug>.edges.yaml`` stub with
-``(id, source, target, source_label, target_label, original_label,
-edge_style)`` extracted for downstream evidence curation.
-
-By default an existing ``.edges.yaml`` is preserved — it contains curated
-evidence.  Pass ``force_stubs=True`` only when intentionally resetting
-curation.
+every edge label. Retired ``*.edges.yaml`` files are not created or reset.
 """
 
 from __future__ import annotations
@@ -18,8 +12,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-
-import yaml
 
 from science_tool.dag.paths import DagPaths
 from science_tool.dag.render import EDGE_RE, _discover_slugs, _flatten_multiline_attrs
@@ -140,33 +132,6 @@ def _emit_numbered_dot(dot_path: Path, parsed: _ParsedDag, out_path: Path) -> No
     out_path.write_text("\n".join(out_lines) + "\n")
 
 
-def _emit_edge_stubs(parsed: _ParsedDag, out_path: Path, dag_slug: str) -> None:
-    payload = {
-        "dag": dag_slug,
-        "source_dot": f"doc/figures/dags/{dag_slug}.dot",
-        "edges": [
-            {
-                "id": e.id,
-                "source": e.src,
-                "target": e.tgt,
-                "source_label": e.src_label,
-                "target_label": e.tgt_label,
-                "original_label": e.label,
-                "edge_style": e.style,
-                # Placeholders for curation.
-                "relation": "",
-                "edge_status": "",
-                "identification": "",
-                "description": "",
-                "data_support": [],
-                "lit_support": [],
-            }
-            for e in parsed.edges
-        ],
-    }
-    out_path.write_text(yaml.safe_dump(payload, sort_keys=False, width=100))
-
-
 def number_one(
     dag_dir: Path,
     slug: str,
@@ -174,43 +139,15 @@ def number_one(
     force_stubs: bool = False,
     proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
 ) -> None:
-    """Number edges in one DAG's .dot.
-
-    Always writes ``<slug>-numbered.dot`` with ``[N]`` prefixed on every edge
-    label (edge IDs derive from DOT topology order).
-
-    When ``proposition_edges`` is supplied, compiled relational propositions are
-    the epistemic source-of-truth (Task 5f) and the RETIRED ``<slug>.edges.yaml``
-    curation stub is NOT (re)written — edge semantics no longer live there.
-
-    When ``proposition_edges`` is ``None`` (no compiled propositions), the legacy
-    edges.yaml stub behavior is preserved for backward compatibility, but
-    creating/resetting the retired file emits a ``DeprecationWarning``: it
-    creates ``<slug>.edges.yaml`` if absent, preserves it when
-    ``force_stubs=False`` (default), and resets it when ``force_stubs=True``.
-    """
+    """Number edges in one DAG's .dot without writing retired edges.yaml."""
+    if force_stubs:
+        raise ValueError(
+            "`science dag number --force-stubs` is retired: *.edges.yaml is no longer "
+            "a DAG authoring surface. Author relational propositions through workbench rows."
+        )
     dot_path = dag_dir / f"{slug}.dot"
     parsed = _parse_dag(dot_path)
     _emit_numbered_dot(dot_path, parsed, dag_dir / f"{slug}-numbered.dot")
-
-    # Propositions are the SoT — do not (re)write the retired edges.yaml stub.
-    if proposition_edges is not None:
-        return
-
-    stub_path = dag_dir / f"{slug}.edges.yaml"
-    if stub_path.exists() and not force_stubs:
-        return
-    _warn_edges_yaml_retired()
-    _emit_edge_stubs(parsed, stub_path, slug)
-
-
-def _warn_edges_yaml_retired() -> None:
-    """Emit the edges.yaml retirement ``DeprecationWarning`` (Task 5f)."""
-    import warnings
-
-    from science_tool.dag.schema import _EDGES_YAML_DEPRECATION
-
-    warnings.warn(_EDGES_YAML_DEPRECATION, DeprecationWarning, stacklevel=3)
 
 
 def number_all(

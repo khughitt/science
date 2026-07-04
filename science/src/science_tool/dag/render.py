@@ -3,7 +3,8 @@
 Lifted from mm30's ``doc/figures/dags/_render_styled.py`` (t186).
 Single-source-of-truth rendering:
   - Topology (nodes, subgraphs, clusters) from ``<slug>.dot``
-  - Semantics (status, identification, posterior, etc.) from ``<slug>.edges.yaml``
+  - Semantics (status, identification, posterior, etc.) from compiled
+    proposition edge dicts
 
 Produces ``<slug>-auto.dot`` and ``<slug>-auto.png`` with per-edge styling.
 
@@ -50,10 +51,9 @@ Overrides (both modes):
     sizing (the mechanism has been retracted; visual should not imply live
     support).
 
-YAML is read directly via ``yaml.safe_load``; schema validation is a separate
-concern (the render path must tolerate legacy ``doi: null`` entries and other
-not-yet-migrated data). YAML records whose ``source``/``target`` pair is absent
-from the DOT are treated as claim-only evidence records and are not rendered.
+Every DOT edge must have a compiled proposition edge with the same
+``source``/``target`` pair. Render fails before writing derived artifacts when
+the proposition view does not cover the DOT topology.
 """
 
 from __future__ import annotations
@@ -61,12 +61,11 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 
-import yaml
-
 from science_tool.dag.paths import DagPaths
+from science_tool.dag.validate import _dot_edge_occurrences
 from science_tool.graph.derived_status import derived_edge_status
 
 log = logging.getLogger(__name__)
@@ -118,6 +117,40 @@ EDGE_RE = re.compile(
     r"^(?P<indent>\s*)(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*->\s*"
     r"(?P<tgt>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[(?P<attrs>[^\]]*)\])?\s*;?\s*$"
 )
+
+
+def _match_dot_edge_line(line: str) -> re.Match[str] | None:
+    comment_stripped = re.sub(r"/\*.*?\*/", "", line)
+    comment_stripped = re.sub(r"//.*$", "", comment_stripped)
+    return EDGE_RE.match(comment_stripped)
+
+
+def _strip_dot_comments_from_line(line: str, *, in_block_comment: bool) -> tuple[str, bool]:
+    stripped = []
+    i = 0
+    while i < len(line):
+        if in_block_comment:
+            end = line.find("*/", i)
+            if end == -1:
+                return "".join(stripped), True
+            i = end + 2
+            in_block_comment = False
+            continue
+
+        line_comment = line.find("//", i)
+        block_comment = line.find("/*", i)
+        if line_comment == -1 and block_comment == -1:
+            stripped.append(line[i:])
+            break
+        if line_comment != -1 and (block_comment == -1 or line_comment < block_comment):
+            stripped.append(line[i:line_comment])
+            break
+
+        stripped.append(line[i:block_comment])
+        i = block_comment + 2
+        in_block_comment = True
+
+    return "".join(stripped), in_block_comment
 
 
 def _flatten_multiline_attrs(text: str) -> str:
@@ -308,17 +341,22 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
 
     # Inject a header banner so the auto-styled version is visually distinct.
     banner_inserted = False
+    in_block_comment = False
     for line in lines:
+        uncommented_line, in_block_comment = _strip_dot_comments_from_line(
+            line,
+            in_block_comment=in_block_comment,
+        )
         # Replace graph-level label with an auto-styling banner.
-        if not banner_inserted and re.match(r"\s*label=<", line):
-            m = re.match(r"(\s*)(label=<.+?>);?\s*$", line)
+        if not banner_inserted and re.match(r"\s*label=<", uncommented_line):
+            m = re.match(r"(\s*)(label=<.+?>);?\s*$", uncommented_line)
             if m:
                 indent = m.group(1)
                 original = m.group(2)
                 auto_banner = (
                     '<br/><font point-size="9" color="#555"><i>'
-                    "auto-styled from edges.yaml — color=edge_status, width=|β|, "
-                    "style=HDI-crosses-zero-dashed, arrowhead=identification"
+                    "auto-styled from proposition edges — color=polarity, width=belief/|β|, "
+                    "style=derived status + HDI, arrowhead=identification"
                     "</i></font>"
                 )
                 # Inject the banner right before the closing `>`.
@@ -327,7 +365,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
                 banner_inserted = True
                 continue
 
-        em = EDGE_RE.match(line)
+        em = EDGE_RE.match(uncommented_line)
         if em:
             queue = edges_by_pair[(em.group("src"), em.group("tgt"))]
             if not queue:
@@ -412,67 +450,65 @@ def render_png(dot_path: Path, png_path: Path, dpi: int = 150) -> None:
 
 
 def _discover_slugs(dag_dir: Path) -> list[str]:
-    """Find every <slug>.edges.yaml file (sorted)."""
-    return sorted(p.stem.replace(".edges", "") for p in dag_dir.glob("*.edges.yaml"))
+    """Find every source <slug>.dot file (sorted)."""
+    return sorted(
+        p.stem
+        for p in dag_dir.glob("*.dot")
+        if not (
+            p.name.endswith("-auto.dot")
+            or p.name.endswith("-numbered.dot")
+            or p.name.endswith(".reference")
+        )
+    )
+
+
+def _assert_dot_edges_backed(slug: str, dot_path: Path, edges: list[dict]) -> None:  # type: ignore[type-arg]
+    """Fail before writing if any DOT edge occurrence lacks a compiled proposition edge."""
+    dot_edge_counts = Counter(_dot_edge_occurrences(dot_path))
+    available_counts = Counter((str(edge["source"]), str(edge["target"])) for edge in edges)
+    missing = sorted(
+        edge_pair
+        for edge_pair, dot_count in dot_edge_counts.items()
+        if available_counts[edge_pair] < dot_count
+    )
+    if missing:
+        missing_text = ", ".join(f"{source} -> {target}" for source, target in missing)
+        raise ValueError(f"{slug}: no compiled proposition edge for DOT edge(s): {missing_text}")
 
 
 def render_one(
     dag_dir: Path,
     slug: str,
     *,
-    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+    proposition_edges: list[dict],  # type: ignore[type-arg]
 ) -> None:
     """Render one slug to <slug>-auto.{dot,png}.
 
     Topology comes from ``<slug>.dot``. Edge SEMANTICS come from
-    ``proposition_edges`` when supplied — the compiled relational propositions
-    are the epistemic source-of-truth (Task 5f), styled in channel mode with a
-    DERIVED ``edge_status``.
-
-    When ``proposition_edges`` is ``None``, the renderer falls back to the
-    RETIRED ``<slug>.edges.yaml`` legacy-import adapter (a ``DeprecationWarning``
-    is emitted on read). The authored ``edge_status`` in that file is not the
-    epistemic status SoT; it survives only as the legacy-mode styling input.
+    ``proposition_edges`` — the compiled relational propositions are the
+    epistemic source-of-truth (Task 5f), styled in channel mode with a DERIVED
+    ``edge_status``.
     """
     dot_path = dag_dir / f"{slug}.dot"
-    if proposition_edges is None:
-        edges = _load_legacy_edges(dag_dir / f"{slug}.edges.yaml")
-    else:
-        edges = proposition_edges
     out_dot = dag_dir / f"{slug}-auto.dot"
     out_png = dag_dir / f"{slug}-auto.png"
-    emit_styled_dot(dot_path, edges, out_dot)
+    _assert_dot_edges_backed(slug, dot_path, proposition_edges)
+    emit_styled_dot(dot_path, proposition_edges, out_dot)
     render_png(out_dot, out_png)
-
-
-def _load_legacy_edges(yaml_path: Path) -> list[dict]:  # type: ignore[type-arg]
-    """Read raw edge dicts from a RETIRED ``<slug>.edges.yaml`` (Task 5f).
-
-    Emits the edges.yaml retirement ``DeprecationWarning`` so that falling back
-    to the authored file is loud, never silent. Returns the raw edge dicts (the
-    render path tolerates not-yet-migrated legacy fields).
-    """
-    import warnings
-
-    from science_tool.dag.schema import _EDGES_YAML_DEPRECATION
-
-    warnings.warn(_EDGES_YAML_DEPRECATION, DeprecationWarning, stacklevel=2)
-    data = yaml.safe_load(yaml_path.read_text())
-    return data["edges"]
 
 
 def render_all(
     paths: DagPaths,
     *,
-    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+    proposition_edges: list[dict],  # type: ignore[type-arg]
 ) -> None:
     """Render every discovered DAG's -auto.dot + -auto.png.
 
-    ``proposition_edges`` (when supplied) are the compiled-proposition edges
-    shared across every slug; topology filtering per slug happens in
-    ``emit_styled_dot`` (edges whose source/target pair is absent from a DAG's
-    DOT are simply not drawn there).
+    ``proposition_edges`` are the compiled-proposition edges shared across every
+    slug. Each DOT edge must have a matching compiled proposition edge.
     """
     slugs = list(paths.dags) if paths.dags else _discover_slugs(paths.dag_dir)
+    for slug in slugs:
+        _assert_dot_edges_backed(slug, paths.dag_dir / f"{slug}.dot", proposition_edges)
     for slug in slugs:
         render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)

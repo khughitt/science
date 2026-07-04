@@ -14,19 +14,30 @@ from science_tool.dag.audit import run_audit
 from science_tool.dag.init import init_dag
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
-from science_tool.dag.render import render_all, render_one
+from science_tool.dag.render import render_all
 from science_tool.dag.schema import EdgesYamlFile
-from science_tool.dag.staleness import check_staleness
-from science_tool.dag.validate import validate_project
+from science_tool.dag.validate import ValidationFinding, ValidationReport, validate_project
 
 
 @click.group("dag")
 def dag_group() -> None:
-    """DAG rendering, numbering, staleness, and audit tools."""
+    """DAG rendering, numbering, retired-edge inspection, and audit tools."""
 
 
 def _wants_json(*, as_json: bool, output_format: str) -> bool:
     return as_json or output_format == "json"
+
+
+def _validation_finding_blocks(finding: ValidationFinding, *, strict: bool) -> bool:
+    return finding.severity == "error" or (strict and finding.severity == "strict_error")
+
+
+def _print_validation_findings(report: ValidationReport, *, strict: bool) -> None:
+    for finding in report.findings:
+        prefix = "ERROR" if _validation_finding_blocks(finding, strict=strict) else "warn"
+        loc = finding.location or ""
+        where = f"{finding.dag}#{finding.edge_id}" if finding.edge_id else finding.dag or "<project>"
+        click.echo(f"{prefix}: [{finding.rule}] {where} ({loc}): {finding.message}")
 
 
 # ---------------------------------------------------------------------------
@@ -50,13 +61,12 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
     help="Project root (default: current working directory).",
 )
 def render_cmd(slug: str | None, project_path: Path | None) -> None:
-    """Render DAG(s) to <slug>-auto.dot and <slug>-auto.png.
+    """Render DAG(s) from compiled relational propositions.
 
     Edge SEMANTICS are SOURCED from compiled relational propositions (the
-    epistemic source-of-truth, Task 5f) when any exist; ``edge_status`` is
-    DERIVED via ``derived_edge_status``. When no propositions are compiled, the
-    renderer falls back to the RETIRED ``<slug>.edges.yaml`` legacy-import
-    adapter (which emits a deprecation warning and is never a status SoT).
+    epistemic source-of-truth, Task 5f); ``edge_status`` is DERIVED via
+    ``derived_edge_status``. Every DOT edge must have a compiled proposition
+    edge.
     """
     project = (project_path or Path.cwd()).resolve()
     try:
@@ -68,7 +78,13 @@ def render_cmd(slug: str | None, project_path: Path | None) -> None:
 
     try:
         if slug is not None:
-            render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)
+            paths = DagPaths(
+                dag_dir=paths.dag_dir,
+                tasks_dir=paths.tasks_dir,
+                dags=(slug,),
+                project_root=paths.project_root,
+            )
+            render_all(paths, proposition_edges=proposition_edges)
             click.echo(f"Rendered {slug}-auto.dot")
         else:
             render_all(paths, proposition_edges=proposition_edges)
@@ -77,17 +93,11 @@ def render_cmd(slug: str | None, project_path: Path | None) -> None:
         raise click.ClickException(str(exc)) from exc
 
 
-def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: ignore[type-arg]
-    """Source channel-mode edges from compiled propositions, or None if absent.
-
-    Returns ``None`` when the project has no compiled ``PropositionEntity``
-    records, signalling render/number to fall back to the retired edges.yaml
-    legacy-import adapter (Task 5f).
-    """
+def _source_proposition_edges(project: Path) -> list[dict]:  # type: ignore[type-arg]
+    """Source channel-mode edges from compiled propositions."""
     from science_tool.dag.proposition_edges import load_proposition_edges
 
-    edges = load_proposition_edges(project)
-    return edges or None
+    return load_proposition_edges(project)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +116,7 @@ def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: igno
     "--force-stubs",
     is_flag=True,
     default=False,
-    help="Overwrite existing edges.yaml stubs (resets curation).",
+    help="Retired; *.edges.yaml is no longer a DAG authoring surface.",
 )
 @click.option(
     "--project-root",
@@ -117,23 +127,19 @@ def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: igno
     help="Project root (default: current working directory).",
 )
 def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -> None:
-    """Assign sequential edge IDs and write <slug>-numbered.dot."""
+    """Assign sequential edge IDs and write numbered DOT only."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    proposition_edges = _source_proposition_edges(project)
-
     try:
         if slug is not None:
-            number_one(
-                paths.dag_dir, slug, force_stubs=force_stubs, proposition_edges=proposition_edges
-            )
+            number_one(paths.dag_dir, slug, force_stubs=force_stubs)
             click.echo(f"Numbered {slug}-numbered.dot")
         else:
-            number_all(paths, force_stubs=force_stubs, proposition_edges=proposition_edges)
+            number_all(paths, force_stubs=force_stubs)
             click.echo("Numbered all DAGs.")
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
@@ -182,21 +188,19 @@ def staleness_cmd(
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Report drift, under-reviewed edges, and unpropagated tasks."""
+    """Retired YAML staleness command."""
     project = (project_path or Path.cwd()).resolve()
     try:
-        paths = load_dag_paths(project)
+        load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    report = check_staleness(paths, recent_days=recent_days)
-
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(report.to_json(), indent=2))
-    else:
-        _print_staleness_summary(report)
-
-    ctx.exit(1 if report.has_findings else 0)
+    del ctx, recent_days, as_json, output_format
+    raise click.ClickException(
+        "DAG staleness over *.edges.yaml is retired. Run `science dag retired-edges` "
+        "to inspect remaining YAML migration content. Proposition-backed freshness "
+        "will be designed separately."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -209,19 +213,13 @@ def staleness_cmd(
     "--fix",
     is_flag=True,
     default=False,
-    help="Execute mutations: open review tasks, write unpropagated-task log.",
+    help="No-op after validation succeeds; refuses validation-blocking findings.",
 )
 @click.option(
     "--strict",
     is_flag=True,
     default=False,
     help="Enable strict validation gates.",
-)
-@click.option(
-    "--recent-days",
-    default=28,
-    show_default=True,
-    help="Look-back window in days for unpropagated-task detection.",
 )
 @click.option(
     "--json",
@@ -251,24 +249,29 @@ def audit_cmd(
     ctx: click.Context,
     fix: bool,
     strict: bool,
-    recent_days: int,
     as_json: bool,
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Run full DAG audit (validate + re-render + staleness). Use --fix to open tasks."""
+    """Run DAG audit (validate + re-render proposition-backed DAGs)."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    audit = run_audit(paths, recent_days=recent_days, fix=fix, strict=strict)
+    try:
+        audit = run_audit(paths, fix=fix, strict=strict)
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(audit.to_json(), indent=2))
     else:
-        _print_staleness_summary(audit.staleness)
+        if audit.validation.ok:
+            click.echo("DAG audit OK.")
+        else:
+            _print_validation_findings(audit.validation, strict=strict)
         if fix and audit.mutations:
             click.echo(f"\nApplied {len(audit.mutations)} mutation(s):")
             for mutation in audit.mutations:
@@ -298,7 +301,7 @@ def audit_cmd(
     help="Project root (default: current working directory).",
 )
 def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
-    """Scaffold a new DAG stub: <slug>.dot + <slug>.edges.yaml."""
+    """Scaffold a new DAG DOT topology file."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -311,13 +314,63 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
         raise click.ClickException(str(exc)) from exc
 
     dot_path = paths.dag_dir / f"{slug}.dot"
-    yaml_path = paths.dag_dir / f"{slug}.edges.yaml"
     click.echo(f"Created {dot_path.relative_to(project)}")
-    click.echo(f"Created {yaml_path.relative_to(project)}")
     click.echo("")
-    click.echo(f"Next steps: add nodes and edges to {slug}.dot, then run:")
+    click.echo("Next steps: add DOT topology, then author matching relational proposition rows in a workbench.")
     click.echo(f"  science dag number --dag {slug}")
-    click.echo(f"  science dag render  --dag {slug}")
+    click.echo(f"  science dag render --dag {slug}")
+
+
+# ---------------------------------------------------------------------------
+# retired-edges
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("retired-edges")
+@click.option(
+    "--dag",
+    "slug",
+    default=None,
+    help="Inspect one retired DAG edge file. Defaults to every *.edges.yaml file.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def retired_edges_cmd(slug: str | None, output_format: str, project_path: Path | None) -> None:
+    """Inspect retired *.edges.yaml files for migration diagnostics."""
+    from science_tool.dag.retired_edges import build_retired_edges_report
+
+    project = (project_path or Path.cwd()).resolve()
+    report = build_retired_edges_report(project, dag=slug)
+    payload = report.to_json()
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    click.echo(
+        "Retired DAG edges: "
+        f"{summary['files']} file(s), {summary['edges']} edge(s), "
+        f"{summary['migration_worthy_edges']} migration-worthy edge(s)."
+    )
+    for file in payload["files"]:
+        flags = []
+        if file["orphan_dot"]:
+            flags.append("orphan-dot")
+        flag_text = f" [{' '.join(flags)}]" if flags else ""
+        click.echo(f"  {file['dag']}: {file['edge_count']} edge(s){flag_text}")
 
 
 # ---------------------------------------------------------------------------
@@ -334,14 +387,19 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
     help="Write the JSON Schema to this file; default: stdout.",
 )
 def schema_cmd(output_path: Path | None) -> None:
-    """Emit the JSON Schema for edges.yaml files."""
+    """Emit the JSON Schema for retired edges.yaml migration inspection."""
     schema = EdgesYamlFile.model_json_schema()
     canonical = json.dumps(schema, indent=2, sort_keys=True) + "\n"
+    banner = (
+        "RETIRED: this schema describes the retired *.edges.yaml migration surface, "
+        "not an active DAG authoring input.\n"
+    )
+    click.echo(banner, nl=False, err=True)
     if output_path is None:
         click.echo(canonical, nl=False)
     else:
         output_path.write_text(canonical, encoding="utf-8")
-        click.echo(f"Wrote {output_path}")
+        click.echo(f"Wrote retired edges.yaml schema to {output_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +439,7 @@ def validate_cmd(
     output_format: str,
     project_path: Path | None,
 ) -> None:
-    """Validate DAG YAML + .dot files for schema, topology, and curation."""
+    """Validate DOT topology against compiled relational propositions."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -394,6 +452,7 @@ def validate_cmd(
             dag_dir=paths.dag_dir,
             tasks_dir=paths.tasks_dir,
             dags=(slug,),
+            project_root=paths.project_root,
         )
 
     report = validate_project(paths, strict=strict)
@@ -404,12 +463,7 @@ def validate_cmd(
         if report.ok:
             click.echo("dag validate: OK")
         else:
-            for f in report.findings:
-                blocking = f.severity == "error" or (strict and f.severity == "strict_error")
-                prefix = "ERROR" if blocking else "warn"
-                loc = f.location or ""
-                where = f"{f.dag}#{f.edge_id}" if f.edge_id else f.dag or "<project>"
-                click.echo(f"{prefix}: [{f.rule}] {where} ({loc}): {f.message}")
+            _print_validation_findings(report, strict=strict)
 
     _sys.exit(0 if report.ok else 1)
 
@@ -485,46 +539,3 @@ def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
         err=False,
     )
     ctx.exit(1)
-
-
-# ---------------------------------------------------------------------------
-# Internal display helpers
-# ---------------------------------------------------------------------------
-
-
-def _print_staleness_summary(report: object) -> None:  # type: ignore[type-arg]
-    """Print a human-readable staleness summary to stdout."""
-    from science_tool.dag.staleness import StalenessReport
-
-    assert isinstance(report, StalenessReport)
-
-    drifted = len(report.drifted_edges)
-    under = len(report.under_reviewed_edges)
-    unresolved = len(report.unresolved_refs)
-    unpropagated = len(report.unpropagated_tasks)
-
-    if not report.has_findings and not under:
-        click.echo("DAG staleness: no findings.")
-        return
-
-    click.echo(f"DAG staleness report ({report.today.isoformat()}, window={report.recent_days}d):")
-    click.echo(f"  Drifted edges:       {drifted}")
-    click.echo(f"  Under-reviewed:      {under}")
-    click.echo(f"  Unresolved refs:     {unresolved}")
-    click.echo(f"  Unpropagated tasks:  {unpropagated}")
-
-    if report.drifted_edges:
-        click.echo("\nDrifted edges:")
-        for edge in report.drifted_edges:
-            last = edge.last_cited_date.isoformat() if edge.last_cited_date else "never"
-            click.echo(f"  {edge.dag}#{edge.id}  ({edge.source} -> {edge.target})  last cited: {last}")
-
-    if report.unresolved_refs:
-        click.echo("\nUnresolved refs:")
-        for ref in report.unresolved_refs:
-            click.echo(f"  {ref.dag}#{ref.edge_id}  [{ref.kind}] {ref.value}  — {ref.reason}")
-
-    if report.unpropagated_tasks:
-        click.echo("\nUnpropagated tasks:")
-        for task in report.unpropagated_tasks:
-            click.echo(f"  {task.id}  {task.title}")

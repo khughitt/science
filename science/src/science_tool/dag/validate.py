@@ -1,27 +1,18 @@
-"""Comprehensive validation for the DAG YAML + .dot layer.
-
-Composes existing Phase 1 shape + ref checks with cross-file topology,
-acyclicity, posterior-sanity, and JSON-schema-conformance checks.
-``--strict`` adds migration-completeness gates.
-"""
+"""Validate DAG DOT topology against compiled relational propositions."""
 
 from __future__ import annotations
 
-import functools
-import json
-import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Literal
 
-import jsonschema
-import yaml
+from science_model.propositions import PropositionEntity
 
 from science_tool.dag.paths import DagPaths
-from science_tool.dag.refs import RefResolutionError, validate_ref_entry
-from science_tool.dag.schema import EdgesYamlFile
+from science_tool.dag.proposition_edges import load_relational_propositions
 
 Severity = Literal["error", "strict_error"]
 
@@ -72,102 +63,62 @@ class ValidationReport:
         }
 
 
-def _discover_edge_yaml_files(paths: DagPaths) -> list[Path]:
-    """Return the list of <slug>.edges.yaml files to validate."""
+def _discover_dot_files(paths: DagPaths) -> list[Path]:
     if paths.dags is not None:
-        return [paths.dag_dir / f"{slug}.edges.yaml" for slug in paths.dags]
-    return sorted(paths.dag_dir.glob("*.edges.yaml"))
+        return [paths.dag_dir / f"{slug}.dot" for slug in paths.dags]
+    return sorted(
+        path
+        for path in paths.dag_dir.glob("*.dot")
+        if not path.name.endswith(("-auto.dot", "-numbered.dot", ".reference"))
+    )
 
 
-def _check_shape_and_refs(yaml_path: Path, project_root: Path) -> tuple[list[ValidationFinding], EdgesYamlFile | None]:
-    """Run Pydantic shape validation and per-entry ref resolution.
-
-    Returns (findings, parsed_model_or_None). If shape validation fails the
-    model is None and ref checks are skipped.
-    """
-    findings: list[ValidationFinding] = []
-    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-    try:
-        model = EdgesYamlFile.model_validate(raw)
-    except ValueError as exc:
-        fallback_dag = yaml_path.stem.removesuffix(".edges")
-        findings.append(
-            ValidationFinding(
-                dag=raw.get("dag", fallback_dag) if isinstance(raw, dict) else fallback_dag,
-                edge_id=None,
-                rule="shape",
-                severity="error",
-                message=str(exc),
-                location=yaml_path.name,
-            )
-        )
-        return findings, None
-
-    for edge in model.edges:
-        for ref_list_name in ("data_support", "lit_support", "eliminated_by"):
-            entries = getattr(edge, ref_list_name, None) or []
-            for entry in entries:
-                try:
-                    validate_ref_entry(entry, project_root)
-                except RefResolutionError as exc:
-                    findings.append(
-                        ValidationFinding(
-                            dag=model.dag,
-                            edge_id=edge.id,
-                            rule="refs",
-                            severity="error",
-                            message=str(exc),
-                            location=yaml_path.name,
-                        )
-                    )
-    return findings, model
-
-
-def _check_posterior_sanity(model: EdgesYamlFile, yaml_path: Path) -> list[ValidationFinding]:
-    """Numeric-sanity checks on posterior blocks."""
-    findings: list[ValidationFinding] = []
-    for edge in model.edges:
-        post = edge.posterior
-        if post is None:
-            continue
-        if post.beta is not None and not math.isfinite(post.beta):
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=edge.id,
-                    rule="posterior_finite",
-                    severity="error",
-                    message=f"posterior.beta is not finite (got {post.beta!r})",
-                    location=yaml_path.name,
-                )
-            )
-        if post.hdi_low is not None and post.hdi_high is not None and post.hdi_low > post.hdi_high:
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=edge.id,
-                    rule="posterior_hdi_ordered",
-                    severity="error",
-                    message=(f"posterior.hdi_low ({post.hdi_low}) > posterior.hdi_high ({post.hdi_high})"),
-                    location=yaml_path.name,
-                )
-            )
-        if post.prob_sign is not None and not (0.0 <= post.prob_sign <= 1.0):
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=edge.id,
-                    rule="posterior_prob_sign_range",
-                    severity="error",
-                    message=(f"posterior.prob_sign ({post.prob_sign}) is outside [0, 1]"),
-                    location=yaml_path.name,
-                )
-            )
-    return findings
+def _project_root_from_paths(paths: DagPaths) -> Path:
+    if paths.project_root is not None:
+        return paths.project_root
+    # Fallback is only for default-layout tests that construct DagPaths directly.
+    return paths.dag_dir.parents[2]
 
 
 _DOT_NODE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
 _DOT_EDGE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*->\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
+_DOT_EDGE_OCCURRENCE_RE = re.compile(
+    r"^\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*->\s*"
+    r"(?P<tgt>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[(?P<attrs>[^\]]*)\])?\s*;?\s*$"
+)
+
+
+def _flatten_multiline_attrs(text: str) -> str:
+    buf = ""
+    depth = 0
+    for ch in text:
+        if ch == "[":
+            depth += 1
+            buf += ch
+        elif ch == "]":
+            depth -= 1
+            buf += ch
+        elif ch == "\n" and depth > 0:
+            buf += " "
+        else:
+            buf += ch
+    return buf
+
+
+def _dot_edge_occurrences(dot_path: Path) -> list[tuple[str, str]]:
+    """Return DOT edge occurrences in source order for the simple edge syntax render supports."""
+    text = dot_path.read_text(encoding="utf-8")
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    text = _flatten_multiline_attrs(text)
+
+    occurrences: list[tuple[str, str]] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"/\*.*?\*/", "", raw_line)
+        line = re.sub(r"//.*$", "", line)
+        edge_m = _DOT_EDGE_OCCURRENCE_RE.match(line)
+        if edge_m:
+            occurrences.append((edge_m.group("src"), edge_m.group("tgt")))
+    return occurrences
 
 
 def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
@@ -225,67 +176,6 @@ def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple
     return frozenset(nodes), frozenset(edges)
 
 
-def _check_topology_parsed(
-    model: EdgesYamlFile,
-    dot_nodes: frozenset[str],
-    dot_edges: frozenset[tuple[str, str]],
-    dot_path: Path,
-    yaml_path: Path,
-) -> list[ValidationFinding]:
-    """Cross-check YAML edges against pre-parsed .dot topology."""
-    findings: list[ValidationFinding] = []
-    yaml_edges: set[tuple[str, str]] = {(e.source, e.target) for e in model.edges}
-
-    # YAML edges whose source/target is absent from .dot nodes.
-    for edge in model.edges:
-        missing_nodes = [n for n in (edge.source, edge.target) if n not in dot_nodes]
-        if missing_nodes:
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=edge.id,
-                    rule="topology_node_mismatch",
-                    severity="error",
-                    message=(
-                        f"YAML edge {edge.source!r} -> {edge.target!r} references "
-                        f"node(s) {missing_nodes!r} not present in {dot_path.name}"
-                    ),
-                    location=yaml_path.name,
-                )
-            )
-
-    # .dot edges that have no matching YAML record.
-    for src, tgt in sorted(dot_edges - yaml_edges):
-        findings.append(
-            ValidationFinding(
-                dag=model.dag,
-                edge_id=None,
-                rule="topology_missing_in_yaml",
-                severity="error",
-                message=(f".dot edge {src!r} -> {tgt!r} has no matching YAML record"),
-                location=yaml_path.name,
-            )
-        )
-
-    # YAML edges whose (source, target) pair is absent from .dot — only
-    # emit when both endpoints exist as nodes (otherwise topology_node_mismatch
-    # already covers it).
-    for src, tgt in sorted(yaml_edges - dot_edges):
-        if src in dot_nodes and tgt in dot_nodes:
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=None,
-                    rule="topology_missing_in_dot",
-                    severity="error",
-                    message=(f"YAML edge {src!r} -> {tgt!r} has no matching .dot edge"),
-                    location=yaml_path.name,
-                )
-            )
-
-    return findings
-
-
 def _find_cycle(edges: frozenset[tuple[str, str]]) -> list[str] | None:
     """Return the node path of a cycle if one exists, else None."""
     graph: dict[str, list[str]] = {}
@@ -312,7 +202,7 @@ def _find_cycle(edges: frozenset[tuple[str, str]]) -> list[str] | None:
             if color[nxt] == GRAY:
                 # Reconstruct cycle: all nodes on the current DFS stack are
                 # GRAY (on the active path); nxt is the entry point of the
-                # cycle.  Collect frames from the first occurrence of nxt
+                # cycle. Collect frames from the first occurrence of nxt
                 # onwards, then append nxt to close the cycle.
                 path: list[str] = [frame for frame, _ in stack]
                 idx = next(i for i, (frame, _) in enumerate(stack) if frame == nxt)
@@ -329,8 +219,10 @@ def _find_cycle(edges: frozenset[tuple[str, str]]) -> list[str] | None:
     return None
 
 
-def _check_acyclicity(
-    model: EdgesYamlFile, dot_edges: frozenset[tuple[str, str]], yaml_path: Path
+def _check_acyclicity_for_dot(
+    dag: str,
+    dot_edges: frozenset[tuple[str, str]],
+    dot_path: Path,
 ) -> list[ValidationFinding]:
     cycle = _find_cycle(dot_edges)
     if cycle is None:
@@ -338,145 +230,75 @@ def _check_acyclicity(
     path_str = " -> ".join(cycle)
     return [
         ValidationFinding(
-            dag=model.dag,
+            dag=dag,
             edge_id=None,
             rule="acyclicity",
             severity="error",
             message=f"cycle detected in .dot topology: {path_str}",
-            location=yaml_path.name,
+            location=dot_path.name,
         )
     ]
 
 
-_SCHEMA_PATH = Path(__file__).with_name("edges.schema.json")
-
-
-@functools.lru_cache(maxsize=1)
-def _load_schema() -> dict:  # type: ignore[type-arg]
-    return json.loads(Path(_SCHEMA_PATH).read_text(encoding="utf-8"))
-
-
-def _check_jsonschema_conformance(
-    raw: dict,  # type: ignore[type-arg]
-    dag_name: str,
-    yaml_path: Path,
-) -> list[ValidationFinding]:
-    """Validate the raw YAML dict against the committed JSON Schema.
-
-    Produces a finding per ValidationError. Schema-driven errors whose
-    substance is already reported by Pydantic ``shape`` will duplicate; that
-    is intentional — the purpose of this check is to act as a drift tripwire
-    on the schema artifact.
-    """
-    try:
-        schema = _load_schema()
-    except FileNotFoundError:
-        return [
-            ValidationFinding(
-                dag=dag_name,
-                edge_id=None,
-                rule="jsonschema_conformance",
-                severity="error",
-                message=(
-                    f"edges.schema.json not found at {_SCHEMA_PATH}; "
-                    "regenerate with `science dag schema --output ...`"
-                ),
-                location=yaml_path.name,
-            )
-        ]
-
-    findings: list[ValidationFinding] = []
-    validator = jsonschema.Draft202012Validator(schema)
-    for err in validator.iter_errors(raw):
-        path_str = "/".join(str(p) for p in err.absolute_path) or "<root>"
-        findings.append(
-            ValidationFinding(
-                dag=dag_name,
-                edge_id=None,
-                rule="jsonschema_conformance",
-                severity="error",
-                message=f"{path_str}: {err.message}",
-                location=yaml_path.name,
-            )
-        )
-    return findings
-
-
-def _check_identification_explicit(
-    raw: dict,  # type: ignore[type-arg]
-    model: EdgesYamlFile,
-    yaml_path: Path,
-) -> list[ValidationFinding]:
-    """Flag edges where 'identification' key is absent from the raw YAML."""
-    findings: list[ValidationFinding] = []
-    raw_edges = raw.get("edges") if isinstance(raw, dict) else None
-    if not isinstance(raw_edges, list):
-        return findings
-    for raw_edge, edge in zip(raw_edges, model.edges, strict=False):
-        if isinstance(raw_edge, dict) and "identification" not in raw_edge:
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
-                    edge_id=edge.id,
-                    rule="identification_missing",
-                    severity="strict_error",
-                    message=(
-                        f"edge {edge.id} ({edge.source} -> {edge.target}) is missing explicit 'identification:' key"
-                    ),
-                    location=yaml_path.name,
-                )
-            )
-    return findings
-
-
-def _check_description_nonempty(
-    model: EdgesYamlFile,
-    yaml_path: Path,
-) -> list[ValidationFinding]:
-    """Flag ref entries (data_support, lit_support, eliminated_by) with empty description."""
-    findings: list[ValidationFinding] = []
-    for edge in model.edges:
-        for ref_list_name in ("data_support", "lit_support", "eliminated_by"):
-            entries = getattr(edge, ref_list_name, None) or []
-            for entry in entries:
-                if not entry.description or not entry.description.strip():
-                    findings.append(
-                        ValidationFinding(
-                            dag=model.dag,
-                            edge_id=edge.id,
-                            rule="description_nonempty",
-                            severity="strict_error",
-                            message=(f"edge {edge.id}.{ref_list_name}[] has an entry with empty description"),
-                            location=yaml_path.name,
-                        )
-                    )
-    return findings
-
-
-def _check_orphan_dot_nodes(
-    model: EdgesYamlFile,
+def _check_orphan_dot_nodes_for_dot(
+    dag: str,
     dot_nodes: frozenset[str],
     dot_edges: frozenset[tuple[str, str]],
-    yaml_path: Path,
+    dot_path: Path,
 ) -> list[ValidationFinding]:
     """Flag .dot nodes that appear in no edge (neither as source nor target)."""
     connected: set[str] = set()
-    for s, t in dot_edges:
-        connected.add(s)
-        connected.add(t)
+    for source, target in dot_edges:
+        connected.add(source)
+        connected.add(target)
     orphans = sorted(dot_nodes - connected)
     if not orphans:
         return []
     return [
         ValidationFinding(
-            dag=model.dag,
+            dag=dag,
             edge_id=None,
             rule="dot_nodes_unused",
             severity="strict_error",
             message=f"orphan .dot node(s): {orphans}",
-            location=yaml_path.name,
+            location=dot_path.name,
         )
     ]
+
+
+def _check_legacy_dag_metadata(
+    propositions: list[PropositionEntity],
+    per_dag_edges: dict[str, frozenset[tuple[str, str]]],
+) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    for prop in propositions:
+        if prop.legacy_patch is None or prop.legacy_patch not in per_dag_edges:
+            continue
+        if prop.subject is None or prop.object is None:
+            continue
+        if (prop.subject, prop.object) in per_dag_edges[prop.legacy_patch]:
+            continue
+
+        legacy_ref = (
+            f"{prop.legacy_patch}#{prop.legacy_edge_id}"
+            if prop.legacy_edge_id is not None
+            else prop.legacy_patch
+        )
+        findings.append(
+            ValidationFinding(
+                dag=prop.legacy_patch,
+                edge_id=prop.legacy_edge_id,
+                rule="legacy_dag_edge_unresolved",
+                severity="error",
+                message=(
+                    f"legacy DAG metadata {legacy_ref} points to proposition "
+                    f"{prop.id!r} ({prop.subject} -> {prop.object}), but that edge is absent from "
+                    f"{prop.legacy_patch}.dot."
+                ),
+                location=None,
+            )
+        )
+    return findings
 
 
 def _check_cross_dag_node_consistency(
@@ -521,79 +343,63 @@ def validate_project(
     strict: bool = False,
     today: date | None = None,
 ) -> ValidationReport:
-    """Validate every DAG YAML under ``paths.dag_dir``.
-
-    Runs all always-on checks (shape, refs, jsonschema conformance, posterior
-    sanity, topology, acyclicity) and — regardless of the ``strict`` flag —
-    emits strict-only findings (identification_missing, description_nonempty,
-    dot_nodes_unused, cross_dag_node_consistency). The ``strict`` flag only
-    gates whether ``report.ok`` considers strict findings blocking.
-    """
+    """Validate DAG DOT files against compiled relational proposition edges."""
     if today is None:
         today = date.today()
-    # dag_dir defaults to <root>/doc/figures/dags under the research profile,
-    # so three parents up recovers the project root.
-    project_root = paths.dag_dir.parents[2]
+
+    project_root = _project_root_from_paths(paths)
+    dot_files = _discover_dot_files(paths)
+    propositions = load_relational_propositions(project_root)
+    proposition_pair_counts = Counter((prop.subject, prop.object) for prop in propositions)
+
     findings: list[ValidationFinding] = []
     per_dag_nodes: dict[str, frozenset[str]] = {}
+    per_dag_edges: dict[str, frozenset[tuple[str, str]]] = {}
 
-    for yaml_path in _discover_edge_yaml_files(paths):
-        if not yaml_path.exists():
+    for dot_path in dot_files:
+        dag = dot_path.stem
+        if not dot_path.exists():
             findings.append(
                 ValidationFinding(
-                    dag=yaml_path.stem.removesuffix(".edges"),
-                    edge_id=None,
-                    rule="shape",
-                    severity="error",
-                    message=f"edges.yaml file not found: {yaml_path}",
-                    location=yaml_path.name,
-                )
-            )
-            continue
-
-        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-        f, model = _check_shape_and_refs(yaml_path, project_root)
-        findings.extend(f)
-        if model is None:
-            continue  # shape broken; skip downstream checks on this file
-
-        # JSON-schema conformance tripwire (runs on the raw dict).
-        findings.extend(_check_jsonschema_conformance(raw, model.dag, yaml_path))
-        findings.extend(_check_posterior_sanity(model, yaml_path))
-
-        if model.source_dot is not None:
-            # source_dot may be project-root-relative (e.g. "doc/figures/dags/foo.dot")
-            # or a bare filename (e.g. "foo.dot").
-            candidate = project_root / model.source_dot
-            dot_path = candidate if candidate.exists() else yaml_path.parent / model.source_dot
-        else:
-            dot_path = yaml_path.parent / f"{model.dag}.dot"
-
-        if dot_path.exists():
-            dot_nodes, dot_edges = _parse_dot_topology(dot_path)
-            per_dag_nodes[model.dag] = dot_nodes
-            findings.extend(_check_topology_parsed(model, dot_nodes, dot_edges, dot_path, yaml_path))
-            findings.extend(_check_acyclicity(model, dot_edges, yaml_path))
-            # Strict-only: orphan .dot nodes.
-            findings.extend(_check_orphan_dot_nodes(model, dot_nodes, dot_edges, yaml_path))
-        else:
-            findings.append(
-                ValidationFinding(
-                    dag=model.dag,
+                    dag=dag,
                     edge_id=None,
                     rule="source_dot_missing",
                     severity="error",
                     message=f"source .dot file not found: {dot_path}",
-                    location=yaml_path.name,
+                    location=dot_path.name,
+                )
+            )
+            continue
+
+        dot_nodes, dot_edges = _parse_dot_topology(dot_path)
+        dot_edge_counts = Counter(_dot_edge_occurrences(dot_path))
+        per_dag_nodes[dag] = dot_nodes
+        per_dag_edges[dag] = dot_edges
+
+        findings.extend(_check_acyclicity_for_dot(dag, dot_edges, dot_path))
+        if strict:
+            findings.extend(_check_orphan_dot_nodes_for_dot(dag, dot_nodes, dot_edges, dot_path))
+
+        for (source, target), dot_count in sorted(dot_edge_counts.items()):
+            if proposition_pair_counts[(source, target)] >= dot_count:
+                continue
+            findings.append(
+                ValidationFinding(
+                    dag=dag,
+                    edge_id=None,
+                    rule="proposition_edge_missing",
+                    severity="error",
+                    message=(
+                        f"DOT edge {source!r} -> {target!r} ({source} -> {target}) has no compiled "
+                        "relational proposition. Author or compile a matching workbench row."
+                    ),
+                    location=dot_path.name,
                 )
             )
 
-        # Strict-only checks (emitted regardless of `strict`; gating is in
-        # ValidationReport.ok).
-        findings.extend(_check_identification_explicit(raw, model, yaml_path))
-        findings.extend(_check_description_nonempty(model, yaml_path))
+    findings.extend(_check_legacy_dag_metadata(propositions, per_dag_edges))
 
-    # Cross-DAG strict-only check (runs after all per-DAG loops complete).
-    findings.extend(_check_cross_dag_node_consistency(per_dag_nodes))
+    if strict:
+        findings.extend(_check_cross_dag_node_consistency(per_dag_nodes))
 
     return ValidationReport(today=today, strict=strict, findings=tuple(findings))

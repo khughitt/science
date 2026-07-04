@@ -1,16 +1,14 @@
-"""Scaffold a new DAG stub: <slug>.dot + <slug>.edges.yaml."""
+"""Scaffold a new DAG DOT topology file."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 
 def init_dag(dag_dir: Path, slug: str, label: str | None = None) -> None:
-    """Scaffold ``<slug>.dot`` + ``<slug>.edges.yaml`` under *dag_dir*.
+    """Scaffold ``<slug>.dot`` under *dag_dir*.
 
-    Raises ``FileExistsError`` if either file already exists.
+    Raises ``FileExistsError`` if the DOT file already exists.
 
     Parameters
     ----------
@@ -22,12 +20,9 @@ def init_dag(dag_dir: Path, slug: str, label: str | None = None) -> None:
         Optional human-readable label. Defaults to the slug if omitted.
     """
     dot_path = dag_dir / f"{slug}.dot"
-    yaml_path = dag_dir / f"{slug}.edges.yaml"
 
     if dot_path.exists():
         raise FileExistsError(f"{dot_path} already exists; refusing to overwrite.")
-    if yaml_path.exists():
-        raise FileExistsError(f"{yaml_path} already exists; refusing to overwrite.")
 
     effective_label = label if label is not None else slug
     graph_name = slug.replace("-", "_")
@@ -46,10 +41,3 @@ digraph {graph_name} {{
 }}
 """
     dot_path.write_text(dot_content)
-
-    edges_data: dict = {
-        "dag": slug,
-        "source_dot": f"doc/figures/dags/{slug}.dot",
-        "edges": [],
-    }
-    yaml_path.write_text(yaml.dump(edges_data, default_flow_style=False, sort_keys=False))

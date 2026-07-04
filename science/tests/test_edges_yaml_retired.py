@@ -22,6 +22,7 @@ import warnings
 
 import pytest
 from science_model.propositions import PropositionEntity
+from science_model.reasoning import ClaimLayer, IdentificationStrength, Polarity, Predicate
 
 from science_tool.dag.proposition_edges import edges_from_propositions
 from science_tool.dag.render import style_for_edge
@@ -36,10 +37,10 @@ def _proposition(
     *,
     subject: str,
     obj: str,
-    predicate: str,
-    polarity: str | None,
-    claim_layer: str | None = None,
-    identification_strength: str | None = None,
+    predicate: Predicate,
+    polarity: Polarity | None,
+    claim_layer: ClaimLayer | None = None,
+    identification_strength: IdentificationStrength | None = None,
 ) -> PropositionEntity:
     return PropositionEntity(
         id=f"proposition:{subject}-{predicate}-{obj}",
@@ -55,7 +56,7 @@ def _proposition(
 class TestEdgesSourcedFromPropositions:
     def test_proposition_becomes_edge_with_subject_object_endpoints(self) -> None:
         prop = _proposition(
-            subject="a", obj="b", predicate="affects", polarity="positive"
+            subject="a", obj="b", predicate=Predicate.AFFECTS, polarity=Polarity.POSITIVE
         )
         edges = edges_from_propositions([prop])
         assert len(edges) == 1
@@ -68,7 +69,7 @@ class TestEdgesSourcedFromPropositions:
     def test_edge_runs_in_channel_mode_and_derives_status(self) -> None:
         # Ungrounded proposition (no belief/grounding wired) → derived "unknown".
         prop = _proposition(
-            subject="a", obj="b", predicate="affects", polarity="positive"
+            subject="a", obj="b", predicate=Predicate.AFFECTS, polarity=Polarity.POSITIVE
         )
         edge = edges_from_propositions([prop])[0]
         attrs = style_for_edge(edge)
@@ -80,10 +81,10 @@ class TestEdgesSourcedFromPropositions:
         # Two propositions with DIFFERENT polarity must produce DIFFERENT hues,
         # proving styling is channel-driven (Task 4b) off the proposition axes.
         pos = _proposition(
-            subject="a", obj="b", predicate="affects", polarity="positive"
+            subject="a", obj="b", predicate=Predicate.AFFECTS, polarity=Polarity.POSITIVE
         )
         neg = _proposition(
-            subject="c", obj="d", predicate="affects", polarity="negative"
+            subject="c", obj="d", predicate=Predicate.AFFECTS, polarity=Polarity.NEGATIVE
         )
         pos_attrs = style_for_edge(edges_from_propositions([pos])[0])
         neg_attrs = style_for_edge(edges_from_propositions([neg])[0])
@@ -93,10 +94,10 @@ class TestEdgesSourcedFromPropositions:
         prop = _proposition(
             subject="a",
             obj="b",
-            predicate="is_proxy_for",
+            predicate=Predicate.IS_PROXY_FOR,
             polarity=None,
-            claim_layer="structural_claim",
-            identification_strength="interventional",
+            claim_layer=ClaimLayer.STRUCTURAL_CLAIM,
+            identification_strength=IdentificationStrength.INTERVENTIONAL,
         )
         edge = edges_from_propositions([prop])[0]
         attrs = style_for_edge(edge)
@@ -151,9 +152,27 @@ class TestEdgesYamlDeprecatedAdapter:
 
 def test_no_deprecation_warning_for_proposition_sourced_edges() -> None:
     """Sourcing from propositions must NOT trip the edges.yaml deprecation."""
-    prop = _proposition(subject="a", obj="b", predicate="affects", polarity="positive")
+    prop = _proposition(subject="a", obj="b", predicate=Predicate.AFFECTS, polarity=Polarity.POSITIVE)
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         edges = edges_from_propositions([prop])
         style_for_edge(edges[0])
     assert edges
+
+
+def test_proposition_edge_carries_identity_and_legacy_dag_metadata() -> None:
+    prop = PropositionEntity(
+        id="proposition:edge-one",
+        subject="a",
+        object="b",
+        predicate=Predicate.AFFECTS,
+        polarity=Polarity.POSITIVE,
+        legacy_patch="h1",
+        legacy_edge_id=7,
+    )
+
+    edge = edges_from_propositions([prop])[0]
+
+    assert edge["proposition_id"] == "proposition:edge-one"
+    assert edge["legacy_patch"] == "h1"
+    assert edge["legacy_edge_id"] == 7

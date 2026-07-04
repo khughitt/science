@@ -12,14 +12,15 @@ class DagPaths:
 
     dag_dir: Path
     tasks_dir: Path
-    dags: tuple[str, ...] | None  # None = auto-discover all <slug>.edges.yaml
+    dags: tuple[str, ...] | None  # None = auto-discover all <slug>.dot files
+    project_root: Path | None = None
 
 
 def load_dag_paths(project_root: Path) -> DagPaths:
     """Load DAG path configuration from science.yaml.
 
     Falls back to defaults when the ``dag:`` block is absent. A project with
-    no ``dag:`` block and no ``*.edges.yaml`` files is a valid empty state:
+    no ``dag:`` block and no ``*.dot`` files is a valid empty state:
     auto-discover yields zero slugs and audit/validate return clean results.
     """
     cfg: dict = yaml.safe_load((project_root / "science.yaml").read_text()) or {}
@@ -30,10 +31,12 @@ def load_dag_paths(project_root: Path) -> DagPaths:
             dag_dir=project_root / "doc/figures/dags",
             tasks_dir=project_root / "tasks",
             dags=None,
+            project_root=project_root,
         )
 
     return DagPaths(
         dag_dir=project_root / block.get("dag_dir", "doc/figures/dags"),
         tasks_dir=project_root / block.get("tasks_dir", "tasks"),
         dags=tuple(block["dags"]) if block.get("dags") else None,
+        project_root=project_root,
     )
