@@ -54,17 +54,15 @@ P4 is not a broad reference-data program. It is the minimum artifact substrate n
 
 ### P5 - MM30 first fully-resolved consumer
 
-**Status:** Re-plan after P4.1-P4.4 shape is known.
+**Status:** P5a/P5b MM30/t665 adoption landed; P5c broader rollout gated on review of the MM30 migration report and real t665 runtime-output registration.
 
 Purpose: prove the framework and commons artifacts on a real consumer.
 
 Work packages:
 
-- remove MM30's hardcoded human species/taxon constants from datapackage emission;
-- backfill declaration-level `identity_context` across existing MM30 dataset entities;
-- resolve coordinate/gene datasets where P4 artifacts exist;
-- add `outputs[].identity` contracts to coordinate- and feature-emitting workflows;
-- replace t665's prose cross-build caveat with structured `proxy` identity and unblock TAD / A-B compartment axes.
+- **P5a/P5b landed:** t665 source dataset entities declare biological identity; the t665 workflow output declares structured `cytoband_proxy` identity via `dataset:cytoband-hg19`; MM30's datapackage helper boundary is documented so `mm30.species` remains descriptive, not authoritative identity; and `data/qa/bio_identity_inventory.csv` plus the migration report surface the untouched backlog.
+- **Runtime registration gated:** `science dataset register-run` was not run because no real `results/gse131651-3d-locus-ledger/*/datapackage.yaml` exists in the MM30 worktree. Derived entity/datapackage stamp propagation remains a runtime-output follow-up, not a declaration blocker.
+- **P5c deferred:** broader MM30 entity backfill, exact UCSC hg19/hg38 registry-row decisions, and any per-symbol gene-content verification remain gated on review of the P5 migration report.
 
 P5 is the definition-of-done for the larger effort. P1-P4 are enabling layers; the end-to-end claim is only real when MM30 uses them successfully.
 
@@ -108,7 +106,8 @@ Closed in P4.3. Resolved liftover outputs emit explicit `from_seqcol_digest` / `
 - 2026-07-03: P4.2 gene-crosswalk-hgnc landed. `science-commons` has a pinned HGNC 2025-04-01 crosswalk artifact with validated opaque `gene_key` rows, hash-verified datapackage metadata, and Science offline resolver coverage for HGNC id/current symbol/previous symbol/alias ambiguity using built-artifact fixture rows.
 - 2026-07-03: P4.3 liftover-chain consumption landed. The explicit `from_seqcol_digest` / `to_seqcol_digest` provenance decision is closed for v1; the transform block records intent, while `derivation.transformations[]` records the exact lifted source-target pair. Science proves offline compatibility loading and a tiny gzipped-chain interval lift through a reduced built-artifact fixture.
 - 2026-07-03: P4.4 cytoband proxy reference landed. `science-commons` now has pinned `dataset:cytoband-hg19` bytes from UCSC hg19 `cytoBand.txt.gz`; Science has an offline hash-verified `science_tool.commons.cytoband` reader with parse + interval-overlap lookup, and proxy provenance tests use the real `dataset:cytoband-hg19` reference slug.
-- Next: P5 MM30/t665 re-planning.
+- 2026-07-04: P5a/P5b MM30/t665 adoption landed locally on MM30 branch `bio-identity-p5-t665`. The t665 source entities declare human hg38/hg19 identity without unsafe aliasing; `workflow:gse131651-3d-locus-ledger` declares a structured `cytoband_proxy` via `dataset:cytoband-hg19`; resolver preflight uses `SCIENCE_COMMONS_ROOT=~/d/science-commons` and `SCIENCE_COMMONS_DATA_ROOT=~/d/science-commons/datasets` with a GRCh38 positive control; MM30 has a workflow-owned `data/qa/bio_identity_inventory.csv` and migration report for the untouched backlog. Register-run/stamp propagation is gated on a real t665 runtime datapackage, and P5c remains gated on report review plus the exact hg19/hg38 registry-row decision.
+- Next: review the MM30 P5 migration report, decide exact UCSC hg19/hg38 registry-row scope, and register a real t665 runtime output when available.
 
 ## How to use this doc
 
