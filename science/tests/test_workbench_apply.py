@@ -394,6 +394,31 @@ def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(
     assert not (tmp_path / "entities").exists()
 
 
+def test_apply_workbench_plan_rejects_symlinked_entity_parent_before_write(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    plan = build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    outside = tmp_path.parent / "outside"
+    outside.mkdir(exist_ok=True)
+    (tmp_path / "entities").mkdir()
+    propositions_dir = tmp_path / "entities/propositions"
+    try:
+        propositions_dir.symlink_to(outside, target_is_directory=True)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlink creation is unavailable on this platform: {exc}")
+
+    with pytest.raises(WorkbenchApplyError):
+        apply_workbench_plan(plan)
+
+    assert not (outside / "a-affects-b.md").exists()
+    workbench_text = workbench_path.read_text(encoding="utf-8")
+    assert "source: paper:Smith2026" in workbench_text
+    assert "evidence-line:a-affects-b-ev0" not in workbench_text
+
+
 @pytest.mark.parametrize(
     "entity_id",
     [

@@ -98,6 +98,8 @@ class PlannedWorkbenchEdit:
     changed: bool
     before_sha256: str | None
     after_sha256: str
+    entity_kind: str | None = None
+    entity_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +305,8 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
             changed=True,
             before_sha256=None,
             after_sha256=_sha256_text(final_text),
+            entity_kind=entity.kind,
+            entity_id=entity.id,
         )
 
     frontmatter, body, current_text = _read_existing_target(path, entity)
@@ -332,6 +336,8 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
         changed=final_text != current_text,
         before_sha256=_sha256_text(current_text),
         after_sha256=_sha256_text(final_text),
+        entity_kind=entity.kind,
+        entity_id=entity.id,
     )
 
 
@@ -468,8 +474,17 @@ def _assert_input_unchanged(plan: WorkbenchApplyPlan) -> None:
         raise WorkbenchApplyError(f"workbench input changed since it was parsed: {plan.input_path}")
 
 
-def _assert_entity_targets_unchanged(edits: list[PlannedWorkbenchEdit]) -> None:
+def _assert_entity_targets_unchanged(project_root: Path, edits: list[PlannedWorkbenchEdit]) -> None:
     for edit in edits:
+        if edit.entity_kind is None or edit.entity_id is None:
+            raise WorkbenchApplyError(f"planned entity edit is missing target metadata: {edit.path}")
+        current_path = _validated_entity_target_path(
+            project_root,
+            kind=edit.entity_kind,
+            entity_id=edit.entity_id,
+        )
+        if current_path != edit.path:
+            raise WorkbenchApplyError(f"entity target path changed since it was planned: {edit.path}")
         if edit.before_sha256 is None:
             if edit.path.exists():
                 raise WorkbenchApplyError(f"entity target appeared since it was planned: {edit.path}")
@@ -504,11 +519,11 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def apply_workbench_plan(plan: WorkbenchApplyPlan) -> WorkbenchApplyResult:
     _assert_input_unchanged(plan)
     changed_edits = plan.changed_edits
-    entity_edits = [edit for edit in plan.edits if edit.path != plan.input_path]
-    changed_entity_edits = [edit for edit in changed_edits if edit.path != plan.input_path]
-    changed_workbench_edits = [edit for edit in changed_edits if edit.path == plan.input_path]
+    entity_edits = [edit for edit in plan.edits if edit.reason == "entity"]
+    changed_entity_edits = [edit for edit in changed_edits if edit.reason == "entity"]
+    changed_workbench_edits = [edit for edit in changed_edits if edit.reason != "entity"]
     if changed_edits:
-        _assert_entity_targets_unchanged(entity_edits)
+        _assert_entity_targets_unchanged(plan.project_root, entity_edits)
     written_paths: list[Path] = []
     try:
         for edit in changed_entity_edits:
