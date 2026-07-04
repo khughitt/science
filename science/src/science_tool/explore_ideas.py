@@ -29,8 +29,13 @@ class CandidateBlock:
 
 def resolve_report_path(project_root: Path, from_value: str) -> Path:
     direct = Path(from_value)
-    if direct.is_file():
-        return direct
+    if direct.is_absolute():
+        if direct.is_file():
+            return direct
+    else:
+        anchored_direct = project_root / direct
+        if anchored_direct.is_file():
+            return anchored_direct
 
     candidate = project_root / "entities" / "meta" / "explorations" / f"{from_value}.md"
     if candidate.is_file():

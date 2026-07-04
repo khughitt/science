@@ -65,6 +65,19 @@ def test_resolve_report_path_direct_file(tmp_path: Path) -> None:
     assert resolve_report_path(tmp_path, str(report)) == report
 
 
+def test_resolve_report_path_relative_file_anchored_to_project_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = tmp_path / "entities" / "meta" / "explorations"
+    d.mkdir(parents=True)
+    report = d / "explore-2026-07-04.md"
+    report.write_text("x", encoding="utf-8")
+    monkeypatch.chdir(tmp_path.parent)
+    assert resolve_report_path(
+        tmp_path, "entities/meta/explorations/explore-2026-07-04.md"
+    ) == report
+
+
 def test_resolve_report_path_by_id(tmp_path: Path) -> None:
     d = tmp_path / "entities" / "meta" / "explorations"
     d.mkdir(parents=True)
