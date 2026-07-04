@@ -290,10 +290,12 @@ If `--commit` was passed: commit the report with
 
 ## Apply mode
 
-Require `--from`; if absent, STOP with a clear error (see Flags). Resolve
-`--from` to `entities/meta/explorations/explore-<id>.md` when given a bare
-date-slug id (e.g. `explore-2026-07-04`), or use the literal path when given
-one directly.
+Require `--from`; if absent, STOP with a clear error (see Flags). If `--from`
+is a path to an existing file, use it directly. Otherwise treat it as a report
+id — the report's basename stem, e.g. `explore-2026-07-04` — and resolve it to
+`entities/meta/explorations/<id>.md` (do **not** re-prepend `explore-`; the id
+already carries it). A same-day-suffixed report resolves the same way from its
+full stem (e.g. `explore-2026-07-04-1430`).
 
 Parse **every** fenced `yaml` block in that file containing a `candidate_id`
 key — ignore all surrounding markdown (headings, prose, the collapsed
