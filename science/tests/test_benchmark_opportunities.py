@@ -538,6 +538,171 @@ benchmark:
     assert "task-support:supported" in row["context_fit_reasons"]
 
 
+def test_context_fit_demotes_warned_direct_fit_without_specific_context_override(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: cbioportal\nname: cbioportal\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0502-breast-cptac-proteogenomics",
+        """
+id: hypothesis:0502-breast-cptac-proteogenomics
+type: hypothesis
+title: Breast cancer CPTAC proteogenomics benchmark hypothesis
+""",
+        body="Breast cancer CPTAC proteogenomics questions need supported benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac-gbm-2021-proteogenomics",
+        """
+id: dataset:cptac-gbm-2021-proteogenomics
+type: dataset
+title: CPTAC GBM proteogenomics
+dataset_class: deposit
+local_path: data/cptac-gbm
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [cross-modal]
+  benchmark_kinds: [protein-rna-cross-modal]
+  source_datasets: [cptac-gbm]
+  tasks:
+    - id: protein-rna-cross-modal
+      task_type: protein rna cross modal prediction
+      prediction_target: protein abundance
+      held_out_unit: gene
+      metric: spearman
+      baseline: transcript-only ridge
+      ground_truth:
+        type: measured-outcome
+        description: protein abundance
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "adjacent-fit"
+    assert "cross-disease:gbm-vs-breast" in row["context_fit_warnings"]
+    assert "context-warning:demoted-direct-fit" in row["context_fit_reasons"]
+    assert "specific-context:cptac" in row["context_fit_reasons"]
+    assert "specific-context:proteogenomics" in row["context_fit_reasons"]
+
+
+def test_context_fit_preserves_direct_fit_with_explicit_source_study_override(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: cbioportal\nname: cbioportal\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-breast-cptac-2021-proteogenomics",
+        """
+id: hypothesis:0503-breast-cptac-2021-proteogenomics
+type: hypothesis
+title: Breast cancer CPTAC 2021 benchmark hypothesis
+""",
+        body="Breast cancer CPTAC-2021 proteogenomics questions need supported benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac-gbm-2021-proteogenomics",
+        """
+id: dataset:cptac-gbm-2021-proteogenomics
+type: dataset
+title: CPTAC GBM proteogenomics
+dataset_class: deposit
+local_path: data/cptac-gbm
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [cross-modal]
+  benchmark_kinds: [protein-rna-cross-modal]
+  source_datasets: [cptac-2021]
+  tasks:
+    - id: protein-rna-cross-modal
+      task_type: protein rna cross modal prediction
+      prediction_target: protein abundance
+      held_out_unit: gene
+      metric: spearman
+      baseline: transcript-only ridge
+      ground_truth:
+        type: measured-outcome
+        description: protein abundance
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "direct-fit"
+    assert "cross-disease:gbm-vs-breast" in row["context_fit_warnings"]
+    assert "specific-context:cptac-2021" in row["context_fit_reasons"]
+    assert "context-warning:demoted-direct-fit" not in row["context_fit_reasons"]
+
+
+def test_context_fit_shared_modality_compound_does_not_override_warning(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: cbioportal\nname: cbioportal\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-breast-single-cell-cross-modal",
+        """
+id: hypothesis:0504-breast-single-cell-cross-modal
+type: hypothesis
+title: Breast cancer single-cell cross-modal benchmark hypothesis
+""",
+        body="Breast cancer single-cell cross-modal questions need supported benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac-gbm-2021-proteogenomics",
+        """
+id: dataset:cptac-gbm-2021-proteogenomics
+type: dataset
+title: GBM single-cell cross-modal proteogenomics
+dataset_class: deposit
+local_path: data/cptac-gbm
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [cross-modal]
+  benchmark_kinds: [protein-rna-cross-modal]
+  source_datasets: [cptac-gbm]
+  tasks:
+    - id: protein-rna-cross-modal
+      task_type: protein rna cross modal prediction
+      prediction_target: protein abundance
+      held_out_unit: gene
+      metric: spearman
+      baseline: transcript-only ridge
+      ground_truth:
+        type: measured-outcome
+        description: protein abundance
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    # `single-cell` / `cross-modal` are shared compound tokens, but they are NOT
+    # declared `source_datasets` provenance, so they must not override the
+    # cross-disease warning. The entity never names `cptac-gbm`, so no override
+    # applies and the row demotes.
+    assert row["context_fit"] == "adjacent-fit"
+    assert "cross-disease:gbm-vs-breast" in row["context_fit_warnings"]
+    assert "context-warning:demoted-direct-fit" in row["context_fit_reasons"]
+    assert "specific-context:cross-modal" in row["context_fit_reasons"]
+    assert "specific-context:cptac-gbm" not in row["context_fit_reasons"]
+
+
 def test_context_fit_coarse_domain_tokens_are_broad_context(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
