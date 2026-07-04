@@ -45,6 +45,15 @@ Expected: the printed path starts with `~/d/science/.worktrees/benchmark-gaps-co
 
 - Use the same `PYTHONPATH=science/src:science/model/src` prefix for every pytest/ruff command in this plan so the worktree source cannot be shadowed by the editable install from the main checkout.
 
+- Before every `rtk git commit` step in this plan, confirm you are on the
+  expected branch — this repo lives under Dropbox and HEAD can switch mid-session,
+  which would leak commits onto the wrong branch:
+
+```bash
+test "$(rtk git branch --show-current)" = "benchmark-gaps-context-fit-design" \
+  || { echo "WRONG BRANCH: $(rtk git branch --show-current)"; exit 1; }
+```
+
 ---
 
 ### Task 1: Annotate Gap Candidates With Context Fit
@@ -116,7 +125,11 @@ benchmark:
 
 
 def test_gaps_report_context_fit_matches_benchmark_tests_projection(tmp_path: Path) -> None:
-    from science_tool.benchmark_opportunities import benchmark_tests_report, gaps_report
+    from science_tool.benchmark_opportunities import (
+        CONTEXT_FIT_ORDER,
+        benchmark_tests_report,
+        gaps_report,
+    )
 
     _write_entity(
         tmp_path,
@@ -171,11 +184,22 @@ benchmark:
     ]
 
     assert test_rows
-    assert gap_candidate["context_fit"] == test_rows[0]["context_fit"]
-    assert set(gap_candidate["context_fit_reasons"]) <= {
+    # The gap candidate summarizes its task-level test rows to the best
+    # (min-by-CONTEXT_FIT_ORDER) fit, so compare against that reduction rather
+    # than an order-dependent test_rows[0]. For a single-task benchmark these
+    # coincide, but asserting the min keeps the contract honest if a second
+    # task is ever added to the fixture.
+    expected_fit = min(
+        (row["context_fit"] for row in test_rows),
+        key=lambda value: CONTEXT_FIT_ORDER[value],
+    )
+    assert gap_candidate["context_fit"] == expected_fit
+    # The candidate reasons/warnings are exactly the union across the same task
+    # rows, so equality (not just subset) is the real contract.
+    assert set(gap_candidate["context_fit_reasons"]) == {
         reason for row in test_rows for reason in row["context_fit_reasons"]
     }
-    assert set(gap_candidate["context_fit_warnings"]) <= {
+    assert set(gap_candidate["context_fit_warnings"]) == {
         warning for row in test_rows for warning in row["context_fit_warnings"]
     }
 
@@ -377,6 +401,34 @@ In `gaps_report(...)`, after `entity_by_id` and `candidate_score_index` are prep
     candidate_score_index: CandidateScoreIndex = {}
 ```
 
+This step makes `gaps_report()` fail loudly when a gap row's entity is missing
+from `entity_by_id` (see the `raise` below). That is intentional and matches the
+existing raise in `benchmark_tests_report()` (which already errors on
+entity-none gap rows), but it contradicts the older tolerant guard inside the
+row loop, where `hint_facets` is computed as
+`set(_entity_facet_hints(entity)) if entity is not None else set()`. Once the
+raise is in place that `else set()` branch is dead code. Remove the tolerance:
+change
+
+```python
+        entity = entity_by_id.get(current_entity_id)
+        hint_facets = set(_entity_facet_hints(entity)) if entity is not None else set()
+```
+
+into a fail-loud resolution, so gaps_report has a single, consistent entity-none
+policy instead of one tolerant and one fatal path (per this repo's
+"explicit > defensive" convention):
+
+```python
+        entity = entity_by_id.get(current_entity_id)
+        if entity is None:
+            raise ValueError(f"gap row references unknown entity: {current_entity_id}")
+        hint_facets = set(_entity_facet_hints(entity))
+```
+
+Keep the existing loop variable name `entity`; the annotation block below reuses
+that same `entity`, so no second lookup is needed.
+
 Then replace the existing `candidates = _candidate_rows(...)` assignment with:
 
 ```python
@@ -388,9 +440,8 @@ Then replace the existing `candidates = _candidate_rows(...)` assignment with:
             hint_facets,
             candidate_score_index,
         )
-        entity_for_context = entity_by_id.get(current_entity_id)
-        if entity_for_context is None:
-            raise ValueError(f"gap row references unknown entity: {current_entity_id}")
+        # `entity` was already resolved (with its raise) before hint_facets
+        # earlier in the loop; reuse it rather than re-fetching.
         annotated_candidates: list[GapCandidateBenchmarkRow] = []
         for candidate in candidates:
             context = context_by_id.get(candidate["benchmark_id"])
@@ -400,7 +451,7 @@ Then replace the existing `candidates = _candidate_rows(...)` assignment with:
             annotated_candidates.append(
                 _annotate_gap_candidate_context_fit(
                     candidate,
-                    entity=entity_for_context,
+                    entity=entity,
                     project_context_tokens=project_context_tokens,
                     context=context,
                     score=score,
@@ -1162,7 +1213,46 @@ PY
 
 Expected: this view keeps generic fallback candidates visible for diagnostics instead of hiding them globally.
 
-- [ ] **Step 6: Check git status**
+- [ ] **Step 6: Measure the shared-surface classification cost**
+
+Annotating gap candidates inside `gaps_report()` adds a classification pass that
+`benchmark_tests_report()` and `benchmark_test_triage_report()` pay (they call
+`gaps_report()` and then re-derive their own rows) and discard. The design doc
+flags this as a "measure it, then accept or optimize" item, so time the two
+shared surfaces on the largest active project (natural systems) and record the
+result rather than assuming it is free.
+
+Run:
+
+```bash
+SCIENCE_PROJECT_ROOT=~/d/natural-systems \
+SCIENCE_COMMONS_ROOT=~/d/science-commons \
+PYTHONPATH=science/src:science/model/src \
+rtk uv run --frozen --project science python - <<'PY'
+import os, time
+from pathlib import Path
+from science_tool.benchmark_opportunities import (
+    benchmark_test_triage_report,
+    benchmark_tests_report,
+)
+
+root = Path(os.environ["SCIENCE_PROJECT_ROOT"])
+for label, fn in (("tests", benchmark_tests_report), ("triage", benchmark_test_triage_report)):
+    start = time.perf_counter()
+    fn(root, include_commons=True)
+    print(label, f"{time.perf_counter() - start:.2f}s")
+PY
+```
+
+Expected: both calls exit cleanly. Record the wall-clock in the Task 4 commit
+message or the design doc's smoke note. If either surface is materially slower
+than the pre-annotation baseline (rough guide: > ~15% on natural systems), do
+**not** optimize scoring in this branch — instead record the observation and
+open a follow-up to let `benchmark_tests_report()` request un-annotated gap rows
+(it re-derives its own rows regardless). If the delta is negligible, note that
+the cost was measured and accepted.
+
+- [ ] **Step 7: Check git status**
 
 Run:
 
@@ -1172,7 +1262,7 @@ rtk git status --short
 
 Expected: clean worktree. If smoke-output files were accidentally written under the repo, remove or move them before final review.
 
-- [ ] **Step 7: Commit any verification-only doc updates if needed**
+- [ ] **Step 8: Commit any verification-only doc updates if needed**
 
 If Step 3-5 uncovered a small documentation correction in `docs/plans/2026-07-04-benchmark-gaps-context-fit-design.md`, commit only that correction:
 
@@ -1197,7 +1287,7 @@ If no doc changes were made, skip this step.
   - Active-project smoke: Task 4.
 - Placeholder scan:
   - No `TBD`, unbounded "handle edge cases", or unspecified test steps remain.
-  - The only conditional step is Task 4 Step 7, which has an explicit skip condition.
+  - The only conditional step is Task 4 Step 8, which has an explicit skip condition.
 - Type consistency:
   - `ContextFit`, `CONTEXT_FIT_ORDER`, `CandidateScore`, `CandidateScoreIndex`, `PrioritySource`, `BenchmarkTestRow`, `GapCandidateBenchmarkRow`, and `BenchmarkGapSummary` match existing names in `benchmark_opportunities.py`.
   - CLI test helpers use existing `_invoke_gaps`, `_write_entity`, and `_write_dataset` signatures.
