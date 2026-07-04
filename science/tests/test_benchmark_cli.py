@@ -870,8 +870,13 @@ benchmark:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["summary"]["concrete_rows"] == 1
-    assert payload["benchmark_tests"][0]["test_plan_state"] == "concrete"
-    assert payload["benchmark_tests"][0]["priority_source"] == "opportunity-relative"
+    row = payload["benchmark_tests"][0]
+    assert row["test_plan_state"] == "concrete"
+    assert row["priority_source"] == "opportunity-relative"
+    assert row["context_fit"] == "direct-fit"
+    assert "context_fit_reasons" in row
+    assert row["context_fit_warnings"] == []
+    assert payload["summary"]["context_fit_counts"]["direct-fit"] == 1
 
 
 def test_benchmark_tests_cli_projects_task_support_fields(tmp_path: Path) -> None:

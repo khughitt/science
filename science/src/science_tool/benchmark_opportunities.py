@@ -573,9 +573,26 @@ class HintCandidatesReport(TypedDict):
 TestPlanState = Literal["concrete", "draft-needed"]
 PrioritySource = Literal["opportunity-relative", "gap-candidate", "gap-fallback"]
 ReadinessLabel = Literal["runnable", "stage-needed", "metadata-only", "blocked"]
+ContextFit = Literal[
+    "direct-fit",
+    "adjacent-fit",
+    "method-fit",
+    "blocked-fit",
+    "generic-fallback",
+    "out-of-context",
+]
 TaskSupportCountKey = Literal["supported", "candidate", "blocked", "none"]
 
 READINESS_LABELS: tuple[ReadinessLabel, ...] = ("runnable", "stage-needed", "metadata-only", "blocked")
+CONTEXT_FITS: tuple[ContextFit, ...] = (
+    "direct-fit",
+    "adjacent-fit",
+    "method-fit",
+    "blocked-fit",
+    "generic-fallback",
+    "out-of-context",
+)
+CONTEXT_FIT_ORDER: dict[ContextFit, int] = {value: index for index, value in enumerate(CONTEXT_FITS)}
 DATASET_CLASSES: tuple[DatasetClass, ...] = ("deposit", "reference", "pointer")
 TASK_SUPPORT_COUNT_KEYS: tuple[TaskSupportCountKey, ...] = ("supported", "candidate", "blocked", "none")
 
@@ -611,6 +628,9 @@ class BenchmarkTestRow(TypedDict):
     metric: str
     baseline: str
     ground_truth: BenchmarkTestGroundTruth
+    context_fit: ContextFit
+    context_fit_reasons: list[str]
+    context_fit_warnings: list[str]
     task_support_state: BenchmarkTaskSupportState | None
     task_support_reason: str
     task_support_checked_at: str
@@ -629,6 +649,7 @@ class BenchmarkTestSummary(TypedDict):
     source_counts: dict[PrioritySource, int]
     fallback_rows: int
     fallback_row_ratio: float
+    context_fit_counts: dict[ContextFit, int]
     top_facets: list[FacetCountRow]
 
 
@@ -2538,6 +2559,28 @@ def _task_support_reason_notes(task: OpportunityTask | None) -> list[str]:
     return []
 
 
+def _empty_context_fit_counts() -> dict[ContextFit, int]:
+    return {context_fit: 0 for context_fit in CONTEXT_FITS}
+
+
+def _context_fit_counts(rows: Sequence[BenchmarkTestRow]) -> dict[ContextFit, int]:
+    counts = _empty_context_fit_counts()
+    for row in rows:
+        counts[row["context_fit"]] += 1
+    return counts
+
+
+def _initial_context_fit_for_row(
+    *,
+    task: OpportunityTask | None,
+) -> tuple[ContextFit, list[str], list[str]]:
+    reasons: list[str] = []
+    support = task.support if task is not None else None
+    if support is not None and support.state == "supported":
+        reasons.append("task-support:supported")
+    return "direct-fit", reasons, []
+
+
 def _benchmark_test_row(
     *,
     entity_id: str,
@@ -2554,6 +2597,7 @@ def _benchmark_test_row(
         reason_notes.append("draft-needed")
     support = task.support if task is not None else None
     reason_notes.extend(_task_support_reason_notes(task))
+    context_fit, context_fit_reasons, context_fit_warnings = _initial_context_fit_for_row(task=task)
     return {
         "entity_id": entity_id,
         "entity_title": entity_title,
@@ -2578,6 +2622,9 @@ def _benchmark_test_row(
         "metric": task.metric if task is not None else "",
         "baseline": task.baseline if task is not None else "",
         "ground_truth": _ground_truth_payload(task),
+        "context_fit": context_fit,
+        "context_fit_reasons": context_fit_reasons,
+        "context_fit_warnings": context_fit_warnings,
         "task_support_state": support.state if support is not None else None,
         "task_support_reason": support.reason if support is not None else "",
         "task_support_checked_at": support.checked_at if support is not None else "",
@@ -2706,6 +2753,7 @@ def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int
         "source_counts": source_counts,
         "fallback_rows": fallback_rows,
         "fallback_row_ratio": (fallback_rows / len(rows)) if rows else 0.0,
+        "context_fit_counts": _context_fit_counts(rows),
         "top_facets": top_facets,
     }
 
