@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from science_model.identity import (  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
     EntityClass,
@@ -224,6 +225,44 @@ def _is_valid_mechanism_participant(ref: str) -> bool:
     return core_entity_type_for_kind(kind) is None
 
 
+_ORIGIN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class OriginType(StrEnum):
+    """Where an epistemic entity's idea came from (an originator claim)."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    LITERATURE = "literature"
+
+
+class OriginRecord(BaseModel):
+    """One known originator of an entity.
+
+    Provenance metadata only; MUST NOT affect evidential weight. Records a known
+    originator *claim*, not a guarantee of metaphysical first origin.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: OriginType
+    ref: str | None = None
+    date: str | None = None
+    independent: bool = False  # THIS record converged independently of the others
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "OriginRecord":
+        if self.type is OriginType.LITERATURE:
+            if not self.ref:
+                raise ValueError("literature origin requires a ref")
+            if not (self.ref.startswith("paper:") or self.ref.startswith("cite:")):
+                raise ValueError("literature origin ref must be 'paper:<key>' or 'cite:<key>'")
+        if self.date is not None and not _ORIGIN_DATE_RE.match(self.date):
+            raise ValueError("origin date must be YYYY-MM-DD")
+        return self
+
+
 class Entity(BaseModel):
     """A research entity parsed from frontmatter or the knowledge graph."""
 
@@ -245,6 +284,10 @@ class Entity(BaseModel):
     same_as: list[str] = Field(default_factory=list)
     source_refs: list[str]
     evidence_refs: list[str] = Field(default_factory=list)
+    # Provenance: known originators (metadata only; MUST NOT affect belief).
+    origins: list[OriginRecord] = Field(default_factory=list)
+    # Discovery stamp: who/what surfaced this entity into the project.
+    added_by: str | None = None
     content_preview: str
     content: str = ""
     file_path: str

@@ -6,6 +6,9 @@ status: "proposed"
 phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
+# origins: known originators (user | assistant | literature). Provenance only;
+# does not affect belief. literature ref must be paper:<key> or cite:<key>.
+origins: []
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
@@ -17,6 +20,7 @@ _template:
     status: { from: status }
     phase: { from: phase, default: "active" }
     source_refs: { from: source_refs }
+    origins: { from: origins, default: [] }
     related: { from: related }
     created: { from: created }
     updated: { from: updated }

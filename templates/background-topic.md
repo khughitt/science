@@ -6,6 +6,8 @@ status: "active"
 ontology_terms: []
 datasets: []                    # omit if not applicable to this topic
 source_refs: []                  # use cite:<bibkey> for bibliography refs; paper:<bibkey> for graph-visible paper notes
+# origins: known originators (user | assistant | literature). Provenance only.
+origins: []
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"

@@ -77,10 +77,30 @@ structural problems block.
 uv run science hypotheses create "<short title>" \
   --related <question:qNN-...> \
   --related <hypothesis:hMM-...> \
-  --source-ref <paper-or-package-ref>
+  --source-ref <paper-or-package-ref> \
+  --origin user@<today> \
+  --added-by user
 ```
 
 The command prints the chosen ID (e.g. `hypothesis:h03-short-title`) and the file path. Do NOT pre-write the file or hand-pick the ID — let the tool sequence and validate. If the user wants a specific slug, pass `--slug <slug>`; if they need a literal ID, pass `--id hypothesis:<local-part>`.
+
+Capture provenance at creation with `--origin` (repeatable) and `--added-by`:
+
+- **user** — you/a collaborator proposed it: `--origin user@<today>`
+- **literature** — from a paper: `--origin literature:paper:<key>@<pubdate>` (a
+  bare BibTeX key is normalized to `cite:<key>`)
+- **assistant** — a novel idea the AI reasoned up with no literature source:
+  `--origin assistant`
+
+More than one may apply (e.g. user-proposed but predated in the literature) —
+pass `--origin` multiple times; dates establish priority. Set `--added-by user`
+(this command is user-driven). Origins are **provenance only** — they never
+affect how the hypothesis's evidence is weighed. For the rare
+convergent-independent case, add `independent: true` to the relevant origin by
+editing the created file's frontmatter — this is the one narrow exception to
+"preserve the frontmatter `science` produced" below, because the `--origin
+TYPE[:REF][@DATE]` CLI grammar has no way to express `independent`; every
+other origin field is set via the CLI flags at creation.
 
 After the file is created, open it and fill in the body using `.ai/templates/hypothesis.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md` as the writing reference. Preserve the frontmatter `science` produced; only edit the body. Use `science entity edit <ref>` (or `science entity edit <ref>`) for later metadata changes — both run prospective validation and update `updated` automatically.
 

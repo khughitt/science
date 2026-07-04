@@ -7,6 +7,9 @@ status: "active"
 ontology_terms: []
 datasets: []
 source_refs: []
+# origins: known originators (user | assistant | literature). Provenance only;
+# does not affect belief. literature ref must be paper:<key> or cite:<key>.
+origins: []
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
@@ -19,6 +22,7 @@ _template:
     ontology_terms: { default: [] }
     datasets: { default: [] }
     source_refs: { from: source_refs }
+    origins: { from: origins, default: [] }
     related: { from: related }
     created: { from: created }
     updated: { from: updated }

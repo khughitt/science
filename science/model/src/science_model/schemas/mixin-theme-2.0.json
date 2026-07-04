@@ -19,6 +19,29 @@
     "theme_kind":  {"enum": ["methodological", "conceptual", "empirical", "domain"]},
     "theme_scope": {"enum": ["project", "cross-project"]},
     "source_refs":   {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "origins": {
+      "type": "array",
+      "science:merge": "append",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {"enum": ["user", "assistant", "literature"]},
+          "ref": {"type": "string"},
+          "date": {"type": "string", "format": "date"},
+          "independent": {"type": "boolean"},
+          "note": {"type": "string"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "literature"}}, "required": ["type"]},
+            "then": {"required": ["ref"], "properties": {"ref": {"pattern": "^(paper|cite):"}}}
+          }
+        ]
+      }
+    },
+    "added_by": {"type": "string", "science:merge": "project_only"},
     "evidence_refs": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "related":       {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "status":  {"type": "string", "science:merge": "project_only"},
