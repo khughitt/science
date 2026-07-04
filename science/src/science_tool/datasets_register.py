@@ -794,15 +794,16 @@ def _append_yaml_list_item(file_path: Path, field: str, value: str) -> None:
         new_fm = fm[: m_i.start()] + new_line + fm[m_i.end() :]
     elif (m_b := block_header.search(fm)) is not None:
         block_indent = m_b["indent"]
-        item_indent = block_indent + "  "
-        item_pattern = re.compile(rf"^{re.escape(item_indent)}-\s")
+        indented_item_pattern = re.compile(rf"^(?P<indent>{re.escape(block_indent)}\s*)-\s")
         head_end = m_b.end()
         tail = fm[head_end:]
         lines = tail.split("\n")
         last_item_idx = -1
+        item_indent = block_indent + "  "
         for i, line in enumerate(lines):
-            if item_pattern.match(line):
+            if item_match := indented_item_pattern.match(line):
                 last_item_idx = i
+                item_indent = item_match["indent"]
             elif line.strip() == "" or line.startswith("#"):
                 continue
             else:
