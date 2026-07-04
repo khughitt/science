@@ -303,6 +303,13 @@ def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -
     )
 
 
+def workbench_entity_body(entity: PropositionEntity | EvidenceLineEntity) -> str:
+    """Default body used for new entities compiled from a workbench."""
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    return f"# {entity.title or local_part}\n\n## Summary\n\n\n## Notes\n"
+
+
 def _write_entity_file(
     entity: PropositionEntity | EvidenceLineEntity,
     *,
@@ -312,10 +319,7 @@ def _write_entity_file(
     """Workbench writer: delegates to the shared entity writer with the legacy body."""
     from science_tool.entities import write_entity_file
 
-    assert entity.id is not None
-    local_part = entity.id.split(":", 1)[1]
-    body = f"# {entity.title or local_part}\n\n## Summary\n\n\n## Notes\n"
-    write_entity_file(entity, project_root=project_root, body=body, as_of=as_of)
+    write_entity_file(entity, project_root=project_root, body=workbench_entity_body(entity), as_of=as_of)
 
 
 def compile_workbench(

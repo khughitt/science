@@ -399,6 +399,27 @@ def slug_for_claim_text(claim: str) -> str:
     return slug
 
 
+def render_entity_text(
+    entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
+    *,
+    body: str,
+    created: str,
+    updated: str,
+) -> str:
+    """Render a typed entity Markdown file with caller-selected dates and body."""
+    kind = entity.kind
+    assert entity.id is not None
+    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
+    frontmatter["id"] = entity.id
+    frontmatter["kind"] = kind
+    frontmatter.setdefault("status", default_status(kind))
+    for derived in ("canonical_id", "content_preview", "content", "file_path"):
+        frontmatter.pop(derived, None)
+    frontmatter["created"] = created
+    frontmatter["updated"] = updated
+    return _render_markdown(frontmatter, body)
+
+
 def write_entity_file(
     entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
     *,
@@ -430,16 +451,12 @@ def write_entity_file(
         except (yaml.YAMLError, ValueError, OSError):
             existing_created = None
 
-    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
-    frontmatter["id"] = entity.id
-    frontmatter["kind"] = kind
-    frontmatter.setdefault("status", default_status(kind))
-    for derived in ("canonical_id", "content_preview", "content", "file_path"):
-        frontmatter.pop(derived, None)
-    frontmatter["created"] = existing_created if existing_created is not None else today.isoformat()
-    frontmatter["updated"] = today.isoformat()
-
-    text = _render_markdown(frontmatter, body)
+    text = render_entity_text(
+        entity,
+        body=body,
+        created=existing_created if existing_created is not None else today.isoformat(),
+        updated=today.isoformat(),
+    )
     dest.parent.mkdir(parents=True, exist_ok=True)
     _atomic_replace_text(dest, text)
 
@@ -1473,6 +1490,11 @@ def parse_markdown_entity_file(path: Path) -> tuple[dict[str, Any], str]:
     return _parse_markdown_file(path)
 
 
+def parse_markdown_entity_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
+    """Public markdown frontmatter/body parser that preserves body bytes exactly."""
+    return _parse_markdown_file_preserving_body(path)
+
+
 def numeric_variants(token: str) -> set[str]:
     """Public id variant helper for local numeric entity references."""
     return _numeric_variants(token)
@@ -1518,13 +1540,21 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
 
 
 def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
         return ({}, text)
-    try:
-        _, frontmatter_text, body = text.split("---\n", 2)
-    except ValueError:
+    after_opening_marker = text[len("---" + newline) :]
+    closing_marker = f"{newline}---{newline}"
+    closing_marker_index = after_opening_marker.find(closing_marker)
+    if closing_marker_index == -1:
         return ({}, text)
+    frontmatter_text = after_opening_marker[:closing_marker_index]
+    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
     frontmatter = yaml.safe_load(frontmatter_text) or {}
     if not isinstance(frontmatter, dict):
         return ({}, body)
