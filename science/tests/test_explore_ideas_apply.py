@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
 import pytest
 import yaml
+from click.testing import CliRunner
 
 from _fixtures.entity_helpers import seed_project
+from science_tool.cli import main
 from science_tool.entities import EntityCommandError
 from science_tool.explore_ideas import (
     ApplyResult,
@@ -787,3 +790,125 @@ def test_apply_report_fatal_writeback_names_entity(
     assert "retry" in message.lower()
     assert "applied_as" in message
     assert list((tmp_path / "entities" / "questions").glob("*.md"))
+
+
+def test_cli_apply_requires_from() -> None:
+    result = CliRunner().invoke(main, ["explore-ideas", "apply", "--model-id", "m"])
+    assert result.exit_code != 0
+    assert "from" in result.output.lower()
+
+
+def test_cli_apply_requires_model_id() -> None:
+    result = CliRunner().invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04"])
+    assert result.exit_code != 0
+    assert "model-id" in result.output.lower()
+
+
+def test_cli_apply_round_trip_text() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "test-model"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "2 created" in result.output
+        assert len(list((root / "entities" / "questions").glob("*.md"))) == 1
+        assert len(list((root / "entities" / "hypotheses").glob("*.md"))) == 1
+
+
+def test_cli_apply_json_format() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m", "--format", "json"],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert len(payload["created"]) == 2
+        assert payload["skipped_other"] == ["cand-contrarian-null-effect"]
+
+
+def test_cli_apply_missing_report_errors() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        seed_project(Path.cwd())
+        result = runner.invoke(
+            main, ["explore-ideas", "apply", "--from", "nope", "--model-id", "m"]
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+
+def _patch_create_with_warning(monkeypatch: pytest.MonkeyPatch, warning: str) -> None:
+    import science_tool.explore_ideas as mod
+    from science_tool.entities import EntityWriteResult
+
+    real = mod.create_entity
+
+    def _warned(*args, **kwargs):
+        res = real(*args, **kwargs)
+        return EntityWriteResult(entity_id=res.entity_id, path=res.path, warnings=[warning])
+
+    monkeypatch.setattr(mod, "create_entity", _warned)
+
+
+def test_cli_apply_emits_warnings_in_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        _patch_create_with_warning(monkeypatch, "heads up: derived id truncated")
+        result = runner.invoke(
+            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "heads up: derived id truncated" in result.output
+
+
+def test_cli_apply_json_stays_valid_with_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        _patch_create_with_warning(monkeypatch, "w!")
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m", "--format", "json"],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["created"][0]["warnings"] == ["w!"]
+
+
+def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_two_keep(root)
+
+        import science_tool.explore_ideas as mod
+
+        real_create_entity = mod.create_entity
+
+        def _patched_create_entity(*args, **kwargs):
+            if kwargs["title"] == "Another question":
+                raise EntityCommandError("simulated create failure")
+            return real_create_entity(*args, **kwargs)
+
+        monkeypatch.setattr(mod, "create_entity", _patched_create_entity)
+        result = runner.invoke(
+            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
+        )
+        assert result.exit_code != 0
+        assert "1 failed" in result.output or "FAILED" in result.output
