@@ -7,6 +7,9 @@ theme_kind: "methodological"  # methodological | conceptual | empirical | domain
 theme_scope: "project"  # project | cross-project. `project` for themes local to a single Science project; `cross-project` for themes organized at the federation/meta level.
 related: []
 source_refs: []
+# origins: known originators (user | assistant | literature). Provenance only;
+# does not affect belief. literature ref must be paper:<key> or cite:<key>.
+origins: []
 evidence_refs: []
 created: "{{created}}"
 updated: "{{updated}}"
@@ -20,6 +23,7 @@ _template:
     theme_scope: { default: "project" }
     related: { from: related }
     source_refs: { from: source_refs }
+    origins: { from: origins, default: [] }
     evidence_refs: { default: [] }
     created: { from: created }
     updated: { from: updated }

@@ -29,6 +29,7 @@ VALID_FIELD_NAMES: frozenset[str] = frozenset(
         "local_part",
         "nn",
         "phase",
+        "origins",
     }
 )
 

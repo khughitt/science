@@ -88,3 +88,54 @@ def test_frontmatter_parses_origins(tmp_path):
     assert ent is not None and ent.added_by == "user"
     assert [o.type.value for o in ent.origins] == ["user", "literature"]
     assert ent.origins[1].ref == "paper:smith2019"
+
+
+from pathlib import Path
+
+from science_model.templates import Renderer
+
+_PKG_TEMPLATES = Path("src/science_model/templates")
+_ROOT_TEMPLATES = Path(__file__).resolve().parents[3] / "templates"
+_MAPPING_KINDS = ["hypothesis", "question", "theme"]
+
+
+@pytest.mark.parametrize("kind", _MAPPING_KINDS)
+def test_mapping_template_scaffolds_origins(kind):
+    text = (_PKG_TEMPLATES / f"{kind}.md").read_text(encoding="utf-8")
+    assert "origins: []" in text
+    assert "origins: { from: origins, default: [] }" in text
+
+
+def test_topic_template_scaffolds_origins():
+    text = (_PKG_TEMPLATES / "background-topic.md").read_text(encoding="utf-8")
+    assert "origins: []" in text  # plain line; topic has no _template mapping
+
+
+@pytest.mark.parametrize("kind", _MAPPING_KINDS)
+def test_mapping_templates_scaffold_origins_in_both_dirs(kind):
+    for base in (_PKG_TEMPLATES, _ROOT_TEMPLATES):
+        text = (base / f"{kind}.md").read_text(encoding="utf-8")
+        assert "origins: []" in text
+        assert "origins: { from: origins, default: [] }" in text
+
+
+def test_topic_template_scaffolds_origins_in_both_dirs():
+    for base in (_PKG_TEMPLATES, _ROOT_TEMPLATES):
+        assert "origins: []" in (base / "background-topic.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("kind", _MAPPING_KINDS)
+def test_render_defaults_origins_to_empty_list(kind):
+    # No `origins` passed → must render `origins: []`, NOT `origins: null`.
+    out = Renderer(template_root=_PKG_TEMPLATES).render(
+        kind,
+        fields={
+            "entity_id": f"{kind}:01-x",
+            "title": "X",
+            "slug": "x",
+            "nn": "01",
+            "status": "active",
+        },
+    )
+    assert "origins: []" in out
+    assert "origins: null" not in out
