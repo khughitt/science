@@ -399,6 +399,27 @@ def slug_for_claim_text(claim: str) -> str:
     return slug
 
 
+def render_entity_text(
+    entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
+    *,
+    body: str,
+    created: str,
+    updated: str,
+) -> str:
+    """Render a typed entity Markdown file with caller-selected dates and body."""
+    kind = entity.kind
+    assert entity.id is not None
+    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
+    frontmatter["id"] = entity.id
+    frontmatter["kind"] = kind
+    frontmatter.setdefault("status", default_status(kind))
+    for derived in ("canonical_id", "content_preview", "content", "file_path"):
+        frontmatter.pop(derived, None)
+    frontmatter["created"] = created
+    frontmatter["updated"] = updated
+    return _render_markdown(frontmatter, body)
+
+
 def write_entity_file(
     entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
     *,
@@ -430,16 +451,12 @@ def write_entity_file(
         except (yaml.YAMLError, ValueError, OSError):
             existing_created = None
 
-    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
-    frontmatter["id"] = entity.id
-    frontmatter["kind"] = kind
-    frontmatter.setdefault("status", default_status(kind))
-    for derived in ("canonical_id", "content_preview", "content", "file_path"):
-        frontmatter.pop(derived, None)
-    frontmatter["created"] = existing_created if existing_created is not None else today.isoformat()
-    frontmatter["updated"] = today.isoformat()
-
-    text = _render_markdown(frontmatter, body)
+    text = render_entity_text(
+        entity,
+        body=body,
+        created=existing_created if existing_created is not None else today.isoformat(),
+        updated=today.isoformat(),
+    )
     dest.parent.mkdir(parents=True, exist_ok=True)
     _atomic_replace_text(dest, text)
 
@@ -1471,6 +1488,11 @@ def load_markdown_entities(project_root: Path, kind: str | None = None) -> list[
 def parse_markdown_entity_file(path: Path) -> tuple[dict[str, Any], str]:
     """Public markdown frontmatter/body parser for entity files."""
     return _parse_markdown_file(path)
+
+
+def parse_markdown_entity_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
+    """Public markdown frontmatter/body parser that preserves body bytes exactly."""
+    return _parse_markdown_file_preserving_body(path)
 
 
 def numeric_variants(token: str) -> set[str]:
