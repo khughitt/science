@@ -147,6 +147,8 @@ already has.
    - `cite:<key>` if the DOI/key is present in `papers/references.bib`.
    - otherwise leave `ref` null — the anchor stays a raw citation and
      contributes no literature origin.
+   Preserve the anchor's `date` (full `YYYY-MM-DD`) if it carries one; a
+   `predates:` anchor's date flows into its independent literature origin.
    Finalize each candidate's `origin_plan` from the resolution per the
    origin-plan rules in Phase 4 below.
 
@@ -183,6 +185,7 @@ literature_anchors:
     title: Cholinergic control of inflammation
     first_author: Smith
     year: 2021
+    date: 2021-06-15
     note: relevant mechanism review
     ref: null
 novelty_bucket: novel
@@ -192,7 +195,6 @@ origin_plan:
   origins:
     - type: assistant
       ref: explore-ideas-mechanism
-  added_by: explore-ideas
 ```
 
 `decision` defaults to `defer`; the human edits it to `keep` or `drop` in
@@ -205,10 +207,16 @@ block in Phase 3→4):
 - Purely reasoned candidate → `origins: [{type: assistant, ref: explore-ideas-<lens>}]`.
 - A resolvable anchor whose `note` began with `predates:` → ALSO add
   `{type: literature, ref: <paper:slug|cite:key>, independent: true}`
-  (convergent: independently reasoned *and* predated in the literature).
+  (convergent: independently reasoned *and* predated in the literature). If
+  that anchor carries a full `date` (`YYYY-MM-DD`), add it to the origin
+  (`date: <YYYY-MM-DD>`); a year-only anchor carries no date (the
+  `OriginRecord` validator rejects year-only dates).
 - A resolvable anchor that merely supports (no `predates:` prefix) → the
   paper belongs in the entity's `source_refs` at apply time, **not** as an
   origin. Keep the origin `assistant` only.
+
+`origin_plan` holds `origins` only — `added_by` is not stored in the block;
+apply stamps it fresh (below) as `explore-ideas:<model-id>:<candidate_id>`.
 
 If `--commit` was passed: commit the report with
 `doc(explore-ideas): report YYYY-MM-DD`.
@@ -254,10 +262,11 @@ uv run science questions create "<title>" \
   --origin "assistant:explore-ideas-<lens>" \
   --added-by "explore-ideas:<model-id>:<candidate_id>"
 
-# convergent hypothesis (reasoned + predated in literature), plus a supporting (non-predating) paper
+# convergent hypothesis (reasoned + predated in literature), plus a supporting (non-predating) paper.
+# Append @<YYYY-MM-DD> to the +literature origin when the predating anchor carries a full date; omit it for year-only.
 uv run science hypotheses create "<title>" \
   --origin "assistant:explore-ideas-<lens>" \
-  --origin "+literature:cite:<predating-key>" \
+  --origin "+literature:cite:<predating-key>@<predating-date>" \
   --source-ref "paper:<supporting-slug>" \
   --added-by "explore-ideas:<model-id>:<candidate_id>"
 ```
@@ -265,7 +274,8 @@ uv run science hypotheses create "<title>" \
 **Literature anchor routing** — the same rule the report's origin-plan
 already encodes, restated for apply time: a resolved anchor whose `note`
 began with `predates:` becomes an independent
-`--origin "+literature:<paper:slug|cite:key>"`; a resolved anchor that
+`--origin "+literature:<paper:slug|cite:key>"` (append `@<YYYY-MM-DD>` when
+the anchor carries a full date); a resolved anchor that
 merely **supports** becomes `--source-ref "<paper:slug|cite:key>"`
 (provenance kept, but not an origin — origin stays `assistant`); an
 **unresolved** raw anchor is dropped from the create call entirely (no

@@ -77,7 +77,6 @@ origin_plan:
   origins:
     - type: assistant
       ref: explore-ideas-mechanism
-  added_by: explore-ideas
 ```
 
 ```yaml
@@ -96,6 +95,7 @@ literature_anchors:
     title: Autocorrelation timescales and apparent drift in repeated-measures assays
     first_author: Okafor
     year: 2015
+    date: 2015-03-12
     note: "predates: independently reasoned convergence, found after drafting the hypothesis"
     ref: cite:okafor2015
 novelty_bucket: novel
@@ -108,7 +108,7 @@ origin_plan:
     - type: literature
       ref: cite:okafor2015
       independent: true
-  added_by: explore-ideas
+      date: 2015-03-12
 ```
 
 ## Out of scope / dropped
@@ -130,7 +130,6 @@ origin_plan:
   origins:
     - type: assistant
       ref: explore-ideas-contrarian
-  added_by: explore-ideas
 ```
 ````
 
@@ -161,7 +160,7 @@ toolkit repo, which has none.
 
    uv run science hypotheses create "Retest interval drives apparent measurement drift" \
      --origin "assistant:explore-ideas-methodology" \
-     --origin "+literature:cite:okafor2015" \
+     --origin "+literature:cite:okafor2015@2015-03-12" \
      --added-by "explore-ideas:<model-id>:cand-methodology-retest-drift-threshold"
    ```
 
@@ -174,7 +173,9 @@ toolkit repo, which has none.
      origin.
    - The created hypothesis's frontmatter carries **two** entries under
      `origins`: the `assistant` one and a `literature` one with
-     `ref: cite:okafor2015` and `independent: true`.
+     `ref: cite:okafor2015`, `independent: true`, and `date: 2015-03-12`
+     (the predating anchor's full publication date, carried through from the
+     `@2015-03-12` suffix on the `+literature:` origin).
    - Both created blocks in the report flip from `decision: keep` to
      `decision: applied`, gaining `applied_as: <entity-id>` and
      `applied_at: 2026-07-04`. The `drop` block is untouched.

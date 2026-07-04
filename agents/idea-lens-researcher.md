@@ -38,7 +38,8 @@ the repository.
   - PubMed esearch → esummary:
     `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=<terms>&retmode=json`
   Use `WebSearch` for discovery. Capture **raw** citation metadata only — DOI,
-  OpenAlex work id, title, first author, year. NEVER emit `paper:` or `cite:`
+  OpenAlex work id, title, first author, year, and the full publication date
+  (`date: YYYY-MM-DD`) when the source gives one. NEVER emit `paper:` or `cite:`
   refs; you cannot resolve them (you can't see the project's library).
 - **Questions by default.** `proposed_kind` is `question` unless the candidate
   already states a falsifiable claim, in which case `hypothesis`.
@@ -57,14 +58,19 @@ element:
   "lens": "<your lens>",
   "rationale": "<why this is worth asking, from your lens>",
   "literature_anchors": [
-    {"doi": "10.xxxx/xxxx", "openalex_id": "Wxxxxxxxxx", "title": "...", "first_author": "Smith", "year": 2021, "note": "how it bears on the candidate"}
+    {"doi": "10.xxxx/xxxx", "openalex_id": "Wxxxxxxxxx", "title": "...", "first_author": "Smith", "year": 2021, "date": "2021-06-15", "note": "how it bears on the candidate"}
   ],
-  "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-<lens>"}], "added_by": "explore-ideas"}
+  "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-<lens>"}]}
 }
 ```
 
 - `candidate_id`: `cand-` + your lens + a short kebab slug of the title; unique within your output.
 - `literature_anchors`: `[]` is allowed if you genuinely found nothing, but try.
+  `date` is optional — include the full `YYYY-MM-DD` when the source provides it;
+  omit it (keep just `year`) when only the year is known.
+- `origin_plan` carries the reasoned `assistant` origin only. The orchestrator
+  adds any independent literature origin at classify time and stamps `added_by`
+  at apply time — do not put `added_by` here.
 - If a found paper **already poses** this same question/claim (predates the idea,
   not merely relevant), set that anchor's `note` to begin with `predates:`. The
   orchestrator uses that signal to add an independent literature origin. Do not
