@@ -674,7 +674,7 @@ id: hypothesis:0503-hidden-source
 type: hypothesis
 title: Hidden source context
 """,
-        body="Sci-plex perturbation response should be benchmarked.",
+        body="Sci-plex perturbation response should not be benchmarked.",
     )
     _write_dataset(
         tmp_path,
@@ -682,7 +682,7 @@ title: Hidden source context
         """
 id: dataset:source-hidden
 type: dataset
-title: Perturbation response benchmark
+title: Should not perturbation response benchmark
 dataset_class: deposit
 local_path: data/source-hidden
 benchmark:
@@ -710,6 +710,8 @@ benchmark:
 
     assert row["context_fit"] == "direct-fit"
     assert "specific-context:sci-plex" in row["context_fit_reasons"]
+    assert "specific-context:should" not in row["context_fit_reasons"]
+    assert "specific-context:not" not in row["context_fit_reasons"]
 
 
 def test_context_fit_broad_terms_do_not_remove_raw_clinical_matching(tmp_path: Path) -> None:

@@ -2627,7 +2627,7 @@ DISEASE_CONTEXT_TOKENS = frozenset(
 
 
 def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
-    broad = set(CONTEXT_BROAD_TOKENS) | set(ENTITY_SUPPRESSED_TOKENS) | set(_STOP_TOKENS) | {"benchmark"}
+    broad = set(CONTEXT_BROAD_TOKENS) | set(_UNMAPPED_TERM_EXCLUSIONS)
     return frozenset(token for token in tokens if token not in broad)
 
 
