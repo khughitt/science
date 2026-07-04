@@ -763,6 +763,104 @@ benchmark:
     assert not any(reason == "specific-context:clinical" for reason in row["context_fit_reasons"])
 
 
+def test_context_fit_broad_tokens_do_not_promote_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0509-broad-only",
+        """
+id: hypothesis:0509-broad-only
+type: hypothesis
+title: Cancer genomics clinical model
+""",
+        body="Cancer genomics clinical data model analysis needs evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "broad-cancer",
+        """
+id: dataset:broad-cancer
+type: dataset
+title: Cancer genomics clinical model
+dataset_class: deposit
+local_path: data/broad-cancer
+benchmark:
+  domains: [biology, cancer]
+  modalities: [clinical, genomics, multi-omic]
+  signal_types: [cross-sectional]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: static
+      task_type: static association
+      prediction_target: association
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority class
+      ground_truth:
+        type: measured-outcome
+        description: association
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] != "direct-fit"
+
+
+def test_context_fit_blocked_fallback_without_context_is_generic(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0510-unmapped",
+        """
+id: hypothesis:0510-unmapped
+type: hypothesis
+title: Unmapped benchmark entity
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-mmrf",
+        """
+id: dataset:blocked-mmrf
+type: dataset
+title: MMRF CoMMpass
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: outcome prediction
+      prediction_target: progression
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: measured-outcome
+        description: progression
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+""",
+    )
+
+    rows = benchmark_tests_report(tmp_path)["benchmark_tests"]
+    fallback = next(row for row in rows if row["priority_source"] == "gap-fallback")
+
+    assert fallback["context_fit"] == "generic-fallback"
+    assert "blocked-support-fallback" in fallback["context_fit_warnings"]
+
+
 def test_context_fit_domain_conflict_recognizes_split_natural_systems_project(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
