@@ -143,10 +143,7 @@ def _commands_with_option_without_option(flag: str, missing_flag: str) -> list[s
     paths: list[str] = []
     for path, command in _walk_commands(science_cli, ()):
         options = {
-            option
-            for parameter in command.params
-            if isinstance(parameter, click.Option)
-            for option in parameter.opts
+            option for parameter in command.params if isinstance(parameter, click.Option) for option in parameter.opts
         }
         if flag in options and missing_flag not in options:
             paths.append(" ".join(path))

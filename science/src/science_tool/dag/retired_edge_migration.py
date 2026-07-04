@@ -227,7 +227,9 @@ def _load_edges_yaml_payload(path: Path) -> dict[str, Any]:
 def _validate_edge_record(path: str, raw_edge: dict[str, Any], row_index: int) -> EdgeRecord:
     try:
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=r"Edge is missing 'identification'.*", category=DeprecationWarning)
+            warnings.filterwarnings(
+                "ignore", message=r"Edge is missing 'identification'.*", category=DeprecationWarning
+            )
             return EdgeRecord.model_validate(_edge_record_payload_for_migration(raw_edge))
     except (SchemaError, TypeError, ValueError, ValidationError) as exc:
         if _invalid_identification_error(exc):
@@ -297,11 +299,7 @@ def _invalid_identification_error(exc: BaseException) -> bool:
     if not isinstance(exc, ValidationError):
         return False
     errors = exc.errors()
-    return (
-        len(errors) == 1
-        and errors[0].get("type") == "enum"
-        and errors[0].get("loc") == ("identification",)
-    )
+    return len(errors) == 1 and errors[0].get("type") == "enum" and errors[0].get("loc") == ("identification",)
 
 
 def _resolve_dot_path(project_root: Path, yaml_path: Path, payload: dict[str, Any], dag_slug: str) -> Path | None:
@@ -595,7 +593,9 @@ def _drop_none(data: dict[str, Any]) -> dict[str, Any]:
 def migration_plan_to_workbench_yaml(plan: RetiredEdgeMigrationPlan) -> str:
     ready_rows = [row.proposed_row for row in plan.rows if row.status == "ready" and row.proposed_row is not None]
     if not ready_rows:
-        raise ValueError("no compile-compatible retired edge migration rows; pass --focal-hypothesis or inspect blockers")
+        raise ValueError(
+            "no compile-compatible retired edge migration rows; pass --focal-hypothesis or inspect blockers"
+        )
     doc: dict[str, Any] = {}
     if plan.focal_hypothesis is not None:
         doc["focal_hypothesis"] = plan.focal_hypothesis

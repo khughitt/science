@@ -13,9 +13,12 @@ from science_tool.dag.render import render_all, render_one
 from science_tool.dag.retired_edge_migration import (
     RetiredEdgeMigrationPlan,
     RetiredEdgeMigrationRow,
+    RetiredEdgeWorkbenchScaffoldResult,
     build_retired_edge_migration_plan,
     migration_plan_to_workbench_yaml,
     render_migration_plan_table,
+    render_retired_edge_workbench_scaffold_table,
+    scaffold_retired_edge_workbench,
 )
 from science_tool.dag.schema import (
     EdgeRecord,
@@ -63,9 +66,12 @@ __all__ = [
     "render_one",
     "RetiredEdgeMigrationPlan",
     "RetiredEdgeMigrationRow",
+    "RetiredEdgeWorkbenchScaffoldResult",
     "build_retired_edge_migration_plan",
     "migration_plan_to_workbench_yaml",
     "render_migration_plan_table",
+    "render_retired_edge_workbench_scaffold_table",
+    "scaffold_retired_edge_workbench",
     "EdgeRecord",
     "EdgeStatus",
     "EdgesYamlFile",
