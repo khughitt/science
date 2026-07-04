@@ -816,8 +816,25 @@ def test_cli_apply_round_trip_text() -> None:
         )
         assert result.exit_code == 0, result.output
         assert "2 created" in result.output
+        assert (
+            "created cand-mechanism-vagal-cytokine-loop ->" in result.output
+        )
+        assert (
+            "created cand-methodology-retest-drift-threshold ->" in result.output
+        )
+        assert "skipped drop/defer: cand-contrarian-null-effect" in result.output
         assert len(list((root / "entities" / "questions").glob("*.md"))) == 1
         assert len(list((root / "entities" / "hypotheses").glob("*.md"))) == 1
+
+        result2 = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "test-model"],
+        )
+        assert result2.exit_code == 0, result2.output
+        assert "2 already applied" in result2.output
+        assert "already applied: cand-mechanism-vagal-cytokine-loop" in result2.output
+        assert "already applied: cand-methodology-retest-drift-threshold" in result2.output
+        assert "skipped drop/defer: cand-contrarian-null-effect" in result2.output
 
 
 def test_cli_apply_json_format() -> None:

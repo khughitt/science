@@ -1516,6 +1516,10 @@ def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> N
             click.echo(
                 f"  created {created.candidate_id} -> {created.entity_id} ({created.kind})"
             )
+        for candidate_id in result.skipped_applied:
+            click.echo(f"  already applied: {candidate_id}")
+        for candidate_id in result.skipped_other:
+            click.echo(f"  skipped drop/defer: {candidate_id}")
         for candidate_id, kind in result.manual:
             click.echo(f"  apply manually ({kind}): {candidate_id}")
         for candidate_id, error in result.failures:
