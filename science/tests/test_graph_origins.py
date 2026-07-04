@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _fixtures.entity_helpers import seed_project
+from click.testing import CliRunner
 from rdflib import Dataset, Graph, Literal, Namespace
 from rdflib.namespace import PROV, RDF, XSD
 
+from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
 from test_graph_materialize import _write_demo_project, _write_minimal_entity
 
@@ -134,3 +137,34 @@ def test_paper_origin_resolves_to_paper_entity(tmp_path: Path) -> None:
     origin_node = next(iter(provenance.objects(entity_uri, SCI_NS.hasOrigin)))
 
     assert (origin_node, PROV.wasDerivedFrom, paper_uri) in provenance
+
+
+def test_cli_created_entity_materializes_origins(tmp_path: Path) -> None:
+    """End-to-end: `hypotheses create --origin/--added-by` (real write path) then
+    `materialize_graph` (real compile path) together emit the same PROV-O
+    attribution as the hand-written-markdown fixtures above.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "hypotheses",
+                "create",
+                "E2E",
+                "--origin",
+                "user@2026-07-03",
+                "--added-by",
+                "user",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+
+        provenance = _materialize_provenance(root)
+        agent_uri = SCI_NS["agent/user"]
+
+        assert (None, PROV.wasAttributedTo, agent_uri) in provenance
+        assert any(str(obj) == "user" for obj in provenance.objects(None, SCI_NS.addedBy))
