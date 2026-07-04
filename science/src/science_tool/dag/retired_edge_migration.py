@@ -715,3 +715,16 @@ def render_migration_plan_table(plan: RetiredEdgeMigrationPlan) -> str:
             f"{row['status']} blockers={blockers} notes={notes}"
         )
     return "\n".join(lines) + "\n"
+
+
+def render_retired_edge_workbench_scaffold_table(result: RetiredEdgeWorkbenchScaffoldResult) -> str:
+    action = "Wrote" if result.written else "No-op"
+    return (
+        f"{action} retired edge workbench scaffold: {result.output_path}\n"
+        f"  status: {result.status}\n"
+        f"  dag: {result.dag}\n"
+        f"  focal_hypothesis: {result.focal_hypothesis}\n"
+        f"  rows: {result.row_count}\n"
+        f"  predicate_review_required: {result.predicate_review_required}\n"
+        f"  evidence_stubs: {result.evidence_stub_count}\n"
+    )

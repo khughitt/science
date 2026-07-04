@@ -531,6 +531,72 @@ def test_cli_dag_retired_edge_migration_plan_workbench_outputs_strict_yaml(tmp_p
     } & set(payload["rows"][0])
 
 
+def test_cli_dag_scaffold_retired_edge_workbench_writes_file(tmp_path: Path) -> None:
+    from science_tool.dag.workbench import WorkbenchFile
+
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "written" in result.output
+    assert "doc/figures/dags/h1.workbench.yaml" in result.output
+    payload = yaml.safe_load(output.read_text(encoding="utf-8"))
+    workbench = WorkbenchFile.model_validate(payload)
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    assert not (project / "entities").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_json_reports_noop(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    args = [
+        "dag",
+        "scaffold-retired-edge-workbench",
+        "--project",
+        str(project),
+        "--dag",
+        "h1",
+        "--focal-hypothesis",
+        "hypothesis:h1",
+        "--output",
+        "doc/figures/dags/h1.workbench.yaml",
+        "--format",
+        "json",
+    ]
+
+    first = CliRunner().invoke(main, args)
+    second = CliRunner().invoke(main, args)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    first_payload = json.loads(first.stdout)
+    second_payload = json.loads(second.stdout)
+    assert first_payload["status"] == "written"
+    assert first_payload["written"] is True
+    assert second_payload["status"] == "no-op"
+    assert second_payload["written"] is False
+    assert second_payload["output"] == "doc/figures/dags/h1.workbench.yaml"
+    assert second_payload["rows"] == 1
+
+
 def test_cli_dag_help_lists_retired_edge_migration_plan() -> None:
     result = CliRunner().invoke(main, ["dag", "--help"])
 
