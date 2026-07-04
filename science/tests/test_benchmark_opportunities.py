@@ -535,6 +535,133 @@ benchmark:
     assert "task-signal:time-series" in row["context_fit_reasons"]
 
 
+def test_context_fit_totality_and_filter_or_semantics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-mixed-context",
+        """
+id: hypothesis:0504-mixed-context
+type: hypothesis
+title: Mixed benchmark context
+""",
+        body="Drug perturbation and time-series temporal mechanism evidence should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [network-reconstruction]
+  limitations: [simulated benchmark]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    all_payload = benchmark_tests_report(tmp_path)
+    direct_or_method = benchmark_tests_report(tmp_path, context_fit=("direct-fit", "method-fit"))
+
+    assert all(row["context_fit"] for row in all_payload["benchmark_tests"])
+    assert all_payload["summary"]["test_plan_rows"] >= 2
+    assert {row["context_fit"] for row in direct_or_method["benchmark_tests"]} <= {"direct-fit", "method-fit"}
+    assert direct_or_method["summary"]["test_plan_rows"] == len(direct_or_method["benchmark_tests"])
+    assert direct_or_method["filters"]["context_fit"] == ["direct-fit", "method-fit"]
+
+
+def test_benchmark_tests_report_rejects_unknown_context_fit_filter(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    with pytest.raises(ValueError, match="unknown benchmark context-fit value: near-fit"):
+        benchmark_tests_report(tmp_path, context_fit=("near-fit",))
+
+
+def test_benchmark_tests_report_filters_payload_includes_existing_filters(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    payload = benchmark_tests_report(
+        tmp_path,
+        include_commons=True,
+        entity_id="hypothesis:missing",
+        domain="biology",
+        facet="perturbation",
+        state="concrete",
+        source="opportunity-relative",
+        exclude_fallback=True,
+        readiness="runnable",
+        benchmark_id="sciplex3",
+    )
+
+    assert payload["filters"] == {
+        "include_commons": True,
+        "entity_id": "hypothesis:missing",
+        "domain": "biology",
+        "facet": "perturbation",
+        "state": "concrete",
+        "source": "opportunity-relative",
+        "exclude_fallback": True,
+        "readiness": "runnable",
+        "benchmark_id": "dataset:sciplex3",
+    }
+
+
+def test_benchmark_tests_report_filters_payload_dedupes_context_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    payload = benchmark_tests_report(tmp_path, context_fit=("direct-fit", "method-fit", "direct-fit"))
+
+    assert payload["filters"]["context_fit"] == ["direct-fit", "method-fit"]
+
+
 def test_context_fit_uses_dataset_metadata_not_public_row_only(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
