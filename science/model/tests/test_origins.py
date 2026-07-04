@@ -139,3 +139,80 @@ def test_render_defaults_origins_to_empty_list(kind):
     )
     assert "origins: []" in out
     assert "origins: null" not in out
+
+
+from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+
+
+def _topic(**extra):
+    entity = {
+        "id": "topic:immune-set-point",
+        "type": "topic",
+        "schema_profile": "science-entity-base/1.0+topic/2.0",
+        "title": "T",
+        "version": "1.0.0",
+        "status": "active",
+        "created": "2026-05-10",
+        "updated": "2026-05-10",
+        "source_refs": [],
+        "related": [],
+    }
+    entity.update(extra)
+    return entity
+
+
+def _theme(**extra):
+    entity = {
+        "id": "theme:reproducibility",
+        "type": "theme",
+        "schema_profile": "science-entity-base/1.0+theme/2.0",
+        "title": "T",
+        "version": "1.0.0",
+        "status": "active",
+        "created": "2026-05-10",
+        "updated": "2026-05-10",
+        "theme_kind": "conceptual",
+        "theme_scope": "project",
+        "source_refs": [],
+        "related": [],
+    }
+    entity.update(extra)
+    return entity
+
+
+def test_topic_schema_accepts_valid_origins():
+    EntityValidator().validate(
+        _topic(
+            origins=[{"type": "literature", "ref": "paper:smith2019"}],
+            added_by="user",
+        )
+    )
+
+
+def test_topic_schema_rejects_literature_without_ref():
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(_topic(origins=[{"type": "literature"}]))
+
+
+def test_topic_schema_rejects_unknown_origin_key():
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(_topic(origins=[{"type": "user", "bogus": 1}]))
+
+
+def test_theme_schema_accepts_valid_origins():
+    EntityValidator().validate(
+        _theme(
+            origins=[{"type": "literature", "ref": "cite:Smith2019"}],
+            added_by="assistant",
+        )
+    )
+
+
+def test_theme_schema_rejects_literature_without_ref():
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(_theme(origins=[{"type": "literature"}]))
+
+
+def test_theme_schema_rejects_unknown_origin_key():
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(_theme(origins=[{"type": "user", "bogus": 1}]))

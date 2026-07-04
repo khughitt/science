@@ -18,6 +18,29 @@
     "datasets":    {"type": "array", "items": {"type": "string", "pattern": "^dataset:"},
                     "science:merge": "append"},
     "source_refs": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "origins": {
+      "type": "array",
+      "science:merge": "append",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {"enum": ["user", "assistant", "literature"]},
+          "ref": {"type": "string"},
+          "date": {"type": "string", "format": "date"},
+          "independent": {"type": "boolean"},
+          "note": {"type": "string"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "literature"}}, "required": ["type"]},
+            "then": {"required": ["ref"], "properties": {"ref": {"pattern": "^(paper|cite):"}}}
+          }
+        ]
+      }
+    },
+    "added_by": {"type": "string", "science:merge": "project_only"},
     "related":     {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "status":      {"type": "string", "science:merge": "project_only"},
     "created":     {"type": "string", "format": "date", "science:merge": "project_only"},
