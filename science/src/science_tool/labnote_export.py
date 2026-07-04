@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 from urllib.parse import quote
@@ -240,6 +241,9 @@ def _is_private_semantic_detail_key(key: str) -> bool:
 def _scrub_public_semantic_detail_value(value: Any) -> Any:
     if isinstance(value, str):
         return _scrub_public_prose_internal_paths(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        msg = "non-finite semantic ref metadata value"
+        raise ValueError(msg)
     if isinstance(value, list):
         return [_scrub_public_semantic_detail_value(item) for item in value if _is_public_semantic_detail_value(item)]
     if isinstance(value, dict):
@@ -257,6 +261,11 @@ def _scrub_public_semantic_detail_value(value: Any) -> Any:
 def _is_public_semantic_detail_value(value: Any) -> bool:
     if isinstance(value, str):
         return True
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return True
+        msg = "non-finite semantic ref metadata value"
+        raise ValueError(msg)
     if isinstance(value, bool | int | float):
         return True
     if isinstance(value, list):

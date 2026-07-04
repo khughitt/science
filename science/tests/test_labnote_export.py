@@ -783,6 +783,37 @@ def test_semantic_refs_bundle_scrubs_internal_paths_from_detail_fields(
     assert detail["metadata"]["source_hint"] == "[private path removed]"
 
 
+def test_semantic_refs_bundle_rejects_non_finite_public_metadata(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        source_hint: .nan
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-patterns.md",
+        """
+        ---
+        id: question:0001-patterns
+        type: question
+        title: Pattern formation
+        sensitivity: public
+        ---
+        Pattern formation uses [@prim:diffusion].
+        """,
+    )
+
+    with pytest.raises(ValueError, match="non-finite semantic ref metadata value"):
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+
 def test_semantic_ref_to_later_discovered_entity_with_graph_record_gets_route(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
