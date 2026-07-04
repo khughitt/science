@@ -97,7 +97,10 @@ pass `--origin` multiple times; dates establish priority. Set `--added-by user`
 (this command is user-driven). Origins are **provenance only** — they never
 affect how the hypothesis's evidence is weighed. For the rare
 convergent-independent case, add `independent: true` to the relevant origin by
-editing the created file's frontmatter.
+editing the created file's frontmatter — this is the one narrow exception to
+"preserve the frontmatter `science` produced" below, because the `--origin
+TYPE[:REF][@DATE]` CLI grammar has no way to express `independent`; every
+other origin field is set via the CLI flags at creation.
 
 After the file is created, open it and fill in the body using `.ai/templates/hypothesis.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md` as the writing reference. Preserve the frontmatter `science` produced; only edit the body. Use `science entity edit <ref>` (or `science entity edit <ref>`) for later metadata changes — both run prospective validation and update `updated` automatically.
 
