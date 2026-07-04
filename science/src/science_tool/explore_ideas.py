@@ -120,13 +120,13 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
                 f"{candidate_id}: literature_anchors entry must be a mapping"
             )
         ref = anchor.get("ref")
+        note = anchor.get("note")
+        if note is not None and not isinstance(note, str):
+            raise ApplyValidationError(f"{candidate_id}: anchor 'note' must be a string")
         if ref is None:
             continue
         if not isinstance(ref, str):
             raise ApplyValidationError(f"{candidate_id}: anchor 'ref' must be a string")
-        note = anchor.get("note")
-        if note is not None and not isinstance(note, str):
-            raise ApplyValidationError(f"{candidate_id}: anchor 'note' must be a string")
         if (note or "").startswith("predates:"):
             continue
         if ref not in seen:

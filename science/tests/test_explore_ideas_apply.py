@@ -210,6 +210,11 @@ def test_build_plan_rejects_non_string_note() -> None:
         build_create_plan("cand-q", _keep_question(literature_anchors=[{"ref": "cite:a", "note": 5}]), "opus")
 
 
+def test_build_plan_rejects_non_string_note_on_unresolved_anchor() -> None:
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-q", _keep_question(literature_anchors=[{"ref": None, "note": 5}]), "opus")
+
+
 def test_build_plan_missing_note_routes_as_support() -> None:
     plan = build_create_plan("cand-q", _keep_question(literature_anchors=[{"ref": "cite:a"}]), "opus")
     assert plan.source_refs == ["cite:a"]
