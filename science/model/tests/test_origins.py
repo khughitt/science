@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from science_model.entities import OriginRecord, OriginType, ProjectEntity
+from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+from science_model.templates import Renderer
 
 
 def test_user_origin_minimal():
@@ -90,10 +94,6 @@ def test_frontmatter_parses_origins(tmp_path):
     assert ent.origins[1].ref == "paper:smith2019"
 
 
-from pathlib import Path
-
-from science_model.templates import Renderer
-
 _PKG_TEMPLATES = Path("src/science_model/templates")
 _ROOT_TEMPLATES = Path(__file__).resolve().parents[3] / "templates"
 _MAPPING_KINDS = ["hypothesis", "question", "theme"]
@@ -139,9 +139,6 @@ def test_render_defaults_origins_to_empty_list(kind):
     )
     assert "origins: []" in out
     assert "origins: null" not in out
-
-
-from science_model.entity_schema.validator import EntityValidationError, EntityValidator
 
 
 def _topic(**extra):
