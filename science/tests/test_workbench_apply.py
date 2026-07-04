@@ -261,7 +261,10 @@ def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
     workbench_path.parent.mkdir(parents=True)
-    _write_workbench(workbench_path, entity_id="proposition:../../../escaped", inline_evidence=False)
+    escaped_path = tmp_path.parent / "escaped.md"
+    escaped_path.unlink(missing_ok=True)
+    escape_local_part = Path("..") / ".." / ".." / "escaped"
+    _write_workbench(workbench_path, entity_id=f"proposition:{escape_local_part}", inline_evidence=False)
 
     try:
         build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
@@ -271,7 +274,7 @@ def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(
         assert "escape" in message
     else:
         raise AssertionError("expected WorkbenchApplyError")
-    assert not (tmp_path.parent / "escaped.md").exists()
+    assert not escaped_path.exists()
     assert not (tmp_path / "entities").exists()
 
 

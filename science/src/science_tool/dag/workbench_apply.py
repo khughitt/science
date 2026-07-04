@@ -133,11 +133,17 @@ def _resolve_input_path(project_root: Path, input_path: Path) -> Path:
 def _target_path(project_root: Path, entity: WorkbenchEntity) -> Path:
     if entity.id is None:
         raise WorkbenchApplyError("compiled workbench entity is missing an id")
+    return _validated_entity_target_path(project_root, kind=entity.kind, entity_id=entity.id)
+
+
+def _validated_entity_target_path(project_root: Path, *, kind: str, entity_id: str) -> Path:
+    if ":" not in entity_id:
+        raise WorkbenchApplyError(f"entity target id is missing a local part separator: {entity_id}")
     try:
-        policy = resolve_path_policy(entity.kind, project_root=project_root)
+        policy = resolve_path_policy(kind, project_root=project_root)
     except EntityCommandError as exc:
         raise WorkbenchApplyError(str(exc)) from exc
-    local_part = entity.id.split(":", 1)[1]
+    local_part = entity_id.split(":", 1)[1]
     candidate = project_root / policy.root / f"{local_part}.md"
     resolved = candidate.resolve()
     try:
@@ -229,6 +235,25 @@ def _check_duplicate_workbench_rows(workbench: WorkbenchFile) -> None:
             raise WorkbenchApplyError(f"conflicting planned writes for proposition target {row.id}")
 
 
+def _validate_precompile_targets(project_root: Path, workbench: WorkbenchFile) -> None:
+    for row in workbench.rows:
+        if row.id is None:
+            continue
+        _validated_entity_target_path(project_root, kind="proposition", entity_id=row.id)
+
+        target_slug = row.id.split(":", 1)[1]
+        ev_index = 0
+        for item in row.evidence:
+            if isinstance(item, str):
+                continue
+            _validated_entity_target_path(
+                project_root,
+                kind="evidence-line",
+                entity_id=f"evidence-line:{target_slug}-ev{ev_index}",
+            )
+            ev_index += 1
+
+
 def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> tuple[CompileResult, str]:
     try:
         raw = yaml.safe_load(input_text) or {}
@@ -236,6 +261,7 @@ def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> 
     except (ValidationError, ValueError, yaml.YAMLError) as exc:
         raise WorkbenchApplyError(f"invalid workbench input: {exc}") from exc
     _check_duplicate_workbench_rows(workbench)
+    _validate_precompile_targets(project_root, workbench)
 
     with tempfile.TemporaryDirectory(prefix="science-workbench-apply-") as scratch_name:
         scratch_root = Path(scratch_name)
