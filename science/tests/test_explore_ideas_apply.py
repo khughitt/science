@@ -4,11 +4,16 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
+from _fixtures.entity_helpers import seed_project
+from science_tool.entities import EntityCommandError
 from science_tool.explore_ideas import (
+    ApplyResult,
     ApplyValidationError,
     ApplyWriteBackError,
     CandidateBlock,
+    apply_report,
     build_create_plan,
     parse_report,
     plan_report,
@@ -505,3 +510,280 @@ def test_write_back_is_composable_across_two_candidates() -> None:
 def test_write_back_missing_candidate_raises() -> None:
     with pytest.raises(ApplyWriteBackError):
         write_back(_WB_REPORT, "cand-zzz", "x", "2026-07-04")
+
+
+_FIXTURE = """\
+---
+type: meta
+id: explore-2026-07-04
+title: Exploration report - 2026-07-04
+created: 2026-07-04
+---
+
+# Exploration report - 2026-07-04
+
+```yaml
+candidate_id: cand-mechanism-vagal-cytokine-loop
+proposed_kind: question
+title: Vagal tone as a cytokine feedback regulator
+question_or_claim: Does reduced vagal tone sustain systemic inflammation?
+lens: mechanism
+rationale: >
+  Established in acute sepsis, under-explored as chronic feedback failure.
+literature_anchors:
+  - doi: 10.1000/chen2022-vagal
+    title: Vagal afferents and cytokine feedback
+    first_author: Chen
+    year: 2022
+    note: supports the feedback-loop framing
+    ref: cite:chen2022
+novelty_bucket: novel
+related_existing: []
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+
+```yaml
+candidate_id: cand-methodology-retest-drift-threshold
+proposed_kind: hypothesis
+title: Retest interval drives apparent measurement drift
+question_or_claim: A fixed retest interval below the assay autocorrelation timescale manifests as spurious drift.
+lens: methodology
+rationale: >
+  Reasoned independently before locating prior work making the same point.
+literature_anchors:
+  - doi: 10.1000/okafor2015-retest
+    title: Autocorrelation timescales and apparent drift
+    first_author: Okafor
+    year: 2015
+    date: 2015-03-12
+    note: "predates: independently reasoned convergence"
+    ref: cite:okafor2015
+novelty_bucket: novel
+related_existing: []
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-methodology
+    - type: literature
+      ref: cite:okafor2015
+      independent: true
+      date: 2015-03-12
+```
+
+```yaml
+candidate_id: cand-contrarian-null-effect
+proposed_kind: question
+title: Is the effect fully explained by selection bias?
+lens: contrarian
+rationale: >
+  Included to exercise the drop path.
+literature_anchors: []
+novelty_bucket: out-of-scope
+related_existing: []
+decision: drop
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-contrarian
+```
+"""
+
+
+def _write_fixture(root: Path) -> Path:
+    d = root / "entities" / "meta" / "explorations"
+    d.mkdir(parents=True)
+    report = d / "explore-2026-07-04.md"
+    report.write_text(_FIXTURE, encoding="utf-8")
+    return report
+
+
+def _frontmatter(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), text[:40]
+    fm, _, _ = text[4:].partition("\n---")
+    return yaml.safe_load(fm)
+
+
+def test_apply_report_creates_kept_entities(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    _write_fixture(tmp_path)
+
+    result = apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    assert isinstance(result, ApplyResult)
+    assert len(result.created) == 2
+    assert sorted(c.kind for c in result.created) == ["hypothesis", "question"]
+    assert result.skipped_other == ["cand-contrarian-null-effect"]
+    assert result.failures == []
+
+    q_files = list((tmp_path / "entities" / "questions").glob("*.md"))
+    h_files = list((tmp_path / "entities" / "hypotheses").glob("*.md"))
+    assert len(q_files) == 1
+    assert len(h_files) == 1
+
+
+def test_apply_report_routes_origins_and_source_refs(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    _write_fixture(tmp_path)
+
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    q_fm = _frontmatter(next((tmp_path / "entities" / "questions").glob("*.md")))
+    assert q_fm["source_refs"] == ["cite:chen2022"]
+    assert all(o.get("ref") != "cite:chen2022" for o in q_fm.get("origins") or [])
+    assert q_fm["added_by"] == "explore-ideas:test-model:cand-mechanism-vagal-cytokine-loop"
+
+    h_fm = _frontmatter(next((tmp_path / "entities" / "hypotheses").glob("*.md")))
+    lit = [o for o in h_fm["origins"] if o["type"] == "literature"]
+    assert len(lit) == 1
+    assert lit[0]["ref"] == "cite:okafor2015"
+    assert lit[0]["independent"] is True
+    assert str(lit[0]["date"]) == "2015-03-12"
+    assert "cite:okafor2015" not in (h_fm.get("source_refs") or [])
+
+
+def test_apply_report_writes_back_and_is_idempotent(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+    text = report.read_text(encoding="utf-8")
+    assert text.count("decision: applied") == 2
+    assert "applied_at: 2026-07-04" in text
+    assert text.count("decision: drop") == 1
+
+    result2 = apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+    assert result2.created == []
+    assert sorted(result2.skipped_applied) == [
+        "cand-mechanism-vagal-cytokine-loop",
+        "cand-methodology-retest-drift-threshold",
+    ]
+    assert len(list((tmp_path / "entities" / "questions").glob("*.md"))) == 1
+    assert len(list((tmp_path / "entities" / "hypotheses").glob("*.md"))) == 1
+
+
+def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+
+    result = apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+    payload = result.to_dict()
+
+    assert payload == {
+        "report": str(report),
+        "created": [
+            {
+                "candidate_id": c.candidate_id,
+                "entity_id": c.entity_id,
+                "kind": c.kind,
+                "path": str(c.path),
+                "warnings": list(c.warnings),
+            }
+            for c in result.created
+        ],
+        "skipped_applied": [],
+        "skipped_other": ["cand-contrarian-null-effect"],
+        "manual": [],
+        "failures": [],
+    }
+
+
+_TWO_KEEP = """\
+---
+type: meta
+id: explore-2026-07-04
+---
+
+```yaml
+candidate_id: cand-good
+proposed_kind: question
+title: A well-formed question
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+
+```yaml
+candidate_id: cand-bad
+proposed_kind: question
+title: Another question
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+"""
+
+
+def _write_two_keep(root: Path) -> Path:
+    d = root / "entities" / "meta" / "explorations"
+    d.mkdir(parents=True)
+    report = d / "explore-2026-07-04.md"
+    report.write_text(_TWO_KEEP, encoding="utf-8")
+    return report
+
+
+def test_apply_report_continues_past_create_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_project(tmp_path)
+    report = _write_two_keep(tmp_path)
+
+    created_ids: list[str] = []
+    real_apply_report = apply_report
+
+    import science_tool.explore_ideas as mod
+
+    real_create_entity = mod.create_entity
+
+    def _patched_create_entity(*args, **kwargs):
+        title = kwargs["title"]
+        if title == "Another question":
+            raise EntityCommandError("simulated create failure")
+        result = real_create_entity(*args, **kwargs)
+        created_ids.append(result.entity_id)
+        return result
+
+    monkeypatch.setattr(mod, "create_entity", _patched_create_entity)
+
+    result = real_apply_report(tmp_path, "explore-2026-07-04", "m", date(2026, 7, 4))
+
+    assert [c.candidate_id for c in result.created] == ["cand-good"]
+    assert result.failures == [("cand-bad", "simulated create failure")]
+    assert len(created_ids) == 1
+    text = report.read_text(encoding="utf-8")
+    good = text.split("candidate_id: cand-good")[1].split("```")[0]
+    bad = text.split("candidate_id: cand-bad")[1].split("```")[0]
+    assert "decision: applied" in good
+    assert "decision: keep" in bad
+    assert len(list((tmp_path / "entities" / "questions").glob("*.md"))) == 1
+
+
+def test_apply_report_fatal_writeback_names_entity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_project(tmp_path)
+    _write_fixture(tmp_path)
+
+    import science_tool.explore_ideas as mod
+
+    def _boom(*args, **kwargs):
+        raise ApplyWriteBackError("simulated write-back failure")
+
+    monkeypatch.setattr(mod, "write_back", _boom)
+
+    with pytest.raises(ApplyWriteBackError) as excinfo:
+        apply_report(tmp_path, "explore-2026-07-04", "m", date(2026, 7, 4))
+
+    message = str(excinfo.value)
+    assert "retry" in message.lower()
+    assert "applied_as" in message
+    assert list((tmp_path / "entities" / "questions").glob("*.md"))

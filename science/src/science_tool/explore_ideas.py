@@ -9,6 +9,7 @@ import yaml
 from pydantic import ValidationError
 
 from science_model.entities import OriginRecord
+from science_tool.entities import EntityCommandError, create_entity
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
@@ -47,6 +48,50 @@ class ReportPlan:
     skipped_applied: list[str]
     skipped_other: list[str]
     manual: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class CreatedEntity:
+    candidate_id: str
+    entity_id: str
+    kind: str
+    path: Path
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    report: Path
+    created: list[CreatedEntity]
+    skipped_applied: list[str]
+    skipped_other: list[str]
+    manual: list[tuple[str, str]]
+    failures: list[tuple[str, str]]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "report": str(self.report),
+            "created": [
+                {
+                    "candidate_id": created.candidate_id,
+                    "entity_id": created.entity_id,
+                    "kind": created.kind,
+                    "path": str(created.path),
+                    "warnings": list(created.warnings),
+                }
+                for created in self.created
+            ],
+            "skipped_applied": list(self.skipped_applied),
+            "skipped_other": list(self.skipped_other),
+            "manual": [
+                {"candidate_id": candidate_id, "proposed_kind": kind}
+                for candidate_id, kind in self.manual
+            ],
+            "failures": [
+                {"candidate_id": candidate_id, "error": error}
+                for candidate_id, error in self.failures
+            ],
+        }
 
 
 def resolve_report_path(project_root: Path, from_value: str) -> Path:
@@ -264,3 +309,59 @@ def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) ->
         i += 1
 
     raise ApplyWriteBackError(f"{candidate_id}: block not found in report for write-back")
+
+
+def apply_report(project_root: Path, from_value: str, model_id: str, today: date) -> ApplyResult:
+    report_path = resolve_report_path(project_root, from_value)
+    text = report_path.read_text(encoding="utf-8")
+    blocks = parse_report(text)
+    plan = plan_report(blocks, model_id)
+
+    created: list[CreatedEntity] = []
+    failures: list[tuple[str, str]] = []
+
+    for create_plan in plan.to_create:
+        try:
+            result = create_entity(
+                project_root,
+                kind=create_plan.kind,
+                title=create_plan.title,
+                source_refs=create_plan.source_refs,
+                today=today,
+                extra_frontmatter={
+                    "origins": create_plan.origins,
+                    "added_by": create_plan.added_by,
+                },
+            )
+        except EntityCommandError as exc:
+            failures.append((create_plan.candidate_id, str(exc)))
+            continue
+
+        try:
+            text = write_back(text, create_plan.candidate_id, result.entity_id, today.isoformat())
+            report_path.write_text(text, encoding="utf-8")
+        except (ApplyWriteBackError, OSError) as exc:
+            raise ApplyWriteBackError(
+                f"created entity {result.entity_id} at {result.path}, but failed to record it in "
+                f"{report_path}: {exc}. Mark that candidate's block 'decision: applied' with "
+                f"'applied_as: {result.entity_id}' before retrying, or a retry may create a duplicate."
+            ) from exc
+
+        created.append(
+            CreatedEntity(
+                candidate_id=create_plan.candidate_id,
+                entity_id=result.entity_id,
+                kind=create_plan.kind,
+                path=result.path,
+                warnings=list(result.warnings),
+            )
+        )
+
+    return ApplyResult(
+        report=report_path,
+        created=created,
+        skipped_applied=plan.skipped_applied,
+        skipped_other=plan.skipped_other,
+        manual=plan.manual,
+        failures=failures,
+    )
