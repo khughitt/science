@@ -51,6 +51,15 @@ from science_tool.dag.workbench import (
     WorkbenchRow,
     compile_workbench,
 )
+from science_tool.dag.workbench_apply import (
+    PlannedWorkbenchEdit,
+    WorkbenchApplyError,
+    WorkbenchApplyPlan,
+    WorkbenchApplyResult,
+    apply_workbench,
+    apply_workbench_plan,
+    build_workbench_apply_plan,
+)
 
 __all__ = [
     "AuditReport",
@@ -98,4 +107,11 @@ __all__ = [
     "WorkbenchFile",
     "WorkbenchRow",
     "compile_workbench",
+    "PlannedWorkbenchEdit",
+    "WorkbenchApplyError",
+    "WorkbenchApplyPlan",
+    "WorkbenchApplyResult",
+    "apply_workbench",
+    "apply_workbench_plan",
+    "build_workbench_apply_plan",
 ]

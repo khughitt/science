@@ -590,6 +590,53 @@ def validate_cmd(
 # ---------------------------------------------------------------------------
 
 
+@dag_group.command("apply-workbench")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Reviewed workbench YAML path to compile/apply. Relative paths resolve against the project root.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def apply_workbench_cmd(input_path: Path, output_format: str, project_path: Path | None) -> None:
+    """Compile a reviewed DAG workbench into entities and canonical YAML."""
+    from science_tool.dag.workbench_apply import WorkbenchApplyError, apply_workbench
+
+    project = (project_path or Path.cwd()).resolve()
+    try:
+        result = apply_workbench(project, input_path=input_path)
+    except WorkbenchApplyError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(result.to_json(), indent=2, sort_keys=True))
+        return
+
+    action = "Applied" if result.status == "applied" else "No-op"
+    click.echo(f"{action} workbench: {result.input_path}")
+    click.echo(
+        f"  rows={result.row_count}, propositions={result.proposition_count}, "
+        f"evidence_lines={result.evidence_line_count}, changed_paths={len(result.changed_paths)}"
+    )
+    for path in result.changed_paths:
+        click.echo(f"  {path}")
+
+
 @dag_group.command("workbench")
 @click.option(
     "--check",

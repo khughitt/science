@@ -727,6 +727,131 @@ def test_cli_dag_scaffold_retired_edge_workbench_output_escape_fails(tmp_path: P
     assert not (tmp_path / "outside.workbench.yaml").exists()
 
 
+def _write_apply_workbench(project: Path, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """rows:
+  - id: proposition:a-affects-b
+    subject: a
+    predicate: affects
+    object: b
+    patch: h1
+    polarity: positive
+    claim_layer: causal_effect
+    identification_strength: observational
+    evidence:
+      - stance: supports
+        source: paper:Smith2026
+        evidence_type: literature
+""",
+        encoding="utf-8",
+    )
+    (project / "science.yaml").write_text(
+        "name: dag-cli-apply-test\nknowledge_profiles:\n  local: local\n",
+        encoding="utf-8",
+    )
+
+
+def test_cli_dag_apply_workbench_writes_entities_and_canonicalizes(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    workbench = project / "doc/figures/dags/h1.workbench.yaml"
+    _write_apply_workbench(project, workbench)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "apply-workbench",
+            "--project",
+            str(project),
+            "--input",
+            "doc/figures/dags/h1.workbench.yaml",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "applied"
+    assert payload["rows"] == 1
+    assert payload["propositions"] == 1
+    assert payload["evidence_lines"] == 1
+    assert (project / "entities/propositions/a-affects-b.md").is_file()
+    assert (project / "entities/evidence-lines/a-affects-b-ev0.md").is_file()
+    assert "evidence-line:a-affects-b-ev0" in workbench.read_text(encoding="utf-8")
+
+    check = CliRunner().invoke(main, ["dag", "workbench", "--check", str(workbench)])
+    assert check.exit_code == 0, check.output
+
+
+def test_cli_dag_apply_workbench_json_reports_noop(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    workbench = project / "doc/figures/dags/h1.workbench.yaml"
+    _write_apply_workbench(project, workbench)
+
+    first = CliRunner().invoke(
+        main,
+        ["dag", "apply-workbench", "--project", str(project), "--input", str(workbench), "--format", "json"],
+    )
+    assert first.exit_code == 0, first.output
+    second = CliRunner().invoke(
+        main,
+        ["dag", "apply-workbench", "--project", str(project), "--input", str(workbench), "--format", "json"],
+    )
+    assert second.exit_code == 0, second.output
+    payload = json.loads(second.output)
+    assert payload["status"] == "no-op"
+    assert payload["changed_path_count"] == 0
+
+
+def test_cli_dag_apply_workbench_refuses_retired_edges_input(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    path = project / "doc/figures/dags/h1.edges.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text("dag: h1\nedges: []\n", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["dag", "apply-workbench", "--project", str(project), "--input", str(path)])
+
+    assert result.exit_code != 0
+    assert "retired edges YAML" in result.output
+
+
+def test_cli_dag_apply_workbench_refuses_dot_input(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    path = project / "doc/figures/dags/h1.dot"
+    path.parent.mkdir(parents=True)
+    path.write_text("digraph h1 { a -> b; }\n", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["dag", "apply-workbench", "--project", str(project), "--input", str(path)])
+
+    assert result.exit_code != 0
+    assert "DOT topology" in result.output
+
+
+def test_cli_dag_apply_workbench_invalid_workbench_is_click_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    path = project / "doc/figures/dags/h1.workbench.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text("rows:\n  - subject: a\n", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["dag", "apply-workbench", "--project", str(project), "--input", str(path)])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "failed to compile workbench" in result.output
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ != "ValidationError"
+
+
 def test_cli_dag_help_lists_retired_edge_migration_plan() -> None:
     result = CliRunner().invoke(main, ["dag", "--help"])
 

@@ -168,9 +168,9 @@ def _resolve_input_path(project_root: Path, input_path: Path) -> Path:
     except ValueError as exc:
         raise WorkbenchApplyError(f"workbench input escapes project root: {candidate}") from exc
     if resolved.name.endswith(".edges.yaml"):
-        raise WorkbenchApplyError("workbench apply does not accept .edges.yaml input")
+        raise WorkbenchApplyError("workbench apply does not accept retired edges YAML input")
     if resolved.suffix == ".dot":
-        raise WorkbenchApplyError("workbench apply does not accept .dot input")
+        raise WorkbenchApplyError("workbench apply does not accept DOT topology input")
     return resolved
 
 
@@ -404,7 +404,7 @@ def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> 
         raw = yaml.safe_load(input_text) or {}
         workbench = WorkbenchFile.model_validate(raw)
     except (ValidationError, ValueError, yaml.YAMLError) as exc:
-        raise WorkbenchApplyError(f"invalid workbench input: {exc}") from exc
+        raise WorkbenchApplyError(f"failed to compile workbench: {exc}") from exc
     _check_duplicate_workbench_rows(workbench)
     _validate_precompile_targets(project_root, workbench)
 
