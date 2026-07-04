@@ -496,6 +496,10 @@ def test_cli_dag_retired_edge_migration_plan_workbench_outputs_strict_yaml(tmp_p
     workbench = WorkbenchFile.model_validate(payload)
     assert workbench.focal_hypothesis == "hypothesis:h1"
     assert len(workbench.rows) == 1
+    row = workbench.rows[0]
+    assert row.legacy_patch == "h1"
+    assert row.legacy_edge_id == 1
+    assert row.discusses == ["hypothesis:h1"]
     assert not {
         "status",
         "blockers",

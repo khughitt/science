@@ -126,6 +126,15 @@ def test_workbench_yaml_is_strict_workbench_file_with_focal_hypothesis(tmp_path:
 
     assert workbench.focal_hypothesis == "hypothesis:h1"
     assert len(workbench.rows) == 1
+    row = workbench.rows[0]
+    assert row.subject == "a"
+    assert row.predicate == "affects"
+    assert row.object == "b"
+    assert row.patch == "h1"
+    assert row.legacy_relation_label == "biases"
+    assert row.legacy_patch == "h1"
+    assert row.legacy_edge_id == 1
+    assert row.discusses == ["hypothesis:h1"]
     assert payload["rows"][0]["subject"] == "a"
     assert payload["rows"][0]["predicate"] == "affects"
     assert payload["rows"][0]["object"] == "b"
