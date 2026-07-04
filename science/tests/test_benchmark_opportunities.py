@@ -176,7 +176,7 @@ benchmark:
   domains: [biology]
   modalities: [proteomics, multimodal]
   signal_types: [multi-omic]
-  benchmark_kinds: [mechanism-discrimination]
+  benchmark_kinds: [time-series]
   tasks:
     - id: subtype-transfer
       prediction_target: subtype
@@ -366,6 +366,589 @@ benchmark:
         "description": "measured expression after perturbation",
     }
     assert row["needs"] == []
+
+
+def test_benchmark_tests_report_projects_context_fit_fields(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0500-perturbation",
+        """
+id: hypothesis:0500-perturbation
+type: hypothesis
+title: Perturbation benchmark hypothesis
+""",
+        body="Sci-plex drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    payload = benchmark_tests_report(tmp_path)
+
+    assert payload["summary"]["context_fit_counts"] == {
+        "direct-fit": 1,
+        "adjacent-fit": 0,
+        "method-fit": 0,
+        "blocked-fit": 0,
+        "generic-fallback": 0,
+        "out-of-context": 0,
+    }
+    row = payload["benchmark_tests"][0]
+    assert row["context_fit"] == "direct-fit"
+    assert "task-support:supported" in row["context_fit_reasons"]
+    assert row["context_fit_warnings"] == []
+
+
+def test_context_fit_totality_and_filter_or_semantics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-mixed-context",
+        """
+id: hypothesis:0504-mixed-context
+type: hypothesis
+title: Mixed benchmark context
+""",
+        body="Sci-plex drug perturbation and temporal time-series mechanism evidence should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [time-series]
+  limitations: [simulated benchmark]
+  related_beliefs:
+    - mixed-context predicts temporal dynamics.
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    all_payload = benchmark_tests_report(tmp_path)
+    direct_or_method = benchmark_tests_report(tmp_path, context_fit=("direct-fit", "method-fit"))
+
+    assert all(row["context_fit"] for row in all_payload["benchmark_tests"])
+    assert all_payload["summary"]["test_plan_rows"] >= 2
+    filtered_fits = {row["context_fit"] for row in direct_or_method["benchmark_tests"]}
+    assert filtered_fits == {"direct-fit", "method-fit"}
+    assert direct_or_method["summary"]["test_plan_rows"] == len(direct_or_method["benchmark_tests"])
+    assert direct_or_method["filters"]["context_fit"] == ["direct-fit", "method-fit"]
+
+
+def test_context_fit_filter_rejects_single_string(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    with pytest.raises(TypeError, match="context_fit must be a sequence"):
+        benchmark_tests_report(tmp_path, context_fit="direct-fit")  # type: ignore[arg-type]
+
+
+def test_benchmark_tests_report_filters_echo_all_active_filters(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    payload = benchmark_tests_report(
+        tmp_path,
+        facet="perturbation",
+        state="concrete",
+        source="opportunity-relative",
+        exclude_fallback=True,
+        readiness="runnable",
+        benchmark_id="sciplex3",
+        context_fit=("direct-fit",),
+    )
+
+    assert payload["filters"] == {
+        "facet": "perturbation",
+        "state": "concrete",
+        "source": "opportunity-relative",
+        "exclude_fallback": True,
+        "readiness": "runnable",
+        "benchmark_id": "dataset:sciplex3",
+        "context_fit": ["direct-fit"],
+    }
+
+
+def test_context_fit_classifies_adjacent_cross_disease_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: multiple-myeloma\nname: mm30\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0501-myeloma-outcome",
+        """
+id: hypothesis:0501-myeloma-outcome
+type: hypothesis
+title: Myeloma outcome benchmark hypothesis
+""",
+        body="Multiple myeloma survival risk needs clinical benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "brca-metabric",
+        """
+id: dataset:brca-metabric
+type: dataset
+title: BRCA METABRIC breast cancer outcomes
+dataset_class: deposit
+local_path: data/brca-metabric
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [outcome-prediction]
+  source_datasets: [breast-cancer-metabric]
+  tasks:
+    - id: survival
+      task_type: outcome prediction
+      prediction_target: survival
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: measured-outcome
+        description: survival outcome
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "adjacent-fit"
+    # The benchmark tokenizes to {brca, breast}; `_context_fit_warning_cues`
+    # picks `sorted(...)[0]` == "brca" deterministically. Keep the fixture body
+    # free of any token the benchmark also carries (e.g. "outcome"/"outcomes")
+    # so the row cannot pick up a shared specific token and promote to direct-fit.
+    assert "cross-disease:brca-vs-myeloma" in row["context_fit_warnings"]
+    assert "task-support:supported" in row["context_fit_reasons"]
+
+
+def test_context_fit_classifies_method_fit_without_specific_context(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0502-temporal",
+        """
+id: hypothesis:0502-temporal
+type: hypothesis
+title: Temporal mechanism hypothesis
+""",
+        body="Temporal mechanism predictions need a time-series benchmark.",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series, perturbation]
+  benchmark_kinds: [network-reconstruction]
+  limitations: [simulated benchmark]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "method-fit"
+    assert "context:weak" in row["context_fit_warnings"]
+    assert "task-signal:time-series" in row["context_fit_reasons"]
+
+
+def test_context_fit_uses_dataset_metadata_not_public_row_only(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-hidden-source",
+        """
+id: hypothesis:0503-hidden-source
+type: hypothesis
+title: Hidden source context
+""",
+        body="Sci-plex perturbation response should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "source-hidden",
+        """
+id: dataset:source-hidden
+type: dataset
+title: Perturbation response benchmark
+dataset_class: deposit
+local_path: data/source-hidden
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "direct-fit"
+    assert "specific-context:sci-plex" in row["context_fit_reasons"]
+
+
+def test_context_fit_broad_suppression_does_not_change_raw_matching(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-multi-omic",
+        """
+id: hypothesis:0503-multi-omic
+type: hypothesis
+title: Multi-omic benchmark hypothesis
+""",
+        body="Multi-omic integration should improve subtype prediction.",
+    )
+    _write_dataset(
+        tmp_path,
+        "multiomic-subtype",
+        """
+id: dataset:multiomic-subtype
+type: dataset
+title: Multi-omic subtype benchmark
+dataset_class: deposit
+local_path: data/multiomic-subtype
+benchmark:
+  domains: [biology]
+  modalities: [multi-omic]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    assert payload["matched_opportunities"]
+    assert "facet-token:multi-omic" in payload["matched_opportunities"][0]["match_reasons"]
+
+
+def test_context_fit_broad_tokens_do_not_promote_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0509-broad-only",
+        """
+id: hypothesis:0509-broad-only
+type: hypothesis
+title: Cancer genomics clinical model
+""",
+        body="Cancer genomics clinical data model analysis needs evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "broad-cancer",
+        """
+id: dataset:broad-cancer
+type: dataset
+title: Cancer genomics clinical model
+dataset_class: deposit
+local_path: data/broad-cancer
+benchmark:
+  domains: [biology, cancer]
+  modalities: [clinical, genomics, multi-omic]
+  signal_types: [cross-sectional]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: static
+      task_type: static association
+      prediction_target: association
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority class
+      ground_truth:
+        type: measured-outcome
+        description: association
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] != "direct-fit"
+
+
+def test_context_fit_common_words_do_not_promote_fallback_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0509-common-words",
+        """
+id: hypothesis:0509-common-words
+type: hypothesis
+title: Common word context
+""",
+        body="Small models and context axes should not make a generic benchmark directly actionable.",
+    )
+    _write_dataset(
+        tmp_path,
+        "common-word-benchmark",
+        """
+id: dataset:common-word-benchmark
+type: dataset
+title: Small cancer context and model benchmark
+dataset_class: deposit
+local_path: data/common-word-benchmark
+benchmark:
+  domains: [biology, cancer]
+  modalities: [proteomics, multimodal]
+  signal_types: [multi-omic, cross-sectional]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: association
+      task_type: association prediction
+      prediction_target: association
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority class
+      ground_truth:
+        type: measured-outcome
+        description: association
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["priority_source"] == "gap-fallback"
+    assert row["context_fit"] == "generic-fallback"
+    assert not any(reason.startswith("specific-context:") for reason in row["context_fit_reasons"])
+
+
+def test_context_fit_blocked_fallback_without_context_is_generic(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0510-unmapped",
+        """
+id: hypothesis:0510-unmapped
+type: hypothesis
+title: Unmapped benchmark entity
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "blocked-mmrf",
+        """
+id: dataset:blocked-mmrf
+type: dataset
+title: MMRF CoMMpass
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [survival-prediction]
+  tasks:
+    - id: progression-risk
+      task_type: outcome prediction
+      prediction_target: progression
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: measured-outcome
+        description: progression
+      support:
+        state: blocked
+        reason: open-metadata-missing-progression-endpoint
+""",
+    )
+
+    rows = benchmark_tests_report(tmp_path)["benchmark_tests"]
+    fallback = next(row for row in rows if row["priority_source"] == "gap-fallback")
+
+    assert fallback["context_fit"] == "generic-fallback"
+    assert "blocked-support-fallback" in fallback["context_fit_warnings"]
+    assert "blocked-support-fallback" not in fallback["context_fit_reasons"]
+
+
+def test_context_fit_does_not_promote_from_unrelated_project_entity_tokens(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-temporal",
+        """
+id: hypothesis:0503-temporal
+type: hypothesis
+title: Temporal benchmark hypothesis
+""",
+        body="Temporal dynamics need a time-series benchmark.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-melanoma-context",
+        """
+id: hypothesis:0503-melanoma-context
+type: hypothesis
+title: Melanoma context
+""",
+        body="Melanoma is unrelated to this temporal row.",
+    )
+    _write_dataset(
+        tmp_path,
+        "melanoma-network",
+        """
+id: dataset:melanoma-network
+type: dataset
+title: Melanoma benchmark
+dataset_class: deposit
+local_path: data/melanoma-network
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [network-reconstruction]
+  source_datasets: [melanoma]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: measured-outcome
+        description: measured regulatory edges
+      support:
+        state: supported
+""",
+    )
+
+    rows = benchmark_tests_report(tmp_path)["benchmark_tests"]
+    temporal = next(row for row in rows if row["entity_id"] == "hypothesis:0503-temporal")
+
+    assert temporal["context_fit"] == "method-fit"
+    assert "specific-context:melanoma" not in temporal["context_fit_reasons"]
 
 
 def test_benchmark_tests_report_marks_incomplete_tasks_draft_needed(tmp_path: Path) -> None:
@@ -1376,6 +1959,94 @@ benchmark:
         {"facet": "perturbation", "count": 1},
         {"facet": "single-cell-rna-seq", "count": 1},
     ]
+
+
+def test_benchmark_test_triage_sorts_with_context_fit_inside_bucket(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0505-context-triage",
+        """
+id: hypothesis:0505-context-triage
+type: hypothesis
+title: Context triage
+""",
+        body="Sci-plex perturbation and temporal time-series mechanism benchmarks should be considered.",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: deposit
+local_path: data/dream4
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [network-reconstruction]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: supported
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path)
+    run_now = payload["buckets"]["run-now"]
+
+    assert [row["context_fit"] for row in run_now][:2] == ["direct-fit", "method-fit"]
+    assert payload["summary"]["context_fit_counts"]["direct-fit"] >= 1
+    assert payload["context_fit_counts_by_bucket"]["run-now"]["direct-fit"] >= 1
+    assert payload["context_fit_counts_by_bucket"]["fallback-diagnostic"] == {
+        "direct-fit": 0,
+        "adjacent-fit": 0,
+        "method-fit": 0,
+        "blocked-fit": 0,
+        "generic-fallback": 0,
+        "out-of-context": 0,
+    }
 
 
 def test_benchmark_test_triage_report_preserves_filtered_row_order_and_fallback_diagnostics(tmp_path: Path) -> None:

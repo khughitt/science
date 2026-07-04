@@ -836,7 +836,7 @@ id: hypothesis:0001-perturbation
 type: hypothesis
 title: Perturbation response hypothesis
 """,
-        body="Drug perturbation should shift response states.",
+        body="Sci-Plex drug perturbation should shift response states.",
     )
     _write_dataset(
         tmp_path,
@@ -852,6 +852,7 @@ benchmark:
   modalities: [single-cell-rna-seq]
   signal_types: [perturbation]
   benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
   tasks:
     - id: compound-response
       task_type: perturbation response
@@ -870,8 +871,13 @@ benchmark:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["summary"]["concrete_rows"] == 1
-    assert payload["benchmark_tests"][0]["test_plan_state"] == "concrete"
-    assert payload["benchmark_tests"][0]["priority_source"] == "opportunity-relative"
+    row = payload["benchmark_tests"][0]
+    assert row["test_plan_state"] == "concrete"
+    assert row["priority_source"] == "opportunity-relative"
+    assert row["context_fit"] == "direct-fit"
+    assert "context_fit_reasons" in row
+    assert row["context_fit_warnings"] == []
+    assert payload["summary"]["context_fit_counts"]["direct-fit"] == 1
 
 
 def test_benchmark_tests_cli_projects_task_support_fields(tmp_path: Path) -> None:
@@ -1265,6 +1271,114 @@ benchmark:
     assert {row["readiness_label"] for row in readiness_payload["benchmark_tests"]} == {"runnable"}
 
 
+def test_benchmark_tests_cli_filters_context_fit_or_values(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0506-context-cli",
+        """
+id: hypothesis:0506-context-cli
+type: hypothesis
+title: Context CLI
+""",
+        body="Sci-plex perturbation and temporal benchmark evidence should be considered.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    result = _invoke_tests(
+        tmp_path,
+        "--context-fit",
+        "direct-fit",
+        "--context-fit",
+        "method-fit",
+        "--format",
+        "json",
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["filters"]["context_fit"] == ["direct-fit", "method-fit"]
+    fits = {row["context_fit"] for row in payload["benchmark_tests"]}
+    assert fits == {"direct-fit"}
+
+
+def test_benchmark_tests_cli_table_shows_context_fit(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0507-context-table",
+        """
+id: hypothesis:0507-context-table
+type: hypothesis
+title: Context table
+""",
+        body="Sci-plex perturbation should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    result = _invoke_tests(tmp_path)
+
+    assert result.exit_code == 0
+    assert "fit" in result.output
+    assert "direct-fit" in result.output
+
+
 def test_benchmark_tests_cli_exclude_fallback(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
@@ -1418,6 +1532,56 @@ benchmark:
         "notes": "",
     }
     assert payload["filters"] == {}
+
+
+def test_benchmark_test_triage_cli_filters_context_fit(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0508-context-triage-cli",
+        """
+id: hypothesis:0508-context-triage-cli
+type: hypothesis
+title: Context triage CLI
+""",
+        body="Sci-plex perturbation should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    result = _invoke_test_triage(tmp_path, "--context-fit", "direct-fit", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["filters"]["context_fit"] == ["direct-fit"]
+    assert payload["summary"]["context_fit_counts"]["direct-fit"] == 1
 
 
 def test_benchmark_test_triage_routes_blocked_task_support_to_blocked_bucket(tmp_path: Path) -> None:
