@@ -370,15 +370,19 @@ Examples:
 ## Context Token Sets
 
 V1 should avoid a large curated ontology. Instead, derive small deterministic
-sets from the **existing** normalization pipeline and stop/broad constants —
-do not introduce a new parallel broad-token list that can drift out of sync:
+sets from the **existing** normalization pipeline and keep scoring-facing broad
+tokens separate from context-fit-only broad tokens:
 
 - Reuse `_normalize_token` / `_SYNONYMS`, `_STOP_TOKENS`, and
   `_token_evidence_from_text` for tokenization (same pipeline as benchmark
   matching, so the sets agree with what already matched).
-- Reuse the existing broad-token suppression sets — `ENTITY_SUPPRESSED_TOKENS`
-  and `BROAD_NON_SCOREABLE_FACETS` — as the definition of "broad." A token that
-  those sets suppress is a broad token here too, by construction.
+- Reuse the existing scoring-facing broad-token suppression sets —
+  `ENTITY_SUPPRESSED_TOKENS` and `BROAD_NON_SCOREABLE_FACETS` — as the base
+  definition of "broad."
+- Add a small `CONTEXT_BROAD_TOKENS` extension for broad context terms that
+  should not promote `direct-fit` (`clinical`, `genomics`, `multi-omic`, etc.).
+  This set is intentionally **not** used by `_scoreable_facet_tokens`, because
+  context-fit must not change raw opportunity matching or scores.
 
 Then define:
 
@@ -388,15 +392,15 @@ Then define:
 - `entity_context_tokens`: high-signal entity tokens after `ENTITY_SUPPRESSED_TOKENS`
   filtering.
 - `benchmark_context_tokens`: tokens from benchmark id/title/domains/source
-  datasets/limitations, minus `BROAD_NON_SCOREABLE_FACETS`.
+  datasets/limitations, minus `CONTEXT_BROAD_TOKENS`.
 
-A token that survives the reused broad/stop filters is "specific"; a token these
-sets suppress is "broad." The `strong_context` predicate requires a *specific*
-shared token.
+A token that survives the context broad/stop filters is "specific"; a token
+these sets suppress is "broad." The `strong_context` predicate requires a
+*specific* shared token.
 
 If a term is genuinely broad but not yet in the shared suppression sets (e.g.
-`cross-sectional`, `multi-omic`), **add it to the existing set** rather than to a
-new context-fit-only list, so benchmark matching and context-fit stay consistent.
+`cross-sectional`, `multi-omic`), add it to `CONTEXT_BROAD_TOKENS`, not
+`BROAD_NON_SCOREABLE_FACETS`, so benchmark matching stays stable.
 Terms to verify are covered by the shared sets before implementation:
 
 - `biology`, `cancer`, `model`, `data`, `analysis`, `cross-sectional`,

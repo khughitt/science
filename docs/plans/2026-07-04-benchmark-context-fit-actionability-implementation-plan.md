@@ -39,9 +39,9 @@
   - `broad_context` can be true when a cross-* warning cue exists;
   - adjacent-fit depends on `broad_context`;
   - build `_context_fit_warning_cues(...)` before or in the same task as `_context_fit_predicates(...)`.
-- Reuse existing token/broad sets:
+- Reuse existing token/broad sets without changing matching:
   - `_normalize_token`, `_token_evidence_from_text`, `_STOP_TOKENS`, `ENTITY_SUPPRESSED_TOKENS`, and `BROAD_NON_SCOREABLE_FACETS`;
-  - if `cross-sectional`, `clinical`, `genomics`, or `multi-omic` are still able to promote `direct-fit` alone, add them to the existing broad suppression set rather than creating a context-fit-only broad list.
+  - keep `BROAD_NON_SCOREABLE_FACETS` scoring-facing; if `cross-sectional`, `clinical`, `genomics`, or `multi-omic` are still able to promote `direct-fit` alone, add them to a context-fit-only `CONTEXT_BROAD_TOKENS` extension that is not used by `_scoreable_facet_tokens`.
 - Use `~/d/` paths in docs and code comments.
 - Use `rtk` command prefix.
 - In a worktree, verify imports resolve to the worktree source before trusting RED/GREEN test output.
@@ -499,33 +499,30 @@ rtk uv run --frozen --project science pytest \
 
 Expected: FAIL because the Task 1 classifier returns `direct-fit` for all rows.
 
-- [ ] **Step 3: Add broad token coverage**
+- [ ] **Step 3: Add context-only broad token coverage**
 
-Update `BROAD_NON_SCOREABLE_FACETS` near the top of `benchmark_opportunities.py` from:
+Keep `BROAD_NON_SCOREABLE_FACETS` unchanged because `_scoreable_facet_tokens(...)`
+uses it for raw opportunity matching. Add this context-fit-only extension near
+`BROAD_NON_SCOREABLE_FACETS`:
 
 ```python
 BROAD_NON_SCOREABLE_FACETS = frozenset({"biology", "cancer", "varies"})
-```
 
-to:
-
-```python
-BROAD_NON_SCOREABLE_FACETS = frozenset(
+CONTEXT_BROAD_TOKENS = BROAD_NON_SCOREABLE_FACETS | frozenset(
     {
-        "biology",
-        "cancer",
         "clinical",
         "cross-sectional",
         "data",
         "genomics",
         "model",
         "multi-omic",
-        "varies",
     }
 )
 ```
 
-Do not add a new context-fit-only broad list.
+Use `CONTEXT_BROAD_TOKENS` only in context-fit helpers. Do not use it in
+`_scoreable_facet_tokens(...)`, `_relative_score(...)`, `_candidate_score(...)`,
+or `baseline_score(...)`.
 
 - [ ] **Step 4: Add context-fit dataclasses and token helpers**
 
@@ -554,7 +551,7 @@ Add these helpers before `_benchmark_test_row(...)`:
 
 ```python
 def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
-    broad = set(BROAD_NON_SCOREABLE_FACETS) | set(ENTITY_SUPPRESSED_TOKENS) | set(_STOP_TOKENS)
+    broad = set(CONTEXT_BROAD_TOKENS) | set(ENTITY_SUPPRESSED_TOKENS) | set(_STOP_TOKENS)
     return frozenset(token for token in tokens if token not in broad)
 
 
@@ -587,7 +584,7 @@ def _benchmark_broad_context_tokens(context: DatasetOpportunityContext) -> froze
         *dataset.domains,
         *dataset.source_datasets,
         *dataset.limitations,
-        broad_tokens=BROAD_NON_SCOREABLE_FACETS,
+        broad_tokens=CONTEXT_BROAD_TOKENS,
     )
     return evidence.broad
 ```
@@ -1751,7 +1748,7 @@ Expected: these should PASS immediately. Both behaviors are already implemented 
 
 - [ ] **Step 3: Investigate only if a lock fails**
 
-If `test_context_fit_broad_tokens_do_not_promote_direct_fit` fails, confirm the broad tokens are in `BROAD_NON_SCOREABLE_FACETS` (Task 2, Step 3) and that `_specific_tokens(...)` subtracts that set.
+If `test_context_fit_broad_tokens_do_not_promote_direct_fit` fails, confirm the broad tokens are in `CONTEXT_BROAD_TOKENS` (Task 2, Step 3) and that `_specific_tokens(...)` subtracts that set.
 
 If `test_context_fit_blocked_fallback_without_context_is_generic` fails, confirm the `_context_fit_for_row(...)` blocked/fallback branches from Task 2 are ordered so the fallback-only, no-context demotion wins first:
 
