@@ -6,6 +6,12 @@
 > **Depends on:** the entity origin-provenance feature (`origins` / `added_by`,
 > merged to main `f33e331e`; impossible-date fix `ed87ab4c`). This design
 > consumes that model as its apply-time provenance seam.
+>
+> **Revision (2026-07-04, review round 1):** resolved five contract gaps —
+> structural blindness by tool restriction (§2, §11); `independent` via a small
+> `--origin` grammar extension (§10, §12); explicit fenced-YAML report format
+> (§9); `--center` limited to topics in v1 (§4); idempotence via report
+> write-back rather than slug matching (§9, §10).
 
 ## 1. Motivation & niche
 
@@ -29,19 +35,31 @@ provenance so they are judged on evidence — not on who proposed them.
 
 The distinctive claim of this design is that anti-anchoring is **structural**.
 During generation, the lens agents are never given the project's existing
-hypotheses, questions, or papers. They cannot cluster near the current framing
-because they cannot see it. Novelty is judged only *afterward*, in a separate
-step that has full visibility. Blindness is enforced by **what the orchestrator
-hands each agent** (a domain brief that excludes those inputs) plus an explicit
-prohibition in the agent contract — not by asking a single prompt to "be
-unbiased."
+hypotheses, questions, or papers, and — crucially — **cannot read them**. The
+`idea-lens-researcher` agent is declared with web tools **only** (`WebSearch`,
+`WebFetch`); it has no `Read` and no `Bash`, so it physically cannot open the
+repository. The orchestrator passes the domain brief **inline in the dispatch
+prompt**; the agent's entire view of the project is that text. Novelty is judged
+only *afterward*, in a separate step run by the orchestrator (which is not
+blind) with full visibility.
+
+This is stronger than the usual "instruction-level" blindness: agent tool
+declarations in this repo are broad capability names (`Read`, `Bash`), which
+cannot be directory-scoped, so a prohibition alone would be unenforceable. By
+withholding filesystem tools entirely, blindness becomes a property of the
+agent's capability set, not of its prompt. Literature grounding therefore runs
+over public REST endpoints via `WebFetch` (§8), not the Bash-based source
+skills.
 
 ## 3. Non-goals (v1)
 
 - No embedding/vector similarity engine. Dedup is agent-judged with a cheap
   deterministic slug-collision pre-pass (§7).
 - No new Python subsystem. v1 is a slash command + a dedicated agent,
-  orchestrating existing CLIs. A durable `science explore-ideas` CLI is a
+  orchestrating existing CLIs. The one bounded Python change is a small
+  backward-compatible extension to `parse_origin_spec` so a leading `+` marks an
+  origin `independent` (§10) — required because apply is create-only and the
+  current grammar cannot express it. A durable `science explore-ideas` CLI is a
   deferred follow-up, added only if the slash command becomes too procedural.
 - No auto-promotion. Applying candidates is an explicit, human-gated second pass.
 - v1 apply auto-creates **questions and hypotheses only** (the kinds whose
@@ -60,12 +78,14 @@ Two modes, selected by the presence of `--apply`:
 **Generate mode (default, read-only):**
 
 - Project-wide by default.
-- `--center <id>` — narrow generation around one hypothesis/topic. Only a
-  **focus area** derived from the center (its subject/topic terms) is added to
-  the brief; the center's own claim text and all sibling hypotheses/questions
-  remain excluded (blindness holds — centering steers *where* to look, it does
-  not reveal *what is already claimed*).
-- `--topic <name>` — narrow around a named topic instead of the whole project.
+- `--center <topic-id>` — narrow generation around one **topic** (v1 accepts
+  topic ids only; hypothesis/question centering is deferred, see below). The
+  topic's subject terms are folded into the brief; since topics are already an
+  allowed brief input, no blindness question arises. Centering on a *hypothesis*
+  is deferred precisely because deriving focus terms from a claim would require
+  the orchestrator to read that claim and risk anchoring — out of scope for v1.
+- `--topic <name>` — narrow around a named topic instead of the whole project
+  (equivalent to `--center` by name rather than id).
 - `--lens <name>` (repeatable) — restrict to specific lenses; default = all (§6).
 - `--n <k>` — target candidates per lens (default 5).
 - `--commit` — auto-commit the written report.
@@ -102,11 +122,12 @@ context the lens agents receive.
 ### Phase 2 — Generate (parallel, blind)
 
 Dispatch one `idea-lens-researcher` subagent **per lens**, in parallel. Each
-receives: the domain brief, its single lens spec, `--n`, and any `--center`/
-`--topic` narrowing. Each returns a list of **candidate entities** conforming to
-the candidate schema (§9), minus the fields Phase 3 fills
-(`novelty_bucket`, `related_existing`). No lens agent is given — or may read —
-existing hypotheses, questions, or papers.
+receives — **inline in the dispatch prompt** — the domain brief, its single lens
+spec, `--n`, and any `--center`/`--topic` narrowing. Because the agent has only
+web tools (no `Read`/`Bash`), the inline brief is its entire project view; it
+cannot read existing hypotheses, questions, or papers even if it tried. Each
+returns a list of **candidate entities** conforming to the candidate schema
+(§9), minus the fields Phase 3 fills (`novelty_bucket`, `related_existing`).
 
 ### Phase 3 — Classify (full visibility)
 
@@ -160,9 +181,13 @@ orthogonal so coverage is *forced* across angles rather than clustering:
 
 ## 8. Literature grounding
 
-Each lens agent does a focused, lens-specific search using the existing
-OpenAlex/PubMed source skills (the same ones `search-literature` uses). Grounding
-rules:
+Each lens agent does a focused, lens-specific search. Because the agent has no
+`Bash` (blindness, §2), it queries the public REST endpoints directly via
+`WebFetch` — OpenAlex (`https://api.openalex.org/works?search=…`) and PubMed
+E-utilities (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?…`) —
+plus `WebSearch` for discovery. These are the same sources `search-literature`
+uses, reached over HTTP rather than through the Bash-based source skills.
+Grounding rules:
 
 - If a supporting paper is **already in** `entities/papers/`, the anchor resolves
   to `paper:<slug>`.
@@ -199,6 +224,25 @@ report exists, suffix with `-<HHMM>` rather than overwrite.
 `proposed_kind` is `hypothesis` only when `question_or_claim` already states a
 falsifiable claim; otherwise `question`.
 
+**Concrete format (the parse contract).** The report is a single markdown file.
+Each candidate is a fenced ` ```yaml ` block whose mapping carries every schema
+field above; the surrounding markdown (headings, the collapsed `already-covered`
+list, prose summary) is for humans and is ignored by the parser. `--apply`
+parses **every fenced `yaml` block that contains a `candidate_id` key** — nothing
+else. The human triages by editing `decision:` inside these blocks. A single
+self-contained, human-editable, machine-parseable artifact (chosen over a JSON
+sidecar so the thing the human edits and the thing apply reads are the same
+file, never skewed).
+
+**Apply write-back (idempotence key).** Auto-incremented numeric ids mean a
+deterministic `--slug` does **not** prevent duplicates on re-apply (§10). So the
+report is the durable ledger: after apply successfully creates an entity for a
+candidate, it **rewrites that candidate's block** in place — `decision: applied`,
+plus `applied_as: <created-entity-id>` and `applied_at: <YYYY-MM-DD>`. Re-running
+`--apply --from <same-report>` skips any candidate already marked `applied`.
+This makes apply idempotent without an external ledger and records the
+candidate → entity mapping where a reader will find it.
+
 ## 10. `--apply` & origins (reuse of the provenance seam)
 
 Apply reads the `--from` report and, for every candidate with `decision: keep`,
@@ -215,16 +259,29 @@ uv run science hypotheses create  … --origin <spec> [--origin <spec>] --added-
 - **Literature-traced** candidate whose anchor is a resolvable `paper:<slug>` /
   `cite:<key>` → `--origin literature:paper:<slug>` (or `cite:<key>`).
 - **Convergent** (independently reasoned *and* found in the literature) → two
-  `--origin`s, with `independent` set on the literature one (the
-  "we predicted it AND it's predated in the lit" case the model was built for).
-- `--added-by` is always `explore-ideas:<model-id>`.
+  `--origin`s, with the literature one marked independent:
+  `--origin '+literature:cite:<key>'` (the "we predicted it AND it's predated in
+  the lit" case the model was built for).
+- `--added-by` is `explore-ideas:<model-id>:<candidate_id>` — the trailing
+  `candidate_id` gives forward traceability from the created entity back to the
+  report block.
 - Unresolved raw citations do **not** produce a literature origin; the candidate
   stays `assistant`-origin until the paper is imported.
 
+**`--origin` grammar extension (the one bounded Python change).**
+`parse_origin_spec` currently accepts `TYPE[:REF][@DATE]` and has no way to set
+`independent`. Extend it backward-compatibly: a leading `+` on the spec sets
+`independent: true` (e.g. `+literature:cite:Smith2019@2019`). Unambiguous because
+`TYPE` is a closed enum (`user|assistant|literature`) that never starts with `+`.
+This keeps apply fully automated (no manual post-create frontmatter edit, which
+the provenance work deliberately moved away from).
+
 Apply behavior:
 
-- Idempotent: skip candidates whose target entity already exists; report
-  created vs skipped counts.
+- **Idempotent via report write-back** (§9), *not* via slug/destination
+  matching — auto-incremented ids would otherwise mint duplicates. Candidates
+  already marked `decision: applied` are skipped; the run reports created vs
+  skipped counts.
 - v1 routes `question`/`hypothesis` only. `topic`/`theme` kept candidates are
   reported as "apply manually (CLI seam pending)" rather than silently dropped.
 
@@ -235,25 +292,29 @@ convention; surfaced as `science:idea-lens-researcher`).
 
 - **Purpose:** given a domain brief + one lens, generate `--n` candidate entities
   in that frame, each grounded by an independent literature search.
-- **Tools:** Read (scoped), WebSearch/WebFetch, Bash (for the OpenAlex/PubMed
-  source skills). *No* access to — and an explicit prohibition against reading —
-  `entities/hypotheses/`, `entities/questions/`, `entities/papers/`.
+- **Tools:** `WebSearch` and `WebFetch` **only** — deliberately *no* `Read` and
+  *no* `Bash`. The agent therefore cannot open the repository at all; blindness
+  is a property of its capability set, not its prompt (§2). Its whole project
+  view is the brief passed inline in the dispatch.
 - **Output contract:** a JSON list of candidates matching §9 minus
   `novelty_bucket` / `related_existing` (filled in Phase 3) and minus `decision`
   (defaults `defer`). Includes a provisional `origin_plan`.
-- **Blindness clause:** the single most important instruction — the agent
-  proposes from its lens and the brief only, and must not attempt to look up or
-  reconcile against the project's existing epistemic entities.
+- **Blindness clause:** the agent proposes from its lens and the inline brief
+  only. (It could not reconcile against existing entities even if instructed to,
+  since it has no filesystem tools — the clause documents intent; the tool set
+  enforces it.)
 
 ## 12. New-code footprint & deferred work
 
 **v1 builds:**
 - `commands/explore-ideas.md` (+ regenerated `codex-skills/` mirror).
 - `agents/idea-lens-researcher.md`.
+- A bounded extension to `parse_origin_spec`: leading `+` → `independent: true`
+  (§10), with a unit test.
 
 **v1 reuses (no new code):** `science project index` (dedup input),
-`science questions/hypotheses create --origin/--added-by` (apply), the
-OpenAlex/PubMed source skills (grounding).
+`science questions/hypotheses create --origin/--added-by/--slug` (apply), the
+OpenAlex/PubMed REST endpoints (grounding via `WebFetch`).
 
 **Deferred:**
 - `--origin`/`--added-by` on `topics`/`themes` create commands, to let apply
@@ -265,10 +326,17 @@ OpenAlex/PubMed source skills (grounding).
 ## 13. Testing considerations
 
 - The command and agent are prose surfaces; the enforceable contracts are:
-  (a) the frame-input boundary (generation must not read the excluded dirs),
-  (b) the candidate schema, (c) the apply → `create --origin` mapping.
-- Apply's origin-spec construction is the piece most worth a deterministic test:
-  given an `origin_plan`, assert the exact `--origin`/`--added-by` args, reusing
-  the `parse_origin_spec` guarantees already tested in the provenance feature.
+  (a) the fenced-YAML report parse + apply write-back round-trip,
+  (b) the `+` → `independent` grammar extension, (c) the apply →
+  `create --origin` mapping.
+- **`parse_origin_spec` `+` extension** — deterministic unit test: `+literature:
+  cite:K@2019` → `{type: literature, ref: cite:K, date: 2019, independent: True}`;
+  a plain `literature:cite:K` stays `independent: False`; `+` on `user`/
+  `assistant` also sets the flag. Lives beside the existing `parse_origin_spec`
+  tests from the provenance feature.
+- **Report round-trip** — parse a report with mixed `decision` values, confirm
+  only `keep` candidates map to create calls with the exact `--origin`/
+  `--added-by`/`--slug` args, and confirm write-back flips them to `applied`
+  with `applied_as`/`applied_at` so a second apply is a no-op.
 - `codex-skills/` sync test must pass after adding the command
   (`scripts/generate_codex_skills.py`).
