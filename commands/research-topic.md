@@ -46,6 +46,11 @@ Additionally:
 Follow `.ai/templates/background-topic.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/background-topic.md`, and fill all sections.
 Save to `entities/topics/<topic-slug>.md`.
 
+Set `origins` in the topic frontmatter to reflect where the framing came from —
+`{type: literature, ref: paper:<key>}` for each seed review (bare keys → `cite:<key>`),
+or `{type: user}` if the user named the topic. Set `added_by: "llm:<model>:research-topic"`.
+Provenance only; does not affect belief.
+
 The output should include:
 
 - Key subtopics and how they connect.
