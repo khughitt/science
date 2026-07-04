@@ -535,6 +535,106 @@ benchmark:
     assert "task-signal:time-series" in row["context_fit_reasons"]
 
 
+def test_context_fit_limitations_do_not_promote_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0502-context-subset",
+        """
+id: hypothesis:0502-context-subset
+type: hypothesis
+title: Context subset hypothesis
+""",
+        body="Context subset method validation needs a time-series benchmark.",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series, perturbation]
+  benchmark_kinds: [network-reconstruction]
+  limitations:
+    - Context subset method terms are documentation, not positive fit evidence.
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "method-fit"
+    assert not any(reason.startswith("specific-context:") for reason in row["context_fit_reasons"])
+
+
+def test_context_fit_numeric_tokens_do_not_promote_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "questions",
+        "0502-2021-benchmark",
+        """
+id: question:0502-2021-benchmark
+type: question
+title: 2021 benchmark question
+""",
+        body="Could a 2021 time-series benchmark test this assumption?",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-2021",
+        """
+id: dataset:dream4-2021
+type: dataset
+title: DREAM4 2021 challenge
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [network-reconstruction]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "method-fit"
+    assert "specific-context:2021" not in row["context_fit_reasons"]
+
+
 def test_context_fit_totality_and_filter_or_semantics(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 

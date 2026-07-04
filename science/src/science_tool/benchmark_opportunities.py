@@ -2628,7 +2628,7 @@ DISEASE_CONTEXT_TOKENS = frozenset(
 
 def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
     broad = set(CONTEXT_BROAD_TOKENS) | set(_UNMAPPED_TERM_EXCLUSIONS)
-    return frozenset(token for token in tokens if token not in broad)
+    return frozenset(token for token in tokens if token not in broad and any(char.isalpha() for char in token))
 
 
 def _project_context_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> frozenset[str]:
@@ -2641,12 +2641,13 @@ def _entity_context_tokens(entity: ProjectBenchmarkEntity) -> frozenset[str]:
 
 def _benchmark_context_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
     dataset = context.dataset
+    # Limitations describe caveats and transfer risks. They are useful warning
+    # evidence, but should not create positive direct-fit context.
     tokens = _tokens_from_text(
         dataset.id,
         dataset.title,
         *dataset.domains,
         *dataset.source_datasets,
-        *dataset.limitations,
         include_stop_tokens=False,
     )
     return _specific_tokens(tokens)
