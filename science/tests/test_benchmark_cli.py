@@ -1231,6 +1231,13 @@ benchmark:
     assert {row["context_fit"] for row in payload["benchmark_tests"]} <= {"direct-fit", "method-fit"}
 
 
+def test_benchmark_tests_cli_rejects_unknown_context_fit(tmp_path: Path) -> None:
+    result = _invoke_tests(tmp_path, "--context-fit", "near-fit")
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--context-fit'" in result.output
+
+
 def test_benchmark_tests_cli_table_shows_context_fit(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
@@ -1695,6 +1702,13 @@ benchmark:
     payload = json.loads(result.output)
     assert payload["filters"]["context_fit"] == ["direct-fit"]
     assert payload["summary"]["context_fit_counts"]["direct-fit"] == 1
+
+
+def test_benchmark_test_triage_cli_rejects_unknown_context_fit(tmp_path: Path) -> None:
+    result = _invoke_test_triage(tmp_path, "--context-fit", "near-fit")
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--context-fit'" in result.output
 
 
 def _write_blocked_fallback_triage_fixture(tmp_path: Path) -> None:

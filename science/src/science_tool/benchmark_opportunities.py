@@ -80,8 +80,11 @@ CONTEXT_BROAD_TOKENS = BROAD_NON_SCOREABLE_FACETS | frozenset(
         "cross-sectional",
         "data",
         "genomics",
+        "health",
         "model",
         "multi-omic",
+        "natural-systems",
+        "physical",
     }
 )
 TERM_BUCKET_CAP = 10
@@ -2778,6 +2781,7 @@ def _context_fit_for_row(
     source_components: dict[str, int],
     reason_notes: list[str],
     matched_facets: list[str],
+    readiness_label: ReadinessLabel,
 ) -> tuple[ContextFit, list[str], list[str]]:
     evidence = _context_fit_evidence(
         entity=entity,
@@ -2799,7 +2803,8 @@ def _context_fit_for_row(
         context=context,
         task_reasons=task_reasons,
     )
-    is_blocked = (task.support.state == "blocked") if task is not None and task.support is not None else False
+    support_blocked = (task.support.state == "blocked") if task is not None and task.support is not None else False
+    is_blocked = support_blocked or readiness_label == "blocked"
     is_fallback = priority_source == "gap-fallback" or any(note.startswith("fallback:") for note in reason_notes)
     has_evidence = bool(predicates.strong_context or predicates.warning_cues or predicates.task_signal)
 
@@ -2815,7 +2820,9 @@ def _context_fit_for_row(
     # route MMRF-style rows to `blocked-fit` and drop the `blocked-support-fallback`
     # warning. Blocked-fit demotion for a fallback-only, no-context row wins first.
     if is_blocked and is_fallback and not shared_specific:
-        return "generic-fallback", sorted(set(reasons)), sorted({*warnings, "blocked-support-fallback"})
+        if support_blocked:
+            warnings.append("blocked-support-fallback")
+        return "generic-fallback", sorted(set(reasons)), sorted(set(warnings))
     if is_blocked and has_evidence:
         return "blocked-fit", sorted(set(reasons)), sorted(set(warnings))
     if is_fallback and not shared_specific:
@@ -2854,6 +2861,7 @@ def _benchmark_test_row(
     if _test_plan_state(task) == "draft-needed" and "draft-needed" not in reason_notes:
         reason_notes.append("draft-needed")
     support = task.support if task is not None else None
+    readiness_label = _readiness_label(context, has_task=task is not None)
     reason_notes.extend(_task_support_reason_notes(task))
     context_fit, context_fit_reasons, context_fit_warnings = _context_fit_for_row(
         entity=entity,
@@ -2864,6 +2872,7 @@ def _benchmark_test_row(
         source_components=source_components,
         reason_notes=reason_notes,
         matched_facets=matched_facets,
+        readiness_label=readiness_label,
     )
     return {
         "entity_id": entity.id,
@@ -2875,7 +2884,7 @@ def _benchmark_test_row(
         "test_plan_state": _test_plan_state(task),
         "task_type": task.task_type if task is not None else "",
         "benchmark_kinds": list(context.dataset.benchmark_kinds),
-        "readiness_label": _readiness_label(context, has_task=task is not None),
+        "readiness_label": readiness_label,
         "priority_score": priority_score,
         "priority_source": priority_source,
         "score_components": {

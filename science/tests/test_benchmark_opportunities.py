@@ -428,6 +428,60 @@ benchmark:
     assert row["context_fit_warnings"] == []
 
 
+def test_context_fit_readiness_blocked_rows_are_blocked_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0500-embargoed-sciplex",
+        """
+id: hypothesis:0500-embargoed-sciplex
+type: hypothesis
+title: Embargoed Sci-Plex hypothesis
+""",
+        body="Sci-plex drug perturbation should shift response states.",
+    )
+    _write_dataset(
+        tmp_path,
+        "embargoed-sciplex",
+        """
+id: dataset:embargoed-sciplex
+type: dataset
+title: Sci-Plex embargoed package
+dataset_class: deposit
+access:
+  level: public
+  availability: available
+  verified: false
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["readiness_label"] == "blocked"
+    assert row["context_fit"] == "blocked-fit"
+    assert "specific-context:sci-plex" in row["context_fit_reasons"]
+
+
 def test_context_fit_classifies_adjacent_cross_disease_rows(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
@@ -482,6 +536,55 @@ benchmark:
     # so the row cannot pick up a shared specific token and promote to direct-fit.
     assert "cross-disease:brca-vs-myeloma" in row["context_fit_warnings"]
     assert "task-support:supported" in row["context_fit_reasons"]
+
+
+def test_context_fit_coarse_domain_tokens_are_broad_context(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0501-health-response",
+        """
+id: hypothesis:0501-health-response
+type: hypothesis
+title: Health response hypothesis
+""",
+        body="Health single-cell-rna-seq evidence should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "health-perturbation",
+        """
+id: dataset:health-perturbation
+type: dataset
+title: General health perturbation benchmark
+dataset_class: pointer
+benchmark:
+  domains: [health]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: candidate
+        reason: requires-health-package-staging
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "adjacent-fit"
+    assert "specific-context:health" not in row["context_fit_reasons"]
 
 
 def test_context_fit_classifies_method_fit_without_specific_context(tmp_path: Path) -> None:
