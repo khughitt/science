@@ -63,6 +63,7 @@ CANONICAL_CHECK_MODULES = (
     "genesets",
     "reference_graphs",
     "dataset_influence",
+    "labnote_export",
     "prose_lints",
     "annotations",
     "evidence_lines",

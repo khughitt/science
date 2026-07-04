@@ -999,6 +999,8 @@ def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -
     assert "paper" not in view_ids
     assert views["views"][0]["surface"] == "findings"
     assert views["views"][0]["route"] == "/findings/proposition"
+    assert views["views"][0]["entity_types"] == ["proposition"]
+    assert views["views"][1]["entity_types"] == ["synthesis"]
 
 
 def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:

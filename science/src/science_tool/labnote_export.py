@@ -763,6 +763,7 @@ def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, An
                 "id": entity_type,
                 "label": base["label"],
                 "surface": base["surface"],
+                "entity_types": [entity_type],
                 "route": base["route"],
                 "order": base["order"],
                 "modules": [],
