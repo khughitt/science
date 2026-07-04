@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
 import yaml
 from science_model.propositions import PropositionEntity
 from science_model.reasoning import ClaimLayer, IdentificationStrength, Polarity, Predicate
@@ -278,6 +279,40 @@ def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(
     assert not (tmp_path / "entities").exists()
 
 
+@pytest.mark.parametrize(
+    "entity_id",
+    [
+        "proposition:../../doc/owned",
+        "proposition:../evidence-lines/foo",
+    ],
+)
+def test_build_workbench_apply_plan_rejects_malformed_proposition_target_ids(
+    tmp_path: Path,
+    entity_id: str,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path, entity_id=entity_id, inline_evidence=False)
+
+    with pytest.raises(WorkbenchApplyError, match="local part"):
+        build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    assert not (tmp_path / "entities").exists()
+
+
+def test_build_workbench_apply_plan_rejects_wrong_prefix_proposition_row_id(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path, entity_id="evidence-line:not-a-proposition", inline_evidence=False)
+
+    with pytest.raises(WorkbenchApplyError, match="prefix proposition:"):
+        build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    assert not (tmp_path / "entities").exists()
+
+
 def test_apply_workbench_rejects_input_hash_drift(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
@@ -293,6 +328,27 @@ def test_apply_workbench_rejects_input_hash_drift(tmp_path: Path) -> None:
         assert "changed since it was parsed" in str(exc)
     else:
         raise AssertionError("expected WorkbenchApplyError")
+
+
+def test_apply_workbench_plan_rejects_entity_target_hash_drift(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    _write_workbench(workbench_path, claim_layer="structural_claim", inline_evidence=False)
+    plan = build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
+    drifted_text = prop_path.read_text(encoding="utf-8").replace("## Summary\n\n", "## Summary\n\nIntervening edit.\n")
+    prop_path.write_text(drifted_text, encoding="utf-8")
+
+    with pytest.raises(WorkbenchApplyError, match="entity target changed since it was planned"):
+        apply_workbench_plan(plan)
+
+    text = prop_path.read_text(encoding="utf-8")
+    assert "Intervening edit." in text
+    assert "structural_claim" not in text
 
 
 def test_build_workbench_apply_plan_rejects_duplicate_target_with_different_final_text(tmp_path: Path) -> None:
@@ -323,3 +379,31 @@ def test_build_workbench_apply_plan_rejects_duplicate_target_with_different_fina
         assert "conflicting planned writes" in str(exc)
     else:
         raise AssertionError("expected WorkbenchApplyError")
+
+
+def test_build_workbench_apply_plan_rejects_duplicate_identical_explicit_rows(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    workbench_path.write_text(
+        """rows:
+  - id: proposition:shared
+    subject: a
+    predicate: affects
+    object: b
+    patch: h1
+    polarity: positive
+    claim_layer: causal_effect
+  - id: proposition:shared
+    subject: a
+    predicate: affects
+    object: b
+    patch: h1
+    polarity: positive
+    claim_layer: causal_effect
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WorkbenchApplyError, match="duplicate proposition row id"):
+        build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))

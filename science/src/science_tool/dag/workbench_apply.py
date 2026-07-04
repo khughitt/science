@@ -23,6 +23,7 @@ from science_tool.dag.workbench import (
 )
 from science_tool.entities import (
     EntityCommandError,
+    local_part_conforms,
     parse_markdown_entity_file_preserving_body,
     render_entity_text,
     resolve_path_policy,
@@ -139,17 +140,27 @@ def _target_path(project_root: Path, entity: WorkbenchEntity) -> Path:
 def _validated_entity_target_path(project_root: Path, *, kind: str, entity_id: str) -> Path:
     if ":" not in entity_id:
         raise WorkbenchApplyError(f"entity target id is missing a local part separator: {entity_id}")
+    expected_prefix = f"{kind}:"
+    if not entity_id.startswith(expected_prefix):
+        raise WorkbenchApplyError(f"entity target id must use prefix {expected_prefix}: {entity_id}")
     try:
         policy = resolve_path_policy(kind, project_root=project_root)
     except EntityCommandError as exc:
         raise WorkbenchApplyError(str(exc)) from exc
     local_part = entity_id.split(":", 1)[1]
+    if not local_part_conforms(kind, local_part, project_root=project_root):
+        raise WorkbenchApplyError(f"entity target id has invalid {kind} local part: {entity_id}")
     candidate = project_root / policy.root / f"{local_part}.md"
     resolved = candidate.resolve()
     try:
         resolved.relative_to(project_root.resolve())
     except ValueError as exc:
         raise WorkbenchApplyError(f"entity target escapes project root: {candidate}") from exc
+    policy_root = (project_root / policy.root).resolve()
+    try:
+        resolved.relative_to(policy_root)
+    except ValueError as exc:
+        raise WorkbenchApplyError(f"entity target escapes {kind} policy root: {candidate}") from exc
     return resolved
 
 
@@ -231,6 +242,8 @@ def _check_duplicate_workbench_rows(workbench: WorkbenchFile) -> None:
         if existing is None:
             signatures[row.id] = signature
             continue
+        if existing == signature:
+            raise WorkbenchApplyError(f"duplicate proposition row id {row.id}")
         if existing != signature:
             raise WorkbenchApplyError(f"conflicting planned writes for proposition target {row.id}")
 
@@ -328,6 +341,19 @@ def _assert_input_unchanged(plan: WorkbenchApplyPlan) -> None:
         raise WorkbenchApplyError(f"workbench input changed since it was parsed: {plan.input_path}")
 
 
+def _assert_entity_targets_unchanged(edits: list[PlannedWorkbenchEdit]) -> None:
+    for edit in edits:
+        if edit.before_sha256 is None:
+            if edit.path.exists():
+                raise WorkbenchApplyError(f"entity target appeared since it was planned: {edit.path}")
+            continue
+        if not edit.path.exists():
+            raise WorkbenchApplyError(f"entity target disappeared since it was planned: {edit.path}")
+        current_text = edit.path.read_text(encoding="utf-8")
+        if _sha256_text(current_text) != edit.before_sha256:
+            raise WorkbenchApplyError(f"entity target changed since it was planned: {edit.path}")
+
+
 def _atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path: Path | None = None
@@ -352,6 +378,7 @@ def apply_workbench_plan(plan: WorkbenchApplyPlan) -> WorkbenchApplyResult:
     _assert_input_unchanged(plan)
     changed_entity_edits = [edit for edit in plan.changed_edits if edit.path != plan.input_path]
     changed_workbench_edits = [edit for edit in plan.changed_edits if edit.path == plan.input_path]
+    _assert_entity_targets_unchanged(changed_entity_edits)
     written_paths: list[Path] = []
     try:
         for edit in changed_entity_edits:
