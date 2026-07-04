@@ -310,6 +310,33 @@ edges:
     assert row["proposed_row"] is None
 
 
+def test_plan_notes_missing_identification_default(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    description: Missing identification should default visibly.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["ready"] == 1
+    row = payload["rows"][0]
+    assert row["status"] == "ready"
+    assert row["notes"] == ["missing-identification-defaulted-to-none"]
+    assert row["proposed_row"]["identification_strength"] == "none"
+
+
 def test_plan_skips_rows_with_no_claim_or_support_content(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_manifest(project)

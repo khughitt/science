@@ -136,6 +136,7 @@ def build_retired_edge_migration_plan(
                     rel_path=rel_path,
                     dag=dag_slug,
                     edge=edge,
+                    missing_identification="identification" not in raw_edge,
                     dot_exists=dot_exists,
                     focal_hypothesis=focal_hypothesis,
                     propositions_by_pair=propositions_by_pair,
@@ -321,6 +322,7 @@ def _plan_edge(
     rel_path: str,
     dag: str,
     edge: EdgeRecord,
+    missing_identification: bool,
     dot_exists: bool,
     focal_hypothesis: str | None,
     propositions_by_pair: dict[tuple[str, str], list[PropositionEntity]],
@@ -341,6 +343,8 @@ def _plan_edge(
         blockers.append("dot-missing")
     if edge.edge_status == EdgeStatus.eliminated:
         blockers.append("eliminated-edge")
+    if missing_identification:
+        notes.append("missing-identification-defaulted-to-none")
 
     if not _has_claim_support_content(edge):
         return RetiredEdgeMigrationRow(
@@ -352,7 +356,7 @@ def _plan_edge(
             description=description,
             raw_support=raw_support,
             status="skipped",
-            notes=("no-claim-support-content",),
+            notes=(*notes, "no-claim-support-content"),
         )
 
     matches = propositions_by_pair.get((source, target), [])
