@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset, Graph, Literal, Namespace, URIRef
+from rdflib import Dataset, Graph, Literal, Namespace
 from rdflib.namespace import PROV, RDF, XSD
 
 from science_tool.graph.materialize import materialize_graph
