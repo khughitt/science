@@ -161,6 +161,20 @@ def test_apply_workbench_writes_entities_and_canonicalizes_workbench(tmp_path: P
     assert _frontmatter(prop_path)["updated"] == "2026-07-04"
 
 
+def test_apply_workbench_result_changed_paths_are_project_relative(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+
+    result = apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    assert "entities/propositions/a-affects-b.md" in result.changed_paths
+    assert "entities/evidence-lines/a-affects-b-ev0.md" in result.changed_paths
+    assert "doc/figures/dags/h1.workbench.yaml" in result.changed_paths
+    assert all(not Path(changed_path).is_absolute() for changed_path in result.changed_paths)
+
+
 def test_apply_workbench_new_proposition_body_matches_workbench_body(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
@@ -210,6 +224,44 @@ def test_apply_workbench_preserves_authored_proposition_body_on_semantic_update(
     assert "Reviewed prose." in prop_path.read_text(encoding="utf-8")
     fm = _frontmatter(prop_path)
     assert fm["claim_layer"] == "structural_claim"
+    assert fm["created"] == "2026-07-04"
+    assert fm["updated"] == "2026-07-10"
+
+
+def test_apply_workbench_preserves_curated_proposition_frontmatter_on_semantic_update(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    frontmatter, body = parse_markdown_entity_file_preserving_body(prop_path)
+    frontmatter["status"] = "ack"
+    frontmatter["source_refs"] = ["paper:Smith2026"]
+    frontmatter["origins"] = [{"type": "user", "ref": "manual:test", "date": "2026-07-04"}]
+    frontmatter["review_state"] = {"last_reviewed": "2026-07-04", "last_review_note": "manual review"}
+    frontmatter["related"] = ["question:manual-test"]
+    frontmatter["ontology_terms"] = ["obo:TEST_0001"]
+    prop_path.write_text(
+        "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
+        encoding="utf-8",
+    )
+    _write_workbench(workbench_path, claim_layer="structural_claim", inline_evidence=False)
+
+    result = apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
+
+    assert result.status == "applied"
+    fm = _frontmatter(prop_path)
+    assert fm["claim_layer"] == "structural_claim"
+    assert fm["status"] == "ack"
+    assert fm["source_refs"] == ["paper:Smith2026"]
+    assert fm["origins"] == [{"type": "user", "ref": "manual:test", "date": "2026-07-04"}]
+    assert fm["review_state"] == {"last_reviewed": "2026-07-04", "last_review_note": "manual review"}
+    assert fm["related"] == ["question:manual-test"]
+    assert fm["ontology_terms"] == ["obo:TEST_0001"]
     assert fm["created"] == "2026-07-04"
     assert fm["updated"] == "2026-07-10"
 
@@ -407,3 +459,34 @@ def test_build_workbench_apply_plan_rejects_duplicate_identical_explicit_rows(tm
 
     with pytest.raises(WorkbenchApplyError, match="duplicate proposition row id"):
         build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+
+def test_build_workbench_apply_plan_rejects_duplicate_idless_proposition_targets(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    workbench_path.write_text(
+        """rows:
+  - subject: a
+    predicate: affects
+    object: b
+    patch: h1
+    polarity: positive
+    claim_layer: causal_effect
+  - subject: a
+    predicate: affects
+    object: b
+    patch: h1
+    polarity: positive
+    claim_layer: causal_effect
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WorkbenchApplyError, match="duplicate proposition target proposition:a-affects-b"):
+        build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    assert not (tmp_path / "entities").exists()
+    assert "id: proposition:a-affects-b" not in workbench_path.read_text(encoding="utf-8")

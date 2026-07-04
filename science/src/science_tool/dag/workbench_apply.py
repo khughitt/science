@@ -43,6 +43,14 @@ _PROPOSITION_ROW_FIELDS: tuple[str, ...] = (
     "claim_layer",
     "identification_strength",
 )
+_CURATED_FRONTMATTER_KEYS: tuple[str, ...] = (
+    "status",
+    "source_refs",
+    "origins",
+    "review_state",
+    "related",
+    "ontology_terms",
+)
 
 
 class WorkbenchApplyError(ValueError):
@@ -182,6 +190,39 @@ def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str
     return frontmatter, body, current_text
 
 
+def _generated_frontmatter(entity: WorkbenchEntity, *, created: str, updated: str) -> dict[str, object]:
+    generated_text = render_entity_text(entity, body="", created=created, updated=updated)
+    try:
+        _prefix, frontmatter_text, _body = generated_text.split("---\n", 2)
+    except ValueError as exc:
+        raise WorkbenchApplyError(f"could not render entity frontmatter for {entity.id}") from exc
+    loaded = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(loaded, dict):
+        raise WorkbenchApplyError(f"could not render entity frontmatter for {entity.id}")
+    return loaded
+
+
+def _render_entity_text_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
+    return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False) + "---\n" + body
+
+
+def _render_workbench_entity_update(
+    entity: WorkbenchEntity,
+    *,
+    existing_frontmatter: dict[str, object],
+    body: str,
+    created: str,
+    updated: str,
+) -> str:
+    final_frontmatter = _generated_frontmatter(entity, created=created, updated=updated)
+    for key in _CURATED_FRONTMATTER_KEYS:
+        if key in existing_frontmatter:
+            final_frontmatter[key] = existing_frontmatter[key]
+    final_frontmatter["created"] = created
+    final_frontmatter["updated"] = updated
+    return _render_entity_text_from_frontmatter(final_frontmatter, body)
+
+
 def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) -> PlannedWorkbenchEdit:
     path = _target_path(project_root, entity)
     today = as_of.isoformat()
@@ -200,8 +241,9 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     frontmatter, body, current_text = _read_existing_target(path, entity)
     created = str(frontmatter["created"])
     existing_updated = str(frontmatter["updated"])
-    unchanged_timestamp_text = render_entity_text(
+    unchanged_timestamp_text = _render_workbench_entity_update(
         entity,
+        existing_frontmatter=frontmatter,
         body=body,
         created=created,
         updated=existing_updated,
@@ -209,7 +251,13 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     if unchanged_timestamp_text == current_text:
         final_text = current_text
     else:
-        final_text = render_entity_text(entity, body=body, created=created, updated=today)
+        final_text = _render_workbench_entity_update(
+            entity,
+            existing_frontmatter=frontmatter,
+            body=body,
+            created=created,
+            updated=today,
+        )
     return PlannedWorkbenchEdit(
         path=path,
         reason="entity",
@@ -267,6 +315,17 @@ def _validate_precompile_targets(project_root: Path, workbench: WorkbenchFile) -
             ev_index += 1
 
 
+def _validate_compiled_targets(project_root: Path, compile_result: CompileResult) -> None:
+    proposition_ids: set[str] = set()
+    for row in compile_result.workbench.rows:
+        if row.id is None:
+            raise WorkbenchApplyError("compiled workbench row is missing an id")
+        if row.id in proposition_ids:
+            raise WorkbenchApplyError(f"duplicate proposition target {row.id}")
+        proposition_ids.add(row.id)
+        _validated_entity_target_path(project_root, kind="proposition", entity_id=row.id)
+
+
 def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> tuple[CompileResult, str]:
     try:
         raw = yaml.safe_load(input_text) or {}
@@ -285,6 +344,7 @@ def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> 
             result = compile_workbench(workbench, project_root=scratch_root, as_of=as_of)
         except (EntityCommandError, ValidationError, ValueError) as exc:
             raise WorkbenchApplyError(f"could not compile workbench: {exc}") from exc
+        _validate_compiled_targets(project_root, result)
         return result, serialize_canonical(result)
 
 
