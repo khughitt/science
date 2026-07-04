@@ -440,7 +440,7 @@ class GapCurrentMatchRow(TypedDict):
     baseline_score: int
 
 
-class GapCandidateBenchmarkRow(TypedDict):
+class GapCandidateBenchmarkBaseRow(TypedDict):
     benchmark_id: str
     benchmark_title: str
     baseline_score: int
@@ -448,9 +448,16 @@ class GapCandidateBenchmarkRow(TypedDict):
     matched_missing_facets: list[str]
     matched_hint_facets: list[str]
     reason_notes: list[str]
-    context_fit: NotRequired[ContextFit]
-    context_fit_reasons: NotRequired[list[str]]
-    context_fit_warnings: NotRequired[list[str]]
+
+
+class RawGapCandidateBenchmarkRow(GapCandidateBenchmarkBaseRow):
+    pass
+
+
+class GapCandidateBenchmarkRow(GapCandidateBenchmarkBaseRow):
+    context_fit: ContextFit
+    context_fit_reasons: list[str]
+    context_fit_warnings: list[str]
 
 
 @dataclass(frozen=True)
@@ -1498,7 +1505,7 @@ def _matched_facets_for_gap(row: BenchmarkGapRow, current_matches: list[Opportun
     return _sorted_facets(facets)
 
 
-def _candidate_mode(candidates: list[GapCandidateBenchmarkRow]) -> CandidateMode:
+def _candidate_mode(candidates: Sequence[GapCandidateBenchmarkBaseRow]) -> CandidateMode:
     if any(candidate["matched_missing_facets"] or candidate["matched_hint_facets"] for candidate in candidates):
         return "entity-specific"
     if candidates:
@@ -1988,11 +1995,11 @@ def _fallback_reason_notes(score: CandidateScore) -> list[str]:
     return notes
 
 
-def _is_fallback_candidate(candidate: GapCandidateBenchmarkRow) -> bool:
+def _is_fallback_candidate(candidate: GapCandidateBenchmarkBaseRow) -> bool:
     return any(note.startswith("fallback:") for note in candidate["reason_notes"])
 
 
-def _selection_reason_note(row: GapCandidateBenchmarkRow, *, rotated: bool) -> str:
+def _selection_reason_note(row: RawGapCandidateBenchmarkRow, *, rotated: bool) -> str:
     if rotated:
         return "selected:diversity-rotation"
     if "fallback:baseline-quality" in row["reason_notes"]:
@@ -2002,7 +2009,7 @@ def _selection_reason_note(row: GapCandidateBenchmarkRow, *, rotated: bool) -> s
     return "selected:available-benchmark"
 
 
-def _with_selection_reason(row: GapCandidateBenchmarkRow, *, rotated: bool) -> GapCandidateBenchmarkRow:
+def _with_selection_reason(row: RawGapCandidateBenchmarkRow, *, rotated: bool) -> RawGapCandidateBenchmarkRow:
     notes = {*row["reason_notes"], _selection_reason_note(row, rotated=rotated)}
     return {**row, "reason_notes": sorted(notes, key=_reason_note_sort_key)}
 
@@ -2014,7 +2021,11 @@ def _stable_rotation_offset(entity_id: str, size: int) -> int:
     return int.from_bytes(digest[:4], "big") % size
 
 
-def _rotated(rows: list[GapCandidateBenchmarkRow], *, entity_id: str) -> tuple[list[GapCandidateBenchmarkRow], bool]:
+def _rotated(
+    rows: list[RawGapCandidateBenchmarkRow],
+    *,
+    entity_id: str,
+) -> tuple[list[RawGapCandidateBenchmarkRow], bool]:
     if len(rows) <= 1:
         return rows, False
     offset = _stable_rotation_offset(entity_id, len(rows))
@@ -2025,11 +2036,11 @@ def _rotated(rows: list[GapCandidateBenchmarkRow], *, entity_id: str) -> tuple[l
 
 def _select_fallback_rows(
     entity_id: str,
-    fallback: list[GapCandidateBenchmarkRow],
+    fallback: list[RawGapCandidateBenchmarkRow],
     *,
     limit: int,
-) -> list[GapCandidateBenchmarkRow]:
-    selected: list[GapCandidateBenchmarkRow] = []
+) -> list[RawGapCandidateBenchmarkRow]:
+    selected: list[RawGapCandidateBenchmarkRow] = []
     remaining = min(3, limit)
     ordered = sorted(
         fallback,
@@ -2058,7 +2069,7 @@ def _summarize_gap_candidate_test_rows(rows: list[BenchmarkTestRow]) -> tuple[Co
 
 
 def _annotate_gap_candidate_context_fit(
-    candidate: GapCandidateBenchmarkRow,
+    candidate: RawGapCandidateBenchmarkRow,
     *,
     entity: ProjectBenchmarkEntity,
     project_context_tokens: frozenset[str],
@@ -2095,17 +2106,17 @@ def _candidate_rows(
     score_index: CandidateScoreIndex,
     *,
     limit: int = 5,
-) -> list[GapCandidateBenchmarkRow]:
+) -> list[RawGapCandidateBenchmarkRow]:
     matched_benchmark_ids = {row["benchmark_id"] for row in current_matches}
-    scored: list[tuple[GapCandidateBenchmarkRow, CandidateScore]] = []
-    fallback: list[GapCandidateBenchmarkRow] = []
+    scored: list[tuple[RawGapCandidateBenchmarkRow, CandidateScore]] = []
+    fallback: list[RawGapCandidateBenchmarkRow] = []
     for context in contexts:
         dataset = context.dataset
         if dataset.id in matched_benchmark_ids:
             continue
         score = _candidate_score(context, missing_facets=missing_facets, hint_facets=hint_facets)
         score_index[(entity_id, dataset.id)] = score
-        row: GapCandidateBenchmarkRow = {
+        row: RawGapCandidateBenchmarkRow = {
             "benchmark_id": dataset.id,
             "benchmark_title": dataset.title,
             "baseline_score": context.baseline.total,
