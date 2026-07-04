@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 import warnings
 
 import yaml
@@ -85,6 +85,40 @@ class RetiredEdgeMigrationPlan:
                 "evidence_warnings": sum(len(row.evidence_warnings) for row in self.rows),
             },
             "rows": [row.to_json() for row in self.rows],
+        }
+
+
+ScaffoldStatus = Literal["written", "no-op"]
+
+
+@dataclass(frozen=True)
+class RetiredEdgeWorkbenchScaffoldResult:
+    project_root: str
+    dag: str
+    focal_hypothesis: str
+    output_path: str
+    status: ScaffoldStatus
+    row_count: int
+    predicate_review_required: int
+    evidence_stub_count: int
+    byte_count: int
+
+    @property
+    def written(self) -> bool:
+        return self.status == "written"
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "project_root": self.project_root,
+            "dag": self.dag,
+            "focal_hypothesis": self.focal_hypothesis,
+            "output": self.output_path,
+            "status": self.status,
+            "written": self.written,
+            "rows": self.row_count,
+            "predicate_review_required": self.predicate_review_required,
+            "evidence_stubs": self.evidence_stub_count,
+            "byte_count": self.byte_count,
         }
 
 
@@ -549,6 +583,101 @@ def migration_plan_to_workbench_yaml(plan: RetiredEdgeMigrationPlan) -> str:
     doc["rows"] = ready_rows
     WorkbenchFile.model_validate(doc)
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+
+
+def _project_relative_or_absolute(project_root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _resolve_scaffold_output_path(project_root: Path, output_path: Path) -> Path:
+    candidate = output_path if output_path.is_absolute() else project_root / output_path
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError(f"output path escapes project root: {output_path}") from exc
+    if not resolved.parent.exists():
+        raise ValueError(f"output parent directory does not exist: {resolved.parent}")
+    if resolved.name.endswith(".edges.yaml"):
+        raise ValueError("output path must not be a retired .edges.yaml file")
+    if resolved.suffix == ".dot":
+        raise ValueError("output path must not be a DOT file")
+    return resolved
+
+
+def _ready_scaffold_rows(plan: RetiredEdgeMigrationPlan) -> Sequence[RetiredEdgeMigrationRow]:
+    return tuple(row for row in plan.rows if row.status == "ready" and row.proposed_row is not None)
+
+
+def _evidence_stub_count(rows: Sequence[RetiredEdgeMigrationRow]) -> int:
+    return sum(len(row.proposed_row.get("evidence", [])) for row in rows if row.proposed_row is not None)
+
+
+def scaffold_retired_edge_workbench(
+    project_root: Path,
+    *,
+    dag: str,
+    focal_hypothesis: str,
+    output_path: Path,
+) -> RetiredEdgeWorkbenchScaffoldResult:
+    project_root = project_root.resolve()
+    if not dag.strip():
+        raise ValueError("--dag is required")
+    if not focal_hypothesis.strip():
+        raise ValueError("--focal-hypothesis is required")
+
+    resolved_output = _resolve_scaffold_output_path(project_root, output_path)
+    plan = build_retired_edge_migration_plan(project_root, dag=dag, focal_hypothesis=focal_hypothesis)
+    if not plan.rows:
+        raise ValueError(f"retired DAG edge file for dag {dag!r} contains no migration rows")
+
+    blocked = [row for row in plan.rows if row.status == "blocked"]
+    skipped = [row for row in plan.rows if row.status == "skipped"]
+    evidence_warnings = [warning for row in plan.rows for warning in row.evidence_warnings]
+    if blocked:
+        details = ", ".join(f"{row.dag}#{row.edge_id}: {'/'.join(row.blockers)}" for row in blocked)
+        raise ValueError(f"cannot scaffold blocked retired edge rows: {details}")
+    if skipped:
+        details = ", ".join(f"{row.dag}#{row.edge_id}: {'/'.join(row.blockers or row.notes)}" for row in skipped)
+        raise ValueError(f"cannot scaffold skipped retired edge rows: {details}")
+    if evidence_warnings:
+        raise ValueError(f"cannot scaffold rows with evidence warnings: {', '.join(sorted(evidence_warnings))}")
+
+    ready_rows = _ready_scaffold_rows(plan)
+    ready_count = sum(1 for row in plan.rows if row.status == "ready")
+    if len(ready_rows) != ready_count:
+        raise AssertionError("Phase 5g invariant violated: ready row lacks proposed_row")
+    if not ready_rows:
+        raise ValueError("no ready retired edge migration rows to scaffold")
+
+    rendered = migration_plan_to_workbench_yaml(plan)
+    # Write-boundary honesty check: persist only YAML accepted by the strict workbench schema.
+    WorkbenchFile.model_validate(yaml.safe_load(rendered) or {})
+    rendered_byte_count = len(rendered.encode("utf-8"))
+
+    status: ScaffoldStatus = "written"
+    if resolved_output.exists():
+        current = resolved_output.read_text(encoding="utf-8")
+        if current != rendered:
+            raise ValueError(f"output path already exists with different content: {resolved_output}")
+        status = "no-op"
+    else:
+        resolved_output.write_text(rendered, encoding="utf-8")
+
+    return RetiredEdgeWorkbenchScaffoldResult(
+        project_root=project_root.as_posix(),
+        dag=dag,
+        focal_hypothesis=focal_hypothesis,
+        output_path=_project_relative_or_absolute(project_root, resolved_output),
+        status=status,
+        row_count=len(ready_rows),
+        predicate_review_required=sum(1 for row in ready_rows if row.predicate_review_required),
+        evidence_stub_count=_evidence_stub_count(ready_rows),
+        byte_count=rendered_byte_count,
+    )
 
 
 def render_migration_plan_table(plan: RetiredEdgeMigrationPlan) -> str:

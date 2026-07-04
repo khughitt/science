@@ -165,6 +165,72 @@ def test_workbench_yaml_is_strict_workbench_file_with_focal_hypothesis(tmp_path:
     } & set(payload["rows"][0])
 
 
+def test_scaffold_retired_edge_workbench_writes_strict_yaml(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=output,
+    )
+
+    assert result.status == "written"
+    assert result.written is True
+    assert result.row_count == 1
+    assert result.predicate_review_required == 1
+    assert result.evidence_stub_count == 2
+    assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
+
+    payload = yaml.safe_load(output.read_text(encoding="utf-8"))
+    workbench = WorkbenchFile.model_validate(payload)
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    row = workbench.rows[0]
+    assert row.subject == "a"
+    assert row.predicate == "affects"
+    assert row.object == "b"
+    assert row.legacy_patch == "h1"
+    assert row.legacy_edge_id == 1
+    assert row.legacy_relation_label == "biases"
+    assert row.discusses == ["hypothesis:h1"]
+    assert payload["rows"][0]["evidence"] == [
+        {
+            "source": "task:t001",
+            "evidence_type": "empirical_data",
+            "stance": "supports",
+        },
+        {
+            "source": "paper:Smith2020",
+            "evidence_type": "literature",
+            "stance": "supports",
+        },
+    ]
+    assert not (project / "entities").exists()
+
+
+def test_scaffold_retired_edge_workbench_relative_output_is_project_relative(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=Path("doc/figures/dags/h1.workbench.yaml"),
+    )
+
+    assert result.status == "written"
+    assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
+    assert (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
 def test_plan_skips_matching_compiled_proposition(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_edge_project(project)
