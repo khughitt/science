@@ -1540,7 +1540,8 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
 
 
 def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text(encoding="utf-8", newline="")
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        text = fh.read()
     if text.startswith("---\r\n"):
         newline = "\r\n"
     elif text.startswith("---\n"):

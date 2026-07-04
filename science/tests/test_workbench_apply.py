@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 from science_model.propositions import PropositionEntity
+from science_model.reasoning import ClaimLayer, IdentificationStrength, Polarity, Predicate
 
 from science_tool.dag.workbench import workbench_entity_body
 from science_tool.entities import (
@@ -33,11 +34,11 @@ def _proposition(entity_id: str = "proposition:a-affects-b") -> PropositionEntit
     return PropositionEntity(
         id=entity_id,
         subject="a",
-        predicate="affects",
+        predicate=Predicate.AFFECTS,
         object="b",
-        polarity="positive",
-        claim_layer="causal_effect",
-        identification_strength="observational",
+        polarity=Polarity.POSITIVE,
+        claim_layer=ClaimLayer.CAUSAL_EFFECT,
+        identification_strength=IdentificationStrength.OBSERVATIONAL,
     )
 
 
