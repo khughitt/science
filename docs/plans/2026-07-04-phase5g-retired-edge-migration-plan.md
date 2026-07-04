@@ -234,6 +234,34 @@ edges:
     assert payload["rows"][0]["blockers"] == ["eliminated-edge"]
 
 
+def test_plan_blocks_missing_edge_id(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: Row with no id.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["blocked"] == 1
+    row = payload["rows"][0]
+    assert row["status"] == "blocked"
+    assert row["blockers"] == ["missing-edge-id"]
+    assert row["edge_id"] is None
+    assert row["proposed_row"] is None
+
+
 def test_plan_parses_with_schema_and_fails_loud_on_invalid_refs(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_manifest(project)
@@ -431,6 +459,13 @@ def _validate_edge_record(path: str, raw_edge: dict[str, Any], row_index: int) -
         raise ValueError(f"invalid retired DAG edge file {path}: edge {row_index}: {exc}") from exc
 
 
+_MISSING_IDENTITY_BLOCKERS = {
+    "id": "missing-edge-id",
+    "source": "missing-source",
+    "target": "missing-target",
+}
+
+
 class _MissingEdgeIdentity(ValueError):
     def __init__(self, fields: set[str]) -> None:
         super().__init__(",".join(sorted(fields)))
@@ -480,7 +515,10 @@ def _plan_raw_edge(
     try:
         edge = _validate_edge_record(rel_path, raw_edge, row_index)
     except _MissingEdgeIdentity as exc:
-        blockers = tuple(f"missing-{field}" for field in sorted(exc.fields))
+        # ``EdgeRecord.id`` is a required int, so a missing/invalid id, source, or
+        # target raises during validation and is routed here. Map ``id`` to the
+        # design's ``missing-edge-id`` blocker token (not ``missing-id``).
+        blockers = tuple(_MISSING_IDENTITY_BLOCKERS[field] for field in sorted(exc.fields))
         return RetiredEdgeMigrationRow(
             path=rel_path,
             dag=dag,
@@ -525,12 +563,13 @@ def _plan_edge(
     blockers: list[str] = []
     notes: list[str] = []
 
+    # ``edge.id``, ``source``, and ``target`` are required on ``EdgeRecord``; a
+    # missing one raises during validation and is handled in ``_plan_raw_edge``.
+    # Here they are guaranteed present, so we only guard empty-after-strip text.
     if not source:
         blockers.append("missing-source")
     if not target:
         blockers.append("missing-target")
-    if edge.id is None:
-        blockers.append("missing-edge-id")
     if not dot_exists:
         blockers.append("dot-missing")
     if edge.edge_status == EdgeStatus.eliminated:
@@ -557,7 +596,9 @@ def _plan_edge(
             matching_propositions=tuple(sorted(prop.id for prop in matches if prop.id is not None)),
         )
 
-    membership_required = focal_hypothesis is None and edge.id is not None
+    # Every migrated row carries a required ``legacy_edge_id``, so it must declare
+    # bundle membership; without a focal hypothesis ``compile_workbench`` rejects it.
+    membership_required = focal_hypothesis is None
     if membership_required:
         blockers.append("membership-required")
 
@@ -655,9 +696,11 @@ def migration_plan_to_workbench_yaml(plan: RetiredEdgeMigrationPlan) -> str:
     ready_rows = [row.proposed_row for row in plan.rows if row.status == "ready" and row.proposed_row is not None]
     if not ready_rows:
         raise ValueError("no compile-compatible retired edge migration rows; pass --focal-hypothesis or inspect blockers")
-    doc: dict[str, Any] = {"rows": ready_rows}
+    # Emit ``focal_hypothesis`` before ``rows`` so the draft reads top-down for review.
+    doc: dict[str, Any] = {}
     if plan.focal_hypothesis is not None:
         doc["focal_hypothesis"] = plan.focal_hypothesis
+    doc["rows"] = ready_rows
     WorkbenchFile.model_validate(doc)
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
 
@@ -877,22 +920,20 @@ Expected: commit succeeds.
 
 - [ ] **Step 1: Add failing core workbench-output tests**
 
-Append these imports near the top of `science/tests/dag/test_retired_edge_migration.py`:
+Update the imports at the top of `science/tests/dag/test_retired_edge_migration.py`.
+Replace the existing single-line
+`from science_tool.dag.retired_edge_migration import build_retired_edge_migration_plan`
+with the combined import below, and add the `yaml` and `WorkbenchFile` imports.
+Do not leave a duplicate `migration_plan_to_workbench_yaml` import (ruff `F811`):
 
 ```python
 import yaml
 
-from science_tool.dag.retired_edge_migration import migration_plan_to_workbench_yaml
-from science_tool.dag.workbench import WorkbenchFile
-```
-
-If the file already imports `build_retired_edge_migration_plan` with a single-line import, replace it with:
-
-```python
 from science_tool.dag.retired_edge_migration import (
     build_retired_edge_migration_plan,
     migration_plan_to_workbench_yaml,
 )
+from science_tool.dag.workbench import WorkbenchFile
 ```
 
 Append these tests:
@@ -1229,7 +1270,8 @@ rtk uv run --frozen --project science science dag retired-edge-migration-plan \
   --format workbench
 ```
 
-Expected: command exits 0 and stdout begins with a `focal_hypothesis:` key and a `rows:` list. It must not write files.
+Expected: command exits 0 and stdout begins with the `focal_hypothesis:` key,
+followed by a `rows:` list. It must not write files.
 
 - [ ] **Step 7: Verify default DAG tests still pass**
 
