@@ -448,6 +448,9 @@ class GapCandidateBenchmarkRow(TypedDict):
     matched_missing_facets: list[str]
     matched_hint_facets: list[str]
     reason_notes: list[str]
+    context_fit: NotRequired[ContextFit]
+    context_fit_reasons: NotRequired[list[str]]
+    context_fit_warnings: NotRequired[list[str]]
 
 
 @dataclass(frozen=True)
@@ -482,6 +485,9 @@ class GapCandidateEvidence(TypedDict):
     dropped_dataset_facets: list[str]
     components: dict[str, int]
     reason_notes: list[str]
+    context_fit: NotRequired[ContextFit]
+    context_fit_reasons: NotRequired[list[str]]
+    context_fit_warnings: NotRequired[list[str]]
 
 
 class GapCalibrationPayload(TypedDict):
@@ -517,6 +523,7 @@ class BenchmarkGapSummary(TypedDict):
     fallback_candidate_rows: int
     fallback_candidate_ratio: float
     gap_candidate_mode_counts: dict[CandidateMode, int]
+    candidate_context_fit_counts: dict[ContextFit, int]
 
 
 class TermCountRow(TypedDict):
@@ -1530,6 +1537,16 @@ def _gap_candidate_counts(rows: list[BenchmarkGapRow]) -> GapCandidateCounts:
     }
 
 
+def _gap_candidate_context_fit_counts(rows: list[BenchmarkGapRow]) -> dict[ContextFit, int]:
+    counts = _empty_context_fit_counts()
+    for row in rows:
+        for candidate in row["candidate_benchmarks"]:
+            context_fit = candidate.get("context_fit")
+            if context_fit is not None:
+                counts[context_fit] += 1
+    return counts
+
+
 def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: list[str]) -> list[str]:
     excluded = set(_UNMAPPED_TERM_EXCLUSIONS)
     excluded.update(_phrase_tokens())
@@ -2007,6 +2024,45 @@ def _select_fallback_rows(
     return selected
 
 
+def _summarize_gap_candidate_test_rows(rows: list[BenchmarkTestRow]) -> tuple[ContextFit, list[str], list[str]]:
+    if not rows:
+        raise ValueError("gap candidate produced no benchmark-test rows")
+    context_fits: list[ContextFit] = [row["context_fit"] for row in rows]
+    context_fit = min(context_fits, key=lambda value: CONTEXT_FIT_ORDER[value])
+    reasons = sorted({reason for row in rows for reason in row["context_fit_reasons"]})
+    warnings = sorted({warning for row in rows for warning in row["context_fit_warnings"]})
+    return context_fit, reasons, warnings
+
+
+def _annotate_gap_candidate_context_fit(
+    candidate: GapCandidateBenchmarkRow,
+    *,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
+    context: DatasetOpportunityContext,
+    score: CandidateScore,
+) -> GapCandidateBenchmarkRow:
+    priority_source: PrioritySource = "gap-fallback" if _is_fallback_candidate(candidate) else "gap-candidate"
+    extra_facets = set(candidate["matched_missing_facets"]) | set(candidate["matched_hint_facets"])
+    rows = _rows_for_gap_candidate(
+        entity=entity,
+        project_context_tokens=project_context_tokens,
+        context=context,
+        priority_score=int(candidate["candidate_score"]),
+        priority_source=priority_source,
+        source_components=dict(score.components),
+        reason_notes=list(candidate["reason_notes"]),
+        matched_facets=_matched_facets_for_context(context, extra=extra_facets),
+    )
+    context_fit, reasons, warnings = _summarize_gap_candidate_test_rows(rows)
+    return {
+        **candidate,
+        "context_fit": context_fit,
+        "context_fit_reasons": reasons,
+        "context_fit_warnings": warnings,
+    }
+
+
 def _candidate_rows(
     entity_id: str,
     contexts: list[DatasetOpportunityContext],
@@ -2069,6 +2125,7 @@ def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkG
         "weakly_covered_entities": sum(1 for row in rows if row["gap_level"] == "weak"),
         "missing_facet_entities": sum(1 for row in rows if row["gap_level"] == "missing-facet"),
         **_gap_candidate_counts(rows),
+        "candidate_context_fit_counts": _gap_candidate_context_fit_counts(rows),
     }
 
 
@@ -2457,6 +2514,11 @@ def _gap_calibration_payload(
             if context is None:
                 continue
             score = candidate_scores[(row["entity_id"], candidate["benchmark_id"])]
+            context_fit = candidate.get("context_fit")
+            context_fit_reasons = candidate.get("context_fit_reasons")
+            context_fit_warnings = candidate.get("context_fit_warnings")
+            if context_fit is None or context_fit_reasons is None or context_fit_warnings is None:
+                raise ValueError(f"gap candidate evidence missing context fit: {candidate['benchmark_id']}")
             candidate_evidence.append(
                 {
                     "entity_id": row["entity_id"],
@@ -2465,6 +2527,9 @@ def _gap_calibration_payload(
                     "dropped_dataset_facets": _dataset_broad_facets(context),
                     "components": dict(score.components),
                     "reason_notes": list(candidate["reason_notes"]),
+                    "context_fit": context_fit,
+                    "context_fit_reasons": list(context_fit_reasons),
+                    "context_fit_warnings": list(context_fit_warnings),
                 }
             )
     return {
@@ -3808,6 +3873,8 @@ def gaps_report(
     unmapped_ids = {row["entity_id"] for row in opportunity["unmapped_project_entities"]}
     entity_ids = sorted(set(matched) | set(coverage) | unmapped_ids)
     entity_by_id = {entity.id: entity for entity in analysis.entities}
+    context_by_id = {context.dataset.id: context for context in analysis.contexts}
+    project_context_tokens = _project_context_tokens(project_root, analysis.entities)
     candidate_score_index: CandidateScoreIndex = {}
 
     rows: list[BenchmarkGapRow] = []
@@ -3818,7 +3885,9 @@ def gaps_report(
         missing_signal_types = list(gap["missing_signal_types"]) if gap is not None else []
         missing_facets = {_normalize_token(value) for value in missing_modalities + missing_signal_types}
         entity = entity_by_id.get(current_entity_id)
-        hint_facets = set(_entity_facet_hints(entity)) if entity is not None else set()
+        if entity is None:
+            raise ValueError(f"gap row references unknown entity: {current_entity_id}")
+        hint_facets = set(_entity_facet_hints(entity))
         weak_match_facets: set[str] = set()
         if _is_weak_gap(current_matches):
             for match in current_matches:
@@ -3850,6 +3919,22 @@ def gaps_report(
             hint_facets,
             candidate_score_index,
         )
+        annotated_candidates: list[GapCandidateBenchmarkRow] = []
+        for candidate in candidates:
+            context = context_by_id.get(candidate["benchmark_id"])
+            if context is None:
+                raise ValueError(f"gap candidate references unknown benchmark context: {candidate['benchmark_id']}")
+            score = candidate_score_index[(current_entity_id, candidate["benchmark_id"])]
+            annotated_candidates.append(
+                _annotate_gap_candidate_context_fit(
+                    candidate,
+                    entity=entity,
+                    project_context_tokens=project_context_tokens,
+                    context=context,
+                    score=score,
+                )
+            )
+        candidates = annotated_candidates
         rows.append(
             {
                 "entity_id": current_entity_id,
