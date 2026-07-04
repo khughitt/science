@@ -131,16 +131,21 @@ returns a list of **candidate entities** conforming to the candidate schema
 
 ### Phase 3 — Classify (full visibility)
 
-Now, and only now, load the existing epistemic surface via
+Now, and only now, load the existing epistemic surface. Start with
 `science project index --format json` (all hypotheses + questions with titles and
-statuses) plus `entities/topics/` for scope.
+statuses) plus `entities/topics/` for scope. The index is the compact routing
+surface, not the whole novelty basis: for candidates that look like likely
+overlaps or refinements by title/id, the orchestrator reads the referenced source
+files before assigning a final novelty bucket.
 
 1. **Deterministic pre-pass (cheap):** slugify each candidate title and compare
    against slugified existing entity ids/titles. Exact or near-exact collisions
    are marked immediately (`already-covered` or `sharpens-existing`) without
    spending agent judgment.
 2. **Agent-judged classification:** the orchestrator (or a classifier step)
-   assigns every remaining candidate exactly one `novelty_bucket`:
+   compares each remaining candidate against the index, reading source files for
+   likely overlaps/refinements when title-level information is insufficient, and
+   assigns exactly one `novelty_bucket`:
    - `novel` — no existing entity covers it.
    - `sharpens-existing` — a sharper/edge variant of an existing entity;
      `related_existing` names it.
@@ -224,11 +229,11 @@ report exists, suffix with `-<HHMM>` rather than overwrite.
 | `question_or_claim` | the actual question text, or the falsifiable claim |
 | `lens` | producing lens |
 | `rationale` | why this is worth asking (the reasoning) |
-| `literature_anchors` | list of `{doi, openalex_id, title, first_author, year, note}` as emitted by the blind lens; the orchestrator adds a resolved `ref` (`paper:<slug>` \| `cite:<key>`) in Phase 3 where it matches, else leaves it raw |
+| `literature_anchors` | list of `{doi, openalex_id, title, first_author, year, date?, note}` as emitted by the blind lens (`date` is the full `YYYY-MM-DD` when the source gives one); the orchestrator adds a resolved `ref` (`paper:<slug>` \| `cite:<key>`) in Phase 3 where it matches, else leaves it raw |
 | `novelty_bucket` | `novel` \| `sharpens-existing` \| `already-covered` \| `out-of-scope` |
 | `related_existing` | existing entity ids this overlaps/refines |
 | `decision` | `keep` \| `drop` \| `defer` (human-edited, default `defer`) \| `applied` (terminal state written by `--apply`, never set by hand) |
-| `origin_plan` | structured `origins` + `added_by` apply will stamp (§10) |
+| `origin_plan` | structured `origins` only (§10); `added_by` is not stored here — apply stamps it fresh as `explore-ideas:<model-id>:<candidate_id>` |
 
 `proposed_kind` is `hypothesis` only when `question_or_claim` already states a
 falsifiable claim; otherwise `question`.
@@ -262,13 +267,16 @@ uv run science questions create   … --origin <spec> [--origin <spec>] --added-
 uv run science hypotheses create  … --origin <spec> [--origin <spec>] --added-by explore-ideas:<model>
 ```
 
-`origin_plan` → concrete `--origin`/`--added-by` args:
+`origin_plan` plus resolved anchors → concrete create args:
 
 - **Purely reasoned** candidate → `--origin assistant:explore-ideas-<lens>`.
-- **Literature-traced** candidate whose anchor is a resolvable `paper:<slug>` /
-  `cite:<key>` → `--origin literature:paper:<slug>` (or `cite:<key>`).
+- **Resolved supporting literature** whose anchor does **not** claim priority →
+  `--source-ref paper:<slug>` or `--source-ref cite:<key>`. Supporting literature
+  is provenance for the entity, but not an originator.
 - **Convergent** (independently reasoned *and* found in the literature) → two
-  `--origin`s, with the literature one marked independent:
+  `--origin`s, with the literature one marked independent. This is reserved for
+  anchors whose note begins with `predates:` (the paper already posed the same
+  question/claim, not merely supported it):
   `--origin '+literature:cite:<key>'` (the "we predicted it AND it's predated in
   the lit" case the model was built for).
 - `--added-by` is `explore-ideas:<model-id>:<candidate_id>` — the trailing
@@ -326,7 +334,7 @@ convention; surfaced as `science:idea-lens-researcher`).
   (§10), with a unit test.
 
 **v1 reuses (no new code):** `science project index` (dedup input),
-`science questions/hypotheses create --origin/--added-by/--slug` (apply), the
+`science questions/hypotheses create --origin/--added-by/--source-ref` (apply), the
 OpenAlex/PubMed REST endpoints (grounding via `WebFetch`).
 
 **Deferred:**
@@ -355,7 +363,7 @@ If apply logic later graduates into a `science explore-ideas apply` helper
 - **Smoke/manual — apply round-trip:** ship a committed fixture report
   (mixed `decision` values, one convergent candidate) plus a short documented
   procedure: run `--apply --from <fixture>`, confirm only `keep` candidates
-  become entities with the expected `--origin`/`--added-by`/`--slug` args,
+  become entities with the expected `--origin`/`--source-ref`/`--added-by` args,
   confirm blocks flip to `applied` with `applied_as`/`applied_at`, and confirm a
   second apply is a no-op. Verified by inspection, not asserted in pytest.
 - `codex-skills/` sync test must pass after adding the command

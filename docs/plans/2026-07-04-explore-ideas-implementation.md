@@ -21,7 +21,7 @@
 - `decision` enum: `keep | drop | defer | applied`. Human sets the first three (default `defer`); `--apply` writes `applied`.
 - `--apply` **requires** `--from` (hard error otherwise). v1 apply routes `question`/`hypothesis` only; `topic`/`theme` kept candidates are reported "apply manually", never silently dropped.
 - Apply is idempotent via **report write-back** (`decision: applied` + `applied_as:` + `applied_at:`), NOT slug/destination matching (auto-incremented ids would mint duplicates).
-- Origin specs: reasoned → `assistant:explore-ideas-<lens>`; resolvable literature → `literature:paper:<slug>` or `literature:cite:<key>`; convergent → add `+literature:cite:<key>` (independent). `--added-by` = `explore-ideas:<model-id>:<candidate_id>`.
+- Apply provenance: reasoned → `--origin assistant:explore-ideas-<lens>`; resolved non-predating literature → `--source-ref paper:<slug>` or `--source-ref cite:<key>`; convergent/predating literature → add `--origin +literature:cite:<key>` (independent). `--added-by` = `explore-ideas:<model-id>:<candidate_id>`.
 - All origin dates are full `YYYY-MM-DD` (the `OriginRecord` validator rejects year-only, e.g. `2019` fails; `2019-01-01` passes).
 - Package layout: **no root `pyproject.toml`**. Run CLI tests from `science/`: `cd science && uv run --frozen pytest`. Lint/types from `science/`: `uv run ruff check`, `uv run pyright` (pyright gates `src/` only, not tests).
 - No AI-attribution trailers on commits (no `Co-Authored-By`, no "Generated with Claude Code").
@@ -441,20 +441,20 @@ Create `docs/plans/2026-07-04-explore-ideas-manual-check.md` containing:
 
 1. A short intro: what this verifies and why it's manual (not pytest).
 2. A complete fixture report body — a `type: meta` frontmatter plus **three** candidate `yaml` blocks:
-   - one `decision: keep`, `proposed_kind: question`, reasoned-only;
+   - one `decision: keep`, `proposed_kind: question`, reasoned-only with one resolved non-predating literature anchor (so apply must pass `--source-ref` and the created entity must carry `source_refs`);
    - one `decision: keep`, `proposed_kind: hypothesis`, **convergent** (origin_plan has an `assistant` origin AND a `{type: literature, ref: cite:<key>, independent: true}` origin);
    - one `decision: drop` (must NOT be created).
 3. The procedure, with expected results:
    - Copy the fixture to `entities/meta/explorations/explore-<date>.md` in a scratch project.
    - Run `/science:explore-ideas --apply --from explore-<date>` (or the CLI-equivalent create commands shown in the command doc).
-   - Expected: exactly 2 entities created (the two `keep`s), none for the `drop`; the convergent one's frontmatter shows two `origins` with `independent: true` on the literature one; both created blocks flip to `decision: applied` with `applied_as`/`applied_at`.
+   - Expected: exactly 2 entities created (the two `keep`s), none for the `drop`; the reasoned-only question's frontmatter includes the resolved supporting paper under `source_refs` and does **not** add it as a literature origin; the convergent one's frontmatter shows two `origins` with `independent: true` on the literature one; both created blocks flip to `decision: applied` with `applied_as`/`applied_at`.
    - Re-run the same apply → expected: 0 created, 2 skipped (idempotent).
    - Confirm `science validate` on the scratch project shows no new ERRORs from the created entities (a raw/unresolved `cite:` key is an expected WARN only).
 
 - [ ] **Step 2: Sanity-check the fixture parses as YAML**
 
-Run: `cd "$(git rev-parse --show-toplevel)" && python -c "import yaml,re; t=open('docs/plans/2026-07-04-explore-ideas-manual-check.md').read(); blocks=re.findall(r'\`\`\`yaml\n(.*?)\`\`\`', t, re.S); cands=[yaml.safe_load(b) for b in blocks if 'candidate_id' in b]; assert len(cands)==3, len(cands); assert sum(c['decision']=='keep' for c in cands)==2; assert any(any(o.get('independent') for o in c['origin_plan']['origins']) for c in cands); print('ok', len(cands))"`
-Expected: prints `ok 3`. (Confirms the fixture has 3 candidate blocks, 2 `keep`, and a convergent independent origin — the shape the procedure relies on.)
+Run: `cd "$(git rev-parse --show-toplevel)" && python -c "import yaml,re; t=open('docs/plans/2026-07-04-explore-ideas-manual-check.md').read(); blocks=re.findall(r'\`\`\`yaml\n(.*?)\`\`\`', t, re.S); cands=[yaml.safe_load(b) for b in blocks if 'candidate_id' in b]; assert len(cands)==3, len(cands); assert sum(c['decision']=='keep' for c in cands)==2; assert any(any(o.get('independent') for o in c['origin_plan']['origins']) for c in cands); assert any(any(a.get('ref') for a in c.get('literature_anchors', []) if not str(a.get('note', '')).startswith('predates:')) for c in cands); print('ok', len(cands))"`
+Expected: prints `ok 3`. (Confirms the fixture has 3 candidate blocks, 2 `keep`, a convergent independent origin, and at least one resolved non-predating anchor for the `--source-ref` branch — the shape the procedure relies on.)
 
 - [ ] **Step 3: Commit**
 
