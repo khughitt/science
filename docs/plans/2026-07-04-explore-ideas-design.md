@@ -55,12 +55,13 @@ skills.
 
 - No embedding/vector similarity engine. Dedup is agent-judged with a cheap
   deterministic slug-collision pre-pass (§7).
-- No new Python subsystem. v1 is a slash command + a dedicated agent,
-  orchestrating existing CLIs. The one bounded Python change is a small
-  backward-compatible extension to `parse_origin_spec` so a leading `+` marks an
-  origin `independent` (§10) — required because apply is create-only and the
-  current grammar cannot express it. A durable `science explore-ideas` CLI is a
-  deferred follow-up, added only if the slash command becomes too procedural.
+- No new Python subsystem for classify/generate. v1 keeps those phases as a
+  slash command plus a dedicated agent, orchestrating existing CLIs. The one
+  bounded Python change is the small backward-compatible extension to
+  `parse_origin_spec` so a leading `+` marks an origin `independent` (§10).
+  Apply mechanics have now graduated into the tested `science explore-ideas
+  apply` CLI; the command still owns classify/generate, while the separate apply
+  CLI handles the write-back path. See the apply CLI design for that flow.
 - No auto-promotion. Applying candidates is an explicit, human-gated second pass.
 - v1 apply auto-creates **questions and hypotheses only** (the kinds whose
   `create` CLI already carries the `--origin`/`--added-by` seam). `topic`/
@@ -348,13 +349,11 @@ OpenAlex/PubMed REST endpoints (grounding via `WebFetch`).
 
 ## 13. Testing considerations
 
-v1 ships exactly one new Python surface (the `parse_origin_spec` `+` extension),
-so it gets the one deterministic test. Everything else — report parsing,
-write-back, the create-call mapping — is executed by the command/agent in prose
-(like every other slash command in this repo; `wander`/`big-picture`
-orchestration is not unit-tested), so those are smoke/manual checks, not pytest.
-If apply logic later graduates into a `science explore-ideas apply` helper
-(deferred, §12), it comes with deterministic tests then.
+The original v1 ships one deterministic Python surface: the
+`parse_origin_spec` `+` extension, so it gets the one deterministic test.
+Classify/generate remains command/agent prose. Apply has now graduated into the
+tested `science explore-ideas apply` CLI, so its routing, write-back, and
+idempotence are covered by pytest instead of remaining manual.
 
 - **Deterministic — `parse_origin_spec` `+` extension:** `+literature:cite:K@
   2019-01-01` → `{type: literature, ref: cite:K, date: 2019-01-01, independent:
