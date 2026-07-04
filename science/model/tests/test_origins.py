@@ -40,6 +40,13 @@ def test_date_format_validated():
         OriginRecord.model_validate({"type": "user", "date": "May 2026"})
 
 
+def test_impossible_calendar_date_rejected():
+    with pytest.raises(ValidationError, match="real calendar date"):
+        OriginRecord.model_validate({"type": "user", "date": "2026-13-45"})
+    with pytest.raises(ValidationError, match="real calendar date"):
+        OriginRecord.model_validate({"type": "user", "date": "2026-02-30"})
+
+
 def test_bare_string_and_unknown_keys_rejected():
     with pytest.raises(ValidationError):
         OriginRecord.model_validate("smith2019")

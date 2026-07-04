@@ -258,8 +258,13 @@ class OriginRecord(BaseModel):
                 raise ValueError("literature origin requires a ref")
             if not (self.ref.startswith("paper:") or self.ref.startswith("cite:")):
                 raise ValueError("literature origin ref must be 'paper:<key>' or 'cite:<key>'")
-        if self.date is not None and not _ORIGIN_DATE_RE.match(self.date):
-            raise ValueError("origin date must be YYYY-MM-DD")
+        if self.date is not None:
+            if not _ORIGIN_DATE_RE.match(self.date):
+                raise ValueError("origin date must be YYYY-MM-DD")
+            try:
+                date.fromisoformat(self.date)
+            except ValueError as exc:
+                raise ValueError("origin date must be a real calendar date (YYYY-MM-DD)") from exc
         return self
 
 
