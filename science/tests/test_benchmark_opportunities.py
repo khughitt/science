@@ -176,7 +176,7 @@ benchmark:
   domains: [biology]
   modalities: [proteomics, multimodal]
   signal_types: [multi-omic]
-  benchmark_kinds: [mechanism-discrimination]
+  benchmark_kinds: [time-series]
   tasks:
     - id: subtype-transfer
       prediction_target: subtype
@@ -426,6 +426,124 @@ benchmark:
     assert row["context_fit"] == "direct-fit"
     assert "task-support:supported" in row["context_fit_reasons"]
     assert row["context_fit_warnings"] == []
+
+
+def test_context_fit_totality_and_filter_or_semantics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-mixed-context",
+        """
+id: hypothesis:0504-mixed-context
+type: hypothesis
+title: Mixed benchmark context
+""",
+        body="Sci-plex drug perturbation and temporal time-series mechanism evidence should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [time-series]
+  limitations: [simulated benchmark]
+  related_beliefs:
+    - mixed-context predicts temporal dynamics.
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    all_payload = benchmark_tests_report(tmp_path)
+    direct_or_method = benchmark_tests_report(tmp_path, context_fit=("direct-fit", "method-fit"))
+
+    assert all(row["context_fit"] for row in all_payload["benchmark_tests"])
+    assert all_payload["summary"]["test_plan_rows"] >= 2
+    filtered_fits = {row["context_fit"] for row in direct_or_method["benchmark_tests"]}
+    assert filtered_fits == {"direct-fit", "method-fit"}
+    assert direct_or_method["summary"]["test_plan_rows"] == len(direct_or_method["benchmark_tests"])
+    assert direct_or_method["filters"]["context_fit"] == ["direct-fit", "method-fit"]
+
+
+def test_context_fit_filter_rejects_single_string(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    with pytest.raises(TypeError, match="context_fit must be a sequence"):
+        benchmark_tests_report(tmp_path, context_fit="direct-fit")  # type: ignore[arg-type]
+
+
+def test_benchmark_tests_report_filters_echo_all_active_filters(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    payload = benchmark_tests_report(
+        tmp_path,
+        facet="perturbation",
+        state="concrete",
+        source="opportunity-relative",
+        exclude_fallback=True,
+        readiness="runnable",
+        benchmark_id="sciplex3",
+        context_fit=("direct-fit",),
+    )
+
+    assert payload["filters"] == {
+        "facet": "perturbation",
+        "state": "concrete",
+        "source": "opportunity-relative",
+        "exclude_fallback": True,
+        "readiness": "runnable",
+        "benchmark_id": "dataset:sciplex3",
+        "context_fit": ["direct-fit"],
+    }
 
 
 def test_context_fit_classifies_adjacent_cross_disease_rows(tmp_path: Path) -> None:

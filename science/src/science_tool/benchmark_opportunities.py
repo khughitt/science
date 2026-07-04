@@ -687,6 +687,7 @@ class BenchmarkTestSummary(TypedDict):
 class BenchmarkTestReport(TypedDict):
     benchmark_tests: list[BenchmarkTestRow]
     summary: BenchmarkTestSummary
+    filters: dict[str, Any]
     commons_notice: str | None
 
 
@@ -3324,6 +3325,50 @@ def _normalize_benchmark_test_facet(value: str | None) -> str | None:
     return _normalized_gap_facet(value)
 
 
+def _normalize_context_fit_filters(values: Sequence[ContextFit] | None) -> tuple[ContextFit, ...] | None:
+    if values is None:
+        return None
+    if isinstance(values, str):
+        raise TypeError("context_fit must be a sequence of context-fit values, not a string")
+    normalized: list[ContextFit] = []
+    for value in values:
+        if value not in CONTEXT_FITS:
+            raise ValueError(f"unknown benchmark context-fit value: {value}")
+        normalized.append(value)
+    return tuple(dict.fromkeys(normalized))
+
+
+def _benchmark_test_filters(
+    *,
+    facet: str | None,
+    state: TestPlanState | None,
+    source: PrioritySource | None,
+    exclude_fallback: bool,
+    readiness: ReadinessLabel | None,
+    benchmark_id: str | None,
+    context_fit: Sequence[ContextFit] | None,
+) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    normalized_facet = _normalize_benchmark_test_facet(facet)
+    if normalized_facet is not None:
+        filters["facet"] = normalized_facet
+    if state is not None:
+        filters["state"] = state
+    if source is not None:
+        filters["source"] = source
+    if exclude_fallback:
+        filters["exclude_fallback"] = True
+    if readiness is not None:
+        filters["readiness"] = readiness
+    normalized_benchmark_id = _normalize_benchmark_filter(benchmark_id)
+    if normalized_benchmark_id is not None:
+        filters["benchmark_id"] = normalized_benchmark_id
+    normalized_context_fit = _normalize_context_fit_filters(context_fit)
+    if normalized_context_fit is not None:
+        filters["context_fit"] = list(normalized_context_fit)
+    return filters
+
+
 def _filter_benchmark_test_rows(
     rows: list[BenchmarkTestRow],
     *,
@@ -3333,9 +3378,11 @@ def _filter_benchmark_test_rows(
     exclude_fallback: bool,
     readiness: ReadinessLabel | None,
     benchmark_id: str | None,
+    context_fit: Sequence[ContextFit] | None,
 ) -> list[BenchmarkTestRow]:
     normalized_facet = _normalize_benchmark_test_facet(facet)
     normalized_benchmark_id = _normalize_benchmark_filter(benchmark_id)
+    normalized_context_fit = _normalize_context_fit_filters(context_fit)
     filtered: list[BenchmarkTestRow] = []
     for row in rows:
         if normalized_facet is not None and normalized_facet not in row["matched_facets"]:
@@ -3349,6 +3396,8 @@ def _filter_benchmark_test_rows(
         if readiness is not None and readiness != row["readiness_label"]:
             continue
         if normalized_benchmark_id is not None and normalized_benchmark_id != row["benchmark_id"]:
+            continue
+        if normalized_context_fit is not None and row["context_fit"] not in normalized_context_fit:
             continue
         filtered.append(row)
     return filtered
@@ -3477,6 +3526,7 @@ def benchmark_tests_report(
     exclude_fallback: bool = False,
     readiness: ReadinessLabel | None = None,
     benchmark_id: str | None = None,
+    context_fit: Sequence[ContextFit] | None = None,
 ) -> BenchmarkTestReport:
     analysis = _opportunity_analysis(
         project_root,
@@ -3546,11 +3596,21 @@ def benchmark_tests_report(
         exclude_fallback=exclude_fallback,
         readiness=readiness,
         benchmark_id=benchmark_id,
+        context_fit=context_fit,
     )
     rows.sort(key=_benchmark_test_sort_key)
     return {
         "benchmark_tests": rows,
         "summary": _benchmark_test_summary(rows, entities_total=len(analysis.entities)),
+        "filters": _benchmark_test_filters(
+            facet=facet,
+            state=state,
+            source=source,
+            exclude_fallback=exclude_fallback,
+            readiness=readiness,
+            benchmark_id=benchmark_id,
+            context_fit=context_fit,
+        ),
         "commons_notice": analysis.report["commons_notice"],
     }
 
