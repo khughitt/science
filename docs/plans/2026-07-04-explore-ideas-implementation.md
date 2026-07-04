@@ -4,7 +4,7 @@
 
 **Goal:** Ship `/science:explore-ideas` — a generative pass that proposes the research questions/hypotheses a Science project is *missing*, blind to its existing framing, and applies kept ones as entities with source-faithful origins.
 
-**Architecture:** A slash command (`commands/explore-ideas.md`) orchestrates a blind, parallel per-lens generation phase (a new `agents/idea-lens-researcher.md` with web-only tools), then a full-visibility classify/report phase, then an opt-in `--apply` that shells out to the existing `science questions/hypotheses create --origin/--added-by/--slug` seam. The one new Python surface is a backward-compatible `parse_origin_spec` extension (leading `+` → `independent: true`).
+**Architecture:** A slash command (`commands/explore-ideas.md`) orchestrates a blind, parallel per-lens generation phase (a new `agents/idea-lens-researcher.md` with web-only tools), then a full-visibility classify/report phase, then an opt-in `--apply` that shells out to the existing `science questions/hypotheses create --origin/--added-by/--source-ref` seam. The one new Python surface is a backward-compatible `parse_origin_spec` extension (leading `+` → `independent: true`).
 
 **Tech Stack:** Python 3.13 / Click / Pydantic v2 (`science_tool`, `science_model`); Claude slash commands + subagents; OpenAlex/PubMed REST via `WebFetch`.
 
@@ -272,7 +272,7 @@ element:
 
 - [ ] **Step 2: Verify the frontmatter parses and tools are web-only**
 
-Run: `cd /mnt/ssd/Dropbox/science && python -c "import yaml,sys; d=yaml.safe_load(open('agents/idea-lens-researcher.md').read().split('---')[1]); assert d['name']=='idea-lens-researcher'; assert [t.strip() for t in d['tools'].split(',')]==['WebSearch','WebFetch'], d['tools']; print('ok')"`
+Run: `cd "$(git rev-parse --show-toplevel)" && python -c "import yaml,sys; d=yaml.safe_load(open('agents/idea-lens-researcher.md').read().split('---')[1]); assert d['name']=='idea-lens-researcher'; assert [t.strip() for t in d['tools'].split(',')]==['WebSearch','WebFetch'], d['tools']; print('ok')"`
 Expected: prints `ok`. (Guards the blindness invariant: exactly `WebSearch, WebFetch`.)
 
 - [ ] **Step 3: Confirm no full-test regression**
@@ -316,7 +316,7 @@ description: Generate the candidate research questions (and testable hypotheses)
 ---
 ```
 
-Then author the body with these sections and **exact** contracts. (Write real prose in the wander/big-picture idiom — this list is the required content, not the literal text.)
+Immediately after the frontmatter, add a top-level heading line `# Explore Ideas` — this is **required**: `generate_codex_skills` (codex_skills.py:85) raises `Command file is missing a top-level heading` without one. Then author the body with these sections and **exact** contracts. (Write real prose in the wander/big-picture idiom — this list is the required content, not the literal text.)
 
 **## Flags** — parse `$ARGUMENTS`:
 - Generate mode (default, read-only): `--center <topic-id>`, `--topic <name>`, `--lens <name>` (repeatable; default = all six lenses), `--n <k>` (default 5), `--commit`.
@@ -329,7 +329,7 @@ Then author the body with these sections and **exact** contracts. (Write real pr
 
 **### Generate — Phase 1: Frame.** Read **only** `science.yaml`, `specs/research-question.md`, `specs/scope-boundaries.md`, `entities/topics/` (skip absent). State explicitly that `entities/hypotheses/`, `entities/questions/`, `entities/papers/` are **excluded** and must not be read here. If `--center`/`--topic`, fold that topic's subject terms into the brief. Produce a compact prose **domain brief**.
 
-**### Generate — Phase 2: Generate (parallel, blind).** For each selected lens, dispatch a `science:idea-lens-researcher` subagent **in parallel**, passing **inline**: the domain brief, the lens name + its meaning (from the table below), `n`, and any focus. Collect each agent's JSON array. Lens table (exact names + frames):
+**### Generate — Phase 2: Generate (parallel, blind).** For each selected lens, dispatch an `idea-lens-researcher` subagent **in parallel** (dispatch by the agent's frontmatter `name`, bare — same as `commands/research-papers.md` uses `subagent_type: paper-researcher`), passing **inline**: the domain brief, the lens name + its meaning (from the table below), `n`, and any focus. Collect each agent's JSON array. Lens table (exact names + frames):
 
 | Lens | Frame |
 |------|-------|
@@ -387,28 +387,27 @@ Origin-plan finalization rules (write these into the block during Phase 3→4):
 - `decision: drop`/`defer` → skip.
 Report created vs skipped counts. If `--commit`: commit created entities + the updated report with `feat(explore-ideas): apply kept candidates YYYY-MM-DD`.
 
-Create command templates (copy-exact; `<model-id>` = the model running this command):
+Create command templates (copy-exact; `<model-id>` = the model running this command). No `--slug` — the create path auto-derives the id from the title, and idempotence comes from report write-back (§9), not slug matching. Forward traceability is the `candidate_id` in `--added-by`.
 
 ```bash
 # reasoned-only question
 uv run science questions create "<title>" \
-  --slug "<candidate-slug>" \
   --origin "assistant:explore-ideas-<lens>" \
   --added-by "explore-ideas:<model-id>:<candidate_id>"
 
-# convergent hypothesis (reasoned + predated in literature)
+# convergent hypothesis (reasoned + predated in literature), plus a supporting (non-predating) paper
 uv run science hypotheses create "<title>" \
-  --slug "<candidate-slug>" \
   --origin "assistant:explore-ideas-<lens>" \
-  --origin "+literature:cite:<key>" \
+  --origin "+literature:cite:<predating-key>" \
+  --source-ref "paper:<supporting-slug>" \
   --added-by "explore-ideas:<model-id>:<candidate_id>"
 ```
 
-`<candidate-slug>` = the `candidate_id` with its `cand-<lens>-` prefix stripped. `--origin` for a resolvable non-predating literature anchor is omitted (that paper goes to `--source-ref` instead); only `predates:` anchors become `+literature:` origins.
+Literature anchor routing: a resolved anchor whose `note` began with `predates:` becomes an independent `--origin "+literature:<paper:slug|cite:key>"`; a resolved anchor that merely **supports** becomes `--source-ref "<paper:slug|cite:key>"` (provenance kept, but not an origin — origin stays `assistant`); an **unresolved** raw anchor is dropped from the create call (no origin, no source-ref) until the paper is imported.
 
 - [ ] **Step 3: Regenerate the codex-skills mirror**
 
-Run: `cd /mnt/ssd/Dropbox/science && python scripts/generate_codex_skills.py`
+Run: `cd "$(git rev-parse --show-toplevel)" && python scripts/generate_codex_skills.py`
 Expected: prints `Generated Codex skills in …/codex-skills`; creates `codex-skills/science-explore-ideas/`.
 
 - [ ] **Step 4: Verify the codex sync test passes**
@@ -454,7 +453,7 @@ Create `docs/plans/2026-07-04-explore-ideas-manual-check.md` containing:
 
 - [ ] **Step 2: Sanity-check the fixture parses as YAML**
 
-Run: `cd /mnt/ssd/Dropbox/science && python -c "import yaml,re; t=open('docs/plans/2026-07-04-explore-ideas-manual-check.md').read(); blocks=re.findall(r'\`\`\`yaml\n(.*?)\`\`\`', t, re.S); cands=[yaml.safe_load(b) for b in blocks if 'candidate_id' in b]; assert len(cands)==3, len(cands); assert sum(c['decision']=='keep' for c in cands)==2; assert any(any(o.get('independent') for o in c['origin_plan']['origins']) for c in cands); print('ok', len(cands))"`
+Run: `cd "$(git rev-parse --show-toplevel)" && python -c "import yaml,re; t=open('docs/plans/2026-07-04-explore-ideas-manual-check.md').read(); blocks=re.findall(r'\`\`\`yaml\n(.*?)\`\`\`', t, re.S); cands=[yaml.safe_load(b) for b in blocks if 'candidate_id' in b]; assert len(cands)==3, len(cands); assert sum(c['decision']=='keep' for c in cands)==2; assert any(any(o.get('independent') for o in c['origin_plan']['origins']) for c in cands); print('ok', len(cands))"`
 Expected: prints `ok 3`. (Confirms the fixture has 3 candidate blocks, 2 `keep`, and a convergent independent origin — the shape the procedure relies on.)
 
 - [ ] **Step 3: Commit**
