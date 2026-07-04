@@ -2728,6 +2728,34 @@ def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
     return frozenset(token for token in tokens if token not in broad and any(char.isalpha() for char in token))
 
 
+DIRECT_FIT_DEMOTION_REASON = "context-warning:demoted-direct-fit"
+DIRECT_FIT_BLOCKING_WARNING_VALUES = frozenset({"cell-line-vs-primary", "simulated-vs-observed"})
+
+
+def _direct_fit_blocking_warnings(warnings: Sequence[str]) -> list[str]:
+    return sorted(
+        warning
+        for warning in warnings
+        if warning.startswith("cross-disease:") or warning in DIRECT_FIT_BLOCKING_WARNING_VALUES
+    )
+
+
+def _benchmark_source_study_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
+    # The override axis is declared provenance, not any shared compound token.
+    # Disease tokens self-defuse cross-disease warnings upstream, so they should
+    # not create a second override path here.
+    tokens = _specific_tokens(_tokens_from_text(*context.dataset.source_datasets, include_stop_tokens=False))
+    return tokens - DISEASE_CONTEXT_TOKENS
+
+
+def _has_direct_context_override(
+    *,
+    shared_specific: Sequence[str],
+    source_study_tokens: frozenset[str],
+) -> bool:
+    return bool(set(shared_specific) & source_study_tokens)
+
+
 def _project_context_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> frozenset[str]:
     return frozenset(_project_local_tokens(project_root, entities))
 
@@ -2923,6 +2951,13 @@ def _context_fit_for_row(
         return "generic-fallback", sorted(set(reasons)), sorted(set(warnings))
 
     if predicates.strong_context and predicates.task_signal:
+        blocking_warnings = _direct_fit_blocking_warnings(warnings)
+        if blocking_warnings and not _has_direct_context_override(
+            shared_specific=shared_specific,
+            source_study_tokens=_benchmark_source_study_tokens(context),
+        ):
+            reasons.append(DIRECT_FIT_DEMOTION_REASON)
+            return "adjacent-fit", sorted(set(reasons)), sorted(set(warnings))
         return "direct-fit", sorted(set(reasons)), sorted(set(warnings))
 
     # domain_conflict compares a small COARSE label set matched BEFORE broad
