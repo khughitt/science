@@ -7,11 +7,13 @@ import pytest
 
 from science_tool.explore_ideas import (
     ApplyValidationError,
+    ApplyWriteBackError,
     CandidateBlock,
     build_create_plan,
     parse_report,
     plan_report,
     resolve_report_path,
+    write_back,
 )
 
 _REPORT = """\
@@ -310,3 +312,68 @@ def test_plan_report_rejects_unknown_kind() -> None:
     blocks = parse_report("```yaml\ncandidate_id: x\nproposed_kind: proverb\ndecision: keep\n```\n")
     with pytest.raises(ApplyValidationError, match="proposed_kind"):
         plan_report(blocks, "opus")
+
+
+_WB_REPORT = """\
+# Report
+
+```yaml
+candidate_id: cand-a
+proposed_kind: question
+title: First
+rationale: >
+  A folded scalar that must be preserved
+  exactly across two lines.
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+
+```yaml
+candidate_id: cand-b
+proposed_kind: hypothesis
+title: Second
+decision: keep
+```
+"""
+
+
+def test_write_back_flips_decision_and_inserts_fields() -> None:
+    out = write_back(_WB_REPORT, "cand-a", "question-0007", "2026-07-04")
+    assert "decision: applied\n" in out
+    assert "applied_as: question-0007\n" in out
+    assert "applied_at: 2026-07-04\n" in out
+    # cand-b block untouched
+    assert out.count("decision: keep") == 1
+
+
+def test_write_back_preserves_everything_else() -> None:
+    out = write_back(_WB_REPORT, "cand-a", "question-0007", "2026-07-04")
+    # The folded rationale and surrounding prose survive byte-for-byte.
+    assert "  A folded scalar that must be preserved\n  exactly across two lines.\n" in out
+    assert out.startswith("# Report\n")
+
+
+def test_write_back_targets_correct_block_by_id() -> None:
+    out = write_back(_WB_REPORT, "cand-b", "hypothesis-0003", "2026-07-04")
+    # Only cand-b changed; cand-a still keep.
+    a_block = out.split("candidate_id: cand-a")[1].split("```")[0]
+    assert "decision: keep" in a_block
+    b_block = out.split("candidate_id: cand-b")[1].split("```")[0]
+    assert "decision: applied" in b_block
+    assert "applied_as: hypothesis-0003" in b_block
+
+
+def test_write_back_is_composable_across_two_candidates() -> None:
+    once = write_back(_WB_REPORT, "cand-a", "question-0007", "2026-07-04")
+    twice = write_back(once, "cand-b", "hypothesis-0003", "2026-07-04")
+    assert twice.count("decision: applied") == 2
+    assert "applied_as: question-0007" in twice
+    assert "applied_as: hypothesis-0003" in twice
+
+
+def test_write_back_missing_candidate_raises() -> None:
+    with pytest.raises(ApplyWriteBackError):
+        write_back(_WB_REPORT, "cand-zzz", "x", "2026-07-04")

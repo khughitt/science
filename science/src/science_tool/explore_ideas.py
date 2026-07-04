@@ -197,3 +197,40 @@ def plan_report(blocks: list[CandidateBlock], model_id: str) -> ReportPlan:
         skipped_other=skipped_other,
         manual=manual,
     )
+
+
+def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) -> str:
+    lines = text.splitlines(keepends=True)
+    candidate_line = re.compile(rf"^\s*candidate_id:\s*{re.escape(candidate_id)}\s*$")
+    decision_line = re.compile(r"^(\s*)decision:\s*\S.*$")
+
+    i = 0
+    n = len(lines)
+    while i < n:
+        if lines[i].rstrip("\r\n") == "```yaml":
+            start = i + 1
+            j = start
+            while j < n and lines[j].rstrip("\r\n") != "```":
+                j += 1
+
+            for k in range(start, j):
+                if candidate_line.match(lines[k].rstrip("\r\n")):
+                    for m in range(start, j):
+                        decision_match = decision_line.match(lines[m].rstrip("\r\n"))
+                        if decision_match:
+                            indent = decision_match.group(1)
+                            newline = "\r\n" if lines[m].endswith("\r\n") else "\n"
+                            lines[m] = f"{indent}decision: applied{newline}"
+                            lines[m + 1 : m + 1] = [
+                                f"{indent}applied_as: {entity_id}{newline}",
+                                f"{indent}applied_at: {applied_at}{newline}",
+                            ]
+                            return "".join(lines)
+                    raise ApplyWriteBackError(
+                        f"{candidate_id}: block has no 'decision:' line to mark applied"
+                    )
+            i = j + 1
+            continue
+        i += 1
+
+    raise ApplyWriteBackError(f"{candidate_id}: block not found in report for write-back")
