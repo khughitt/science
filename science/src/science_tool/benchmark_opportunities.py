@@ -83,7 +83,24 @@ CONTEXT_BROAD_NON_SPECIFIC_TOKENS = BROAD_NON_SCOREABLE_FACETS | frozenset(
 )
 COARSE_DOMAIN_LABELS = frozenset({"biology", "cancer", "health", "natural-systems", "physical"})
 DISEASE_CONTEXT_TOKENS = frozenset({"brca", "breast", "gbm", "glioblastoma", "melanoma", "myeloma"})
-CONTEXT_NON_SPECIFIC_TOKENS = frozenset({"benchmark"})
+CONTEXT_NON_SPECIFIC_TOKENS = frozenset(
+    {
+        "2021",
+        "axis",
+        "benchmark",
+        "before",
+        "context",
+        "current",
+        "method",
+        "must",
+        "per",
+        "prediction",
+        "small",
+        "subset",
+        "terms",
+        "time",
+    }
+)
 TERM_BUCKET_CAP = 10
 FREQUENT_TERM_COUNT = 3
 HINT_CANDIDATE_TRUNCATION_NOTICE = "evidence categories are capped at top 10 terms per bucket"
@@ -2614,6 +2631,7 @@ def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
         set(CONTEXT_BROAD_NON_SPECIFIC_TOKENS)
         | set(ENTITY_SUPPRESSED_TOKENS)
         | set(_STOP_TOKENS)
+        | set(_UNMAPPED_TERM_EXCLUSIONS)
         | set(CONTEXT_NON_SPECIFIC_TOKENS)
     )
     return frozenset(token for token in tokens if token not in broad)

@@ -788,6 +788,56 @@ benchmark:
     assert row["context_fit"] != "direct-fit"
 
 
+def test_context_fit_common_words_do_not_promote_fallback_direct_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0509-common-words",
+        """
+id: hypothesis:0509-common-words
+type: hypothesis
+title: Common word context
+""",
+        body="Small models and context axes should not make a generic benchmark directly actionable.",
+    )
+    _write_dataset(
+        tmp_path,
+        "common-word-benchmark",
+        """
+id: dataset:common-word-benchmark
+type: dataset
+title: Small cancer context and model benchmark
+dataset_class: deposit
+local_path: data/common-word-benchmark
+benchmark:
+  domains: [biology, cancer]
+  modalities: [proteomics, multimodal]
+  signal_types: [multi-omic, cross-sectional]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: association
+      task_type: association prediction
+      prediction_target: association
+      held_out_unit: sample
+      metric: auroc
+      baseline: majority class
+      ground_truth:
+        type: measured-outcome
+        description: association
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["priority_source"] == "gap-fallback"
+    assert row["context_fit"] == "generic-fallback"
+    assert not any(reason.startswith("specific-context:") for reason in row["context_fit_reasons"])
+
+
 def test_context_fit_blocked_fallback_without_context_is_generic(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
