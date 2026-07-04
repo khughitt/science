@@ -60,6 +60,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |
 | `feedback`, `telemetry` | Specialized | Source-write / Read-only | Agent feedback records and local operational telemetry. |
+| `explore-ideas` | Specialized | Source-write | Apply reviewed exploration report candidates into source-authored question and hypothesis entities. |
 | `benchmark` | Specialized | Read-only | Benchmark metadata reports, opportunities, gaps, and test triage. |
 | `annotate` | Specialized | Mixed | Annotation sidecars, prose decomposition, PubTator seeding, proposition reconciliation, promotion, and synthesis. |
 | `verdict` | Specialized | Read-only | Parse and roll up verdict interpretation frontmatter. |

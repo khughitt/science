@@ -45,6 +45,11 @@ from science_tool.entities import (
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
 from science_tool.entity_migrations import audit_identifiers
+from science_tool.explore_ideas import (
+    ApplyValidationError,
+    ApplyWriteBackError,
+    apply_report,
+)
 from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
 from science_tool.graph.cross_impact import query_cross_impact
@@ -1473,6 +1478,57 @@ def interpretation_show(ref: str, output_format: str) -> None:
 def interpretation_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored interpretations."""
     _list_typed_entities("interpretation", status, related, output_format)
+
+
+@main.group("explore-ideas")
+def explore_ideas_group() -> None:
+    """Explore-ideas commands."""
+
+
+@explore_ideas_group.command("apply")
+@click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
+@click.option("--model-id", "model_id", required=True, help="Model id for the --added-by provenance stamp.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> None:
+    """Apply kept candidates from an exploration report to real entities."""
+    try:
+        result = apply_report(Path.cwd(), from_value, model_id, date.today())
+    except (ApplyValidationError, ApplyWriteBackError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(result.to_dict(), indent=2))
+    else:
+        click.echo(
+            f"{len(result.created)} created, "
+            f"{len(result.skipped_applied)} already applied, "
+            f"{len(result.skipped_other)} deferred/dropped, "
+            f"{len(result.manual)} to apply manually, "
+            f"{len(result.failures)} failed"
+        )
+        for created in result.created:
+            click.echo(
+                f"  created {created.candidate_id} -> {created.entity_id} ({created.kind})"
+            )
+        for candidate_id in result.skipped_applied:
+            click.echo(f"  already applied: {candidate_id}")
+        for candidate_id in result.skipped_other:
+            click.echo(f"  skipped drop/defer: {candidate_id}")
+        for candidate_id, kind in result.manual:
+            click.echo(f"  apply manually ({kind}): {candidate_id}")
+        for candidate_id, error in result.failures:
+            click.echo(f"  FAILED {candidate_id}: {error}")
+        for created in result.created:
+            _emit_entity_warnings(created.warnings)
+
+    if result.failures:
+        raise SystemExit(1)
 
 
 def _build_origin_frontmatter(
