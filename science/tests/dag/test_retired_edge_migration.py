@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
-from science_tool.dag.retired_edge_migration import build_retired_edge_migration_plan
+from science_tool.dag.retired_edge_migration import build_retired_edge_migration_plan, migration_plan_to_workbench_yaml
+from science_tool.dag.workbench import WorkbenchFile
 
 
 def _write_manifest(project: Path) -> None:
@@ -103,6 +105,40 @@ def test_plan_ready_with_focal_hypothesis(tmp_path: Path) -> None:
             "stance": "supports",
         },
     ]
+
+
+def test_workbench_yaml_requires_ready_rows(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    plan = build_retired_edge_migration_plan(project)
+
+    with pytest.raises(ValueError, match="no compile-compatible"):
+        migration_plan_to_workbench_yaml(plan)
+
+
+def test_workbench_yaml_is_strict_workbench_file_with_focal_hypothesis(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    plan = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+    payload = yaml.safe_load(migration_plan_to_workbench_yaml(plan))
+    workbench = WorkbenchFile.model_validate(payload)
+
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    assert payload["rows"][0]["subject"] == "a"
+    assert payload["rows"][0]["predicate"] == "affects"
+    assert payload["rows"][0]["object"] == "b"
+    assert not {
+        "status",
+        "blockers",
+        "notes",
+        "predicate_review_required",
+        "membership_required",
+        "evidence_warnings",
+        "matching_propositions",
+        "proposed_row",
+    } & set(payload["rows"][0])
 
 
 def test_plan_skips_matching_compiled_proposition(tmp_path: Path) -> None:

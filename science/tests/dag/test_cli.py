@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -454,6 +455,57 @@ def test_cli_dag_retired_edge_migration_plan_missing_project_is_click_error(tmp_
     assert "Error:" in result.output
     assert result.exception is not None
     assert result.exception.__class__.__name__ != "FileNotFoundError"
+
+
+def test_cli_dag_retired_edge_migration_plan_workbench_requires_focal_hypothesis(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edge-migration-plan", "--project", str(project), "--format", "workbench"],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "no compile-compatible" in result.output
+
+
+def test_cli_dag_retired_edge_migration_plan_workbench_outputs_strict_yaml(tmp_path: Path) -> None:
+    from science_tool.dag.workbench import WorkbenchFile
+
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "retired-edge-migration-plan",
+            "--project",
+            str(project),
+            "--format",
+            "workbench",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = yaml.safe_load(result.stdout)
+    workbench = WorkbenchFile.model_validate(payload)
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    assert not {
+        "status",
+        "blockers",
+        "notes",
+        "predicate_review_required",
+        "membership_required",
+        "evidence_warnings",
+        "matching_propositions",
+        "proposed_row",
+    } & set(payload["rows"][0])
 
 
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
