@@ -201,12 +201,8 @@ def plan_report(blocks: list[CandidateBlock], model_id: str) -> ReportPlan:
 
 def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) -> str:
     lines = text.splitlines(keepends=True)
-    candidate_line = re.compile(rf"^\s*candidate_id:\s*{re.escape(candidate_id)}\s*$")
-    decision_line = re.compile(
-        r"^decision:(?P<separator>\s*)(?P<value>keep|drop|defer|applied)(?P<trailing>.*)$"
-    )
-    applied_as_line = re.compile(r"^applied_as:(?P<separator>\s*).*")
-    applied_at_line = re.compile(r"^applied_at:(?P<separator>\s*).*")
+    fence_line = re.compile(r"^(?P<indent>\s*)```yaml$")
+    candidate_line = re.compile(rf"^(?P<indent>\s*)candidate_id:\s*{re.escape(candidate_id)}\s*$")
 
     def _newline(line: str) -> str:
         if line.endswith("\r\n"):
@@ -218,21 +214,32 @@ def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) ->
     i = 0
     n = len(lines)
     while i < n:
-        if lines[i].rstrip("\r\n") == "```yaml":
+        fence_match = fence_line.match(lines[i].rstrip("\r\n"))
+        if fence_match:
+            fence_indent = fence_match.group("indent")
             start = i + 1
             j = start
-            while j < n and lines[j].rstrip("\r\n") != "```":
+            closing_fence = re.compile(rf"^{re.escape(fence_indent)}```$")
+            while j < n and not closing_fence.match(lines[j].rstrip("\r\n")):
                 j += 1
 
             for k in range(start, j):
-                if candidate_line.match(lines[k].rstrip("\r\n")):
+                candidate_match = candidate_line.match(lines[k].rstrip("\r\n"))
+                if candidate_match:
+                    indent = candidate_match.group("indent")
+                    decision_line = re.compile(
+                        rf"^{re.escape(indent)}decision:(?P<separator>\s*)(?P<value>keep|drop|defer|applied)(?P<trailing>.*)$"
+                    )
+                    applied_as_line = re.compile(rf"^{re.escape(indent)}applied_as:(?P<separator>\s*).*")
+                    applied_at_line = re.compile(rf"^{re.escape(indent)}applied_at:(?P<separator>\s*).*")
+
                     for m in range(start, j):
                         decision_match = decision_line.match(lines[m].rstrip("\r\n"))
                         if decision_match:
                             separator = decision_match.group("separator")
                             trailing = decision_match.group("trailing")
                             newline = _newline(lines[m])
-                            lines[m] = f"decision:{separator}applied{trailing}{newline}"
+                            lines[m] = f"{indent}decision:{separator}applied{trailing}{newline}"
 
                             applied_as_index = m + 1
                             applied_at_index = m + 2
@@ -241,12 +248,12 @@ def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) ->
                                 and applied_as_line.match(lines[applied_as_index].rstrip("\r\n"))
                                 and applied_at_line.match(lines[applied_at_index].rstrip("\r\n"))
                             ):
-                                lines[applied_as_index] = f"applied_as: {entity_id}{newline}"
-                                lines[applied_at_index] = f"applied_at: {applied_at}{newline}"
+                                lines[applied_as_index] = f"{indent}applied_as: {entity_id}{newline}"
+                                lines[applied_at_index] = f"{indent}applied_at: {applied_at}{newline}"
                             else:
                                 lines[m + 1 : m + 1] = [
-                                    f"applied_as: {entity_id}{newline}",
-                                    f"applied_at: {applied_at}{newline}",
+                                    f"{indent}applied_as: {entity_id}{newline}",
+                                    f"{indent}applied_at: {applied_at}{newline}",
                                 ]
                             return "".join(lines)
                     raise ApplyWriteBackError(

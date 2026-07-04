@@ -421,6 +421,31 @@ def test_write_back_only_updates_top_level_decision() -> None:
     assert "applied_at: 2026-07-04\n" in out
 
 
+_WB_REPORT_INDENTED_BLOCK = """\
+# Report
+
+  Before the block.
+
+  ```yaml
+  candidate_id: cand-a
+  proposed_kind: question
+  title: First
+  decision: keep
+  ```
+
+  After the block.
+"""
+
+
+def test_write_back_preserves_indented_block_prefix() -> None:
+    out = write_back(_WB_REPORT_INDENTED_BLOCK, "cand-a", "question-0007", "2026-07-04")
+    assert "  decision: applied\n" in out
+    assert "  applied_as: question-0007\n" in out
+    assert "  applied_at: 2026-07-04\n" in out
+    assert "  Before the block.\n\n  ```yaml\n" in out
+    assert "\n  After the block.\n" in out
+
+
 _WB_REPORT_CRLF = (
     "# Report\r\n"
     "\r\n"
