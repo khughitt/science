@@ -86,7 +86,7 @@ Each `lens_view` record is:
 | --- | --- | --- |
 | `lens` | yes | Slug from the packaged vocabulary (`science_model.lenses`). |
 | `rationale` | yes | This lens's distinct framing of the idea (the preserved complementary view). |
-| `origin_ref` | no | Slug of the entity's own origin that produced this view. |
+| `origin_ref` | no | The `OriginRecord.ref` value of one of the entity's own origins — the origin that produced this view. |
 
 Independence and date are **not** duplicated on the lens-view; they live on the
 linked origin and are derived. Convergence is therefore a derived predicate:
@@ -125,11 +125,13 @@ analytical content, not provenance, so it must not live on the origin.
 
 The link between the two is tightly constrained:
 
-- `origin_ref` on a lens-view **must resolve to one of the entity's own
-  `origins[].ref` values** — never to an arbitrary project ref.
-- Origin `ref`s within a single entity **must be unique**; if two origins share a
-  `ref`, `origin_ref` is ambiguous and validation fails. (v1 requires unique
-  origin refs rather than inventing a disambiguation scheme.)
+- `origin_ref` on a lens-view **must be non-null and resolve to one of the
+  entity's own `origins[].ref` values** — never to an arbitrary project ref.
+- **Non-null** origin `ref`s within a single entity **must be unique**; if two
+  origins share a non-null `ref`, `origin_ref` is ambiguous and validation fails.
+  Origins with no `ref` are permitted and unconstrained here — a lens-view simply
+  cannot link to them. (v1 requires unique *non-null* origin refs rather than
+  inventing a disambiguation scheme; `OriginRecord.ref` remains optional.)
 
 This keeps two clean concepts — provenance (`origins`) and framing
 (`lens_views`) — joined by one unambiguous, entity-local link.
@@ -144,14 +146,24 @@ representations of the same fact disagree.
 
 ## Graph representation
 
-Materialization adds one predicate:
+Materialization **reifies each lens-view as a node** so the lens↔origin
+association survives into the graph:
 
-- `<entity> sci:viewedThroughLens lens:<slug>` for each lens-view.
+- `<entity> sci:hasLensView <view>` for each lens-view.
+- `<view> sci:viewedThroughLens lens:<slug>`.
+- `<view> sci:fromOrigin <origin>` when the lens-view carries an `origin_ref`,
+  resolved to the origin node the entity already materializes (today
+  `sci:hasOrigin` → `origin/<canonical_id>/<i>`, typed `sci:Origin`, carrying
+  `sci:independentOrigination` for independent origins).
 - `lens:<slug>` nodes are materialized **from the packaged vocabulary**, not from
   authored project entities.
 
-Convergence remains **derived**, not stored: a query for entities with ≥2
-`viewedThroughLens` edges backed by independent origins. This unlocks the
+A flat `<entity> sci:viewedThroughLens lens:<slug>` edge is deliberately *not*
+used: it would drop which origin backs which view, making the convergence query
+below impossible. The reified view node preserves the association.
+
+Convergence remains **derived**, not stored: entities with ≥2 lens-views whose
+`sci:fromOrigin` origin carries `sci:independentOrigination`. This unlocks the
 analyses the flat-string model could not express — which lenses co-fire, and
 which lens is under-represented in a given project's idea set (directly useful to
 the next `explore-ideas` pass, which can then bias toward the thin lenses).
@@ -174,6 +186,16 @@ report speaks in **apply units**.
   decisions inside a group, no duplicate write-back, and no ambiguity over which
   `candidate_id` owns the created entity.
 
+**Block-internal origin contract.** A block that carries `lens_views` **must also
+carry the matching `origin_plan.origins`**, and every `lens_views[].origin_ref`
+must equal one of those planned origin refs. `apply` validates this
+correspondence *before* writing, then creates the entity's `origins` and
+`lens_views` together atomically — a lens-view can never reference an origin the
+block did not also plan, and the two-lens convergent case is expressed entirely
+within a single block (two planned origins, two lens-views, each linked). This
+gives `apply` a stated contract for producing `origins` and `lens_views` as one
+unit.
+
 The old "keep only one of each convergent pair" instruction is removed.
 
 ## Validation
@@ -181,8 +203,9 @@ The old "keep only one of each convergent pair" instruction is removed.
 New checks:
 
 1. Every `lens_view.lens` is a slug in the packaged vocabulary.
-2. Every `origin_ref` resolves to one of the entity's own `origins[].ref`;
-   origin refs within an entity are unique.
+2. Every `origin_ref` is non-null and resolves to one of the entity's own
+   `origins[].ref`; non-null origin refs within an entity are unique (origins
+   without a `ref` are allowed and simply cannot be linked from a lens-view).
 3. **At most one lens-view per lens per entity** in v1. Repeated views from the
    same lens are disallowed unless a future revision adds an explicit reason
    field to justify them.
