@@ -267,6 +267,19 @@ if it is material, let `benchmark_tests_report()` request un-annotated gap rows
 (it re-derives its own rows regardless), otherwise accept the cost and note it
 here.
 
+Implementation smoke on 2026-07-04 accepted the cost:
+
+- `~/d/natural-systems`, `benchmark gaps --commons --context-fit direct-fit`:
+  0 rows, all context-fit counts 0.
+- `~/d/cancer/cancer-types/multiple-myeloma`,
+  `benchmark gaps --commons --context-fit direct-fit`: 48 rows,
+  `direct-fit: 105`.
+- `~/d/cancer/cancer-types/multiple-myeloma`,
+  `benchmark gaps --commons --context-fit generic-fallback`: 450 rows,
+  `generic-fallback: 900`, all rows `fallback-only`.
+- Shared-surface timing on `~/d/natural-systems` with commons:
+  `benchmark_tests_report` 1.65s; `benchmark_test_triage_report` 1.78s.
+
 ## Error Handling
 
 - Unknown context-fit values raise `ValueError("unknown benchmark context-fit
