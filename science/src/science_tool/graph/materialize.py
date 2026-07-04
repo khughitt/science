@@ -905,6 +905,32 @@ def _add_relations(
             continue
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
 
+    for i, origin in enumerate(entity.origins):
+        origin_node = URIRef(PROJECT_NS[f"origin/{quote(entity.canonical_id, safe='')}/{i}"])
+        provenance.add((entity_uri, SCI_NS.hasOrigin, origin_node))
+        provenance.add((origin_node, RDF.type, SCI_NS.Origin))
+        provenance.add((origin_node, SCI_NS.originKind, Literal(origin.type.value)))
+        if origin.date:
+            provenance.add((origin_node, PROV.generatedAtTime, Literal(origin.date, datatype=XSD.date)))
+        if origin.independent:
+            provenance.add((origin_node, SCI_NS.independentOrigination, Literal(True)))
+        if origin.type.value in ("user", "assistant"):
+            agent_uri = URIRef(SCI_NS[f"agent/{origin.type.value}"])
+            provenance.add((origin_node, PROV.wasAttributedTo, agent_uri))
+            provenance.add((agent_uri, RDF.type, PROV.Agent))
+        elif origin.type.value == "literature" and origin.ref:
+            if origin.ref.startswith("cite:"):
+                bib_uri = _cite_bib_uri(origin.ref.removeprefix("cite:"))
+                provenance.add((origin_node, PROV.wasDerivedFrom, bib_uri))
+                provenance.add((bib_uri, RDF.type, PROV.Entity))
+            else:  # paper:<key>
+                resolution = resolver.resolve(origin.ref, allow_cross_kind_fallback=True)
+                if resolution.status == "resolved" and resolution.canonical_id is not None:
+                    provenance.add((origin_node, PROV.wasDerivedFrom, _entity_uri(resolution.canonical_id)))
+                # unresolved paper: ref → no edge; Task 6 health flags it.
+    if entity.added_by:
+        provenance.add((entity_uri, SCI_NS.addedBy, Literal(entity.added_by)))
+
     for raw_target in sorted(getattr(entity, "evidence_refs", []) or []):
         if is_bibliography_reference(raw_target):
             continue
@@ -1658,6 +1684,11 @@ def _resolve_relation_term(value: str) -> URIRef:
 
 def _entity_uri(canonical_id: str) -> URIRef:
     return entity_uri_for_ref(canonical_id)
+
+
+def _cite_bib_uri(key: str) -> URIRef:
+    """Stable prov:Entity URI for a `cite:<key>` bibliography-only origin."""
+    return URIRef(SCI_NS[f"cite/{quote(key.strip(), safe='')}"])
 
 
 def _annotation_uri(ref: str) -> URIRef:
