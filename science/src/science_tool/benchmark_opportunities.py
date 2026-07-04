@@ -1541,10 +1541,33 @@ def _gap_candidate_context_fit_counts(rows: list[BenchmarkGapRow]) -> dict[Conte
     counts = _empty_context_fit_counts()
     for row in rows:
         for candidate in row["candidate_benchmarks"]:
-            context_fit = candidate.get("context_fit")
-            if context_fit is not None:
-                counts[context_fit] += 1
+            counts[candidate["context_fit"]] += 1
     return counts
+
+
+def _filter_gap_rows_by_candidate_context_fit(
+    rows: list[BenchmarkGapRow],
+    context_fit: Sequence[ContextFit] | None,
+) -> list[BenchmarkGapRow]:
+    if context_fit is None:
+        return rows
+
+    allowed = set(context_fit)
+    filtered_rows: list[BenchmarkGapRow] = []
+    for row in rows:
+        candidates = [
+            candidate for candidate in row["candidate_benchmarks"] if candidate["context_fit"] in allowed
+        ]
+        if not candidates:
+            continue
+        filtered_rows.append(
+            {
+                **row,
+                "candidate_benchmarks": candidates,
+                "candidate_mode": _candidate_mode(candidates),
+            }
+        )
+    return filtered_rows
 
 
 def _unmapped_high_value_terms(entity: ProjectBenchmarkEntity, matched_facets: list[str]) -> list[str]:
@@ -2514,11 +2537,6 @@ def _gap_calibration_payload(
             if context is None:
                 continue
             score = candidate_scores[(row["entity_id"], candidate["benchmark_id"])]
-            context_fit = candidate.get("context_fit")
-            context_fit_reasons = candidate.get("context_fit_reasons")
-            context_fit_warnings = candidate.get("context_fit_warnings")
-            if context_fit is None or context_fit_reasons is None or context_fit_warnings is None:
-                raise ValueError(f"gap candidate evidence missing context fit: {candidate['benchmark_id']}")
             candidate_evidence.append(
                 {
                     "entity_id": row["entity_id"],
@@ -2527,9 +2545,9 @@ def _gap_calibration_payload(
                     "dropped_dataset_facets": _dataset_broad_facets(context),
                     "components": dict(score.components),
                     "reason_notes": list(candidate["reason_notes"]),
-                    "context_fit": context_fit,
-                    "context_fit_reasons": list(context_fit_reasons),
-                    "context_fit_warnings": list(context_fit_warnings),
+                    "context_fit": candidate["context_fit"],
+                    "context_fit_reasons": list(candidate["context_fit_reasons"]),
+                    "context_fit_warnings": list(candidate["context_fit_warnings"]),
                 }
             )
     return {
@@ -3855,10 +3873,12 @@ def gaps_report(
     entity_id: str | None = None,
     domain: str | None = None,
     facet: str | None = None,
+    context_fit: Sequence[str] | None = None,
     calibration_report: bool = False,
     evidence_report: bool = False,
 ) -> BenchmarkGapReport:
     normalized_facet = _normalized_gap_facet(facet)
+    normalized_context_fit = _normalize_context_fit_filters(context_fit)
     analysis = _opportunity_analysis(
         project_root,
         include_commons=include_commons,
@@ -3950,6 +3970,7 @@ def gaps_report(
             }
         )
 
+    rows = _filter_gap_rows_by_candidate_context_fit(rows, normalized_context_fit)
     rows.sort(key=lambda row: (_gap_level_sort_key(row["gap_level"]), row["entity_id"]))
     calibration = _gap_calibration_payload(
         rows,

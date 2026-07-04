@@ -1247,6 +1247,197 @@ benchmark:
     assert payload["summary"]["candidate_context_fit_counts"]["generic-fallback"] == 1
 
 
+def test_gaps_report_filters_context_fit_and_recomputes_candidate_mode(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0603-direct",
+        """
+id: hypothesis:0603-direct
+type: hypothesis
+title: Direct Sci-Plex gap
+""",
+        body="Sci-plex drug compound screen should be benchmarked.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0604-generic",
+        """
+id: hypothesis:0604-generic
+type: hypothesis
+title: Generic fallback gap
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    payload = gaps_report(tmp_path, context_fit=("direct-fit",))
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0603-direct"]
+    row = payload["benchmark_gaps"][0]
+    assert row["candidate_mode"] == "entity-specific"
+    assert [candidate["context_fit"] for candidate in row["candidate_benchmarks"]] == ["direct-fit"]
+    assert payload["summary"]["candidate_context_fit_counts"]["direct-fit"] == 1
+    assert payload["summary"]["candidate_context_fit_counts"]["generic-fallback"] == 0
+
+
+def test_gaps_report_context_fit_filter_accepts_or_values(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0605-direct",
+        """
+id: hypothesis:0605-direct
+type: hypothesis
+title: Direct Sci-Plex gap
+""",
+        body="Sci-plex drug compound screen should be benchmarked.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0606-generic",
+        """
+id: hypothesis:0606-generic
+type: hypothesis
+title: Generic fallback gap
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    payload = gaps_report(tmp_path, context_fit=("direct-fit", "generic-fallback"))
+    fits = {
+        candidate["context_fit"]
+        for row in payload["benchmark_gaps"]
+        for candidate in row["candidate_benchmarks"]
+    }
+
+    assert fits == {"direct-fit", "generic-fallback"}
+    assert payload["summary"]["candidate_context_fit_counts"]["direct-fit"] == 1
+    assert payload["summary"]["candidate_context_fit_counts"]["generic-fallback"] >= 1
+
+
+def test_gaps_report_rejects_unknown_context_fit_filter(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    with pytest.raises(ValueError, match="unknown benchmark context-fit value: near-fit"):
+        gaps_report(tmp_path, context_fit=("near-fit",))
+
+
+def test_gaps_report_calibration_candidate_evidence_includes_context_fit(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0607-sciplex-calibration",
+        """
+id: hypothesis:0607-sciplex-calibration
+type: hypothesis
+title: Sci-Plex calibration gap
+""",
+        body="Sci-plex drug compound screen should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    payload = gaps_report(tmp_path, calibration_report=True)
+    evidence = payload["calibration"]["candidate_evidence"][0]
+
+    assert evidence["context_fit"] == "direct-fit"
+    assert "specific-context:sci-plex" in evidence["context_fit_reasons"]
+    assert evidence["context_fit_warnings"] == []
+
+
 def test_context_fit_domain_conflict_recognizes_split_natural_systems_project(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
