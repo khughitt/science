@@ -636,6 +636,56 @@ benchmark:
     assert not any(reason == "specific-context:clinical" for reason in row["context_fit_reasons"])
 
 
+def test_context_fit_domain_conflict_recognizes_split_natural_systems_project(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: natural-systems\nname: Natural Systems\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0505-ecosystem-validation",
+        """
+id: hypothesis:0505-ecosystem-validation
+type: hypothesis
+title: Ecosystem validation hypothesis
+""",
+        body="Clinical assessment should use a supported task.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cancer-cohort",
+        """
+id: dataset:cancer-cohort
+type: dataset
+title: Patient cohort
+dataset_class: deposit
+local_path: data/cancer-cohort
+benchmark:
+  domains: [biology, cancer]
+  modalities: [clinical]
+  signal_types: []
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: label
+      task_type: label classification
+      prediction_target: label
+      held_out_unit: patient
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "out-of-context"
+    assert "domain-conflict" in row["context_fit_warnings"]
+
+
 def test_benchmark_tests_report_marks_incomplete_tasks_draft_needed(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 

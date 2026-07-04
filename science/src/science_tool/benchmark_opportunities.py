@@ -334,7 +334,7 @@ class ContextFitPredicates:
     broad_context: bool
     task_signal: bool
     domain_conflict: bool
-    warning_cues: list[str]
+    warning_cues: tuple[str, ...]
 
 
 class OpportunityScoreComponents(TypedDict):
@@ -2678,6 +2678,13 @@ def _context_fit_warning_cues(
     return warnings
 
 
+def _coarse_project_domain_labels(raw_project_tokens: set[str]) -> frozenset[str]:
+    labels = set(raw_project_tokens & COARSE_DOMAIN_LABELS)
+    if {"natural", "systems"} <= raw_project_tokens:
+        labels.add("natural-systems")
+    return frozenset(labels)
+
+
 def _context_fit_evidence(
     *,
     entity: ProjectBenchmarkEntity,
@@ -2703,14 +2710,16 @@ def _context_fit_predicates(
     context: DatasetOpportunityContext,
     task_reasons: list[str],
 ) -> ContextFitPredicates:
-    warning_cues = _context_fit_warning_cues(
-        project_entity_tokens=evidence.project_tokens,
-        benchmark_tokens=evidence.benchmark_tokens,
-        context=context,
+    warning_cues = tuple(
+        _context_fit_warning_cues(
+            project_entity_tokens=evidence.project_tokens,
+            benchmark_tokens=evidence.benchmark_tokens,
+            context=context,
+        )
     )
     raw_project_tokens = set(project_context_tokens) | set(entity.tokens) | set(entity.id_tokens)
     dataset_domains = {_normalize_token(value) for value in context.dataset.domains} & COARSE_DOMAIN_LABELS
-    project_domains = raw_project_tokens & COARSE_DOMAIN_LABELS
+    project_domains = _coarse_project_domain_labels(raw_project_tokens)
     domain_conflict = bool(dataset_domains and project_domains and dataset_domains.isdisjoint(project_domains))
     return ContextFitPredicates(
         strong_context=bool(evidence.project_tokens & evidence.benchmark_tokens),
