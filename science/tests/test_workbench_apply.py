@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import io
 from pathlib import Path
 
 import pytest
@@ -463,6 +464,53 @@ def test_apply_workbench_plan_rejects_entity_target_hash_drift(tmp_path: Path) -
     text = prop_path.read_text(encoding="utf-8")
     assert "Intervening edit." in text
     assert "structural_claim" not in text
+
+
+def test_build_workbench_apply_plan_hashes_same_entity_snapshot_it_parses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    _write_workbench(workbench_path, claim_layer="structural_claim", inline_evidence=False)
+    original_open = Path.open
+    mutated = False
+
+    def open_and_mutate_after_read(
+        self: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> object:
+        nonlocal mutated
+        if self != prop_path or "r" not in mode:
+            return original_open(self, mode, buffering, encoding, errors, newline)
+        with original_open(self, mode, buffering, encoding, errors, newline) as handle:
+            text = handle.read()
+        if not mutated:
+            self.write_text(
+                text.replace("## Summary\n\n", "## Summary\n\nIntervening edit.\n"),
+                encoding="utf-8",
+            )
+            mutated = True
+        return io.StringIO(text)
+
+    monkeypatch.setattr(Path, "open", open_and_mutate_after_read)
+
+    plan = build_workbench_apply_plan(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
+
+    with pytest.raises(WorkbenchApplyError, match="entity target changed since it was planned"):
+        apply_workbench_plan(plan)
+
+    assert "Intervening edit." in prop_path.read_text(encoding="utf-8")
+    assert "structural_claim" not in prop_path.read_text(encoding="utf-8")
 
 
 def test_apply_workbench_plan_rejects_noop_entity_target_hash_drift_before_workbench_write(

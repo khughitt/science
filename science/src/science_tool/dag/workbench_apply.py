@@ -24,7 +24,6 @@ from science_tool.dag.workbench import (
 from science_tool.entities import (
     EntityCommandError,
     local_part_conforms,
-    parse_markdown_entity_file_preserving_body,
     render_entity_text,
     resolve_path_policy,
 )
@@ -206,12 +205,33 @@ def _validated_entity_target_path(project_root: Path, *, kind: str, entity_id: s
     return resolved
 
 
+def _parse_existing_target_text(text: str) -> tuple[dict[str, object], str]:
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
+        return ({}, text)
+    after_opening_marker = text[len("---" + newline) :]
+    closing_marker = f"{newline}---{newline}"
+    closing_marker_index = after_opening_marker.find(closing_marker)
+    if closing_marker_index == -1:
+        return ({}, text)
+    frontmatter_text = after_opening_marker[:closing_marker_index]
+    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        return ({}, body)
+    return frontmatter, body
+
+
 def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str, object], str, str]:
     expected_id = entity.id
     expected_kind = entity.kind
     try:
-        frontmatter, body = parse_markdown_entity_file_preserving_body(path)
-        current_text = path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            current_text = handle.read()
+        frontmatter, body = _parse_existing_target_text(current_text)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise WorkbenchApplyError(f"malformed existing entity target {path}: {exc}") from exc
     existing_kind = frontmatter.get("kind") or frontmatter.get("type")
