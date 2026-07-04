@@ -6065,6 +6065,15 @@ def benchmark_gap_calibration(
 @click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
 @click.option(
+    "--context-fit",
+    "context_fit",
+    multiple=True,
+    type=click.Choice(
+        ["direct-fit", "adjacent-fit", "method-fit", "blocked-fit", "generic-fallback", "out-of-context"]
+    ),
+    help="Filter by benchmark context-fit label. May be supplied more than once.",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["table", "json"]),
@@ -6088,6 +6097,7 @@ def benchmark_tests(
     runnable_only: bool,
     benchmark_ref: str | None,
     include_commons: bool,
+    context_fit: tuple[str, ...],
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6120,6 +6130,7 @@ def benchmark_tests(
             exclude_fallback=exclude_fallback,
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
+            context_fit=context_fit or None,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -6138,7 +6149,7 @@ def benchmark_tests(
         return
 
     table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
-    for col in ("entity", "state", "source", "readiness", "benchmark", "task", "score", "facets", "needs"):
+    for col in ("entity", "state", "source", "readiness", "fit", "benchmark", "task", "score", "facets", "needs"):
         table.add_column(col, overflow="fold", no_wrap=False)
     for row in rows:
         table.add_row(
@@ -6146,6 +6157,7 @@ def benchmark_tests(
             row["test_plan_state"],
             row["priority_source"],
             row["readiness_label"],
+            row["context_fit"],
             row["benchmark_id"],
             row["task_id"] or "-",
             str(row["priority_score"]),
@@ -6185,6 +6197,15 @@ def benchmark_tests(
 @click.option("--runnable-only", is_flag=True, help="Shortcut for --readiness runnable.")
 @click.option("--benchmark", "benchmark_ref", default=None, help="Filter by benchmark dataset id or slug.")
 @click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option(
+    "--context-fit",
+    "context_fit",
+    multiple=True,
+    type=click.Choice(
+        ["direct-fit", "adjacent-fit", "method-fit", "blocked-fit", "generic-fallback", "out-of-context"]
+    ),
+    help="Filter by benchmark context-fit label. May be supplied more than once.",
+)
 @click.option("--write-review-file", is_flag=True, help="Write a YAML review artifact under the project root.")
 @click.option(
     "--output",
@@ -6218,6 +6239,7 @@ def benchmark_test_triage(
     runnable_only: bool,
     benchmark_ref: str | None,
     include_commons: bool,
+    context_fit: tuple[str, ...],
     write_review_file: bool,
     output_path: Path | None,
     output_format: str,
@@ -6256,6 +6278,7 @@ def benchmark_test_triage(
             include_blocked_fallback=include_blocked_fallback,
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
+            context_fit=context_fit or None,
         )
         if write_review_file:
             generated = _benchmark_test_triage_today()
@@ -6276,6 +6299,7 @@ def benchmark_test_triage(
                     readiness_label=readiness_label,
                     runnable_only=runnable_only,
                     benchmark_ref=benchmark_ref,
+                    context_fit=context_fit,
                     output_format=output_format,
                 ),
             )
@@ -6298,7 +6322,7 @@ def benchmark_test_triage(
         if not bucket_rows:
             continue
         table = Table(title=f"Benchmark Test Triage: {bucket}", show_header=True, header_style="bold")
-        for col in ("entity", "benchmark", "task", "readiness", "score", "facets", "needs"):
+        for col in ("entity", "benchmark", "task", "fit", "readiness", "score", "facets", "needs"):
             table.add_column(col, overflow="fold", no_wrap=False)
         for row in bucket_rows:
             visible_rows += 1
@@ -6306,6 +6330,7 @@ def benchmark_test_triage(
                 row["entity_id"],
                 row["benchmark_id"],
                 _format_test_triage_task(row),
+                row["context_fit"],
                 row["readiness_label"],
                 str(row["priority_score"]),
                 _format_test_triage_facets(row),
@@ -6545,6 +6570,7 @@ def _test_triage_source_command(
     readiness_label: str | None,
     runnable_only: bool,
     benchmark_ref: str | None,
+    context_fit: tuple[str, ...],
     output_format: str,
 ) -> str:
     # Best-effort context string for review artifacts, not an exact shell history record.
@@ -6571,6 +6597,8 @@ def _test_triage_source_command(
         parts.append("--runnable-only")
     if benchmark_ref is not None:
         parts.extend(["--benchmark", benchmark_ref])
+    for value in context_fit:
+        parts.extend(["--context-fit", value])
     if output_format != "table":
         parts.extend(["--format", output_format])
     parts.append("--write-review-file")
