@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import click
 import yaml
+from pydantic import ValidationError
 from rich.text import Text
 from science_model.reasoning import MembershipRole
 
@@ -37,6 +38,7 @@ from science_tool.entities import (
     find_entity,
     graph_is_stale,
     list_entities,
+    parse_origin_spec,
     plan_entity_removal,
     remove_entity,
 )
@@ -1293,6 +1295,13 @@ def hypothesis_group() -> None:
 @click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
 @click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
 @click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
+@click.option(
+    "--origin",
+    "origins",
+    multiple=True,
+    help="Origin as TYPE[:REF][@DATE], e.g. user, literature:Smith2019@2019-03-01. Repeatable.",
+)
+@click.option("--added-by", "added_by", default=None, help="Discovery stamp (who surfaced this entity).")
 def hypothesis_create(
     title: str,
     related_refs: tuple[str, ...],
@@ -1304,12 +1313,16 @@ def hypothesis_create(
     with_sections: tuple[str, ...],
     without_sections: tuple[str, ...],
     no_hints: bool,
+    origins: tuple[str, ...],
+    added_by: str | None,
 ) -> None:
     """Create a source-authored hypothesis."""
 
     sections = list(with_sections)
     if phase == "candidate" and "promotion-criteria" not in sections:
         sections.append("promotion-criteria")
+
+    extra = _build_origin_frontmatter(origins, added_by)
 
     _create_typed_entity(
         kind="hypothesis",
@@ -1323,6 +1336,7 @@ def hypothesis_create(
         with_sections=sections,
         without_sections=list(without_sections),
         no_hints=no_hints,
+        extra_frontmatter=extra,
     )
 
 
@@ -1459,6 +1473,26 @@ def interpretation_show(ref: str, output_format: str) -> None:
 def interpretation_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored interpretations."""
     _list_typed_entities("interpretation", status, related, output_format)
+
+
+def _build_origin_frontmatter(
+    origins: tuple[str, ...], added_by: str | None
+) -> dict[str, object]:
+    """Parse `--origin`/`--added-by` CLI inputs into an `extra_frontmatter` dict.
+
+    Raises `click.BadParameter` (nonzero exit, no file written) on a
+    malformed `--origin` spec — validation happens here, before
+    `create_entity` performs any write.
+    """
+    extra: dict[str, object] = {}
+    try:
+        if origins:
+            extra["origins"] = [parse_origin_spec(spec) for spec in origins]
+    except ValidationError as exc:
+        raise click.BadParameter(f"invalid --origin: {exc}") from exc
+    if added_by:
+        extra["added_by"] = added_by
+    return extra
 
 
 def _create_typed_entity(
@@ -5323,6 +5357,13 @@ def question() -> None:
 @click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
 @click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
 @click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
+@click.option(
+    "--origin",
+    "origins",
+    multiple=True,
+    help="Origin as TYPE[:REF][@DATE], e.g. user, literature:Smith2019@2019-03-01. Repeatable.",
+)
+@click.option("--added-by", "added_by", default=None, help="Discovery stamp (who surfaced this entity).")
 def question_create(
     title: str,
     related_refs: tuple[str, ...],
@@ -5333,8 +5374,12 @@ def question_create(
     with_sections: tuple[str, ...],
     without_sections: tuple[str, ...],
     no_hints: bool,
+    origins: tuple[str, ...],
+    added_by: str | None,
 ) -> None:
     """Create a source-authored question."""
+
+    extra = _build_origin_frontmatter(origins, added_by)
 
     _create_typed_entity(
         kind="question",
@@ -5347,6 +5392,7 @@ def question_create(
         with_sections=list(with_sections),
         without_sections=list(without_sections),
         no_hints=no_hints,
+        extra_frontmatter=extra,
     )
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
-from science_model.entities import ProjectEntity
+from science_model.entities import OriginRecord, ProjectEntity
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
@@ -763,6 +763,34 @@ def _entity_body_template(kind: str, title: str) -> str:
 def _leading_number(local_part: str) -> str:
     match = _ID_PREFIX_RE.match(local_part)
     return match.group("number") if match else ""
+
+
+def parse_origin_spec(spec: str) -> dict[str, object]:
+    """Parse a compact ``TYPE[:REF][@DATE]`` origin spec into a validated dict.
+
+    Splits off a trailing ``@DATE`` first, then splits ``TYPE:REF`` on the
+    first ``:`` (so ``literature:paper:smith2019`` yields ref
+    ``paper:smith2019``). A bare literature ref (no ``paper:``/``cite:``
+    prefix) is normalized to ``cite:<ref>``. Raises via
+    ``OriginRecord.model_validate`` if the resulting record is invalid (e.g. a
+    literature origin with no ref).
+    """
+    date: str | None = None
+    if "@" in spec:
+        spec, date = spec.rsplit("@", 1)
+    if ":" in spec:
+        type_, ref = spec.split(":", 1)
+    else:
+        type_, ref = spec, None
+    if type_ == "literature" and ref and not ref.startswith(("paper:", "cite:")):
+        ref = f"cite:{ref}"
+    record: dict[str, object] = {"type": type_}
+    if ref:
+        record["ref"] = ref
+    if date:
+        record["date"] = date
+    OriginRecord.model_validate(record)  # validate/normalize; raises on bad input
+    return record
 
 
 def create_entity(
