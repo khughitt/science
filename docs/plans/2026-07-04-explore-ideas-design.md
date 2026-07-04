@@ -340,8 +340,10 @@ OpenAlex/PubMed REST endpoints (grounding via `WebFetch`).
 **Deferred:**
 - `--origin`/`--added-by` on `topics`/`themes` create commands, to let apply
   route those kinds.
-- A durable `science explore-ideas classify|apply` CLI, if/when the slash
-  command's classify/apply logic outgrows prose orchestration.
+- A durable `science explore-ideas classify` CLI (classify stays agent judgment
+  in the command for now). The `apply` half **shipped** - see
+  `2026-07-04-explore-ideas-apply-cli-design.md`; apply mechanics are now the
+  tested `science explore-ideas apply` CLI, not command prose.
 - Embedding-based dedup.
 
 ## 13. Testing considerations
@@ -360,11 +362,11 @@ If apply logic later graduates into a `science explore-ideas apply` helper
   `assistant` also sets the flag. (Dates must be full `YYYY-MM-DD` — the
   `OriginRecord` validator rejects year-only.) Lives beside the existing
   `parse_origin_spec` tests from the provenance feature.
-- **Smoke/manual — apply round-trip:** ship a committed fixture report
-  (mixed `decision` values, one convergent candidate) plus a short documented
-  procedure: run `--apply --from <fixture>`, confirm only `keep` candidates
-  become entities with the expected `--origin`/`--source-ref`/`--added-by` args,
-  confirm blocks flip to `applied` with `applied_as`/`applied_at`, and confirm a
-  second apply is a no-op. Verified by inspection, not asserted in pytest.
+- **Apply round-trip (now deterministic):** apply mechanics moved into
+  `science explore-ideas apply` and are covered by
+  `science/tests/test_explore_ideas_apply.py` (routing, write-back, idempotence,
+  and an end-to-end create against a seeded project). The former manual smoke-check
+  doc (`2026-07-04-explore-ideas-manual-check.md`) is retired; its fixture lives in
+  that test.
 - `codex-skills/` sync test must pass after adding the command
   (`scripts/generate_codex_skills.py`).

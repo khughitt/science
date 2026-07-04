@@ -223,60 +223,35 @@ If `--commit` was passed: commit the report with
 
 ## Apply mode
 
-Require `--from`; if absent, STOP with a clear error (see Flags). If `--from`
-is a path to an existing file, use it directly. Otherwise treat it as a report
-id — the report's basename stem, e.g. `explore-2026-07-04` — and resolve it to
-`entities/meta/explorations/<id>.md` (do **not** re-prepend `explore-`; the id
-already carries it). A same-day-suffixed report resolves the same way from its
-full stem (e.g. `explore-2026-07-04-1430`).
+Apply is a single deterministic CLI call — this command does **not** re-derive
+create logic in prose. Require `--from`; if absent, STOP with a clear error (see
+Flags).
 
-Parse **every** fenced `yaml` block in that file containing a `candidate_id`
-key — ignore all surrounding markdown (headings, prose, the collapsed
-`already-covered` list); it is for humans only. For each parsed block:
-
-- `decision: keep` and `proposed_kind` ∈ {`question`, `hypothesis`} → build
-  and run the matching create command below, capture the created entity's
-  id, then **write back** into that block in the report file:
-  `decision: applied`, `applied_as: <entity-id>`, `applied_at: <YYYY-MM-DD>`.
-- `decision: applied` already → skip (idempotent; this is how re-running
-  `--apply --from` the same report is safe).
-- `decision: keep` but `proposed_kind` ∈ {`topic`, `theme`} → do **not**
-  create anything; list it under "apply manually (CLI seam pending)" in the
-  report to the user.
-- `decision: drop` or `decision: defer` → skip.
-
-Report created vs. skipped counts to the user. If `--commit` was passed:
-commit the created entities plus the updated report with
-`feat(explore-ideas): apply kept candidates YYYY-MM-DD`.
-
-**Create command templates** (`<model-id>` = the model running this
-command). Copy exact — field names, flag spellings, and the `+literature:`
-independent-origin spelling all matter. There is no `--slug`: the create
-path auto-derives the id from the title, and idempotence comes from the
-report write-back above, not slug matching. Forward traceability back to
-the report is the `candidate_id` carried in `--added-by`.
+Run, from the project root:
 
 ```bash
-# reasoned-only question
-uv run science questions create "<title>" \
-  --origin "assistant:explore-ideas-<lens>" \
-  --added-by "explore-ideas:<model-id>:<candidate_id>"
-
-# convergent hypothesis (reasoned + predated in literature), plus a supporting (non-predating) paper.
-# Append @<YYYY-MM-DD> to the +literature origin when the predating anchor carries a full date; omit it for year-only.
-uv run science hypotheses create "<title>" \
-  --origin "assistant:explore-ideas-<lens>" \
-  --origin "+literature:cite:<predating-key>@<predating-date>" \
-  --source-ref "paper:<supporting-slug>" \
-  --added-by "explore-ideas:<model-id>:<candidate_id>"
+uv run science explore-ideas apply --from <report-path-or-id> --model-id <your-model-id>
 ```
 
-**Literature anchor routing** — the same rule the report's origin-plan
-already encodes, restated for apply time: a resolved anchor whose `note`
-began with `predates:` becomes an independent
-`--origin "+literature:<paper:slug|cite:key>"` (append `@<YYYY-MM-DD>` when
-the anchor carries a full date); a resolved anchor that
-merely **supports** becomes `--source-ref "<paper:slug|cite:key>"`
-(provenance kept, but not an origin — origin stays `assistant`); an
-**unresolved** raw anchor is dropped from the create call entirely (no
-origin, no source-ref) until the paper is imported into the project.
+- `<report-path-or-id>` is the `--from` value: a path to the report file, or the
+  report id — its basename stem, e.g. `explore-2026-07-04` (the `explore-` prefix
+  is already part of the id and is not re-prepended).
+- `<your-model-id>` is the id of the model running this command.
+
+The CLI parses every fenced `yaml` block that has a `candidate_id`, and for each
+`decision: keep` question/hypothesis it creates a real entity — routing
+`origin_plan.origins` to `origins`, supporting (non-`predates:`) resolved anchors
+to `source_refs`, and stamping `--added-by explore-ideas:<model-id>:<candidate_id>`
+— then writes `decision: applied` + `applied_as` + `applied_at` back into that
+block. It is idempotent: a re-run skips blocks already `applied`. `topic`/`theme`
+keeps are reported as "apply manually"; `drop`/`defer` are skipped. Bad input
+(duplicate ids, unknown `decision`/`proposed_kind`, a `keep` block missing
+`title`/`origin_plan.origins`, or an invalid origin) is rejected before anything
+is written.
+
+Relay the CLI's created / skipped / manual / failure summary to the user. If
+`--commit` was passed, commit the created entities plus the updated report with
+`feat(explore-ideas): apply kept candidates YYYY-MM-DD`.
+
+Add `--format json` if you need the machine-readable result instead of the text
+summary.
