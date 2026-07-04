@@ -78,23 +78,16 @@ collapses review, authoring, and compilation into one step.
 
 ## 5. Command Surface
 
-Add a planning surface under the explicit retired-edge namespace. The exact CLI
-can be either a subcommand or a flag, but it should read as a planner, not as
-normal DAG validation:
-
-```bash
-science dag retired-edges plan-migration \
-  --project <root> \
-  [--dag <slug>] \
-  [--format table|json|workbench]
-```
-
-If Click nesting makes this awkward, a flat sibling is acceptable:
+Add a flat planning command beside the explicit retired-edge inspection surface.
+`retired-edges` is currently a leaf Click command, not a group, so a nested
+`retired-edges plan-migration` shape would require avoidable CLI restructuring.
+Use a flat sibling:
 
 ```bash
 science dag retired-edge-migration-plan \
   --project <root> \
   [--dag <slug>] \
+  [--focal-hypothesis <hypothesis-ref>] \
   [--format table|json|workbench]
 ```
 
@@ -102,11 +95,25 @@ The planner is read-only for every format. `--format workbench` prints a draft
 workbench document to stdout; it does not write a file. A later phase may add an
 explicit `--output` or writer command after review.
 
+`--focal-hypothesis` is the only Phase 5g mechanism for making migrated rows
+compile-compatible through file-level bundle membership. Without it, rows with
+`legacy_edge_id` are blocked with `membership-required`.
+
 ## 6. Planner Input
 
-The planner consumes the same explicit retired-edge discovery path as
-`build_retired_edges_report`. It must not be imported by default render,
-validate, audit, number, init, or inventory paths.
+The planner shares discovery with `build_retired_edges_report`: use
+`load_dag_paths(project_root).dag_dir`, the same `--dag` scoping, and the same
+retired-file globbing. It must not be imported by default render, validate,
+audit, number, init, or inventory paths.
+
+Parsing is intentionally stricter than `build_retired_edges_report`.
+`build_retired_edges_report` currently uses raw `yaml.safe_load` dictionaries and
+only probes summary fields. The migration planner needs rich legacy fields, so
+it should parse each file through the retired schema model
+(`EdgesYamlFile` / `EdgeRecord`) in a controlled warning-suppressed context. That
+means planner parse failures can be stricter than `dag retired-edges`; this is
+acceptable because the planner emits candidate workbench rows, while
+`retired-edges` is only an inventory report.
 
 For each retired row, the planner needs more than the current summary row exposes.
 It should preserve raw fields required for candidate construction:
@@ -128,9 +135,10 @@ It should preserve raw fields required for candidate construction:
 - `target_label`;
 - `caveats`.
 
-The existing `RetiredEdgeRow` can be extended, or the planner can have its own
-internal row type that is built from the same YAML parse. The important boundary
-is shared discovery and parsing behavior, not shared summary shape.
+The existing `RetiredEdgeRow` summary type should not be stretched if that would
+blur the inventory/planning boundary. A planner-specific internal row type built
+from `EdgeRecord` is acceptable. The important shared behavior is discovery; the
+planner's parsing contract is deliberately stricter.
 
 ## 7. Row Classification
 
@@ -151,6 +159,7 @@ Initial blocker reasons:
 - `dot-missing`;
 - `invalid-identification`;
 - `eliminated-edge`;
+- `membership-required`;
 - `predicate-review-required` if the implementation chooses to block instead of
   scaffold conservative predicates;
 - `matching-proposition-exists`.
@@ -158,7 +167,14 @@ Initial blocker reasons:
 `matching-proposition-exists` should normally be `skipped`, not an error. If a
 matching proposition exists but lacks `legacy_patch` / `legacy_edge_id`, the
 planner may report a non-blocking note so authors can decide whether to add
-lineage metadata later.
+lineage metadata later. Producing that note requires richer matching than the
+current `RetiredEdgeRow.has_matching_proposition` boolean: the planner must
+inspect matched proposition ids and their `legacy_patch` / `legacy_edge_id`
+fields.
+
+`membership-required` is a blocker, not a note. A migrated row with
+`legacy_edge_id` and no row-level `discusses` or file-level `focal_hypothesis`
+would be rejected by `compile_workbench`, so it is not workbench-ready.
 
 ## 8. Workbench Row Mapping
 
@@ -219,9 +235,14 @@ Map `edge_status: structural` or `identification: structural` to
 description as evidence/source context rather than trying to infer
 `mechanistic_narrative` automatically.
 
+The target `ClaimLayer` enum also includes `empirical_regularity`. Phase 5g does
+not try to infer that value from retired YAML; authors can change the draft row
+during review.
+
 ### Identification Strength
 
-Map legacy identification tokens to the current enum:
+Map legacy `Identification` tokens from `edges.yaml` to the current
+`IdentificationStrength` enum:
 
 - `interventional` -> `interventional`;
 - `longitudinal` -> `longitudinal`;
@@ -230,7 +251,9 @@ Map legacy identification tokens to the current enum:
 - `none` -> `none`;
 - missing -> `none` plus a review note.
 
-Invalid values block the row with `invalid-identification`.
+The legacy enum does not contain the current `analogical` target value, so the
+identity map above is complete for legacy inputs but not exhaustive for the
+target enum. Invalid legacy values block the row with `invalid-identification`.
 
 ### Bundle Membership
 
@@ -239,10 +262,10 @@ The planner should make this explicit.
 
 Default Phase 5g behavior:
 
-- set file-level `focal_hypothesis` only when the command is scoped to one DAG
-  and the user provides or configures an intended hypothesis frame;
-- otherwise emit row-level `discusses` blockers or a JSON field
-  `membership_required: true`;
+- set file-level `focal_hypothesis` only when the user passes
+  `--focal-hypothesis`;
+- otherwise classify migrated rows as `blocked` with `membership-required` and a
+  JSON field `membership_required: true`;
 - do not invent hypothesis ids from the DAG slug unless an existing project
   convention is discovered and validated.
 
@@ -269,10 +292,12 @@ For draft workbench output:
   workbench evidence stub is emitted.
 
 If a support entry is structurally invalid under the retired schema, the planner
-should fail loud during parse, matching the existing retired-edge inspection
-surface. If it is structurally valid but not mappable to a useful workbench
-source string, the row can still be `ready` with an evidence warning, because the
-core proposition row may be migrated separately from evidence cleanup.
+should fail loud during schema-model parse. This is stricter than the existing
+`dag retired-edges` inventory surface, which currently uses lenient raw-dict
+access. If a support entry is structurally valid but not mappable to a useful
+workbench source string, the row can still be `ready` with an evidence warning,
+because the core proposition row may be migrated separately from evidence
+cleanup.
 
 ## 10. Output
 
@@ -307,6 +332,8 @@ YAML.
 
 If no rows are compile-compatible, workbench output should fail with an
 actionable message rather than printing an empty file that looks useful.
+For migrated rows, compile-compatible means `--focal-hypothesis` was supplied or
+the row otherwise has explicit `discusses` membership.
 
 ## 11. Error Handling
 
@@ -314,7 +341,8 @@ Fail loud for:
 
 - missing `science.yaml`;
 - unreadable configured DAG directory;
-- invalid retired YAML that the legacy schema rejects;
+- invalid retired YAML that the `EdgesYamlFile` / `EdgeRecord` legacy schema
+  rejects;
 - `--dag` naming a retired file that does not exist;
 - workbench format requested when all candidate rows are blocked/skipped.
 
@@ -338,16 +366,20 @@ CLI tests:
 
 - JSON output reports ready/blocked/skipped counts;
 - table output includes concise blockers;
+- default `protein-landscape`-style migrated rows without `--focal-hypothesis`
+  are blocked with `membership-required`;
 - workbench output is parseable as `WorkbenchFile`;
 - workbench output omits review-only keys forbidden by the workbench schema;
-- workbench output fails when all rows require membership or predicate blocking,
-  if the selected implementation blocks those conditions.
+- workbench output fails when all rows require membership;
+- workbench output succeeds when `--focal-hypothesis` makes otherwise-ready
+  migrated rows compile-compatible.
 
 Real-project smoke:
 
-- `protein-landscape` should produce six migration candidates or six explicit
-  blockers, depending on the membership/predicate policy selected in the
-  implementation plan;
+- `protein-landscape` without `--focal-hypothesis` should produce six
+  `membership-required` blockers;
+- `protein-landscape` with the reviewed `--focal-hypothesis` value should
+  produce six workbench-compatible migration candidates;
 - projects with no retired YAML should report zero candidates cleanly.
 
 ## 13. Acceptance Criteria
