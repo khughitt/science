@@ -66,6 +66,13 @@ def test_parse_report_ignores_non_yaml_and_non_candidate() -> None:
     assert parse_report("no fenced blocks here") == []
 
 
+def test_parse_report_accepts_crlf_fenced_yaml_blocks() -> None:
+    blocks = parse_report("```yaml\r\ncandidate_id: cand-a\r\ndecision: drop\r\n```\r\n")
+    assert len(blocks) == 1
+    assert blocks[0].candidate_id == "cand-a"
+    assert blocks[0].data["decision"] == "drop"
+
+
 def test_parse_report_malformed_yaml_raises_validation_error() -> None:
     text = "```yaml\ncandidate_id: [unterminated\n```\n"
     with pytest.raises(ApplyValidationError, match="invalid yaml"):

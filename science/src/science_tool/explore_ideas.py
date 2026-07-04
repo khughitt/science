@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from science_model.entities import OriginRecord
 from science_tool.entities import EntityCommandError, create_entity
 
-_YAML_BLOCK_RE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
+_YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
 _ROUTABLE_KINDS = {"question", "hypothesis"}
 _MANUAL_KINDS = {"topic", "theme"}
