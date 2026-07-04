@@ -366,8 +366,26 @@ def test_export_omits_semantic_refs_bundle_when_only_exported_semantic_refs_are_
     export_labnote_package(project_root=project_root, out_dir=out)
 
     manifest = read_json(out / "manifest.json")
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
     assert not (out / "semantic_refs" / "index.json").exists()
     assert "semantic_refs" not in {item["name"] for item in manifest["resources"]}
+    assert "features" not in prose
+
+
+def test_export_omits_semantic_ref_feature_when_no_semantic_index_is_exported(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
+    manifest = read_json(out / "manifest.json")
+    assert not (out / "semantic_refs" / "index.json").exists()
+    assert "semantic_refs" not in {item["name"] for item in manifest["resources"]}
+    assert "features" not in prose
 
 
 def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path: Path) -> None:
