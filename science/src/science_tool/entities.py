@@ -766,15 +766,21 @@ def _leading_number(local_part: str) -> str:
 
 
 def parse_origin_spec(spec: str) -> dict[str, object]:
-    """Parse a compact ``TYPE[:REF][@DATE]`` origin spec into a validated dict.
+    """Parse a compact ``[+]TYPE[:REF][@DATE]`` origin spec into a validated dict.
 
-    Splits off a trailing ``@DATE`` first, then splits ``TYPE:REF`` on the
-    first ``:`` (so ``literature:paper:smith2019`` yields ref
-    ``paper:smith2019``). A bare literature ref (no ``paper:``/``cite:``
-    prefix) is normalized to ``cite:<ref>``. Raises via
-    ``OriginRecord.model_validate`` if the resulting record is invalid (e.g. a
-    literature origin with no ref).
+    A single leading ``+`` marks the origin ``independent`` (converged
+    independently of the entity's other origins). The remainder is parsed as
+    before: a trailing ``@DATE`` is split off first, then ``TYPE:REF`` splits on
+    the first ``:`` (so ``literature:paper:smith2019`` yields ref
+    ``paper:smith2019``). A bare literature ref (no ``paper:``/``cite:`` prefix)
+    is normalized to ``cite:<ref>``. Raises via ``OriginRecord.model_validate``
+    if the resulting record is invalid (e.g. a literature origin with no ref, or
+    a non ``YYYY-MM-DD`` date).
     """
+    independent = False
+    if spec.startswith("+"):
+        independent = True
+        spec = spec[1:]
     date: str | None = None
     if "@" in spec:
         spec, date = spec.rsplit("@", 1)
@@ -789,6 +795,8 @@ def parse_origin_spec(spec: str) -> dict[str, object]:
         record["ref"] = ref
     if date:
         record["date"] = date
+    if independent:
+        record["independent"] = True
     OriginRecord.model_validate(record)  # validate/normalize; raises on bad input
     return record
 
