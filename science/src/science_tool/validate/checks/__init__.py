@@ -67,6 +67,7 @@ CANONICAL_CHECK_MODULES = (
     "annotations",
     "evidence_lines",
     "propositions",
+    "origins",
 )
 
 
