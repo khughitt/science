@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -161,8 +162,6 @@ def test_build_plan_dedupes_source_refs_in_order() -> None:
 
 
 def test_build_plan_normalizes_yaml_date_object() -> None:
-    from datetime import date
-
     data = _keep_question(
         origin_plan={
             "origins": [
@@ -179,6 +178,32 @@ def test_build_plan_normalizes_yaml_date_object() -> None:
     plan = build_create_plan("cand-q", data, "opus")
     lit = [o for o in plan.origins if o["type"] == "literature"][0]
     assert lit["date"] == "2015-03-12"
+    assert "note" not in lit
+
+
+def test_build_plan_canonical_origin_dump_excludes_defaults() -> None:
+    data = _keep_question(
+        origin_plan={
+            "origins": [
+                {"type": "assistant", "ref": "explore-ideas-methodology", "note": None},
+                {
+                    "type": "literature",
+                    "ref": "cite:okafor2015",
+                    "independent": True,
+                    "note": None,
+                    "date": date(2015, 3, 12),
+                },
+            ]
+        },
+    )
+    plan = build_create_plan("cand-q", data, "opus")
+    assert plan.origins[0] == {"type": "assistant", "ref": "explore-ideas-methodology"}
+    assert plan.origins[1] == {
+        "type": "literature",
+        "ref": "cite:okafor2015",
+        "independent": True,
+        "date": "2015-03-12",
+    }
 
 
 def test_build_plan_rejects_missing_title() -> None:
@@ -213,6 +238,13 @@ def test_build_plan_rejects_non_string_note() -> None:
 def test_build_plan_rejects_non_string_note_on_unresolved_anchor() -> None:
     with pytest.raises(ApplyValidationError):
         build_create_plan("cand-q", _keep_question(literature_anchors=[{"ref": None, "note": 5}]), "opus")
+
+
+@pytest.mark.parametrize("kind", [None, "topic"])
+def test_build_plan_rejects_invalid_proposed_kind(kind: object) -> None:
+    data = _keep_question(proposed_kind=kind)
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-q", data, "opus")
 
 
 def test_build_plan_missing_note_routes_as_support() -> None:

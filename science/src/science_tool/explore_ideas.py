@@ -90,14 +90,17 @@ def _normalize_origin(origin: object, candidate_id: str) -> dict:
     if isinstance(value, date):
         normalized["date"] = value.isoformat()
     try:
-        OriginRecord.model_validate(normalized)
+        return OriginRecord.model_validate(normalized).model_dump(
+            mode="json", exclude_none=True, exclude_defaults=True
+        )
     except ValidationError as exc:
         raise ApplyValidationError(f"{candidate_id}: invalid origin {normalized!r}: {exc}") from exc
-    return normalized
 
 
 def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePlan:
     kind = data.get("proposed_kind")
+    if not isinstance(kind, str) or kind not in _ROUTABLE_KINDS:
+        raise ApplyValidationError(f"{candidate_id}: keep block has invalid 'proposed_kind'")
     title = data.get("title")
     if not isinstance(title, str) or not title.strip():
         raise ApplyValidationError(f"{candidate_id}: keep block missing a non-empty 'title'")
@@ -144,10 +147,15 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
 
 
 def plan_report(blocks: list[CandidateBlock], model_id: str) -> ReportPlan:
-    candidate_ids = [block.candidate_id for block in blocks]
-    duplicates = sorted({candidate_id for candidate_id in candidate_ids if candidate_ids.count(candidate_id) > 1})
+    seen_ids: set[str] = set()
+    duplicates: set[str] = set()
+    for block in blocks:
+        if block.candidate_id in seen_ids:
+            duplicates.add(block.candidate_id)
+        else:
+            seen_ids.add(block.candidate_id)
     if duplicates:
-        raise ApplyValidationError(f"duplicate candidate_id(s): {', '.join(duplicates)}")
+        raise ApplyValidationError(f"duplicate candidate_id(s): {', '.join(sorted(duplicates))}")
 
     to_create: list[CreatePlan] = []
     skipped_applied: list[str] = []
