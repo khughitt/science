@@ -373,6 +373,60 @@ def retired_edges_cmd(slug: str | None, output_format: str, project_path: Path |
         click.echo(f"  {file['dag']}: {file['edge_count']} edge(s){flag_text}")
 
 
+@dag_group.command("retired-edge-migration-plan")
+@click.option(
+    "--dag",
+    "slug",
+    default=None,
+    help="Plan migration for one retired DAG edge file. Defaults to every *.edges.yaml file.",
+)
+@click.option(
+    "--focal-hypothesis",
+    default=None,
+    help="Hypothesis ref to use as file-level workbench membership for migrated rows.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json", "workbench"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def retired_edge_migration_plan_cmd(
+    slug: str | None,
+    focal_hypothesis: str | None,
+    output_format: str,
+    project_path: Path | None,
+) -> None:
+    """Plan read-only migration from retired *.edges.yaml rows to workbench rows."""
+    from science_tool.dag.retired_edge_migration import (
+        build_retired_edge_migration_plan,
+        migration_plan_to_workbench_yaml,
+        render_migration_plan_table,
+    )
+
+    project = (project_path or Path.cwd()).resolve()
+    try:
+        plan = build_retired_edge_migration_plan(project, dag=slug, focal_hypothesis=focal_hypothesis)
+        if output_format == "json":
+            click.echo(json.dumps(plan.to_json(), indent=2, sort_keys=True))
+            return
+        if output_format == "workbench":
+            click.echo(migration_plan_to_workbench_yaml(plan), nl=False)
+            return
+        click.echo(render_migration_plan_table(plan), nl=False)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # schema
 # ---------------------------------------------------------------------------

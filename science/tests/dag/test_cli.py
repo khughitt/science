@@ -388,6 +388,62 @@ def test_cli_dag_retired_edges_table_reports_orphans(tmp_path: Path) -> None:
     assert "orphan-dot" in result.output
 
 
+def _write_retired_migration_project(project: Path) -> None:
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True, exist_ok=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    relation: biases
+    edge_status: supported
+    identification: observational
+    description: Retired edge text.
+    lit_support:
+      - paper: Smith2020
+        description: Literature support.
+""".strip(),
+        encoding="utf-8",
+    )
+
+
+def test_cli_dag_retired_edge_migration_plan_json_blocks_without_membership(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edge-migration-plan", "--project", str(project), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["blocked"] == 1
+    assert payload["summary"]["membership_required"] == 1
+    assert payload["rows"][0]["blockers"] == ["membership-required"]
+    assert payload["rows"][0]["predicate_review_required"] is True
+
+
+def test_cli_dag_retired_edge_migration_plan_table_reports_blockers(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edge-migration-plan", "--project", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Retired edge migration plan" in result.output
+    assert "h1#1" in result.output
+    assert "membership-required" in result.output
+
+
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
     # Banner goes to STDERR so stdout stays pure JSON.
     result = CliRunner().invoke(main, ["dag", "schema"])
