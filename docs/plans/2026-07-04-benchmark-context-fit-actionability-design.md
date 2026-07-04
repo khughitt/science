@@ -67,13 +67,20 @@ axis is why good benchmarks can still produce weak action queues.
 
 Add a context-fit classification layer over existing benchmark-test rows.
 
-The layer consumes the same row data already produced by
-`benchmark_tests_report()` and the project context already loaded for benchmark
-matching. It emits additive fields on benchmark-test rows and uses those fields
-for triage sorting/grouping.
+Context-fit is computed **at row-build time**, not as a projection over the
+returned public rows. The classifier needs benchmark source metadata (`domains`,
+`modalities`, `signal_types`, `source_datasets`, `limitations`) that lives on the
+`OpportunityDataset` (`context.dataset.*`) and is deliberately *not* carried on
+`BenchmarkTestRow`. That `context` object is already in scope inside
+`_benchmark_test_row` / `_rows_for_context_tasks` / `_rows_for_gap_candidate`,
+which is where classification runs. The additive fields are then surfaced on the
+row for downstream consumers; nothing downstream needs to reload benchmark
+sources or re-derive context.
 
 Raw matching remains the source of truth for "what matched." Context-fit is a
-separate projection for "how actionable is this match in this project?"
+separate axis for "how actionable is this match in this project?" — additive and
+frozen against the scoring stack, but populated where the evidence is available,
+not bolted on after the row is finalized.
 
 ## Context-Fit Vocabulary
 
@@ -171,6 +178,72 @@ No network calls are allowed.
 V1 uses ordered rules. Evaluate the blocked override first, then the remaining
 rules in order. First match wins.
 
+Classification must be **total and deterministic**: every well-formed row
+receives exactly one value, and the same inputs always yield the same value.
+The narrative rules below are the intent; the following decision table is the
+normative spec, defined over four deterministic predicates:
+
+- `strong_context` — the row shares at least one **specific** (non-broad)
+  context token between the project/entity token set and the benchmark token
+  set (see [Context Token Sets](#context-token-sets)). Broad tokens
+  (`biology`, `cancer`, …) never satisfy this predicate.
+- `broad_context` — no specific shared token, but the row shares a
+  domain-level/broad context token *or* carries at least one cross-* warning
+  cue (see Rule 4). This is what separates "biologically adjacent" from "no
+  context at all."
+- `task_signal` — at least one task/modality signal is present: a high-value
+  modality or signal type in `matched_facets`, `task_support_state ==
+  "supported"`, task type matching the entity need, or an
+  `opportunity-relative` row with nonzero facet overlap. **The mere presence of
+  a `task_type` string is not a signal** — the task type counts only when its
+  tokens intersect the entity's need tokens. Treating any task as a signal makes
+  `task_signal` true for nearly every row and collapses the `method-fit` /
+  `out-of-context` boundary (Rule 5 vs Rule 7).
+- `domain_conflict` — the benchmark's domain and the project's domain are both
+  present and disjoint (e.g. a biology-only benchmark in a non-biology project).
+  **Implementation note:** this predicate must compare a small **coarse
+  domain-label set** (e.g. `biology`, `cancer`, `health`, `natural-systems`,
+  `physical`) that is matched *before* broad-token stripping — because the very
+  tokens that name a domain (`biology`, `cancer`) are the ones on the broad
+  suppression set. If `domain_conflict` is computed over already-broad-stripped
+  tokens it is vestigial: the benchmark domain set is almost always empty and
+  the predicate never fires. Absence of a shared domain is *not* a conflict
+  unless both sides carry an explicit coarse domain label.
+
+  V1 consequence to accept or revisit: with `domain_conflict` scoped to this
+  coarse set, a biology benchmark surfacing in a project whose *only* domain
+  signal is also "biology" (via a broad token) will land in `method-fit`, not
+  `out-of-context`. That still removes it from `direct-fit`/actionable queues
+  (meeting the natural-systems success criterion), but it does not label it as
+  an outright mismatch. If v1 calibration shows biology `method-fit` noise
+  dominating non-biology projects, tighten the coarse domain comparison in a
+  follow-up rather than in this slice.
+
+Evaluate top to bottom; first matching row wins. `—` means the predicate is not
+consulted for that row.
+
+| # | `priority_source` / block | `strong_context` | `broad_context` | `task_signal` | `domain_conflict` | → class |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | blocked, with any project/entity evidence | — | — | — | — | `blocked-fit` |
+| 1b | blocked, fallback-only, no evidence | — | — | — | — | `generic-fallback` (+ `blocked-support-fallback`) |
+| 2 | `gap-fallback`, no specific context token | — | — | — | — | `generic-fallback` |
+| 3 | any non-fallback | yes | — | yes | — | `direct-fit` |
+| 6 | any non-fallback | — | — | — | yes | `out-of-context` |
+| 4 | any non-fallback | no | yes | yes | no | `adjacent-fit` |
+| 5 | any non-fallback | no | no | yes | no | `method-fit` |
+| 7 | **terminal default** (matched no row above) | — | — | — | — | `out-of-context` |
+
+Rule 6 is placed above 4/5 so a genuine domain conflict always wins over a
+broad-context adjacency claim. Rule 7 is an **unconditional** catch-all: any
+non-fallback row not matched by Rules 3–6 is `out-of-context`. This makes the
+table total by construction — note in particular that a row with context but no
+`task_signal` (nothing runnable) lands here, since without a task signal the
+match is not actionable regardless of context strength. Implementations must
+assert totality (see [Testing](#testing)).
+
+(The `### N` subsections below give the narrative intent per class; where prose
+and table disagree, the table governs.)
+
 ### 1. Blocked Override
 
 If `task_support_state == "blocked"` or `readiness_label == "blocked"`, classify
@@ -185,8 +258,17 @@ blocked fallback action items.
 
 ### 2. Generic Fallback
 
-If `priority_source == "gap-fallback"` and the row has no entity-specific
-candidate evidence, classify as `generic-fallback`.
+If `priority_source == "gap-fallback"` and the row shares **no specific
+(non-broad) context token** between its benchmark token set and the
+project/entity token set, classify as `generic-fallback`.
+
+Note that `gap-fallback` is *defined* as "carries a `fallback:` reason note"
+(`_is_fallback_candidate`), which is already mutually exclusive with an
+entity-matched `gap-candidate`. The context-token clause is therefore the real
+discriminator: it rescues the rare fallback row that coincidentally shares a
+specific disease/system/source token with the project, letting it fall through
+to Rules 3–5 rather than being labeled generic. Do **not** treat baseline/task
+metadata quality as context evidence here.
 
 Use existing notes to distinguish the reason:
 
@@ -243,8 +325,23 @@ Adjacent fit should carry warnings such as:
 - `cell-line-vs-primary`
 - `simulated-vs-observed`
 
-V1 can infer these warnings from simple metadata cues only. If the evidence is
-not present, omit the warning rather than guessing.
+These warnings are inferred by comparing **specific tokens**, never domain-level
+broad tokens. `cross-disease` in particular cannot use the shared `cancer`
+domain (it is on the broad-exclusion set): it fires only when a specific disease
+token on the benchmark side (from `benchmark_id`/`benchmark_title`/
+`source_datasets`, e.g. `brca`, `breast`) differs from a specific disease token
+on the project/entity side (e.g. `myeloma`, `mm`), with both present. Each
+warning names its two sources explicitly:
+
+- `cross-disease` — benchmark disease token vs project/entity disease token.
+- `cross-tissue` — benchmark tissue/system token vs project/entity tissue token.
+- `cell-line-vs-primary` — benchmark `source_datasets`/`limitations` cue (e.g.
+  `cell-line`) vs a primary-tissue cue in the entity.
+- `simulated-vs-observed` — benchmark `signal_types`/`limitations` cue (e.g.
+  `simulated`, `synthetic`) vs observed-data context in the entity.
+
+V1 infers these from those explicit metadata cues only. If both specific tokens
+are not present, omit the warning rather than guessing.
 
 ### 5. Method Fit
 
@@ -272,29 +369,44 @@ Examples:
 
 ## Context Token Sets
 
-V1 should avoid a large curated ontology. Instead, define small deterministic
-sets and keep them auditable:
+V1 should avoid a large curated ontology. Instead, derive small deterministic
+sets from the **existing** normalization pipeline and keep scoring-facing broad
+tokens separate from context-fit-only broad tokens:
+
+- Reuse `_normalize_token` / `_SYNONYMS`, `_STOP_TOKENS`, and
+  `_token_evidence_from_text` for tokenization (same pipeline as benchmark
+  matching, so the sets agree with what already matched).
+- Reuse the existing scoring-facing broad-token suppression sets —
+  `ENTITY_SUPPRESSED_TOKENS` and `BROAD_NON_SCOREABLE_FACETS` — as the base
+  definition of "broad."
+- Add a small `CONTEXT_BROAD_TOKENS` extension for broad context terms that
+  should not promote `direct-fit` (`clinical`, `genomics`, `multi-omic`, etc.).
+  This set is intentionally **not** used by `_scoreable_facet_tokens`, because
+  context-fit must not change raw opportunity matching or scores.
+
+Then define:
 
 - `project_context_tokens`: derived from project root leaf, `science.yaml` `id`
-  and `name`, and entity id stems.
-- `entity_context_tokens`: high-signal entity tokens after existing stop/broad
+  and `name`, and entity id stems (this reuses the existing
+  `project_context_tokens` derivation in `_opportunity_analysis`).
+- `entity_context_tokens`: high-signal entity tokens after `ENTITY_SUPPRESSED_TOKENS`
   filtering.
 - `benchmark_context_tokens`: tokens from benchmark id/title/domains/source
-  datasets/limitations, excluding existing broad facet stopwords.
+  datasets/limitations, minus `CONTEXT_BROAD_TOKENS`.
 
-Do not treat the following as context-fit evidence by themselves:
+A token that survives the context broad/stop filters is "specific"; a token
+these sets suppress is "broad." The `strong_context` predicate requires a
+*specific* shared token.
 
-- `biology`
-- `cancer`
-- `model`
-- `data`
-- `analysis`
-- `cross-sectional`
-- `clinical`
-- `genomics`
-- `multi-omic`
+If a term is genuinely broad but not yet in the shared suppression sets (e.g.
+`cross-sectional`, `multi-omic`), add it to `CONTEXT_BROAD_TOKENS`, not
+`BROAD_NON_SCOREABLE_FACETS`, so benchmark matching stays stable.
+Terms to verify are covered by the shared sets before implementation:
 
-These can remain useful facets, but they should not alone promote a row to
+- `biology`, `cancer`, `model`, `data`, `analysis`, `cross-sectional`,
+  `clinical`, `genomics`, `multi-omic`.
+
+These can remain useful facets, but must not alone promote a row to
 `direct-fit`.
 
 ## Sorting and Triage
@@ -310,6 +422,17 @@ we explicitly decide to change it during implementation review.
 3. Then sort by current score/readiness/source tie-breakers.
 
 This keeps the triage queue action-focused without making raw reports unstable.
+
+Note that `_benchmark_test_triage_bucket` already routes on `priority_source`
+and `task_support_state`: `gap-fallback` → `fallback-diagnostic`, blocked →
+`blocked-or-reference`. So the `generic-fallback` and `blocked-fit` labels
+largely restate bucket membership, and those two buckets will be near-uniform in
+`context_fit`. Context-fit ordering therefore does its real work inside the
+`run-now`, `stage-next`, and `metadata-needed` buckets, where it adds the
+biological/context axis the buckets do not encode. The labels are still worth
+emitting on fallback/blocked rows for the JSON counts and cross-view
+consistency, but the design does not expect them to re-sort those buckets
+meaningfully.
 
 ## CLI Surface
 
@@ -376,6 +499,14 @@ Unit tests:
 - generic-fallback row for fallback-only candidate selected by baseline/task
   quality.
 - blocked-fit row for non-fallback blocked task support.
+- blocked fallback-only row with no context evidence classifies as
+  `generic-fallback` and carries the `blocked-support-fallback` warning
+  (Rule 1b), not `blocked-fit`.
+- totality: over a representative row corpus, every row receives exactly one
+  context-fit value and never an empty/unset value.
+- classification reads benchmark source metadata (`domains`/`modalities`/
+  `limitations`) that is not present on `BenchmarkTestRow`, guarding against a
+  refactor that reduces classification to a post-hoc projection over public rows.
 - broad tokens such as `biology`, `cancer`, `clinical`, and `genomics` do not
   promote direct-fit alone.
 - context-fit filter OR semantics.

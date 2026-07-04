@@ -6105,7 +6105,7 @@ def benchmark_tests(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.benchmark_opportunities import ContextFit, TestPlanState, benchmark_tests_report
+    from science_tool.benchmark_opportunities import TestPlanState, benchmark_tests_report
     from science_tool.entities import EntityCommandError, resolve_entity_ref
 
     root = project_root.resolve() if project_root else _project_root_from_env()
@@ -6119,7 +6119,6 @@ def benchmark_tests(
         raise click.ClickException(f"--runnable-only conflicts with --readiness {readiness_label}")
 
     try:
-        context_fit_filter = cast("tuple[ContextFit, ...] | None", context_fit or None)
         payload = benchmark_tests_report(
             root,
             include_commons=include_commons,
@@ -6131,7 +6130,7 @@ def benchmark_tests(
             exclude_fallback=exclude_fallback,
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
-            context_fit=context_fit_filter,
+            context_fit=context_fit or None,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -6250,7 +6249,7 @@ def benchmark_test_triage(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.benchmark_opportunities import ContextFit, TestPlanState, benchmark_test_triage_report
+    from science_tool.benchmark_opportunities import TestPlanState, benchmark_test_triage_report
     from science_tool.entities import EntityCommandError, resolve_entity_ref
 
     if output_path is not None and not write_review_file:
@@ -6267,7 +6266,6 @@ def benchmark_test_triage(
         raise click.ClickException(f"--runnable-only conflicts with --readiness {readiness_label}")
 
     try:
-        context_fit_filter = cast("tuple[ContextFit, ...] | None", context_fit or None)
         payload = benchmark_test_triage_report(
             root,
             include_commons=include_commons,
@@ -6280,7 +6278,7 @@ def benchmark_test_triage(
             include_blocked_fallback=include_blocked_fallback,
             readiness="runnable" if runnable_only else cast("Any", readiness_label),
             benchmark_id=benchmark_ref,
-            context_fit=context_fit_filter,
+            context_fit=context_fit or None,
         )
         if write_review_file:
             generated = _benchmark_test_triage_today()
@@ -6324,7 +6322,7 @@ def benchmark_test_triage(
         if not bucket_rows:
             continue
         table = Table(title=f"Benchmark Test Triage: {bucket}", show_header=True, header_style="bold")
-        for col in ("entity", "benchmark", "task", "readiness", "fit", "score", "facets", "needs"):
+        for col in ("entity", "benchmark", "task", "fit", "readiness", "score", "facets", "needs"):
             table.add_column(col, overflow="fold", no_wrap=False)
         for row in bucket_rows:
             visible_rows += 1
@@ -6332,8 +6330,8 @@ def benchmark_test_triage(
                 row["entity_id"],
                 row["benchmark_id"],
                 _format_test_triage_task(row),
-                row["readiness_label"],
                 row["context_fit"],
+                row["readiness_label"],
                 str(row["priority_score"]),
                 _format_test_triage_facets(row),
                 _format_test_triage_needs(row),
@@ -6599,8 +6597,8 @@ def _test_triage_source_command(
         parts.append("--runnable-only")
     if benchmark_ref is not None:
         parts.extend(["--benchmark", benchmark_ref])
-    for fit in context_fit:
-        parts.extend(["--context-fit", fit])
+    for value in context_fit:
+        parts.extend(["--context-fit", value])
     if output_format != "table":
         parts.extend(["--format", output_format])
     parts.append("--write-review-file")
