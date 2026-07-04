@@ -66,3 +66,25 @@ def test_entity_carries_origins_and_added_by():
     assert ent.added_by == "user"
     assert [o.type.value for o in ent.origins] == ["user", "literature"]
     assert ent.origins[1].independent is True
+
+
+def test_frontmatter_parses_origins(tmp_path):
+    from science_model.frontmatter import parse_entity_file  # confirm real entry-point name
+
+    p = tmp_path / "0001-x.md"
+    p.write_text(
+        "---\n"
+        "id: hypothesis:0001-x\n"
+        "type: hypothesis\n"
+        "title: X\n"
+        "origins:\n"
+        "  - {type: user, date: '2026-05-10'}\n"
+        "  - {type: literature, ref: 'paper:smith2019', independent: true}\n"
+        "added_by: user\n"
+        "---\n\n# X\n",
+        encoding="utf-8",
+    )
+    ent = parse_entity_file(p, project_slug="p")
+    assert ent is not None and ent.added_by == "user"
+    assert [o.type.value for o in ent.origins] == ["user", "literature"]
+    assert ent.origins[1].ref == "paper:smith2019"
