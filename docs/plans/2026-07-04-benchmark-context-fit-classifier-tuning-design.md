@@ -255,3 +255,127 @@ the missing context.
 - Existing context-fit tests continue to pass.
 - No CLI contract, JSON schema, scoring, or commons metadata changes are
   required.
+
+## Ideal Architecture / Deferred Keystone
+
+This slice is a scoped patch, not the terminus. It should ship as a **down
+payment** on a typed context-fit refactor, recorded here so the *next* axis
+request triggers the keystone rather than another override tangle.
+
+### Root cause this patch does not remove
+
+Context-fit flattens each side into **one undifferentiated token bag**, then
+derives the label from bag intersection (`strong_context = project ∩ benchmark
+≠ ∅`) while computing warnings **per-axis** (disease, sample, sim) separately.
+The label decision and the warning decision read the data through two
+incompatible lenses. The failure modes found while reviewing this design are all
+symptoms of that single flattening:
+
+- **Self-defusal.** Disease "match" and disease "absent" collapse into the same
+  state — a bag either contains `gbm` or it does not, so there is no "the entity
+  is silent on disease" state. The cross-disease warning (`_context_fit_warning_cues`,
+  keyed on disjoint disease-token sets) therefore disappears the moment any
+  entity/project token supplies the benchmark disease, which is why the
+  disease-token override rules in this design are structurally unreachable.
+- **`cptac-gbm` vs `gbm` brittleness.** Source-study identity and disease
+  identity share one namespace. Because the tokenizer (`_TOKEN_RE =
+  [A-Za-z0-9:_-]+`) keeps hyphens, a compound token is the *only* thing keeping
+  the source study distinct from its disease.
+- **`cbioportal` shared-token hazard.** Project *identity* tokens live in the
+  same bag as *context* tokens, so a project name pollutes context matching and
+  forces the "not merely a broad project token" carve-out.
+
+Override rules cannot fix these, because they read the same flattened bag that
+lost the distinctions.
+
+### Target model
+
+Represent each side as a structured `ContextProfile` — one axis at a time — the
+same SSOT move already made for evidence types, kind descriptors, and belief
+policy:
+
+```text
+ContextProfile:
+  diseases:       frozenset[DiseaseTerm]     # gbm, breast, pan-cancer
+  sample_types:   frozenset[SampleType]      # cell-line | primary | pdx | simulated
+  modalities:     frozenset[Modality]
+  source_studies: frozenset[SourceStudy]     # cptac-gbm-2021  (its OWN axis)
+  domain:         frozenset[DomainLabel]
+```
+
+Each axis yields a **typed relation**, not disjoint-or-silence:
+
+```text
+AxisRelation = match | mismatch | subsumes | subsumed-by | unknown
+```
+
+The three states the current disjointness test cannot express are exactly the
+ones that matter: `mismatch` (breast vs gbm), `unknown` (entity silent on
+disease), and `subsumes` (pan-cancer ⊇ gbm). The label then becomes a **pure
+function of the per-axis relation vector**, governed by a declared,
+identity-stamped policy object (mirroring the `BeliefPolicy` keystone), e.g.:
+
+> `direct-fit` requires `disease ∈ {match, subsumes}` **and** `sample ∈ {match,
+> unknown}` **and** task-signal; a `disease:mismatch` demotes to `adjacent-fit`
+> **unless** `source_study:match` overrides.
+
+Per-axis relations are emitted as reasons (`disease:mismatch(gbm-vs-breast)`,
+`source-study:match(cptac-gbm-2021)`, `sample:unknown`), so the label is
+*derivable from the reasons* and tests assert on axis relations rather than
+token strings.
+
+### Why the typed model dissolves the failure modes
+
+- The source-study override becomes a real relation vector (`disease:mismatch,
+  source_study:match`), not a token-bag contradiction. Warning generation and
+  label decision read the *same* typed axes, so they cannot disagree.
+- Self-defusal disappears: a genuine GBM entity is `disease:match`, a silent
+  entity is `disease:unknown`, and both are distinct from `mismatch`.
+- The `cbioportal` hazard vanishes structurally — project identity is not a
+  context axis, so it never enters axis comparison. A data-source / pan-cancer
+  project declares `diseases: {pan-cancer}` → `disease:subsumes`, legitimately
+  direct *without* a hand-coded stoplist.
+- Test conflation cannot recur: each axis relation is asserted by its own test.
+
+### Vocabulary sourcing
+
+"Metadata Enrichment First" (see Alternatives Considered) is **not an
+alternative** to this refactor — it is its prerequisite input. Axis extraction
+should read *declared structured fields first* (commons benchmark records
+already carry `domains` / `source_datasets`; entities carry structured
+frontmatter) and fall back to lexical extraction only for free prose.
+
+The offline / deterministic principle is preserved: comparing *typed* axis
+values needs no embeddings or network. The one place an ontology helps is the
+`subsumes` relation (GBM ⊂ glioma ⊂ CNS tumor; pan-cancer ⊇ any) — and that is a
+**bundled static asset**, not a lookup service. So the ideal stays faithful to
+"no network, deterministic"; it needs typed inputs plus one shipped ontology
+file. (This is where the current `cross-disease` ontology non-goal is
+deliberately relaxed.)
+
+### Staging (keystone + slices)
+
+- [ ] **Keystone** — typed `ContextProfile` + `AxisRelation`, extracted from
+  existing tokens; behavior-neutral, label logic unchanged, relations emitted as
+  reasons only.
+- [ ] **Slice A** — move the disease axis onto relations; folds in the current
+  cross-disease warning and this design's demotion as legible three-state logic.
+- [ ] **Slice B** — source-study as its own axis; retires the compound-token
+  brittleness.
+- [ ] **Slice C** — declared combination policy object; sample / modality /
+  domain axes migrate onto it one at a time.
+- [ ] **Later** — structured-metadata-first extraction; bundled ontology asset
+  for `subsumes`.
+
+### Go / no-go
+
+The scoped patch in this document is correct *if context-fit is done growing
+axes*. It is not — it already carries disease, cell-line, simulated, and
+domain-conflict, and this toolkit's trajectory is to keep hardening exactly these
+classifiers. Every new warning axis under the current design is another override
+tangle like the one this review surfaced. The keystone is the point where each
+new axis becomes a **data addition, not a control-flow addition**.
+
+Recommendation: **ship the scoped patch now** (source-study override + split
+tests), and trigger this keystone when the *next* context axis is requested —
+not speculatively on this one cluster of 23 rows.
