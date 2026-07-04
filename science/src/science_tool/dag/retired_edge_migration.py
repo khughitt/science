@@ -33,6 +33,8 @@ class RetiredEdgeMigrationRow:
     source: str
     target: str
     status: MigrationStatus
+    description: str = ""
+    raw_support: tuple[dict[str, str], ...] = field(default_factory=tuple)
     blockers: tuple[str, ...] = field(default_factory=tuple)
     notes: tuple[str, ...] = field(default_factory=tuple)
     predicate_review_required: bool = False
@@ -48,6 +50,8 @@ class RetiredEdgeMigrationRow:
             "edge_id": self.edge_id,
             "source": self.source,
             "target": self.target,
+            "description": self.description,
+            "raw_support": [dict(entry) for entry in self.raw_support],
             "status": self.status,
             "blockers": list(self.blockers),
             "notes": list(self.notes),
@@ -119,6 +123,9 @@ def build_retired_edge_migration_plan(
             except _MissingEdgeIdentity as exc:
                 rows.append(_plan_missing_identity_edge(rel_path=rel_path, dag=dag_slug, raw_edge=raw_edge, exc=exc))
                 continue
+            except _InvalidEdgeIdentification:
+                rows.append(_plan_invalid_identification_edge(rel_path=rel_path, dag=dag_slug, raw_edge=raw_edge))
+                continue
 
             pair = (edge.source, edge.target)
             if pair in seen_pairs:
@@ -162,6 +169,8 @@ def _validate_edge_record(path: str, raw_edge: dict[str, Any], row_index: int) -
             warnings.filterwarnings("ignore", message=r"Edge is missing 'identification'.*", category=DeprecationWarning)
             return EdgeRecord.model_validate(raw_edge)
     except (SchemaError, TypeError, ValueError, ValidationError) as exc:
+        if _invalid_identification_error(exc):
+            raise _InvalidEdgeIdentification() from exc
         missing = _missing_required_fields(exc)
         if missing <= {"id", "source", "target"} and missing:
             raise _MissingEdgeIdentity(missing) from exc
@@ -181,6 +190,10 @@ class _MissingEdgeIdentity(ValueError):
         self.fields = fields
 
 
+class _InvalidEdgeIdentification(ValueError):
+    pass
+
+
 def _missing_required_fields(exc: BaseException) -> set[str]:
     if not isinstance(exc, ValidationError):
         return set()
@@ -198,6 +211,17 @@ def _missing_required_fields(exc: BaseException) -> set[str]:
             return set()
         result.add(loc[0])
     return result
+
+
+def _invalid_identification_error(exc: BaseException) -> bool:
+    if not isinstance(exc, ValidationError):
+        return False
+    errors = exc.errors()
+    return (
+        len(errors) == 1
+        and errors[0].get("type") == "enum"
+        and errors[0].get("loc") == ("identification",)
+    )
 
 
 def _resolve_dot_path(project_root: Path, yaml_path: Path, payload: dict[str, Any], dag_slug: str) -> Path | None:
@@ -231,8 +255,29 @@ def _plan_missing_identity_edge(
         edge_id=_raw_int(raw_edge.get("id")),
         source=_raw_text(raw_edge.get("source")),
         target=_raw_text(raw_edge.get("target")),
+        description=_raw_text(raw_edge.get("description")),
+        raw_support=_raw_support_entries_from_raw(raw_edge),
         status="blocked",
         blockers=blockers,
+    )
+
+
+def _plan_invalid_identification_edge(
+    *,
+    rel_path: str,
+    dag: str,
+    raw_edge: dict[str, Any],
+) -> RetiredEdgeMigrationRow:
+    return RetiredEdgeMigrationRow(
+        path=rel_path,
+        dag=dag,
+        edge_id=_raw_int(raw_edge.get("id")),
+        source=_raw_text(raw_edge.get("source")),
+        target=_raw_text(raw_edge.get("target")),
+        description=_raw_text(raw_edge.get("description")),
+        raw_support=_raw_support_entries_from_raw(raw_edge),
+        status="blocked",
+        blockers=("invalid-identification",),
     )
 
 
@@ -257,6 +302,8 @@ def _plan_edge(
     del project_root
     source = edge.source.strip()
     target = edge.target.strip()
+    description = edge.description.strip()
+    raw_support = _raw_support_entries(edge)
     blockers: list[str] = []
     notes: list[str] = []
 
@@ -268,6 +315,19 @@ def _plan_edge(
         blockers.append("dot-missing")
     if edge.edge_status == EdgeStatus.eliminated:
         blockers.append("eliminated-edge")
+
+    if not _has_claim_support_content(edge):
+        return RetiredEdgeMigrationRow(
+            path=rel_path,
+            dag=dag,
+            edge_id=edge.id,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            status="skipped",
+            notes=("no-claim-support-content",),
+        )
 
     matches = propositions_by_pair.get((source, target), [])
     if matches:
@@ -284,6 +344,8 @@ def _plan_edge(
             edge_id=edge.id,
             source=source,
             target=target,
+            description=description,
+            raw_support=raw_support,
             status="skipped",
             blockers=("matching-proposition-exists",),
             notes=tuple(notes),
@@ -306,6 +368,8 @@ def _plan_edge(
         edge_id=edge.id,
         source=source,
         target=target,
+        description=description,
+        raw_support=raw_support,
         status=status,
         blockers=tuple(blockers),
         notes=tuple(notes),
@@ -343,6 +407,16 @@ def _proposed_workbench_row(
     return _drop_none(row), warnings
 
 
+def _has_claim_support_content(edge: EdgeRecord) -> bool:
+    return (
+        bool(edge.description.strip())
+        or bool(edge.data_support)
+        or bool(edge.lit_support)
+        or bool(edge.eliminated_by)
+        or bool(edge.caveats)
+    )
+
+
 def _claim_layer(edge: EdgeRecord) -> str:
     if edge.edge_status == EdgeStatus.structural or edge.identification == Identification.structural:
         return "structural_claim"
@@ -371,10 +445,61 @@ def _evidence_stubs(edge: EdgeRecord) -> tuple[list[dict[str, str]], list[str]]:
     return evidence, warnings
 
 
+def _raw_support_entries(edge: EdgeRecord) -> tuple[dict[str, str], ...]:
+    entries: list[dict[str, str]] = []
+    for section, support_entries in (
+        ("data_support", edge.data_support),
+        ("lit_support", edge.lit_support),
+        ("eliminated_by", edge.eliminated_by or []),
+    ):
+        for entry in support_entries:
+            source = _ref_source(entry)
+            entries.append(
+                {
+                    "section": section,
+                    "source": source or "",
+                    "description": entry.description,
+                }
+            )
+    return tuple(entries)
+
+
+def _raw_support_entries_from_raw(raw_edge: dict[str, Any]) -> tuple[dict[str, str], ...]:
+    entries: list[dict[str, str]] = []
+    for section in ("data_support", "lit_support", "eliminated_by"):
+        raw_entries = raw_edge.get(section)
+        if not isinstance(raw_entries, list):
+            continue
+        for raw_entry in raw_entries:
+            if not isinstance(raw_entry, dict):
+                continue
+            source = _raw_ref_source(raw_entry)
+            description = raw_entry.get("description")
+            entries.append(
+                {
+                    "section": section,
+                    "source": source or "",
+                    "description": description.strip() if isinstance(description, str) else "",
+                }
+            )
+    return tuple(entries)
+
+
+_REF_SOURCE_KEYS = ("task", "dataset", "accession", "paper", "doi", "proposition", "interpretation", "discussion")
+
+
 def _ref_source(entry: object) -> str | None:
     extra = getattr(entry, "__pydantic_extra__", None) or {}
-    for key in ("task", "dataset", "accession", "paper", "doi", "proposition", "interpretation", "discussion"):
+    for key in _REF_SOURCE_KEYS:
         value = extra.get(key)
+        if isinstance(value, str) and value.strip():
+            return f"{key}:{value.strip()}"
+    return None
+
+
+def _raw_ref_source(entry: dict[str, Any]) -> str | None:
+    for key in _REF_SOURCE_KEYS:
+        value = entry.get(key)
         if isinstance(value, str) and value.strip():
             return f"{key}:{value.strip()}"
     return None
