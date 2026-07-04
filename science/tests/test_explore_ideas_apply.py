@@ -375,6 +375,14 @@ def test_write_back_preserves_decision_trailing_comment() -> None:
     assert "applied_at: 2026-07-04\n" in out
 
 
+def test_write_back_same_candidate_is_idempotent() -> None:
+    once = write_back(_WB_REPORT, "cand-a", "question-0007", "2026-07-04")
+    twice = write_back(once, "cand-a", "question-0007", "2026-07-04")
+    assert twice.count("applied_as: question-0007") == 1
+    assert twice.count("applied_at: 2026-07-04") == 1
+    assert twice.count("decision: applied") == 1
+
+
 _WB_REPORT_WITHOUT_DECISION = """\
 # Report
 
@@ -389,6 +397,66 @@ title: First
 def test_write_back_missing_decision_line_raises() -> None:
     with pytest.raises(ApplyWriteBackError):
         write_back(_WB_REPORT_WITHOUT_DECISION, "cand-a", "question-0007", "2026-07-04")
+
+
+_WB_REPORT_WITH_NESTED_DECISION = """\
+# Report
+
+```yaml
+candidate_id: cand-a
+proposed_kind: question
+title: First
+metadata:
+  decision: keep
+decision: keep
+```
+"""
+
+
+def test_write_back_only_updates_top_level_decision() -> None:
+    out = write_back(_WB_REPORT_WITH_NESTED_DECISION, "cand-a", "question-0007", "2026-07-04")
+    assert "metadata:\n  decision: keep\n" in out
+    assert "decision: applied\n" in out
+    assert "applied_as: question-0007\n" in out
+    assert "applied_at: 2026-07-04\n" in out
+
+
+_WB_REPORT_CRLF = (
+    "# Report\r\n"
+    "\r\n"
+    "```yaml\r\n"
+    "candidate_id: cand-a\r\n"
+    "proposed_kind: question\r\n"
+    "title: First\r\n"
+    "decision: keep\r\n"
+    "```\r\n"
+)
+
+
+def test_write_back_preserves_crlf_newlines() -> None:
+    out = write_back(_WB_REPORT_CRLF, "cand-a", "question-0007", "2026-07-04")
+    assert "\r\n" in out
+    assert "\n" not in out.replace("\r\n", "")
+    assert "decision: applied\r\n" in out
+    assert "applied_as: question-0007\r\n" in out
+    assert "applied_at: 2026-07-04\r\n" in out
+
+
+_WB_REPORT_NO_TRAILING_NEWLINE = """\
+# Report
+
+```yaml
+candidate_id: cand-a
+proposed_kind: question
+title: First
+decision: keep
+```"""
+
+
+def test_write_back_preserves_absence_of_trailing_newline() -> None:
+    out = write_back(_WB_REPORT_NO_TRAILING_NEWLINE, "cand-a", "question-0007", "2026-07-04")
+    assert not out.endswith("\n")
+    assert out.endswith("```")
 
 
 def test_write_back_targets_correct_block_by_id() -> None:
