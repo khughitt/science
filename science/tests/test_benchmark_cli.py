@@ -836,7 +836,7 @@ id: hypothesis:0001-perturbation
 type: hypothesis
 title: Perturbation response hypothesis
 """,
-        body="Drug perturbation should shift response states.",
+        body="Sci-plex drug perturbation should shift response states.",
     )
     _write_dataset(
         tmp_path,
@@ -852,6 +852,7 @@ benchmark:
   modalities: [single-cell-rna-seq]
   signal_types: [perturbation]
   benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
   tasks:
     - id: compound-response
       task_type: perturbation response
@@ -862,6 +863,8 @@ benchmark:
       ground_truth:
         type: measured-outcome
         description: expression
+      support:
+        state: supported
 """,
     )
 
@@ -874,7 +877,8 @@ benchmark:
     assert row["test_plan_state"] == "concrete"
     assert row["priority_source"] == "opportunity-relative"
     assert row["context_fit"] == "direct-fit"
-    assert "context_fit_reasons" in row
+    assert "specific-context:sci-plex" in row["context_fit_reasons"]
+    assert "task-support:supported" in row["context_fit_reasons"]
     assert row["context_fit_warnings"] == []
     assert payload["summary"]["context_fit_counts"]["direct-fit"] == 1
 
