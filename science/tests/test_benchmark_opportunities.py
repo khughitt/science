@@ -1812,6 +1812,94 @@ benchmark:
     ]
 
 
+def test_benchmark_test_triage_sorts_with_context_fit_inside_bucket(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_test_triage_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0505-context-triage",
+        """
+id: hypothesis:0505-context-triage
+type: hypothesis
+title: Context triage
+""",
+        body="Sci-plex perturbation and temporal time-series mechanism benchmarks should be considered.",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: deposit
+local_path: data/dream4
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series]
+  benchmark_kinds: [network-reconstruction]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: supported
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    payload = benchmark_test_triage_report(tmp_path)
+    run_now = payload["buckets"]["run-now"]
+
+    assert [row["context_fit"] for row in run_now][:2] == ["direct-fit", "method-fit"]
+    assert payload["summary"]["context_fit_counts"]["direct-fit"] >= 1
+    assert payload["context_fit_counts_by_bucket"]["run-now"]["direct-fit"] >= 1
+    assert payload["context_fit_counts_by_bucket"]["fallback-diagnostic"] == {
+        "direct-fit": 0,
+        "adjacent-fit": 0,
+        "method-fit": 0,
+        "blocked-fit": 0,
+        "generic-fallback": 0,
+        "out-of-context": 0,
+    }
+
+
 def test_benchmark_test_triage_report_preserves_filtered_row_order_and_fallback_diagnostics(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_test_triage_report
 
