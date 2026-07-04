@@ -1014,7 +1014,6 @@ def _prose_bundle(
     return {
         "contract": PROSE_CONTRACT,
         "schema_version": BUNDLE_SCHEMA_VERSION,
-        "features": {"semantic_refs": "1"},
         "entities": records,
     }
 
@@ -1305,6 +1304,14 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     }
     views = _views_for_entities(entities, raw_config)
     _validate_capabilities(project, views)
+    semantic_ref_bundle = _semantic_ref_bundle(
+        data_version,
+        diagnostics["semantic_refs"]["_referenced"],
+        exported_records,
+        source_records,
+    )
+    if semantic_ref_bundle is not None:
+        prose_bundle["features"] = {"semantic_refs": "1"}
 
     _json_write(out_dir / "project.json", project)
     _json_write(out_dir / "views.json", views)
@@ -1312,12 +1319,6 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     _json_write(out_dir / "prose_bundles" / "entity_prose_bundles.json", prose_bundle)
     _json_write(out_dir / "references" / "index.json", build_reference_bundle(project_root))
     _json_write(out_dir / "links" / "index.json", link_bundle)
-    semantic_ref_bundle = _semantic_ref_bundle(
-        data_version,
-        diagnostics["semantic_refs"]["_referenced"],
-        exported_records,
-        source_records,
-    )
     if semantic_ref_bundle is not None:
         _json_write(out_dir / "semantic_refs" / "index.json", semantic_ref_bundle)
     public_diagnostics = _public_export_diagnostics(diagnostics)
