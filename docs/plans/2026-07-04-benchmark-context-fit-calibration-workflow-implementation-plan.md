@@ -4,7 +4,7 @@
 
 **Goal:** Run the first durable context-fit calibration pass, generate a committed audit report from JSON outputs, and use it to choose the next benchmark slice.
 
-**Architecture:** This is a read-only audit/report workflow, not a code feature. Existing `science benchmark ...` commands remain the source of truth; a one-off capture script writes raw JSON snapshots to `/tmp`, validates count reconciliation, and writes a dated Markdown report under `docs/reports/`.
+**Architecture:** This is a read-only audit/report workflow, not a code feature. Existing `science benchmark ...` commands remain the source of truth; a one-off capture script writes raw JSON snapshots to a session scratch directory (`$CALIBRATION_SCRATCH`, not `/tmp`), validates count reconciliation, and writes a dated Markdown report under `docs/reports/`.
 
 **Tech Stack:** Python stdlib (`json`, `subprocess`, `pathlib`, `collections`), existing `science` CLI commands, git.
 
@@ -14,7 +14,7 @@
 
 - Create: `docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md`
   - Durable report generated from JSON payloads.
-- Use scratch only: `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/`
+- Use scratch only: `$CALIBRATION_SCRATCH` (a subdirectory of your session scratchpad, not `/tmp`)
   - Raw JSON snapshots and a temporary capture script.
 - Do not modify source code unless a command fails because of a real bug.
 - Do not commit raw JSON snapshots by default.
@@ -70,22 +70,27 @@ Expected: both paths are printed. The existing `benchmark-context-fit-calibratio
 ## Task 1: Capture Calibration JSON and Generate Report
 
 **Files:**
-- Create scratch: `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/capture_context_fit_calibration.py`
+- Create scratch: `$CALIBRATION_SCRATCH/capture_context_fit_calibration.py`
 - Create: `docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md`
 
 - [ ] **Step 1: Create the scratch directory**
 
-Run:
+Pick a scratch directory inside your session scratchpad (shown in your
+environment) — do not use `/tmp`. Export `CALIBRATION_SCRATCH` to it and create
+it. Shell state does not persist between the steps below, so re-export
+`CALIBRATION_SCRATCH` (substituting the same absolute path) at the top of every
+later command that references it.
 
 ```bash
-mkdir -p /tmp/benchmark-context-fit-calibration-pass-1-2026-07-04
+export CALIBRATION_SCRATCH="<session-scratchpad>/benchmark-context-fit-calibration-pass-1"
+mkdir -p "$CALIBRATION_SCRATCH"
 ```
 
 Expected: exit 0.
 
 - [ ] **Step 2: Write the capture script**
 
-Create `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/capture_context_fit_calibration.py` with this exact content:
+Create `$CALIBRATION_SCRATCH/capture_context_fit_calibration.py` with this exact content:
 
 ```python
 import json
@@ -97,9 +102,16 @@ from pathlib import Path
 
 PASS_DATE = "2026-07-04"
 PASS_LABEL = "pass-1"
-SCRATCH = Path("/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04")
+TABLE_LIMIT = 20
 REPORT = Path("docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md")
-COMMONS_ROOT = Path("~/d/science-commons").expanduser()
+
+_scratch_env = os.environ.get("CALIBRATION_SCRATCH")
+if not _scratch_env:
+    raise SystemExit(
+        "CALIBRATION_SCRATCH is unset; set it to a subdirectory of your session "
+        "scratchpad (do not use /tmp) before running this script."
+    )
+SCRATCH = Path(_scratch_env).expanduser()
 CONTEXT_FITS = (
     "direct-fit",
     "adjacent-fit",
@@ -122,7 +134,6 @@ def env() -> dict[str, str]:
     prefix = f"{root / 'science/src'}:{root / 'science/model/src'}"
     existing = result.get("PYTHONPATH")
     result["PYTHONPATH"] = f"{prefix}:{existing}" if existing else prefix
-    result["SCIENCE_COMMONS_ROOT"] = str(COMMONS_ROOT)
     return result
 
 
@@ -235,25 +246,44 @@ def warning_rows(gaps_by_project: dict[str, dict]) -> list[dict]:
             if row["context_fit"] in {"direct-fit", "adjacent-fit"} and row["context_fit_warnings"]:
                 rows.append({"project": project, **row})
     rows.sort(key=lambda row: (row["project"], row["context_fit"], row["benchmark_id"], row["entity_id"]))
-    return rows[:20]
+    return rows
+
+
+def _fit_benchmark_counts(gaps_by_project: dict[str, dict], fit: str) -> list[tuple[str, str, int]]:
+    counter: Counter[tuple[str, str]] = Counter()
+    for project, payload in gaps_by_project.items():
+        for row in candidate_rows(payload):
+            if row["context_fit"] == fit:
+                counter[(project, row["benchmark_id"])] += 1
+    return [(project, benchmark_id, count) for (project, benchmark_id), count in counter.most_common()]
 
 
 def blocked_counts(gaps_by_project: dict[str, dict]) -> list[tuple[str, str, int]]:
-    counter: Counter[tuple[str, str]] = Counter()
-    for project, payload in gaps_by_project.items():
-        for row in candidate_rows(payload):
-            if row["context_fit"] == "blocked-fit":
-                counter[(project, row["benchmark_id"])] += 1
-    return [(project, benchmark_id, count) for (project, benchmark_id), count in counter.most_common(20)]
+    return _fit_benchmark_counts(gaps_by_project, "blocked-fit")
 
 
 def fallback_counts(gaps_by_project: dict[str, dict]) -> list[tuple[str, str, int]]:
-    counter: Counter[tuple[str, str]] = Counter()
-    for project, payload in gaps_by_project.items():
-        for row in candidate_rows(payload):
-            if row["context_fit"] == "generic-fallback":
-                counter[(project, row["benchmark_id"])] += 1
-    return [(project, benchmark_id, count) for (project, benchmark_id), count in counter.most_common(20)]
+    return _fit_benchmark_counts(gaps_by_project, "generic-fallback")
+
+
+def _benchmark_concentration(rows: list[tuple[str, str, int]]) -> tuple[float, int]:
+    """Return (top-benchmark share, total candidates) over the full row set.
+
+    Rows are (project, benchmark_id, count). Shares are computed per benchmark id
+    across projects, so a single benchmark that recurs everywhere reads as
+    concentrated. Runs over the untruncated candidate set, not a top-N slice.
+    """
+    total = sum(count for _, _, count in rows)
+    if not total:
+        return 0.0, 0
+    by_benchmark: Counter[str] = Counter()
+    for _project, benchmark_id, count in rows:
+        by_benchmark[benchmark_id] += count
+    return by_benchmark.most_common(1)[0][1] / total, total
+
+
+def _class_total(payloads: dict[str, dict], key: str, fit: str) -> int:
+    return sum(payload["summary"][key][fit] for payload in payloads.values())
 
 
 def context_decision(
@@ -262,29 +292,69 @@ def context_decision(
     gaps_by_project: dict[str, dict],
 ) -> list[str]:
     lines: list[str] = ["", "## Recommendation", ""]
+
     natural_direct = tests_by_project["natural-systems"]["summary"]["context_fit_counts"]["direct-fit"]
     direct_warnings = len(warning_rows(gaps_by_project))
-    generic_fallback = sum(
-        payload["summary"]["context_fit_counts"]["generic-fallback"] for payload in triage_by_project.values()
-    )
-    total_triage = sum(payload["summary"]["test_plan_rows"] for payload in triage_by_project.values())
-    blocked = sum(payload["summary"]["context_fit_counts"]["blocked-fit"] for payload in triage_by_project.values())
 
+    triage_total = sum(payload["summary"]["test_plan_rows"] for payload in triage_by_project.values())
+    fallback = _class_total(triage_by_project, "context_fit_counts", "generic-fallback")
+    fallback_ratio = fallback / triage_total if triage_total else 0.0
+
+    concrete_total = sum(payload["summary"]["test_plan_rows"] for payload in tests_by_project.values())
+    method_concrete = _class_total(tests_by_project, "context_fit_counts", "method-fit")
+    method_ratio = method_concrete / concrete_total if concrete_total else 0.0
+
+    fallback_conc, fallback_candidates = _benchmark_concentration(fallback_counts(gaps_by_project))
+    blocked_conc, blocked_candidates = _benchmark_concentration(blocked_counts(gaps_by_project))
+
+    # Precedence follows the design's Decision Rules: classifier regressions
+    # first, then fallback dominance, then concentrated blockers, then the
+    # expected method-fit steady state. "Dominant" is a >0.5 share. blocked-fit
+    # drives a recommendation only when a few benchmark ids concentrate it (>=0.5
+    # of blocked candidates), not merely because some blocked rows exist.
     if natural_direct:
         recommendation = "classifier tuning"
-        reason = "`natural-systems` has nonzero direct-fit rows."
+        reason = (
+            f"`natural-systems` has {natural_direct} direct-fit concrete row(s); "
+            "the seed baseline is zero, so this is a regression signal."
+        )
     elif direct_warnings:
         recommendation = "classifier tuning"
-        reason = "direct/adjacent rows carry context-fit warnings."
-    elif blocked:
+        reason = f"{direct_warnings} direct/adjacent gap candidate(s) carry cross-context warnings."
+    elif triage_total and fallback_ratio > 0.5 and fallback_conc >= 0.5:
         recommendation = "metadata/staging cleanup"
-        reason = "blocked-fit rows remain visible and should be resolved through task-support/access metadata before scorer changes."
-    elif total_triage and generic_fallback / total_triage > 0.5:
+        reason = (
+            f"generic-fallback dominates triage ({fallback}/{triage_total} = {fallback_ratio:.2f}) "
+            f"and fallback candidates concentrate on a few benchmark ids "
+            f"(top id = {fallback_conc:.2f} of {fallback_candidates}); prefer task-support/dataset "
+            "metadata for those records over matcher changes."
+        )
+    elif triage_total and fallback_ratio > 0.5:
         recommendation = "presentation/report tuning"
-        reason = "generic-fallback rows dominate full triage while concrete direct rows are already separated."
+        reason = (
+            f"generic-fallback dominates triage ({fallback}/{triage_total} = {fallback_ratio:.2f}) "
+            "but is spread across many benchmarks while concrete direct/method rows are already "
+            "separated; prefer report presentation tuning over matcher changes."
+        )
+    elif blocked_candidates and blocked_conc >= 0.5:
+        recommendation = "metadata/staging cleanup"
+        reason = (
+            f"blocked-fit gap candidates are concentrated (top id = {blocked_conc:.2f} of "
+            f"{blocked_candidates}); resolve via task-support/access metadata before scorer changes."
+        )
+    elif method_ratio > 0.5:
+        recommendation = "workflow promotion"
+        reason = (
+            f"method-fit dominates concrete non-fallback rows ({method_concrete}/{concrete_total} = "
+            f"{method_ratio:.2f}); this is the expected actionable steady state, so no matcher change "
+            "is indicated."
+        )
     else:
         recommendation = "workflow promotion"
-        reason = "the report surfaces stable fields without obvious classifier or metadata blockers."
+        reason = (
+            "no classifier regression, fallback dominance, or concentrated blocker was detected; "
+            "the report surfaces stable fields."
+        )
 
     lines.extend(
         [
@@ -292,7 +362,13 @@ def context_decision(
             "",
             f"Reason: {reason}",
             "",
-            f"Aggregate generic-fallback share: {generic_fallback}/{total_triage}.",
+            "Signals:",
+            f"- natural-systems direct-fit concrete rows: {natural_direct}",
+            f"- direct/adjacent gap candidates with cross-context warnings: {direct_warnings}",
+            f"- generic-fallback triage share: {fallback}/{triage_total} ({fallback_ratio:.2f})",
+            f"- fallback candidate concentration: {fallback_conc:.2f} of {fallback_candidates}",
+            f"- method-fit concrete share: {method_concrete}/{concrete_total} ({method_ratio:.2f})",
+            f"- blocked-fit candidate concentration: {blocked_conc:.2f} of {blocked_candidates}",
         ]
     )
     return lines
@@ -431,11 +507,13 @@ def main() -> None:
                 "| --- | --- | --- | --- | --- |",
             ]
         )
-        for row in warnings:
+        for row in warnings[:TABLE_LIMIT]:
             warnings_text = ", ".join(row["context_fit_warnings"])
             lines.append(
                 f"| {row['project']} | {row['context_fit']} | `{row['benchmark_id']}` | `{row['entity_id']}` | {warnings_text} |"
             )
+        if len(warnings) > TABLE_LIMIT:
+            lines.extend(["", f"_Showing top {TABLE_LIMIT} of {len(warnings)} warned rows._"])
     else:
         lines.append("No direct-fit or adjacent-fit candidates carried context-fit warnings.")
 
@@ -443,8 +521,12 @@ def main() -> None:
     blocked = blocked_counts(gaps_by_project)
     if blocked:
         lines.extend(["| Project | benchmark | blocked-fit candidates |", "| --- | --- | ---: |"])
-        for project, benchmark_id, count in blocked:
+        for project, benchmark_id, count in blocked[:TABLE_LIMIT]:
             lines.append(f"| {project} | `{benchmark_id}` | {count} |")
+        if len(blocked) > TABLE_LIMIT:
+            lines.extend(
+                ["", f"_Showing top {TABLE_LIMIT} of {len(blocked)} (project, benchmark) blocked-fit pairs._"]
+            )
     else:
         lines.append("No blocked-fit gap candidates were present.")
 
@@ -452,8 +534,12 @@ def main() -> None:
     fallback = fallback_counts(gaps_by_project)
     if fallback:
         lines.extend(["| Project | benchmark | generic-fallback candidates |", "| --- | --- | ---: |"])
-        for project, benchmark_id, count in fallback:
+        for project, benchmark_id, count in fallback[:TABLE_LIMIT]:
             lines.append(f"| {project} | `{benchmark_id}` | {count} |")
+        if len(fallback) > TABLE_LIMIT:
+            lines.extend(
+                ["", f"_Showing top {TABLE_LIMIT} of {len(fallback)} (project, benchmark) generic-fallback pairs._"]
+            )
     else:
         lines.append("No generic-fallback gap candidates were present.")
 
@@ -471,7 +557,7 @@ def main() -> None:
             "",
             "## Raw Snapshots",
             "",
-            f"Raw JSON snapshots were written to `{SCRATCH}` and are intentionally not committed.",
+            "Raw JSON snapshots were written to the session scratch directory and are intentionally not committed.",
             "",
         ]
     )
@@ -490,7 +576,8 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science python /tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/capture_context_fit_calibration.py
+export CALIBRATION_SCRATCH="<session-scratchpad>/benchmark-context-fit-calibration-pass-1"
+PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science python "$CALIBRATION_SCRATCH/capture_context_fit_calibration.py"
 ```
 
 Expected output:
@@ -501,7 +588,7 @@ docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md
 
 Expected side effects:
 
-- `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/gap-calibration.json`
+- `$CALIBRATION_SCRATCH/gap-calibration.json`
 - one `*-tests-concrete.json`, `*-test-triage.json`, `*-gaps.json`, and `*-gaps-direct-fit.json` file per project;
 - `docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md`.
 
@@ -511,8 +598,8 @@ If the command fails with a JSON count mismatch, do not edit the report by hand.
 
 **Files:**
 - Read: `docs/reports/benchmark-context-fit-calibration-pass-1-2026-07-04.md`
-- Read: `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/*.json`
-- Modify only if the report generator has a bug: `/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04/capture_context_fit_calibration.py`
+- Read: `$CALIBRATION_SCRATCH/*.json`
+- Modify only if the report generator has a bug: `$CALIBRATION_SCRATCH/capture_context_fit_calibration.py`
 
 - [ ] **Step 1: Inspect the generated report**
 
@@ -557,11 +644,13 @@ report hygiene check passed
 Run:
 
 ```bash
+export CALIBRATION_SCRATCH="<session-scratchpad>/benchmark-context-fit-calibration-pass-1"
 PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science python - <<'PY'
 import json
+import os
 from pathlib import Path
 
-scratch = Path("/tmp/benchmark-context-fit-calibration-pass-1-2026-07-04")
+scratch = Path(os.environ["CALIBRATION_SCRATCH"]).expanduser()
 fits = ("direct-fit", "adjacent-fit", "method-fit", "blocked-fit", "generic-fallback", "out-of-context")
 
 for path in sorted(scratch.glob("*-tests-concrete.json")):
