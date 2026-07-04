@@ -16,6 +16,8 @@ from science_tool.dag.workbench_apply import (
     apply_workbench_plan,
     build_workbench_apply_plan,
 )
+from science_tool.dag.paths import load_dag_paths
+from science_tool.dag.validate import validate_project
 from science_tool.entities import (
     parse_markdown_entity_file_preserving_body,
     render_entity_text,
@@ -160,6 +162,24 @@ def test_apply_workbench_writes_entities_and_canonicalizes_workbench(tmp_path: P
     assert ev_path.is_file()
     assert "evidence-line:a-affects-b-ev0" in workbench_path.read_text(encoding="utf-8")
     assert _frontmatter(prop_path)["updated"] == "2026-07-04"
+
+
+def test_apply_workbench_satisfies_dag_validate_subject_object_edge(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    dag_dir = tmp_path / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (tmp_path / "tasks").mkdir()
+    workbench_path = dag_dir / "h1.workbench.yaml"
+    _write_workbench(workbench_path, inline_evidence=False)
+
+    before = validate_project(load_dag_paths(tmp_path))
+    assert any(f.rule == "proposition_edge_missing" for f in before.findings)
+
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    after = validate_project(load_dag_paths(tmp_path))
+    assert not any(f.rule == "proposition_edge_missing" for f in after.findings)
 
 
 def test_apply_workbench_result_changed_paths_are_project_relative(tmp_path: Path) -> None:
