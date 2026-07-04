@@ -586,6 +586,123 @@ benchmark:
     assert "+2 fallback" in result.output
 
 
+def test_benchmark_gaps_cli_filters_context_fit_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0600-direct",
+        """
+id: hypothesis:0600-direct
+type: hypothesis
+title: Direct Sci-Plex gap
+""",
+        body="Sci-plex drug compound screen should be benchmarked.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0601-generic",
+        """
+id: hypothesis:0601-generic
+type: hypothesis
+title: Generic fallback gap
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    result = _invoke_gaps(tmp_path, "--context-fit", "direct-fit", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0600-direct"]
+    candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
+    assert [candidate["context_fit"] for candidate in candidates] == ["direct-fit"]
+
+
+def test_benchmark_gaps_cli_rejects_unknown_context_fit(tmp_path: Path) -> None:
+    result = _invoke_gaps(tmp_path, "--context-fit", "near-fit")
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--context-fit'" in result.output
+
+
+def test_benchmark_gaps_cli_table_shows_candidate_context_fit(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0602-context-table",
+        """
+id: hypothesis:0602-context-table
+type: hypothesis
+title: Context table gap
+""",
+        body="Sci-plex drug compound screen should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: deposit
+local_path: data/sciplex3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression response
+      support:
+        state: supported
+""",
+    )
+
+    result = _invoke_gaps(tmp_path)
+
+    assert result.exit_code == 0
+    assert "dataset:sciplex3 [direct-fit]" in result.output
+
+
 def test_benchmark_hint_candidates_cli_json_and_commons_notice(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,

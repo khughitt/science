@@ -6384,15 +6384,21 @@ def benchmark_test_triage(
         return
 
 
+def _format_gap_candidate_for_table(candidate: Mapping[str, Any]) -> str:
+    context_fit = candidate.get("context_fit")
+    label = f" \\[{context_fit}]" if context_fit else ""
+    return f"{candidate['benchmark_id']}{label} ({candidate['candidate_score']})"
+
+
 def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     candidates = row["candidate_benchmarks"]
     if not candidates:
         return "-"
     if row.get("candidate_mode") == "fallback-only":
-        first = candidates[0]["benchmark_id"]
+        first = _format_gap_candidate_for_table(candidates[0])
         remainder = len(candidates) - 1
         return first if remainder <= 0 else f"{first} +{remainder} fallback"
-    return ", ".join(candidate["benchmark_id"] for candidate in candidates[:3])
+    return ", ".join(_format_gap_candidate_for_table(candidate) for candidate in candidates[:3])
 
 
 def _format_test_triage_task(row: Mapping[str, Any]) -> str:
@@ -6745,6 +6751,15 @@ def benchmark_hint_candidates(
 @click.option("--calibration-summary", is_flag=True, help="Summarize benchmark gap calibration metrics.")
 @click.option("--evidence-report", is_flag=True, help="Include benchmark gap evidence extraction details.")
 @click.option(
+    "--context-fit",
+    "context_fit",
+    multiple=True,
+    type=click.Choice(
+        ["direct-fit", "adjacent-fit", "method-fit", "blocked-fit", "generic-fallback", "out-of-context"]
+    ),
+    help="Filter by benchmark context-fit label. May be supplied more than once.",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["table", "json"]),
@@ -6765,6 +6780,7 @@ def benchmark_gaps(
     calibration_report: bool,
     calibration_summary: bool,
     evidence_report: bool,
+    context_fit: tuple[str, ...],
     output_format: str,
     project_root: Path | None,
 ) -> None:
@@ -6792,6 +6808,7 @@ def benchmark_gaps(
             facet=facet,
             calibration_report=calibration_report,
             evidence_report=evidence_report,
+            context_fit=context_fit or None,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
