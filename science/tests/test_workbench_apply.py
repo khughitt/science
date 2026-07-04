@@ -245,6 +245,15 @@ def test_apply_workbench_preserves_curated_proposition_frontmatter_on_semantic_u
     frontmatter["review_state"] = {"last_reviewed": "2026-07-04", "last_review_note": "manual review"}
     frontmatter["related"] = ["question:manual-test"]
     frontmatter["ontology_terms"] = ["obo:TEST_0001"]
+    frontmatter["aliases"] = ["proposition:a-influences-b"]
+    frontmatter["same_as"] = ["proposition:external-a-affects-b"]
+    frontmatter["relations"] = [{"predicate": "skos:related", "target": "question:manual-test"}]
+    frontmatter["evidence_refs"] = ["evidence-line:manual-a-affects-b"]
+    frontmatter["review_after"] = "2026-08-01"
+    frontmatter["canonical_id"] = "proposition:a-affects-b"
+    frontmatter["content_preview"] = "renderer-derived preview"
+    frontmatter["content"] = "renderer-derived body"
+    frontmatter["file_path"] = "entities/propositions/a-affects-b.md"
     prop_path.write_text(
         "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
         encoding="utf-8",
@@ -262,6 +271,15 @@ def test_apply_workbench_preserves_curated_proposition_frontmatter_on_semantic_u
     assert fm["review_state"] == {"last_reviewed": "2026-07-04", "last_review_note": "manual review"}
     assert fm["related"] == ["question:manual-test"]
     assert fm["ontology_terms"] == ["obo:TEST_0001"]
+    assert fm["aliases"] == ["proposition:a-influences-b"]
+    assert fm["same_as"] == ["proposition:external-a-affects-b"]
+    assert fm["relations"] == [{"predicate": "skos:related", "target": "question:manual-test"}]
+    assert fm["evidence_refs"] == ["evidence-line:manual-a-affects-b"]
+    assert fm["review_after"] == "2026-08-01"
+    assert "canonical_id" not in fm
+    assert "content_preview" not in fm
+    assert "content" not in fm
+    assert "file_path" not in fm
     assert fm["created"] == "2026-07-04"
     assert fm["updated"] == "2026-07-10"
 
@@ -288,6 +306,50 @@ def test_apply_workbench_preserves_authored_evidence_line_body_on_semantic_updat
     assert "Curated evidence note." in ev_path.read_text(encoding="utf-8")
     fm = _frontmatter(ev_path)
     assert fm["source"] == "paper:Jones2026"
+    assert fm["created"] == "2026-07-04"
+    assert fm["updated"] == "2026-07-11"
+
+
+def test_apply_workbench_preserves_authored_evidence_line_frontmatter_on_semantic_update(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    ev_path = tmp_path / "entities/evidence-lines/a-affects-b-ev0.md"
+    frontmatter, body = parse_markdown_entity_file_preserving_body(ev_path)
+    frontmatter["aliases"] = ["evidence-line:manual-support"]
+    frontmatter["evidence_refs"] = ["evidence-line:upstream-observation"]
+    frontmatter["source_refs"] = ["paper:Curated2026"]
+    frontmatter["related"] = ["question:evidence-review"]
+    frontmatter["canonical_id"] = "evidence-line:a-affects-b-ev0"
+    frontmatter["content_preview"] = "renderer-derived preview"
+    frontmatter["content"] = "renderer-derived body"
+    frontmatter["file_path"] = "entities/evidence-lines/a-affects-b-ev0.md"
+    ev_path.write_text(
+        "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
+        encoding="utf-8",
+    )
+    _write_workbench(workbench_path)
+    text = workbench_path.read_text(encoding="utf-8").replace("paper:Smith2026", "paper:Jones2026")
+    workbench_path.write_text(text, encoding="utf-8")
+
+    result = apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 11))
+
+    assert result.status == "applied"
+    fm = _frontmatter(ev_path)
+    assert fm["source"] == "paper:Jones2026"
+    assert fm["aliases"] == ["evidence-line:manual-support"]
+    assert fm["evidence_refs"] == ["evidence-line:upstream-observation"]
+    assert fm["source_refs"] == ["paper:Curated2026"]
+    assert fm["related"] == ["question:evidence-review"]
+    assert "canonical_id" not in fm
+    assert "content_preview" not in fm
+    assert "content" not in fm
+    assert "file_path" not in fm
     assert fm["created"] == "2026-07-04"
     assert fm["updated"] == "2026-07-11"
 

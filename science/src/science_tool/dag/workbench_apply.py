@@ -43,13 +43,47 @@ _PROPOSITION_ROW_FIELDS: tuple[str, ...] = (
     "claim_layer",
     "identification_strength",
 )
-_CURATED_FRONTMATTER_KEYS: tuple[str, ...] = (
-    "status",
-    "source_refs",
-    "origins",
-    "review_state",
-    "related",
-    "ontology_terms",
+_RENDERER_DERIVED_FRONTMATTER_KEYS: frozenset[str] = frozenset(
+    (
+        "canonical_id",
+        "content_preview",
+        "content",
+        "file_path",
+    )
+)
+_PROPOSITION_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
+    (
+        "id",
+        "kind",
+        "type",
+        "subject",
+        "object",
+        "predicate",
+        "polarity",
+        "legacy_relation_label",
+        "legacy_patch",
+        "legacy_edge_id",
+        "discusses",
+        "claim_layer",
+        "identification_strength",
+        "created",
+        "updated",
+    )
+)
+_EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
+    (
+        "id",
+        "kind",
+        "type",
+        "stance",
+        "target",
+        "source",
+        "evidence_type",
+        "quantitative_result",
+        "belief_eligible",
+        "created",
+        "updated",
+    )
 )
 
 
@@ -206,6 +240,14 @@ def _render_entity_text_from_frontmatter(frontmatter: dict[str, object], body: s
     return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False) + "---\n" + body
 
 
+def _workbench_frontmatter_keys(entity: WorkbenchEntity) -> frozenset[str]:
+    if entity.kind == "proposition":
+        return _PROPOSITION_WORKBENCH_FRONTMATTER_KEYS
+    if entity.kind == "evidence-line":
+        return _EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS
+    raise WorkbenchApplyError(f"unsupported workbench entity kind: {entity.kind}")
+
+
 def _render_workbench_entity_update(
     entity: WorkbenchEntity,
     *,
@@ -214,10 +256,15 @@ def _render_workbench_entity_update(
     created: str,
     updated: str,
 ) -> str:
-    final_frontmatter = _generated_frontmatter(entity, created=created, updated=updated)
-    for key in _CURATED_FRONTMATTER_KEYS:
-        if key in existing_frontmatter:
-            final_frontmatter[key] = existing_frontmatter[key]
+    final_frontmatter = {
+        key: value
+        for key, value in existing_frontmatter.items()
+        if key not in _RENDERER_DERIVED_FRONTMATTER_KEYS
+    }
+    generated_frontmatter = _generated_frontmatter(entity, created=created, updated=updated)
+    for key in _workbench_frontmatter_keys(entity):
+        if key in generated_frontmatter:
+            final_frontmatter[key] = generated_frontmatter[key]
     final_frontmatter["created"] = created
     final_frontmatter["updated"] = updated
     return _render_entity_text_from_frontmatter(final_frontmatter, body)
