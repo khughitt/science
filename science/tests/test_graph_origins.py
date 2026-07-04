@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset, Literal, Namespace, URIRef
+from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, XSD
 
 from science_tool.graph.materialize import materialize_graph
@@ -19,7 +19,7 @@ PROJECT_NS = Namespace("http://example.org/project/")
 SCI_NS = Namespace("http://example.org/science/vocab/")
 
 
-def _materialize_provenance(project: Path) -> object:
+def _materialize_provenance(project: Path) -> Graph:
     trig_path = materialize_graph(project)
     dataset = Dataset()
     dataset.parse(source=str(trig_path), format="trig")
