@@ -457,6 +457,25 @@ def test_cli_dag_retired_edge_migration_plan_missing_project_is_click_error(tmp_
     assert result.exception.__class__.__name__ != "FileNotFoundError"
 
 
+def test_cli_dag_retired_edge_migration_plan_malformed_yaml_is_click_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text("not: [valid\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edge-migration-plan", "--project", str(project), "--format", "json"],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "invalid retired DAG edge file" in result.output
+    assert result.exception is not None
+    assert "ParserError" not in result.exception.__class__.__name__
+
+
 def test_cli_dag_retired_edge_migration_plan_workbench_requires_focal_hypothesis(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_migration_project(project)

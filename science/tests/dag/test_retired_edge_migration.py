@@ -460,3 +460,13 @@ edges: ""
 
     with pytest.raises(ValueError, match="edges must be a list"):
         build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+
+def test_plan_wraps_malformed_retired_yaml(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.edges.yaml").write_text("not: [valid\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid retired DAG edge file"):
+        build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")

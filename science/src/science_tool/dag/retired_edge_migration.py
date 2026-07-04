@@ -185,7 +185,7 @@ def _load_edges_yaml_payload(path: Path) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("top-level YAML document must be a mapping")
         return payload
-    except (OSError, TypeError, ValueError) as exc:
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise ValueError(f"invalid retired DAG edge file {path}: {exc}") from exc
 
 
