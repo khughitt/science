@@ -734,6 +734,29 @@ def _write_two_keep(root: Path) -> Path:
     return report
 
 
+_KEEP_TOPIC = """\
+---
+type: meta
+id: explore-2026-07-04
+---
+
+```yaml
+candidate_id: cand-topic
+proposed_kind: topic
+title: Manual routing candidate
+decision: keep
+```
+"""
+
+
+def _write_keep_topic(root: Path) -> Path:
+    d = root / "entities" / "meta" / "explorations"
+    d.mkdir(parents=True)
+    report = d / "explore-2026-07-04.md"
+    report.write_text(_KEEP_TOPIC, encoding="utf-8")
+    return report
+
+
 def test_apply_report_continues_past_create_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -905,6 +928,34 @@ def test_cli_apply_json_stays_valid_with_warnings(monkeypatch: pytest.MonkeyPatc
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
         assert payload["created"][0]["warnings"] == ["w!"]
+
+
+def test_cli_apply_emits_manual_detail_in_text() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_keep_topic(root)
+        result = runner.invoke(
+            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "1 to apply manually" in result.output
+        assert "apply manually (topic): cand-topic" in result.output
+
+
+def test_cli_apply_translates_writeback_error_to_click_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(*args, **kwargs):
+        raise ApplyWriteBackError("boom")
+
+    monkeypatch.setattr("science_tool.cli.apply_report", _boom)
+    result = CliRunner().invoke(
+        main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
+    )
+    assert result.exit_code != 0
+    assert "boom" in result.output
 
 
 def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
