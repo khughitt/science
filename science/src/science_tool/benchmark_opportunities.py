@@ -755,6 +755,7 @@ class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
 class BenchmarkTestTriageReport(TypedDict):
     summary: dict[str, Any]
     buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]]
+    context_fit_counts_by_bucket: dict[BenchmarkTestTriageBucket, dict[ContextFit, int]]
     fallback_diagnostics: BenchmarkTestTriageFallbackDiagnostics
     filters: dict[str, Any]
     review_file: str | None
@@ -2602,6 +2603,12 @@ def _context_fit_counts(rows: Sequence[BenchmarkTestRow]) -> dict[ContextFit, in
     return counts
 
 
+def _context_fit_counts_by_bucket(
+    buckets: dict[BenchmarkTestTriageBucket, list[BenchmarkTestTriageRow]],
+) -> dict[BenchmarkTestTriageBucket, dict[ContextFit, int]]:
+    return {bucket: _context_fit_counts(buckets[bucket]) for bucket in BENCHMARK_TEST_TRIAGE_BUCKETS}
+
+
 COARSE_DOMAIN_LABELS = frozenset({"biology", "cancer", "health", "natural-systems", "physical"})
 
 DISEASE_CONTEXT_TOKENS = frozenset(
@@ -3330,6 +3337,7 @@ def _benchmark_test_triage_filters(
     include_blocked_fallback: bool,
     readiness: ReadinessLabel | None,
     benchmark_id: str | None,
+    context_fit: Sequence[str] | None,
 ) -> dict[str, Any]:
     filters: dict[str, Any] = {}
     if include_commons:
@@ -3352,6 +3360,9 @@ def _benchmark_test_triage_filters(
         filters["readiness"] = readiness
     if benchmark_id is not None:
         filters["benchmark_id"] = benchmark_id
+    normalized_context_fit = _normalize_context_fit_filters(context_fit)
+    if normalized_context_fit is not None:
+        filters["context_fit"] = list(normalized_context_fit)
     return filters
 
 
@@ -3466,9 +3477,25 @@ def _benchmark_test_readiness_sort_key(readiness: ReadinessLabel) -> int:
     return order[readiness]
 
 
+def _context_fit_sort_key(context_fit: ContextFit) -> int:
+    return CONTEXT_FIT_ORDER[context_fit]
+
+
 def _benchmark_test_sort_key(row: BenchmarkTestRow) -> tuple[int, int, int, int, str, str, str]:
     return (
         _benchmark_test_state_sort_key(row["test_plan_state"]),
+        _benchmark_test_source_sort_key(row["priority_source"]),
+        _benchmark_test_readiness_sort_key(row["readiness_label"]),
+        -row["priority_score"],
+        row["entity_id"],
+        row["benchmark_id"],
+        "" if row["task_id"] is None else row["task_id"],
+    )
+
+
+def _benchmark_test_triage_sort_key(row: BenchmarkTestTriageRow) -> tuple[int, int, int, int, str, str, str]:
+    return (
+        _context_fit_sort_key(row["context_fit"]),
         _benchmark_test_source_sort_key(row["priority_source"]),
         _benchmark_test_readiness_sort_key(row["readiness_label"]),
         -row["priority_score"],
@@ -3680,6 +3707,7 @@ def benchmark_test_triage_report(
     include_blocked_fallback: bool = False,
     readiness: ReadinessLabel | None = None,
     benchmark_id: str | None = None,
+    context_fit: Sequence[str] | None = None,
     review_file: str | None = None,
 ) -> BenchmarkTestTriageReport:
     report = benchmark_tests_report(
@@ -3693,6 +3721,7 @@ def benchmark_test_triage_report(
         exclude_fallback=exclude_fallback,
         readiness=readiness,
         benchmark_id=benchmark_id,
+        context_fit=context_fit,
     )
     rows = report["benchmark_tests"]
     visible_rows, suppressed_blocked_support_rows = _partition_blocked_support_fallback_rows(
@@ -3703,6 +3732,9 @@ def benchmark_test_triage_report(
     for row in visible_rows:
         bucket = _benchmark_test_triage_bucket(row)
         buckets[bucket].append(_benchmark_test_triage_row(row))
+
+    for bucket_rows in buckets.values():
+        bucket_rows.sort(key=_benchmark_test_triage_sort_key)
 
     fallback_rows = buckets["fallback-diagnostic"]
     fallback_diagnostics = _benchmark_test_fallback_diagnostics(fallback_rows)
@@ -3721,6 +3753,7 @@ def benchmark_test_triage_report(
             suppressed_blocked_support_fallback_rows=len(suppressed_blocked_support_rows),
         ),
         "buckets": buckets,
+        "context_fit_counts_by_bucket": _context_fit_counts_by_bucket(buckets),
         "fallback_diagnostics": fallback_diagnostics,
         "filters": _benchmark_test_triage_filters(
             include_commons=include_commons,
@@ -3733,6 +3766,7 @@ def benchmark_test_triage_report(
             include_blocked_fallback=include_blocked_fallback,
             readiness=readiness,
             benchmark_id=benchmark_id,
+            context_fit=context_fit,
         ),
         "review_file": review_file,
         "commons_notice": report["commons_notice"],
