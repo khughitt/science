@@ -67,6 +67,14 @@ Before executing any research command:
    This assumes the root `pyproject.toml` includes `science` as a dev
    dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
    (the distribution is `science`; the entry point it installs is `science`).
+   If you are operating from a git worktree and `uv run --frozen science ...`
+   fails because a relative editable `tool.uv.sources` path resolves to a
+   nonexistent checkout, use the main checkout's synced environment while
+   keeping the worktree as the current directory:
+   `$MAIN/.venv/bin/science <command>`. For wrappers or rules that shell out to
+   nested `uv run --frozen ...`, export `UV_PROJECT=$MAIN` so dependencies
+   resolve from the main checkout while cwd-relative project files still come
+   from the worktree.
    If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
    `uv run --with <science-plugin-root>/science science <command>`
@@ -197,7 +205,13 @@ For each input data source identified in Step 2:
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
      `science dataset register-run <run-slug>`."
-2. Check the gate per origin:
+2. For identity-bearing inputs, require an `identity_context` declaration.
+   Coordinate- or bio identity-bearing profiles need `taxon` plus the relevant
+   assembly or molecular tier declaration, or an explicit UNKNOWN/unresolved
+   declaration. Exact identity resolution is required at the publish/promote
+   boundary; initial planning may proceed only when the unresolved identity is
+   recorded as a blocker or caveat.
+3. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.
      - PASS if `access.verified: false` AND `access.exception.mode != ""`.
@@ -230,7 +244,7 @@ For each input data source identified in Step 2:
      - Recursively check each ID in `derivation.inputs` passes the gate. HALT with the
        broken-link path if any input transitively fails. Cycle detection: maintain a
        visited-set; HALT on revisit.
-3. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
+4. **Reproducibility gate (transparency-bound plans).** Step 2b runs the combined
    `check_plan_data_gate` — the access checks above **then** reproducibility enforcement. Resolve
    the effective `reproducibility_policy` (plan frontmatter merged over `science.yaml`, plan wins).
    - If **neither** project nor plan declares a policy: emit `reproducibility-policy-missing` as a
@@ -242,7 +256,7 @@ For each input data source identified in Step 2:
      - class < `bar` with a matching plan waiver (same dataset **and** `accepted_class == derived class`)
        → PASS-with-recorded-exception.
      - class < `bar` with no matching waiver → resolve by `policy.below_bar` (default HALT).
-4. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
+5. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
 
 ### Step 3: Add computational nodes to the inquiry (Inquiry mode only, optional)
 

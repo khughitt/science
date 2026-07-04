@@ -67,6 +67,14 @@ Before executing any research command:
    This assumes the root `pyproject.toml` includes `science` as a dev
    dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
    (the distribution is `science`; the entry point it installs is `science`).
+   If you are operating from a git worktree and `uv run --frozen science ...`
+   fails because a relative editable `tool.uv.sources` path resolves to a
+   nonexistent checkout, use the main checkout's synced environment while
+   keeping the worktree as the current directory:
+   `$MAIN/.venv/bin/science <command>`. For wrappers or rules that shell out to
+   nested `uv run --frozen ...`, export `UV_PROJECT=$MAIN` so dependencies
+   resolve from the main checkout while cwd-relative project files still come
+   from the worktree.
    If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
    `uv run --with <science-plugin-root>/science science <command>`
@@ -112,6 +120,13 @@ Additionally:
 
 Follow `.ai/templates/background-topic.md` first, then `templates/background-topic.md`, and fill all sections.
 Save to `entities/topics/<topic-slug>.md`.
+
+Set `origins` in the topic frontmatter to reflect where the framing came from —
+`{type: literature, ref: paper:<key>}` for each seed review, or `{type: literature, ref: cite:<key>}`
+if it's a bibliography-only reference, or `{type: user}` if the user named the topic. Write the
+full `cite:<key>` or `paper:<key>` prefix yourself — there is no CLI-side normalization for
+hand-authored topic frontmatter. Set `added_by: "llm:<model>:research-topic"`.
+Provenance only; does not affect belief.
 
 The output should include:
 
