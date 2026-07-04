@@ -1540,13 +1540,20 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
 
 
 def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
+    text = path.read_text(encoding="utf-8", newline="")
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
         return ({}, text)
-    try:
-        _, frontmatter_text, body = text.split("---\n", 2)
-    except ValueError:
+    after_opening_marker = text[len("---" + newline) :]
+    closing_marker = f"{newline}---{newline}"
+    closing_marker_index = after_opening_marker.find(closing_marker)
+    if closing_marker_index == -1:
         return ({}, text)
+    frontmatter_text = after_opening_marker[:closing_marker_index]
+    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
     frontmatter = yaml.safe_load(frontmatter_text) or {}
     if not isinstance(frontmatter, dict):
         return ({}, body)

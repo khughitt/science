@@ -70,3 +70,15 @@ def test_parse_markdown_entity_file_preserving_body_keeps_body_bytes(tmp_path: P
 
     assert frontmatter["id"] == "proposition:x"
     assert body == "\n# Title\n\nBody.\n"
+
+
+def test_parse_markdown_entity_file_preserving_body_keeps_crlf_body_bytes(tmp_path: Path) -> None:
+    path = tmp_path / "entity.md"
+    path.write_bytes(
+        b"---\r\nid: proposition:x\r\ntype: proposition\r\n---\r\n\r\n# Title\r\n\r\nBody.\r\n"
+    )
+
+    frontmatter, body = parse_markdown_entity_file_preserving_body(path)
+
+    assert frontmatter["id"] == "proposition:x"
+    assert body == "\r\n# Title\r\n\r\nBody.\r\n"
