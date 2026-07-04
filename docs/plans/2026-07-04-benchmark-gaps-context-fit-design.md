@@ -72,9 +72,16 @@ For each `BenchmarkGapRow` candidate:
    - otherwise `gap-candidate`.
 4. Reuse `_rows_for_gap_candidate(...)` with:
    - the candidate score;
-   - the stored candidate score components;
+   - the stored candidate score components, read from
+     `candidate_score_index[(entity_id, benchmark_id)].components` — the same
+     `CandidateScoreIndex` `gaps_report()` already threads through candidate
+     construction. Do **not** call `_gap_candidate_components(gap_payload, ...)`
+     here: that helper re-runs `_candidate_score` (double scoring) and requires
+     the assembled gap payload, which does not yet exist mid-build.
    - candidate reason notes;
-   - `_matched_facets_for_context(context, extra=matched candidate facets)`.
+   - `_matched_facets_for_context(context, extra=matched candidate facets)`,
+     where `matched candidate facets` is
+     `set(candidate["matched_missing_facets"]) | set(candidate["matched_hint_facets"])`.
 5. Summarize the produced `BenchmarkTestRow` list back onto the candidate:
    - choose the best `context_fit` by `CONTEXT_FIT_ORDER`;
    - merge `context_fit_reasons`;
@@ -105,9 +112,17 @@ Extend `GapCandidateBenchmarkRow` additively:
     "task-signal:proteomics",
     "task-support:supported"
   ],
-  "context_fit_warnings": ["cross-disease:gbm-vs-breast"]
+  "context_fit_warnings": ["cross-disease:gbm-vs-brca"]
 }
 ```
+
+The `cross-disease` warning is formatted as
+`{benchmark_diseases[0]}-vs-{project_diseases[0]}`, where each side is
+`sorted(tokens & DISEASE_CONTEXT_TOKENS)`. It is **not** the intuitive
+`benchmark-vs-project-label` pair: a breast-cancer entity that carries both
+`brca` and `breast` sorts `brca` first, so the emitted string is
+`gbm-vs-brca`, not `gbm-vs-breast`. Tests that assert this warning must match
+the sorted `[0]` reality rather than the readable label.
 
 Extend `BenchmarkGapSummary` additively:
 
@@ -141,7 +156,12 @@ Semantics:
 - For each gap row, candidate lists are filtered to candidates whose
   `context_fit` is in the requested set.
 - Gap rows with no remaining candidates are omitted from the filtered output.
-- `candidate_mode` is recomputed from the filtered candidate list.
+- `candidate_mode` is recomputed from the filtered candidate list. Note this
+  makes `candidate_mode` **view-relative** under a filter: filtering an
+  `entity-specific` row down to only its fallback candidates will recompute it
+  to `fallback-only`. That reflects the filtered view, not the entity's
+  intrinsic coverage — consumers reading `candidate_mode` off a filtered
+  response must treat it accordingly.
 - `summary` is computed from the filtered row set.
 - `evidence_report` and `calibration` reflect the filtered row set.
 
@@ -160,8 +180,14 @@ science benchmark gaps --context-fit generic-fallback --commons
 remains an explicit diagnostic view of fallback-only noise.
 
 No new `--exclude-fallback` flag is needed in v1. `--context-fit
-generic-fallback` and the existing `candidate_mode` summary are enough to audit
-fallback behavior without adding another filter vocabulary.
+generic-fallback` plus the existing `candidate_mode` summary are enough to audit
+fallback behavior without adding another filter vocabulary. Note that
+`context_fit` and `priority_source` are different axes: a `gap-fallback`
+candidate whose task support is blocked-with-evidence classifies as
+`blocked-fit`, not `generic-fallback`. So `--context-fit generic-fallback`
+alone does not capture all fallback candidates — a complete fallback audit
+combines the `candidate_mode: fallback-only` count with the fit filter, rather
+than treating the fit label as a source filter.
 
 ## Table Output
 
@@ -217,9 +243,29 @@ The new flow is:
 6. Sort rows by existing gap-level/entity ordering.
 7. Build summary, calibration, and evidence payloads from the final rows.
 
+Ordering here is load-bearing, not cosmetic. Steps 3–5 must complete before
+step 7: `_gap_calibration_payload` and `_gap_summary` consume the rows passed to
+them (calibration looks candidates up in the score index by
+`(entity_id, benchmark_id)` key, so an unpruned index is harmless as long as it
+stays a superset), and `summary` counts `candidate_mode` — so both must see the
+post-filter rows with `candidate_mode` already recomputed. Today `gaps_report()`
+builds calibration immediately after the row loop; the filter and mode-recompute
+steps must be inserted before that call.
+
 The helper should not call `benchmark_tests_report()` because that would recurse
 through `gaps_report()`. It should reuse the lower-level `_rows_for_gap_candidate`
 path directly.
+
+Because `benchmark_tests_report()` itself calls `gaps_report()` and then
+independently rebuilds and classifies the same gap candidates, unconditionally
+annotating candidates in `gaps_report()` adds a classification pass that the
+`benchmark tests` / `benchmark test-triage` surfaces compute and discard. Unlike
+calibration and evidence (already gated behind `enabled=` flags), context fit is
+part of the default gaps output and cannot be lazily gated the same way. Measure
+the cost on the largest active project (natural systems, ~1,500 candidate rows);
+if it is material, let `benchmark_tests_report()` request un-annotated gap rows
+(it re-derives its own rows regardless), otherwise accept the cost and note it
+here.
 
 ## Error Handling
 
@@ -264,6 +310,12 @@ Add focused tests for:
 
 - `gaps_report()` annotates entity-specific candidates with `context_fit`,
   reasons, and warnings.
+- cross-surface consistency: for a fixture `(entity, benchmark)` gap candidate,
+  the `context_fit` reported by `gaps_report()` equals the `context_fit` that
+  `benchmark_tests_report()` produces for the same pair (summarized by
+  `CONTEXT_FIT_ORDER` across that pair's task-level rows). This pins the
+  single-source guarantee that justifies reuse over a gap-specific classifier,
+  so a future classifier edit cannot silently diverge the two surfaces.
 - fallback-only candidates with no project/entity context classify as
   `generic-fallback`.
 - blocked task-support candidates classify as `blocked-fit`, except blocked
