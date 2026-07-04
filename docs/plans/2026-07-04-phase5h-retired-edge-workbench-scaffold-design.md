@@ -115,14 +115,17 @@ Fail before writing if:
 - the retired edge file does not exist;
 - the plan has zero rows;
 - any row in the selected DAG is `blocked`;
-- any row is `skipped` because a matching proposition already exists;
-- any ready row lacks `proposed_row`;
+- any row in the selected DAG is `skipped`, including
+  `matching-proposition-exists` and `no-claim-support-content`;
 - evidence warnings are present, unless a later design adds an explicit
   `--allow-evidence-warnings`;
 - `--focal-hypothesis` is missing.
 
 This strictness is deliberate. A scaffold is a durable reviewed artifact; it
 should not silently omit rows from the retired file or hide migration debt.
+Phase 5g guarantees ready rows carry `proposed_row`; Phase 5h treats a ready row
+without one as an internal planner invariant violation rather than a recoverable
+selection case.
 
 ## 6. Output Path Semantics
 
@@ -226,7 +229,10 @@ Unit tests:
 - output preserves `legacy_patch`, `legacy_edge_id`, `legacy_relation_label`,
   `focal_hypothesis`, and evidence stubs;
 - missing `--focal-hypothesis` fails before writing;
-- blocked/skipped rows fail before writing;
+- missing retired edge files and empty migration plans fail before writing;
+- blocked rows fail before writing;
+- skipped rows fail before writing for both `matching-proposition-exists` and
+  `no-claim-support-content`;
 - output path escaping the project root fails;
 - identical existing file is a no-op;
 - different existing file fails.
@@ -236,6 +242,7 @@ CLI tests:
 - command writes the expected file and table report;
 - `--format json` reports `written` vs `no-op`;
 - relative `--output` resolves against `--project`;
+- missing retired edge files are surfaced as Click errors, not tracebacks;
 - the command does not compile propositions or evidence lines.
 
 Real-project smoke:

@@ -23,7 +23,7 @@
 - Modify `science/src/science_tool/dag/__init__.py`
   - Export the new scaffold API only if the existing module export pattern requires it.
 - Modify `science/tests/dag/test_retired_edge_migration.py`
-  - Add API-level tests for write, no-op, blocked/skipped/evidence-warning failures, strict YAML, and path safety.
+  - Add API-level tests for write, no-op, missing/empty retired files, blocked/skipped/evidence-warning failures, strict YAML, and path safety.
 - Modify `science/tests/dag/test_cli.py`
   - Add CLI tests for table/json output and relative output resolution.
 - Modify `science/tests/test_cli_surface_contract.py`
@@ -144,7 +144,7 @@ class RetiredEdgeWorkbenchScaffoldResult:
     row_count: int
     predicate_review_required: int
     evidence_stub_count: int
-    bytes: int
+    byte_count: int
 
     @property
     def written(self) -> bool:
@@ -161,7 +161,7 @@ class RetiredEdgeWorkbenchScaffoldResult:
             "rows": self.row_count,
             "predicate_review_required": self.predicate_review_required,
             "evidence_stubs": self.evidence_stub_count,
-            "bytes": self.bytes,
+            "byte_count": self.byte_count,
         }
 ```
 
@@ -226,7 +226,6 @@ def scaffold_retired_edge_workbench(
 
     blocked = [row for row in plan.rows if row.status == "blocked"]
     skipped = [row for row in plan.rows if row.status == "skipped"]
-    missing_rows = [row for row in plan.rows if row.status == "ready" and row.proposed_row is None]
     evidence_warnings = [warning for row in plan.rows for warning in row.evidence_warnings]
     if blocked:
         details = ", ".join(f"{row.dag}#{row.edge_id}: {'/'.join(row.blockers)}" for row in blocked)
@@ -234,19 +233,20 @@ def scaffold_retired_edge_workbench(
     if skipped:
         details = ", ".join(f"{row.dag}#{row.edge_id}: {'/'.join(row.blockers or row.notes)}" for row in skipped)
         raise ValueError(f"cannot scaffold skipped retired edge rows: {details}")
-    if missing_rows:
-        details = ", ".join(f"{row.dag}#{row.edge_id}" for row in missing_rows)
-        raise ValueError(f"ready retired edge rows lack proposed workbench rows: {details}")
     if evidence_warnings:
         raise ValueError(f"cannot scaffold rows with evidence warnings: {', '.join(sorted(evidence_warnings))}")
 
     ready_rows = _ready_scaffold_rows(plan)
+    ready_count = sum(1 for row in plan.rows if row.status == "ready")
+    if len(ready_rows) != ready_count:
+        raise AssertionError("Phase 5g invariant violated: ready row lacks proposed_row")
     if not ready_rows:
         raise ValueError("no ready retired edge migration rows to scaffold")
 
     rendered = migration_plan_to_workbench_yaml(plan)
+    # Write-boundary honesty check: persist only YAML accepted by the strict workbench schema.
     WorkbenchFile.model_validate(yaml.safe_load(rendered) or {})
-    rendered_bytes = len(rendered.encode("utf-8"))
+    rendered_byte_count = len(rendered.encode("utf-8"))
 
     status: ScaffoldStatus = "written"
     if resolved_output.exists():
@@ -266,7 +266,7 @@ def scaffold_retired_edge_workbench(
         row_count=len(ready_rows),
         predicate_review_required=sum(1 for row in ready_rows if row.predicate_review_required),
         evidence_stub_count=_evidence_stub_count(ready_rows),
-        bytes=rendered_bytes,
+        byte_count=rendered_byte_count,
     )
 ```
 
@@ -297,6 +297,8 @@ rtk git commit -m "feat: scaffold retired edge workbench files"
 - Modify: `science/tests/dag/test_retired_edge_migration.py`
 - Modify: `science/src/science_tool/dag/retired_edge_migration.py`
 
+Task 2 adds guardrail coverage around the Task 1 implementation. These tests are expected to pass immediately when Task 1 was implemented correctly; they are still required because they pin strict no-partial-scaffold behavior that did not have dedicated coverage before Phase 5h.
+
 - [ ] **Step 1: Add failing tests for no-op and existing-file protection**
 
 Append these tests to `science/tests/dag/test_retired_edge_migration.py`:
@@ -325,7 +327,7 @@ def test_scaffold_retired_edge_workbench_identical_existing_file_is_noop(tmp_pat
     assert first.status == "written"
     assert second.status == "no-op"
     assert second.written is False
-    assert second.bytes == first.bytes
+    assert second.byte_count == first.byte_count
 
 
 def test_scaffold_retired_edge_workbench_existing_different_file_fails(tmp_path: Path) -> None:
@@ -357,7 +359,66 @@ rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py::tes
 
 Expected: PASS if Task 1 was implemented exactly; otherwise fix `scaffold_retired_edge_workbench(...)` before continuing.
 
-- [ ] **Step 3: Add failing tests for blocked, skipped, and evidence-warning rows**
+- [ ] **Step 3: Add guardrail tests for missing and empty retired edge files**
+
+Append these tests to `science/tests/dag/test_retired_edge_migration.py`:
+
+```python
+def test_scaffold_retired_edge_workbench_missing_retired_file_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    _dag_dir(project)
+
+    with pytest.raises(ValueError, match="retired DAG edge file does not exist"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="missing",
+            focal_hypothesis="hypothesis:h1",
+            output_path=Path("doc/figures/dags/missing.workbench.yaml"),
+        )
+
+    assert not (project / "doc/figures/dags/missing.workbench.yaml").exists()
+
+
+def test_scaffold_retired_edge_workbench_empty_retired_file_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges: []
+""".strip(),
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="contains no migration rows"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+```
+
+- [ ] **Step 4: Run the missing/empty file tests**
+
+Run:
+
+```bash
+rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_missing_retired_file_fails_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_empty_retired_file_fails_before_write -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Add guardrail tests for blocked, skipped, and evidence-warning rows**
 
 Append these tests to `science/tests/dag/test_retired_edge_migration.py`:
 
@@ -419,6 +480,40 @@ A affects B.
     assert not output.exists()
 
 
+def test_scaffold_retired_edge_workbench_no_claim_support_skip_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+source_dot: doc/figures/dags/h1.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    relation: biases
+    edge_status: supported
+    identification: observational
+""".strip(),
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="no-claim-support-content"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
 def test_scaffold_retired_edge_workbench_evidence_warnings_fail_before_write(tmp_path: Path) -> None:
     from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
 
@@ -456,17 +551,17 @@ edges:
     assert not output.exists()
 ```
 
-- [ ] **Step 4: Run the fail-loud row-state tests**
+- [ ] **Step 6: Run the fail-loud row-state tests**
 
 Run:
 
 ```bash
-rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_blocked_rows_fail_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_skipped_rows_fail_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_evidence_warnings_fail_before_write -q
+rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_blocked_rows_fail_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_skipped_rows_fail_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_no_claim_support_skip_fails_before_write science/tests/dag/test_retired_edge_migration.py::test_scaffold_retired_edge_workbench_evidence_warnings_fail_before_write -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Add failing tests for output path safety**
+- [ ] **Step 7: Add guardrail tests for output path safety**
 
 Append these tests to `science/tests/dag/test_retired_edge_migration.py`:
 
@@ -524,7 +619,7 @@ def test_scaffold_retired_edge_workbench_refuses_retired_or_dot_outputs(tmp_path
         )
 ```
 
-- [ ] **Step 6: Run the path safety tests**
+- [ ] **Step 8: Run the path safety tests**
 
 Run:
 
@@ -534,7 +629,7 @@ rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py::tes
 
 Expected: PASS.
 
-- [ ] **Step 7: Run the full retired-edge migration test file**
+- [ ] **Step 9: Run the full retired-edge migration test file**
 
 Run:
 
@@ -544,7 +639,7 @@ rtk uv run --frozen pytest science/tests/dag/test_retired_edge_migration.py -q
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Task 2**
+- [ ] **Step 10: Commit Task 2**
 
 Run:
 
@@ -734,7 +829,7 @@ In `science/tests/test_cli_surface_contract.py`, add the new command to `_PROJEC
 
 ```python
     "dag scaffold-retired-edge-workbench": (
-        "older DAG filesystem-root flag for explicit retired YAML workbench scaffolding",
+        "DAG scaffold write surface; retains --project-root alongside --project",
         "project root",
     ),
 ```
@@ -836,6 +931,34 @@ def test_cli_dag_scaffold_retired_edge_workbench_blocked_plan_fails_before_write
     assert "blocked retired edge rows" in result.output
     assert "dot-missing" in result.output
     assert not (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_missing_dag_is_click_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "missing",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/missing.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "retired DAG edge file does not exist" in result.output
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ != "FileNotFoundError"
+    assert not (project / "doc/figures/dags/missing.workbench.yaml").exists()
 ```
 
 - [ ] **Step 2: Add CLI tests for output protection**
@@ -900,7 +1023,7 @@ def test_cli_dag_scaffold_retired_edge_workbench_output_escape_fails(tmp_path: P
 Run:
 
 ```bash
-rtk uv run --frozen pytest science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_requires_focal_hypothesis science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_blocked_plan_fails_before_write science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_existing_different_file_fails science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_output_escape_fails -q
+rtk uv run --frozen pytest science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_requires_focal_hypothesis science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_blocked_plan_fails_before_write science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_missing_dag_is_click_error science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_existing_different_file_fails science/tests/dag/test_cli.py::test_cli_dag_scaffold_retired_edge_workbench_output_escape_fails -q
 ```
 
 Expected: PASS.
