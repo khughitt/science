@@ -1159,6 +1159,20 @@ def test_append_handles_block_form_list(tmp_path: Path) -> None:
     assert '- "plan:p2"' in body
 
 
+def test_append_handles_zero_indent_block_form_list(tmp_path: Path) -> None:
+    from science_tool.datasets_register import _append_yaml_list_item
+
+    p = tmp_path / "zero-indent.md"
+    p.write_text(
+        '---\nid: "dataset:y"\ntype: "dataset"\ntitle: "Y"\nconsumed_by:\n- "plan:existing"\n---\n',
+        encoding="utf-8",
+    )
+    _append_yaml_list_item(p, "consumed_by", "plan:p2")
+    frontmatter = p.read_text(encoding="utf-8").split("---", 2)[1]
+    parsed = yaml.safe_load(frontmatter)
+    assert parsed["consumed_by"] == ["plan:existing", "plan:p2"]
+
+
 def test_append_idempotent(tmp_path: Path) -> None:
     from science_tool.datasets_register import _append_yaml_list_item
 
