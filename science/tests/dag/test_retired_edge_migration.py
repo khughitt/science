@@ -417,6 +417,35 @@ edges:
         build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
 
 
+def test_plan_fails_loud_on_duplicate_pair_with_invalid_identification(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: not-real
+    description: First row has invalid identification.
+  - id: 2
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: Second row duplicates the same pair.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate edge"):
+        build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+
 def test_plan_fails_loud_when_edges_value_is_not_list(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_manifest(project)

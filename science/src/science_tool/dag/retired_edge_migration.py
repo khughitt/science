@@ -124,16 +124,12 @@ def build_retired_edge_migration_plan(
                 rows.append(_plan_missing_identity_edge(rel_path=rel_path, dag=dag_slug, raw_edge=raw_edge, exc=exc))
                 continue
             except _InvalidEdgeIdentification:
+                _record_raw_pair_or_raise(yaml_path=yaml_path, dag=dag_slug, raw_edge=raw_edge, seen_pairs=seen_pairs)
                 rows.append(_plan_invalid_identification_edge(rel_path=rel_path, dag=dag_slug, raw_edge=raw_edge))
                 continue
 
             pair = (edge.source, edge.target)
-            if pair in seen_pairs:
-                raise ValueError(
-                    f"invalid retired DAG edge file {yaml_path}: "
-                    f"duplicate edge (source={edge.source!r}, target={edge.target!r}) in DAG {dag_slug!r}"
-                )
-            seen_pairs.add(pair)
+            _record_pair_or_raise(yaml_path=yaml_path, dag=dag_slug, pair=pair, seen_pairs=seen_pairs)
             rows.append(
                 _plan_edge(
                     project_root=project_root,
@@ -151,6 +147,36 @@ def build_retired_edge_migration_plan(
         focal_hypothesis=focal_hypothesis,
         rows=tuple(rows),
     )
+
+
+def _record_raw_pair_or_raise(
+    *,
+    yaml_path: Path,
+    dag: str,
+    raw_edge: dict[str, Any],
+    seen_pairs: set[tuple[str, str]],
+) -> None:
+    source = _raw_text(raw_edge.get("source"))
+    target = _raw_text(raw_edge.get("target"))
+    if not source or not target:
+        return
+    _record_pair_or_raise(yaml_path=yaml_path, dag=dag, pair=(source, target), seen_pairs=seen_pairs)
+
+
+def _record_pair_or_raise(
+    *,
+    yaml_path: Path,
+    dag: str,
+    pair: tuple[str, str],
+    seen_pairs: set[tuple[str, str]],
+) -> None:
+    if pair in seen_pairs:
+        source, target = pair
+        raise ValueError(
+            f"invalid retired DAG edge file {yaml_path}: "
+            f"duplicate edge (source={source!r}, target={target!r}) in DAG {dag!r}"
+        )
+    seen_pairs.add(pair)
 
 
 def _load_edges_yaml_payload(path: Path) -> dict[str, Any]:
