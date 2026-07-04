@@ -148,6 +148,11 @@ statuses) plus `entities/topics/` for scope.
      names it. Collapsed in the report (evidence the pass isn't blind-spotting).
    - `out-of-scope` — falls outside `scope-boundaries.md`. Surfaced but not
      promoted by default.
+3. **Anchor resolution:** resolve each candidate's raw literature anchors to
+   `paper:<slug>` / `cite:<key>` where they match `entities/papers/` or
+   `papers/references.bib` (§8); unresolved anchors stay raw. This is where the
+   `origin_plan`'s literature refs are finalized — only the orchestrator, not the
+   blind lens, can do it.
 
 ### Phase 4 — Report
 
@@ -187,16 +192,20 @@ Each lens agent does a focused, lens-specific search. Because the agent has no
 E-utilities (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?…`) —
 plus `WebSearch` for discovery. These are the same sources `search-literature`
 uses, reached over HTTP rather than through the Bash-based source skills.
-Grounding rules:
 
-- If a supporting paper is **already in** `entities/papers/`, the anchor resolves
-  to `paper:<slug>`.
-- If the key is **already in** `papers/references.bib`, the anchor may be
-  `cite:<key>`.
-- Otherwise the anchor is recorded as a **raw citation** in the report; it does
-  **not** become a `cite:`/`paper:` origin until the paper is imported. Until
-  then the candidate's origin stays `assistant` (§10). This respects the
-  `origins` validate check (unresolved `cite:`/`paper:` → WARN).
+**Division of labor (the lens phase is blind, so it cannot resolve anchors).**
+A lens agent has no way to know what is already in `entities/papers/` or
+`papers/references.bib` — it can't read them. So:
+
+- **Lens agent (blind, generation):** attaches to each candidate the **raw
+  citation metadata** it found — DOI, OpenAlex work id, title, first author,
+  year. It never emits a `paper:`/`cite:` ref.
+- **Orchestrator (full visibility, Phase 3):** resolves each raw anchor —
+  → `paper:<slug>` when the DOI/title matches an entity in `entities/papers/`;
+  → `cite:<key>` when the DOI/key is in `papers/references.bib`;
+  → otherwise it stays a **raw citation**, yields **no** literature origin, and
+  the candidate's origin remains `assistant` (§10) until the paper is imported.
+  This respects the `origins` validate check (unresolved `cite:`/`paper:` → WARN).
 
 ## 9. Report artifact
 
@@ -215,10 +224,10 @@ report exists, suffix with `-<HHMM>` rather than overwrite.
 | `question_or_claim` | the actual question text, or the falsifiable claim |
 | `lens` | producing lens |
 | `rationale` | why this is worth asking (the reasoning) |
-| `literature_anchors` | list of `{ref, note}`; `ref` = `paper:<slug>` \| `cite:<key>` \| raw citation |
+| `literature_anchors` | list of `{doi, openalex_id, title, first_author, year, note}` as emitted by the blind lens; the orchestrator adds a resolved `ref` (`paper:<slug>` \| `cite:<key>`) in Phase 3 where it matches, else leaves it raw |
 | `novelty_bucket` | `novel` \| `sharpens-existing` \| `already-covered` \| `out-of-scope` |
 | `related_existing` | existing entity ids this overlaps/refines |
-| `decision` | `keep` \| `drop` \| `defer` (default `defer`) — human-edited |
+| `decision` | `keep` \| `drop` \| `defer` (human-edited, default `defer`) \| `applied` (terminal state written by `--apply`, never set by hand) |
 | `origin_plan` | structured `origins` + `added_by` apply will stamp (§10) |
 
 `proposed_kind` is `hypothesis` only when `question_or_claim` already states a
@@ -271,7 +280,8 @@ uv run science hypotheses create  … --origin <spec> [--origin <spec>] --added-
 **`--origin` grammar extension (the one bounded Python change).**
 `parse_origin_spec` currently accepts `TYPE[:REF][@DATE]` and has no way to set
 `independent`. Extend it backward-compatibly: a leading `+` on the spec sets
-`independent: true` (e.g. `+literature:cite:Smith2019@2019`). Unambiguous because
+`independent: true` (e.g. `+literature:cite:Smith2019@2019-01-01`, or with the
+`@DATE` omitted). Unambiguous because
 `TYPE` is a closed enum (`user|assistant|literature`) that never starts with `+`.
 This keeps apply fully automated (no manual post-create frontmatter edit, which
 the provenance work deliberately moved away from).
@@ -298,7 +308,10 @@ convention; surfaced as `science:idea-lens-researcher`).
   view is the brief passed inline in the dispatch.
 - **Output contract:** a JSON list of candidates matching §9 minus
   `novelty_bucket` / `related_existing` (filled in Phase 3) and minus `decision`
-  (defaults `defer`). Includes a provisional `origin_plan`.
+  (defaults `defer`). `literature_anchors` carry **raw** citation metadata (DOI,
+  OpenAlex id, title, author, year) — never `paper:`/`cite:` refs, which the
+  agent cannot resolve. `origin_plan` is provisional (`assistant` origin plus
+  any raw anchors); the orchestrator finalizes literature refs in Phase 3.
 - **Blindness clause:** the agent proposes from its lens and the inline brief
   only. (It could not reconcile against existing entities even if instructed to,
   since it has no filesystem tools — the clause documents intent; the tool set
@@ -325,18 +338,25 @@ OpenAlex/PubMed REST endpoints (grounding via `WebFetch`).
 
 ## 13. Testing considerations
 
-- The command and agent are prose surfaces; the enforceable contracts are:
-  (a) the fenced-YAML report parse + apply write-back round-trip,
-  (b) the `+` → `independent` grammar extension, (c) the apply →
-  `create --origin` mapping.
-- **`parse_origin_spec` `+` extension** — deterministic unit test: `+literature:
-  cite:K@2019` → `{type: literature, ref: cite:K, date: 2019, independent: True}`;
-  a plain `literature:cite:K` stays `independent: False`; `+` on `user`/
-  `assistant` also sets the flag. Lives beside the existing `parse_origin_spec`
-  tests from the provenance feature.
-- **Report round-trip** — parse a report with mixed `decision` values, confirm
-  only `keep` candidates map to create calls with the exact `--origin`/
-  `--added-by`/`--slug` args, and confirm write-back flips them to `applied`
-  with `applied_as`/`applied_at` so a second apply is a no-op.
+v1 ships exactly one new Python surface (the `parse_origin_spec` `+` extension),
+so it gets the one deterministic test. Everything else — report parsing,
+write-back, the create-call mapping — is executed by the command/agent in prose
+(like every other slash command in this repo; `wander`/`big-picture`
+orchestration is not unit-tested), so those are smoke/manual checks, not pytest.
+If apply logic later graduates into a `science explore-ideas apply` helper
+(deferred, §12), it comes with deterministic tests then.
+
+- **Deterministic — `parse_origin_spec` `+` extension:** `+literature:cite:K@
+  2019-01-01` → `{type: literature, ref: cite:K, date: 2019-01-01, independent:
+  True}`; a plain `literature:cite:K` stays `independent: False`; `+` on `user`/
+  `assistant` also sets the flag. (Dates must be full `YYYY-MM-DD` — the
+  `OriginRecord` validator rejects year-only.) Lives beside the existing
+  `parse_origin_spec` tests from the provenance feature.
+- **Smoke/manual — apply round-trip:** ship a committed fixture report
+  (mixed `decision` values, one convergent candidate) plus a short documented
+  procedure: run `--apply --from <fixture>`, confirm only `keep` candidates
+  become entities with the expected `--origin`/`--added-by`/`--slug` args,
+  confirm blocks flip to `applied` with `applied_as`/`applied_at`, and confirm a
+  second apply is a no-op. Verified by inspection, not asserted in pytest.
 - `codex-skills/` sync test must pass after adding the command
   (`scripts/generate_codex_skills.py`).
