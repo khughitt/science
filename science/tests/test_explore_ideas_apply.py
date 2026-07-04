@@ -375,6 +375,22 @@ def test_write_back_preserves_decision_trailing_comment() -> None:
     assert "applied_at: 2026-07-04\n" in out
 
 
+_WB_REPORT_WITHOUT_DECISION = """\
+# Report
+
+```yaml
+candidate_id: cand-a
+proposed_kind: question
+title: First
+```
+"""
+
+
+def test_write_back_missing_decision_line_raises() -> None:
+    with pytest.raises(ApplyWriteBackError):
+        write_back(_WB_REPORT_WITHOUT_DECISION, "cand-a", "question-0007", "2026-07-04")
+
+
 def test_write_back_targets_correct_block_by_id() -> None:
     out = write_back(_WB_REPORT, "cand-b", "hypothesis-0003", "2026-07-04")
     # Only cand-b changed; cand-a still keep.
