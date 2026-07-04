@@ -2780,7 +2780,7 @@ def _context_fit_for_row(
     support = task.support if task is not None else None
     if support is not None and support.state == "blocked":
         if priority_source == "gap-fallback" and not predicates.strong_context:
-            reasons.append("blocked-support-fallback")
+            warnings.append("blocked-support-fallback")
             return "generic-fallback", sorted(set(reasons), key=_reason_note_sort_key), sorted(set(warnings))
         if predicates.strong_context or predicates.broad_context or predicates.task_signal:
             return "blocked-fit", sorted(set(reasons), key=_reason_note_sort_key), sorted(set(warnings))
