@@ -428,6 +428,214 @@ benchmark:
     assert row["context_fit_warnings"] == []
 
 
+def test_context_fit_classifies_adjacent_cross_disease_rows(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: multiple-myeloma\nname: mm30\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0501-myeloma-outcome",
+        """
+id: hypothesis:0501-myeloma-outcome
+type: hypothesis
+title: Myeloma outcome benchmark hypothesis
+""",
+        body="Multiple myeloma survival risk needs clinical benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "brca-metabric",
+        """
+id: dataset:brca-metabric
+type: dataset
+title: BRCA METABRIC breast cancer outcomes
+dataset_class: deposit
+local_path: data/brca-metabric
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: [clinical-outcome]
+  benchmark_kinds: [outcome-prediction]
+  source_datasets: [breast-cancer-metabric]
+  tasks:
+    - id: survival
+      task_type: outcome prediction
+      prediction_target: survival
+      held_out_unit: patient
+      metric: concordance-index
+      baseline: clinical covariates
+      ground_truth:
+        type: measured-outcome
+        description: survival outcome
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "adjacent-fit"
+    # The benchmark tokenizes to {brca, breast}; `_context_fit_warning_cues`
+    # picks `sorted(...)[0]` == "brca" deterministically. Keep the fixture body
+    # free of any token the benchmark also carries (e.g. "outcome"/"outcomes")
+    # so the row cannot pick up a shared specific token and promote to direct-fit.
+    assert "cross-disease:brca-vs-myeloma" in row["context_fit_warnings"]
+    assert "task-support:supported" in row["context_fit_reasons"]
+
+
+def test_context_fit_classifies_method_fit_without_specific_context(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0502-temporal",
+        """
+id: hypothesis:0502-temporal
+type: hypothesis
+title: Temporal mechanism hypothesis
+""",
+        body="Temporal mechanism predictions need a time-series benchmark.",
+    )
+    _write_dataset(
+        tmp_path,
+        "dream4-in-silico-network",
+        """
+id: dataset:dream4-in-silico-network
+type: dataset
+title: DREAM4 in silico network
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [simulated-gene-expression]
+  signal_types: [time-series, perturbation]
+  benchmark_kinds: [network-reconstruction]
+  limitations: [simulated benchmark]
+  tasks:
+    - id: network-reconstruction
+      task_type: network reconstruction
+      prediction_target: regulatory edges
+      held_out_unit: edge
+      metric: auprc
+      baseline: random ranking
+      ground_truth:
+        type: simulated-network
+        description: simulated regulatory network
+      support:
+        state: candidate
+        reason: requires-challenge-package-staging
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "method-fit"
+    assert "context:weak" in row["context_fit_warnings"]
+    assert "task-signal:time-series" in row["context_fit_reasons"]
+
+
+def test_context_fit_uses_dataset_metadata_not_public_row_only(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0503-hidden-source",
+        """
+id: hypothesis:0503-hidden-source
+type: hypothesis
+title: Hidden source context
+""",
+        body="Sci-plex perturbation response should be benchmarked.",
+    )
+    _write_dataset(
+        tmp_path,
+        "source-hidden",
+        """
+id: dataset:source-hidden
+type: dataset
+title: Perturbation response benchmark
+dataset_class: deposit
+local_path: data/source-hidden
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  source_datasets: [sci-plex]
+  tasks:
+    - id: compound-response
+      task_type: perturbation response
+      prediction_target: expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: expression
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["context_fit"] == "direct-fit"
+    assert "specific-context:sci-plex" in row["context_fit_reasons"]
+
+
+def test_context_fit_broad_terms_do_not_remove_raw_clinical_matching(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-clinical",
+        """
+id: hypothesis:0504-clinical
+type: hypothesis
+title: Clinical benchmark hypothesis
+""",
+        body="Clinical validation needs a supported task.",
+    )
+    _write_dataset(
+        tmp_path,
+        "clinical-reference",
+        """
+id: dataset:clinical-reference
+type: dataset
+title: Reference cohort
+dataset_class: deposit
+local_path: data/clinical-reference
+benchmark:
+  domains: [biology]
+  modalities: [clinical]
+  signal_types: []
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: clinical-validation
+      task_type: validation
+      prediction_target: label
+      held_out_unit: patient
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    assert row["priority_source"] == "opportunity-relative"
+    assert row["matched_facets"] == ["clinical"]
+    assert row["context_fit"] != "direct-fit"
+    assert not any(reason == "specific-context:clinical" for reason in row["context_fit_reasons"])
+
+
 def test_benchmark_tests_report_marks_incomplete_tasks_draft_needed(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
@@ -1129,6 +1337,9 @@ def test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence() -> 
         "score_components": {"source": {"task_readiness": 10}, "baseline": {}},
         "matched_facets": ["spatial"],
         "reason_notes": ["fallback:task-ready"],
+        "context_fit": "direct-fit",
+        "context_fit_reasons": ["specific-context:myeloma"],
+        "context_fit_warnings": ["cell-line-vs-primary"],
         "prediction_target": "",
         "held_out_unit": "",
         "metric": "",
@@ -1143,6 +1354,9 @@ def test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence() -> 
         "score_components": {"source": {"facet_overlap": 25}, "baseline": {}},
         "matched_facets": ["perturbation"],
         "reason_notes": ["facet-token:perturbation"],
+        "context_fit": "method-fit",
+        "context_fit_reasons": ["task-signal:perturbation"],
+        "context_fit_warnings": ["context:weak"],
     }
 
     rows = _dedupe_benchmark_test_rows([base, stronger])
@@ -1152,6 +1366,9 @@ def test_benchmark_tests_report_merges_duplicate_rows_by_source_precedence() -> 
     assert rows[0]["priority_score"] == 25
     assert rows[0]["matched_facets"] == ["spatial", "perturbation"]
     assert rows[0]["reason_notes"] == ["facet-token:perturbation", "fallback:task-ready"]
+    assert rows[0]["context_fit"] == "direct-fit"
+    assert rows[0]["context_fit_reasons"] == ["specific-context:myeloma", "task-signal:perturbation"]
+    assert rows[0]["context_fit_warnings"] == ["cell-line-vs-primary", "context:weak"]
 
 
 def test_benchmark_tests_report_readiness_labels_handle_special_states(tmp_path: Path) -> None:

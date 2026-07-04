@@ -71,6 +71,19 @@ BENCHMARK_GAP_HINT_FACETS = (
 )
 BENCHMARK_GAP_HINT_FACET_SET = frozenset(BENCHMARK_GAP_HINT_FACETS)
 BROAD_NON_SCOREABLE_FACETS = frozenset({"biology", "cancer", "varies"})
+# Context-fit suppresses additional coarse labels, but raw matching/scoring must
+# keep using BROAD_NON_SCOREABLE_FACETS so facets like clinical/genomics remain
+# scoreable opportunity signals.
+CONTEXT_BROAD_TOKENS = BROAD_NON_SCOREABLE_FACETS | frozenset(
+    {
+        "clinical",
+        "cross-sectional",
+        "data",
+        "genomics",
+        "model",
+        "multi-omic",
+    }
+)
 TERM_BUCKET_CAP = 10
 FREQUENT_TERM_COUNT = 3
 HINT_CANDIDATE_TRUNCATION_NOTICE = "evidence categories are capped at top 10 terms per bucket"
@@ -304,6 +317,24 @@ class TokenEvidence:
     stop: frozenset[str]
     broad: frozenset[str]
     short: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ContextFitEvidence:
+    project_tokens: frozenset[str]
+    entity_tokens: frozenset[str]
+    benchmark_tokens: frozenset[str]
+    broad_project_tokens: frozenset[str]
+    broad_benchmark_tokens: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ContextFitPredicates:
+    strong_context: bool
+    broad_context: bool
+    task_signal: bool
+    domain_conflict: bool
+    warning_cues: list[str]
 
 
 class OpportunityScoreComponents(TypedDict):
@@ -2570,21 +2601,230 @@ def _context_fit_counts(rows: Sequence[BenchmarkTestRow]) -> dict[ContextFit, in
     return counts
 
 
-def _initial_context_fit_for_row(
+COARSE_DOMAIN_LABELS = frozenset({"biology", "cancer", "health", "natural-systems", "physical"})
+
+DISEASE_CONTEXT_TOKENS = frozenset(
+    {
+        "brca",
+        "breast",
+        "gbm",
+        "glioblastoma",
+        "melanoma",
+        "myeloma",
+    }
+)
+# Note: 2-char disease tokens (e.g. "mm") are intentionally omitted -- the
+# tokenizer drops tokens under 3 chars, so they would be dead entries. Multiple
+# myeloma is matched via "myeloma".
+
+
+def _specific_tokens(tokens: set[str] | frozenset[str]) -> frozenset[str]:
+    broad = set(CONTEXT_BROAD_TOKENS) | set(ENTITY_SUPPRESSED_TOKENS) | set(_STOP_TOKENS) | {"benchmark"}
+    return frozenset(token for token in tokens if token not in broad)
+
+
+def _project_context_tokens(project_root: Path, entities: list[ProjectBenchmarkEntity]) -> frozenset[str]:
+    return frozenset(_project_local_tokens(project_root, entities))
+
+
+def _entity_context_tokens(entity: ProjectBenchmarkEntity) -> frozenset[str]:
+    return _specific_tokens(entity.tokens | entity.id_tokens)
+
+
+def _benchmark_context_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
+    dataset = context.dataset
+    tokens = _tokens_from_text(
+        dataset.id,
+        dataset.title,
+        *dataset.domains,
+        *dataset.source_datasets,
+        *dataset.limitations,
+        include_stop_tokens=False,
+    )
+    return _specific_tokens(tokens)
+
+
+def _benchmark_broad_context_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
+    dataset = context.dataset
+    evidence = _token_evidence_from_text(
+        dataset.id,
+        dataset.title,
+        *dataset.domains,
+        *dataset.source_datasets,
+        *dataset.limitations,
+        broad_tokens=CONTEXT_BROAD_TOKENS,
+    )
+    return evidence.broad
+
+
+def _context_fit_warning_cues(
+    *,
+    project_entity_tokens: frozenset[str],
+    benchmark_tokens: frozenset[str],
+    context: DatasetOpportunityContext,
+) -> list[str]:
+    warnings: list[str] = []
+    project_diseases = sorted(project_entity_tokens & DISEASE_CONTEXT_TOKENS)
+    benchmark_diseases = sorted(benchmark_tokens & DISEASE_CONTEXT_TOKENS)
+    if project_diseases and benchmark_diseases and set(project_diseases).isdisjoint(benchmark_diseases):
+        warnings.append(f"cross-disease:{benchmark_diseases[0]}-vs-{project_diseases[0]}")
+
+    dataset_values = _dataset_evidence_values(context.dataset)
+    dataset_tokens = _tokens_from_text(*dataset_values, include_stop_tokens=False)
+    if "cell-line" in dataset_tokens and "primary" in project_entity_tokens:
+        warnings.append("cell-line-vs-primary")
+    if {"simulated", "synthetic"} & dataset_tokens and {"observed", "measured"} & project_entity_tokens:
+        warnings.append("simulated-vs-observed")
+    return warnings
+
+
+def _context_fit_evidence(
+    *,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
+    context: DatasetOpportunityContext,
+) -> ContextFitEvidence:
+    entity_tokens = _entity_context_tokens(entity)
+    raw_project_tokens = set(project_context_tokens) | set(entity.tokens) | set(entity.id_tokens)
+    return ContextFitEvidence(
+        project_tokens=_specific_tokens(set(project_context_tokens) | set(entity_tokens)),
+        entity_tokens=entity_tokens,
+        benchmark_tokens=_benchmark_context_tokens(context),
+        broad_project_tokens=frozenset(raw_project_tokens & CONTEXT_BROAD_TOKENS),
+        broad_benchmark_tokens=_benchmark_broad_context_tokens(context),
+    )
+
+
+def _context_fit_predicates(
+    *,
+    evidence: ContextFitEvidence,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
+    context: DatasetOpportunityContext,
+    task_reasons: list[str],
+) -> ContextFitPredicates:
+    warning_cues = _context_fit_warning_cues(
+        project_entity_tokens=evidence.project_tokens,
+        benchmark_tokens=evidence.benchmark_tokens,
+        context=context,
+    )
+    raw_project_tokens = set(project_context_tokens) | set(entity.tokens) | set(entity.id_tokens)
+    dataset_domains = {_normalize_token(value) for value in context.dataset.domains} & COARSE_DOMAIN_LABELS
+    project_domains = raw_project_tokens & COARSE_DOMAIN_LABELS
+    domain_conflict = bool(dataset_domains and project_domains and dataset_domains.isdisjoint(project_domains))
+    return ContextFitPredicates(
+        strong_context=bool(evidence.project_tokens & evidence.benchmark_tokens),
+        broad_context=bool(evidence.broad_project_tokens & evidence.broad_benchmark_tokens) or bool(warning_cues),
+        task_signal=bool(task_reasons),
+        domain_conflict=domain_conflict,
+        warning_cues=warning_cues,
+    )
+
+
+def _task_signal_reasons(
     *,
     task: OpportunityTask | None,
-) -> tuple[ContextFit, list[str], list[str]]:
+    priority_source: PrioritySource,
+    source_components: dict[str, int],
+    matched_facets: list[str],
+    entity_need_tokens: frozenset[str],
+) -> list[str]:
     reasons: list[str] = []
+    high_value = set(matched_facets) & (HIGH_VALUE_MODALITIES | HIGH_VALUE_SIGNALS | BENCHMARK_GAP_HINT_FACET_SET)
+    for facet in sorted(high_value, key=_facet_sort_key):
+        reasons.append(f"task-signal:{facet}")
     support = task.support if task is not None else None
     if support is not None and support.state == "supported":
         reasons.append("task-support:supported")
-    return "direct-fit", reasons, []
+    if priority_source == "opportunity-relative" and int(source_components.get("facet_overlap", 0)) > 0:
+        reasons.append("task-signal:facet-overlap")
+    # Design: the task type is a signal only when it "directly matches the entity
+    # need" -- NOT merely because the task carries a task_type. Gating on the
+    # entity-token intersection keeps `task_signal` discriminating; treating any
+    # task_type as a signal makes `task_signal` true for nearly every row and
+    # collapses the method-fit / out-of-context boundary.
+    if task is not None and task.task_type:
+        task_type_tokens = _specific_tokens(_tokens_from_text(task.task_type, include_stop_tokens=False))
+        if task_type_tokens & entity_need_tokens:
+            reasons.append(f"task-type:{_normalize_token(task.task_type)}")
+    return sorted(set(reasons))
+
+
+def _context_fit_for_row(
+    *,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
+    context: DatasetOpportunityContext,
+    task: OpportunityTask | None,
+    priority_source: PrioritySource,
+    source_components: dict[str, int],
+    reason_notes: list[str],
+    matched_facets: list[str],
+) -> tuple[ContextFit, list[str], list[str]]:
+    evidence = _context_fit_evidence(
+        entity=entity,
+        project_context_tokens=project_context_tokens,
+        context=context,
+    )
+    shared_specific = sorted(evidence.project_tokens & evidence.benchmark_tokens)
+    task_reasons = _task_signal_reasons(
+        task=task,
+        priority_source=priority_source,
+        source_components=source_components,
+        matched_facets=matched_facets,
+        entity_need_tokens=evidence.entity_tokens,
+    )
+    predicates = _context_fit_predicates(
+        evidence=evidence,
+        entity=entity,
+        project_context_tokens=project_context_tokens,
+        context=context,
+        task_reasons=task_reasons,
+    )
+    is_blocked = (task.support.state == "blocked") if task is not None and task.support is not None else False
+    is_fallback = priority_source == "gap-fallback" or any(note.startswith("fallback:") for note in reason_notes)
+    has_evidence = bool(predicates.strong_context or predicates.warning_cues or predicates.task_signal)
+
+    reasons: list[str] = []
+    reasons.extend(f"specific-context:{token}" for token in shared_specific)
+    reasons.extend(task_reasons)
+    warnings = list(predicates.warning_cues)
+
+    # Blocked/fallback ordering (design Rules 1, 1b, 2). The demotion of a
+    # blocked fallback with no project/entity context is keyed on
+    # `not shared_specific`, NOT on `has_evidence`: a blocked fallback can still
+    # carry task evidence, and demoting only when task evidence is absent would
+    # route MMRF-style rows to `blocked-fit` and drop the `blocked-support-fallback`
+    # warning. Blocked-fit demotion for a fallback-only, no-context row wins first.
+    if is_blocked and is_fallback and not shared_specific:
+        return "generic-fallback", sorted(set(reasons)), sorted({*warnings, "blocked-support-fallback"})
+    if is_blocked and has_evidence:
+        return "blocked-fit", sorted(set(reasons)), sorted(set(warnings))
+    if is_fallback and not shared_specific:
+        return "generic-fallback", sorted(set(reasons)), sorted(set(warnings))
+
+    if predicates.strong_context and predicates.task_signal:
+        return "direct-fit", sorted(set(reasons)), sorted(set(warnings))
+
+    # domain_conflict compares a small COARSE label set matched BEFORE broad
+    # stripping (design "Implementation note"). Both `dataset_domains` and
+    # `project_domains` are read from RAW (non-`_specific_tokens`) tokens, because
+    # the domain-naming tokens (`biology`, `cancer`) are exactly the ones broad
+    # stripping removes -- comparing stripped sets makes this predicate vestigial.
+    if predicates.domain_conflict:
+        return "out-of-context", sorted(set(reasons)), sorted({*warnings, "domain-conflict"})
+
+    if predicates.broad_context and predicates.task_signal:
+        return "adjacent-fit", sorted(set(reasons)), sorted(set(warnings))
+    if predicates.task_signal:
+        return "method-fit", sorted(set(reasons)), sorted({*warnings, "context:weak"})
+    return "out-of-context", sorted(set(reasons)), sorted(set(warnings))
 
 
 def _benchmark_test_row(
     *,
-    entity_id: str,
-    entity_title: str,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
     context: DatasetOpportunityContext,
     task: OpportunityTask | None,
     priority_score: int,
@@ -2597,10 +2837,19 @@ def _benchmark_test_row(
         reason_notes.append("draft-needed")
     support = task.support if task is not None else None
     reason_notes.extend(_task_support_reason_notes(task))
-    context_fit, context_fit_reasons, context_fit_warnings = _initial_context_fit_for_row(task=task)
+    context_fit, context_fit_reasons, context_fit_warnings = _context_fit_for_row(
+        entity=entity,
+        project_context_tokens=project_context_tokens,
+        context=context,
+        task=task,
+        priority_source=priority_source,
+        source_components=source_components,
+        reason_notes=reason_notes,
+        matched_facets=matched_facets,
+    )
     return {
-        "entity_id": entity_id,
-        "entity_title": entity_title,
+        "entity_id": entity.id,
+        "entity_title": entity.title,
         "benchmark_id": context.dataset.id,
         "benchmark_title": context.dataset.title,
         "dataset_class": context.dataset.dataset_class,
@@ -2634,13 +2883,19 @@ def _benchmark_test_row(
     }
 
 
-def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportunityContext) -> list[BenchmarkTestRow]:
+def _rows_for_context_tasks(
+    opportunity: OpportunityRow,
+    context: DatasetOpportunityContext,
+    *,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
+) -> list[BenchmarkTestRow]:
     task_id = opportunity["task_id"]
     if task_id is None:
         return [
             _benchmark_test_row(
-                entity_id=opportunity["entity_id"],
-                entity_title=opportunity["entity_title"],
+                entity=entity,
+                project_context_tokens=project_context_tokens,
                 context=context,
                 task=None,
                 priority_score=int(opportunity["relative_score"]),
@@ -2656,8 +2911,8 @@ def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportu
         return []
     return [
         _benchmark_test_row(
-            entity_id=opportunity["entity_id"],
-            entity_title=opportunity["entity_title"],
+            entity=entity,
+            project_context_tokens=project_context_tokens,
             context=context,
             task=task,
             priority_score=int(opportunity["relative_score"]),
@@ -2671,8 +2926,8 @@ def _rows_for_context_tasks(opportunity: OpportunityRow, context: DatasetOpportu
 
 def _rows_for_gap_candidate(
     *,
-    entity_id: str,
-    entity_title: str,
+    entity: ProjectBenchmarkEntity,
+    project_context_tokens: frozenset[str],
     context: DatasetOpportunityContext,
     priority_score: int,
     priority_source: PrioritySource,
@@ -2683,8 +2938,8 @@ def _rows_for_gap_candidate(
     tasks: list[OpportunityTask | None] = list(context.dataset.tasks) or [None]
     return [
         _benchmark_test_row(
-            entity_id=entity_id,
-            entity_title=entity_title,
+            entity=entity,
+            project_context_tokens=project_context_tokens,
             context=context,
             task=task,
             priority_score=priority_score,
@@ -2715,6 +2970,12 @@ def _merge_benchmark_test_rows(left: BenchmarkTestRow, right: BenchmarkTestRow) 
         merged = dict(left)
     merged["matched_facets"] = _sorted_facets(set(left["matched_facets"]) | set(right["matched_facets"]))
     merged["reason_notes"] = sorted({*left["reason_notes"], *right["reason_notes"]}, key=_reason_note_sort_key)
+    merged["context_fit_reasons"] = sorted({*left["context_fit_reasons"], *right["context_fit_reasons"]})
+    merged["context_fit_warnings"] = sorted({*left["context_fit_warnings"], *right["context_fit_warnings"]})
+    merged["context_fit"] = min(
+        (left["context_fit"], right["context_fit"]),
+        key=lambda context_fit: CONTEXT_FIT_ORDER[context_fit],
+    )
     return cast("BenchmarkTestRow", merged)
 
 
@@ -3259,12 +3520,24 @@ def benchmark_tests_report(
         include_prose_tokens=False,
     )
     context_by_id = {context.dataset.id: context for context in analysis.contexts}
+    entity_by_id = {entity.id: entity for entity in analysis.entities}
+    project_context_tokens = _project_context_tokens(project_root, analysis.entities)
     rows: list[BenchmarkTestRow] = []
     for opportunity in analysis.report["matched_opportunities"]:
         context = context_by_id.get(opportunity["benchmark_id"])
         if context is None:
             continue
-        rows.extend(_rows_for_context_tasks(opportunity, context))
+        entity = entity_by_id.get(opportunity["entity_id"])
+        if entity is None:
+            raise ValueError(f"matched opportunity references unknown entity: {opportunity['entity_id']}")
+        rows.extend(
+            _rows_for_context_tasks(
+                opportunity,
+                context,
+                entity=entity,
+                project_context_tokens=project_context_tokens,
+            )
+        )
     gap_payload = gaps_report(
         project_root,
         include_commons=include_commons,
@@ -3277,6 +3550,9 @@ def benchmark_tests_report(
         contexts=analysis.contexts,
     )
     for gap_row in gap_payload["benchmark_gaps"]:
+        entity = entity_by_id.get(gap_row["entity_id"])
+        if entity is None:
+            raise ValueError(f"gap row references unknown entity: {gap_row['entity_id']}")
         for candidate in gap_row["candidate_benchmarks"]:
             context = context_by_id.get(candidate["benchmark_id"])
             if context is None:
@@ -3285,8 +3561,8 @@ def benchmark_tests_report(
             extra_facets = set(candidate["matched_missing_facets"]) | set(candidate["matched_hint_facets"])
             rows.extend(
                 _rows_for_gap_candidate(
-                    entity_id=gap_row["entity_id"],
-                    entity_title=gap_row["entity_title"],
+                    entity=entity,
+                    project_context_tokens=project_context_tokens,
                     context=context,
                     priority_score=int(candidate["candidate_score"]),
                     priority_source=priority_source,
