@@ -444,6 +444,18 @@ def test_cli_dag_retired_edge_migration_plan_table_reports_blockers(tmp_path: Pa
     assert "membership-required" in result.output
 
 
+def test_cli_dag_retired_edge_migration_plan_missing_project_is_click_error(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        ["dag", "retired-edge-migration-plan", "--project", str(tmp_path / "missing")],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ != "FileNotFoundError"
+
+
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
     # Banner goes to STDERR so stdout stays pure JSON.
     result = CliRunner().invoke(main, ["dag", "schema"])

@@ -423,7 +423,7 @@ def retired_edge_migration_plan_cmd(
             click.echo(migration_plan_to_workbench_yaml(plan), nl=False)
             return
         click.echo(render_migration_plan_table(plan), nl=False)
-    except ValueError as exc:
+    except (FileNotFoundError, KeyError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
 
