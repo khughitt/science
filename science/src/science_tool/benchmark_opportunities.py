@@ -3009,7 +3009,7 @@ def _benchmark_test_summary(rows: list[BenchmarkTestRow], *, entities_total: int
         source_counts[row["priority_source"]] += 1
     fallback_rows = source_counts["gap-fallback"]
     facet_counts = Counter(facet for row in rows for facet in row["matched_facets"])
-    top_facets = [
+    top_facets: list[FacetCountRow] = [
         {"facet": facet, "count": count}
         for facet, count in sorted(facet_counts.items(), key=lambda item: (-item[1], _facet_sort_key(item[0])))[:10]
     ]
