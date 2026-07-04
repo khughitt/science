@@ -107,19 +107,32 @@ def build_retired_edge_migration_plan(
         dot_path = _resolve_dot_path(project_root, yaml_path, payload, dag_slug)
         dot_exists = bool(dot_path and dot_path.exists())
         rel_path = yaml_path.relative_to(project_root).as_posix()
-        raw_edges = payload.get("edges") or []
+        raw_edges = [] if "edges" not in payload else payload["edges"]
         if not isinstance(raw_edges, list):
             raise ValueError(f"invalid retired DAG edge file {yaml_path}: edges must be a list")
+        seen_pairs: set[tuple[str, str]] = set()
         for index, raw_edge in enumerate(raw_edges, start=1):
             if not isinstance(raw_edge, dict):
                 raise ValueError(f"invalid retired DAG edge file {yaml_path}: edge {index} must be a mapping")
+            try:
+                edge = _validate_edge_record(rel_path, raw_edge, index)
+            except _MissingEdgeIdentity as exc:
+                rows.append(_plan_missing_identity_edge(rel_path=rel_path, dag=dag_slug, raw_edge=raw_edge, exc=exc))
+                continue
+
+            pair = (edge.source, edge.target)
+            if pair in seen_pairs:
+                raise ValueError(
+                    f"invalid retired DAG edge file {yaml_path}: "
+                    f"duplicate edge (source={edge.source!r}, target={edge.target!r}) in DAG {dag_slug!r}"
+                )
+            seen_pairs.add(pair)
             rows.append(
-                _plan_raw_edge(
+                _plan_edge(
                     project_root=project_root,
                     rel_path=rel_path,
                     dag=dag_slug,
-                    raw_edge=raw_edge,
-                    row_index=index,
+                    edge=edge,
                     dot_exists=dot_exists,
                     focal_hypothesis=focal_hypothesis,
                     propositions_by_pair=propositions_by_pair,
@@ -171,12 +184,19 @@ class _MissingEdgeIdentity(ValueError):
 def _missing_required_fields(exc: BaseException) -> set[str]:
     if not isinstance(exc, ValidationError):
         return set()
+    identity_fields = set(_MISSING_IDENTITY_BLOCKERS)
     result: set[str] = set()
     for error in exc.errors():
-        if error.get("type") == "missing":
-            loc = error.get("loc")
-            if isinstance(loc, tuple) and len(loc) == 1 and isinstance(loc[0], str):
-                result.add(loc[0])
+        loc = error.get("loc")
+        if (
+            error.get("type") != "missing"
+            or not isinstance(loc, tuple)
+            or len(loc) != 1
+            or not isinstance(loc[0], str)
+            or loc[0] not in identity_fields
+        ):
+            return set()
+        result.add(loc[0])
     return result
 
 
@@ -197,38 +217,22 @@ def _propositions_by_pair(project_root: Path) -> dict[tuple[str, str], list[Prop
     return result
 
 
-def _plan_raw_edge(
+def _plan_missing_identity_edge(
     *,
-    project_root: Path,
     rel_path: str,
     dag: str,
     raw_edge: dict[str, Any],
-    row_index: int,
-    dot_exists: bool,
-    focal_hypothesis: str | None,
-    propositions_by_pair: dict[tuple[str, str], list[PropositionEntity]],
+    exc: _MissingEdgeIdentity,
 ) -> RetiredEdgeMigrationRow:
-    try:
-        edge = _validate_edge_record(rel_path, raw_edge, row_index)
-    except _MissingEdgeIdentity as exc:
-        blockers = tuple(_MISSING_IDENTITY_BLOCKERS[field] for field in sorted(exc.fields))
-        return RetiredEdgeMigrationRow(
-            path=rel_path,
-            dag=dag,
-            edge_id=_raw_int(raw_edge.get("id")),
-            source=_raw_text(raw_edge.get("source")),
-            target=_raw_text(raw_edge.get("target")),
-            status="blocked",
-            blockers=blockers,
-        )
-    return _plan_edge(
-        project_root=project_root,
-        rel_path=rel_path,
+    blockers = tuple(_MISSING_IDENTITY_BLOCKERS[field] for field in sorted(exc.fields))
+    return RetiredEdgeMigrationRow(
+        path=rel_path,
         dag=dag,
-        edge=edge,
-        dot_exists=dot_exists,
-        focal_hypothesis=focal_hypothesis,
-        propositions_by_pair=propositions_by_pair,
+        edge_id=_raw_int(raw_edge.get("id")),
+        source=_raw_text(raw_edge.get("source")),
+        target=_raw_text(raw_edge.get("target")),
+        status="blocked",
+        blockers=blockers,
     )
 
 

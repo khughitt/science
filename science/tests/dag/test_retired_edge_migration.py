@@ -242,3 +242,72 @@ edges:
 
     with pytest.raises(ValueError, match="invalid retired DAG edge file"):
         build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+
+def test_plan_fails_loud_when_identity_missing_and_other_schema_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: Row has a missing id and an invalid support ref.
+    data_support:
+      - description: Missing kind tag.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid retired DAG edge file"):
+        build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+
+def test_plan_fails_loud_on_duplicate_source_target_pairs(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: First duplicate row.
+  - id: 2
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: Second duplicate row.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate edge"):
+        build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
+
+
+def test_plan_fails_loud_when_edges_value_is_not_list(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges: ""
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="edges must be a list"):
+        build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1")
