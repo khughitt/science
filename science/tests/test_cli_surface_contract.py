@@ -45,6 +45,10 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
         "older DAG filesystem-root flag for explicit retired YAML migration planning",
         "project root",
     ),
+    "dag scaffold-retired-edge-workbench": (
+        "DAG scaffold write surface; retains --project-root alongside --project",
+        "project root",
+    ),
     "dag staleness": (
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
@@ -92,6 +96,7 @@ _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
     "dag render",
     "dag retired-edges",
     "dag retired-edge-migration-plan",
+    "dag scaffold-retired-edge-workbench",
     "dag staleness",
     "dag validate",
     "data audit",
@@ -138,10 +143,7 @@ def _commands_with_option_without_option(flag: str, missing_flag: str) -> list[s
     paths: list[str] = []
     for path, command in _walk_commands(science_cli, ()):
         options = {
-            option
-            for parameter in command.params
-            if isinstance(parameter, click.Option)
-            for option in parameter.opts
+            option for parameter in command.params if isinstance(parameter, click.Option) for option in parameter.opts
         }
         if flag in options and missing_flag not in options:
             paths.append(" ".join(path))

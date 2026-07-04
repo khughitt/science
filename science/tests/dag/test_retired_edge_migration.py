@@ -165,6 +165,342 @@ def test_workbench_yaml_is_strict_workbench_file_with_focal_hypothesis(tmp_path:
     } & set(payload["rows"][0])
 
 
+def test_scaffold_retired_edge_workbench_writes_strict_yaml(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=output,
+    )
+
+    assert result.status == "written"
+    assert result.written is True
+    assert result.row_count == 1
+    assert result.predicate_review_required == 1
+    assert result.evidence_stub_count == 2
+    assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
+
+    payload = yaml.safe_load(output.read_text(encoding="utf-8"))
+    workbench = WorkbenchFile.model_validate(payload)
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    row = workbench.rows[0]
+    assert row.subject == "a"
+    assert row.predicate == "affects"
+    assert row.object == "b"
+    assert row.legacy_patch == "h1"
+    assert row.legacy_edge_id == 1
+    assert row.legacy_relation_label == "biases"
+    assert row.discusses == ["hypothesis:h1"]
+    assert payload["rows"][0]["evidence"] == [
+        {
+            "source": "task:t001",
+            "evidence_type": "empirical_data",
+            "stance": "supports",
+        },
+        {
+            "source": "paper:Smith2020",
+            "evidence_type": "literature",
+            "stance": "supports",
+        },
+    ]
+    assert not (project / "entities").exists()
+
+
+def test_scaffold_retired_edge_workbench_relative_output_is_project_relative(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=Path("doc/figures/dags/h1.workbench.yaml"),
+    )
+
+    assert result.status == "written"
+    assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
+    assert (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
+def test_scaffold_retired_edge_workbench_identical_existing_file_is_noop(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    first = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=output,
+    )
+    second = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=output,
+    )
+
+    assert first.status == "written"
+    assert second.status == "no-op"
+    assert second.written is False
+    assert second.byte_count == first.byte_count
+
+
+def test_scaffold_retired_edge_workbench_existing_different_file_fails(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+    output.write_text("manual edits\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="already exists with different content"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert output.read_text(encoding="utf-8") == "manual edits\n"
+
+
+def test_scaffold_retired_edge_workbench_missing_retired_file_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    _dag_dir(project)
+
+    with pytest.raises(ValueError, match="retired DAG edge file does not exist"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="missing",
+            focal_hypothesis="hypothesis:h1",
+            output_path=Path("doc/figures/dags/missing.workbench.yaml"),
+        )
+
+    assert not (project / "doc/figures/dags/missing.workbench.yaml").exists()
+
+
+def test_scaffold_retired_edge_workbench_empty_retired_file_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges: []
+""".strip(),
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="contains no migration rows"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_scaffold_retired_edge_workbench_blocked_rows_fail_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    (project / "doc/figures/dags/h1.dot").unlink()
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="blocked retired edge rows"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_scaffold_retired_edge_workbench_skipped_rows_fail_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True)
+    (prop_dir / "a-affects-b.md").write_text(
+        """---
+id: proposition:a-affects-b
+type: proposition
+title: A affects B
+status: active
+subject: a
+predicate: affects
+object: b
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+---
+
+A affects B.
+""",
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="skipped retired edge rows"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_scaffold_retired_edge_workbench_no_claim_support_skip_fails_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+source_dot: doc/figures/dags/h1.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    relation: biases
+    edge_status: supported
+    identification: observational
+""".strip(),
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="no-claim-support-content"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_scaffold_retired_edge_workbench_evidence_warnings_fail_before_write(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+source_dot: doc/figures/dags/h1.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    relation: biases
+    edge_status: supported
+    identification: observational
+    description: Retired claim with unmapped support.
+    lit_support:
+      - description: Missing paper ref.
+""".strip(),
+        encoding="utf-8",
+    )
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    with pytest.raises(ValueError, match="evidence warnings"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_scaffold_retired_edge_workbench_output_escape_fails(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    with pytest.raises(ValueError, match="escapes project root"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=tmp_path / "outside.workbench.yaml",
+        )
+
+
+def test_scaffold_retired_edge_workbench_parent_must_exist(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    with pytest.raises(ValueError, match="parent directory does not exist"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=Path("missing/h1.workbench.yaml"),
+        )
+
+
+def test_scaffold_retired_edge_workbench_refuses_retired_or_dot_outputs(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    with pytest.raises(ValueError, match=r"\.edges\.yaml"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=Path("doc/figures/dags/h1.edges.yaml"),
+        )
+
+    with pytest.raises(ValueError, match="DOT file"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=Path("doc/figures/dags/h1.dot"),
+        )
+
+
 def test_plan_skips_matching_compiled_proposition(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_edge_project(project)

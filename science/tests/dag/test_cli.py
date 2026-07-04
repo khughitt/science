@@ -531,6 +531,202 @@ def test_cli_dag_retired_edge_migration_plan_workbench_outputs_strict_yaml(tmp_p
     } & set(payload["rows"][0])
 
 
+def test_cli_dag_scaffold_retired_edge_workbench_writes_file(tmp_path: Path) -> None:
+    from science_tool.dag.workbench import WorkbenchFile
+
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "written" in result.output
+    assert "doc/figures/dags/h1.workbench.yaml" in result.output
+    payload = yaml.safe_load(output.read_text(encoding="utf-8"))
+    workbench = WorkbenchFile.model_validate(payload)
+    assert workbench.focal_hypothesis == "hypothesis:h1"
+    assert len(workbench.rows) == 1
+    assert not (project / "entities").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_json_reports_noop(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    args = [
+        "dag",
+        "scaffold-retired-edge-workbench",
+        "--project",
+        str(project),
+        "--dag",
+        "h1",
+        "--focal-hypothesis",
+        "hypothesis:h1",
+        "--output",
+        "doc/figures/dags/h1.workbench.yaml",
+        "--format",
+        "json",
+    ]
+
+    first = CliRunner().invoke(main, args)
+    second = CliRunner().invoke(main, args)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    first_payload = json.loads(first.stdout)
+    second_payload = json.loads(second.stdout)
+    assert first_payload["status"] == "written"
+    assert first_payload["written"] is True
+    assert second_payload["status"] == "no-op"
+    assert second_payload["written"] is False
+    assert second_payload["output"] == "doc/figures/dags/h1.workbench.yaml"
+    assert second_payload["rows"] == 1
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_requires_focal_hypothesis(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--output",
+            "doc/figures/dags/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Missing option '--focal-hypothesis'" in result.output
+    assert not (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_blocked_plan_fails_before_write(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    (project / "doc/figures/dags/h1.dot").unlink()
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "blocked retired edge rows" in result.output
+    assert "dot-missing" in result.output
+    assert not (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_missing_dag_is_click_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "missing",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/missing.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "retired DAG edge file does not exist" in result.output
+    assert result.exception is not None
+    assert result.exception.__class__.__name__ != "FileNotFoundError"
+    assert not (project / "doc/figures/dags/missing.workbench.yaml").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_existing_different_file_fails(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+    output.write_text("reviewed content\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "doc/figures/dags/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists with different content" in result.output
+    assert output.read_text(encoding="utf-8") == "reviewed content\n"
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_output_escape_fails(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            str(tmp_path / "outside.workbench.yaml"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "escapes project root" in result.output
+    assert not (tmp_path / "outside.workbench.yaml").exists()
+
+
 def test_cli_dag_help_lists_retired_edge_migration_plan() -> None:
     result = CliRunner().invoke(main, ["dag", "--help"])
 

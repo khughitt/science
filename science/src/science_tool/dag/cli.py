@@ -427,6 +427,69 @@ def retired_edge_migration_plan_cmd(
         raise click.ClickException(str(exc)) from exc
 
 
+@dag_group.command("scaffold-retired-edge-workbench")
+@click.option(
+    "--dag",
+    "slug",
+    required=True,
+    help="Retired DAG slug to scaffold into one workbench file.",
+)
+@click.option(
+    "--focal-hypothesis",
+    required=True,
+    help="Hypothesis ref to use as file-level workbench membership for migrated rows.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Workbench YAML path to write. Relative paths resolve against the project root.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def scaffold_retired_edge_workbench_cmd(
+    slug: str,
+    focal_hypothesis: str,
+    output_path: Path,
+    output_format: str,
+    project_path: Path | None,
+) -> None:
+    """Write a reviewable workbench YAML scaffold from retired DAG edge rows."""
+    from science_tool.dag.retired_edge_migration import (
+        render_retired_edge_workbench_scaffold_table,
+        scaffold_retired_edge_workbench,
+    )
+
+    project = (project_path or Path.cwd()).resolve()
+    try:
+        result = scaffold_retired_edge_workbench(
+            project,
+            dag=slug,
+            focal_hypothesis=focal_hypothesis,
+            output_path=output_path,
+        )
+        if output_format == "json":
+            click.echo(json.dumps(result.to_json(), indent=2, sort_keys=True))
+            return
+        click.echo(render_retired_edge_workbench_scaffold_table(result), nl=False)
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # schema
 # ---------------------------------------------------------------------------
