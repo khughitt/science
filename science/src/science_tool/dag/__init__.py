@@ -10,6 +10,13 @@ from science_tool.dag.proposition_edges import (
 )
 from science_tool.dag.refs import RefResolutionError, validate_ref_entry
 from science_tool.dag.render import render_all, render_one
+from science_tool.dag.retired_edge_migration import (
+    RetiredEdgeMigrationPlan,
+    RetiredEdgeMigrationRow,
+    build_retired_edge_migration_plan,
+    migration_plan_to_workbench_yaml,
+    render_migration_plan_table,
+)
 from science_tool.dag.schema import (
     EdgeRecord,
     EdgeStatus,
@@ -54,6 +61,11 @@ __all__ = [
     "validate_ref_entry",
     "render_all",
     "render_one",
+    "RetiredEdgeMigrationPlan",
+    "RetiredEdgeMigrationRow",
+    "build_retired_edge_migration_plan",
+    "migration_plan_to_workbench_yaml",
+    "render_migration_plan_table",
     "EdgeRecord",
     "EdgeStatus",
     "EdgesYamlFile",

@@ -512,6 +512,13 @@ def test_cli_dag_retired_edge_migration_plan_workbench_outputs_strict_yaml(tmp_p
     } & set(payload["rows"][0])
 
 
+def test_cli_dag_help_lists_retired_edge_migration_plan() -> None:
+    result = CliRunner().invoke(main, ["dag", "--help"])
+
+    assert result.exit_code == 0
+    assert "retired-edge-migration-plan" in result.output
+
+
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:
     # Banner goes to STDERR so stdout stays pure JSON.
     result = CliRunner().invoke(main, ["dag", "schema"])
