@@ -202,7 +202,9 @@ def test_export_resolves_content_prose_entity_ref_with_dynamic_namespace(tmp_pat
     assert detail["resolution"] == "known_source_entity_not_exported"
 
 
-def test_data_version_changes_when_referenced_content_prose_semantic_record_changes(tmp_path: Path) -> None:
+def test_data_version_and_semantic_refs_hash_change_when_public_detail_changes(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "project"
     first_out = tmp_path / "first"
     second_out = tmp_path / "second"
@@ -213,6 +215,8 @@ def test_data_version_changes_when_referenced_content_prose_semantic_record_chan
         """
         entityRef: prim:diffusion
         title: Diffusion
+        summary: Spatial smoothing process.
+        family: transport
         """,
     )
     write_text(
@@ -229,19 +233,30 @@ def test_data_version_changes_when_referenced_content_prose_semantic_record_chan
     )
 
     export_labnote_package(project_root=project_root, out_dir=first_out)
-    first = read_json(first_out / "project.json")["package"]["data_version"]
+    first_project = read_json(first_out / "project.json")
+    first_manifest = read_json(first_out / "manifest.json")
+    first_resource = {item["name"]: item for item in first_manifest["resources"]}[
+        "semantic_refs"
+    ]
 
     write_text(
         prose_path,
         """
         entityRef: prim:diffusion
-        title: Diffusive process
+        title: Diffusion
+        summary: Cross-gradient public transport process.
+        family: patterning
         """,
     )
     export_labnote_package(project_root=project_root, out_dir=second_out)
-    second = read_json(second_out / "project.json")["package"]["data_version"]
+    second_project = read_json(second_out / "project.json")
+    second_manifest = read_json(second_out / "manifest.json")
+    second_resource = {item["name"]: item for item in second_manifest["resources"]}[
+        "semantic_refs"
+    ]
 
-    assert first != second
+    assert first_project["package"]["data_version"] != second_project["package"]["data_version"]
+    assert first_resource["sha256"] != second_resource["sha256"]
 
 
 def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path: Path) -> None:
@@ -288,6 +303,165 @@ def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path
     ]
     assert diagnostics["semantic_refs"]["known_source_entity_not_exported"] == 1
     assert diagnostics["semantic_refs"]["unknown_semantic_ref"] == 0
+
+
+def test_export_writes_referenced_semantic_refs_bundle(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        summary: Spatial smoothing process.
+        aliases:
+          - diffusive transport
+        family: transport
+        private_note: do not export
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-patterns.md",
+        """
+        ---
+        id: question:0001-patterns
+        type: question
+        title: Pattern formation
+        sensitivity: public
+        ---
+        Pattern formation uses [@prim:diffusion].
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    bundle = read_json(out / "semantic_refs" / "index.json")
+    manifest = read_json(out / "manifest.json")
+    project = read_json(out / "project.json")
+    prose = read_json(out / "prose_bundles" / "entity_prose_bundles.json")
+    detail = bundle["semantic_refs"]["prim:diffusion"]
+    source_detail = prose["entities"]["question:0001-patterns"]["sections"][0][
+        "source_ref_details"
+    ][0]
+    resource = {item["name"]: item for item in manifest["resources"]}["semantic_refs"]
+
+    assert bundle["contract"] == "science.semantic_refs"
+    assert bundle["schema_version"] == "1"
+    assert bundle["data_version"] == manifest["data_version"] == project["package"]["data_version"]
+    assert detail == {
+        "id": "prim:diffusion",
+        "kind": "semantic_ref",
+        "label": "Diffusion",
+        "entity_type": "prim",
+        "summary": "Spatial smoothing process.",
+        "source_path": "content/prose/primitives/diffusion.yml",
+        "resolution": "known_source_entity_not_exported",
+        "aliases": ["diffusive transport"],
+        "metadata": {"family": "transport"},
+    }
+    # Private metadata fields are not part of the public semantic ref contract.
+    assert "private_note" not in detail
+    assert "private_note" not in detail["metadata"]
+    assert "route" not in detail
+    assert "route" not in source_detail
+    assert resource["path"] == "semantic_refs/index.json"
+    assert resource["kind"] == "bundle"
+    assert resource["sensitivity"] == "public"
+    assert isinstance(resource["bytes"], int) and resource["bytes"] > 0
+    assert len(resource["sha256"]) == 64
+    assert resource["media_type"] == "application/json"
+
+
+def test_semantic_refs_bundle_excludes_exported_entities_and_unreferenced_records(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        """,
+    )
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "reaction.yml",
+        """
+        entityRef: prim:reaction
+        title: Reaction
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-source.md",
+        """
+        ---
+        id: question:0001-source
+        type: question
+        title: Source question
+        sensitivity: public
+        ---
+        This points to [@prim:diffusion] and [@question:9999-later].
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "9999-later.md",
+        """
+        ---
+        id: question:9999-later
+        type: question
+        title: Later question
+        sensitivity: public
+        ---
+        Later entity body.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    bundle = read_json(out / "semantic_refs" / "index.json")
+    assert set(bundle["semantic_refs"]) == {"prim:diffusion"}
+
+
+def test_semantic_refs_bundle_scrubs_internal_paths_from_detail_fields(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "content" / "prose" / "primitives" / "diffusion.yml",
+        """
+        entityRef: prim:diffusion
+        title: Diffusion
+        summary: Private project path /data/proj/private/summary.txt.
+        description: Derived project path ~/.claude/projects/private/note.md.
+        source_hint: /data/proj/private/input.tsv
+        """,
+    )
+    write_text(
+        project_root / "entities" / "questions" / "0001-patterns.md",
+        """
+        ---
+        id: question:0001-patterns
+        type: question
+        title: Pattern formation
+        sensitivity: public
+        ---
+        Pattern formation uses [@prim:diffusion].
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    bundle_text = (out / "semantic_refs" / "index.json").read_text(encoding="utf-8")
+    detail = read_json(out / "semantic_refs" / "index.json")["semantic_refs"]["prim:diffusion"]
+    assert "/data/proj" not in bundle_text
+    assert "~/.claude/projects" not in bundle_text
+    assert "[private path removed]" in detail["summary"]
+    assert "[private path removed]" in detail["description"]
+    assert detail["metadata"]["source_hint"] == "[private path removed]"
 
 
 def test_semantic_ref_to_later_discovered_entity_gets_route(tmp_path: Path) -> None:
