@@ -419,7 +419,7 @@ def _write_retired_migration_lineage_proposition(project: Path) -> None:
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a

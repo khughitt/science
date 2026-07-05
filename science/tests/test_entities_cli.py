@@ -1421,7 +1421,7 @@ def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
             {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
         graph = Path("knowledge/graph.trig")
-        graph.parent.mkdir(parents=True)
+        graph.parent.mkdir(parents=True, exist_ok=True)
         graph.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
         os.utime(graph, (1, 1))
         os.utime(Path("entities/questions/0001-alpha.md"), (2, 2))

@@ -548,7 +548,7 @@ def test_context_fit_demotes_warned_direct_fit_without_specific_context_override
         "0502-breast-cptac-proteogenomics",
         """
 id: hypothesis:0502-breast-cptac-proteogenomics
-type: hypothesis
+kind: hypothesis
 title: Breast cancer CPTAC proteogenomics benchmark hypothesis
 """,
         body="Breast cancer CPTAC proteogenomics questions need supported benchmark evidence.",
@@ -558,7 +558,7 @@ title: Breast cancer CPTAC proteogenomics benchmark hypothesis
         "cptac-gbm-2021-proteogenomics",
         """
 id: dataset:cptac-gbm-2021-proteogenomics
-type: dataset
+kind: dataset
 title: CPTAC GBM proteogenomics
 dataset_class: deposit
 local_path: data/cptac-gbm
@@ -602,7 +602,7 @@ def test_context_fit_preserves_direct_fit_with_explicit_source_study_override(tm
         "0503-breast-cptac-2021-proteogenomics",
         """
 id: hypothesis:0503-breast-cptac-2021-proteogenomics
-type: hypothesis
+kind: hypothesis
 title: Breast cancer CPTAC 2021 benchmark hypothesis
 """,
         body="Breast cancer CPTAC-2021 proteogenomics questions need supported benchmark evidence.",
@@ -612,7 +612,7 @@ title: Breast cancer CPTAC 2021 benchmark hypothesis
         "cptac-gbm-2021-proteogenomics",
         """
 id: dataset:cptac-gbm-2021-proteogenomics
-type: dataset
+kind: dataset
 title: CPTAC GBM proteogenomics
 dataset_class: deposit
 local_path: data/cptac-gbm
@@ -655,7 +655,7 @@ def test_context_fit_shared_modality_compound_does_not_override_warning(tmp_path
         "0504-breast-single-cell-cross-modal",
         """
 id: hypothesis:0504-breast-single-cell-cross-modal
-type: hypothesis
+kind: hypothesis
 title: Breast cancer single-cell cross-modal benchmark hypothesis
 """,
         body="Breast cancer single-cell cross-modal questions need supported benchmark evidence.",
@@ -665,7 +665,7 @@ title: Breast cancer single-cell cross-modal benchmark hypothesis
         "cptac-gbm-2021-proteogenomics",
         """
 id: dataset:cptac-gbm-2021-proteogenomics
-type: dataset
+kind: dataset
 title: GBM single-cell cross-modal proteogenomics
 dataset_class: deposit
 local_path: data/cptac-gbm

@@ -856,7 +856,7 @@ def test_list_entities_orders_by_canonical_id(tmp_path: Path) -> None:
 def test_graph_is_stale_when_source_newer_than_graph(tmp_path: Path) -> None:
     seed_project(tmp_path)
     graph_path = tmp_path / "knowledge" / "graph.trig"
-    graph_path.parent.mkdir(parents=True)
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
     graph_path.write_text("", encoding="utf-8")
     source = write_markdown_entity(
         tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"}
