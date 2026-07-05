@@ -2467,19 +2467,24 @@ def _benchmark_test_row_for_triage(
     *,
     entity_id: str,
     benchmark_id: str,
-    test_plan_state: str,
-    readiness_label: str,
-    priority_source: str,
+    test_plan_state: str = "concrete",
+    readiness_label: str = "runnable",
+    priority_source: str = "opportunity-relative",
     priority_score: int = 10,
     task_id: str | None = "dataset:benchmark#task",
     matched_facets: list[str] | None = None,
     needs: list[str] | None = None,
+    context_fit: str = "direct-fit",
+    reason_notes: list[str] | None = None,
+    task_support_state: str | None = None,
+    task_support_reason: str = "",
 ) -> dict[str, Any]:
     return {
         "entity_id": entity_id,
         "entity_title": entity_id.removeprefix("hypothesis:"),
         "benchmark_id": benchmark_id,
         "benchmark_title": benchmark_id.removeprefix("dataset:"),
+        "dataset_class": "deposit",
         "task_id": task_id,
         "test_plan_state": test_plan_state,
         "task_type": "validation",
@@ -2489,7 +2494,10 @@ def _benchmark_test_row_for_triage(
         "priority_source": priority_source,
         "score_components": {"source": {"component": priority_score}, "baseline": {}},
         "matched_facets": matched_facets or ["perturbation"],
-        "reason_notes": ["fixture"],
+        "reason_notes": reason_notes or ["fixture"],
+        "context_fit": context_fit,
+        "context_fit_reasons": [],
+        "context_fit_warnings": [],
         "prediction_target": "target" if task_id else "",
         "held_out_unit": "unit" if task_id else "",
         "metric": "auroc" if task_id else "",
@@ -2498,6 +2506,11 @@ def _benchmark_test_row_for_triage(
             "type": "measured-outcome" if task_id else "",
             "description": "label" if task_id else "",
         },
+        "task_support_state": task_support_state,
+        "task_support_reason": task_support_reason,
+        "task_support_checked_at": "",
+        "task_support_evidence": [],
+        "task_support_notes": [],
         "needs": needs
         or ([] if task_id else ["prediction-target", "held-out-unit", "metric", "baseline", "ground-truth"]),
     }
@@ -2568,6 +2581,161 @@ def test_benchmark_test_triage_bucket_assignment_is_ordered() -> None:
         )
         == "fallback-diagnostic"
     )
+
+
+def test_fallback_display_group_for_gap_candidates() -> None:
+    from science_tool.benchmark_opportunities import _fallback_display_group_for_gap_candidate
+
+    base = {
+        "benchmark_id": "dataset:fallback",
+        "benchmark_title": "Fallback",
+        "baseline_score": 80,
+        "candidate_score": 20,
+        "matched_missing_facets": [],
+        "matched_hint_facets": [],
+        "context_fit": "generic-fallback",
+        "context_fit_reasons": [],
+        "context_fit_warnings": [],
+    }
+
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {**base, "reason_notes": ["fallback:baseline-quality", "selected:generic-baseline"]}
+        )
+        == "generic-baseline-fallback"
+    )
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {**base, "reason_notes": ["fallback:task-ready", "selected:task-ready"]}
+        )
+        == "generic-task-ready-fallback"
+    )
+    assert (
+        _fallback_display_group_for_gap_candidate({**base, "reason_notes": ["fallback:available-benchmark"]})
+        == "generic-available-fallback"
+    )
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {
+                **base,
+                "context_fit": "adjacent-fit",
+                "reason_notes": ["fallback:baseline-quality"],
+            }
+        )
+        == "specific-fallback"
+    )
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {
+                **base,
+                "reason_notes": ["fallback:baseline-quality"],
+                "context_fit_warnings": ["blocked-support-fallback"],
+            }
+        )
+        == "blocked-support-fallback"
+    )
+    # Precedence: the blocked warning wins even when the summarized context_fit is
+    # non-generic (blocked test row on one task, actionable on another). This is the
+    # gap-level aggregation caveat -- blocked branding beats specific.
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {
+                **base,
+                "context_fit": "adjacent-fit",
+                "reason_notes": ["fallback:baseline-quality"],
+                "context_fit_warnings": ["blocked-support-fallback"],
+            }
+        )
+        == "blocked-support-fallback"
+    )
+
+
+def test_fallback_display_group_rejects_non_fallback_candidate() -> None:
+    from science_tool.benchmark_opportunities import _fallback_display_group_for_gap_candidate
+
+    with pytest.raises(ValueError, match="non-fallback gap candidate"):
+        _fallback_display_group_for_gap_candidate(
+            {
+                "benchmark_id": "dataset:specific",
+                "benchmark_title": "Specific",
+                "baseline_score": 80,
+                "candidate_score": 30,
+                "matched_missing_facets": ["proteomics"],
+                "matched_hint_facets": [],
+                "reason_notes": ["missing-facet:proteomics"],
+                "context_fit": "direct-fit",
+                "context_fit_reasons": [],
+                "context_fit_warnings": [],
+            }
+        )
+
+
+def test_fallback_display_group_for_test_rows() -> None:
+    from science_tool.benchmark_opportunities import _fallback_display_group_for_test_row
+
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:generic-baseline",
+                benchmark_id="dataset:generic-baseline",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["fallback:baseline-quality", "selected:generic-baseline"],
+            )
+        )
+        == "generic-baseline-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:generic-task",
+                benchmark_id="dataset:generic-task",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["fallback:task-ready", "selected:task-ready"],
+            )
+        )
+        == "generic-task-ready-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:specific",
+                benchmark_id="dataset:specific",
+                priority_source="gap-fallback",
+                context_fit="adjacent-fit",
+                reason_notes=["fallback:baseline-quality"],
+            )
+        )
+        == "specific-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:blocked",
+                benchmark_id="dataset:blocked",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["fallback:baseline-quality"],
+                task_support_state="blocked",
+            )
+        )
+        == "blocked-support-fallback"
+    )
+
+
+def test_fallback_display_group_rejects_non_fallback_test_row() -> None:
+    from science_tool.benchmark_opportunities import _fallback_display_group_for_test_row
+
+    with pytest.raises(ValueError, match="non-fallback benchmark test row"):
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:run",
+                benchmark_id="dataset:run",
+                priority_source="opportunity-relative",
+                context_fit="direct-fit",
+            )
+        )
 
 
 def test_benchmark_test_triage_report_buckets_and_preserves_summary_fields(tmp_path: Path) -> None:

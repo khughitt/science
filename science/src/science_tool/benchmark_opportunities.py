@@ -629,6 +629,13 @@ ContextFit = Literal[
     "generic-fallback",
     "out-of-context",
 ]
+FallbackDisplayGroup = Literal[
+    "specific-fallback",
+    "blocked-support-fallback",
+    "generic-baseline-fallback",
+    "generic-task-ready-fallback",
+    "generic-available-fallback",
+]
 TaskSupportCountKey = Literal["supported", "candidate", "blocked", "none"]
 
 READINESS_LABELS: tuple[ReadinessLabel, ...] = ("runnable", "stage-needed", "metadata-only", "blocked")
@@ -639,6 +646,20 @@ CONTEXT_FITS: tuple[ContextFit, ...] = (
     "blocked-fit",
     "generic-fallback",
     "out-of-context",
+)
+FALLBACK_DISPLAY_GROUPS: tuple[FallbackDisplayGroup, ...] = (
+    "specific-fallback",
+    "blocked-support-fallback",
+    "generic-baseline-fallback",
+    "generic-task-ready-fallback",
+    "generic-available-fallback",
+)
+GENERIC_FALLBACK_DISPLAY_GROUPS: frozenset[FallbackDisplayGroup] = frozenset(
+    {
+        "generic-baseline-fallback",
+        "generic-task-ready-fallback",
+        "generic-available-fallback",
+    }
 )
 CONTEXT_FIT_ORDER: dict[ContextFit, int] = {value: index for index, value in enumerate(CONTEXT_FITS)}
 DATASET_CLASSES: tuple[DatasetClass, ...] = ("deposit", "reference", "pointer")
@@ -1997,6 +2018,52 @@ def _fallback_reason_notes(score: CandidateScore) -> list[str]:
 
 def _is_fallback_candidate(candidate: GapCandidateBenchmarkBaseRow) -> bool:
     return any(note.startswith("fallback:") for note in candidate["reason_notes"])
+
+
+def _fallback_group_from_notes(
+    *,
+    benchmark_id: str,
+    reason_notes: Sequence[str],
+    context_fit: ContextFit,
+    blocked: bool,
+) -> FallbackDisplayGroup:
+    if blocked:
+        return "blocked-support-fallback"
+    if context_fit != "generic-fallback":
+        return "specific-fallback"
+    if "fallback:baseline-quality" in reason_notes or "selected:generic-baseline" in reason_notes:
+        return "generic-baseline-fallback"
+    if "fallback:task-ready" in reason_notes or "selected:task-ready" in reason_notes:
+        return "generic-task-ready-fallback"
+    if any(note.startswith("fallback:") for note in reason_notes):
+        return "generic-available-fallback"
+    raise ValueError(f"generic fallback row has no fallback reason note: {benchmark_id}")
+
+
+def _fallback_display_group_for_gap_candidate(candidate: GapCandidateBenchmarkRow) -> FallbackDisplayGroup:
+    if not _is_fallback_candidate(candidate):
+        raise ValueError(f"non-fallback gap candidate cannot be grouped: {candidate['benchmark_id']}")
+    return _fallback_group_from_notes(
+        benchmark_id=candidate["benchmark_id"],
+        reason_notes=candidate["reason_notes"],
+        context_fit=candidate["context_fit"],
+        blocked="blocked-support-fallback" in candidate["context_fit_warnings"],
+    )
+
+
+def _fallback_display_group_for_test_row(row: BenchmarkTestRow) -> FallbackDisplayGroup:
+    if row["priority_source"] != "gap-fallback":
+        raise ValueError(f"non-fallback benchmark test row cannot be grouped: {row['benchmark_id']}")
+    return _fallback_group_from_notes(
+        benchmark_id=row["benchmark_id"],
+        reason_notes=row["reason_notes"],
+        context_fit=row["context_fit"],
+        blocked=_is_blocked_support_fallback(row),
+    )
+
+
+def _is_generic_fallback_display_group(group: FallbackDisplayGroup) -> bool:
+    return group in GENERIC_FALLBACK_DISPLAY_GROUPS
 
 
 def _selection_reason_note(row: RawGapCandidateBenchmarkRow, *, rotated: bool) -> str:
