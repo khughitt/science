@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Run all `science` commands with `uv run --frozen`.
-- Model tests run from `science/model/` (`cd science/model && uv run pytest tests/...`); tool tests run from `science/` (`cd science && uv run pytest tests/...`). Both packages set `testpaths = ["tests"]`.
+- Model tests run from `science/model/` (`cd science/model && uv run --frozen pytest tests/...`); tool tests run from `science/` (`cd science && uv run --frozen pytest tests/...`). Both packages set `testpaths = ["tests"]`.
 - Commit-message rule (user global): **no AI-attribution trailer or footer** — no `Co-Authored-By`, no "Generated with" line.
 - D-001 (meta project): commits touching **tool code** stay scoped to the repo root; commits touching **`meta/`** (this plan, `core/decisions.md`) stay scoped to `meta/`. In this single branch that means *separate commits per scope*, never one commit mixing `meta/` with tool code.
 - Provenance invariant (from `science_model.entities.OriginRecord`): "Provenance metadata only; MUST NOT affect evidential weight." `OriginRecord` is **not modified**; lens rationale is content and lives only on `LensView`.
@@ -81,7 +81,7 @@ def test_lens_metadata() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science/model && uv run pytest tests/test_lenses.py -q`
+Run: `cd science/model && uv run --frozen pytest tests/test_lenses.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_model.lenses'`
 
 - [ ] **Step 3: Write the vocabulary module**
@@ -90,7 +90,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'science_model.lenses'
 # science/model/src/science_model/lenses.py
 """Packaged vocabulary of generative analytical lenses.
 
-A lens is a *view* over a shared research idea — the analytical perspective the
+A lens is a *view* over a shared research idea - the analytical perspective the
 idea was framed through. This module is the single source of truth for lens
 slugs; schema validation, explore-ideas apply, graph materialization, and the
 validation checks all read from here. Slugs are stable identifiers; names and
@@ -116,7 +116,7 @@ LENSES: tuple[Lens, ...] = (
     Lens("methodology", "Methodology", "measurement, assay, study-design, analysis method"),
     Lens("population", "Population", "population, context, subgroup, setting, boundary conditions"),
     Lens("contrarian", "Contrarian", "what if the dominant assumption is wrong; null/negative framing"),
-    Lens("analogy", "Analogy", "cross-disciplinary analogy — how an adjacent field would frame it"),
+    Lens("analogy", "Analogy", "cross-disciplinary analogy - how an adjacent field would frame it"),
     Lens("temporal", "Temporal", "temporal/longitudinal/dynamics dimension"),
 )
 
@@ -138,7 +138,7 @@ from science_model.lenses import LENS_BY_SLUG, LENS_SLUGS, LENSES, Lens, is_vali
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd science/model && uv run pytest tests/test_lenses.py -q`
+Run: `cd science/model && uv run --frozen pytest tests/test_lenses.py -q`
 Expected: PASS (3 passed)
 
 - [ ] **Step 6: Commit**
@@ -233,7 +233,7 @@ def test_entity_rejects_duplicate_lens() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science/model && uv run pytest tests/test_lens_views.py -q`
+Run: `cd science/model && uv run --frozen pytest tests/test_lens_views.py -q`
 Expected: FAIL with `ImportError: cannot import name 'LensView'`
 
 - [ ] **Step 3: Add the `LensView` model**
@@ -306,12 +306,12 @@ Add `LensView` to the `from science_model.entities import (...)` block in `scien
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `cd science/model && uv run pytest tests/test_lens_views.py -q`
+Run: `cd science/model && uv run --frozen pytest tests/test_lens_views.py -q`
 Expected: PASS (5 passed)
 
 - [ ] **Step 7: Run the full model suite (no regressions)**
 
-Run: `cd science/model && uv run pytest -q`
+Run: `cd science/model && uv run --frozen pytest -q`
 Expected: PASS (all)
 
 - [ ] **Step 8: Commit**
@@ -425,7 +425,7 @@ def test_build_create_plan_rejects_duplicate_origin_ref() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run pytest tests/test_explore_ideas_apply.py -q -k lens`
+Run: `cd science && uv run --frozen pytest tests/test_explore_ideas_apply.py -q -k lens`
 Expected: FAIL with `ImportError: cannot import name 'derive_lens_views'`
 
 - [ ] **Step 3: Add `derive_lens_views` and route it**
@@ -523,12 +523,12 @@ In `apply_report`, extend the `extra_frontmatter` dict passed to `create_entity`
 
 - [ ] **Step 4: Run the lens tests to verify they pass**
 
-Run: `cd science && uv run pytest tests/test_explore_ideas_apply.py -q -k lens`
+Run: `cd science && uv run --frozen pytest tests/test_explore_ideas_apply.py -q -k lens`
 Expected: PASS
 
 - [ ] **Step 5: Run the full apply suite (no regressions)**
 
-Run: `cd science && uv run pytest tests/test_explore_ideas_apply.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_explore_ideas_apply.py -q`
 Expected: PASS (all)
 
 - [ ] **Step 6: Commit**
@@ -558,12 +558,12 @@ git commit -m "feat(explore-ideas): route lens_views into created entities"
 # science/tests/test_lens_view_materialize.py
 from __future__ import annotations
 
-from rdflib import Graph, Literal, URIRef
+from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
 from science_model.entities import Entity, EntityType, LensView, OriginRecord, OriginType
 from science_tool.graph.io import SCI_NS
-from science_tool.graph.materialize import _add_lens_views, _add_lens_vocabulary
+from science_tool.graph.materialize import _add_lens_views, _add_lens_vocabulary, materialize_graph
 
 
 def _entity() -> Entity:
@@ -610,11 +610,66 @@ def test_lens_vocabulary_emits_all_six_lenses() -> None:
     mechanism = URIRef(SCI_NS["lens/mechanism"])
     assert mechanism in lens_nodes
     assert (mechanism, SCI_NS.lensSlug, Literal("mechanism")) in g
+
+
+_ENTITY_MD = """\
+---
+id: question:0001-lens-demo
+type: question
+title: Lens demo
+status: open
+ontology_terms: []
+related: []
+source_refs: []
+origins:
+  - type: assistant
+    ref: explore-ideas-mechanism
+  - type: assistant
+    ref: explore-ideas-analogy
+    independent: true
+lens_views:
+  - lens: mechanism
+    rationale: mechanism framing
+    origin_ref: explore-ideas-mechanism
+  - lens: analogy
+    rationale: analogy framing
+    origin_ref: explore-ideas-analogy
+created: '2026-07-04'
+updated: '2026-07-04'
+---
+# Lens demo
+
+## Summary
+
+Body.
+"""
+
+
+def test_lens_views_and_vocabulary_wired_into_materialize(tmp_path) -> None:
+    # Integration: guards against the helpers existing but never being CALLED.
+    (tmp_path / "science.yaml").write_text(
+        "name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8"
+    )
+    q = tmp_path / "entities" / "questions" / "0001-lens-demo.md"
+    q.parent.mkdir(parents=True, exist_ok=True)
+    q.write_text(_ENTITY_MD, encoding="utf-8")
+
+    trig = materialize_graph(tmp_path, strict=False)
+    ds = Dataset()
+    ds.parse(trig, format="trig")
+
+    assert any(ds.quads((None, SCI_NS.hasLensView, None))), (
+        "no sci:hasLensView edge - _add_lens_views not wired into _add_entity"
+    )
+    lens_nodes = {row[0] for row in ds.quads((None, RDF.type, SCI_NS.Lens))}
+    assert len(lens_nodes) == 6, (
+        "expected 6 lens vocabulary nodes - _add_lens_vocabulary not wired into _emit_phase"
+    )
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd science && uv run pytest tests/test_lens_view_materialize.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_materialize.py -q`
 Expected: FAIL with `ImportError: cannot import name '_add_lens_views'`
 
 - [ ] **Step 3: Add the vocabulary helper and wire it once**
@@ -677,12 +732,12 @@ In `_add_entity`, immediately after the `for i, origin in enumerate(entity.origi
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `cd science && uv run pytest tests/test_lens_view_materialize.py -q`
-Expected: PASS (2 passed)
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_materialize.py -q`
+Expected: PASS (3 passed — the two unit tests plus the wiring integration test)
 
 - [ ] **Step 6: Run the graph suite (no regressions)**
 
-Run: `cd science && uv run pytest tests/test_graph_build_strict.py tests/test_composition_rule_materialize.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_graph_build_strict.py tests/test_composition_rule_materialize.py -q`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -740,11 +795,11 @@ def test_validate_warns_on_lens_origin_without_lens_views(tmp_path) -> None:
     assert "no lens_views" in result.output or "lens_views" in result.output
 ```
 
-> Confirm the exact `validate` invocation/flags with `cd science && uv run science validate --help`; adjust `["validate", "--project-root", str(root)]` to match (some builds infer the project from cwd — then use `CliRunner().invoke(main, ["validate"], catch_exceptions=False)` after `monkeypatch.chdir(root)`).
+> Confirm the exact `validate` invocation/flags with `cd science && uv run --frozen science validate --help`; adjust `["validate", "--project-root", str(root)]` to match (some builds infer the project from cwd — then use `CliRunner().invoke(main, ["validate"], catch_exceptions=False)` after `monkeypatch.chdir(root)`).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd science && uv run pytest tests/test_lens_view_backfill.py -q -k warns`
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_backfill.py -q -k warns`
 Expected: FAIL (no such warning yet)
 
 - [ ] **Step 3: Write the check**
@@ -809,12 +864,12 @@ In `science/src/science_tool/validate/checks/__init__.py`, add `"lens_views",` t
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `cd science && uv run pytest tests/test_lens_view_backfill.py -q -k warns`
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_backfill.py -q -k warns`
 Expected: PASS
 
 - [ ] **Step 6: Confirm the check is discovered**
 
-Run: `cd science && uv run python -c "from science_tool.validate.checks import CANONICAL_CHECKS; print([c.section for c in CANONICAL_CHECKS if c.section=='lens_views'])"`
+Run: `cd science && uv run --frozen python -c "from science_tool.validate.checks import CANONICAL_CHECKS; print([c.section for c in CANONICAL_CHECKS if c.section=='lens_views'])"`
 Expected: `['lens_views']`
 
 - [ ] **Step 7: Commit**
@@ -914,8 +969,9 @@ Expected: no matches.
 
 This repo mirrors each command into `codex-skills/science-<command>/SKILL.md` via a generator, and tests assert the mirror is current. After editing the command doc, regenerate and verify:
 
-Run: `uv run python scripts/generate_codex_skills.py`
-Run: `cd science && uv run pytest tests/test_codex_skills.py tests/test_command_docs.py -q`
+The repo root has no `pyproject.toml`, so run the generator under the `science` env (the script resolves the repo root from its own `__file__`, so cwd does not matter):
+Run: `cd science && uv run --frozen python ../scripts/generate_codex_skills.py`
+Run: `cd science && uv run --frozen pytest tests/test_codex_skills.py tests/test_command_docs.py -q`
 Expected: PASS. Confirm the mirror changed: `git status --porcelain codex-skills/science-explore-ideas/`.
 
 - [ ] **Step 7: Commit (command + regenerated mirror together)**
@@ -938,7 +994,7 @@ git commit -m "docs(explore-ideas): lens_views report contract; drop keep-one"
 - Consumes: `parse_report` (Task-era existing), `derive_lens_views` (Task 3), `science_model.frontmatter.parse_frontmatter`, `science_model.lenses.LENS_BY_SLUG`, and the tool's canonical frontmatter renderer `science_tool.entities._render_markdown`.
 - Produces: `backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, int]]` returning `(entity_id, views_added)` per touched entity.
 
-**Behavior:** for each applied block (`decision: applied`, with `applied_as: <id>`), load that entity; for each assistant origin whose `ref` is `explore-ideas-<lens>` and which has no matching `lens_views` entry, append a view. Rationale for the block's primary lens comes from the block's `rationale`/`lens_views`; a secondary lens-origin (e.g. a hand-added independent analogy origin) uses `LENS_BY_SLUG[lens].description` as an honest interim rationale. Writes the entity back via the canonical renderer.
+**Behavior:** for each applied block (`decision: applied`, with `applied_as: <id>`), load that entity; for each assistant origin whose `ref` is `explore-ideas-<lens>` and which has no matching `lens_views` entry, append a view. Per-lens rationales are recovered by calling `derive_lens_views(block, block_origins)` — so explicit per-lens rationales from newer reports are preserved, not just the top-level `rationale`; any lens-origin the block did not cover (e.g. a hand-added independent analogy origin) falls back to `LENS_BY_SLUG[lens].description` as an honest interim rationale. Writes the entity back via the canonical renderer.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1000,7 +1056,7 @@ def test_backfill_adds_views_for_lens_origins(tmp_path) -> None:
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd science && uv run pytest tests/test_lens_view_backfill.py -q -k backfill`
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_backfill.py -q -k backfill`
 Expected: FAIL with `ImportError: cannot import name 'backfill_lens_views'`
 
 - [ ] **Step 3: Implement `backfill_lens_views`**
@@ -1034,9 +1090,18 @@ def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, 
         if target is None:
             continue
         fm, body = parse_frontmatter(target) or ({}, "")
+
+        # Recover per-lens rationales the report already carried (explicit
+        # lens_views, or a synthesized single-lens view) via the same helper apply
+        # uses; fall back to the canonical lens-frame description otherwise.
+        block_origins = (block.get("origin_plan") or {}).get("origins") or []
+        try:
+            block_views = derive_lens_views(block, list(block_origins), entity_id)
+        except ApplyValidationError:
+            block_views = []
+        rationale_by_lens = {v["lens"]: v["rationale"] for v in block_views}
+
         existing = {v.get("lens") for v in (fm.get("lens_views") or []) if isinstance(v, dict)}
-        primary_lens = block.get("lens")
-        primary_rationale = block.get("rationale")
         added: list[dict] = []
         for origin in fm.get("origins") or []:
             ref = origin.get("ref") if isinstance(origin, dict) else None
@@ -1045,10 +1110,7 @@ def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, 
             lens = ref.removeprefix("explore-ideas-")
             if lens not in LENS_BY_SLUG or lens in existing:
                 continue
-            if lens == primary_lens and isinstance(primary_rationale, str) and primary_rationale.strip():
-                rationale = primary_rationale.strip()
-            else:
-                rationale = LENS_BY_SLUG[lens].description
+            rationale = rationale_by_lens.get(lens) or LENS_BY_SLUG[lens].description
             added.append({"lens": lens, "rationale": rationale, "origin_ref": ref})
             existing.add(lens)
         if not added:
@@ -1075,27 +1137,27 @@ def _file_id(path: Path) -> str | None:
 
 - [ ] **Step 4: Add the CLI subcommand**
 
-In `science/src/science_tool/cli.py`, find the `explore-ideas` command group (search `explore-ideas` / `explore_ideas`) and add, mirroring the existing `apply` subcommand's option style:
+In `science/src/science_tool/cli.py`, the group is `explore_ideas_group` (`@main.group("explore-ideas")`, ~line 1483) and the sibling `apply` command resolves the project via `Path.cwd()` and wraps errors in `ClickException`. Add, mirroring `apply` exactly:
 
 ```python
-@explore_ideas.command("backfill-lens-views")
-@click.option("--from", "from_value", required=True, help="Report path or id (entities/meta/explorations/<id>.md).")
-@click.option("--project-root", "project_root", default=".", type=click.Path(file_okay=False))
-def backfill_lens_views_cmd(from_value: str, project_root: str) -> None:
+@explore_ideas_group.command("backfill-lens-views")
+@click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
+def explore_ideas_backfill_lens_views(from_value: str) -> None:
     """Backfill lens_views onto entities from a prior applied report."""
-    from science_tool.explore_ideas import backfill_lens_views
-
-    touched = backfill_lens_views(Path(project_root), from_value)
+    try:
+        touched = backfill_lens_views(Path.cwd(), from_value)
+    except (ApplyValidationError, ApplyWriteBackError) as exc:
+        raise click.ClickException(str(exc)) from exc
     for entity_id, n in touched:
-        click.echo(f"{entity_id}: +{n} lens_view(s)")
-    click.echo(f"backfilled {len(touched)} ent/ {sum(n for _, n in touched)} views")
+        click.echo(f"  {entity_id}: +{n} lens_view(s)")
+    click.echo(f"backfilled {sum(n for _, n in touched)} view(s) across {len(touched)} entit(ies)")
 ```
 
-> Confirm the group's decorator name (`@explore_ideas.command` vs a differently-named Click group) in `cli.py` before editing; match the surrounding option conventions (e.g. `--model-id` on `apply`).
+> Add `backfill_lens_views` to the existing `from science_tool.explore_ideas import (...)` block at the top of `cli.py` (~line 48), next to `apply_report`, `ApplyValidationError`, `ApplyWriteBackError` (already imported there).
 
 - [ ] **Step 5: Run the backfill tests to verify they pass**
 
-Run: `cd science && uv run pytest tests/test_lens_view_backfill.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_lens_view_backfill.py -q`
 Expected: PASS (all — warn test + backfill test)
 
 - [ ] **Step 6: Commit**
@@ -1110,7 +1172,7 @@ git commit -m "feat(explore-ideas): backfill-lens-views for prior applied report
 This plan does **not** modify the PAIS repo. After this branch merges and the tool is available, run (from `~/d/health/processes/post-acute-infection`):
 
 ```bash
-uv run science explore-ideas backfill-lens-views --from explore-2026-07-04
+uv run --frozen science explore-ideas backfill-lens-views --from explore-2026-07-04
 ```
 
 Then, for the two convergent entities (`question:0026`, `question:0036`), replace the interim analogy rationale (the lens-frame description) with the true framing recoverable from the report's `decision: drop` twin blocks (`cand-analogy-maladaptive-trained-immunity-hsc-setpoint`, `cand-analogy-critical-slowing-down-pais-chronification`). Re-run `uv run --frozen science validate` to confirm the lens_views nudge clears. File this as a PAIS task via `science tasks add`.
@@ -1192,7 +1254,7 @@ remains the complete target; the items below are consciously out of v1 scope.
 
 ## Final verification
 
-- [ ] **Full model suite:** `cd science/model && uv run pytest -q` → PASS
-- [ ] **Full tool suite (touched areas):** `cd science && uv run pytest tests/test_explore_ideas_apply.py tests/test_lens_view_materialize.py tests/test_lens_view_backfill.py tests/test_graph_build_strict.py -q` → PASS
-- [ ] **End-to-end apply smoke:** seed a report with one convergent block (two `lens_views`, two independent origins), run `uv run science explore-ideas apply --from <report> --model-id test`, confirm the created entity's frontmatter carries both `lens_views` and both `origins`, and `science graph build` emits `sci:hasLensView` with `sci:fromOrigin` on each view.
+- [ ] **Full model suite:** `cd science/model && uv run --frozen pytest -q` → PASS
+- [ ] **Full tool suite (touched areas):** `cd science && uv run --frozen pytest tests/test_explore_ideas_apply.py tests/test_lens_view_materialize.py tests/test_lens_view_backfill.py tests/test_graph_build_strict.py -q` → PASS
+- [ ] **End-to-end apply smoke:** seed a report with one convergent block (two `lens_views`, two independent origins), run `uv run --frozen science explore-ideas apply --from <report> --model-id test`, confirm the created entity's frontmatter carries both `lens_views` and both `origins`, and `science graph build` emits `sci:hasLensView` with `sci:fromOrigin` on each view.
 - [ ] **Branch review:** `git log --oneline main..HEAD` shows tool-code commits and meta-scoped commits are not mixed (D-001).
