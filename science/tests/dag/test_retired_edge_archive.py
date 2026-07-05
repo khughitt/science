@@ -483,3 +483,38 @@ def test_apply_retired_edge_archive_cleans_partial_manifest_on_rollback(
     assert not _archive_path(project).exists()
     assert not _manifest_path(project).exists()
     assert build_retired_edge_archive_plan(project, dag="h1").to_json()["status"] == "ready_to_archive"
+
+
+def test_archived_retired_edge_file_is_not_active_migration_debt(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+    from science_tool.dag.retired_edge_migration import build_retired_edge_migration_plan
+    from science_tool.dag.retired_edges import build_retired_edges_report
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+    assert _archive_path(project).exists()
+
+    retired_report = build_retired_edges_report(project, dag="h1").to_json()
+    assert retired_report["summary"]["files"] == 0
+    assert retired_report["files"] == []
+    with pytest.raises(ValueError, match="retired DAG edge file does not exist"):
+        build_retired_edge_migration_plan(project, dag="h1")
+
+
+def test_archived_retired_edge_file_does_not_break_dag_validation(tmp_path: Path) -> None:
+    from science_tool.dag.paths import load_dag_paths
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+    from science_tool.dag.validate import validate_project
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+    _archive_path(project).write_text("not: [valid\n", encoding="utf-8")
+
+    report = validate_project(load_dag_paths(project))
+    assert report.ok
