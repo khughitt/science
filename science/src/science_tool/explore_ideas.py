@@ -446,14 +446,16 @@ def _file_id(path: Path) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, int]]:
+def backfill_lens_views(project_root: Path, from_value: str, today: date) -> list[tuple[str, int]]:
     """Backfill lens_views onto entities created by a prior applied report.
 
     For each applied block, add one lens_view per lens-encoding assistant origin
     on the created entity that has no matching view yet. Per-lens rationales are
     recovered via ``derive_lens_views`` (so explicit per-lens rationales from
     newer reports survive); any lens-origin the block didn't cover falls back to
-    the canonical lens-frame description as an honest interim rationale. Returns
+    the canonical lens-frame description as an honest interim rationale. When an
+    entity gains new views, its ``updated`` frontmatter advances to ``today``,
+    matching the sibling in-place mutators in ``entities.py``. Returns
     ``(entity_id, views_added)`` for each touched entity.
     """
     report_path = resolve_report_path(project_root, from_value)
@@ -502,8 +504,9 @@ def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, 
             existing.add(lens)
         if not added:
             continue
-        fm.setdefault("lens_views", [])
+        fm["lens_views"] = list(fm.get("lens_views") or [])
         fm["lens_views"].extend(added)
+        fm["updated"] = today.isoformat()
         _atomic_replace_text(target, _render_markdown(fm, body))
         touched.append((entity_id, len(added)))
     return touched

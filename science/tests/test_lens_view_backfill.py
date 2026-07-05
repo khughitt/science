@@ -1,6 +1,8 @@
 # science/tests/test_lens_view_backfill.py  (Task 7 appends to this file)
 from __future__ import annotations
 
+from datetime import date
+
 from click.testing import CliRunner
 
 from _fixtures.entity_helpers import seed_project
@@ -104,10 +106,19 @@ def test_backfill_adds_views_for_lens_origins(tmp_path) -> None:
     p = root / "entities" / "questions" / "0001-hspc.md"
     p.write_text(p.read_text().replace("question:0001-x", "question:0001-hspc"), encoding="utf-8")
 
-    touched = backfill_lens_views(root, "explore-demo")
+    backfill_date = date(2026, 7, 5)
+    touched = backfill_lens_views(root, "explore-demo", backfill_date)
     assert ("question:0001-hspc", 2) in touched
 
     from science_model.frontmatter import parse_frontmatter
     fm, _ = parse_frontmatter(p)
     lenses = {v["lens"] for v in fm["lens_views"]}
     assert lenses == {"mechanism", "analogy"}
+    assert fm["updated"] == backfill_date.isoformat()
+
+    # Idempotency: re-running against the now-populated entity must be a true
+    # no-op, touching neither the returned set nor the file's bytes.
+    after_first = p.read_bytes()
+    touched_again = backfill_lens_views(root, "explore-demo", backfill_date)
+    assert touched_again == []
+    assert p.read_bytes() == after_first

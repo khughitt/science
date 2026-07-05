@@ -1537,7 +1537,7 @@ def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> N
 def explore_ideas_backfill_lens_views(from_value: str) -> None:
     """Backfill lens_views onto entities from a prior applied report."""
     try:
-        touched = backfill_lens_views(Path.cwd(), from_value)
+        touched = backfill_lens_views(Path.cwd(), from_value, date.today())
     except (ApplyValidationError, ApplyWriteBackError) as exc:
         raise click.ClickException(str(exc)) from exc
     for entity_id, n in touched:
