@@ -18,6 +18,7 @@ from science_tool.explore_ideas import (
     CandidateBlock,
     apply_report,
     build_create_plan,
+    derive_lens_views,
     parse_report,
     plan_report,
     resolve_report_path,
@@ -963,6 +964,83 @@ def test_cli_apply_translates_writeback_error_to_click_error(
     )
     assert result.exit_code != 0
     assert "boom" in result.output
+
+
+def test_derive_lens_views_from_explicit_block() -> None:
+    data = {
+        "lens_views": [
+            {"lens": "mechanism", "rationale": "m", "origin_ref": "explore-ideas-mechanism"},
+            {"lens": "analogy", "rationale": "a", "origin_ref": "explore-ideas-analogy"},
+        ],
+    }
+    origins = [
+        {"type": "assistant", "ref": "explore-ideas-mechanism"},
+        {"type": "assistant", "ref": "explore-ideas-analogy", "independent": True},
+    ]
+    views = derive_lens_views(data, origins)
+    assert [v["lens"] for v in views] == ["mechanism", "analogy"]
+    assert views[1]["origin_ref"] == "explore-ideas-analogy"
+
+
+def test_derive_lens_views_synthesizes_from_legacy_single_lens() -> None:
+    data = {"lens": "mechanism", "rationale": "the framing"}
+    origins = [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
+    views = derive_lens_views(data, origins)
+    assert views == [
+        {"lens": "mechanism", "rationale": "the framing", "origin_ref": "explore-ideas-mechanism"}
+    ]
+
+
+def test_derive_lens_views_rejects_dangling_origin_ref() -> None:
+    data = {"lens_views": [{"lens": "analogy", "rationale": "a", "origin_ref": "explore-ideas-analogy"}]}
+    origins = [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
+    with pytest.raises(ApplyValidationError):
+        derive_lens_views(data, origins, candidate_id="cand-x")
+
+
+def test_build_create_plan_carries_lens_views() -> None:
+    data = {
+        "proposed_kind": "question",
+        "title": "T",
+        "lens": "mechanism",
+        "rationale": "framing",
+        "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
+    }
+    plan = build_create_plan("cand-x", data, "model-1")
+    assert plan.lens_views == [
+        {"lens": "mechanism", "rationale": "framing", "origin_ref": "explore-ideas-mechanism"}
+    ]
+
+
+def test_build_create_plan_rejects_duplicate_lens() -> None:
+    data = {
+        "proposed_kind": "question",
+        "title": "T",
+        "lens_views": [
+            {"lens": "mechanism", "rationale": "a", "origin_ref": "explore-ideas-mechanism"},
+            {"lens": "mechanism", "rationale": "b"},
+        ],
+        "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
+    }
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-x", data, "model-1")
+
+
+def test_build_create_plan_rejects_duplicate_origin_ref() -> None:
+    data = {
+        "proposed_kind": "question",
+        "title": "T",
+        "lens": "mechanism",
+        "rationale": "framing",
+        "origin_plan": {
+            "origins": [
+                {"type": "assistant", "ref": "explore-ideas-mechanism"},
+                {"type": "assistant", "ref": "explore-ideas-mechanism", "independent": True},
+            ]
+        },
+    }
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-x", data, "model-1")
 
 
 def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:

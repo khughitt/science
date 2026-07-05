@@ -8,8 +8,17 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from science_model.entities import OriginRecord
-from science_tool.entities import EntityCommandError, create_entity
+from science_model.entities import LensView, OriginRecord
+from science_model.frontmatter import parse_frontmatter
+from science_model.lenses import LENS_BY_SLUG
+from science_tool.entities import (
+    EntityCommandError,
+    _atomic_replace_text,
+    _parse_markdown_file_preserving_body,
+    _render_markdown,
+    create_entity,
+)
+from science_tool.entity_scan import iter_entity_markdown
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
@@ -39,6 +48,7 @@ class CreatePlan:
     title: str
     origins: list[dict]
     source_refs: list[str]
+    lens_views: list[dict]
     added_by: str
 
 
@@ -142,6 +152,47 @@ def _normalize_origin(origin: object, candidate_id: str) -> dict:
         raise ApplyValidationError(f"{candidate_id}: invalid origin {normalized!r}: {exc}") from exc
 
 
+def _normalize_lens_view(view: object, candidate_id: str, planned_refs: set[str]) -> dict:
+    if not isinstance(view, dict):
+        raise ApplyValidationError(f"{candidate_id}: lens_views entry must be a mapping")
+    try:
+        record = LensView.model_validate(dict(view))
+    except ValidationError as exc:
+        raise ApplyValidationError(f"{candidate_id}: invalid lens_view {view!r}: {exc}") from exc
+    if record.origin_ref is not None and record.origin_ref not in planned_refs:
+        raise ApplyValidationError(
+            f"{candidate_id}: lens_view origin_ref {record.origin_ref!r} is not one of the "
+            "block's planned origin refs"
+        )
+    return record.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+
+
+def derive_lens_views(data: dict, origins: list[dict], candidate_id: str = "?") -> list[dict]:
+    """Return the lens_views for a candidate block.
+
+    Explicit ``lens_views`` are validated against the planned origin refs. A
+    legacy block (no ``lens_views``) with a top-level ``lens``+``rationale``
+    synthesizes one view, linked to the ``explore-ideas-<lens>`` origin when the
+    block planned it. Returns ``[]`` when neither is present.
+    """
+    planned_refs = {o["ref"] for o in origins if o.get("ref")}
+    raw = data.get("lens_views")
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise ApplyValidationError(f"{candidate_id}: 'lens_views' must be a list")
+        return [_normalize_lens_view(v, candidate_id, planned_refs) for v in raw]
+
+    lens = data.get("lens")
+    rationale = data.get("rationale")
+    if isinstance(lens, str) and isinstance(rationale, str) and rationale.strip():
+        view: dict = {"lens": lens, "rationale": rationale}
+        origin_ref = f"explore-ideas-{lens}"
+        if origin_ref in planned_refs:
+            view["origin_ref"] = origin_ref
+        return [_normalize_lens_view(view, candidate_id, planned_refs)]
+    return []
+
+
 def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePlan:
     kind = data.get("proposed_kind")
     if not isinstance(kind, str) or kind not in _ROUTABLE_KINDS:
@@ -158,6 +209,24 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     origins: list[dict] = []
     for origin in origins_raw:
         origins.append(_normalize_origin(origin, candidate_id))
+
+    # Harden unconditionally: apply rejects duplicate non-null origin refs even absent lens_views (stricter than the model, which only checks this when lens_views are present) so a later lens_views addition can never collide.
+    planned_refs = [o["ref"] for o in origins if o.get("ref")]
+    if len(planned_refs) != len(set(planned_refs)):
+        raise ApplyValidationError(
+            f"{candidate_id}: duplicate non-null origin_plan.origins[].ref"
+        )
+
+    lens_views = derive_lens_views(data, origins, candidate_id)
+
+    seen_lenses: set[str] = set()
+    for view in lens_views:
+        if view["lens"] in seen_lenses:
+            raise ApplyValidationError(
+                f"{candidate_id}: duplicate lens_views[].lens {view['lens']!r} "
+                "(at most one view per lens)"
+            )
+        seen_lenses.add(view["lens"])
 
     anchors = data.get("literature_anchors") or []
     source_refs: list[str] = []
@@ -187,6 +256,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
         title=title,
         origins=origins,
         source_refs=source_refs,
+        lens_views=lens_views,
         added_by=f"explore-ideas:{model_id}:{candidate_id}",
     )
 
@@ -331,6 +401,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
                 extra_frontmatter={
                     "origins": create_plan.origins,
                     "added_by": create_plan.added_by,
+                    **({"lens_views": create_plan.lens_views} if create_plan.lens_views else {}),
                 },
             )
         except EntityCommandError as exc:
@@ -365,3 +436,78 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
         manual=plan.manual,
         failures=failures,
     )
+
+
+def _file_id(path: Path) -> str | None:
+    parsed = parse_frontmatter(path)
+    if not parsed:
+        return None
+    fm, _ = parsed
+    value = fm.get("id")
+    return value if isinstance(value, str) else None
+
+
+def backfill_lens_views(project_root: Path, from_value: str, today: date) -> list[tuple[str, int]]:
+    """Backfill lens_views onto entities created by a prior applied report.
+
+    For each applied block, add one lens_view per lens-encoding assistant origin
+    on the created entity that has no matching view yet. Per-lens rationales are
+    recovered via ``derive_lens_views`` (so explicit per-lens rationales from
+    newer reports survive); any lens-origin the block didn't cover falls back to
+    the canonical lens-frame description as an honest interim rationale. When an
+    entity gains new views, its ``updated`` frontmatter advances to ``today``,
+    matching the sibling in-place mutators in ``entities.py``. Returns
+    ``(entity_id, views_added)`` for each touched entity.
+    """
+    report_path = resolve_report_path(project_root, from_value)
+    blocks = parse_report(report_path.read_text(encoding="utf-8"))
+    by_applied_as = {
+        str(b.data.get("applied_as")): b.data
+        for b in blocks
+        if b.data.get("decision") == "applied" and b.data.get("applied_as")
+    }
+
+    entities_root = project_root / "entities"
+    touched: list[tuple[str, int]] = []
+    for entity_id, block in by_applied_as.items():
+        target = next(
+            (p for p in iter_entity_markdown(entities_root) if _file_id(p) == entity_id), None
+        )
+        if target is None:
+            continue
+        # Body-preserving parse (not science_model's parse_frontmatter, which
+        # strips the body) so the write-back below only touches lens_views —
+        # no incidental whitespace churn to a hand-authored entity's prose.
+        fm, body = _parse_markdown_file_preserving_body(target)
+
+        # Recover per-lens rationales the report already carried (explicit
+        # lens_views, or a synthesized single-lens view) via the same helper
+        # apply uses; fall back to the canonical lens-frame description
+        # otherwise.
+        block_origins = (block.get("origin_plan") or {}).get("origins") or []
+        try:
+            block_views = derive_lens_views(block, list(block_origins), entity_id)
+        except ApplyValidationError:
+            block_views = []
+        rationale_by_lens = {v["lens"]: v["rationale"] for v in block_views}
+
+        existing = {v.get("lens") for v in (fm.get("lens_views") or []) if isinstance(v, dict)}
+        added: list[dict] = []
+        for origin in fm.get("origins") or []:
+            ref = origin.get("ref") if isinstance(origin, dict) else None
+            if not (isinstance(ref, str) and ref.startswith("explore-ideas-")):
+                continue
+            lens = ref.removeprefix("explore-ideas-")
+            if lens not in LENS_BY_SLUG or lens in existing:
+                continue
+            rationale = rationale_by_lens.get(lens) or LENS_BY_SLUG[lens].description
+            added.append({"lens": lens, "rationale": rationale, "origin_ref": ref})
+            existing.add(lens)
+        if not added:
+            continue
+        fm["lens_views"] = list(fm.get("lens_views") or [])
+        fm["lens_views"].extend(added)
+        fm["updated"] = today.isoformat()
+        _atomic_replace_text(target, _render_markdown(fm, body))
+        touched.append((entity_id, len(added)))
+    return touched

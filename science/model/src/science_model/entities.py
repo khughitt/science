@@ -268,6 +268,32 @@ class OriginRecord(BaseModel):
         return self
 
 
+class LensView(BaseModel):
+    """One analytical-lens view that frames an entity.
+
+    Content, not provenance: a lens-view records *how* a lens frames the idea
+    (its rationale). It is distinct from ``OriginRecord``, which records
+    *who/what* originated the entity. A lens-view may link back to the origin
+    that produced it via ``origin_ref``; that link never affects belief.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lens: str
+    rationale: str
+    origin_ref: str | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "LensView":
+        from science_model.lenses import LENS_SLUGS, is_valid_lens
+
+        if not is_valid_lens(self.lens):
+            raise ValueError(f"unknown lens {self.lens!r}; expected one of {sorted(LENS_SLUGS)}")
+        if not self.rationale.strip():
+            raise ValueError("lens-view rationale must be non-empty")
+        return self
+
+
 class Entity(BaseModel):
     """A research entity parsed from frontmatter or the knowledge graph."""
 
@@ -291,6 +317,8 @@ class Entity(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     # Provenance: known originators (metadata only; MUST NOT affect belief).
     origins: list[OriginRecord] = Field(default_factory=list)
+    # Content: analytical lens(es) that frame this entity (see LensView).
+    lens_views: list[LensView] = Field(default_factory=list)
     # Discovery stamp: who/what surfaced this entity into the project.
     added_by: str | None = None
     content_preview: str
@@ -327,6 +355,26 @@ class Entity(BaseModel):
         }
         if self.review_state is not None and self.kind in non_epistemic:
             raise ValueError(f"review_state is not allowed on kind {self.kind!r} (non-epistemic by design)")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_lens_views(self) -> "Entity":
+        if not self.lens_views:
+            return self
+        non_null_refs = [o.ref for o in self.origins if o.ref is not None]
+        ref_set = set(non_null_refs)
+        if len(non_null_refs) != len(ref_set):
+            raise ValueError("non-null origin refs must be unique when lens_views are present")
+        seen: set[str] = set()
+        for view in self.lens_views:
+            if view.lens in seen:
+                raise ValueError(f"duplicate lens_view for lens {view.lens!r} (at most one view per lens)")
+            seen.add(view.lens)
+            if view.origin_ref is not None and view.origin_ref not in ref_set:
+                raise ValueError(
+                    f"lens_view origin_ref {view.origin_ref!r} does not match any of the "
+                    "entity's own non-null origin refs"
+                )
         return self
 
     @model_validator(mode="after")

@@ -325,6 +325,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     bridge = dataset.graph(PROJECT_NS["graph/bridge"])
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    _add_lens_vocabulary(provenance)
     dataset.graph(PROJECT_NS["graph/causal"])
     datasets = dataset.graph(PROJECT_NS["graph/datasets"])
 
@@ -928,6 +929,9 @@ def _add_relations(
                 if resolution.status == "resolved" and resolution.canonical_id is not None:
                     provenance.add((origin_node, PROV.wasDerivedFrom, _entity_uri(resolution.canonical_id)))
                 # unresolved paper: ref → no edge; Task 6 health flags it.
+
+    _add_lens_views(uri=entity_uri, provenance=provenance, entity=entity)
+
     if entity.added_by:
         provenance.add((entity_uri, SCI_NS.addedBy, Literal(entity.added_by)))
 
@@ -1642,6 +1646,43 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
     legacy_edge_id = getattr(entity, "legacy_edge_id", None)
     if legacy_edge_id is not None:
         provenance.add((uri, SCI_NS.legacyEdgeId, Literal(legacy_edge_id)))
+
+
+def _add_lens_vocabulary(graph) -> None:
+    """Emit the full packaged lens vocabulary as nodes.
+
+    Every lens gets a node with metadata, regardless of whether any entity uses
+    it, so 'which lens is under-represented' queries can find absent lenses.
+    """
+    from science_model.lenses import LENSES
+
+    for lens in LENSES:
+        node = URIRef(SCI_NS[f"lens/{lens.slug}"])
+        graph.add((node, RDF.type, SCI_NS.Lens))
+        graph.add((node, SCI_NS.lensSlug, Literal(lens.slug)))
+        graph.add((node, RDFS.label, Literal(lens.name)))
+        graph.add((node, RDFS.comment, Literal(lens.description)))
+        graph.add((node, SCI_NS.lensKind, Literal(lens.kind)))
+
+
+def _add_lens_views(*, uri: URIRef, provenance, entity) -> None:
+    """Reify each lens-view, linking the entity, its lens node, and the origin
+    that produced it. Lens *nodes* come from _add_lens_vocabulary; here we only
+    link to them so the lens<->origin association survives into the graph."""
+    origin_index_by_ref = {
+        origin.ref: idx for idx, origin in enumerate(entity.origins) if origin.ref is not None
+    }
+    qid = quote(entity.canonical_id, safe='')
+    for j, view in enumerate(getattr(entity, "lens_views", []) or []):
+        view_node = URIRef(PROJECT_NS[f"lensview/{qid}/{j}"])
+        lens_node = URIRef(SCI_NS[f"lens/{view.lens}"])
+        provenance.add((uri, SCI_NS.hasLensView, view_node))
+        provenance.add((view_node, RDF.type, SCI_NS.LensView))
+        provenance.add((view_node, SCI_NS.viewedThroughLens, lens_node))
+        if view.origin_ref is not None and view.origin_ref in origin_index_by_ref:
+            origin_idx = origin_index_by_ref[view.origin_ref]
+            origin_node = URIRef(PROJECT_NS[f"origin/{qid}/{origin_idx}"])
+            provenance.add((view_node, SCI_NS.fromOrigin, origin_node))
 
 
 def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:

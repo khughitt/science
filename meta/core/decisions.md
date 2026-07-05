@@ -293,3 +293,46 @@ scaffolding the project prematurely.
   `~/d/health/meta` or fails to reduce known routing/duplication costs.
 - Dry-run recommendations are mostly obvious from ordinary task review, which
   would weaken the case for a dedicated topology workflow.
+
+---
+
+## D-009: Lenses are first-class content (`lens_views`), separate from provenance
+
+- **Date:** 2026-07-04
+- **Status:** active
+- **Resolves:** Schema design for `lens_views` as a multi-valued content field, distinct from provenance. Multi-lens feature (lens-views schema, backfill, materialization, graph reification).
+- **Decision:** The analytical lens that frames an epistemic entity is modelled
+  as a multi-valued content field `lens_views` (one `LensView` per lens: `lens`,
+  `rationale`, optional `origin_ref`), not as a string smuggled into an origin
+  `ref`. The lens vocabulary is packaged in `science_model.lenses` (stable slugs;
+  slug changes are explicit migrations). `OriginRecord` is unchanged and remains
+  provenance-only ("MUST NOT affect evidential weight"); `lens_views[].origin_ref`
+  links a view to one of the entity's own non-null, unique origin refs. Convergence
+  is derived (≥2 lens-views backed by independent origins), materialized as reified
+  `sci:hasLensView`/`sci:viewedThroughLens`/`sci:fromOrigin` nodes.
+
+**Why:**
+The lens vocabulary and entity framings are first-class scientific metadata,
+distinct from *where knowledge came from* (provenance). Preserving complementary
+lens framings instead of forcing keep-one-discard-rest is essential to
+multi-hypothesis reasoning and exploration. See `~/d/science/meta/doc/plans/2026-07-04-multi-lens-first-class-representation-design.md`
+and upstream feedback `fb-2026-07-04-005`.
+
+**Implications:**
+- `lens_views` entries are never null or recomputed; they record the *framing*
+  under which an entity was produced or analyzed. Backfill and migrations must
+  preserve all views.
+- `OriginRecord` and its role in evidential weight remain unaffected.
+  `lens_views[].origin_ref` is a link, not a modification to origin semantics.
+- The lens vocabulary lives in `science_model.lenses` (not in entity frontmatter).
+  Slug changes and additions are explicit migrations under Science versioning.
+- Convergence (≥2 views from independent origins) is derived and reified in the
+  knowledge graph as `sci:hasLensView`/`sci:viewedThroughLens`/`sci:fromOrigin`,
+  enabling SPARQL and federation queries.
+
+**Revisit if:**
+- Lens vocabulary stability proves fragile (e.g., frequent ad-hoc slug changes
+  required), suggesting a mutable registry would be better than explicit
+  migrations.
+- Convergence reification in the graph adds more noise than signal due to sparse
+  view coverage or overlapping lens definitions.
