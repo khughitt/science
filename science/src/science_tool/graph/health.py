@@ -243,7 +243,7 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
     project_root = project_root.resolve()
     results: list[LingeringTagsRecord] = []
 
-    for scan_dir in ["doc", "specs"]:
+    for scan_dir in ["doc", "entities"]:
         base = project_root / scan_dir
         if not base.is_dir():
             continue
@@ -1254,11 +1254,11 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
         return []
 
     findings: list[InvalidEntityAspectsFinding] = []
-    for relative in ("specs/hypotheses", "doc/questions", "doc/interpretations"):
-        directory = project_root / relative
-        if not directory.is_dir():
-            continue
-        for path in directory.rglob("*.md"):
+    entities_root = project_root / "entities"
+    if entities_root.is_dir():
+        from science_tool.entity_scan import iter_entity_markdown
+
+        for path in iter_entity_markdown(entities_root):
             result = parse_frontmatter(path)
             if result is None:
                 continue

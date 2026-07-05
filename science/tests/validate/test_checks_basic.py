@@ -883,16 +883,17 @@ def test_directory_structure_v3_errors_when_entities_missing(tmp_path: Path) -> 
     assert "Required directory missing: entities/" in messages
 
 
-def test_directory_structure_v2_still_requires_specs(tmp_path: Path) -> None:
-    """layout_version: 2 (< 3) project still requires specs/ (additive — v2 behavior unchanged)."""
+def test_directory_structure_requires_entities_even_when_manifest_is_v2(tmp_path: Path) -> None:
+    """layout_version: 2 is invalid, but directory structure still enforces the current layout."""
     from science_tool.validate.checks.directory_structure import check_directory_structure
 
     ctx = _ctx(tmp_path, profile="research", layout_version=2)
     for dirname in ("doc", "knowledge", "tasks", "code"):
         tmp_path.joinpath(dirname).mkdir()
-    # specs/ intentionally absent
+    # entities/ intentionally absent
 
     results = list(check_directory_structure(ctx))
     messages = _messages(results)
 
-    assert "Required directory missing: specs/" in messages
+    assert "Required directory missing: entities/" in messages
+    assert "Required directory missing: specs/" not in messages

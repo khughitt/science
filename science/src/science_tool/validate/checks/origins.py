@@ -57,8 +57,7 @@ def _cite_unresolved(ctx: ValidateContext, ref: str) -> bool:
 def _paper_unresolved(ctx: ValidateContext, ref: str, known_ids: set[str]) -> bool:
     if ref in known_ids:
         return False
-    # Legacy doc/papers layout: resolve_reference finds `paper:<slug>` as a
-    # papers-dir file or a doc/specs frontmatter id.
+    # resolve_reference also covers bibliography-backed literature references.
     return resolve_reference(ctx, ref) is None
 
 

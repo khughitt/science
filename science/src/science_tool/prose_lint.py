@@ -672,7 +672,7 @@ _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
     "numeric-anchor": detect_numeric_anchor,
     "unsupported-citation-syntax": detect_unsupported_citation_syntax,
 }
-_SCAN_DIRS = ("doc", "specs", "entities")
+_SCAN_DIRS = ("doc", "entities")
 _SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md", "RESEARCH_PLAN.md")
 _SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "templates"}
 

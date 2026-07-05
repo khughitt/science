@@ -588,13 +588,19 @@ class TestShortFormIdsDeny:
 
     def test_scans_entities_v3_layout(self, tmp_path):
         # v3 migration moves entity bodies into entities/<kind>/; prose there
-        # must still be linted (regression: scanner only walked doc/ + specs/).
+        # must still be linted.
         (tmp_path / "entities" / "papers").mkdir(parents=True)
         (tmp_path / "entities" / "papers" / "Foo2024.md").write_text(
             "# Foo\n\nAs Brunton 2022 showed, the result rho = 0.168 holds.\n"
         )
         result = scan_root(tmp_path, checks=["bare-author-year"])
         assert result["counts"]["bare-author-year"] == 1
+
+    def test_specs_tree_not_scanned_by_default(self, tmp_path):
+        (tmp_path / "specs").mkdir()
+        (tmp_path / "specs" / "old.md").write_text("As Brunton 2022 showed.\n")
+        result = scan_root(tmp_path, checks=["bare-author-year"])
+        assert result["counts"].get("bare-author-year", 0) == 0
 
 
 class TestUnsupportedCitationSyntax:

@@ -107,33 +107,33 @@ cd science && uv run --frozen pytest tests/test_downstream_legacy_inventory.py -
 ## Task 2: v2-to-v3 Entity Layout Surface
 
 **Files:**
-- Modify only after green precheck: `science/src/science_tool/entity_layout_migration.py`
+- Remove only after green precheck: `science/src/science_tool/entity_layout_migration.py`
 - Modify after green precheck: `science/src/science_tool/refs.py`, `science/src/science_tool/markers.py`, `science/src/science_tool/prose_lint.py`, `science/src/science_tool/validate/checks/entity_conformance.py`, `science/src/science_tool/validate/checks/directory_structure.py`, `science/src/science_tool/graph/health.py`, `science/src/science_tool/graph/materialize.py`
 - Tests: existing entity layout, refs, markers, prose lint, validation, graph health tests
 
-- [ ] **Step 1: Run layout precheck**
+- [x] **Step 1: Run layout precheck**
 
 Use Task 1 inventory to list every registered project with entity files under
 `doc/` or `specs/`.
 
-- [ ] **Step 2: Migrate project data**
+- [x] **Step 2: Migrate project data**
 
 Run the existing entity layout migration over each affected project. Review
 git diffs in each project and resolve collisions explicitly.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Re-run the registered-project inventory. Proceed only when `doc/specs entity`
 hits are zero **and** each affected project still builds: run `science validate`
 (or `graph materialize`) on every migrated project and confirm green. Sentinel
 absence alone does not prove a project still loads.
 
-- [ ] **Step 4: Remove reader support**
+- [x] **Step 4: Remove reader support**
 
 Delete the scanner branches that treat `doc/` and `specs/` as entity roots.
 Keep `doc/` as prose-only where still intentional.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run focused tests, then:
 

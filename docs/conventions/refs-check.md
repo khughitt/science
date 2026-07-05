@@ -6,8 +6,8 @@ links, DOIs, PMIDs, typed entity refs in frontmatter, and (with
 
 ## Default behavior
 
-Scans `paths.doc_dir` (default `doc/`) and `paths.specs_dir` (default
-`specs/`) plus `RESEARCH_PLAN.md`. The body-prose typed-ref scan
+Scans `paths.doc_dir` (default `doc/`), `paths.entities_dir` (default
+`entities/`), and `RESEARCH_PLAN.md`. The body-prose typed-ref scan
 (opt-in via `--include-body`) validates against the frontmatter `id:`
 sweep — a walk over every markdown file's `id:` field, collecting
 `<kind>:<slug>` strings whose kind is in the canonical local-entity-kinds
@@ -24,7 +24,7 @@ refs:
   #   knowledge_graph  — parse `knowledge/graph.trig` (built by `science graph build`)
   entity_index_source: knowledge_graph
 
-  # Extra dirs to scan beyond paths.doc_dir + paths.specs_dir.
+  # Extra dirs to scan beyond paths.doc_dir + paths.entities_dir.
   # The special value "." means root-level .md files only (non-recursive).
   scan_roots:
     - tasks

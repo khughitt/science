@@ -74,7 +74,7 @@ def test_cli_promote_topic_dry_run_lists_candidates(tmp_path, monkeypatch) -> No
 
     assert result.exit_code == 0, result.output
     assert "single-instance" in result.output
-    assert "flatten-source" in result.output
+    assert "flatten-source" not in result.output
 
 
 def test_cli_promote_topic_single_entity_form(tmp_path, monkeypatch) -> None:

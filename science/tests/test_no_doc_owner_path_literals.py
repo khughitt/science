@@ -7,7 +7,7 @@ stray ``doc/datasets`` / ``doc/workflows`` / ``doc/workflow-runs`` literal in a
 reader is silently load-bearing — it strands all migrated coverage with no error
 (this is exactly how validate/_helpers.py and graph/health.py were nearly missed).
 This frozen guard is the backstop: it greps the source tree and fails on any such
-literal outside the one legitimate exception.
+literal.
 
 Scope note: this gate covers the THREE kinds this slice moved. The federated
 ``doc/papers`` / ``doc/topics`` / ``doc/themes`` owner-discovery readers carry
@@ -32,12 +32,7 @@ _FORBIDDEN = re.compile(
     r"""|["']doc["']\s*/\s*["'](?:datasets|workflows|workflow-runs)["']"""
 )
 
-# The ONLY legitimate reader of doc/<type>/ for these kinds: the one-time layout
-# migrator, whose entire job is to read the legacy doc/ tree as MIGRATION INPUT and
-# relocate it into entities/ + overlays/.
-_ALLOWLIST: set[str] = {
-    "entity_layout_migration.py",
-}
+_ALLOWLIST: set[str] = set()
 
 
 def test_no_doc_owner_path_literals_in_source() -> None:

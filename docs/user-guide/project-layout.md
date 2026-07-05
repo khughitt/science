@@ -40,19 +40,9 @@ files were scattered under `doc/<type>/`. See
 `docs/user-guide/entities.md` for the entity model and source entity CLI
 contract.
 
-The v2-to-v3 migration path is still available for legacy projects through
-`science entities migrate`. A dry run plans moves, rewrites resolvable full-id
-references, and reports blockers without changing files. `--apply` performs the
-tracked moves, writes any synthesized frontmatter, runs the graph-audit-equivalent
-post-move check, and only then bumps `layout_version: 3`.
-
-Migration blockers are structural project-state problems, not every prose token.
-References in graph-audited fields block when they would be unresolved after the
-move. Leftover entity-looking tokens in prose bodies are reported as warnings, so
-examples, code snippets, wikilinks, cross-project mentions, and stale prose notes
-do not block a mechanical layout move. Files under a known legacy entity root
-that lack an explicit `id`, `type`, or `kind` are skipped with a warning instead
-of being silently treated as entities.
+The v2-to-v3 migration command has been retired. Projects are expected to keep
+typed entity owners in `entities/<kind>/`; `doc/` is prose-only and `specs/` is
+not an entity owner root.
 
 Project-local markdown kinds declared in the active local profile participate in
 this migration. By default a local kind lives at `entities/<kind>/`, uses numeric

@@ -266,7 +266,7 @@ class TestCollectUnresolvedRefs:
         from science_tool.graph.health import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -317,7 +317,7 @@ class TestCollectLingeringTags:
         from science_tool.graph.health import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -371,10 +371,9 @@ class TestBuildHealthReport:
             'status: "proposed"\nrelated: [topic:foo]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
-        # Lingering-tags is a legacy-cleanup check that still scans doc/specs.
-        legacy = tmp_path / "doc" / "hypotheses"
-        legacy.mkdir(parents=True)
-        (legacy / "h02.md").write_text(
+        tagged = tmp_path / "entities" / "hypotheses"
+        tagged.mkdir(parents=True, exist_ok=True)
+        (tagged / "q01.md").write_text(
             '---\nid: "hypothesis:h02"\ntype: "hypothesis"\ntitle: "H2"\n'
             'status: "proposed"\ntags: [legacy]\nrelated: []\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
@@ -1474,9 +1473,9 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     from science_tool.graph.health import collect_invalid_entity_aspects
 
     project_root = Path(tmp_path)
-    (project_root / "doc" / "questions").mkdir(parents=True)
+    (project_root / "entities" / "questions").mkdir(parents=True)
     (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
-    (project_root / "doc" / "questions" / "q01.md").write_text(
+    (project_root / "entities" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
     findings = collect_invalid_entity_aspects(project_root)
@@ -1514,9 +1513,9 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     (project_root / "tasks" / "active.md").write_text(
         "## [t001] Legacy task\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
-    (project_root / "doc" / "questions").mkdir(parents=True)
+    (project_root / "entities" / "questions").mkdir(parents=True)
     (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
-    (project_root / "doc" / "questions" / "q01.md").write_text(
+    (project_root / "entities" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
 

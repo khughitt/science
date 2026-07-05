@@ -43,24 +43,20 @@ def _seed_profile(root: Path, *, layout_version: int) -> None:
     _write(root, "knowledge/sources/local/manifest.yaml", _LOCAL_PROFILE)
 
 
-def test_local_kind_stranded_in_doc_is_flagged(tmp_path: Path) -> None:
+def test_local_kind_in_wrong_entities_home_is_flagged(tmp_path: Path) -> None:
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
+    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
     results = list(check_entity_location_coherence(_ctx(tmp_path)))
     msgs = [r.message for r in results]
-    assert any("design entity outside its home" in m for m in msgs)
+    assert any("type 'design' in question/ directory" in m for m in msgs)
+    assert any("id kind 'design' in question/ directory" in m for m in msgs)
 
 
-def test_local_kind_stranded_severity_is_version_gated(tmp_path: Path) -> None:
-    # v2 → WARN (transition); v3 → ERROR (cutover). Same stranded file.
-    _seed_profile(tmp_path, layout_version=2)
+def test_local_kind_stranded_in_doc_is_not_scanned(tmp_path: Path) -> None:
     _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
-    warn = [r for r in check_entity_location_coherence(_ctx(tmp_path)) if "outside its home" in r.message]
-    assert warn and all(r.severity is Severity.WARN for r in warn)
-
     _seed_profile(tmp_path, layout_version=3)
-    err = [r for r in check_entity_location_coherence(_ctx(tmp_path)) if "outside its home" in r.message]
-    assert err and all(r.severity is Severity.ERROR for r in err)
+    results = list(check_entity_location_coherence(_ctx(tmp_path)))
+    assert results == []
 
 
 def test_local_kind_nonconforming_filename_flagged(tmp_path: Path) -> None:
@@ -88,15 +84,15 @@ def test_local_kind_conforming_filename_is_clean(tmp_path: Path) -> None:
     assert not any("non-conforming design" in m for m in msgs)
 
 
-def test_core_and_local_stranded_both_flagged(tmp_path: Path) -> None:
-    # With a local profile loaded, BOTH a stranded core kind and a stranded local
-    # kind must be flagged (project-awareness must not hide core kinds).
+def test_core_and_local_wrong_entities_home_both_flagged(tmp_path: Path) -> None:
+    # With a local profile loaded, BOTH a misplaced core kind and a misplaced
+    # local kind must be flagged (project-awareness must not hide core kinds).
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
-    _write(tmp_path, "doc/questions/q.md", '---\nid: "question:q"\ntype: question\n---\nb\n')
+    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
+    _write(tmp_path, "entities/design/q.md", '---\nid: "question:q"\ntype: question\n---\nb\n')
     msgs = [r.message for r in check_entity_location_coherence(_ctx(tmp_path))]
-    assert any("design entity outside its home" in m for m in msgs)
-    assert any("question entity outside its home" in m for m in msgs)
+    assert any("id kind 'design' in question/ directory" in m for m in msgs)
+    assert any("id kind 'question' in design/ directory" in m for m in msgs)
 
 
 def test_local_kind_warning_is_surfaced_as_validate_warning(tmp_path: Path) -> None:

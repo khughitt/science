@@ -17,14 +17,14 @@ from science_tool.refs_cli import refs_group
 
 def _scaffold(root: Path) -> None:
     """Create a minimal project scaffold for testing."""
-    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
     (root / "doc" / "background" / "topics").mkdir(parents=True)
     (root / "doc" / "background" / "papers").mkdir(parents=True)
     (root / "doc" / "questions").mkdir(parents=True)
     (root / "papers").mkdir(parents=True)
 
     # Create hypothesis file
-    (root / "specs" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nStatus: proposed\n")
+    (root / "entities" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nStatus: proposed\n")
     # Create bib file
     (root / "papers" / "references.bib").write_text(
         "% references.bib\n@article{Smith2024,\n  title={Test},\n  author={Smith},\n  year={2024}\n}\n"
@@ -79,7 +79,7 @@ def test_hypothesis_ref_in_own_file_ignored() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "specs" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nH01 is about testing.\n")
+        (root / "entities" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nH01 is about testing.\n")
         issues = check_refs(root)
         hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
         assert len(hyp_issues) == 0
@@ -91,9 +91,9 @@ def test_slug_named_hypothesis_file_resolves_legacy_h_alias_and_self_reference()
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        legacy = root / "specs" / "hypotheses" / "h01-test.md"
+        legacy = root / "entities" / "hypotheses" / "h01-test.md"
         legacy.unlink()
-        (root / "specs" / "hypotheses" / "higher-order-topology.md").write_text(
+        (root / "entities" / "hypotheses" / "higher-order-topology.md").write_text(
             "---\n"
             "id: hypothesis:h03-higher-order-topology\n"
             "type: hypothesis\n"
@@ -115,9 +115,9 @@ def test_slug_named_hypothesis_file_uses_heading_alias_for_self_reference() -> N
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        legacy = root / "specs" / "hypotheses" / "h01-test.md"
+        legacy = root / "entities" / "hypotheses" / "h01-test.md"
         legacy.unlink()
-        (root / "specs" / "hypotheses" / "higher-order-topology.md").write_text(
+        (root / "entities" / "hypotheses" / "higher-order-topology.md").write_text(
             "---\n"
             "id: hypothesis:higher-order-topology\n"
             "type: hypothesis\n"
@@ -139,8 +139,7 @@ def test_v3_hypothesis_ref_resolves_from_entities_dir_via_heading() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "specs" / "hypotheses" / "h01-test.md").unlink()
-        (root / "entities" / "hypotheses").mkdir(parents=True)
+        (root / "entities" / "hypotheses" / "h01-test.md").unlink()
         (root / "entities" / "hypotheses" / "0001-rhythms.md").write_text(
             "---\n"
             "id: hypothesis:0001-rhythms\n"
@@ -164,8 +163,7 @@ def test_v3_hypothesis_ref_resolves_from_numeric_id_prefix_without_heading_label
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "specs" / "hypotheses" / "h01-test.md").unlink()
-        (root / "entities" / "hypotheses").mkdir(parents=True)
+        (root / "entities" / "hypotheses" / "h01-test.md").unlink()
         (root / "entities" / "hypotheses" / "0003-menstrual-cycle.md").write_text(
             "---\n"
             "id: hypothesis:0003-menstrual-cycle\n"
@@ -181,11 +179,26 @@ def test_v3_hypothesis_ref_resolves_from_numeric_id_prefix_without_heading_label
         assert hyp_issues == []
 
 
+def test_specs_hypotheses_do_not_resolve_h_aliases() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "entities" / "hypotheses" / "h01-test.md").unlink()
+        (root / "specs" / "hypotheses").mkdir(parents=True)
+        (root / "specs" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nStatus: proposed\n")
+        (root / "doc" / "background" / "topics" / "test.md").write_text("# Test\nThis relates to H01 strongly.\n")
+
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert len(hyp_issues) == 1
+        assert hyp_issues[0].ref_value == "H01"
+
+
 def test_broken_ref_inside_entities_dir_is_scanned() -> None:
     """After the v2->v3 migration entity bodies live under entities/<kind>/.
     A broken cross-reference in such a body must be detected (regression: the
-    refs source scanner only walked doc/ + specs/, so entities/ bodies were
-    never scanned for broken refs)."""
+    refs source scanner once missed entities/ bodies)."""
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
@@ -1069,8 +1082,8 @@ def test_markdown_emphasis_after_doi_is_not_part_of_doi() -> None:
         assert [i for i in issues if i.ref_type == "doi"] == []
 
 
-def test_doi_check_skipped_in_doc_papers() -> None:
-    """Paper notes are corpus contributors, not consumers — don't flag DOIs there."""
+def test_doc_papers_no_longer_contributes_or_exempts_dois() -> None:
+    """doc/papers is not a paper-note owner root; paper notes live in entities/papers."""
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
@@ -1083,7 +1096,9 @@ def test_doi_check_skipped_in_doc_papers() -> None:
             "# Smith 2024\n- DOI: 10.1038/s41586-024-00001-1\n- Newly added not yet in bib: 10.1234/new.5678\n"
         )
         issues = check_refs(root)
-        assert [i for i in issues if i.ref_type == "doi"] == []
+        doi_issues = [i for i in issues if i.ref_type == "doi"]
+        assert len(doi_issues) == 1
+        assert doi_issues[0].ref_value == "10.1234/new.5678"
 
 
 def test_doi_check_skipped_in_entities_papers() -> None:
@@ -1575,7 +1590,7 @@ class TestEntityIndexSourceSelection:
 
 
 class TestRefsScanRoots:
-    """`refs.scan_roots` config extends the default scan beyond doc/specs."""
+    """`refs.scan_roots` config extends the default scan beyond current roots."""
 
     def test_extra_dir_scanned_when_configured(self, tmp_path):
         """A `tasks/` ref shows up only when `scan_roots: [tasks]` is configured."""
@@ -1631,6 +1646,23 @@ class TestRefsScanRoots:
             "# Active\n\nReferences task:t999.\n",
             encoding="utf-8",
         )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert not any(i.ref_value == "task:t999" for i in body_issues)
+
+    def test_specs_not_scanned_by_default(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n", encoding="utf-8"
+        )
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "old.md").write_text(
+            "# Old\n\nReferences task:t999.\n",
+            encoding="utf-8",
+        )
+
         issues = check_refs(tmp_path, include_body=True)
         body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
         assert not any(i.ref_value == "task:t999" for i in body_issues)

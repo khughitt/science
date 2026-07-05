@@ -149,7 +149,7 @@ class PromoteKindConfig:
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
     kind="paper",
-    source_subdirs=("entities/papers", "doc/papers", "doc/background/papers"),
+    source_subdirs=("entities/papers",),
     overlay_dest_subdir="overlays/papers",
     commons_subdir="papers",
     id_prefix="paper:",
@@ -162,7 +162,7 @@ PROMOTE_KIND_PAPER = PromoteKindConfig(
 
 PROMOTE_KIND_TOPIC = PromoteKindConfig(
     kind="topic",
-    source_subdirs=("entities/topics", "doc/topics", "doc/background/topics"),
+    source_subdirs=("entities/topics",),
     overlay_dest_subdir="overlays/topics",
     commons_subdir="topics",
     id_prefix="topic:",
@@ -191,7 +191,7 @@ def _theme_eligibility(fm: Mapping[str, Any]) -> EligibilityVerdict:
 
 PROMOTE_KIND_THEME = PromoteKindConfig(
     kind="theme",
-    source_subdirs=("entities/themes", "doc/themes"),
+    source_subdirs=("entities/themes",),
     overlay_dest_subdir="overlays/themes",
     commons_subdir="themes",
     id_prefix="theme:",
@@ -499,7 +499,7 @@ class PromoteResult:
         | None
     )
     failure_detail: str | None
-    # Project slugs whose `doc/papers/<file>.md` were actually modified by this
+    # Project slugs whose source entity file was actually modified by this
     # operation. On the success path, every overlay slug; on a partial step-6
     # failure, just the slugs reached before the failure; on
     # preflight/tag/commit failures (no project file touched), the empty list.
@@ -1273,9 +1273,8 @@ def _project_target_files_clean(
 ) -> tuple[bool, list[str]]:
     """For each filename in `target_filenames`, check whether the overlay
     destination AND every source subdir's same-named file are clean against
-    HEAD. The multi-path scan covers the topic flatten case: when a candidate
-    came from doc/background/topics/, the apply path unlinks that file, so
-    the preflight must catch dirtiness there too."""
+    HEAD. The multi-path scan covers cases where the source and overlay
+    destination are distinct, so the preflight catches dirtiness in both."""
     dirty: list[str] = []
     subdirs_to_check = [kind.overlay_dest_subdir, *kind.source_subdirs]
     seen: set[str] = set()
@@ -3323,8 +3322,8 @@ def _render_audit_log_yaml(
             "commons": (f"git -C {commons_root} revert {result.commons_commit}" if result.commons_commit else None),
             # Per design §6.5: each entry is a copy-pasteable git command,
             # not a placeholder. Derive project_root by walking up from each
-            # overlay path (`<root>/doc/papers/<file>`) and list every rewritten
-            # path so the operator can restore exactly the touched files.
+            # overlay path and list every rewritten path so the operator can
+            # restore exactly the touched files.
             "projects": {
                 slug: _build_project_rollback_command(rewrites["overlay_rewrites"], result.kind)
                 for slug, rewrites in projects_touched.items()

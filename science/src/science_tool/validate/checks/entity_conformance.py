@@ -1,8 +1,4 @@
-"""Entity-conformance health checks driven by the policy table.
-
-All checks emit WARN during the transition (layout_version 2→3). The
-WARN→ERROR promotion is Plan 3 (cutover).
-"""
+"""Entity-conformance health checks driven by the policy table."""
 
 from __future__ import annotations
 
@@ -15,7 +11,6 @@ import yaml
 from science_tool.entities import (
     LOCAL_PART_WIDTH,
     EntityPathPolicy,
-    is_markdown_entity_kind,
     local_kind_warnings,
     local_part_conforms,
     markdown_entity_kinds,
@@ -26,9 +21,6 @@ from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
-
-_LEGACY_ROOTS = ("doc", "specs")
-
 
 def _result(severity: Severity, path: Path | None, message: str) -> Result:
     return Result(severity, path, None, message, "entity-conformance", None)
@@ -88,27 +80,8 @@ def check_local_kind_manifest(ctx: ValidateContext) -> Iterator[Result]:
 
 @Check(section="entity location coherence...", order=37)
 def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
-    """(a) Flag entity files stranded in doc/specs; (b) flag files under
-    entities/<kind>/ whose frontmatter type or id-kind disagrees with the
-    directory (directory/type/id coherence)."""
-    # (a) stranded in legacy roots
-    for root_name in _LEGACY_ROOTS:
-        root = ctx.project_root / root_name
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*.md")):
-            if "templates" in path.relative_to(ctx.project_root).parts:
-                continue
-            kind = _entity_type(ctx, path)
-            if kind is None or not is_markdown_entity_kind(kind, project_root=ctx.project_root):
-                continue  # prose / non-entity markdown is ignored
-            yield _result(
-                _severity(ctx),
-                _rel(ctx, path),
-                f"{kind} entity outside its home; expected under "
-                f"{resolve_path_policy(kind, project_root=ctx.project_root).root}/",
-            )
-    # (b) miscategorized within entities/<kind>/
+    """Flag files under entities/<kind>/ whose frontmatter type or id-kind
+    disagrees with the directory (directory/type/id coherence)."""
     for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
             data = ctx.frontmatter(path)

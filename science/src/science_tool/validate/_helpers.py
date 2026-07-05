@@ -8,10 +8,9 @@ import yaml
 
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
 from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
-
-_SAFE_PAPER_SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
@@ -48,12 +47,6 @@ def resolve_reference(ctx: ValidateContext, ref: str) -> Path | None:
     if frontmatter_path is not None:
         return frontmatter_path
 
-    paper_slug = _paper_slug(ref)
-    if paper_slug is None:
-        return None
-    paper_path = ctx.papers_dir / f"{paper_slug}.md"
-    if paper_path.is_file():
-        return paper_path
     return None
 
 
@@ -83,7 +76,10 @@ def _resolve_task_reference(ctx: ValidateContext, ref: str) -> Path | None:
 
 
 def _resolve_frontmatter_reference(ctx: ValidateContext, ref: str) -> Path | None:
-    for path in _markdown_files(ctx.doc_dir) + _markdown_files(ctx.specs_dir):
+    entities_dir = ctx.project_root / "entities"
+    if not entities_dir.is_dir():
+        return None
+    for path in iter_entity_markdown(entities_dir):
         frontmatter, _body = parse_frontmatter_document(ctx, path)
         if frontmatter.get("id") == ref:
             return path
@@ -110,21 +106,6 @@ def _task_files(project_root: Path) -> list[Path]:
     if done_dir.is_dir():
         paths.extend(sorted(done_dir.glob("*.md")))
     return paths
-
-
-def _markdown_files(root: Path) -> list[Path]:
-    if not root.is_dir():
-        return []
-    return sorted(path for path in root.rglob("*.md") if path.is_file())
-
-
-def _paper_slug(ref: str) -> str | None:
-    if not ref.startswith("paper:"):
-        return None
-    slug = ref[len("paper:") :]
-    if _SAFE_PAPER_SLUG_RE.fullmatch(slug) is None:
-        return None
-    return slug or None
 
 
 def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:

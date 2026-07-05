@@ -47,6 +47,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -58,6 +59,11 @@ import click
 import yaml
 
 SCIENCE_REPO_ROOT = Path(__file__).resolve().parent.parent
+SCIENCE_SRC = SCIENCE_REPO_ROOT / "science" / "src"
+SCIENCE_MODEL_SRC = SCIENCE_REPO_ROOT / "science" / "model" / "src"
+for _src_path in (SCIENCE_SRC, SCIENCE_MODEL_SRC):
+    if _src_path.is_dir() and str(_src_path) not in sys.path:
+        sys.path.insert(0, str(_src_path))
 DEFAULT_OUTPUT_DIR = SCIENCE_REPO_ROOT / "docs" / "audits" / "downstream-project-conventions" / "inventory"
 CANONICAL_VALIDATE_PATH = SCIENCE_REPO_ROOT / "meta" / "validate.sh"
 
@@ -431,8 +437,15 @@ def _has_entity_frontmatter(fm: dict[str, Any]) -> bool:
     return any(key in fm for key in ENTITY_FRONTMATTER_HINTS)
 
 
-def _is_legacy_entity_root(rel_path: str, fm: dict[str, Any]) -> bool:
-    return rel_path.startswith(("doc/", "specs/")) and _has_entity_frontmatter(fm)
+def _is_legacy_entity_root(project_root: Path, rel_path: str, fm: dict[str, Any]) -> bool:
+    if not rel_path.startswith(("doc/", "specs/")):
+        return False
+    kind = fm.get("kind") or fm.get("type")
+    if not isinstance(kind, str) or not kind:
+        return False
+    from science_tool.entities import is_markdown_entity_kind
+
+    return is_markdown_entity_kind(kind, project_root=project_root)
 
 
 def _is_scalar_access(value: Any) -> bool:
@@ -608,7 +621,7 @@ def scan_legacy_surfaces(project_root: Path) -> LegacySurfaceScan:
         fm, error = split_frontmatter(text)
         if error or fm is None:
             continue
-        if _is_legacy_entity_root(rel_path, fm):
+        if _is_legacy_entity_root(project_root, rel_path, fm):
             findings.append(
                 LegacySurfaceFinding(
                     "legacy_entity_roots",

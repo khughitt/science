@@ -1,6 +1,6 @@
 # Legacy Support Scrub Inventory
 
-Generated at: `2026-07-05T02:29:58Z`
+Generated at: `2026-07-05T03:45:48Z`
 Config path: `~/.config/science/config.yaml`
 
 ## Summary
@@ -14,7 +14,7 @@ Config path: `~/.config/science/config.yaml`
 | `scanned_projects` | 22 |
 | `skipped_registered_projects` | 1 |
 | `unregistered_science_yaml` | 0 |
-| `total_findings` | 7522 |
+| `total_findings` | 7443 |
 
 ## Surface Totals
 
@@ -22,7 +22,6 @@ Config path: `~/.config/science/config.yaml`
 | --- | ---: |
 | `aggregate_manifest` | 7 |
 | `article_prefix_alias` | 39 |
-| `legacy_entity_roots` | 79 |
 | `legacy_marker_alias` | 4 |
 | `retired_edges_yaml` | 4 |
 | `type_frontmatter` | 7389 |
@@ -31,28 +30,28 @@ Config path: `~/.config/science/config.yaml`
 
 | project | findings | surfaces |
 | --- | ---: | --- |
-| `~/d/3d-attention-bias` | 108 | `aggregate_manifest`=1, `article_prefix_alias`=10, `legacy_entity_roots`=5, `legacy_marker_alias`=1, `type_frontmatter`=91 |
-| `~/d/cancer/cancer-types/breast` | 5 | `legacy_entity_roots`=1, `type_frontmatter`=4 |
-| `~/d/cancer/cancer-types/head-and-neck` | 5 | `legacy_entity_roots`=1, `type_frontmatter`=4 |
-| `~/d/cancer/cancer-types/multiple-myeloma` | 2504 | `aggregate_manifest`=2, `article_prefix_alias`=3, `legacy_entity_roots`=2, `retired_edges_yaml`=1, `type_frontmatter`=2496 |
-| `~/d/cancer/cancer-types/ovarian` | 5 | `legacy_entity_roots`=1, `type_frontmatter`=4 |
-| `~/d/cancer/cancer-types/prostate` | 5 | `legacy_entity_roots`=1, `type_frontmatter`=4 |
+| `~/d/3d-attention-bias` | 103 | `aggregate_manifest`=1, `article_prefix_alias`=10, `legacy_marker_alias`=1, `type_frontmatter`=91 |
+| `~/d/cancer/cancer-types/breast` | 4 | `type_frontmatter`=4 |
+| `~/d/cancer/cancer-types/head-and-neck` | 4 | `type_frontmatter`=4 |
+| `~/d/cancer/cancer-types/multiple-myeloma` | 2502 | `aggregate_manifest`=2, `article_prefix_alias`=3, `retired_edges_yaml`=1, `type_frontmatter`=2496 |
+| `~/d/cancer/cancer-types/ovarian` | 4 | `type_frontmatter`=4 |
+| `~/d/cancer/cancer-types/prostate` | 4 | `type_frontmatter`=4 |
 | `~/d/cancer/conditions/pre-cancer` | 17 | `type_frontmatter`=17 |
-| `~/d/cancer/data-sources/cbioportal` | 454 | `aggregate_manifest`=1, `article_prefix_alias`=26, `legacy_entity_roots`=1, `retired_edges_yaml`=2, `type_frontmatter`=424 |
+| `~/d/cancer/data-sources/cbioportal` | 453 | `aggregate_manifest`=1, `article_prefix_alias`=26, `retired_edges_yaml`=2, `type_frontmatter`=424 |
 | `~/d/cancer/mechanisms/evolution` | 367 | `type_frontmatter`=367 |
 | `~/d/cancer/meta` | 195 | `type_frontmatter`=195 |
 | `~/d/cancer/therapeutics` | 100 | `type_frontmatter`=100 |
 | `~/d/cats` | 0 |  |
 | `~/d/health/comparisons/pan-disease` | 230 | `type_frontmatter`=230 |
 | `~/d/health/meta` | 412 | `type_frontmatter`=412 |
-| `~/d/health/processes/cycles` | 511 | `legacy_entity_roots`=4, `type_frontmatter`=507 |
-| `~/d/health/processes/immunity` | 83 | `legacy_entity_roots`=1, `type_frontmatter`=82 |
-| `~/d/health/processes/post-acute-infection` | 566 | `legacy_entity_roots`=8, `type_frontmatter`=558 |
-| `~/d/natural-systems` | 1009 | `aggregate_manifest`=1, `legacy_entity_roots`=41, `legacy_marker_alias`=2, `type_frontmatter`=965 |
-| `~/d/protein-landscape` | 285 | `aggregate_manifest`=1, `legacy_entity_roots`=5, `retired_edges_yaml`=1, `type_frontmatter`=278 |
+| `~/d/health/processes/cycles` | 507 | `type_frontmatter`=507 |
+| `~/d/health/processes/immunity` | 82 | `type_frontmatter`=82 |
+| `~/d/health/processes/post-acute-infection` | 558 | `type_frontmatter`=558 |
+| `~/d/natural-systems` | 968 | `aggregate_manifest`=1, `legacy_marker_alias`=2, `type_frontmatter`=965 |
+| `~/d/protein-landscape` | 280 | `aggregate_manifest`=1, `retired_edges_yaml`=1, `type_frontmatter`=278 |
 | `~/d/science-commons` | 339 | `type_frontmatter`=339 |
 | `~/d/science/meta` | 110 | `type_frontmatter`=110 |
-| `~/d/seq-feats` | 212 | `aggregate_manifest`=1, `legacy_entity_roots`=8, `legacy_marker_alias`=1, `type_frontmatter`=202 |
+| `~/d/seq-feats` | 204 | `aggregate_manifest`=1, `legacy_marker_alias`=1, `type_frontmatter`=202 |
 
 ## Findings
 
@@ -69,11 +68,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/3d-attention-bias` | `article_prefix_alias` | `archive/project-layout-legacy/notes/articles/Rouskin2014.md` | article:<bibkey> reference |
 | `~/d/3d-attention-bias` | `article_prefix_alias` | `archive/project-layout-legacy/notes/articles/Schiff2024.md` | article:<bibkey> reference |
 | `~/d/3d-attention-bias` | `article_prefix_alias` | `archive/project-layout-legacy/notes/articles/Zhou2023.md` | article:<bibkey> reference |
-| `~/d/3d-attention-bias` | `legacy_entity_roots` | `doc/meta/bias-audit-phase1-ablation.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/3d-attention-bias` | `legacy_entity_roots` | `doc/meta/bias-audit-t041-specificity-extension.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/3d-attention-bias` | `legacy_entity_roots` | `doc/meta/bias-audit-t045-t046.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/3d-attention-bias` | `legacy_entity_roots` | `doc/meta/matched-cohort-characterization.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/3d-attention-bias` | `legacy_entity_roots` | `doc/meta/review-pipeline-t041.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/3d-attention-bias` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
 | `~/d/3d-attention-bias` | `type_frontmatter` | `archive/project-layout-legacy/notes/articles/Cech2014.md` | entity frontmatter has type: |
 | `~/d/3d-attention-bias` | `type_frontmatter` | `archive/project-layout-legacy/notes/articles/DallaTorre2023.md` | entity frontmatter has type: |
@@ -166,12 +160,10 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/3d-attention-bias` | `type_frontmatter` | `entities/topics/rna-tertiary-structure.md` | entity frontmatter has type: |
 | `~/d/3d-attention-bias` | `type_frontmatter` | `entities/topics/ssm-models.md` | entity frontmatter has type: |
 | `~/d/3d-attention-bias` | `type_frontmatter` | `entities/topics/structural-dynamics.md` | entity frontmatter has type: |
-| `~/d/cancer/cancer-types/breast` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/cancer-types/breast` | `type_frontmatter` | `entities/papers/Xiong2024.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/breast` | `type_frontmatter` | `entities/questions/0001-breast-subtypes-mechanisms-treatment.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/breast` | `type_frontmatter` | `entities/research-question.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/breast` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
-| `~/d/cancer/cancer-types/head-and-neck` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/cancer-types/head-and-neck` | `type_frontmatter` | `entities/papers/Dunn2025.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/head-and-neck` | `type_frontmatter` | `entities/questions/0001-hnscc-deescalation-by-etiology.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/head-and-neck` | `type_frontmatter` | `entities/research-question.md` | entity frontmatter has type: |
@@ -181,8 +173,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/cancer/cancer-types/multiple-myeloma` | `article_prefix_alias` | `.labnote/app_export/entities/index.json` | article:<bibkey> reference |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `article_prefix_alias` | `entities/claim-registry.yaml` | article:<bibkey> reference |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `article_prefix_alias` | `entities/questions/0099-bmsc-ap1-chromatin-cytogenetic-subtype.md` | article:<bibkey> reference |
-| `~/d/cancer/cancer-types/multiple-myeloma` | `legacy_entity_roots` | `doc/interpretations/2026-05-12-t665-gse131651-3d-locus-ledger.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/cancer/cancer-types/multiple-myeloma` | `legacy_entity_roots` | `doc/papers/Binder2024.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `retired_edges_yaml` | `tests/migration/fixtures/mini_patch.edges.yaml` | retired DAG edge file |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `type_frontmatter` | `.ai/templates/paper-summary.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `type_frontmatter` | `archive/0009-next-steps-2026-07-02.md` | entity frontmatter has type: |
@@ -2680,12 +2670,10 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/cancer/cancer-types/multiple-myeloma` | `type_frontmatter` | `tests/migration/fixtures/dataset_grounding/interpretations/0100-multi-task-synth.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `type_frontmatter` | `tests/migration/fixtures/dataset_grounding/interpretations/0101-t300-dedicated-overview.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/multiple-myeloma` | `type_frontmatter` | `tests/migration/fixtures/dataset_grounding/interpretations/0102-t301-commpass.md` | entity frontmatter has type: |
-| `~/d/cancer/cancer-types/ovarian` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/cancer-types/ovarian` | `type_frontmatter` | `entities/papers/Caruso2025.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/ovarian` | `type_frontmatter` | `entities/questions/0001-ovarian-early-detection.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/ovarian` | `type_frontmatter` | `entities/research-question.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/ovarian` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
-| `~/d/cancer/cancer-types/prostate` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/cancer-types/prostate` | `type_frontmatter` | `entities/papers/Raychaudhuri2025.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/prostate` | `type_frontmatter` | `entities/questions/0001-prostate-indolent-vs-aggressive-biomarkers.md` | entity frontmatter has type: |
 | `~/d/cancer/cancer-types/prostate` | `type_frontmatter` | `entities/research-question.md` | entity frontmatter has type: |
@@ -2734,7 +2722,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/cancer/data-sources/cbioportal` | `article_prefix_alias` | `entities/papers/Suehnholz2024.md` | article:<bibkey> reference |
 | `~/d/cancer/data-sources/cbioportal` | `article_prefix_alias` | `entities/papers/Tate2019.md` | article:<bibkey> reference |
 | `~/d/cancer/data-sources/cbioportal` | `article_prefix_alias` | `entities/papers/Zehir2017.md` | article:<bibkey> reference |
-| `~/d/cancer/data-sources/cbioportal` | `legacy_entity_roots` | `doc/meta/curation/curation-sweep-2026-04-22.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/cancer/data-sources/cbioportal` | `retired_edges_yaml` | `doc/figures/dags/h02-cross-study-ranking-divergence.edges.yaml` | retired DAG edge file |
 | `~/d/cancer/data-sources/cbioportal` | `retired_edges_yaml` | `doc/figures/dags/h08-agnostic-covariate-association.edges.yaml` | retired DAG edge file |
 | `~/d/cancer/data-sources/cbioportal` | `type_frontmatter` | `archive/next-steps-2026-06-08.md` | entity frontmatter has type: |
@@ -4465,10 +4452,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/meta` | `type_frontmatter` | `entities/topics/organ-aging-and-dynamic-health-state-axes.md` | entity frontmatter has type: |
 | `~/d/health/meta` | `type_frontmatter` | `entities/topics/ribosome-translational-homeostasis-across-disease.md` | entity frontmatter has type: |
 | `~/d/health/meta` | `type_frontmatter` | `entities/topics/systems-biology-reproducibility-and-commons.md` | entity frontmatter has type: |
-| `~/d/health/processes/cycles` | `legacy_entity_roots` | `doc/access/t026-cohort-feasibility-scan.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/cycles` | `legacy_entity_roots` | `doc/meta/next-steps-2026-06-10.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/cycles` | `legacy_entity_roots` | `specs/rhythm-phenotype-schema.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/cycles` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/health/processes/cycles` | `type_frontmatter` | `archive/0001-next-steps-2026-06-11.md` | entity frontmatter has type: |
 | `~/d/health/processes/cycles` | `type_frontmatter` | `archive/0002-next-steps-2026-06-16.md` | entity frontmatter has type: |
 | `~/d/health/processes/cycles` | `type_frontmatter` | `doc/access/t026-cohort-feasibility-scan.md` | entity frontmatter has type: |
@@ -4976,7 +4959,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/processes/cycles` | `type_frontmatter` | `entities/topics/temperature-and-nutrient-compensation-of-biological-clocks.md` | entity frontmatter has type: |
 | `~/d/health/processes/cycles` | `type_frontmatter` | `specs/rhythm-phenotype-schema.md` | entity frontmatter has type: |
 | `~/d/health/processes/cycles` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
-| `~/d/health/processes/immunity` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/health/processes/immunity` | `type_frontmatter` | `entities/hypotheses/0001-regulatory-enhancer-setpoints.md` | entity frontmatter has type: |
 | `~/d/health/processes/immunity` | `type_frontmatter` | `entities/hypotheses/0002-trained-immunity-enhancer-convergence.md` | entity frontmatter has type: |
 | `~/d/health/processes/immunity` | `type_frontmatter` | `entities/hypotheses/0003-treg-tsdr-ratchet.md` | entity frontmatter has type: |
@@ -5059,14 +5041,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/processes/immunity` | `type_frontmatter` | `entities/topics/sex-as-a-modifier-of-immune-homeostasis.md` | entity frontmatter has type: |
 | `~/d/health/processes/immunity` | `type_frontmatter` | `entities/topics/sex-hormone-life-stage-immune-homeostasis.md` | entity frontmatter has type: |
 | `~/d/health/processes/immunity` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/inquiries/menopause-pais-causal-dag-critique.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/inquiries/menopause-pais-causal-dag.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/meta/2026-06-10-paper-import-triage.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/meta/2026-06-19-case-definition-crosswalk.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/meta/2026-06-19-next-steps.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/meta/2026-06-19-session-summary.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `doc/meta/2026-07-01-t079-vehicle-feasibility-memo.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/health/processes/post-acute-infection` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/health/processes/post-acute-infection` | `type_frontmatter` | `doc/inquiries/menopause-pais-causal-dag-critique.md` | entity frontmatter has type: |
 | `~/d/health/processes/post-acute-infection` | `type_frontmatter` | `doc/inquiries/menopause-pais-causal-dag.md` | entity frontmatter has type: |
 | `~/d/health/processes/post-acute-infection` | `type_frontmatter` | `doc/meta/2026-06-19-next-steps.md` | entity frontmatter has type: |
@@ -5626,47 +5600,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/processes/post-acute-infection` | `type_frontmatter` | `entities/workflows/t035-cross-trigger-pathway-overlap.md` | entity frontmatter has type: |
 | `~/d/health/processes/post-acute-infection` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
 | `~/d/natural-systems` | `aggregate_manifest` | `knowledge/sources/local/entities.yaml` | aggregate manifest |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/meta/curation/curation-sweep-2026-05-01.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/meta/curation/curation-sweep-2026-06-13.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-10-constituent-decomposition-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-11-global-show-unimplemented-toggle-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-16-limit-relations-ui-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-16-meta-model-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-17-composition-graph-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-17-dimensionless-groups-page-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-29-appendix-reorg-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-29-cas-model-additions-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-29-independent-variables-and-structural-capabilities-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-29-inline-figures-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-30-formula-system-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-30-research-provenance-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-30-umap-model-landscape-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-31-composition-dag-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-31-formula-interaction-v2-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-31-formula-promote-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-31-guide-pdf-generation-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-03-31-lens-taxonomy-redesign.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-02-formula-coverage-chapter-sweeps-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-03-typed-symbol-taxonomy-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-11-canonical-spec-authority-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-12-catalog-health-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-12-metaclass-taxonomy-reform-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-13-data-fitting-pilot-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-13-phenomenon-coverage-audit-scope.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-22-extends-generator-pilot-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-22-morphism-generator-families-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-22-morphism-generator-family-mapping.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-22-provenance-derivation-redesign-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-26-t342-pre-registered-partition-test-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-04-27-t344-sub-fibration-probe-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-05-11-curatorial-lens-to-tag-migration-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-06-17-formula-alignment-msa-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/plans/2026-06-23-extraction-fidelity-harness-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/reports/v1-solution-behavior-derivation.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/specs/2026-06-22-empirical-arxiv-catalog-umbrella.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/specs/catalog-canonical-core.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/specs/health-coverage-scope.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/natural-systems` | `legacy_entity_roots` | `doc/specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/natural-systems` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
 | `~/d/natural-systems` | `legacy_marker_alias` | `tasks/done/2026-05.md` | [NEEDS CITATION] |
 | `~/d/natural-systems` | `type_frontmatter` | `archive/0021-next-steps-2026-06-14.md` | entity frontmatter has type: |
@@ -6635,11 +6568,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/natural-systems` | `type_frontmatter` | `tmp/t677-covariate-audit.md` | entity frontmatter has type: |
 | `~/d/natural-systems` | `type_frontmatter` | `tmp/t690-real.md` | entity frontmatter has type: |
 | `~/d/protein-landscape` | `aggregate_manifest` | `knowledge/sources/local/entities.yaml` | aggregate manifest |
-| `~/d/protein-landscape` | `legacy_entity_roots` | `doc/plans/2026-04-11-protein-landscape-viewer-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/protein-landscape` | `legacy_entity_roots` | `doc/plans/2026-04-12-entity-pages-app-shell-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/protein-landscape` | `legacy_entity_roots` | `doc/plans/2026-04-12-protein-landscape-data-model-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/protein-landscape` | `legacy_entity_roots` | `doc/plans/2026-04-19-t123-per-lens-phylum-coverage-design.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/protein-landscape` | `legacy_entity_roots` | `specs/scope-boundaries.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/protein-landscape` | `retired_edges_yaml` | `doc/figures/dags/h01-multi-manifold-protein-universe.edges.yaml` | retired DAG edge file |
 | `~/d/protein-landscape` | `type_frontmatter` | `archive/2026-04-16-t060-hierarchical-archetype-explorer-data-model-spec.md` | entity frontmatter has type: |
 | `~/d/protein-landscape` | `type_frontmatter` | `archive/apr26/next-steps-2026-04-17.md` | entity frontmatter has type: |
@@ -7369,14 +7297,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/science/meta` | `type_frontmatter` | `entities/topics/cross-project.md` | entity frontmatter has type: |
 | `~/d/science/meta` | `type_frontmatter` | `entities/topics/structured-scientific-knowledge.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `aggregate_manifest` | `knowledge/sources/local/entities.yaml` | aggregate manifest |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/ensembl.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/gencode.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/pdb-rcsb.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/refseq.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/reploc.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/skewdb.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/ucsc-conservation-tracks.md` | entity frontmatter under doc/ or specs/ |
-| `~/d/seq-feats` | `legacy_entity_roots` | `specs/datasets/ucsc-genome-browser.md` | entity frontmatter under doc/ or specs/ |
 | `~/d/seq-feats` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
 | `~/d/seq-feats` | `type_frontmatter` | `archive/project-layout-legacy/notes/topics/biological-sequence-foundation-models.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `archive/project-layout-legacy/notes/topics/context-dependent-multi-role-function.md` | entity frontmatter has type: |
@@ -7411,6 +7331,14 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/seq-feats` | `type_frontmatter` | `archive/project-layout-legacy/templates/pipeline-step.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `archive/project-layout-legacy/templates/pre-registration.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `archive/project-layout-legacy/templates/question.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/ensembl.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/gencode.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/pdb-rcsb.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/refseq.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/reploc.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/skewdb.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/ucsc-conservation-tracks.md` | entity frontmatter has type: |
+| `~/d/seq-feats` | `type_frontmatter` | `entities/datasets/ucsc-genome-browser.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `entities/discussions/0001-compositional-controls.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `entities/discussions/0002-model-selection.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `entities/discussions/0003-reading-frame-phase-awareness.md` | entity frontmatter has type: |
@@ -7572,14 +7500,6 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/seq-feats` | `type_frontmatter` | `entities/topics/sequence-feature-types.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `entities/topics/sequence-function-phenotype.md` | entity frontmatter has type: |
 | `~/d/seq-feats` | `type_frontmatter` | `entities/topics/uncertainty-reproducibility-reporting.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/ensembl.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/gencode.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/pdb-rcsb.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/refseq.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/reploc.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/skewdb.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/ucsc-conservation-tracks.md` | entity frontmatter has type: |
-| `~/d/seq-feats` | `type_frontmatter` | `specs/datasets/ucsc-genome-browser.md` | entity frontmatter has type: |
 
 ## Skipped Registered Projects
 

@@ -113,15 +113,10 @@ class TestResolvePaperEntity:
         assert resolved.citekey == "Jones2025"
         assert resolved.path == path
 
-    def test_resolves_paper_under_doc_background_papers(self, tmp_path: Path) -> None:
-        # Real checkouts (this meta repo) store paper summaries outside entities/papers;
-        # the resolver must scan every canonical paper subdir, not the policy root.
-        path = _write_paper(
-            tmp_path, "Meta2026", doi="10.1101/meta", subdir="doc/background/papers"
-        )
-        resolved = resolve_paper_entity(tmp_path, doi="10.1101/meta", pmid=None)
-        assert resolved.path == path
-        assert resolved.directory == tmp_path / "doc" / "background" / "papers"
+    def test_ignores_paper_under_doc_background_papers(self, tmp_path: Path) -> None:
+        _write_paper(tmp_path, "Meta2026", doi="10.1101/meta", subdir="doc/background/papers")
+        with pytest.raises(SourceTextError, match="no paper entity"):
+            resolve_paper_entity(tmp_path, doi="10.1101/meta", pmid=None)
 
     def test_carries_entity_pmid_when_resolved_by_doi(self, tmp_path: Path) -> None:
         # Core of the resolver→acquisition contract: a DOI-invoked resolve still

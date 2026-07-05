@@ -50,7 +50,20 @@ def test_parse_frontmatter_document_returns_empty_frontmatter_for_non_mapping_ya
     assert parse_frontmatter_document(ctx, path) == ({}, "Body\n")
 
 
-def test_resolve_reference_finds_frontmatter_id_in_doc_or_specs(tmp_path: Path) -> None:
+def test_resolve_reference_finds_frontmatter_id_in_entities(tmp_path: Path) -> None:
+    ctx = _project(tmp_path)
+    question_path = tmp_path / "entities" / "questions" / "q01.md"
+    hypothesis_path = tmp_path / "entities" / "hypotheses" / "h01.md"
+    question_path.parent.mkdir(parents=True)
+    hypothesis_path.parent.mkdir(parents=True)
+    question_path.write_text("---\nid: question:q01\n---\nQuestion\n", encoding="utf-8")
+    hypothesis_path.write_text("---\nid: hypothesis:h01\n---\nHypothesis\n", encoding="utf-8")
+
+    assert resolve_reference(ctx, "question:q01") == question_path
+    assert resolve_reference(ctx, "hypothesis:h01") == hypothesis_path
+
+
+def test_resolve_reference_ignores_doc_and_specs_frontmatter_ids(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
     doc_path = tmp_path / "doc" / "questions" / "q01.md"
     specs_path = tmp_path / "specs" / "hypotheses" / "h01.md"
@@ -59,30 +72,17 @@ def test_resolve_reference_finds_frontmatter_id_in_doc_or_specs(tmp_path: Path) 
     doc_path.write_text("---\nid: question:q01\n---\nQuestion\n", encoding="utf-8")
     specs_path.write_text("---\nid: hypothesis:h01\n---\nHypothesis\n", encoding="utf-8")
 
-    assert resolve_reference(ctx, "question:q01") == doc_path
-    assert resolve_reference(ctx, "hypothesis:h01") == specs_path
+    assert resolve_reference(ctx, "question:q01") is None
+    assert resolve_reference(ctx, "hypothesis:h01") is None
 
 
-def test_resolve_reference_falls_back_to_doc_paper_slug(tmp_path: Path) -> None:
+def test_resolve_reference_resolves_paper_entity(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
-    paper_path = tmp_path / "doc" / "papers" / "Foo2024.md"
+    paper_path = tmp_path / "entities" / "papers" / "Foo2024.md"
     paper_path.parent.mkdir(parents=True)
-    paper_path.write_text("# Paper\n", encoding="utf-8")
+    paper_path.write_text("---\nid: paper:Foo2024\n---\nPaper\n", encoding="utf-8")
 
     assert resolve_reference(ctx, "paper:Foo2024") == paper_path
-
-
-def test_resolve_reference_rejects_unsafe_paper_fallback_slugs(tmp_path: Path) -> None:
-    ctx = _project(tmp_path)
-    escape_path = tmp_path / "doc" / "some-doc.md"
-    nested_path = tmp_path / "doc" / "papers" / "subdir" / "name.md"
-    escape_path.parent.mkdir(parents=True)
-    nested_path.parent.mkdir(parents=True)
-    escape_path.write_text("# Escape\n", encoding="utf-8")
-    nested_path.write_text("# Nested\n", encoding="utf-8")
-
-    assert resolve_reference(ctx, "paper:../some-doc") is None
-    assert resolve_reference(ctx, "paper:subdir/name") is None
 
 
 def test_resolve_reference_resolves_cite_key_to_bibliography(tmp_path: Path) -> None:

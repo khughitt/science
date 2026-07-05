@@ -376,8 +376,8 @@ def _client(handler):
 
 
 def _paper_entity(tmp_path):
-    """Create a paper entity whose pmid resolves, under doc/background/papers/."""
-    d = tmp_path / "doc" / "background" / "papers"
+    """Create a paper entity whose pmid resolves."""
+    d = tmp_path / "entities" / "papers"
     d.mkdir(parents=True)
     (d / "doe2020.md").write_text("---\nkind: paper\npmid: 12345678\n---\n\n# Doe 2020\n")
     return d / "doe2020.md"

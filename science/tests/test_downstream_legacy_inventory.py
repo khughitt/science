@@ -101,6 +101,40 @@ def test_legacy_scan_reports_precise_project_surfaces(tmp_path: Path) -> None:
     assert "entities/articles/article.md" not in result.paths_for("article_prefix_alias")
 
 
+def test_legacy_entity_roots_reports_only_registered_markdown_entity_kinds(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _science_yaml(project)
+    _write(
+        project / "doc" / "plans" / "design.md",
+        """
+        ---
+        type: spec
+        id: spec:design
+        title: Design note
+        ---
+        This is doc metadata, not a registered entity kind.
+        """,
+    )
+    _write(
+        project / "specs" / "datasets" / "reference.md",
+        """
+        ---
+        type: dataset
+        id: dataset:reference
+        title: Reference dataset
+        status: active
+        created: "2026-07-04"
+        updated: "2026-07-04"
+        ---
+        This is a real markdown entity in a legacy root.
+        """,
+    )
+
+    result = downstream_inventory.scan_legacy_surfaces(project)
+
+    assert result.paths_for("legacy_entity_roots") == ["specs/datasets/reference.md"]
+
+
 def test_legacy_scan_ignores_nested_worktrees_and_git_dirs(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _science_yaml(project)

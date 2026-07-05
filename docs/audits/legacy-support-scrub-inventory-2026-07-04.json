@@ -1,12 +1,11 @@
 {
   "config_path": "~/.config/science/config.yaml",
-  "generated_at_utc": "2026-07-05T02:29:58Z",
+  "generated_at_utc": "2026-07-05T03:45:48Z",
   "projects": [
     {
       "counts": {
         "aggregate_manifest": 1,
         "article_prefix_alias": 10,
-        "legacy_entity_roots": 5,
         "legacy_marker_alias": 1,
         "type_frontmatter": 91
       },
@@ -65,31 +64,6 @@
           "detail": "article:<bibkey> reference",
           "path": "archive/project-layout-legacy/notes/articles/Zhou2023.md",
           "surface": "article_prefix_alias"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/bias-audit-phase1-ablation.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/bias-audit-t041-specificity-extension.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/bias-audit-t045-t046.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/matched-cohort-characterization.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/review-pipeline-t041.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "[NEEDS CITATION]",
@@ -556,15 +530,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 1,
         "type_frontmatter": 4
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/papers/Xiong2024.md",
@@ -590,15 +558,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 1,
         "type_frontmatter": 4
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/papers/Dunn2025.md",
@@ -626,7 +588,6 @@
       "counts": {
         "aggregate_manifest": 2,
         "article_prefix_alias": 3,
-        "legacy_entity_roots": 2,
         "retired_edges_yaml": 1,
         "type_frontmatter": 2496
       },
@@ -655,16 +616,6 @@
           "detail": "article:<bibkey> reference",
           "path": "entities/questions/0099-bmsc-ap1-chromatin-cytogenetic-subtype.md",
           "surface": "article_prefix_alias"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/interpretations/2026-05-12-t665-gse131651-3d-locus-ledger.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/papers/Binder2024.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "retired DAG edge file",
@@ -13156,15 +13107,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 1,
         "type_frontmatter": 4
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/papers/Caruso2025.md",
@@ -13190,15 +13135,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 1,
         "type_frontmatter": 4
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/papers/Raychaudhuri2025.md",
@@ -13319,7 +13258,6 @@
       "counts": {
         "aggregate_manifest": 1,
         "article_prefix_alias": 26,
-        "legacy_entity_roots": 1,
         "retired_edges_yaml": 2,
         "type_frontmatter": 424
       },
@@ -13458,11 +13396,6 @@
           "detail": "article:<bibkey> reference",
           "path": "entities/papers/Zehir2017.md",
           "surface": "article_prefix_alias"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/curation/curation-sweep-2026-04-22.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "retired DAG edge file",
@@ -22164,30 +22097,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 4,
         "type_frontmatter": 507
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/access/t026-cohort-feasibility-scan.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/next-steps-2026-06-10.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/rhythm-phenotype-schema.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "archive/0001-next-steps-2026-06-11.md",
@@ -24728,15 +24640,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 1,
         "type_frontmatter": 82
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/hypotheses/0001-regulatory-enhancer-setpoints.md",
@@ -25152,50 +25058,9 @@
     },
     {
       "counts": {
-        "legacy_entity_roots": 8,
         "type_frontmatter": 558
       },
       "findings": [
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/inquiries/menopause-pais-causal-dag-critique.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/inquiries/menopause-pais-causal-dag.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/2026-06-10-paper-import-triage.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/2026-06-19-case-definition-crosswalk.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/2026-06-19-next-steps.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/2026-06-19-session-summary.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/2026-07-01-t079-vehicle-feasibility-memo.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
-        },
         {
           "detail": "entity frontmatter has type:",
           "path": "doc/inquiries/menopause-pais-causal-dag-critique.md",
@@ -27992,7 +27857,6 @@
     {
       "counts": {
         "aggregate_manifest": 1,
-        "legacy_entity_roots": 41,
         "legacy_marker_alias": 2,
         "type_frontmatter": 965
       },
@@ -28001,211 +27865,6 @@
           "detail": "aggregate manifest",
           "path": "knowledge/sources/local/entities.yaml",
           "surface": "aggregate_manifest"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/curation/curation-sweep-2026-05-01.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/meta/curation/curation-sweep-2026-06-13.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-10-constituent-decomposition-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-11-global-show-unimplemented-toggle-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-16-limit-relations-ui-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-16-meta-model-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-17-composition-graph-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-17-dimensionless-groups-page-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-29-appendix-reorg-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-29-cas-model-additions-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-29-independent-variables-and-structural-capabilities-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-29-inline-figures-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-30-formula-system-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-30-research-provenance-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-30-umap-model-landscape-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-31-composition-dag-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-31-formula-interaction-v2-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-31-formula-promote-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-31-guide-pdf-generation-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-03-31-lens-taxonomy-redesign.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-02-formula-coverage-chapter-sweeps-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-03-typed-symbol-taxonomy-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-11-canonical-spec-authority-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-12-catalog-health-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-12-metaclass-taxonomy-reform-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-13-data-fitting-pilot-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-13-phenomenon-coverage-audit-scope.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-22-extends-generator-pilot-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-22-morphism-generator-families-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-22-morphism-generator-family-mapping.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-22-provenance-derivation-redesign-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-26-t342-pre-registered-partition-test-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-27-t344-sub-fibration-probe-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-05-11-curatorial-lens-to-tag-migration-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-06-17-formula-alignment-msa-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-06-23-extraction-fidelity-harness-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/reports/v1-solution-behavior-derivation.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/specs/2026-06-22-empirical-arxiv-catalog-umbrella.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/specs/catalog-canonical-core.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/specs/health-coverage-scope.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "[NEEDS CITATION]",
@@ -33048,7 +32707,6 @@
     {
       "counts": {
         "aggregate_manifest": 1,
-        "legacy_entity_roots": 5,
         "retired_edges_yaml": 1,
         "type_frontmatter": 278
       },
@@ -33057,31 +32715,6 @@
           "detail": "aggregate manifest",
           "path": "knowledge/sources/local/entities.yaml",
           "surface": "aggregate_manifest"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-11-protein-landscape-viewer-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-12-entity-pages-app-shell-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-12-protein-landscape-data-model-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "doc/plans/2026-04-19-t123-per-lens-phylum-coverage-design.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/scope-boundaries.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "retired DAG edge file",
@@ -35042,7 +34675,6 @@
     {
       "counts": {
         "aggregate_manifest": 1,
-        "legacy_entity_roots": 8,
         "legacy_marker_alias": 1,
         "type_frontmatter": 202
       },
@@ -35051,46 +34683,6 @@
           "detail": "aggregate manifest",
           "path": "knowledge/sources/local/entities.yaml",
           "surface": "aggregate_manifest"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/ensembl.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/gencode.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/pdb-rcsb.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/refseq.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/reploc.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/skewdb.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/ucsc-conservation-tracks.md",
-          "surface": "legacy_entity_roots"
-        },
-        {
-          "detail": "entity frontmatter under doc/ or specs/",
-          "path": "specs/datasets/ucsc-genome-browser.md",
-          "surface": "legacy_entity_roots"
         },
         {
           "detail": "[NEEDS CITATION]",
@@ -35260,6 +34852,46 @@
         {
           "detail": "entity frontmatter has type:",
           "path": "archive/project-layout-legacy/templates/question.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/ensembl.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/gencode.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/pdb-rcsb.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/refseq.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/reploc.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/skewdb.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/ucsc-conservation-tracks.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "entities/datasets/ucsc-genome-browser.md",
           "surface": "type_frontmatter"
         },
         {
@@ -36065,46 +35697,6 @@
         {
           "detail": "entity frontmatter has type:",
           "path": "entities/topics/uncertainty-reproducibility-reporting.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/ensembl.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/gencode.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/pdb-rcsb.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/refseq.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/reploc.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/skewdb.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/ucsc-conservation-tracks.md",
-          "surface": "type_frontmatter"
-        },
-        {
-          "detail": "entity frontmatter has type:",
-          "path": "specs/datasets/ucsc-genome-browser.md",
           "surface": "type_frontmatter"
         }
       ],
@@ -37827,14 +37419,13 @@
     "scanned_projects": 22,
     "shared_repository_entries": 1,
     "skipped_registered_projects": 1,
-    "total_findings": 7522,
+    "total_findings": 7443,
     "unique_registered_paths": 22,
     "unregistered_science_yaml": 0
   },
   "surface_totals": {
     "aggregate_manifest": 7,
     "article_prefix_alias": 39,
-    "legacy_entity_roots": 79,
     "legacy_marker_alias": 4,
     "retired_edges_yaml": 4,
     "type_frontmatter": 7389

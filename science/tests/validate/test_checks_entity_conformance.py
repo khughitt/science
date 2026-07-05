@@ -32,11 +32,11 @@ def _write(root: Path, rel: str, fm: dict) -> None:
     p.write_text("---\n" + yaml.safe_dump(fm) + "---\n", encoding="utf-8")
 
 
-def test_location_coherence_flags_stranded_entity(tmp_path: Path) -> None:
+def test_location_coherence_does_not_scan_legacy_roots(tmp_path: Path) -> None:
     _write(tmp_path, "doc/questions/0001-x.md", {"id": "question:0001-x", "type": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
-    assert any(r.severity is Severity.ERROR and "doc/questions/0001-x.md" in str(r.path) for r in results)
+    assert not [r for r in results if "doc/questions/0001-x.md" in str(r.path)]
 
 
 def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:

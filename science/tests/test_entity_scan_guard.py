@@ -18,14 +18,13 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 _RGLOB = re.compile(r'\.rglob\(\s*["\']\*\.md["\']\s*\)')
 
-# Files that legitimately contain a recursive `rglob("*.md")` AFTER Task 3 routing.
+# Files that legitimately contain a recursive `rglob("*.md")`.
 # entity_scan.py is the SSOT (its rglob IS the sanctioned one). Every other entry
-# scans a NON-entities/ root (or a legacy doc/specs root). Reconcile this set with
-# the actual collector output in Step 3.
+# scans a non-entity root, a prose root, or an explicit migration input.
 ALLOWLIST: set[str] = {
     "entity_scan.py",  # SSOT
     "archive.py",  # verify_archive scans the _archive subtree itself, not live entities
-    # --- known non-entity / legacy recursive markdown scanners (reason each) ---
+    # --- known non-entity / prose / migration recursive markdown scanners (reason each) ---
     "big_picture/validator.py",             # tasks/ rglob (entities branch routed)
     "graph/storage_adapters/markdown.py",   # research/packages else-branch (entities branch routed)
     "graph/storage_adapters/task.py",       # tasks/ root
@@ -33,9 +32,7 @@ ALLOWLIST: set[str] = {
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots
     "graph/paper_dataset_migration.py",     # research/packages/doc paper roots (entities branch routed)
-    "entity_layout_migration.py",           # legacy doc/specs scan for v2->v3 migration
-    "validate/checks/id_prefixes.py",       # doc/specs legacy roots (line 52)
-    "validate/checks/entity_conformance.py",  # _LEGACY_ROOTS (line 89)
+    "validate/checks/id_prefixes.py",       # entities routed through iter_entity_markdown
     "validate/_helpers.py",
     "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
     "prose.py", "prose_lint.py", "markers.py", "refs.py",

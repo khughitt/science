@@ -155,13 +155,14 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_scan_markers_walks_doc_and_specs(tmp_path: Path) -> None:
+def test_scan_markers_walks_current_roots(tmp_path: Path) -> None:
     _write(tmp_path / "doc" / "a.md", "alpha [UNVERIFIED]\n")
     _write(tmp_path / "specs" / "b.md", "beta [SPECULATION]\n")
+    _write(tmp_path / "entities" / "questions" / "q.md", "delta [UNVERIFIED]\n")
     _write(tmp_path / "RESEARCH_PLAN.md", "gamma [INACCESSIBLE]\n")
     hits = scan_markers(tmp_path, strict=False)
     files = sorted(h.file.name for h in hits)
-    assert files == ["RESEARCH_PLAN.md", "a.md", "b.md"]
+    assert files == ["RESEARCH_PLAN.md", "a.md", "q.md"]
 
 
 def test_scan_markers_walks_entities_v3_layout(tmp_path: Path) -> None:
