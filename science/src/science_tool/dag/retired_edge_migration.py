@@ -20,6 +20,7 @@ from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.proposition_edges import load_relational_propositions
 from science_tool.dag.schema import EdgeRecord, EdgeStatus, Identification, SchemaError
 from science_tool.dag.workbench import WorkbenchFile
+from science_tool.entities import is_default_visible
 
 
 MigrationStatus = Literal["ready", "blocked", "skipped", "closed"]
@@ -345,6 +346,8 @@ def _resolve_dot_path(project_root: Path, yaml_path: Path, payload: dict[str, An
 def _propositions_by_pair(project_root: Path) -> dict[tuple[str, str], list[PropositionEntity]]:
     result: dict[tuple[str, str], list[PropositionEntity]] = {}
     for prop in load_relational_propositions(project_root):
+        if not is_default_visible(prop.status):
+            continue
         if prop.subject is None or prop.object is None:
             continue
         result.setdefault((prop.subject, prop.object), []).append(prop)
@@ -354,6 +357,8 @@ def _propositions_by_pair(project_root: Path) -> dict[tuple[str, str], list[Prop
 def _closure_claims_by_legacy_edge(project_root: Path) -> dict[tuple[str, int], list[LegacyEdgeClosureClaim]]:
     result: dict[tuple[str, int], list[LegacyEdgeClosureClaim]] = {}
     for prop in load_relational_propositions(project_root):
+        if not is_default_visible(prop.status):
+            continue
         if prop.id is None or prop.legacy_patch is None or prop.legacy_edge_id is None:
             continue
         if prop.subject is None or prop.object is None:

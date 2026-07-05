@@ -56,6 +56,7 @@ def _write_lineage_proposition(
     object_: str = "b",
     legacy_patch: str = "h1",
     legacy_edge_id: int = 1,
+    status: str = "active",
 ) -> None:
     prop_dir = project / "entities/propositions"
     prop_dir.mkdir(parents=True, exist_ok=True)
@@ -64,7 +65,7 @@ def _write_lineage_proposition(
 id: proposition:{slug}
 type: proposition
 title: {subject} affects {object_}
-status: active
+status: {status}
 subject: {subject}
 predicate: affects
 object: {object_}
@@ -890,6 +891,51 @@ def test_plan_resurfaces_ready_when_closing_proposition_is_removed(tmp_path: Pat
     assert second["summary"]["closed"] == 0
     assert second["summary"]["ready"] == 1
     assert second["rows"][0]["status"] == "ready"
+
+
+def test_plan_ignores_superseded_legacy_lineage_claim(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project, status="superseded")
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["closed"] == 0
+    assert payload["summary"]["ready"] == 1
+    row = payload["rows"][0]
+    assert row["status"] == "ready"
+    assert row["closed_by"] == []
+
+
+def test_plan_active_lineage_still_closes_when_superseded_duplicate_exists(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project, slug="a-affects-b")
+    _write_lineage_proposition(project, slug="a-affects-b-old", status="superseded")
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["closed"] == 1
+    assert payload["summary"]["blocked"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+    assert row["closure_conflicts"] == []
+
+
+def test_plan_superseded_mismatched_lineage_does_not_block(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project, subject="a", object_="c", status="superseded")
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["blocked"] == 0
+    assert payload["summary"]["closed"] == 0
+    assert payload["summary"]["ready"] == 1
+    row = payload["rows"][0]
+    assert row["status"] == "ready"
+    assert row["closure_conflicts"] == []
 
 
 def test_plan_blocks_orphan_dot(tmp_path: Path) -> None:
