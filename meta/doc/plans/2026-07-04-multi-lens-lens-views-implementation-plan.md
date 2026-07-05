@@ -172,14 +172,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_model.entities import LensView, OriginRecord
-from science_model.provenance import ProvenanceType
+from science_model.entities import LensView, OriginRecord, OriginType
 
 
 def _entity(**overrides):
-    from science_model.entities import Entity
+    from science_model.entities import Entity, EntityType
     base = dict(
-        id="question:0001-x", kind="question", title="X", project="p",
+        id="question:0001-x", kind="question", type=EntityType.QUESTION, title="X", project="p",
         ontology_terms=[], related=[], source_refs=[], content_preview="",
         file_path="entities/questions/0001-x.md",
     )
@@ -200,8 +199,8 @@ def test_lens_view_requires_nonempty_rationale() -> None:
 def test_entity_accepts_convergent_lens_views() -> None:
     e = _entity(
         origins=[
-            OriginRecord(type=ProvenanceType.ASSISTANT, ref="explore-ideas-mechanism"),
-            OriginRecord(type=ProvenanceType.ASSISTANT, ref="explore-ideas-analogy", independent=True),
+            OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism"),
+            OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-analogy", independent=True),
         ],
         lens_views=[
             LensView(lens="mechanism", rationale="m", origin_ref="explore-ideas-mechanism"),
@@ -214,7 +213,7 @@ def test_entity_accepts_convergent_lens_views() -> None:
 def test_entity_rejects_dangling_origin_ref() -> None:
     with pytest.raises(ValidationError):
         _entity(
-            origins=[OriginRecord(type=ProvenanceType.ASSISTANT, ref="explore-ideas-mechanism")],
+            origins=[OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism")],
             lens_views=[LensView(lens="analogy", rationale="a", origin_ref="explore-ideas-analogy")],
         )
 
@@ -222,7 +221,7 @@ def test_entity_rejects_dangling_origin_ref() -> None:
 def test_entity_rejects_duplicate_lens() -> None:
     with pytest.raises(ValidationError):
         _entity(
-            origins=[OriginRecord(type=ProvenanceType.ASSISTANT, ref="explore-ideas-mechanism")],
+            origins=[OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism")],
             lens_views=[
                 LensView(lens="mechanism", rationale="a", origin_ref="explore-ideas-mechanism"),
                 LensView(lens="mechanism", rationale="b"),
@@ -230,7 +229,7 @@ def test_entity_rejects_duplicate_lens() -> None:
         )
 ```
 
-> Note: confirm the `ProvenanceType`/`OriginType` enum member for assistant. `OriginRecord.type` is `OriginType`; in this codebase `OriginType` is re-exported via `science_model.provenance.ProvenanceType`. If the import fails, run `cd science/model && uv run python -c "from science_model.entities import OriginType; print(list(OriginType))"` and use the correct member (e.g. `OriginType.ASSISTANT`).
+> `OriginType` is a `StrEnum` in `science_model.entities` with member `ASSISTANT = "assistant"` (confirmed). `OriginRecord(type="assistant", ...)` also works via coercion.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -389,7 +388,40 @@ def test_build_create_plan_carries_lens_views() -> None:
     assert plan.lens_views == [
         {"lens": "mechanism", "rationale": "framing", "origin_ref": "explore-ideas-mechanism"}
     ]
+
+
+def test_build_create_plan_rejects_duplicate_lens() -> None:
+    data = {
+        "proposed_kind": "question",
+        "title": "T",
+        "lens_views": [
+            {"lens": "mechanism", "rationale": "a", "origin_ref": "explore-ideas-mechanism"},
+            {"lens": "mechanism", "rationale": "b"},
+        ],
+        "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
+    }
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-x", data, "model-1")
+
+
+def test_build_create_plan_rejects_duplicate_origin_ref() -> None:
+    data = {
+        "proposed_kind": "question",
+        "title": "T",
+        "lens": "mechanism",
+        "rationale": "framing",
+        "origin_plan": {
+            "origins": [
+                {"type": "assistant", "ref": "explore-ideas-mechanism"},
+                {"type": "assistant", "ref": "explore-ideas-mechanism", "independent": True},
+            ]
+        },
+    }
+    with pytest.raises(ApplyValidationError):
+        build_create_plan("cand-x", data, "model-1")
 ```
+
+> `ApplyValidationError` is already imported at the top of `test_explore_ideas_apply.py`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -456,10 +488,25 @@ def derive_lens_views(data: dict, origins: list[dict], candidate_id: str = "?") 
     return []
 ```
 
-In `build_create_plan`, after the `origins` loop (after line ~160) and before the `anchors` block, add:
+In `build_create_plan`, after the `origins` loop (after line ~160) and before the `anchors` block, add the entity-level invariants (apply must enforce these itself — `create_entity` writes frontmatter without instantiating `Entity`, so the model validators in Task 2 do **not** run at apply time):
 
 ```python
+    planned_refs = [o["ref"] for o in origins if o.get("ref")]
+    if len(planned_refs) != len(set(planned_refs)):
+        raise ApplyValidationError(
+            f"{candidate_id}: duplicate non-null origin_plan.origins[].ref"
+        )
+
     lens_views = derive_lens_views(data, origins, candidate_id)
+
+    seen_lenses: set[str] = set()
+    for view in lens_views:
+        if view["lens"] in seen_lenses:
+            raise ApplyValidationError(
+                f"{candidate_id}: duplicate lens_views[].lens {view['lens']!r} "
+                "(at most one view per lens)"
+            )
+        seen_lenses.add(view["lens"])
 ```
 
 Add `lens_views=lens_views,` to the `CreatePlan(...)` constructor (after `source_refs=source_refs,`).
@@ -496,126 +543,153 @@ git commit -m "feat(explore-ideas): route lens_views into created entities"
 ## Task 4: Graph materialization reifies lens-views
 
 **Files:**
-- Modify: `science/src/science_tool/graph/materialize.py` (in the entity-emit function, immediately after the `for i, origin in enumerate(entity.origins)` loop, ~line 929, before `if entity.added_by:`)
+- Modify: `science/src/science_tool/graph/materialize.py` — add `_add_lens_vocabulary(graph)` (called once in `_emit_phase` after the graphs are created, ~line 332) and `_add_lens_views(*, uri, provenance, entity)` (called from `_add_entity` immediately after the `for i, origin in enumerate(entity.origins)` loop, ~line 929, before `if entity.added_by:`).
 - Test: `science/tests/test_lens_view_materialize.py`
 
 **Interfaces:**
-- Consumes: `entity.lens_views` (Task 2); existing `PROJECT_NS`, `SCI_NS`, `RDF`, `URIRef`, `quote`, `provenance` graph.
-- Produces graph triples: `<entity> sci:hasLensView <view>`, `<view> a sci:LensView`, `<view> sci:viewedThroughLens <lens>`, `<lens> a sci:Lens`, and `<view> sci:fromOrigin <origin>` when linkable.
+- Consumes: `entity.lens_views` (Task 2); `science_model.lenses.LENSES` (Task 1); existing module-level `PROJECT_NS`, `SCI_NS`, `RDF`, `RDFS`, `Literal`, `URIRef`, `quote`.
+- Produces: `_add_lens_vocabulary(graph)` — emits **all** `LENSES` as `sci:Lens` nodes with `sci:lensSlug`, `rdfs:label`, `rdfs:comment`, `sci:lensKind` (so absent lenses still have nodes for under-represented-lens queries). `_add_lens_views(*, uri, provenance, entity)` — reifies each view: `<entity> sci:hasLensView <view>`, `<view> a sci:LensView`, `<view> sci:viewedThroughLens <lens>`, and `<view> sci:fromOrigin <origin>` when linkable. The two responsibilities are split: vocabulary nodes are emitted once; views only *link* to them.
 
-- [ ] **Step 1: Write the failing test**
+**Test pattern:** existing graph tests (`test_composition_rule_materialize.py`) call the emit helper directly with a bare `Graph()` and import `SCI_NS` from `science_tool.graph.io` — do the same here instead of parsing a full TriG with a guessed namespace.
 
-Model the harness on `science/tests/test_composition_rule_materialize.py` (read it first for the `seed_project` / `materialize_graph` / graph-load pattern). Concretely:
+- [ ] **Step 1: Write the failing tests**
 
 ```python
 # science/tests/test_lens_view_materialize.py
 from __future__ import annotations
 
-from rdflib import Graph, URIRef
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import RDF
 
-from _fixtures.entity_helpers import seed_project
-from science_tool.graph.materialize import materialize_graph
-
-
-_ENTITY = """\
----
-id: question:0001-lens-demo
-kind: question
-title: Lens demo
-status: open
-project: testproj
-ontology_terms: []
-related: []
-source_refs: []
-origins:
-  - type: assistant
-    ref: explore-ideas-mechanism
-  - type: assistant
-    ref: explore-ideas-analogy
-    independent: true
-lens_views:
-  - lens: mechanism
-    rationale: mechanism framing
-    origin_ref: explore-ideas-mechanism
-  - lens: analogy
-    rationale: analogy framing
-    origin_ref: explore-ideas-analogy
-created: '2026-07-04'
-updated: '2026-07-04'
----
-# Lens demo
-
-## Summary
-
-Body.
-"""
+from science_model.entities import Entity, EntityType, LensView, OriginRecord, OriginType
+from science_tool.graph.io import SCI_NS
+from science_tool.graph.materialize import _add_lens_views, _add_lens_vocabulary
 
 
-def test_lens_views_reified_with_origin_link(tmp_path) -> None:
-    root = seed_project(tmp_path)
-    (root / "entities" / "questions").mkdir(parents=True, exist_ok=True)
-    (root / "entities" / "questions" / "0001-lens-demo.md").write_text(_ENTITY, encoding="utf-8")
+def _entity() -> Entity:
+    return Entity(
+        id="question:0001-lens-demo",
+        canonical_id="question:0001-lens-demo",
+        kind="question",
+        type=EntityType.QUESTION,
+        title="Lens demo",
+        project="p",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="entities/questions/0001-lens-demo.md",
+        origins=[
+            OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism"),
+            OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-analogy", independent=True),
+        ],
+        lens_views=[
+            LensView(lens="mechanism", rationale="m", origin_ref="explore-ideas-mechanism"),
+            LensView(lens="analogy", rationale="a", origin_ref="explore-ideas-analogy"),
+        ],
+    )
 
-    trig = materialize_graph(root, strict=False)
-    g = Graph()
-    g.parse(trig, format="trig")
 
-    sci = "https://schema.science.dev/"  # confirm actual SCI_NS base in Step 2
-    has_lens_view = URIRef(sci + "hasLensView")
-    viewed_through = URIRef(sci + "viewedThroughLens")
-    from_origin = URIRef(sci + "fromOrigin")
+def test_lens_views_reified_with_origin_link() -> None:
+    prov = Graph()
+    uri = URIRef("http://example.org/science/entity/question/0001-lens-demo")
+    _add_lens_views(uri=uri, provenance=prov, entity=_entity())
 
-    views = list(g.objects(None, has_lens_view))
+    views = list(prov.objects(uri, SCI_NS.hasLensView))
     assert len(views) == 2
-    # each view links a lens and an origin
-    for v in views:
-        assert list(g.objects(v, viewed_through)), "view missing viewedThroughLens"
-        assert list(g.objects(v, from_origin)), "view missing fromOrigin"
+    for view in views:
+        assert list(prov.objects(view, SCI_NS.viewedThroughLens)), "view missing viewedThroughLens"
+        assert list(prov.objects(view, SCI_NS.fromOrigin)), "view missing fromOrigin"
+
+
+def test_lens_vocabulary_emits_all_six_lenses() -> None:
+    g = Graph()
+    _add_lens_vocabulary(g)
+    lens_nodes = set(g.subjects(RDF.type, SCI_NS.Lens))
+    assert len(lens_nodes) == 6
+    mechanism = URIRef(SCI_NS["lens/mechanism"])
+    assert mechanism in lens_nodes
+    assert (mechanism, SCI_NS.lensSlug, Literal("mechanism")) in g
 ```
 
-- [ ] **Step 2: Confirm the `SCI_NS` base URI, then run the test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd science && uv run python -c "from science_tool.graph.materialize import SCI_NS; print(str(SCI_NS))"`
-Use the printed base in the test's `sci = ...` line (replace the placeholder).
 Run: `cd science && uv run pytest tests/test_lens_view_materialize.py -q`
-Expected: FAIL (only 0 `hasLensView` objects — predicate not emitted yet)
+Expected: FAIL with `ImportError: cannot import name '_add_lens_views'`
 
-- [ ] **Step 3: Emit the reified lens-view triples**
+- [ ] **Step 3: Add the vocabulary helper and wire it once**
 
-In `science/src/science_tool/graph/materialize.py`, immediately after the `for i, origin in enumerate(entity.origins):` loop (after line ~929), add:
+In `science/src/science_tool/graph/materialize.py`, add:
 
 ```python
+def _add_lens_vocabulary(graph) -> None:
+    """Emit the full packaged lens vocabulary as nodes.
+
+    Every lens gets a node with metadata, regardless of whether any entity uses
+    it, so 'which lens is under-represented' queries can find absent lenses.
+    """
+    from science_model.lenses import LENSES
+
+    for lens in LENSES:
+        node = URIRef(SCI_NS[f"lens/{lens.slug}"])
+        graph.add((node, RDF.type, SCI_NS.Lens))
+        graph.add((node, SCI_NS.lensSlug, Literal(lens.slug)))
+        graph.add((node, RDFS.label, Literal(lens.name)))
+        graph.add((node, RDFS.comment, Literal(lens.description)))
+        graph.add((node, SCI_NS.lensKind, Literal(lens.kind)))
+```
+
+Then, in `_emit_phase`, immediately after the provenance graph is created (`provenance = dataset.graph(PROJECT_NS["graph/provenance"])`, ~line 327), add:
+
+```python
+    _add_lens_vocabulary(provenance)
+```
+
+- [ ] **Step 4: Add the per-entity reification helper and call it from `_add_entity`**
+
+Add to `science/src/science_tool/graph/materialize.py`:
+
+```python
+def _add_lens_views(*, uri: URIRef, provenance, entity) -> None:
+    """Reify each lens-view, linking the entity, its lens node, and the origin
+    that produced it. Lens *nodes* come from _add_lens_vocabulary; here we only
+    link to them so the lens<->origin association survives into the graph."""
     origin_index_by_ref = {
         origin.ref: idx for idx, origin in enumerate(entity.origins) if origin.ref is not None
     }
     for j, view in enumerate(getattr(entity, "lens_views", []) or []):
         view_node = URIRef(PROJECT_NS[f"lensview/{quote(entity.canonical_id, safe='')}/{j}"])
         lens_node = URIRef(SCI_NS[f"lens/{view.lens}"])
-        provenance.add((entity_uri, SCI_NS.hasLensView, view_node))
+        provenance.add((uri, SCI_NS.hasLensView, view_node))
         provenance.add((view_node, RDF.type, SCI_NS.LensView))
         provenance.add((view_node, SCI_NS.viewedThroughLens, lens_node))
-        provenance.add((lens_node, RDF.type, SCI_NS.Lens))
         if view.origin_ref is not None and view.origin_ref in origin_index_by_ref:
             origin_idx = origin_index_by_ref[view.origin_ref]
             origin_node = URIRef(PROJECT_NS[f"origin/{quote(entity.canonical_id, safe='')}/{origin_idx}"])
             provenance.add((view_node, SCI_NS.fromOrigin, origin_node))
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+In `_add_entity`, immediately after the `for i, origin in enumerate(entity.origins):` loop (after line ~929), add:
+
+```python
+    _add_lens_views(uri=entity_uri, provenance=provenance, entity=entity)
+```
+
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd science && uv run pytest tests/test_lens_view_materialize.py -q`
-Expected: PASS
+Expected: PASS (2 passed)
 
-- [ ] **Step 5: Run the graph suite (no regressions)**
+- [ ] **Step 6: Run the graph suite (no regressions)**
 
 Run: `cd science && uv run pytest tests/test_graph_build_strict.py tests/test_composition_rule_materialize.py -q`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add science/src/science_tool/graph/materialize.py science/tests/test_lens_view_materialize.py
-git commit -m "feat(graph): reify lens-views with lens and origin edges"
+git commit -m "feat(graph): reify lens-views; emit packaged lens vocabulary nodes"
 ```
 
 ---
@@ -659,7 +733,8 @@ def _write_entity(root, name, extra_fm) -> None:
 
 
 def test_validate_warns_on_lens_origin_without_lens_views(tmp_path) -> None:
-    root = seed_project(tmp_path)
+    root = tmp_path
+    seed_project(root)
     _write_entity(root, "0001-x.md", "origins:\n  - type: assistant\n    ref: explore-ideas-mechanism\n")
     result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
     assert "no lens_views" in result.output or "lens_views" in result.output
@@ -835,10 +910,18 @@ In the "Origin-plan finalization rules" list (line ~204+), add a bullet:
 Run: `grep -n "keep only one" commands/explore-ideas.md`
 Expected: no matches.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Regenerate the Codex-skills mirror and run sync tests**
+
+This repo mirrors each command into `codex-skills/science-<command>/SKILL.md` via a generator, and tests assert the mirror is current. After editing the command doc, regenerate and verify:
+
+Run: `uv run python scripts/generate_codex_skills.py`
+Run: `cd science && uv run pytest tests/test_codex_skills.py tests/test_command_docs.py -q`
+Expected: PASS. Confirm the mirror changed: `git status --porcelain codex-skills/science-explore-ideas/`.
+
+- [ ] **Step 7: Commit (command + regenerated mirror together)**
 
 ```bash
-git add commands/explore-ideas.md
+git add commands/explore-ideas.md codex-skills/science-explore-ideas/SKILL.md
 git commit -m "docs(explore-ideas): lens_views report contract; drop keep-one"
 ```
 
@@ -890,7 +973,8 @@ origin_plan:
 
 
 def test_backfill_adds_views_for_lens_origins(tmp_path) -> None:
-    root = seed_project(tmp_path)
+    root = tmp_path
+    seed_project(root)
     (root / "entities" / "meta" / "explorations").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "meta" / "explorations" / "explore-demo.md").write_text(
         _APPLIED_REPORT, encoding="utf-8"
@@ -1080,6 +1164,11 @@ git commit -m "decision: lens_views as first-class content, separate from proven
 
 ## Deferred from v1 (explicit, not overlooked)
 
+**This plan is a deliberate v1 *partial* implementation of the design**, not a
+full realization of it. The design at
+`meta/doc/plans/2026-07-04-multi-lens-first-class-representation-design.md`
+remains the complete target; the items below are consciously out of v1 scope.
+
 - **Generated `## Lens Views` body section.** The design specifies a
   human-readable body section rendered from frontmatter (non-canonical, no
   bidirectional sync). It is a pure display affordance — `lens_views` frontmatter
@@ -1091,6 +1180,15 @@ git commit -m "decision: lens_views as first-class content, separate from proven
 - **`theme`/`topic` lens_views.** Design §Scope makes the field extensible to
   `topic`/`theme`; v1 targets `question`/`hypothesis` only (the kinds
   `explore-ideas` produces). Ties to upstream `fb-2026-07-04-007`.
+
+- **Future direction — cross/within-lens idea clustering.** Once `lens_views`
+  exist, the natural next layer is clustering ideas *within and across* lenses by
+  shared system / theme / modality (e.g. two ideas both about "innate-immune
+  memory" surfaced by different lenses). That grouping axis is **distinct from
+  the lens vocabulary itself** — a lens is *how* an idea was framed; a cluster is
+  *what* it is about. This likely lands on the `theme` entity kind
+  (`fb-2026-07-04-007`) and the derived convergence graph, not on `lens_views`.
+  Out of scope here; recorded so the model boundary stays clean.
 
 ## Final verification
 
