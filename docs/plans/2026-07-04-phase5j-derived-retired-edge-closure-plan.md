@@ -174,6 +174,42 @@ def test_plan_closure_wins_soft_retired_state_blockers(tmp_path: Path) -> None:
     assert row["closed_by"] == ["proposition:a-affects-b"]
 
 
+def test_plan_closure_wins_eliminated_edge_blocker(tmp_path: Path) -> None:
+    # An eliminated retired edge that already has a lineage-backed proposition is
+    # treated as migrated (closed), not blocked. This pins the deliberate decision
+    # that `eliminated-edge` is a soft blocker that derived closure overrides.
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: eliminated
+    identification: observational
+    description: Refuted legacy edge.
+    eliminated_by:
+      - task: t002
+        description: Refutation.
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_lineage_proposition(project)
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["closed"] == 1
+    assert payload["summary"]["blocked"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["blockers"] == []
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+
+
 def test_plan_pair_only_match_without_lineage_remains_skipped(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_edge_project(project)
@@ -300,6 +336,27 @@ Update `RetiredEdgeMigrationPlan.to_json()` summary:
 ```python
                 "closed": counts["closed"],
 ```
+
+Adding `closed` to the summary breaks the one existing exact-equality
+assertion. Update `test_plan_blocks_migrated_row_without_focal_hypothesis`
+(the `assert payload["summary"] == { ... }` block) to include the new key:
+
+```python
+    assert payload["summary"] == {
+        "files": 1,
+        "rows": 1,
+        "ready": 0,
+        "blocked": 1,
+        "skipped": 0,
+        "closed": 0,
+        "predicate_review_required": 1,
+        "membership_required": 1,
+        "evidence_warnings": 0,
+    }
+```
+
+All other summary assertions use key subscripts and are unaffected. Do this in
+the same commit as the implementation so the suite stays green.
 
 - [ ] **Step 2: Add the closure index helper**
 
@@ -440,9 +497,37 @@ def _closure_row_or_blocker(
 
 - [ ] **Step 5: Reorder `_plan_edge(...)`**
 
-Inside `_plan_edge(...)`, replace the initial blocker flow with this structure:
+Replace the **entire** body of `_plan_edge(...)` (its signature already grew a
+`closure_claims_by_edge` argument in Step 3) with the following. This is a
+faithful reorder: hard identity blockers short-circuit first, then derived
+closure, then the *unchanged* soft-blocker / no-claim-skip / pair-only-skip /
+ready flow. The two skip branches must keep their exact current shape — the
+no-claim skip returns a `skipped` row carrying only notes (no blockers), and
+the pair-only skip returns the hardcoded `("matching-proposition-exists",)`
+tuple and populates `matching_propositions`.
 
 ```python
+def _plan_edge(
+    *,
+    project_root: Path,
+    rel_path: str,
+    dag: str,
+    edge: EdgeRecord,
+    missing_identification: bool,
+    dot_exists: bool,
+    focal_hypothesis: str | None,
+    propositions_by_pair: dict[tuple[str, str], list[PropositionEntity]],
+    closure_claims_by_edge: dict[tuple[str, int], list[LegacyEdgeClosureClaim]],
+) -> RetiredEdgeMigrationRow:
+    del project_root
+    source = edge.source.strip()
+    target = edge.target.strip()
+    description = edge.description.strip()
+    raw_support = _raw_support_entries(edge)
+    notes: list[str] = []
+
+    # 1. Hard identity blockers short-circuit before closure: a row whose
+    #    source/target is unusable cannot be trusted as already migrated.
     hard_blockers: list[str] = []
     if not source:
         hard_blockers.append("missing-source")
@@ -450,7 +535,6 @@ Inside `_plan_edge(...)`, replace the initial blocker flow with this structure:
         hard_blockers.append("missing-target")
     if missing_identification:
         notes.append("missing-identification-defaulted-to-none")
-
     if hard_blockers:
         return _blocked_row(
             rel_path=rel_path,
@@ -464,7 +548,11 @@ Inside `_plan_edge(...)`, replace the initial blocker flow with this structure:
             notes=tuple(notes),
         )
 
-    closure_claims = tuple(closure_claims_by_edge.get((dag, edge.id), ()))
+    # 2. Derived closure: a live lineage-backed proposition for this retired
+    #    edge closes it (or blocks on duplicate / subject-object mismatch).
+    #    This precedes the soft retired-state blockers below, so dot-missing /
+    #    eliminated-edge do not prevent closure of an already-migrated row.
+    closure_claims = closure_claims_by_edge.get((dag, edge.id), [])
     if closure_claims:
         return _closure_row_or_blocker(
             rel_path=rel_path,
@@ -478,14 +566,86 @@ Inside `_plan_edge(...)`, replace the initial blocker flow with this structure:
             claims=closure_claims,
         )
 
+    # 3. Soft retired-state blockers (only reached when the row is not closed).
     blockers: list[str] = []
     if not dot_exists:
         blockers.append("dot-missing")
     if edge.edge_status == EdgeStatus.eliminated:
         blockers.append("eliminated-edge")
+
+    # 4. No-claim-support rows are skipped (unchanged Phase 5g behavior).
+    if not _has_claim_support_content(edge):
+        return RetiredEdgeMigrationRow(
+            path=rel_path,
+            dag=dag,
+            edge_id=edge.id,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            status="skipped",
+            notes=(*notes, "no-claim-support-content"),
+        )
+
+    # 5. Pair-only match without lineage stays skipped (unchanged Phase 5g
+    #    behavior); lineage-backed pairs were already handled by closure above.
+    matches = propositions_by_pair.get((source, target), [])
+    if matches:
+        missing_legacy = [
+            prop.id
+            for prop in matches
+            if getattr(prop, "legacy_patch", None) is None or getattr(prop, "legacy_edge_id", None) is None
+        ]
+        if missing_legacy:
+            notes.append("matching proposition lacks legacy_patch/legacy_edge_id")
+        return RetiredEdgeMigrationRow(
+            path=rel_path,
+            dag=dag,
+            edge_id=edge.id,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            status="skipped",
+            blockers=("matching-proposition-exists",),
+            notes=tuple(notes),
+            matching_propositions=tuple(sorted(prop.id for prop in matches if prop.id is not None)),
+        )
+
+    # 6. Otherwise plan a ready/blocked migration row (unchanged).
+    membership_required = focal_hypothesis is None
+    if membership_required:
+        blockers.append("membership-required")
+
+    proposed_row, evidence_warnings = _proposed_workbench_row(
+        dag=dag,
+        edge=edge,
+        focal_hypothesis=focal_hypothesis,
+    )
+    status: MigrationStatus = "blocked" if blockers else "ready"
+    return RetiredEdgeMigrationRow(
+        path=rel_path,
+        dag=dag,
+        edge_id=edge.id,
+        source=source,
+        target=target,
+        description=description,
+        raw_support=raw_support,
+        status=status,
+        blockers=tuple(blockers),
+        notes=tuple(notes),
+        predicate_review_required=True,
+        membership_required=membership_required,
+        evidence_warnings=tuple(evidence_warnings),
+        proposed_row=proposed_row,
+    )
 ```
 
-Leave the no-claim skip, pair-only skip, membership blocker, and proposed row logic after this block. Remove the old early `blockers` list initialization to avoid duplicate variables.
+Behavior note: the hard-blocker early return (step 1) means a whitespace-only
+`source`/`target` row now returns with only the identity blocker instead of
+also accumulating soft/membership blockers. `EdgeRecord` requires `source` and
+`target`, so this path is only reachable for whitespace-only values and is
+untested today; the change is intentional (fail fast on unusable identity).
 
 - [ ] **Step 6: Update table rendering for closed rows**
 
@@ -526,7 +686,10 @@ Run:
 cd science && rtk uv run --frozen pytest tests/dag/test_retired_edge_migration.py -q
 ```
 
-Expected: PASS, or failures only in scaffold complete behavior that Task 3 will implement.
+Expected: PASS, once the `test_plan_blocks_migrated_row_without_focal_hypothesis`
+summary assertion has been updated for the new `closed` key (Step 1). The only
+remaining failures should be the not-yet-implemented scaffold `complete`
+behavior that Task 3 delivers.
 
 - [ ] **Step 9: Commit planner implementation**
 
@@ -1125,7 +1288,7 @@ Expected: clean worktree on `phase5j-derived-retired-edge-closure`.
 - [ ] Pair-only matches without `legacy_patch` / `legacy_edge_id` remain skipped with the existing diagnostic.
 - [ ] Duplicate `(legacy_patch, legacy_edge_id)` claims block the retired row.
 - [ ] Subject/object mismatch for a lineage claim blocks the retired row.
-- [ ] Soft retired-state blockers such as `dot-missing` do not prevent closure when trusted live proposition lineage exists.
+- [ ] Soft retired-state blockers (`dot-missing`, `eliminated-edge`) do not prevent closure when trusted live proposition lineage exists; both are covered by tests.
 - [ ] Scaffold all-closed DAGs return `complete` and do not inspect/write the output path.
 - [ ] Scaffold mixed closed+ready DAGs write only remaining ready rows.
 - [ ] Protein-landscape six-row fixture reports `closed: 6` and scaffold `complete`.
