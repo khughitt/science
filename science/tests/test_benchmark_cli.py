@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -663,6 +664,33 @@ def test_format_gap_candidates_renders_mixed_fallback_without_raising() -> None:
 
     assert "dataset:specific-a" in rendered
     assert "generic fallback: 1 candidates (top: dataset:generic-a)" in rendered
+
+
+def test_format_gap_candidates_rejects_entity_specific_and_fallback_mix() -> None:
+    from science_tool.cli import _format_gap_candidates_for_table
+
+    row = {
+        "candidate_mode": "entity-specific",
+        "candidate_benchmarks": [
+            {
+                "benchmark_id": "dataset:specific-a",
+                "candidate_score": 2.0,
+                "context_fit": "direct-fit",
+                "context_fit_warnings": [],
+                "reason_notes": ["missing-facet:proteomics"],
+            },
+            {
+                "benchmark_id": "dataset:generic-a",
+                "candidate_score": 1.0,
+                "context_fit": "generic-fallback",
+                "context_fit_warnings": [],
+                "reason_notes": ["fallback:baseline-quality"],
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="mixes entity-specific and fallback candidates"):
+        _format_gap_candidates_for_table(row)
 
 
 def test_benchmark_gaps_cli_filters_context_fit_json(tmp_path: Path) -> None:

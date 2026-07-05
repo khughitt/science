@@ -377,12 +377,13 @@ Add focused tests for:
 - `display_group(...)` per-row derivation on **both** row types, including the
   precedence partition (blocked-support > specific > generic-baseline >
   generic-task-ready > generic-available) and totality via the catch-all;
-- `display_group(...)` raises on a non-fallback row, and `blocked-support-fallback`
-  is never produced for a gap-candidate row (no `task_support_state`);
+- `display_group(...)` raises on a non-fallback row, and
+  `blocked-support-fallback` is derived for gap candidates from the
+  `blocked-support-fallback` warning unioned across underlying task rows;
 - `gaps_report()` includes `fallback_diagnostics` whose counts satisfy the
   Reconciliation Invariants (`fallback_candidate_rows == Σ groups`;
   `generic_fallback_candidate_rows ==` the three generic groups; gaps `groups`
-  omits `blocked-support-fallback`);
+  includes all five display groups);
 - a single gap row whose fallback candidates mix `specific-fallback` and
   `generic-*`: the table shows the specific candidate(s) individually and
   collapses the generic ones — it does **not** raise;

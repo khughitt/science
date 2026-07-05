@@ -6495,6 +6495,13 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     candidates = row["candidate_benchmarks"]
     if not candidates:
         return "-"
+    fallback_candidates = [
+        candidate
+        for candidate in candidates
+        if any(str(note).startswith("fallback:") for note in candidate.get("reason_notes", []))
+    ]
+    if fallback_candidates and len(fallback_candidates) != len(candidates):
+        raise ValueError("gap row mixes entity-specific and fallback candidates")
     if row.get("candidate_mode") != "fallback-only":
         return ", ".join(_format_gap_candidate_for_table(candidate) for candidate in candidates[:3])
 
