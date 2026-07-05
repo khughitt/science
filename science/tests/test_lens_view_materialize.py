@@ -45,6 +45,35 @@ def test_lens_views_reified_with_origin_link() -> None:
         assert list(prov.objects(view, SCI_NS.fromOrigin)), "view missing fromOrigin"
 
 
+def test_lens_view_without_origin_ref_omits_from_origin() -> None:
+    prov = Graph()
+    uri = URIRef("http://example.org/science/entity/question/0002-no-origin")
+    entity = Entity(
+        id="question:0002-no-origin",
+        canonical_id="question:0002-no-origin",
+        kind="question",
+        type=EntityType.QUESTION,
+        title="No origin lens view",
+        project="p",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="entities/questions/0002-no-origin.md",
+        origins=[],
+        lens_views=[
+            LensView(lens="mechanism", rationale="m", origin_ref=None),
+        ],
+    )
+    _add_lens_views(uri=uri, provenance=prov, entity=entity)
+
+    views = list(prov.objects(uri, SCI_NS.hasLensView))
+    assert len(views) == 1
+    view = views[0]
+    assert list(prov.objects(view, SCI_NS.viewedThroughLens)), "view missing viewedThroughLens"
+    assert not list(prov.objects(view, SCI_NS.fromOrigin)), "view should not have fromOrigin"
+
+
 def test_lens_vocabulary_emits_all_six_lenses() -> None:
     g = Graph()
     _add_lens_vocabulary(g)
@@ -102,7 +131,7 @@ def test_lens_views_and_vocabulary_wired_into_materialize(tmp_path) -> None:
     ds.parse(trig, format="trig")
 
     assert any(ds.quads((None, SCI_NS.hasLensView, None))), (
-        "no sci:hasLensView edge - _add_lens_views not wired into _add_entity"
+        "no sci:hasLensView edge - _add_lens_views not wired into _add_relations"
     )
     lens_nodes = {row[0] for row in ds.quads((None, RDF.type, SCI_NS.Lens))}
     assert len(lens_nodes) == 6, (

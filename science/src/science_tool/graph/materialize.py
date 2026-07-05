@@ -1672,15 +1672,16 @@ def _add_lens_views(*, uri: URIRef, provenance, entity) -> None:
     origin_index_by_ref = {
         origin.ref: idx for idx, origin in enumerate(entity.origins) if origin.ref is not None
     }
+    qid = quote(entity.canonical_id, safe='')
     for j, view in enumerate(getattr(entity, "lens_views", []) or []):
-        view_node = URIRef(PROJECT_NS[f"lensview/{quote(entity.canonical_id, safe='')}/{j}"])
+        view_node = URIRef(PROJECT_NS[f"lensview/{qid}/{j}"])
         lens_node = URIRef(SCI_NS[f"lens/{view.lens}"])
         provenance.add((uri, SCI_NS.hasLensView, view_node))
         provenance.add((view_node, RDF.type, SCI_NS.LensView))
         provenance.add((view_node, SCI_NS.viewedThroughLens, lens_node))
         if view.origin_ref is not None and view.origin_ref in origin_index_by_ref:
             origin_idx = origin_index_by_ref[view.origin_ref]
-            origin_node = URIRef(PROJECT_NS[f"origin/{quote(entity.canonical_id, safe='')}/{origin_idx}"])
+            origin_node = URIRef(PROJECT_NS[f"origin/{qid}/{origin_idx}"])
             provenance.add((view_node, SCI_NS.fromOrigin, origin_node))
 
 
