@@ -22,7 +22,23 @@ from science_tool.dag.schema import EdgeRecord, EdgeStatus, Identification, Sche
 from science_tool.dag.workbench import WorkbenchFile
 
 
-MigrationStatus = Literal["ready", "blocked", "skipped"]
+MigrationStatus = Literal["ready", "blocked", "skipped", "closed"]
+
+
+@dataclass(frozen=True)
+class LegacyEdgeClosureClaim:
+    proposition: str
+    subject: str
+    object: str
+    file_path: str
+
+    def to_json(self) -> dict[str, str]:
+        return {
+            "proposition": self.proposition,
+            "subject": self.subject,
+            "object": self.object,
+            "file_path": self.file_path,
+        }
 
 
 @dataclass(frozen=True)
@@ -41,6 +57,9 @@ class RetiredEdgeMigrationRow:
     membership_required: bool = False
     evidence_warnings: tuple[str, ...] = field(default_factory=tuple)
     matching_propositions: tuple[str, ...] = field(default_factory=tuple)
+    closed_by: tuple[str, ...] = field(default_factory=tuple)
+    closure_reason: str = ""
+    closure_conflicts: tuple[LegacyEdgeClosureClaim, ...] = field(default_factory=tuple)
     proposed_row: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
@@ -59,6 +78,9 @@ class RetiredEdgeMigrationRow:
             "membership_required": self.membership_required,
             "evidence_warnings": list(self.evidence_warnings),
             "matching_propositions": list(self.matching_propositions),
+            "closed_by": list(self.closed_by),
+            "closure_reason": self.closure_reason,
+            "closure_conflicts": [claim.to_json() for claim in self.closure_conflicts],
             "proposed_row": self.proposed_row,
         }
 
@@ -80,6 +102,7 @@ class RetiredEdgeMigrationPlan:
                 "ready": counts["ready"],
                 "blocked": counts["blocked"],
                 "skipped": counts["skipped"],
+                "closed": counts["closed"],
                 "predicate_review_required": sum(1 for row in self.rows if row.predicate_review_required),
                 "membership_required": sum(1 for row in self.rows if row.membership_required),
                 "evidence_warnings": sum(len(row.evidence_warnings) for row in self.rows),
@@ -136,6 +159,7 @@ def build_retired_edge_migration_plan(
         raise ValueError(f"retired DAG edge file does not exist for dag {dag!r}: {yaml_paths[0]}")
 
     propositions_by_pair = _propositions_by_pair(project_root)
+    closure_claims_by_edge = _closure_claims_by_legacy_edge(project_root)
     rows: list[RetiredEdgeMigrationRow] = []
     for yaml_path in yaml_paths:
         if not yaml_path.exists():
@@ -174,6 +198,7 @@ def build_retired_edge_migration_plan(
                     dot_exists=dot_exists,
                     focal_hypothesis=focal_hypothesis,
                     propositions_by_pair=propositions_by_pair,
+                    closure_claims_by_edge=closure_claims_by_edge,
                 )
             )
 
@@ -319,6 +344,34 @@ def _propositions_by_pair(project_root: Path) -> dict[tuple[str, str], list[Prop
     return result
 
 
+def _closure_claims_by_legacy_edge(project_root: Path) -> dict[tuple[str, int], list[LegacyEdgeClosureClaim]]:
+    result: dict[tuple[str, int], list[LegacyEdgeClosureClaim]] = {}
+    for prop in load_relational_propositions(project_root):
+        if prop.id is None or prop.legacy_patch is None or prop.legacy_edge_id is None:
+            continue
+        if prop.subject is None or prop.object is None:
+            continue
+        key = (prop.legacy_patch, prop.legacy_edge_id)
+        result.setdefault(key, []).append(
+            LegacyEdgeClosureClaim(
+                proposition=prop.id,
+                subject=prop.subject,
+                object=prop.object,
+                file_path=_project_relative_entity_path(project_root, prop.file_path),
+            )
+        )
+    for claims in result.values():
+        claims.sort(key=lambda claim: claim.proposition)
+    return result
+
+
+def _project_relative_entity_path(project_root: Path, file_path: str) -> str:
+    path = Path(file_path)
+    if not path.is_absolute():
+        return file_path
+    return _project_relative_or_absolute(project_root, path)
+
+
 def _plan_missing_identity_edge(
     *,
     rel_path: str,
@@ -367,6 +420,92 @@ def _raw_int(value: object) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _blocked_row(
+    *,
+    rel_path: str,
+    dag: str,
+    edge: EdgeRecord,
+    source: str,
+    target: str,
+    description: str,
+    raw_support: tuple[dict[str, str], ...],
+    blockers: Sequence[str],
+    notes: Sequence[str] = (),
+    closure_conflicts: Sequence[LegacyEdgeClosureClaim] = (),
+) -> RetiredEdgeMigrationRow:
+    return RetiredEdgeMigrationRow(
+        path=rel_path,
+        dag=dag,
+        edge_id=edge.id,
+        source=source,
+        target=target,
+        description=description,
+        raw_support=raw_support,
+        status="blocked",
+        blockers=tuple(blockers),
+        notes=tuple(notes),
+        closure_conflicts=tuple(closure_conflicts),
+    )
+
+
+def _closure_row_or_blocker(
+    *,
+    rel_path: str,
+    dag: str,
+    edge: EdgeRecord,
+    source: str,
+    target: str,
+    description: str,
+    raw_support: tuple[dict[str, str], ...],
+    notes: Sequence[str],
+    claims: Sequence[LegacyEdgeClosureClaim],
+) -> RetiredEdgeMigrationRow | None:
+    if not claims:
+        return None
+    if len(claims) > 1:
+        return _blocked_row(
+            rel_path=rel_path,
+            dag=dag,
+            edge=edge,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            blockers=("duplicate-legacy-edge-claim",),
+            notes=notes,
+            closure_conflicts=claims,
+        )
+
+    claim = claims[0]
+    if claim.subject != source or claim.object != target:
+        return _blocked_row(
+            rel_path=rel_path,
+            dag=dag,
+            edge=edge,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            blockers=("legacy-edge-claim-mismatch",),
+            notes=notes,
+            closure_conflicts=(claim,),
+        )
+
+    return RetiredEdgeMigrationRow(
+        path=rel_path,
+        dag=dag,
+        edge_id=edge.id,
+        source=source,
+        target=target,
+        description=description,
+        raw_support=raw_support,
+        status="closed",
+        notes=(*notes, "derived-closure"),
+        closed_by=(claim.proposition,),
+        closure_reason="derived-legacy-edge-lineage",
+    )
+
+
 def _plan_edge(
     *,
     project_root: Path,
@@ -377,6 +516,7 @@ def _plan_edge(
     dot_exists: bool,
     focal_hypothesis: str | None,
     propositions_by_pair: dict[tuple[str, str], list[PropositionEntity]],
+    closure_claims_by_edge: dict[tuple[str, int], list[LegacyEdgeClosureClaim]],
 ) -> RetiredEdgeMigrationRow:
     del project_root
     source = edge.source.strip()
@@ -390,12 +530,39 @@ def _plan_edge(
         blockers.append("missing-source")
     if not target:
         blockers.append("missing-target")
+    if missing_identification:
+        notes.append("missing-identification-defaulted-to-none")
+    if blockers:
+        return _blocked_row(
+            rel_path=rel_path,
+            dag=dag,
+            edge=edge,
+            source=source,
+            target=target,
+            description=description,
+            raw_support=raw_support,
+            blockers=blockers,
+            notes=notes,
+        )
+
+    closure_row = _closure_row_or_blocker(
+        rel_path=rel_path,
+        dag=dag,
+        edge=edge,
+        source=source,
+        target=target,
+        description=description,
+        raw_support=raw_support,
+        notes=notes,
+        claims=closure_claims_by_edge.get((dag, edge.id), []),
+    )
+    if closure_row is not None:
+        return closure_row
+
     if not dot_exists:
         blockers.append("dot-missing")
     if edge.edge_status == EdgeStatus.eliminated:
         blockers.append("eliminated-edge")
-    if missing_identification:
-        notes.append("missing-identification-defaulted-to-none")
 
     if not _has_claim_support_content(edge):
         return RetiredEdgeMigrationRow(
@@ -705,9 +872,17 @@ def render_migration_plan_table(plan: RetiredEdgeMigrationPlan) -> str:
         "Retired edge migration plan: "
         f"{payload['summary']['ready']} ready, "
         f"{payload['summary']['blocked']} blocked, "
-        f"{payload['summary']['skipped']} skipped."
+        f"{payload['summary']['skipped']} skipped, "
+        f"{payload['summary']['closed']} closed."
     ]
     for row in payload["rows"]:
+        if row["status"] == "closed":
+            closed_by = ",".join(row["closed_by"]) if row["closed_by"] else "-"
+            lines.append(
+                f"  {row['dag']}#{row['edge_id']}: {row['source']} -> {row['target']} "
+                f"closed by {closed_by}"
+            )
+            continue
         blockers = ",".join(row["blockers"]) if row["blockers"] else "-"
         notes = ",".join(row["notes"]) if row["notes"] else "-"
         lines.append(

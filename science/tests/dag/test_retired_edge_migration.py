@@ -95,6 +95,7 @@ def test_plan_blocks_migrated_row_without_focal_hypothesis(tmp_path: Path) -> No
         "ready": 0,
         "blocked": 1,
         "skipped": 0,
+        "closed": 0,
         "predicate_review_required": 1,
         "membership_required": 1,
         "evidence_warnings": 0,
