@@ -9,7 +9,15 @@ import yaml
 from pydantic import ValidationError
 
 from science_model.entities import LensView, OriginRecord
-from science_tool.entities import EntityCommandError, create_entity
+from science_model.frontmatter import parse_frontmatter
+from science_model.lenses import LENS_BY_SLUG
+from science_tool.entities import (
+    EntityCommandError,
+    _atomic_replace_text,
+    _parse_markdown_file_preserving_body,
+    _render_markdown,
+    create_entity,
+)
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
@@ -426,3 +434,75 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
         manual=plan.manual,
         failures=failures,
     )
+
+
+def _file_id(path: Path) -> str | None:
+    parsed = parse_frontmatter(path)
+    if not parsed:
+        return None
+    fm, _ = parsed
+    value = fm.get("id")
+    return value if isinstance(value, str) else None
+
+
+def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, int]]:
+    """Backfill lens_views onto entities created by a prior applied report.
+
+    For each applied block, add one lens_view per lens-encoding assistant origin
+    on the created entity that has no matching view yet. Per-lens rationales are
+    recovered via ``derive_lens_views`` (so explicit per-lens rationales from
+    newer reports survive); any lens-origin the block didn't cover falls back to
+    the canonical lens-frame description as an honest interim rationale. Returns
+    ``(entity_id, views_added)`` for each touched entity.
+    """
+    report_path = resolve_report_path(project_root, from_value)
+    blocks = parse_report(report_path.read_text(encoding="utf-8"))
+    by_applied_as = {
+        str(b.data.get("applied_as")): b.data
+        for b in blocks
+        if b.data.get("decision") == "applied" and b.data.get("applied_as")
+    }
+
+    entities_root = project_root / "entities"
+    touched: list[tuple[str, int]] = []
+    for entity_id, block in by_applied_as.items():
+        target = next(
+            (p for p in entities_root.rglob("*.md") if _file_id(p) == entity_id), None
+        )
+        if target is None:
+            continue
+        # Body-preserving parse (not science_model's parse_frontmatter, which
+        # strips the body) so the write-back below only touches lens_views —
+        # no incidental whitespace churn to a hand-authored entity's prose.
+        fm, body = _parse_markdown_file_preserving_body(target)
+
+        # Recover per-lens rationales the report already carried (explicit
+        # lens_views, or a synthesized single-lens view) via the same helper
+        # apply uses; fall back to the canonical lens-frame description
+        # otherwise.
+        block_origins = (block.get("origin_plan") or {}).get("origins") or []
+        try:
+            block_views = derive_lens_views(block, list(block_origins), entity_id)
+        except ApplyValidationError:
+            block_views = []
+        rationale_by_lens = {v["lens"]: v["rationale"] for v in block_views}
+
+        existing = {v.get("lens") for v in (fm.get("lens_views") or []) if isinstance(v, dict)}
+        added: list[dict] = []
+        for origin in fm.get("origins") or []:
+            ref = origin.get("ref") if isinstance(origin, dict) else None
+            if not (isinstance(ref, str) and ref.startswith("explore-ideas-")):
+                continue
+            lens = ref.removeprefix("explore-ideas-")
+            if lens not in LENS_BY_SLUG or lens in existing:
+                continue
+            rationale = rationale_by_lens.get(lens) or LENS_BY_SLUG[lens].description
+            added.append({"lens": lens, "rationale": rationale, "origin_ref": ref})
+            existing.add(lens)
+        if not added:
+            continue
+        fm.setdefault("lens_views", [])
+        fm["lens_views"].extend(added)
+        _atomic_replace_text(target, _render_markdown(fm, body))
+        touched.append((entity_id, len(added)))
+    return touched

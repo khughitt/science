@@ -49,6 +49,7 @@ from science_tool.explore_ideas import (
     ApplyValidationError,
     ApplyWriteBackError,
     apply_report,
+    backfill_lens_views,
 )
 from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
@@ -1529,6 +1530,19 @@ def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> N
 
     if result.failures:
         raise SystemExit(1)
+
+
+@explore_ideas_group.command("backfill-lens-views")
+@click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
+def explore_ideas_backfill_lens_views(from_value: str) -> None:
+    """Backfill lens_views onto entities from a prior applied report."""
+    try:
+        touched = backfill_lens_views(Path.cwd(), from_value)
+    except (ApplyValidationError, ApplyWriteBackError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    for entity_id, n in touched:
+        click.echo(f"  {entity_id}: +{n} lens_view(s)")
+    click.echo(f"backfilled {sum(n for _, n in touched)} view(s) across {len(touched)} entit(ies)")
 
 
 def _build_origin_frontmatter(
