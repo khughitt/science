@@ -69,6 +69,7 @@ CANONICAL_CHECK_MODULES = (
     "evidence_lines",
     "propositions",
     "origins",
+    "lens_views",
 )
 
 
