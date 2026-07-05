@@ -289,7 +289,9 @@ When two lenses independently converge on the **same idea**, emit **one block**
 for the whole idea (not one per lens): carry every converged lens as a
 `lens_views` entry and one `origin_plan.origins` entry per lens, each marked
 `independent: true`. Every `lens_views[].origin_ref` MUST equal one of the
-planned `origin_plan.origins[].ref`.
+planned `origin_plan.origins[].ref`. A convergent block carries its per-lens
+framing in `lens_views` and omits the top-level `lens`/`rationale` fields,
+which are only for single-lens blocks.
 
 ```yaml
 candidate_id: cand-hspc-trained-immunity
@@ -310,6 +312,7 @@ origin_plan:
   origins:
     - type: assistant
       ref: explore-ideas-mechanism
+      independent: true
     - type: assistant
       ref: explore-ideas-analogy
       independent: true
@@ -337,6 +340,10 @@ block in Phase 3→4):
   Apply creates `origins` and `lens_views` together atomically; a legacy block
   with only a top-level `lens`+`rationale` (no `lens_views`) synthesizes a single
   view at apply time.
+- In a convergent (multi-lens) block, mark **every** per-lens `origin_plan.origins`
+  entry `independent: true` — each lens reached the idea independently, and that
+  is precisely what makes the entity convergent (≥2 lens-views whose origins are
+  independent).
 
 `origin_plan` holds `origins` only — `added_by` is not stored in the block;
 apply stamps it fresh (below) as `explore-ideas:<model-id>:<candidate_id>`.
