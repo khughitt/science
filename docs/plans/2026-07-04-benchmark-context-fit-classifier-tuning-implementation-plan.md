@@ -13,7 +13,7 @@
 ## File Map
 
 - Modify: `science/tests/test_benchmark_opportunities.py`
-  - Add two focused context-fit classifier tests near `test_context_fit_classifies_adjacent_cross_disease_rows(...)`.
+  - Add three focused context-fit classifier tests near `test_context_fit_classifies_adjacent_cross_disease_rows(...)`.
 - Modify: `science/src/science_tool/benchmark_opportunities.py`
   - Add private constants/helpers near `_context_fit_warning_cues(...)`.
   - Update only the `direct-fit` branch inside `_context_fit_for_row(...)`.
@@ -202,10 +202,79 @@ benchmark:
 ```
 
 This fixture explicitly contains `cptac-gbm`, which the tokenizer keeps as a
-compound token. That compound shared token is the planned source-study override;
-plain `cptac` / `proteogenomics` is intentionally not enough.
+single token (`_TOKEN_RE` retains hyphens). `cptac-gbm` is a **declared
+`source_datasets` token** for this benchmark, so it — and only it — is the
+source-study override. Plain `cptac` / `proteogenomics` is intentionally not
+enough: they are not declared provenance tokens.
 
-- [ ] **Step 3: Run the new tests and verify the red signal**
+- [ ] **Step 3: Add a modality-compound non-override guard test**
+
+Immediately after the preservation test, add a test proving that a shared
+*modality/method* compound token does **not** preserve `direct-fit`. This guards
+against the rejected "any hyphenated shared token overrides" heuristic; the
+override must key on declared benchmark provenance, not on the presence of a
+hyphen.
+
+```python
+def test_context_fit_shared_modality_compound_does_not_override_warning(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import benchmark_tests_report
+
+    (tmp_path / "science.yaml").write_text("id: cbioportal\nname: cbioportal\n", encoding="utf-8")
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0504-breast-single-cell-cross-modal",
+        """
+id: hypothesis:0504-breast-single-cell-cross-modal
+type: hypothesis
+title: Breast cancer single-cell cross-modal benchmark hypothesis
+""",
+        body="Breast cancer single-cell cross-modal questions need supported benchmark evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac-gbm-2021-proteogenomics",
+        """
+id: dataset:cptac-gbm-2021-proteogenomics
+type: dataset
+title: GBM single-cell cross-modal proteogenomics
+dataset_class: deposit
+local_path: data/cptac-gbm
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [cross-modal]
+  benchmark_kinds: [protein-rna-cross-modal]
+  source_datasets: [cptac-gbm]
+  tasks:
+    - id: protein-rna-cross-modal
+      task_type: protein rna cross modal prediction
+      prediction_target: protein abundance
+      held_out_unit: gene
+      metric: spearman
+      baseline: transcript-only ridge
+      ground_truth:
+        type: measured-outcome
+        description: protein abundance
+      support:
+        state: supported
+""",
+    )
+
+    row = benchmark_tests_report(tmp_path)["benchmark_tests"][0]
+
+    # `single-cell` / `cross-modal` are shared compound tokens, but they are NOT
+    # declared `source_datasets` provenance, so they must not override the
+    # cross-disease warning. The entity never names `cptac-gbm`, so no override
+    # applies and the row demotes.
+    assert row["context_fit"] == "adjacent-fit"
+    assert "cross-disease:gbm-vs-breast" in row["context_fit_warnings"]
+    assert "context-warning:demoted-direct-fit" in row["context_fit_reasons"]
+    assert "specific-context:cross-modal" in row["context_fit_reasons"]
+    assert "specific-context:cptac-gbm" not in row["context_fit_reasons"]
+```
+
+- [ ] **Step 4: Run the new tests and verify the red signal**
 
 Run:
 
@@ -213,18 +282,22 @@ Run:
 PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_opportunities.py::test_context_fit_demotes_warned_direct_fit_without_specific_context_override \
   science/tests/test_benchmark_opportunities.py::test_context_fit_preserves_direct_fit_with_explicit_source_study_override \
+  science/tests/test_benchmark_opportunities.py::test_context_fit_shared_modality_compound_does_not_override_warning \
   -q
 ```
 
-Expected: FAIL on `test_context_fit_demotes_warned_direct_fit_without_specific_context_override` with:
+Expected: FAIL on both `test_context_fit_demotes_warned_direct_fit_without_specific_context_override`
+and `test_context_fit_shared_modality_compound_does_not_override_warning`, each with:
 
 ```text
 E       AssertionError: assert 'direct-fit' == 'adjacent-fit'
 ```
 
-The preservation test may already pass before implementation; the required red signal is the demotion test.
+The preservation test may already pass before implementation (the current
+unconditional direct-fit branch returns `direct-fit`); the required red signal is
+the two demotion tests.
 
-- [ ] **Step 4: Commit the failing tests**
+- [ ] **Step 5: Commit the failing tests**
 
 Run:
 
@@ -240,7 +313,7 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `science/src/science_tool/benchmark_opportunities.py`
 
-- [ ] **Step 1: Add direct-fit warning helpers**
+- [ ] **Step 1: Add the direct-fit safety-gate helpers**
 
 In `science/src/science_tool/benchmark_opportunities.py`, near
 `DISEASE_CONTEXT_TOKENS` and before `_context_fit_warning_cues(...)`, add:
@@ -258,55 +331,37 @@ def _direct_fit_blocking_warnings(warnings: Sequence[str]) -> list[str]:
     )
 
 
-def _benchmark_warning_tokens(warnings: Sequence[str]) -> frozenset[str]:
-    tokens: set[str] = set()
-    for warning in warnings:
-        if not warning.startswith("cross-disease:"):
-            continue
-        benchmark_token, separator, _project_token = warning.removeprefix("cross-disease:").partition("-vs-")
-        if separator and benchmark_token:
-            tokens.add(benchmark_token)
-    return frozenset(tokens)
-
-
-def _compound_context_tokens(tokens: Iterable[str]) -> frozenset[str]:
-    return frozenset(
-        token
-        for token in tokens
-        if "-" in token and token not in CONTEXT_BROAD_TOKENS and token not in DISEASE_CONTEXT_TOKENS
-    )
+def _benchmark_source_study_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
+    # The override axis is the benchmark's DECLARED provenance (`source_datasets`),
+    # not "any hyphenated token". Disease tokens are excluded on purpose: sharing a
+    # disease never clears a sample-provenance warning, and a genuinely shared
+    # disease already self-defuses the cross-disease warning upstream (it makes the
+    # disease token sets non-disjoint in `_context_fit_warning_cues`).
+    tokens = _specific_tokens(_tokens_from_text(*context.dataset.source_datasets, include_stop_tokens=False))
+    return tokens - DISEASE_CONTEXT_TOKENS
 
 
 def _has_direct_context_override(
     *,
     shared_specific: Sequence[str],
-    entity_tokens: frozenset[str],
-    warnings: Sequence[str],
+    source_study_tokens: frozenset[str],
 ) -> bool:
-    shared = set(shared_specific)
-    benchmark_warning_tokens = _benchmark_warning_tokens(warnings)
-    if benchmark_warning_tokens and (
-        (shared & benchmark_warning_tokens) or (entity_tokens & benchmark_warning_tokens)
-    ):
-        return True
-    return bool(_compound_context_tokens(shared))
+    return bool(set(shared_specific) & source_study_tokens)
 ```
 
-- [ ] **Step 2: Add the missing import**
+Design note: there is intentionally **no** disease-token override branch. A row
+can only reach the direct-fit gate with a `cross-disease:*` warning present when
+the shared/entity tokens do **not** include the benchmark disease (otherwise the
+warning would not have fired). A disease-token override is therefore unreachable
+by construction; only declared `source_datasets` provenance can preserve a warned
+direct-fit. See the design doc's "Ideal Architecture / Deferred Keystone" for why
+disease/subsumption overrides require the typed `ContextProfile` refactor.
 
-At the top of `benchmark_opportunities.py`, change:
+No import change is required: the helpers use `Sequence` (already imported),
+`DatasetOpportunityContext`, `_tokens_from_text`, `_specific_tokens`, and
+`DISEASE_CONTEXT_TOKENS`, all already in scope.
 
-```python
-from collections.abc import Callable, Mapping, Sequence
-```
-
-to:
-
-```python
-from collections.abc import Callable, Iterable, Mapping, Sequence
-```
-
-- [ ] **Step 3: Update the direct-fit branch**
+- [ ] **Step 2: Update the direct-fit branch**
 
 In `_context_fit_for_row(...)`, replace:
 
@@ -322,8 +377,7 @@ with:
         blocking_warnings = _direct_fit_blocking_warnings(warnings)
         if not blocking_warnings or _has_direct_context_override(
             shared_specific=shared_specific,
-            entity_tokens=evidence.entity_tokens,
-            warnings=blocking_warnings,
+            source_study_tokens=_benchmark_source_study_tokens(context),
         ):
             return "direct-fit", sorted(set(reasons)), sorted(set(warnings))
         reasons.append(DIRECT_FIT_DEMOTION_REASON)
@@ -332,7 +386,7 @@ with:
 
 This is the only classifier behavior change in this task.
 
-- [ ] **Step 4: Run the focused red-green tests**
+- [ ] **Step 3: Run the focused red-green tests**
 
 Run:
 
@@ -340,12 +394,13 @@ Run:
 PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_opportunities.py::test_context_fit_demotes_warned_direct_fit_without_specific_context_override \
   science/tests/test_benchmark_opportunities.py::test_context_fit_preserves_direct_fit_with_explicit_source_study_override \
+  science/tests/test_benchmark_opportunities.py::test_context_fit_shared_modality_compound_does_not_override_warning \
   -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Run context-fit regression tests**
+- [ ] **Step 4: Run context-fit regression tests**
 
 Run:
 
@@ -362,7 +417,7 @@ PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science p
 
 Expected: PASS.
 
-- [ ] **Step 6: Run static checks for touched source**
+- [ ] **Step 5: Run static checks for touched source**
 
 Run:
 
@@ -372,7 +427,7 @@ PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science r
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit implementation**
+- [ ] **Step 6: Commit implementation**
 
 Run:
 
@@ -422,7 +477,46 @@ demoted_adjacent_cptac_gbm_rows=23
 
 The exact count may change if project or commons metadata changed after the pass-1 report. The required property is positive demoted adjacent rows and zero warned direct CPTAC-GBM rows from Step 1.
 
-- [ ] **Step 3: Run the benchmark opportunity test file subset**
+- [ ] **Step 3: Project-wide surviving-direct-fit inspection (wrong-preservation guard)**
+
+Steps 1–2 only inspect CPTAC-GBM. This step catches the failure mode where the
+override wrongly preserves a warned row on *any* benchmark. Because the query
+filters to `direct-fit`, every listed row survived the gate **while carrying a
+blocking warning** — so each must be justified by declared benchmark provenance,
+not by an incidental modality/broad compound.
+
+Run:
+
+```bash
+PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science python -c "import json, subprocess; from pathlib import Path; pr=str(Path('~/d/cancer/data-sources/cbioportal').expanduser()); p=json.loads(subprocess.run(['rtk','uv','run','--frozen','--project','science','science','benchmark','gaps','--commons','--context-fit','direct-fit','--format','json','--project-root',pr], text=True, capture_output=True, check=True).stdout); blk=lambda ws:[w for w in ws if w.startswith('cross-disease:') or w in {'cell-line-vs-primary','simulated-vs-observed'}]; rows=[(g['entity_id'], c['benchmark_id'], c['context_fit_reasons'], c['context_fit_warnings']) for g in p['benchmark_gaps'] for c in g['candidate_benchmarks'] if blk(c['context_fit_warnings'])]; print(f'direct_fit_rows_with_blocking_warning={len(rows)}'); [print(r) for r in rows[:10]]"
+```
+
+Expected: usually `0` for `cbioportal`. A positive count is **not** an automatic
+failure, but each row must be manually confirmed to share a real declared
+`source_datasets` token (its `context_fit_reasons` should carry a
+`specific-context:<source-study>` entry that matches the benchmark's provenance).
+If any surviving row is justified only by a modality/method compound
+(e.g. `specific-context:cross-modal`, `specific-context:single-cell`) or a broad
+token (e.g. `specific-context:pan-cancer`), that is a bug in
+`_benchmark_source_study_tokens(...)` — stop and inspect before proceeding.
+
+- [ ] **Step 4: Project-wide demotion invariant (spurious-demotion guard)**
+
+This asserts the reciprocal: every row that received the demotion reason actually
+carried a blocking warning. A demoted row without a blocking warning would mean a
+legitimate direct-fit row was demoted for the wrong reason.
+
+Run:
+
+```bash
+PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science python -c "import json, subprocess; from pathlib import Path; pr=str(Path('~/d/cancer/data-sources/cbioportal').expanduser()); p=json.loads(subprocess.run(['rtk','uv','run','--frozen','--project','science','science','benchmark','gaps','--commons','--context-fit','adjacent-fit','--format','json','--project-root',pr], text=True, capture_output=True, check=True).stdout); blk=lambda ws:[w for w in ws if w.startswith('cross-disease:') or w in {'cell-line-vs-primary','simulated-vs-observed'}]; demoted=[c for g in p['benchmark_gaps'] for c in g['candidate_benchmarks'] if 'context-warning:demoted-direct-fit' in c['context_fit_reasons']]; bad=[c['benchmark_id'] for c in demoted if not blk(c['context_fit_warnings'])]; print(f'demoted_rows={len(demoted)} demoted_without_blocking_warning={len(bad)}'); [print(b) for b in bad[:10]]; raise SystemExit(1 if bad else 0)"
+```
+
+Expected output includes `demoted_without_blocking_warning=0` and exits `0`. A
+non-zero `bad` count means the demotion branch is firing on rows with no blocking
+warning — stop and inspect.
+
+- [ ] **Step 5: Run the benchmark opportunity test file subset**
 
 Run:
 
@@ -432,7 +526,7 @@ PYTHONPATH=science/src:science/model/src rtk uv run --frozen --project science p
 
 Expected: PASS.
 
-- [ ] **Step 4: Run diff and status checks**
+- [ ] **Step 6: Run diff and status checks**
 
 Run:
 
@@ -447,7 +541,7 @@ Expected:
 - branch is `benchmark-context-fit-classifier-tuning-design`;
 - worktree is clean after Task 2 commit.
 
-- [ ] **Step 5: Final handoff**
+- [ ] **Step 7: Final handoff**
 
 Report:
 
@@ -455,6 +549,10 @@ Report:
 - focused tests and smoke commands run;
 - cBioPortal direct-fit smoke count from Step 1;
 - cBioPortal adjacent-fit demotion count from Step 2;
+- the project-wide surviving-warned-direct-fit count from Step 3, with a note on
+  whether any survivor was justified by non-provenance tokens;
+- the project-wide demotion-invariant result from Step 4
+  (`demoted_without_blocking_warning`);
 - whether source/API/CLI/JSON contracts changed.
 
 Do not merge to `main` until the implementation has been reviewed.
@@ -463,12 +561,17 @@ Do not merge to `main` until the implementation has been reviewed.
 
 - Spec coverage:
   - warned direct-fit demotion: Task 1 and Task 2;
-  - explicit same-context preservation: Task 1 and Task 2;
+  - explicit declared-source-study preservation: Task 1 and Task 2;
+  - modality/broad compound does NOT override (provenance-only override): Task 1
+    Step 3 and Task 2;
   - raw matching/scoring/metadata unchanged: File Map and Task 2 scope;
-  - real-project smoke: Task 3;
+  - real-project smoke incl. project-wide wrong-preservation and
+    spurious-demotion guards: Task 3;
   - deferred typed `ContextProfile` refactor: intentionally out of scope.
 - Placeholder scan: this plan contains no incomplete requirement slots.
 - Type consistency:
-  - helpers use existing `Sequence` plus added `Iterable`;
+  - helpers use existing `Sequence` and `DatasetOpportunityContext`; no new
+    imports are added (the earlier `Iterable`/hyphen-heuristic approach was
+    dropped in favor of a declared-`source_datasets` override);
   - tests assert existing `BenchmarkTestRow` fields;
   - no new public TypedDict or CLI fields are introduced.

@@ -55,8 +55,15 @@ The classifier should continue computing:
 - `task_reasons`;
 - `predicates.warning_cues`.
 
+The gate adds one new derived signal:
+
+- the benchmark's declared source-study tokens, from
+  `_benchmark_source_study_tokens(context)` (the specific, non-disease tokens of
+  `context.dataset.source_datasets`).
+
 Then, before returning `direct-fit`, classify rows with specific cross-context
-warnings as **not direct** unless they have an explicit direct-context override.
+warnings as **not direct** unless `shared_specific` intersects those declared
+source-study tokens (the direct-context override).
 
 ### Cross-Context Warning Set
 
@@ -79,24 +86,40 @@ empty: no warning means no direct-fit demotion.
 ### Direct-Context Override
 
 A row with blocking warnings can still be `direct-fit` when the entity/project
-has explicit same-context evidence for the benchmark. V1 should keep this
-deterministic and token-based.
+shares the benchmark's **declared provenance**. V1 keeps this deterministic and
+token-based, and — importantly — scopes the override to exactly one axis:
 
-Allow direct-fit despite blocking warnings when at least one of these is true:
+> Allow direct-fit despite blocking warnings when `shared_specific` intersects
+> the benchmark's declared `source_datasets` tokens (excluding disease tokens).
 
-1. The shared specific context includes the benchmark-side warning token.
-   Example: warning `cross-disease:gbm-vs-breast`, and `shared_specific`
-   contains `gbm`.
-2. The entity tokens explicitly include the benchmark disease/source token.
-   Example: a cBioPortal question specifically about GBM or CPTAC-GBM.
-3. The shared specific context includes a source-dataset/study token that is not
-   merely a broad project token.
-   Example: `cptac-gbm`, `gbm`, or another concrete study/source token, not just
-   `cancer`, `omics`, `dataset`, or `cbioportal`.
+Concretely, `_benchmark_source_study_tokens(context)` = the specific,
+non-disease tokens of `context.dataset.source_datasets`. For the CPTAC-GBM
+benchmark that set is `{cptac-gbm}`, so an entity that names `cptac-gbm`
+overrides while an entity that only shares `cptac` / `proteogenomics` does not.
+
+**Why disease-token overrides are deliberately excluded.** An earlier draft of
+this design proposed overriding when `shared_specific` (or the entity tokens)
+contained the benchmark's disease token (e.g. `gbm`). That rule is unreachable by
+construction. The `cross-disease` warning is emitted only when the project and
+benchmark disease-token sets are **disjoint** (`_context_fit_warning_cues`). If
+`gbm` were in `shared_specific` or in the entity tokens, it would be in
+`project_tokens` (entity tokens are folded into `project_tokens`), the disease
+sets would not be disjoint, and the warning would never fire. So "warning present
+AND its disease token is shared" is a contradiction — a genuine same-disease
+entity already **self-defuses** the warning upstream and stays `direct-fit`
+through the ordinary path, needing no override.
+
+That leaves declared source-study provenance as the only override the classifier
+can act on before the typed-`ContextProfile` keystone (see "Ideal Architecture /
+Deferred Keystone"). Broader semantics — disease subsumption (`pan-cancer ⊇
+gbm`), study-identity beyond `source_datasets` — are explicitly deferred there.
 
 Do **not** use task support, task readiness, or modality overlap as an override.
 Those are task/actionability signals, not proof that the context mismatch is
-resolved.
+resolved. In particular, the override must key on declared provenance, **not** on
+"the shared token happens to contain a hyphen": modality/method compounds
+(`cross-modal`, `single-cell`) and broad compounds (`pan-cancer`) are not
+source-study evidence and must not preserve a warned direct-fit.
 
 ### Classification Rule
 
@@ -147,15 +170,19 @@ pan-cancer data-source questions.
 ### Legitimate Direct Rows
 
 Rows should remain `direct-fit` when they are explicitly about the benchmark
-context.
+context. Two distinct mechanisms produce these, and the distinction matters for
+testing:
 
-Examples:
-
-- Entity text mentions GBM/glioblastoma and the benchmark is
-  `cptac-gbm-2021-proteogenomics`.
-- Entity text mentions CPTAC-GBM or the exact source study.
-- Same-disease benchmark rows with strong context and task signal and no
-  blocking warning.
+- **Warning self-defusal (no override needed).** Entity text mentions
+  GBM/glioblastoma as a standalone disease token and the benchmark is
+  `cptac-gbm-2021-proteogenomics`. The disease sets are no longer disjoint, the
+  `cross-disease` warning never fires, and the row is direct through the ordinary
+  path.
+- **Provenance override.** Entity text names the compound `cptac-gbm` (a declared
+  `source_datasets` token) but no standalone disease token. The warning still
+  fires, but the shared declared-provenance token preserves `direct-fit`.
+- **No warning at all.** Same-disease benchmark rows with strong context and task
+  signal and no blocking warning.
 
 ### Existing Adjacent Rows
 
@@ -197,21 +224,37 @@ Required tests:
    - Assert `cross-disease:gbm-vs-breast` remains in warnings.
    - Assert `context-warning:demoted-direct-fit` appears in reasons.
 
-2. **Explicit benchmark context preserves direct-fit**
-   - Same fixture, but entity text explicitly contains `gbm` or `cptac-gbm`.
+2. **Declared source-study provenance preserves direct-fit**
+   - Same fixture, but entity text explicitly contains the compound
+     `cptac-gbm` (a declared `source_datasets` token), while never naming a
+     standalone `gbm`/`glioblastoma`.
    - Assert `context_fit == "direct-fit"`.
-   - Assert the warning is either absent if disease tokens now overlap, or still
-     present only if the token sets genuinely still disagree.
+   - Assert `cross-disease:gbm-vs-breast` is still present (the disease sets
+     genuinely still disagree — `cptac-gbm` is a source token, not a disease
+     token), and `specific-context:cptac-gbm` appears in reasons.
    - Assert no demotion reason is present.
+   - Note: this exercises the override path. The distinct "entity names
+     standalone `gbm`" scenario is *warning self-defusal*, not the override —
+     the warning simply never fires — and does not need its own test here.
 
-3. **Existing cross-disease adjacent behavior remains stable**
+3. **Shared modality/broad compound does NOT override**
+   - Entity and benchmark both carry a modality compound (`cross-modal` /
+     `single-cell`); the entity does **not** name `cptac-gbm`.
+   - Assert `context_fit == "adjacent-fit"` and the demotion reason is present.
+   - This guards against a hyphen-based override heuristic: only declared
+     `source_datasets` provenance may preserve a warned direct-fit.
+
+4. **Existing cross-disease adjacent behavior remains stable**
    - Keep or extend the current BRCA-vs-myeloma regression.
 
-4. **Calibration smoke**
+5. **Calibration smoke**
    - Run a targeted `science benchmark gaps --commons --context-fit direct-fit`
      for `~/d/cancer/data-sources/cbioportal`.
    - Confirm the count of warned direct-fit CPTAC-GBM rows decreases from the
      pass-1 baseline.
+   - Additionally scan project-wide for any surviving `direct-fit` row that still
+     carries a blocking warning, and confirm each is justified by a declared
+     source-study token rather than a modality/broad compound.
 
 ## Risks and Constraints
 
@@ -242,10 +285,16 @@ that currently ignores blocking warnings during direct-fit assignment.
 
 ### Demote All Cross-Disease Rows
 
-Any `cross-disease:*` warning would prevent `direct-fit`. Rejected because a
-data-source or pan-cancer project may have entities explicitly about the
-benchmark disease/source; those should still be direct when the entity provides
-the missing context.
+Any `cross-disease:*` warning would prevent `direct-fit`, with no override at
+all. This is closer to correct than it first appears: for the *disease* axis, an
+entity genuinely about the benchmark disease already self-defuses the warning
+upstream (its disease token makes the sets non-disjoint), so blanket demotion of
+*warned* rows would not touch legitimately same-disease entities. The one case
+blanket demotion gets wrong is **declared source-study provenance**: an entity
+that names the benchmark's `source_datasets` (e.g. `cptac-gbm`) without carrying
+a standalone disease token still fires a cross-disease warning, yet is genuinely
+about that study and should stay direct. The provenance-scoped override is the
+minimal addition that preserves exactly those rows; everything else demotes.
 
 ## Success Criteria
 
