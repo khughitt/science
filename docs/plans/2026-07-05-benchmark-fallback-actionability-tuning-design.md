@@ -90,12 +90,21 @@ rather than a single field:
 | --- | --- | --- |
 | `is_fallback` | `_is_fallback_candidate(row)` (reason-note predicate; gap rows have no `priority_source`) | `priority_source == "gap-fallback"` |
 | `context_fit` | present | present |
-| `task_support_state` | **absent** | present |
+| `blocked` | `"blocked-support-fallback" in context_fit_warnings` | `_is_blocked_support_fallback(row)` (`priority_source == "gap-fallback" and task_support_state == "blocked"`) |
 
-Because gap-candidate rows carry no task-support signal, the
-`blocked-support-fallback` group is **only derivable on benchmark-test rows**. The
-gaps `fallback_diagnostics.groups` therefore omits it entirely (see Benchmark Gaps
-Output). Do not invent a blocked-support count on the gap side.
+Both row types can express the blocked signal, but through different fields. Gap
+candidates carry no `task_support_state`; instead their `context_fit_warnings`
+inherit `blocked-support-fallback` because `_summarize_gap_candidate_test_rows`
+**unions** the warnings across the candidate's per-task test rows. So a gap
+candidate is `blocked` iff any of its underlying test rows was a blocked-support
+fallback. `blocked-support-fallback` is therefore derivable on **both** row types,
+and the gaps `fallback_diagnostics.groups` includes it.
+
+Caveat (gap side): because the gap candidate aggregates across tasks (min
+`context_fit`, unioned warnings), one blocked task marks the whole benchmark
+`blocked-support-fallback` (precedence 1), even if the candidate is actionable on
+another task. This is an accepted consequence of benchmark-level gap aggregation;
+per-task actionability remains visible in `benchmark test-triage`.
 
 ### Groups (per-row, precedence order)
 
@@ -104,7 +113,7 @@ the first matching rule wins:
 
 | Precedence | Group | Predicate | Row types |
 | --- | --- | --- | --- |
-| 1 | `blocked-support-fallback` | `is_fallback and task_support_state == "blocked"` | test only |
+| 1 | `blocked-support-fallback` | `is_fallback and blocked` (see the normalized `blocked` signal) | both |
 | 2 | `specific-fallback` | `is_fallback and context_fit != "generic-fallback"` | both |
 | 3 | `generic-baseline-fallback` | `is_fallback and context_fit == "generic-fallback" and "fallback:baseline-quality" in reason_notes` | both |
 | 4 | `generic-task-ready-fallback` | `is_fallback and context_fit == "generic-fallback" and "fallback:task-ready" in reason_notes` | both |
@@ -121,7 +130,8 @@ Notes:
   **non-blocked** fallback rows with a real context signal, because
   `blocked-support-fallback` (precedence 1) claims blocked rows first.
 - The three `generic-*` groups are the **collapsible** set. `specific-fallback`
-  and (on the test side) `blocked-support-fallback` are handled separately.
+  and `blocked-support-fallback` are handled separately (on the test side,
+  blocked-support rows are additionally suppressed before bucketing by default).
 
 ### Rollups must be group-homogeneous
 
@@ -155,10 +165,13 @@ reconcile by construction. State these invariants and test them:
 - `hidden_generic_fallback_rows == generic_fallback_rows` (all three generic
   groups are hidden from default terminal detail).
 - `shown_fallback_rows == specific-fallback` count.
-- On the gap side there is no blocked-support group, so
-  `generic_fallback_rows` equals the gap rows with `context_fit ==
-  "generic-fallback"` exactly; on the test side the two differ by the
-  blocked-support rows, which are partitioned out before bucketing by default.
+- `generic_fallback_rows` and a raw `context_fit == "generic-fallback"` scan
+  differ by the blocked, no-context rows (which are `context_fit ==
+  "generic-fallback"` but grouped `blocked-support-fallback` by precedence). This
+  holds on **both** row types now that gap candidates derive blocked-support from
+  the unioned warning. On the test side, blocked-support rows are additionally
+  partitioned out before bucketing by default, so the default-visible test set has
+  no blocked-support rows at all.
 
 ## Benchmark Gaps Output
 
@@ -166,8 +179,9 @@ reconcile by construction. State these invariants and test them:
 
 Keep `benchmark_gaps[].candidate_benchmarks` unchanged.
 
-Add a top-level `fallback_diagnostics` object to the gap payload. `groups` omits
-`blocked-support-fallback` because gap-candidate rows carry no task-support state:
+Add a top-level `fallback_diagnostics` object to the gap payload. `groups` carries
+all five display groups, including `blocked-support-fallback` (derived from the
+`blocked-support-fallback` warning unioned onto gap candidates):
 
 ```json
 {
@@ -179,6 +193,7 @@ Add a top-level `fallback_diagnostics` object to the gap payload. `groups` omits
     "specific_fallback_candidate_rows": 0,
     "groups": {
       "specific-fallback": 0,
+      "blocked-support-fallback": 0,
       "generic-baseline-fallback": 1200,
       "generic-task-ready-fallback": 550,
       "generic-available-fallback": 51
@@ -192,7 +207,7 @@ Add a top-level `fallback_diagnostics` object to the gap payload. `groups` omits
 
 The example reconciles (per Reconciliation Invariants):
 
-- `fallback_candidate_rows` (`1801`) `== Σ groups` (`0 + 1200 + 550 + 51`);
+- `fallback_candidate_rows` (`1801`) `== Σ groups` (`0 + 0 + 1200 + 550 + 51`);
 - `generic_fallback_candidate_rows` (`1801`) `==` the three `generic-*` groups;
 - `candidate_rows` (`2274`) `== entity_specific_candidate_rows` (`473`) `+
   fallback_candidate_rows` (`1801`).

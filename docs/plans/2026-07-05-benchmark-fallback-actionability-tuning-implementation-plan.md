@@ -87,7 +87,18 @@ If it points at the main checkout, keep `PYTHONPATH=science/src:science/model/sr
 
 - [ ] **Step 1: Extend the triage row test helper**
 
-First update `_benchmark_test_row_for_triage()` in `science/tests/test_benchmark_opportunities.py` so the new tests can build realistic fallback rows. Replace the helper signature and returned fields with this version:
+First update `_benchmark_test_row_for_triage()` in `science/tests/test_benchmark_opportunities.py` so the new tests can build realistic fallback rows. This is a **shared** fixture used by existing tests, so the change must be **additive**: only add new keyword parameters (`context_fit`, `reason_notes`, `task_support_state`, `task_support_reason`, …) with defaults that reproduce the current returned dict when a caller passes nothing new. Do not rename or drop existing parameters or change existing defaults. Diff the version below against the current helper and keep any existing fields it already returns.
+
+After editing the helper (before adding new tests), run the full file once to confirm no existing test regressed on a shifted default:
+
+```bash
+PYTEST_DEBUG_TEMPROOT=/tmp PYTHONPATH=science/src:science/model/src \
+  rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py -q
+```
+
+Expected: PASS (same as the pre-edit baseline). If anything fails, a default shifted — reconcile before continuing.
+
+Additive target version:
 
 ```python
 def _benchmark_test_row_for_triage(
@@ -193,6 +204,20 @@ def test_fallback_display_group_for_gap_candidates() -> None:
         _fallback_display_group_for_gap_candidate(
             {
                 **base,
+                "reason_notes": ["fallback:baseline-quality"],
+                "context_fit_warnings": ["blocked-support-fallback"],
+            }
+        )
+        == "blocked-support-fallback"
+    )
+    # Precedence: the blocked warning wins even when the summarized context_fit is
+    # non-generic (blocked test row on one task, actionable on another). This is the
+    # gap-level aggregation caveat -- blocked branding beats specific.
+    assert (
+        _fallback_display_group_for_gap_candidate(
+            {
+                **base,
+                "context_fit": "adjacent-fit",
                 "reason_notes": ["fallback:baseline-quality"],
                 "context_fit_warnings": ["blocked-support-fallback"],
             }
@@ -494,12 +519,17 @@ benchmark:
     candidates = [candidate for row in payload["benchmark_gaps"] for candidate in row["candidate_benchmarks"]]
     diagnostics = payload["fallback_diagnostics"]
 
+    fallback_candidates = [candidate for candidate in candidates if candidate["reason_notes"] and any(
+        note.startswith("fallback:") for note in candidate["reason_notes"]
+    )]
     assert diagnostics["candidate_rows"] == len(candidates)
-    assert diagnostics["generic_fallback_candidate_rows"] == len(candidates)
+    assert diagnostics["fallback_candidate_rows"] == len(fallback_candidates)
+    assert diagnostics["entity_specific_candidate_rows"] == len(candidates) - len(fallback_candidates)
+    assert diagnostics["generic_fallback_candidate_rows"] == len(fallback_candidates)
     assert diagnostics["specific_fallback_candidate_rows"] == 0
     assert set(diagnostics["groups"]) == set(FALLBACK_DISPLAY_GROUPS)
-    assert sum(diagnostics["groups"].values()) == len(candidates)
-    assert diagnostics["groups"]["generic-baseline-fallback"] == len(candidates)
+    assert sum(diagnostics["groups"].values()) == diagnostics["fallback_candidate_rows"]
+    assert diagnostics["groups"]["generic-baseline-fallback"] == len(fallback_candidates)
     assert diagnostics["top_generic_fallback_benchmarks"][0]["benchmark_id"].startswith("dataset:generic-")
 ```
 
@@ -522,11 +552,17 @@ In `science/src/science_tool/benchmark_opportunities.py`, add this typed dict af
 ```python
 class BenchmarkGapFallbackDiagnostics(TypedDict):
     candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
     generic_fallback_candidate_rows: int
     specific_fallback_candidate_rows: int
     groups: dict[FallbackDisplayGroup, int]
     top_generic_fallback_benchmarks: list[BenchmarkCountRow]
 ```
+
+`candidate_rows` is **all** candidates (entity-specific + fallback), matching the
+design's reconciliation (`candidate_rows == entity_specific_candidate_rows +
+fallback_candidate_rows`). Do not overload `candidate_rows` to mean fallback-only.
 
 Update `BenchmarkGapReport`:
 
@@ -550,15 +586,17 @@ def _empty_fallback_display_group_counts() -> dict[FallbackDisplayGroup, int]:
 
 
 def _gap_fallback_diagnostics(rows: list[BenchmarkGapRow], *, top: int = 10) -> BenchmarkGapFallbackDiagnostics:
-    fallback_candidates: list[GapCandidateBenchmarkRow] = []
+    all_candidate_rows = 0
+    fallback_candidates = 0
     group_counts = _empty_fallback_display_group_counts()
     generic_benchmarks: Counter[str] = Counter()
 
     for row in rows:
         for candidate in row["candidate_benchmarks"]:
+            all_candidate_rows += 1
             if not _is_fallback_candidate(candidate):
                 continue
-            fallback_candidates.append(candidate)
+            fallback_candidates += 1
             group = _fallback_display_group_for_gap_candidate(candidate)
             group_counts[group] += 1
             if _is_generic_fallback_display_group(group):
@@ -566,13 +604,19 @@ def _gap_fallback_diagnostics(rows: list[BenchmarkGapRow], *, top: int = 10) -> 
 
     generic_rows = sum(group_counts[group] for group in GENERIC_FALLBACK_DISPLAY_GROUPS)
     return {
-        "candidate_rows": len(fallback_candidates),
+        "candidate_rows": all_candidate_rows,
+        "entity_specific_candidate_rows": all_candidate_rows - fallback_candidates,
+        "fallback_candidate_rows": fallback_candidates,
         "generic_fallback_candidate_rows": generic_rows,
         "specific_fallback_candidate_rows": group_counts["specific-fallback"],
         "groups": group_counts,
         "top_generic_fallback_benchmarks": _top_benchmark_counts(generic_benchmarks, top=top),
     }
 ```
+
+`fallback_candidate_rows == Σ groups` and `candidate_rows ==
+entity_specific_candidate_rows + fallback_candidate_rows` both hold by
+construction.
 
 Update the `return` in `gaps_report()` to include the diagnostics. Find the existing return near the end of `gaps_report()` and make it:
 
@@ -730,23 +774,56 @@ In `BenchmarkTestTriageFallbackDiagnostics`, add:
 
 - [ ] **Step 5: Add triage diagnostics implementation**
 
-In `_benchmark_test_fallback_rollups()`, compute the group for each rollup group and add it to the rollup dictionary.
+In `_benchmark_test_fallback_rollups()`, make each rollup group-homogeneous by
+adding the row's `display_group` to the grouping key. This is the design's
+resolution ("Rollups must be group-homogeneous"): `context_fit` is not in the
+current key but varies by entity, so a benchmark/task pairing can otherwise mix
+`specific-fallback` and `generic-*` rows in one rollup. Do **not** detect
+heterogeneity and raise — key it away instead.
 
-Immediately before the existing line that starts `reason_notes = sorted(`, add:
-
-```python
-        display_groups = {_fallback_display_group_for_test_row(row) for row in group_rows}
-        if len(display_groups) > 1:
-            raise ValueError(f"fallback rollup has inconsistent display groups for {_rollup_task_label(benchmark_id, task_id)}")
-```
-
-Add this key to the rollup dict:
+Extend the grouping key with the row's display group. Change the key construction:
 
 ```python
-                "display_group": next(iter(display_groups)),
+    for row in rows:
+        key = (
+            row["benchmark_id"],
+            row["task_id"],
+            row["task_support_state"],
+            row["readiness_label"],
+            row["dataset_class"],
+            row["test_plan_state"],
+            _fallback_display_group_for_test_row(row),
+        )
+        grouped.setdefault(key, []).append(row)
 ```
 
-Place it near `"reason_notes"` so exact test dictionaries are easy to read.
+Update the `grouped` type annotation to add a trailing `FallbackDisplayGroup` to
+the key tuple, and extend the unpacking loop to bind it:
+
+```python
+    for (
+        benchmark_id,
+        task_id,
+        task_support_state,
+        readiness_label,
+        dataset_class,
+        test_plan_state,
+        display_group,
+    ), group_rows in grouped.items():
+```
+
+Add this key to the rollup dict, near `"reason_notes"` so exact test dictionaries
+are easy to read:
+
+```python
+                "display_group": display_group,
+```
+
+`_fallback_display_group_for_test_row` is total over these rows because
+`_benchmark_test_fallback_rollups` is only ever called with the
+`fallback-diagnostic` bucket (all `priority_source == "gap-fallback"`). Because
+`display_group` is now part of the key, every row in a rollup shares it — no
+heterogeneity check is needed.
 
 Add these helpers before `_benchmark_test_fallback_diagnostics()`:
 
@@ -824,6 +901,14 @@ For every exact expected `BenchmarkTestFallbackRollup`, add the expected `displa
 - supported generic fallback rollups: `"generic-baseline-fallback"`;
 - blocked support fallback rollups restored via `include_blocked_fallback=True`: `"blocked-support-fallback"`;
 - any non-generic fallback row with `context_fit != "generic-fallback"`: `"specific-fallback"`.
+
+Also account for possible **rollup splitting**: because `display_group` is now part
+of the grouping key, a benchmark/task whose rows previously merged into one rollup
+will split into two if its rows span a `specific-fallback` and a `generic-*` group
+(same `benchmark_id`/`task_id`, differing `context_fit`). Most fixtures have
+homogeneous rows per benchmark/task and are unaffected, but if an exact-rollup test
+fixture mixes context_fit for one benchmark/task, update the expected list to the
+two split rollups (each with its own `display_group` and `count`) rather than one.
 
 - [ ] **Step 7: Run tests to verify they pass**
 
@@ -960,6 +1045,42 @@ benchmark:
     assert payload["fallback_diagnostics"]["generic_fallback_candidate_rows"] == 2
 ```
 
+Add this formatter unit test after it. It pins the corrected-design behavior — a
+fallback row that mixes specific and generic candidates renders each by its group
+and does **not** raise:
+
+```python
+def test_format_gap_candidates_renders_mixed_fallback_without_raising() -> None:
+    from science_tool.cli import _format_gap_candidates_for_table
+
+    def _candidate(benchmark_id: str, context_fit: str) -> dict:
+        return {
+            "benchmark_id": benchmark_id,
+            "benchmark_title": benchmark_id.removeprefix("dataset:"),
+            "baseline_score": 10,
+            "candidate_score": 5,
+            "matched_missing_facets": [],
+            "matched_hint_facets": [],
+            "reason_notes": ["fallback:baseline-quality"],
+            "context_fit": context_fit,
+            "context_fit_reasons": [],
+            "context_fit_warnings": [],
+        }
+
+    row = {
+        "candidate_mode": "fallback-only",
+        "candidate_benchmarks": [
+            _candidate("dataset:specific", "adjacent-fit"),
+            _candidate("dataset:generic-a", "generic-fallback"),
+        ],
+    }
+
+    rendered = _format_gap_candidates_for_table(row)
+
+    assert "dataset:specific" in rendered
+    assert "generic fallback: 1 candidates (top: dataset:generic-a)" in rendered
+```
+
 - [ ] **Step 2: Add triage table tests**
 
 In `test_benchmark_test_triage_cli_table_output_shows_fallback_rollups()`, change the assertions to expect generic fallback summary instead of detailed fallback table:
@@ -1051,6 +1172,7 @@ PYTEST_DEBUG_TEMPROOT=/tmp PYTHONPATH=science/src:science/model/src \
   rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_cli.py::test_benchmark_gaps_cli_table_collapses_generic_fallback_candidates \
   science/tests/test_benchmark_cli.py::test_benchmark_gaps_cli_json_keeps_raw_generic_fallback_candidates \
+  science/tests/test_benchmark_cli.py::test_format_gap_candidates_renders_mixed_fallback_without_raising \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_table_output_shows_fallback_rollups \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_table_hides_generic_but_keeps_json_rollups -q
 ```
@@ -1074,15 +1196,23 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
         _is_generic_fallback_display_group,
     )
 
-    groups = [_fallback_display_group_for_gap_candidate(candidate) for candidate in candidates]
-    generic = [_is_generic_fallback_display_group(group) for group in groups]
-    if any(generic) and not all(generic):
-        benchmark_ids = ", ".join(candidate["benchmark_id"] for candidate in candidates)
-        raise click.ClickException(f"mixed generic and specific fallback candidates in one gap row: {benchmark_ids}")
-    if all(generic):
-        top = candidates[0]["benchmark_id"]
-        return f"generic fallback: {len(candidates)} candidates (top: {top})"
-    return ", ".join(_format_gap_candidate_for_table(candidate) for candidate in candidates)
+    # A fallback-only row can legitimately mix display groups: _select_fallback_rows
+    # returns several fallback candidates, and they can differ in context_fit (one
+    # shares a context token -> specific-fallback; others do not -> generic-*).
+    # Render each candidate by its own group -- show non-generic individually,
+    # collapse the generic ones into one compact label. Never raise on a
+    # within-fallback group mix (design: Benchmark Gaps Table).
+    generic: list[Mapping[str, Any]] = []
+    parts: list[str] = []
+    for candidate in candidates:
+        group = _fallback_display_group_for_gap_candidate(candidate)
+        if _is_generic_fallback_display_group(group):
+            generic.append(candidate)
+        else:
+            parts.append(_format_gap_candidate_for_table(candidate))
+    if generic:
+        parts.append(f"generic fallback: {len(generic)} candidates (top: {generic[0]['benchmark_id']})")
+    return ", ".join(parts) if parts else "-"
 ```
 
 In `benchmark_gaps()`, after rendering the gap table and before the calibration summary block, add:
@@ -1201,6 +1331,7 @@ PYTEST_DEBUG_TEMPROOT=/tmp PYTHONPATH=science/src:science/model/src \
   rtk uv run --frozen --project science pytest \
   science/tests/test_benchmark_cli.py::test_benchmark_gaps_cli_table_collapses_generic_fallback_candidates \
   science/tests/test_benchmark_cli.py::test_benchmark_gaps_cli_json_keeps_raw_generic_fallback_candidates \
+  science/tests/test_benchmark_cli.py::test_format_gap_candidates_renders_mixed_fallback_without_raising \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_table_output_shows_fallback_rollups \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_table_output_shows_hidden_fallback_rollup_count \
   science/tests/test_benchmark_cli.py::test_benchmark_test_triage_cli_table_hides_generic_but_keeps_json_rollups \
