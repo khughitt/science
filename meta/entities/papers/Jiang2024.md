@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'DiffKG: Knowledge Graph Diffusion Model for Recommendation'
 status: active
 created: '2026-05-06'

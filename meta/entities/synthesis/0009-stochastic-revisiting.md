@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Stochastic revisiting
 status: active
 created: '2026-05-06'

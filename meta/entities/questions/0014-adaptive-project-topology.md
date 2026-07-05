@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science adapt project topology to evidence, uncertainty, and decay?
 status: active
 created: '2026-05-17'

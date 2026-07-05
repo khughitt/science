@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian Data Integration for Quantifying the Contribution of Diverse Measurements
   to Parameter Estimates
 status: active

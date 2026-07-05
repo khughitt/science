@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian Evidence Estimation from Posterior Samples with Normalizing Flows
 status: active
 created: '2026-05-05'

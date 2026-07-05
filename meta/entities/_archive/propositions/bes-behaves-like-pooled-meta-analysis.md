@@ -1,5 +1,5 @@
 ---
-type: proposition
+kind: proposition
 title: BES behaves like pooled meta-analysis
 status: superseded
 created: '2026-06-30'

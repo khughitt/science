@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Graphical Models and Multiview Integration'
 status: active
 created: '2026-05-06'

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Self-Compatibility: Evaluating Causal Discovery without Ground Truth'
 status: active
 created: '2026-05-06'

@@ -1,5 +1,5 @@
 ---
-type: interpretation
+kind: interpretation
 title: 'Latent-construct correction: subtracting the publication-attention axis on
   the q14 slice'
 status: active

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Source excerpts for VanWonderen2024
 status: active
 created: '2026-06-30'

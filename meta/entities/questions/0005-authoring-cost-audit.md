@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How much of the proposed evidence-payload schema can authors and agents reliably
   populate?
 status: active

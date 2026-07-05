@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'MetaBayesDTA: codeless Bayesian meta-analysis of test accuracy, with or without
   a gold standard'
 status: active

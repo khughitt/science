@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Unsupervised Multi-Omics Data Integration Methods: A Comprehensive Review'
 status: active
 created: '2026-05-06'

@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Rich evidence payloads improve graph calibration
 status: proposed
 created: '2026-05-05'

@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Causal Graph Construction and Discovery'
 status: active
 created: '2026-05-06'

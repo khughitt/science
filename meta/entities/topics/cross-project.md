@@ -1,5 +1,5 @@
 ---
-type: topic
+kind: topic
 title: Cross-Project Knowledge and Task Coordination
 status: active
 created: '2026-05-07'

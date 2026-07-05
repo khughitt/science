@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science represent causal graph construction as a staged evidence
   pipeline?
 status: active

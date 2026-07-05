@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Stochastic revisiting of down-weighted claims improves final recall under noisy
   early evidence
 status: supported

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Statistical Data Integration: Challenges and Opportunities'
 status: active
 created: '2026-05-05'

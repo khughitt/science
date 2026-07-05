@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: From Weight of Evidence to Quantitative Data Integration using Multicriteria
   Decision Analysis and Bayesian Methods
 status: active

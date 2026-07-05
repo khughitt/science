@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'gCastle: A Python Toolbox for Causal Discovery'
 status: active
 created: '2026-05-06'

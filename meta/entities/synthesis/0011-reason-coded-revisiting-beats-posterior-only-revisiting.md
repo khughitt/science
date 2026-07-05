@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Reason-coded revisiting beats posterior-only revisiting
 status: active
 created: '2026-05-06'

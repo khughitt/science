@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Bayes Factor Hypothesis Testing in Meta-Analyses: Practical Advantages and
   Methodological Considerations'
 status: active

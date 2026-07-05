@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science represent agent operations, tool graphs, KG transformations,
   and graph evolution events?
 status: active

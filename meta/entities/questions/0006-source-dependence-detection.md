@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: Which evidence-source dependence patterns can be inferred mechanically rather
   than annotated by hand?
 status: active

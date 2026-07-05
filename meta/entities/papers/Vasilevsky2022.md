@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Mondo: Unifying diseases for the world, by the world'
 status: active
 created: '2026-05-31'

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: The Role of the Bayes Factor in the Evaluation of Evidence
 status: active
 created: '2026-05-05'

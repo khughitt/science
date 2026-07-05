@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Truth Discovery and Data Integration'
 status: active
 created: '2026-05-05'

@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Sequential anytime-valid evidence improves attention and stopping decisions
   over fixed-N synthesis
 status: proposed

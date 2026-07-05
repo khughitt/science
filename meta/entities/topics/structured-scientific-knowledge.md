@@ -1,5 +1,5 @@
 ---
-type: topic
+kind: topic
 title: 'Structured Representations of Scientific Knowledge: Nanopublications and Research
   Knowledge Graphs'
 status: active

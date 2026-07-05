@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Scalable Bayesian Structure Learning for Gaussian Graphical Models Using Marginal
   Pseudo-likelihood
 status: active

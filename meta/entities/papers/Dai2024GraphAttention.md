@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Integrating Causal Inference and Graph Attention for Structure-Aware Data Mining
 status: active
 created: '2026-05-06'

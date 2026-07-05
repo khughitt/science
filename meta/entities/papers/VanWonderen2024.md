@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Bayesian Evidence Synthesis as a Flexible Alternative to Meta-Analysis: A
   Simulation Study and Empirical Demonstration'
 status: active

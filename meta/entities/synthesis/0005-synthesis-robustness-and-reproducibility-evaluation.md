@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Robustness and Reproducibility Evaluation'
 status: active
 created: '2026-05-06'

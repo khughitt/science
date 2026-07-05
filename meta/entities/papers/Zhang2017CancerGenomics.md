@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: A Statistical Framework for Data Integration Through Graphical Models with
   Application to Cancer Genomics
 status: active

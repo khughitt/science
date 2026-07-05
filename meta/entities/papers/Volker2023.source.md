@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Source excerpts for Volker2023
 status: active
 created: '2026-06-30'

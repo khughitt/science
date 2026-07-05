@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'A Scoping Review on Metrics to Quantify Reproducibility: A Multitude of Questions
   Leads to a Multitude of Metrics'
 status: active

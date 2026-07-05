@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Incorporating Additional Evidence as Prior Information to Resolve Non-Identifiability
   in Bayesian Disease Model Calibration: A Tutorial'
 status: active

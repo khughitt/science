@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis
   of Multiple Exposures and Outcomes
 status: active

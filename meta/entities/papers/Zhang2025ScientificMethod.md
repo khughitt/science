@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Exploring the Role of Large Language Models in the Scientific Method: From
   Hypothesis to Discovery'
 status: active

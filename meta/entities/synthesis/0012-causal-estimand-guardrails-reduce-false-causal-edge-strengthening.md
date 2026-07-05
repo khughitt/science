@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Causal estimand guardrails reduce false causal edge strengthening
 status: active
 created: '2026-05-06'

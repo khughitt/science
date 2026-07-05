@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should MCDA-style decision scores interact with Bayesian belief states
   in the graph?
 status: active

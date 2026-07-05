@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Causal Meta-Analysis: Rethinking the Foundations of Evidence-Based Medicine'
 status: active
 created: '2026-05-05'

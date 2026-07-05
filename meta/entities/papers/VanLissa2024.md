@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: A Tutorial on Aggregating Evidence from Conceptual Replication Studies Using
   the Product Bayes Factor
 status: active

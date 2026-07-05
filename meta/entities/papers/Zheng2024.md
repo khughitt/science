@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Causal-learn: Causal Discovery in Python'
 status: active
 created: '2026-05-06'

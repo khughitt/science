@@ -1,5 +1,5 @@
 ---
-type: interpretation
+kind: interpretation
 title: L1 epistemic-neighborhood patch prototype on the pan-disease q14 slice
 status: active
 created: '2026-06-01'

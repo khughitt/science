@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: Should Science treat evidence accumulation as sequential and anytime-valid
   rather than fixed-N synthesis?
 status: active

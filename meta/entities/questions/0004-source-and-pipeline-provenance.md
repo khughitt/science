@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science represent source behavior and pipeline provenance in evidence
   aggregation?
 status: active

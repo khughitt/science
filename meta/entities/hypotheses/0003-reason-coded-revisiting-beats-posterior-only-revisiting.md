@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Reason-coded revisiting beats posterior-only revisiting
 status: proposed
 created: '2026-05-05'

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Joint Bayesian Inference of Graphical Structure and Parameters with a Single
   Generative Flow Network
 status: active

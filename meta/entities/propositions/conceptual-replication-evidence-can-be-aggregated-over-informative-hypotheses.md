@@ -1,5 +1,5 @@
 ---
-type: proposition
+kind: proposition
 title: Conceptual-replication evidence can be aggregated over informative hypotheses
 status: active
 created: '2026-06-30'

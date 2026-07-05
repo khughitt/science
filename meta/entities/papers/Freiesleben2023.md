@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Beyond Generalization: A Theory of Robustness in Machine Learning'
 status: active
 created: '2026-05-06'
