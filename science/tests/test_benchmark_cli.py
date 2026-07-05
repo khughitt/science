@@ -2493,11 +2493,14 @@ benchmark:
     rollups = written["fallback_diagnostics"]["rollups"]
     assert len(rollups) == 1
     assert rollups[0]["benchmark_id"] == "dataset:visible-review-fallback"
+    assert rollups[0]["display_group"] == "specific-fallback"
     assert rollups[0]["task_id"] == "dataset:visible-review-fallback#ready"
     assert rollups[0]["task_type"] == "protein-lineage-association"
     assert rollups[0]["count"] == 1
     assert rollups[0]["task_support_state"] == "supported"
     assert rollups[0]["example_entities"] == ["hypothesis:0307-generic"]
+    assert written["fallback_diagnostics"]["hidden_generic_fallback_rows"] == 0
+    assert written["fallback_diagnostics"]["terminal_hidden_rollup_count"] == 0
 
 
 def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_path: Path, monkeypatch) -> None:
@@ -2558,6 +2561,14 @@ benchmark:
         "top_benchmarks": [{"benchmark_id": "dataset:blocked-fallback", "count": 1}],
     }
     assert written["fallback_diagnostics"]["rollups"] == []
+    assert written["fallback_diagnostics"]["display_group_counts"] == {
+        "specific-fallback": 0,
+        "blocked-support-fallback": 0,
+        "generic-baseline-fallback": 0,
+        "generic-task-ready-fallback": 0,
+        "generic-available-fallback": 0,
+    }
+    assert written["fallback_diagnostics"]["hidden_generic_fallback_rows"] == 0
 
 
 def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
