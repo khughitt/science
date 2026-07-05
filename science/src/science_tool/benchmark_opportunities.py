@@ -533,6 +533,16 @@ class BenchmarkGapSummary(TypedDict):
     candidate_context_fit_counts: dict[ContextFit, int]
 
 
+class BenchmarkGapFallbackDiagnostics(TypedDict):
+    candidate_rows: int
+    entity_specific_candidate_rows: int
+    fallback_candidate_rows: int
+    generic_fallback_candidate_rows: int
+    specific_fallback_candidate_rows: int
+    groups: dict[FallbackDisplayGroup, int]
+    top_generic_fallback_benchmarks: list[BenchmarkCountRow]
+
+
 class TermCountRow(TypedDict):
     term: str
     count: int
@@ -578,6 +588,7 @@ class EvidenceReport(TypedDict):
 class BenchmarkGapReport(TypedDict):
     benchmark_gaps: list[BenchmarkGapRow]
     summary: BenchmarkGapSummary
+    fallback_diagnostics: BenchmarkGapFallbackDiagnostics
     calibration: GapCalibrationPayload
     evidence_report: EvidenceReport
     commons_notice: str | None
@@ -2349,6 +2360,36 @@ def _top_fallback_benchmarks(rows: list[BenchmarkGapRow], *, top: int) -> list[B
     return _top_benchmark_counts(fallback, top=top)
 
 
+def _empty_fallback_display_group_counts() -> dict[FallbackDisplayGroup, int]:
+    return {group: 0 for group in FALLBACK_DISPLAY_GROUPS}
+
+
+def _gap_fallback_diagnostics(rows: list[BenchmarkGapRow], *, top: int = 10) -> BenchmarkGapFallbackDiagnostics:
+    candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
+    fallback_candidates = [candidate for candidate in candidates if _is_fallback_candidate(candidate)]
+    groups = _empty_fallback_display_group_counts()
+    generic_fallback_benchmarks: Counter[str] = Counter()
+
+    for candidate in fallback_candidates:
+        group = _fallback_display_group_for_gap_candidate(candidate)
+        groups[group] += 1
+        if _is_generic_fallback_display_group(group):
+            generic_fallback_benchmarks[candidate["benchmark_id"]] += 1
+
+    generic_fallback_candidate_rows = sum(
+        count for group, count in groups.items() if _is_generic_fallback_display_group(group)
+    )
+    return {
+        "candidate_rows": len(candidates),
+        "entity_specific_candidate_rows": len(candidates) - len(fallback_candidates),
+        "fallback_candidate_rows": len(fallback_candidates),
+        "generic_fallback_candidate_rows": generic_fallback_candidate_rows,
+        "specific_fallback_candidate_rows": groups["specific-fallback"],
+        "groups": groups,
+        "top_generic_fallback_benchmarks": _top_benchmark_counts(generic_fallback_benchmarks, top=top),
+    }
+
+
 def _fallback_candidates_from_rows(rows: list[BenchmarkGapRow]) -> list[GapCandidateBenchmarkRow]:
     return [candidate for row in rows for candidate in row["candidate_benchmarks"] if _is_fallback_candidate(candidate)]
 
@@ -4096,6 +4137,7 @@ def gaps_report(
     return {
         "benchmark_gaps": rows,
         "summary": _gap_summary(rows, entities_total=len(entity_ids)),
+        "fallback_diagnostics": _gap_fallback_diagnostics(rows),
         "calibration": calibration,
         "evidence_report": _gap_evidence_report(
             rows,

@@ -1412,6 +1412,91 @@ benchmark:
     assert payload["summary"]["candidate_context_fit_counts"]["generic-fallback"] == 1
 
 
+def test_gaps_report_includes_fallback_diagnostics(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import FALLBACK_DISPLAY_GROUPS, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0607-generic",
+        """
+id: hypothesis:0607-generic
+type: hypothesis
+title: Generic benchmark entity
+""",
+        body="No specific benchmark facet appears here.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic-a",
+        """
+id: dataset:generic-a
+type: dataset
+title: Generic A
+dataset_class: deposit
+local_path: data/generic-a
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic-b",
+        """
+id: dataset:generic-b
+type: dataset
+title: Generic B
+dataset_class: deposit
+local_path: data/generic-b
+benchmark:
+  domains: [biology]
+  modalities: [bulk-rna-seq]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+    candidates = [candidate for row in payload["benchmark_gaps"] for candidate in row["candidate_benchmarks"]]
+    diagnostics = payload["fallback_diagnostics"]
+
+    fallback_candidates = [
+        candidate
+        for candidate in candidates
+        if any(note.startswith("fallback:") for note in candidate["reason_notes"])
+    ]
+    assert diagnostics["candidate_rows"] == len(candidates)
+    assert diagnostics["fallback_candidate_rows"] == len(fallback_candidates)
+    assert diagnostics["entity_specific_candidate_rows"] == len(candidates) - len(fallback_candidates)
+    assert diagnostics["generic_fallback_candidate_rows"] == len(fallback_candidates)
+    assert diagnostics["specific_fallback_candidate_rows"] == 0
+    assert set(diagnostics["groups"]) == set(FALLBACK_DISPLAY_GROUPS)
+    assert sum(diagnostics["groups"].values()) == diagnostics["fallback_candidate_rows"]
+    assert diagnostics["groups"]["generic-baseline-fallback"] == len(fallback_candidates)
+    assert diagnostics["top_generic_fallback_benchmarks"][0]["benchmark_id"].startswith("dataset:generic-")
+
+
 def test_gaps_report_filters_context_fit_and_recomputes_candidate_mode(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
