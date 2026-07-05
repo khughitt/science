@@ -58,13 +58,7 @@ import click
 import yaml
 
 SCIENCE_REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT_DIR = (
-    SCIENCE_REPO_ROOT
-    / "docs"
-    / "audits"
-    / "downstream-project-conventions"
-    / "inventory"
-)
+DEFAULT_OUTPUT_DIR = SCIENCE_REPO_ROOT / "docs" / "audits" / "downstream-project-conventions" / "inventory"
 CANONICAL_VALIDATE_PATH = SCIENCE_REPO_ROOT / "meta" / "validate.sh"
 
 SECOND_LEVEL_DIRS: list[str] = [
@@ -120,9 +114,7 @@ OBSERVED_VALUE_FIELDS: list[str] = [
 ]
 
 SECTION_MARKER_RE = re.compile(r"^#\s*─{2,}\s*(?P<title>.+?)\s*─{2,}\s*$")
-ENTITY_ID_RE = re.compile(
-    r"^(?P<prefix>[A-Za-z][A-Za-z0-9_-]{0,40}?)[-_]?(?P<num>\d+)$"
-)
+ENTITY_ID_RE = re.compile(r"^(?P<prefix>[A-Za-z][A-Za-z0-9_-]{0,40}?)[-_]?(?P<num>\d+)$")
 ENTITY_ID_COLON_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z][a-z0-9_-]*)$")
 KEY_LINE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,40}\s*:\s*\S")
 
@@ -144,6 +136,79 @@ GITIGNORED_NOISE_DIRS: frozenset[str] = frozenset(
         ".mypy_cache",
     }
 )
+
+LEGACY_SCAN_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".snakemake",
+        ".venv",
+        ".worktrees",
+        "__pycache__",
+        "data",
+        "logs",
+        "models",
+        "node_modules",
+        "results",
+        "worktrees",
+    }
+)
+
+ENTITY_FRONTMATTER_HINTS: frozenset[str] = frozenset({"id", "kind", "type"})
+ARTICLE_REF_FIELDS: frozenset[str] = frozenset(
+    {
+        "consumed_by",
+        "datapackage",
+        "datasets",
+        "evidence",
+        "inputs",
+        "outputs",
+        "produces",
+        "references",
+        "related",
+        "source",
+        "source_refs",
+        "sources",
+        "supports",
+    }
+)
+ARTICLE_ALIAS_RE = re.compile(r"(?<![A-Za-z0-9_-])article:[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
+@dataclass(frozen=True)
+class LegacySurfaceFinding:
+    surface: str
+    path: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class LegacySurfaceScan:
+    project_root: str
+    findings: tuple[LegacySurfaceFinding, ...]
+
+    def counts_by_surface(self) -> dict[str, int]:
+        counts: Counter[str] = Counter(finding.surface for finding in self.findings)
+        return dict(sorted(counts.items()))
+
+    def paths_for(self, surface: str) -> list[str]:
+        return sorted({finding.path for finding in self.findings if finding.surface == surface})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "project_root": self.project_root,
+            "counts": self.counts_by_surface(),
+            "findings": [
+                {
+                    "surface": finding.surface,
+                    "path": finding.path,
+                    "detail": finding.detail,
+                }
+                for finding in self.findings
+            ],
+        }
 
 
 def extract_entity_id_prefix(entity_id: str) -> str:
@@ -225,9 +290,7 @@ def gather_git_info(project_root: Path) -> GitInfo:
     rc, porc, _ = _run(["git", "status", "--porcelain"], project_root)
     porcelain = sorted(line for line in porc.splitlines() if line.strip())
 
-    rc, last, _ = _run(
-        ["git", "log", "-1", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s"], project_root
-    )
+    rc, last, _ = _run(["git", "log", "-1", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s"], project_root)
     last_commit: dict[str, str] | None = None
     if rc == 0 and last.strip():
         parts = last.strip().split("\x1f")
@@ -240,9 +303,7 @@ def gather_git_info(project_root: Path) -> GitInfo:
                 "subject": parts[4],
             }
 
-    return GitInfo(
-        is_repo=True, head=head_sha, porcelain=porcelain, last_commit=last_commit
-    )
+    return GitInfo(is_repo=True, head=head_sha, porcelain=porcelain, last_commit=last_commit)
 
 
 def science_repo_head() -> str | None:
@@ -293,9 +354,7 @@ def load_protected_dirs(project_root: Path) -> list[str]:
     if not science_yaml.is_file():
         return []
     try:
-        data = yaml.safe_load(
-            science_yaml.read_text(encoding="utf-8", errors="replace")
-        )
+        data = yaml.safe_load(science_yaml.read_text(encoding="utf-8", errors="replace"))
     except yaml.YAMLError:
         return []
     if not isinstance(data, dict):
@@ -356,6 +415,247 @@ def split_frontmatter(text: str) -> tuple[dict[str, Any] | None, str | None]:
     return parsed, None
 
 
+def _iter_scannable_files(project_root: Path) -> Iterable[Path]:
+    for root, dirnames, filenames in os.walk(project_root):
+        dirnames[:] = sorted(dirname for dirname in dirnames if dirname not in LEGACY_SCAN_EXCLUDED_DIRS)
+        current = Path(root)
+        for filename in sorted(filenames):
+            yield current / filename
+
+
+def _rel_posix(project_root: Path, path: Path) -> str:
+    return path.relative_to(project_root).as_posix()
+
+
+def _has_entity_frontmatter(fm: dict[str, Any]) -> bool:
+    return any(key in fm for key in ENTITY_FRONTMATTER_HINTS)
+
+
+def _is_legacy_entity_root(rel_path: str, fm: dict[str, Any]) -> bool:
+    return rel_path.startswith(("doc/", "specs/")) and _has_entity_frontmatter(fm)
+
+
+def _is_scalar_access(value: Any) -> bool:
+    return value is not None and not isinstance(value, (dict, list))
+
+
+def _iter_strings(value: Any, *, key: str | None = None) -> Iterable[tuple[str | None, str]]:
+    if isinstance(value, str):
+        yield key, value
+        return
+    if isinstance(value, list):
+        for item in value:
+            yield from _iter_strings(item, key=key)
+        return
+    if isinstance(value, dict):
+        for child_key, child_value in value.items():
+            next_key = child_key if isinstance(child_key, str) else key
+            yield from _iter_strings(child_value, key=next_key)
+
+
+def _frontmatter_has_article_alias(fm: dict[str, Any]) -> bool:
+    for field in ARTICLE_REF_FIELDS:
+        if field not in fm:
+            continue
+        for _, value in _iter_strings(fm[field], key=field):
+            if ARTICLE_ALIAS_RE.search(value):
+                return True
+    return False
+
+
+def _structured_file_has_article_alias(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    try:
+        if path.suffix == ".json":
+            data = json.loads(text)
+        else:
+            data = yaml.safe_load(text)
+    except (json.JSONDecodeError, yaml.YAMLError):
+        return False
+    for key, value in _iter_strings(data):
+        if key not in ARTICLE_REF_FIELDS:
+            continue
+        if ARTICLE_ALIAS_RE.search(value):
+            return True
+    return False
+
+
+def _is_aggregate_manifest(rel_path: str) -> bool:
+    parts = rel_path.split("/")
+    if (
+        len(parts) == 4
+        and parts[0] == "knowledge"
+        and parts[1] == "sources"
+        and parts[3] in {"entities.yaml", "terms.yaml"}
+    ):
+        return True
+    if len(parts) == 3 and parts[0] == "doc":
+        stem, suffix = os.path.splitext(parts[2])
+        return stem == parts[1] and suffix in {".json", ".yaml", ".yml"}
+    return False
+
+
+def _is_active_data_package_entity(rel_path: str, fm: dict[str, Any]) -> bool:
+    if not rel_path.startswith("doc/data-packages/") or not rel_path.endswith(".md"):
+        return False
+    kind = fm.get("kind") or fm.get("type")
+    if kind != "data-package":
+        return False
+    status = fm.get("status")
+    return status not in {"archived", "retired"}
+
+
+def _legacy_science_yaml_findings(project_root: Path) -> list[LegacySurfaceFinding]:
+    path = project_root / "science.yaml"
+    if not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8", errors="replace"))
+    except yaml.YAMLError as exc:
+        return [
+            LegacySurfaceFinding(
+                "science_yaml_parse_error",
+                "science.yaml",
+                exc.__class__.__name__,
+            )
+        ]
+    if not isinstance(data, dict):
+        return []
+    findings: list[LegacySurfaceFinding] = []
+    if "profiles" in data and "knowledge_profiles" not in data:
+        findings.append(
+            LegacySurfaceFinding(
+                "bare_profiles_config",
+                "science.yaml",
+                "top-level profiles without knowledge_profiles",
+            )
+        )
+    rejected = sorted(key for key in ("parent", "children") if key in data)
+    if rejected:
+        findings.append(
+            LegacySurfaceFinding(
+                "parent_children_config",
+                "science.yaml",
+                ", ".join(rejected),
+            )
+        )
+    return findings
+
+
+def scan_legacy_surfaces(project_root: Path) -> LegacySurfaceScan:
+    """Return precise legacy-surface findings for one downstream project."""
+    project_root = project_root.expanduser().resolve()
+    findings: list[LegacySurfaceFinding] = []
+    findings.extend(_legacy_science_yaml_findings(project_root))
+
+    for path in _iter_scannable_files(project_root):
+        rel_path = _rel_posix(project_root, path)
+        if rel_path == "science.yaml":
+            continue
+        if rel_path == "validate.local.sh":
+            findings.append(
+                LegacySurfaceFinding(
+                    "validate_local_sh",
+                    rel_path,
+                    "local validation script",
+                )
+            )
+        if rel_path.endswith(".edges.yaml"):
+            findings.append(
+                LegacySurfaceFinding(
+                    "retired_edges_yaml",
+                    rel_path,
+                    "retired DAG edge file",
+                )
+            )
+        if _is_aggregate_manifest(rel_path):
+            findings.append(
+                LegacySurfaceFinding(
+                    "aggregate_manifest",
+                    rel_path,
+                    "aggregate manifest",
+                )
+            )
+
+        suffix = path.suffix.lower()
+        if suffix in {".yaml", ".yml", ".json"} and rel_path != "science.yaml":
+            if _structured_file_has_article_alias(path):
+                findings.append(
+                    LegacySurfaceFinding(
+                        "article_prefix_alias",
+                        rel_path,
+                        "article:<bibkey> reference",
+                    )
+                )
+        if suffix not in {".md", ".markdown"}:
+            continue
+
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "[NEEDS CITATION]" in text:
+            findings.append(
+                LegacySurfaceFinding(
+                    "legacy_marker_alias",
+                    rel_path,
+                    "[NEEDS CITATION]",
+                )
+            )
+        fm, error = split_frontmatter(text)
+        if error or fm is None:
+            continue
+        if _is_legacy_entity_root(rel_path, fm):
+            findings.append(
+                LegacySurfaceFinding(
+                    "legacy_entity_roots",
+                    rel_path,
+                    "entity frontmatter under doc/ or specs/",
+                )
+            )
+        if "type" in fm and _has_entity_frontmatter(fm):
+            findings.append(
+                LegacySurfaceFinding(
+                    "type_frontmatter",
+                    rel_path,
+                    "entity frontmatter has type:",
+                )
+            )
+        if "access" in fm and _is_scalar_access(fm["access"]):
+            findings.append(
+                LegacySurfaceFinding(
+                    "scalar_access",
+                    rel_path,
+                    "frontmatter access is scalar",
+                )
+            )
+        if _frontmatter_has_article_alias(fm):
+            findings.append(
+                LegacySurfaceFinding(
+                    "article_prefix_alias",
+                    rel_path,
+                    "article:<bibkey> reference",
+                )
+            )
+        if _is_active_data_package_entity(rel_path, fm):
+            findings.append(
+                LegacySurfaceFinding(
+                    "legacy_data_package_entity",
+                    rel_path,
+                    "active data-package entity under doc/data-packages",
+                )
+            )
+
+    deduped = sorted(
+        set(findings),
+        key=lambda finding: (finding.surface, finding.path, finding.detail),
+    )
+    return LegacySurfaceScan(project_root=str(project_root), findings=tuple(deduped))
+
+
 def detect_long_form(text: str) -> tuple[int, list[int]]:
     """Return (line_count, candidate_embedded_block_starts).
 
@@ -411,9 +711,7 @@ def count_top_level(tracked: list[str]) -> dict[str, int]:
     return dict(sorted(counter.items()))
 
 
-def count_second_level(
-    tracked: list[str], dirs: list[str]
-) -> dict[str, dict[str, int]]:
+def count_second_level(tracked: list[str], dirs: list[str]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {}
     for top in dirs:
         sub: Counter[str] = Counter()
@@ -461,9 +759,7 @@ def find_gitignored_top_level_dirs(
             continue
         if name in GITIGNORED_NOISE_DIRS:
             continue
-        if is_path_ignored(name, ignore_patterns) or is_path_ignored(
-            name + "/", ignore_patterns
-        ):
+        if is_path_ignored(name, ignore_patterns) or is_path_ignored(name + "/", ignore_patterns):
             continue
 
         file_count = 0
@@ -573,19 +869,13 @@ def summarize_science_yaml(project_root: Path) -> dict[str, Any]:
 
     keys = sorted(data.keys())
     summary: dict[str, Any] = {"present": True, "keys": keys}
-    summary["profile"] = (
-        data.get("profile") if isinstance(data.get("profile"), str) else None
-    )
+    summary["profile"] = data.get("profile") if isinstance(data.get("profile"), str) else None
     aspects = data.get("aspects")
     summary["aspects"] = (
-        sorted(aspects)
-        if isinstance(aspects, list) and all(isinstance(a, str) for a in aspects)
-        else aspects
+        sorted(aspects) if isinstance(aspects, list) and all(isinstance(a, str) for a in aspects) else aspects
     )
     layout_version = data.get("layout_version")
-    summary["layout_version"] = (
-        layout_version if isinstance(layout_version, (int, str)) else None
-    )
+    summary["layout_version"] = layout_version if isinstance(layout_version, (int, str)) else None
 
     # data_sources shape inspection
     sources = data.get("data_sources")
@@ -663,20 +953,14 @@ def summarize_gitignore(project_root: Path) -> dict[str, Any]:
             continue
         for bucket, needles in buckets.items():
             for needle in needles:
-                if (
-                    line == needle.rstrip("/")
-                    or line == needle
-                    or needle.rstrip("/") in line
-                ):
+                if line == needle.rstrip("/") or line == needle or needle.rstrip("/") in line:
                     hits[bucket].append(line)
                     break
     cleaned = {k: sorted(set(v)) for k, v in hits.items() if v}
     return {
         "present": True,
         "line_count": len(lines),
-        "non_blank_non_comment": sum(
-            1 for line in lines if line.strip() and not line.strip().startswith("#")
-        ),
+        "non_blank_non_comment": sum(1 for line in lines if line.strip() and not line.strip().startswith("#")),
         "matched": cleaned,
     }
 
@@ -732,16 +1016,8 @@ def compute_content_diff(
         local_lines = local_sections.get(title)
         canon_text = "\n".join(canon_lines) if canon_lines is not None else ""
         local_text = "\n".join(local_lines) if local_lines is not None else ""
-        canon_sha = (
-            hashlib.sha256(canon_text.encode("utf-8")).hexdigest()
-            if canon_lines is not None
-            else None
-        )
-        local_sha = (
-            hashlib.sha256(local_text.encode("utf-8")).hexdigest()
-            if local_lines is not None
-            else None
-        )
+        canon_sha = hashlib.sha256(canon_text.encode("utf-8")).hexdigest() if canon_lines is not None else None
+        local_sha = hashlib.sha256(local_text.encode("utf-8")).hexdigest() if local_lines is not None else None
         if canon_sha == local_sha:
             continue
         diff_lines = list(
@@ -753,11 +1029,7 @@ def compute_content_diff(
             )
         )
         # Count actual changed/added/removed lines (skip headers & hunk markers).
-        changed = sum(
-            1
-            for line in diff_lines
-            if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
-        )
+        changed = sum(1 for line in diff_lines if line.startswith(("+", "-")) and not line.startswith(("+++", "---")))
         total_changed += changed
         records.append(
             {
@@ -789,16 +1061,10 @@ def summarize_validate(project_root: Path) -> dict[str, Any]:
         "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
     }
     if CANONICAL_VALIDATE_PATH.is_file():
-        canon_text = CANONICAL_VALIDATE_PATH.read_text(
-            encoding="utf-8", errors="replace"
-        )
+        canon_text = CANONICAL_VALIDATE_PATH.read_text(encoding="utf-8", errors="replace")
         canon_sections = parse_validate_sections(canon_text)
-        summary["canonical_path"] = str(
-            CANONICAL_VALIDATE_PATH.relative_to(SCIENCE_REPO_ROOT)
-        )
-        summary["canonical_sha256"] = hashlib.sha256(
-            canon_text.encode("utf-8")
-        ).hexdigest()
+        summary["canonical_path"] = str(CANONICAL_VALIDATE_PATH.relative_to(SCIENCE_REPO_ROOT))
+        summary["canonical_sha256"] = hashlib.sha256(canon_text.encode("utf-8")).hexdigest()
         summary["structural_diff"] = compute_structural_diff(canon_sections, sections)
         canon_buckets = split_validate_sections(canon_text)
         local_buckets = split_validate_sections(text)
@@ -810,9 +1076,7 @@ def summarize_validate(project_root: Path) -> dict[str, Any]:
     return summary
 
 
-def compute_structural_diff(
-    canonical: list[str], local: list[str]
-) -> list[dict[str, Any]]:
+def compute_structural_diff(canonical: list[str], local: list[str]) -> list[dict[str, Any]]:
     """Return added/removed/reordered section records (no whitespace findings)."""
     diff: list[dict[str, Any]] = []
     canon_set = set(canonical)
@@ -853,9 +1117,7 @@ def sweep_markdown_files(
     key_count_by_dir: dict[str, Counter[str]] = {}
     files_by_dir: Counter[str] = Counter()
     field_paths: dict[str, list[str]] = {f: [] for f in FRONTMATTER_REFERENCE_FIELDS}
-    observed_values: dict[str, Counter[Any]] = {
-        f: Counter() for f in OBSERVED_VALUE_FIELDS
-    }
+    observed_values: dict[str, Counter[Any]] = {f: Counter() for f in OBSERVED_VALUE_FIELDS}
     entity_id_paths: dict[str, list[str]] = {}
     entity_id_prefix_counts: Counter[str] = Counter()
     template_files_skipped = 0
@@ -869,9 +1131,7 @@ def sweep_markdown_files(
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            parse_errors.append(
-                {"path": rel, "error": f"read failed: {exc.__class__.__name__}"}
-            )
+            parse_errors.append({"path": rel, "error": f"read failed: {exc.__class__.__name__}"})
             continue
         top_dir = rel.split("/", 1)[0] if "/" in rel else "<root>"
         files_by_dir[top_dir] += 1
@@ -890,9 +1150,7 @@ def sweep_markdown_files(
         if line_count > LONG_FORM_LINES_THRESHOLD:
             long_form.append({"path": rel, "lines": line_count})
         if blocks:
-            embedded_blocks.append(
-                {"path": rel, "lines": line_count, "candidate_starts": blocks}
-            )
+            embedded_blocks.append({"path": rel, "lines": line_count, "candidate_starts": blocks})
 
         fm, error = split_frontmatter(text)
         if error:
@@ -933,9 +1191,7 @@ def sweep_markdown_files(
             entity_id_prefix_counts[extract_entity_id_prefix(ent_id_str)] += 1
 
     # Duplicates: ids with >1 path.
-    duplicate_ids = {
-        eid: sorted(paths) for eid, paths in entity_id_paths.items() if len(paths) > 1
-    }
+    duplicate_ids = {eid: sorted(paths) for eid, paths in entity_id_paths.items() if len(paths) > 1}
 
     # Sort numerically-then-alphabetically for entity_id_paths keys.
     def id_sort_key(s: str) -> tuple[int, str]:
@@ -947,38 +1203,26 @@ def sweep_markdown_files(
                 return (1, s)
         return (1, s)
 
-    sorted_id_paths = {
-        k: sorted(entity_id_paths[k]) for k in sorted(entity_id_paths, key=id_sort_key)
-    }
-    sorted_dup_ids = {
-        k: duplicate_ids[k] for k in sorted(duplicate_ids, key=id_sort_key)
-    }
+    sorted_id_paths = {k: sorted(entity_id_paths[k]) for k in sorted(entity_id_paths, key=id_sort_key)}
+    sorted_dup_ids = {k: duplicate_ids[k] for k in sorted(duplicate_ids, key=id_sort_key)}
 
     return {
         "markdown_file_count": len(md_files),
         "scanned_count": sum(files_by_dir.values()),
         "template_files_skipped": template_files_skipped,
         "files_by_top_dir": dict(sorted(files_by_dir.items())),
-        "frontmatter_key_counts_by_dir": {
-            d: dict(sorted(c.items())) for d, c in sorted(key_count_by_dir.items())
-        },
+        "frontmatter_key_counts_by_dir": {d: dict(sorted(c.items())) for d, c in sorted(key_count_by_dir.items())},
         "frontmatter_unparsed": sorted(frontmatter_unparsed),
         "frontmatter_parse_errors": sorted(parse_errors, key=lambda e: e["path"]),
-        "observed_values": {
-            f: dict(sorted(observed_values[f].items())) for f in OBSERVED_VALUE_FIELDS
-        },
+        "observed_values": {f: dict(sorted(observed_values[f].items())) for f in OBSERVED_VALUE_FIELDS},
         "entity_id_prefix_counts": dict(sorted(entity_id_prefix_counts.items())),
         "entity_id_paths": sorted_id_paths,
         "duplicate_entity_ids": sorted_dup_ids,
         "frontmatter_reference_field_paths": {
-            f: sorted(field_paths[f])
-            for f in FRONTMATTER_REFERENCE_FIELDS
-            if field_paths[f]
+            f: sorted(field_paths[f]) for f in FRONTMATTER_REFERENCE_FIELDS if field_paths[f]
         },
         "long_form_files": sorted(long_form, key=lambda d: d["path"]),
-        "embedded_metadata_candidates": sorted(
-            embedded_blocks, key=lambda d: d["path"]
-        ),
+        "embedded_metadata_candidates": sorted(embedded_blocks, key=lambda d: d["path"]),
     }
 
 
@@ -1002,9 +1246,7 @@ def code_layout_summary(project_root: Path, tracked: list[str]) -> dict[str, Any
         "paths": notebook_paths[:25],  # cap for size; full count above
         "truncated": len(notebook_paths) > 25,
     }
-    test_paths = sorted(
-        p for p in tracked if "/tests/" in "/" + p or p.startswith("tests/")
-    )
+    test_paths = sorted(p for p in tracked if "/tests/" in "/" + p or p.startswith("tests/"))
     layout["tests"] = {
         "count": len(test_paths),
         "top_dirs": sorted({p.split("/", 1)[0] for p in test_paths}),
@@ -1013,9 +1255,7 @@ def code_layout_summary(project_root: Path, tracked: list[str]) -> dict[str, Any
 
 
 def find_datapackages(tracked: list[str]) -> list[str]:
-    return sorted(
-        p for p in tracked if p.endswith("/datapackage.json") or p == "datapackage.json"
-    )
+    return sorted(p for p in tracked if p.endswith("/datapackage.json") or p == "datapackage.json")
 
 
 # ----------------------------- top-level orchestration -----------------------------
@@ -1034,9 +1274,7 @@ def build_inventory(project_root: Path) -> dict[str, Any]:
     md = sweep_markdown_files(project_root, tracked, ignore_patterns, protected_dirs)
     present_untracked = find_present_untracked(project_root)
     already_listed = {entry["path"] for entry in present_untracked}
-    gitignored_dirs = find_gitignored_top_level_dirs(
-        project_root, tracked, ignore_patterns, already_listed
-    )
+    gitignored_dirs = find_gitignored_top_level_dirs(project_root, tracked, ignore_patterns, already_listed)
 
     inventory: dict[str, Any] = {
         "schema_version": "v0",
@@ -1105,9 +1343,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
     out.append(f"- Project HEAD: `{g['head']}`")
     if g["last_commit"]:
         lc = g["last_commit"]
-        out.append(
-            f"- Last commit: `{lc['sha'][:12]}` {lc['authored']} — {lc['subject']}"
-        )
+        out.append(f"- Last commit: `{lc['sha'][:12]}` {lc['authored']} — {lc['subject']}")
     porc = g["status_porcelain"]
     out.append(f"- Dirty entries: {len(porc)}")
     if g["status_porcelain_summary"]:
@@ -1177,9 +1413,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
         out.append("| --- | ---: | ---: | --- |")
         for entry in git_dirs:
             samples = ", ".join(f"`{p}`" for p in entry["sample_paths"])
-            out.append(
-                f"| `{entry['name']}` | {entry['file_count']} | {entry['total_size_bytes']} | {samples} |"
-            )
+            out.append(f"| `{entry['name']}` | {entry['file_count']} | {entry['total_size_bytes']} | {samples} |")
     else:
         out.append("_None._")
     out.append("")
@@ -1205,18 +1439,14 @@ def render_markdown(inv: dict[str, Any]) -> str:
     else:
         out.append(f"- Profile: `{sy.get('profile')}`")
         out.append(f"- Layout version: `{sy.get('layout_version')}`")
-        out.append(
-            f"- Top-level keys ({len(sy['keys'])}): {', '.join(f'`{k}`' for k in sy['keys'])}"
-        )
+        out.append(f"- Top-level keys ({len(sy['keys'])}): {', '.join(f'`{k}`' for k in sy['keys'])}")
         if sy.get("aspects"):
             out.append(f"- Aspects: {', '.join(f'`{a}`' for a in sy['aspects'])}")
         if sy.get("ontologies"):
             out.append(f"- Ontologies: {sy['ontologies']}")
         ds = sy.get("data_sources_shape", {})
         if ds.get("present"):
-            out.append(
-                f"- data_sources: count={ds.get('count')}, kinds={ds.get('entry_kinds')}"
-            )
+            out.append(f"- data_sources: count={ds.get('count')}, kinds={ds.get('entry_kinds')}")
             if ds.get("object_key_counts"):
                 out.append(f"  - object key counts: {ds['object_key_counts']}")
             if ds.get("type_value_counts"):
@@ -1229,9 +1459,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
     if not gi.get("present"):
         out.append("_Not present._")
     else:
-        out.append(
-            f"- Lines: {gi['line_count']}, non-blank/comment: {gi['non_blank_non_comment']}"
-        )
+        out.append(f"- Lines: {gi['line_count']}, non-blank/comment: {gi['non_blank_non_comment']}")
         if gi.get("matched"):
             for bucket, hits in gi["matched"].items():
                 out.append(f"- **{bucket}**: {', '.join(f'`{h}`' for h in hits)}")
@@ -1246,9 +1474,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
         out.append(f"- Lines: {v['line_count']}")
         out.append(f"- sha256: `{v['sha256']}`")
         if v.get("canonical_path"):
-            out.append(
-                f"- Canonical comparator: `{v['canonical_path']}` (sha256 `{v['canonical_sha256']}`)"
-            )
+            out.append(f"- Canonical comparator: `{v['canonical_path']}` (sha256 `{v['canonical_sha256']}`)")
         out.append("")
         out.append("**Header:**")
         out.append("")
@@ -1283,9 +1509,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
             )
             out.append("")
             if content:
-                out.append(
-                    "| section | canonical lines | local lines | changed lines |"
-                )
+                out.append("| section | canonical lines | local lines | changed lines |")
                 out.append("| --- | ---: | ---: | ---: |")
                 for entry in content:
                     out.append(
@@ -1317,9 +1541,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
         if nb.get("truncated"):
             out.append("  - _(truncated)_")
     tests = cl.get("tests", {})
-    out.append(
-        f"- tests: count={tests.get('count', 0)}, top_dirs={tests.get('top_dirs', [])}"
-    )
+    out.append(f"- tests: count={tests.get('count', 0)}, top_dirs={tests.get('top_dirs', [])}")
     out.append("")
 
     md = inv["markdown"]
@@ -1328,13 +1550,9 @@ def render_markdown(inv: dict[str, Any]) -> str:
     out.append(f"- Markdown files: {md['markdown_file_count']}")
     out.append(f"- Scanned (after .audit-ignore / protected): {md['scanned_count']}")
     if md.get("template_files_skipped"):
-        out.append(
-            f"- Template files skipped from entity accounting: {md['template_files_skipped']}"
-        )
+        out.append(f"- Template files skipped from entity accounting: {md['template_files_skipped']}")
     if md["frontmatter_unparsed"]:
-        out.append(
-            f"- Frontmatter unparsed (TOML/non-YAML): {len(md['frontmatter_unparsed'])}"
-        )
+        out.append(f"- Frontmatter unparsed (TOML/non-YAML): {len(md['frontmatter_unparsed'])}")
     if md["frontmatter_parse_errors"]:
         out.append(f"- Frontmatter parse errors: {len(md['frontmatter_parse_errors'])}")
     out.append("")
@@ -1414,9 +1632,7 @@ def render_markdown(inv: dict[str, Any]) -> str:
     out.append("")
     if md["embedded_metadata_candidates"]:
         for entry in md["embedded_metadata_candidates"][:50]:
-            out.append(
-                f"- `{entry['path']}` (lines={entry['lines']}, candidates={entry['candidate_starts']})"
-            )
+            out.append(f"- `{entry['path']}` (lines={entry['lines']}, candidates={entry['candidate_starts']})")
         if len(md["embedded_metadata_candidates"]) > 50:
             out.append(f"- _(+{len(md['embedded_metadata_candidates']) - 50} more)_")
     else:
@@ -1491,9 +1707,7 @@ def main(
     json_path = output_dir / f"{base}.json"
     md_path = output_dir / f"{base}.md"
 
-    json_path.write_text(
-        json.dumps(inv, indent=2, sort_keys=False) + "\n", encoding="utf-8"
-    )
+    json_path.write_text(json.dumps(inv, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     md_path.write_text(render_markdown(inv), encoding="utf-8")
 
     click.echo(f"wrote {json_path}")

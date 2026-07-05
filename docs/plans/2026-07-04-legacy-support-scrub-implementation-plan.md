@@ -45,13 +45,13 @@
 - Test: `science/tests/test_downstream_legacy_inventory.py`
 - Output: `docs/audits/legacy-support-scrub-inventory-2026-07-04.md`
 
-- [ ] **Step 1: Add focused single-project findings**
+- [x] **Step 1: Add focused single-project findings**
 
 Extend the existing downstream scanner so it returns structured counts for the
 sentinels listed in `docs/audits/legacy-support-scrub-2026-07-04.md`. Keep the
 checks precise enough to avoid current feature false positives.
 
-- [ ] **Step 2: Add registered-project wrapper**
+- [x] **Step 2: Add registered-project wrapper**
 
 Create a wrapper that loads registered projects, resolves and deduplicates
 paths, skips entries without `science.yaml`, runs the single-project scanner,
@@ -69,7 +69,12 @@ either register it, migrate it under this campaign, or record an explicit
 exclusion with rationale. Do not trust any zero-hit gate until this delta is
 resolved.
 
-- [ ] **Step 4: Test deduplication and sentinel precision**
+Status 2026-07-05: the initial sweep found one unregistered project,
+`~/d/science-commons`, and one stale registered worktree path,
+`~/d/natural-systems/.worktrees/validation-strict-cleanup`. Resolve those before
+trusting a zero-hit surface gate.
+
+- [x] **Step 4: Test deduplication and sentinel precision**
 
 Add tests with tiny temporary project trees covering:
 
@@ -80,12 +85,12 @@ Add tests with tiny temporary project trees covering:
 - `article:<bibkey>` refs are reported, while `kind: article` is not;
 - task `retired` and `deprecated_ids` are not reported.
 
-- [ ] **Step 5: Run initial inventory**
+- [x] **Step 5: Run initial inventory**
 
 Run the wrapper against registered projects and save the baseline report under
 `docs/audits/`. This report drives the remaining task order.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run:
 
