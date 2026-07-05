@@ -785,20 +785,24 @@ def _project_relative_or_absolute(project_root: Path, path: Path) -> str:
         return path.as_posix()
 
 
-def _resolve_scaffold_output_path(project_root: Path, output_path: Path) -> Path:
+def _validate_scaffold_output_path(project_root: Path, output_path: Path, *, require_parent: bool) -> Path:
     candidate = output_path if output_path.is_absolute() else project_root / output_path
     resolved = candidate.resolve()
     try:
         resolved.relative_to(project_root)
     except ValueError as exc:
         raise ValueError(f"output path escapes project root: {output_path}") from exc
-    if not resolved.parent.exists():
+    if require_parent and not resolved.parent.exists():
         raise ValueError(f"output parent directory does not exist: {resolved.parent}")
     if resolved.name.endswith(".edges.yaml"):
         raise ValueError("output path must not be a retired .edges.yaml file")
     if resolved.suffix == ".dot":
         raise ValueError("output path must not be a DOT file")
     return resolved
+
+
+def _resolve_scaffold_output_path(project_root: Path, output_path: Path) -> Path:
+    return _validate_scaffold_output_path(project_root, output_path, require_parent=True)
 
 
 def _ready_scaffold_rows(plan: RetiredEdgeMigrationPlan) -> Sequence[RetiredEdgeMigrationRow]:
@@ -845,11 +849,12 @@ def scaffold_retired_edge_workbench(
         raise AssertionError("Phase 5g invariant violated: ready row lacks proposed_row")
     closed_by = tuple(closed_id for row in closed for closed_id in row.closed_by)
     if closed and not ready_rows:
+        resolved_output = _validate_scaffold_output_path(project_root, output_path, require_parent=False)
         return RetiredEdgeWorkbenchScaffoldResult(
             project_root=project_root.as_posix(),
             dag=dag,
             focal_hypothesis=focal_hypothesis,
-            output_path=_project_relative_or_absolute(project_root, project_root / output_path),
+            output_path=_project_relative_or_absolute(project_root, resolved_output),
             status="complete",
             row_count=0,
             total_row_count=len(plan.rows),
@@ -925,7 +930,8 @@ def render_retired_edge_workbench_scaffold_table(result: RetiredEdgeWorkbenchSca
             f"Retired edge workbench scaffold complete: {result.dag}\n"
             f"  status: {result.status}\n"
             f"  focal_hypothesis: {result.focal_hypothesis}\n"
-            f"  rows: {result.total_row_count}\n"
+            f"  written_rows: {result.row_count}\n"
+            f"  total_rows: {result.total_row_count}\n"
             f"  closed_rows: {result.closed_row_count}\n"
         )
     action = "Wrote" if result.written else "No-op"

@@ -295,6 +295,74 @@ def test_scaffold_retired_edge_workbench_all_closed_returns_complete_without_out
     assert not (project / "missing-parent").exists()
 
 
+def test_scaffold_retired_edge_workbench_all_closed_rejects_escaping_output(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    with pytest.raises(ValueError, match="escapes project root"):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=tmp_path / "outside.workbench.yaml",
+        )
+
+
+@pytest.mark.parametrize(
+    ("output_path", "message"),
+    [
+        (Path("doc/figures/dags/h1.edges.yaml"), r"\.edges\.yaml"),
+        (Path("doc/figures/dags/h1.dot"), "DOT file"),
+    ],
+)
+def test_scaffold_retired_edge_workbench_all_closed_rejects_retired_or_dot_outputs(
+    tmp_path: Path, output_path: Path, message: str
+) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    with pytest.raises(ValueError, match=message):
+        scaffold_retired_edge_workbench(
+            project,
+            dag="h1",
+            focal_hypothesis="hypothesis:h1",
+            output_path=output_path,
+        )
+
+
+def test_render_retired_edge_workbench_scaffold_table_complete_uses_explicit_row_counts(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import (
+        render_retired_edge_workbench_scaffold_table,
+        scaffold_retired_edge_workbench,
+    )
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=Path("missing-parent/h1.workbench.yaml"),
+    )
+
+    assert render_retired_edge_workbench_scaffold_table(result) == (
+        "Retired edge workbench scaffold complete: h1\n"
+        "  status: complete\n"
+        "  focal_hypothesis: hypothesis:h1\n"
+        "  written_rows: 0\n"
+        "  total_rows: 1\n"
+        "  closed_rows: 1\n"
+    )
+
+
 def test_scaffold_retired_edge_workbench_writes_remaining_ready_rows_when_some_closed(tmp_path: Path) -> None:
     from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
 
