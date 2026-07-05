@@ -6409,10 +6409,19 @@ def benchmark_test_triage(
         Console(width=200).print(table)
     fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
     if fallback_count:
+        from science_tool.benchmark_opportunities import (
+            FALLBACK_DISPLAY_GROUPS,
+            _is_generic_fallback_display_group,
+        )
+
         diagnostics = payload["fallback_diagnostics"]
         rollups = diagnostics["rollups"]
+        for rollup in rollups:
+            display_group = rollup.get("display_group")
+            if display_group not in FALLBACK_DISPLAY_GROUPS:
+                raise click.ClickException(f"unknown fallback display group: {display_group}")
         visible_terminal_rollups = [
-            rollup for rollup in rollups if not str(rollup.get("display_group") or "").startswith("generic-")
+            rollup for rollup in rollups if not _is_generic_fallback_display_group(rollup["display_group"])
         ]
         visible_rollups = visible_terminal_rollups[:10]
         terminal_visible_total = diagnostics.get("terminal_visible_rollup_count", len(rollups))
@@ -6497,11 +6506,7 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     rendered: list[str] = []
     generic_candidates: list[Mapping[str, Any]] = []
     for candidate in candidates:
-        try:
-            display_group = _fallback_display_group_for_gap_candidate(candidate)
-        except ValueError:
-            rendered.append(_format_gap_candidate_for_table(candidate))
-            continue
+        display_group = _fallback_display_group_for_gap_candidate(candidate)
         if _is_generic_fallback_display_group(display_group):
             generic_candidates.append(candidate)
         else:

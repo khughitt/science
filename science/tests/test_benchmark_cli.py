@@ -2164,6 +2164,70 @@ def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path
     assert "fallback diagnostics rollups missing for fallback rows" in result.output
 
 
+def test_benchmark_test_triage_cli_errors_on_unknown_fallback_display_group(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_benchmark_test_triage_report(*args, **kwargs):
+        return {
+            "summary": {
+                "bucket_counts": {
+                    "run-now": 0,
+                    "stage-next": 0,
+                    "metadata-needed": 0,
+                    "blocked-or-reference": 0,
+                    "fallback-diagnostic": 1,
+                }
+            },
+            "buckets": {
+                "run-now": [],
+                "stage-next": [],
+                "metadata-needed": [],
+                "blocked-or-reference": [],
+                "fallback-diagnostic": [],
+            },
+            "fallback_diagnostics": {
+                "rollups": [
+                    {
+                        "benchmark_id": "dataset:fallback",
+                        "benchmark_title": "Fallback",
+                        "display_group": "generic-ish",
+                        "task_id": "dataset:fallback#ready",
+                        "task_type": "",
+                        "count": 1,
+                        "task_support_state": "supported",
+                        "task_support_reason": "",
+                        "readiness_label": "runnable",
+                        "dataset_class": "deposit",
+                        "test_plan_state": "concrete",
+                        "top_facets": [],
+                        "example_entities": ["hypothesis:one"],
+                        "reason_notes": ["fallback:baseline-quality"],
+                    }
+                ],
+                "terminal_visible_rollup_count": 1,
+            },
+            "commons_notice": "",
+            "filters": {},
+            "review_file": None,
+        }
+
+    monkeypatch.setattr(
+        "science_tool.benchmark_opportunities.benchmark_test_triage_report",
+        fake_benchmark_test_triage_report,
+    )
+
+    result = CliRunner().invoke(
+        science_cli,
+        ["benchmark", "test-triage"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+
+    assert result.exit_code != 0
+    assert "unknown fallback display group: generic-ish" in result.output
+
+
 def test_benchmark_test_triage_cli_table_hides_generic_but_keeps_json_rollups(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
