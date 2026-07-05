@@ -18,6 +18,7 @@ from science_tool.entities import (
     _render_markdown,
     create_entity,
 )
+from science_tool.entity_scan import iter_entity_markdown
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
@@ -467,7 +468,7 @@ def backfill_lens_views(project_root: Path, from_value: str) -> list[tuple[str, 
     touched: list[tuple[str, int]] = []
     for entity_id, block in by_applied_as.items():
         target = next(
-            (p for p in entities_root.rglob("*.md") if _file_id(p) == entity_id), None
+            (p for p in iter_entity_markdown(entities_root) if _file_id(p) == entity_id), None
         )
         if target is None:
             continue

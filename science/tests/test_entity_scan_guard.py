@@ -58,6 +58,7 @@ ENTITY_SCANNERS: set[str] = {
     "big_picture/validator.py",
     "graph/paper_dataset_migration.py",
     "entities.py",
+    "explore_ideas.py",
 }
 
 
