@@ -8,10 +8,12 @@ archive path plus a small manifest.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 from typing import Any, Literal
 
 from science_tool.dag.paths import load_dag_paths
@@ -181,6 +183,50 @@ def build_retired_edge_archive_plan(project_root: Path, *, dag: str) -> RetiredE
     )
 
 
+def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str) -> RetiredEdgeArchivePlan:
+    project_root = Path(project_root).resolve()
+    plan = build_retired_edge_archive_plan(project_root, dag=dag)
+    if plan.status == "already_archived":
+        return plan
+    if plan.status != "ready_to_archive":
+        raise ValueError(f"retired edge file {dag!r} is not ready to archive: {plan.status} {list(plan.blockers)}")
+
+    source, archive, manifest = _paths(project_root, dag)
+    current_sha = _sha256_file(source)
+    if current_sha != plan.sha256:
+        raise ValueError(f"retired edge file {plan.source} changed during archive planning")
+    if archive.exists() or manifest.exists():
+        raise ValueError(f"retired edge file {dag!r} entered ambiguous_state before archive")
+
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(archive))
+    _fsync_dir(archive.parent)
+    try:
+        _write_manifest_file(
+            manifest,
+            dag=dag,
+            source=plan.source,
+            archive=plan.archive,
+            closed_rows=plan.closed_rows,
+            closed_by=plan.closed_by,
+            sha256=current_sha,
+            archived_at=now,
+        )
+    except Exception:
+        manifest.unlink(missing_ok=True)
+        shutil.move(str(archive), str(source))
+        _fsync_dir(manifest.parent)
+        _fsync_dir(source.parent)
+        raise
+
+    return replace(
+        plan,
+        status="already_archived",
+        applied=True,
+        sha256=current_sha,
+    )
+
+
 def _plan(
     project_root: Path,
     dag: str,
@@ -238,6 +284,50 @@ def _relative(project_root: Path, path: Path) -> str:
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     return f"sha256:{digest}"
+
+
+def _write_manifest_file(
+    path: Path,
+    *,
+    dag: str,
+    source: str,
+    archive: str,
+    closed_rows: int,
+    closed_by: tuple[str, ...],
+    sha256: str,
+    archived_at: str,
+) -> None:
+    payload = {
+        "schema_version": ARCHIVE_SCHEMA_VERSION,
+        "dag": dag,
+        "original_path": source,
+        "archived_path": archive,
+        "closed_by": list(closed_by),
+        "closed_rows": closed_rows,
+        "sha256": sha256,
+        "archived_at": archived_at,
+        "tool": ARCHIVE_TOOL,
+        "reason": ARCHIVE_REASON,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _fsync_file(path)
+    _fsync_dir(path.parent)
+
+
+def _fsync_file(path: Path) -> None:
+    with open(path, "rb") as fh:
+        os.fsync(fh.fileno())
+
+
+def _fsync_dir(directory: Path) -> None:
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _read_manifest(path: Path, *, dag: str, archive: str, source: str, archived_file: Path) -> dict[str, Any]:

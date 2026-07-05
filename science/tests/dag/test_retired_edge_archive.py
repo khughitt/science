@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from science_tool.dag.retired_edge_archive import (
     ARCHIVE_SCHEMA_VERSION,
     build_retired_edge_archive_plan,
@@ -349,3 +351,135 @@ def test_archive_plan_reports_ambiguous_state_for_wrong_manifest_reason(tmp_path
 
     assert payload["status"] == "ambiguous_state"
     assert payload["blockers"] == ["invalid-archive-manifest"]
+
+
+def test_apply_retired_edge_archive_moves_file_and_writes_manifest(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    source = project / "doc/figures/dags/h1.edges.yaml"
+    before = source.read_text(encoding="utf-8")
+
+    result = apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+    payload = result.to_json()
+
+    assert payload["status"] == "already_archived"
+    assert payload["applied"] is True
+    assert not source.exists()
+    archived = _archive_path(project)
+    manifest = _manifest_path(project)
+    assert archived.read_text(encoding="utf-8") == before
+    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert manifest_payload == {
+        "archived_at": "2026-07-05",
+        "archived_path": "archive/dag-retired-edges/h1.edges.yaml",
+        "closed_by": ["proposition:a-affects-b"],
+        "closed_rows": 1,
+        "dag": "h1",
+        "original_path": "doc/figures/dags/h1.edges.yaml",
+        "reason": "all-retired-edges-closed",
+        "schema_version": ARCHIVE_SCHEMA_VERSION,
+        "sha256": payload["sha256"],
+        "tool": "science dag archive-retired-edges",
+    }
+
+
+def test_apply_retired_edge_archive_rerun_reports_already_archived(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    first = apply_retired_edge_archive(project, dag="h1", now="2026-07-05").to_json()
+    second = apply_retired_edge_archive(project, dag="h1", now="2026-07-06").to_json()
+
+    assert first["status"] == "already_archived"
+    assert first["applied"] is True
+    assert second["status"] == "already_archived"
+    assert second["applied"] is False
+    assert second["closed_by"] == ["proposition:a-affects-b"]
+
+
+def test_apply_retired_edge_archive_refuses_blocked_plan(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+
+    with pytest.raises(ValueError, match="not ready to archive"):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert (project / "doc/figures/dags/h1.edges.yaml").exists()
+    assert not _archive_path(project).exists()
+    assert not _manifest_path(project).exists()
+
+
+def test_apply_retired_edge_archive_refuses_destination_collision(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    _archive_path(project).parent.mkdir(parents=True)
+    _archive_path(project).write_text("collision\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="ambiguous_state"):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert (project / "doc/figures/dags/h1.edges.yaml").exists()
+    assert _archive_path(project).read_text(encoding="utf-8") == "collision\n"
+
+
+def test_apply_retired_edge_archive_rolls_back_when_manifest_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import science_tool.dag.retired_edge_archive as module
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    source = project / "doc/figures/dags/h1.edges.yaml"
+    before = source.read_text(encoding="utf-8")
+
+    def fail_manifest(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(module, "_write_manifest_file", fail_manifest)
+
+    with pytest.raises(OSError, match="disk full"):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert source.read_text(encoding="utf-8") == before
+    assert not _archive_path(project).exists()
+    assert not _manifest_path(project).exists()
+
+
+def test_apply_retired_edge_archive_cleans_partial_manifest_on_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import science_tool.dag.retired_edge_archive as module
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    source = project / "doc/figures/dags/h1.edges.yaml"
+    before = source.read_text(encoding="utf-8")
+
+    def partial_manifest(path: Path, **_kwargs: object) -> None:
+        path.write_text("partial manifest\n", encoding="utf-8")
+        raise OSError("fsync failed")
+
+    monkeypatch.setattr(module, "_write_manifest_file", partial_manifest)
+
+    with pytest.raises(OSError, match="fsync failed"):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert source.read_text(encoding="utf-8") == before
+    assert not _archive_path(project).exists()
+    assert not _manifest_path(project).exists()
+    assert build_retired_edge_archive_plan(project, dag="h1").to_json()["status"] == "ready_to_archive"
