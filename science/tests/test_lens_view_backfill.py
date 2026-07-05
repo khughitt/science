@@ -9,9 +9,11 @@ from science_tool.cli import main
 
 def _write_entity(root, name, extra_fm) -> None:
     (root / "entities" / "questions").mkdir(parents=True, exist_ok=True)
+    # Extract id from filename (remove .md extension)
+    id_part = name.replace(".md", "")
     (root / "entities" / "questions" / name).write_text(
         "---\n"
-        "id: question:0001-x\nkind: question\ntitle: X\nstatus: open\nproject: testproj\n"
+        f"id: question:{id_part}\nkind: question\ntype: question\ntitle: X\nstatus: open\nproject: testproj\n"
         "ontology_terms: []\nrelated: []\nsource_refs: []\n"
         f"{extra_fm}"
         "created: '2026-07-04'\nupdated: '2026-07-04'\n"
@@ -43,6 +45,7 @@ def test_validate_does_not_warn_with_lens_views_populated(tmp_path) -> None:
         "    origin_ref: explore-ideas-mechanism\n",
     )
     result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
+    assert result.exit_code == 0, result.output
     assert "but no lens_views" not in result.output
 
 
@@ -57,4 +60,5 @@ def test_validate_does_not_warn_on_non_lens_origin(tmp_path) -> None:
         "    ref: explore-ideas-frobnicate\n",
     )
     result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
+    assert result.exit_code == 0, result.output
     assert "but no lens_views" not in result.output
