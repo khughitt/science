@@ -122,3 +122,45 @@ def test_backfill_adds_views_for_lens_origins(tmp_path) -> None:
     touched_again = backfill_lens_views(root, "explore-demo", backfill_date)
     assert touched_again == []
     assert p.read_bytes() == after_first
+
+
+def test_cli_backfill_lens_views(tmp_path, monkeypatch) -> None:
+    """CLI smoke test: verify the explore-ideas backfill-lens-views subcommand
+    exercises the actual CLI path (uses Path.cwd() and date.today())."""
+    root = tmp_path
+    seed_project(root)
+    (root / "entities" / "meta" / "explorations").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "meta" / "explorations" / "explore-demo.md").write_text(
+        _APPLIED_REPORT, encoding="utf-8"
+    )
+    _write_entity(
+        root, "0001-hspc.md",
+        "origins:\n"
+        "  - type: assistant\n    ref: explore-ideas-mechanism\n"
+        "  - type: assistant\n    ref: explore-ideas-analogy\n    independent: true\n",
+    )
+    # rename id inside the file to match applied_as
+    p = root / "entities" / "questions" / "0001-hspc.md"
+    p.write_text(p.read_text().replace("question:0001-x", "question:0001-hspc"), encoding="utf-8")
+
+    # Change to the project root so Path.cwd() resolves correctly
+    monkeypatch.chdir(root)
+
+    # Invoke the CLI subcommand
+    result = CliRunner().invoke(
+        main, ["explore-ideas", "backfill-lens-views", "--from", "explore-demo"],
+        catch_exceptions=False
+    )
+
+    # Assert: (a) exit code is 0
+    assert result.exit_code == 0, result.output
+
+    # Assert: (b) output reports the backfilled entity (contains entity id or "lens_view")
+    assert "question:0001-hspc" in result.output
+    assert "lens_view" in result.output
+
+    # Assert: (c) the target entity's frontmatter has the expected lens_views set
+    from science_model.frontmatter import parse_frontmatter
+    fm, _ = parse_frontmatter(p)
+    lenses = {v["lens"] for v in fm["lens_views"]}
+    assert lenses == {"mechanism", "analogy"}

@@ -210,6 +210,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     for origin in origins_raw:
         origins.append(_normalize_origin(origin, candidate_id))
 
+    # Harden unconditionally: apply rejects duplicate non-null origin refs even absent lens_views (stricter than the model, which only checks this when lens_views are present) so a later lens_views addition can never collide.
     planned_refs = [o["ref"] for o in origins if o.get("ref")]
     if len(planned_refs) != len(set(planned_refs)):
         raise ApplyValidationError(
