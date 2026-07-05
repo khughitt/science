@@ -33,7 +33,8 @@
 - `--apply` succeeds only for `ready_to_archive` or a complete previous archive (`already_archived`). Applying a blocked or ambiguous plan exits non-zero.
 - A successful apply returns final status `already_archived` with `applied: true`. A rerun returns `already_archived` with `applied: false`.
 - The manifest is strict JSON with sorted keys. Invalid or mismatched existing manifests make the state `ambiguous_state`.
-- `archive/dag-retired-edges/` is a project artifact archive, not the entity archive index.
+- `archive/dag-retired-edges/` is a project artifact archive, not the entity archive index. This commits to **Option 1** of the design's "Open Decision" (top-level `archive/`, the recommended default) rather than the co-located `doc/figures/dags/_archive/` alternative. If that decision is revisited, only the `ARCHIVE_DIR` literal changes; planning, manifest, and apply logic are unaffected.
+- `now` is injected into `apply_retired_edge_archive` by the CLI (which reads the UTC wall clock); the archive module never reads the clock itself, and there is no `date.today()` fallback. This mirrors the entity archive's `now=` convention and keeps the manifest deterministic under test.
 - The SHA-256 recheck in apply guards against source bytes changing between the
   in-function plan build and the move. The CLI does not accept a saved dry-run
   plan artifact.
@@ -699,13 +700,19 @@ Modify `science/src/science_tool/dag/retired_edge_archive.py`:
 ```python
 import os
 import shutil
-from datetime import date
 ```
+
+`now` is a required, injected timestamp — the archive module never reads the
+wall clock itself. The CLI computes the UTC timestamp and threads it in (see
+Task 3 Step 5), matching the entity archive's `archive_entities(..., now=...)`
+convention and keeping the manifest deterministic for tests. There is no
+`date.today()` fallback: the single caller always supplies `now`, so a missing
+value should fail loudly rather than silently stamp a nondeterministic time.
 
 Add below `build_retired_edge_archive_plan(...)`:
 
 ```python
-def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str | None = None) -> RetiredEdgeArchivePlan:
+def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str) -> RetiredEdgeArchivePlan:
     project_root = Path(project_root).resolve()
     plan = build_retired_edge_archive_plan(project_root, dag=dag)
     if plan.status == "already_archived":
@@ -732,7 +739,7 @@ def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str | None 
             closed_rows=plan.closed_rows,
             closed_by=plan.closed_by,
             sha256=current_sha,
-            archived_at=now or date.today().isoformat(),
+            archived_at=now,
         )
     except Exception:
         shutil.move(str(archive), str(source))
@@ -1070,6 +1077,8 @@ def archive_retired_edges_cmd(
     project_path: Path | None,
 ) -> None:
     """Archive a fully closed retired DAG *.edges.yaml file."""
+    from datetime import datetime, timezone
+
     from science_tool.dag.retired_edge_archive import (
         apply_retired_edge_archive,
         build_retired_edge_archive_plan,
@@ -1078,11 +1087,14 @@ def archive_retired_edges_cmd(
 
     project = (project_path or Path.cwd()).resolve()
     try:
-        result = (
-            apply_retired_edge_archive(project, dag=slug)
-            if apply_changes
-            else build_retired_edge_archive_plan(project, dag=slug)
-        )
+        if apply_changes:
+            # Read the wall clock only here, at the CLI boundary, and thread it
+            # into the pure archive function so the manifest stays deterministic
+            # for tests.
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            result = apply_retired_edge_archive(project, dag=slug, now=now)
+        else:
+            result = build_retired_edge_archive_plan(project, dag=slug)
         if output_format == "json":
             click.echo(json.dumps(result.to_json(), indent=2, sort_keys=True))
             return
@@ -1142,6 +1154,7 @@ def test_archived_retired_edge_file_is_not_active_migration_debt(tmp_path: Path)
 
 
 def test_archived_retired_edge_file_does_not_break_dag_validation(tmp_path: Path) -> None:
+    from science_tool.dag.paths import load_dag_paths
     from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
     from science_tool.dag.validate import validate_project
 
@@ -1151,8 +1164,12 @@ def test_archived_retired_edge_file_does_not_break_dag_validation(tmp_path: Path
 
     apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
 
-    report = validate_project(project, dag="h1")
-    assert report.findings == []
+    # validate_project takes a DagPaths (not a project Path) and has no dag=
+    # kwarg; mirror the `dag validate` CLI (cli.py) and assert on report.ok,
+    # the same "OK" property that command gates on. `findings` is a tuple, so
+    # `== []` would be False even when empty — use report.ok.
+    report = validate_project(load_dag_paths(project))
+    assert report.ok
 ```
 
 - [ ] **Step 2: Run regression tests**
@@ -1388,12 +1405,16 @@ rtk uv run --frozen science dag retired-edges \
   --format json
 ```
 
-Expected JSON summary:
+Expected: the `summary` block reports zero files and edges (the top-level
+`files` key is a list, so it is `[]`, not `0`):
 
 ```json
 {
-  "files": 0,
-  "edges": 0
+  "summary": {
+    "files": 0,
+    "edges": 0
+  },
+  "files": []
 }
 ```
 
