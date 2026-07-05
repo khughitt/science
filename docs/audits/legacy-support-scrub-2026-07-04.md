@@ -100,6 +100,31 @@ forward, which conflicts with the goal of one current representation. The escape
 hatch for an off-machine or later-reactivated project is the recorded migration
 commit plus git history, not a permanent legacy migration surface.
 
+## Status 2026-07-05
+
+Merged to `main`:
+
+- Multi-project inventory and coverage sweep.
+- v2-to-v3 entity layout migration and reader cleanup.
+- Aggregate-manifest retirement, including downstream project migrations,
+  zero-hit inventory gate, and toolkit reader/migrator/test removal.
+
+Current refreshed inventory:
+
+- `article_prefix_alias`: 39 findings.
+- `retired_edges_yaml`: 4 findings.
+- `legacy_marker_alias`: 4 findings.
+- Zero findings for aggregate manifests, entity-layout roots, `type:`
+  frontmatter, scalar `access:`, active legacy data-package entities, bare
+  `profiles:`, and removed `science.yaml` fields.
+
+Remaining code-only cleanup before the next data-bearing migration:
+
+- Remove the last `kind`/`type` dual-read in
+  `science/src/science_tool/graph/commons_sources.py`.
+- Remove scalar `access:` coercion in
+  `science/model/src/science_model/frontmatter.py`.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -109,7 +134,7 @@ commit plus git history, not a permanent legacy migration surface.
 | Flat scalar `access:` | Frontmatter with `access: public` or another scalar value | **MUST BUILD** — no scalar-`access:` migrator exists; build one that emits a block with `verified: false` (matches current `_coerce_access` — a scalar was never verified) | `science/model/src/science_model/frontmatter.py` scalar coercion and health/reporting shims | Run after entity layout so paths are canonical. |
 | `article:<bibkey>` prefix alias | Structured/project refs containing `article:<bibkey>` where the intended target is a literature record | **MUST BUILD** — no `article:`→`paper:` rewriter exists (`add_article` is unrelated entity creation); build one scoped to the alias prefix only | Literature-prefix alias checks and canonicalization paths | Do not remove the live `article` entity kind or BibTeX `@article` support. |
 | Retired DAG `.edges.yaml` | Any `*.edges.yaml` file in project DAG areas | `science dag retired-edge-migration-plan`, `science dag scaffold-retired-edge-workbench`, and related retired-edge tools | `science/src/science_tool/dag/` retired-edge readers, schemas, CLI commands, warnings, and validation adapters | Keep migration commands until every registered project has zero edge YAML files. |
-| Aggregate manifests | `knowledge/sources/<local>/entities.yaml`, `terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` aggregate owners | `science/src/science_tool/graph/aggregate_retire.py` and triage helpers | `aggregate.py`, `aggregate_triage.py`, `aggregate_retire.py`, `graph/source_records.py`, `validate/checks/aggregate_retired.py` support paths | Split multi-type aggregate retirement from single-type `doc/<plural>` aggregate removal if needed. |
+| Aggregate manifests | `knowledge/sources/<local>/entities.yaml`, `terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` aggregate owners | Complete; migration commits exist in affected project repos | Complete; aggregate readers, migrators, command paths, validators, and tests removed | Merged 2026-07-05; current inventory reports zero aggregate-manifest findings. |
 | Legacy data-package entities | `doc/data-packages/*.md` with active `type: data-package` | `data-package` CLI group and dataset/research-package promotion helpers | `science/src/science_tool/graph/materialize.py:_preflight_migration`, `science/src/science_tool/cli.py` `data-package` group, promote helpers, docs | Precheck must look at project data, not only toolkit code. |
 | Other one-shot graph migrations | Inputs still requiring `graph migrate-addresses`, `graph migrate-paper-datasets`, `graph/migrate.py`, or materialize migration flags | Existing one-shot commands and flags | One-shot commands and flags after data is clean | Treat each one-shot as a separate surface if its precheck is nonzero. |
 | `science_qa` table mode | QA invocation using `--config qa.yaml --table T` | Add or document datapackage-mode migration if any downstream usage remains | `science/qa/src/science_qa/cli.py` legacy branch and `run_qa` mode if unused | This is a single confirmed item, not a cluster. |
@@ -142,15 +167,17 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 
 ## Execution Order
 
-1. Build the multi-project inventory wrapper and produce the first table.
-2. Migrate and gate v2-to-v3 entity layout.
-3. Migrate and gate `type:` to `kind:` authoring and data.
-4. Migrate and gate scalar `access:`.
+1. Complete: build the multi-project inventory wrapper and produce the first
+   table.
+2. Complete: migrate and gate v2-to-v3 entity layout.
+3. Next: finish strict `kind:` reader cleanup now that `type:` data hits are
+   zero.
+4. Next: remove scalar `access:` coercion now that scalar data hits are zero.
 5. Migrate and gate `article:<bibkey>` aliases.
 6. Migrate and gate retired DAG `.edges.yaml`.
-7. Migrate and gate aggregate manifests.
-8. Migrate and gate legacy data-package entities.
-9. Migrate and gate the remaining one-shot graph migrations.
+7. Complete: migrate and gate aggregate manifests.
+8. Reconfirm and, if needed, migrate legacy data-package entities.
+9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.
 10. Migrate and gate small aliases and CLI compatibility modes.
 11. Remove enforcement-only shims after zero-hit confirmation.
 12. Run final toolkit and downstream verification.

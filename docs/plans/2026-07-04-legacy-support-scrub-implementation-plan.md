@@ -41,6 +41,25 @@
   such as datasets and paper summaries, so any affected commons files must be
   migrated before a reader is deleted.
 
+## Status 2026-07-05
+
+- Merged on `main`: Task 1 inventory, Task 2 v2-to-v3 entity layout, and Task 7
+  aggregate manifest retirement.
+- Current inventory: 47 total findings across 3 remaining data surfaces:
+  `article_prefix_alias`=39, `retired_edges_yaml`=4, and
+  `legacy_marker_alias`=4. Aggregate manifest, `type:` frontmatter, scalar
+  `access:`, data-package, bare `profiles:`, and removed `science.yaml` field
+  hits are zero.
+- Current coverage: 23 registered entries, 22 scanned projects, 1 shared
+  repository (`~/d/science-commons`), 1 skipped stale registered path
+  (`~/d/natural-systems/.worktrees/validation-strict-cleanup`), and no
+  unregistered `science.yaml` files in the configured search roots.
+- Next low-risk slice: finish strict frontmatter cleanup. Downstream data is
+  already clean, but toolkit support still includes one `kind`/`type` dual-read
+  in `science/src/science_tool/graph/commons_sources.py` and scalar `access:`
+  coercion in `science/model/src/science_model/frontmatter.py`.
+- Next data-bearing slice after that: `article:<bibkey>` alias migration.
+
 ## Task 1: Multi-Project Legacy Inventory
 
 **Files:**
@@ -153,28 +172,33 @@ cd science && uv run --frozen pytest
 > No on-disk `type:`→`kind:` rewriter exists today — this surface requires
 > building one before any data can be migrated.
 
+Status 2026-07-05: project data and active authoring surfaces are clean in the
+registered-project inventory. One reader fallback remains:
+`science/src/science_tool/graph/commons_sources.py` still uses
+`fm.get("kind") or fm.get("type")`; remove that before closing this surface.
+
 - [ ] **Step 0: Build the frontmatter migrator (TDD)**
 
 Write a rewriter that replaces entity-frontmatter `type:` with `kind:`,
 preserving surrounding field order and body bytes, idempotent, with a
 `--write`/dry-run split. Cover with tests before running it on any project.
 
-- [ ] **Step 1: Inventory authoring and data**
+- [x] **Step 1: Inventory authoring and data**
 
 Use the scanner to count project files with entity frontmatter `type:` and
 toolkit templates/commands that still author `type:`.
 
-- [ ] **Step 2: Change authoring surfaces**
+- [x] **Step 2: Change authoring surfaces**
 
 Update templates and command guidance to emit `kind:`. Do this before removing
 reader compatibility so new legacy files stop appearing.
 
-- [ ] **Step 3: Migrate project data**
+- [x] **Step 3: Migrate project data**
 
 Run the Step 0 migrator to rewrite on-disk entity frontmatter from `type:` to
 `kind:` in all registered projects, preserving field order.
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Re-run the registered-project inventory. Proceed only when `type:` hits are
 zero in project entity files and toolkit templates, **and** each migrated
@@ -201,6 +225,12 @@ suites.
 
 > No scalar-`access:` migrator exists today — build one before migrating data.
 
+Status 2026-07-05: registered-project inventory reports zero scalar `access:`
+hits, so no project data migration is currently required. The remaining work is
+to remove scalar coercion from
+`science/model/src/science_model/frontmatter.py` and prove scalar input is
+invalid.
+
 - [ ] **Step 0: Build the access migrator (TDD)**
 
 Write a rewriter that converts scalar `access: <level>` to a structured block.
@@ -208,16 +238,16 @@ It **must preserve the current coercion semantics** — `verified: false` (the
 existing `_coerce_access` behavior); a scalar value was never verified, so the
 migration must not assert `verified: true`. Cover with tests before running.
 
-- [ ] **Step 1: Inventory scalar access**
+- [x] **Step 1: Inventory scalar access**
 
 Report every entity with scalar `access:`.
 
-- [ ] **Step 2: Migrate data**
+- [x] **Step 2: Migrate data**
 
 Run the Step 0 migrator to rewrite scalar access values to structured blocks
 with explicit `level` and `verified: false` fields.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when project scalar access hits are zero **and** each migrated
 project still builds under `science validate` / `graph materialize`.
@@ -240,6 +270,10 @@ Run frontmatter and health tests plus package suites.
 
 > No `article:`→`paper:` ref rewriter exists today (`add_article` is unrelated
 > entity creation) — build one before migrating refs.
+
+Status 2026-07-05: current inventory reports 39 `article:<bibkey>` alias hits
+across `~/d/3d-attention-bias`, `~/d/cancer/cancer-types/multiple-myeloma`,
+and `~/d/cancer/data-sources/cbioportal`.
 
 - [ ] **Step 0: Build the ref migrator (TDD)**
 
@@ -277,6 +311,10 @@ Run reference, graph audit, and entity kind tests.
 - Keep until after gate: retired-edge migration commands and modules
 - Remove after gate: retired-edge readers, schemas, CLI commands, warnings, and tests
 
+Status 2026-07-05: current inventory reports 4 `*.edges.yaml` hits across
+`~/d/cancer/cancer-types/multiple-myeloma`,
+`~/d/cancer/data-sources/cbioportal`, and `~/d/protein-landscape`.
+
 - [ ] **Step 1: Inventory edge YAML files**
 
 Report every registered project containing `*.edges.yaml`.
@@ -306,25 +344,30 @@ Run DAG and graph tests plus package suites.
 - Keep until after gate: `aggregate_retire.py`, `aggregate_triage.py`
 - Remove after gate: aggregate adapter support and aggregate-retired validation
 
-- [ ] **Step 1: Inventory aggregate manifests**
+Status 2026-07-05: complete and merged to `main`. Aggregate manifests were
+migrated in affected project repos, the inventory reports zero
+`aggregate_manifest` findings, and aggregate readers/migration commands/tests
+were removed from the toolkit.
+
+- [x] **Step 1: Inventory aggregate manifests**
 
 Report multi-type and single-type aggregate manifests by project.
 
-- [ ] **Step 2: Migrate or retire aggregate owners**
+- [x] **Step 2: Migrate or retire aggregate owners**
 
 Use aggregate triage and retire helpers to convert each owner to canonical
 entity markdown or delete retired rows.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when aggregate manifest hits are zero **and** each migrated project
 still builds under `science validate` / `graph materialize`.
 
-- [ ] **Step 4: Remove aggregate readers**
+- [x] **Step 4: Remove aggregate readers**
 
 Remove aggregate adapter support paths and transition validators.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run graph source, identity collision, aggregate, and validation tests.
 
@@ -390,6 +433,9 @@ Run graph migration, materialize, and CLI tests.
 - `science/src/science_tool/graph/sources.py`
 - `science/src/science_tool/project_config.py`
 - related docs and tests
+
+Status 2026-07-05: current inventory reports 4 `[NEEDS CITATION]` hits and
+zero bare `profiles:` / removed `science.yaml` field hits.
 
 - [ ] **Step 1: Inventory small aliases**
 

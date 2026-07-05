@@ -1,6 +1,6 @@
 # Legacy Support Scrub Inventory
 
-Generated at: `2026-07-05T13:39:41Z`
+Generated at: `2026-07-05T20:47:19Z`
 Config path: `~/.config/science/config.yaml`
 
 ## Summary
@@ -100,7 +100,7 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/cancer/data-sources/cbioportal` | `retired_edges_yaml` | `doc/figures/dags/h08-agnostic-covariate-association.edges.yaml` | retired DAG edge file |
 | `~/d/natural-systems` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
 | `~/d/natural-systems` | `legacy_marker_alias` | `tasks/done/2026-05.md` | [NEEDS CITATION] |
-| `~/d/protein-landscape` | `retired_edges_yaml` | `doc/figures/dags/h01-multi-manifold-protein-universe.edges.yaml` | retired DAG edge file |
+| `~/d/protein-landscape` | `retired_edges_yaml` | `archive/dag-retired-edges/h01-multi-manifold-protein-universe.edges.yaml` | retired DAG edge file |
 | `~/d/seq-feats` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
 
 ## Skipped Registered Projects
