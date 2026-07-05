@@ -53,6 +53,10 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
         "DAG reviewed workbench apply surface; retains --project-root alongside --project",
         "project root",
     ),
+    "dag archive-retired-edges": (
+        "DAG retired edge archive write surface; retains --project-root alongside --project",
+        "project root",
+    ),
     "dag staleness": (
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
@@ -102,6 +106,7 @@ _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
     "dag retired-edge-migration-plan",
     "dag scaffold-retired-edge-workbench",
     "dag apply-workbench",
+    "dag archive-retired-edges",
     "dag staleness",
     "dag validate",
     "data audit",

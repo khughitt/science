@@ -226,7 +226,7 @@ class _StubCanonical:
 
 def _merged(frontmatter: dict[str, object]) -> MergedEntity:
     canonical_id = str(frontmatter["id"])
-    kind = str(frontmatter["kind"])
+    kind = str(frontmatter.get("kind") or frontmatter.get("type"))
     canonical = _StubCanonical(
         canonical_id=canonical_id,
         type=kind,
@@ -262,6 +262,14 @@ def test_translate_topic_sets_scope_shared() -> None:
     assert entity.kind == "topic"
     assert entity.title == "PHF19"
     assert entity.file_path == "commons/topic/phf19.md"
+
+
+def test_translate_commons_record_accepts_kind_without_type() -> None:
+    entity = _translate({"id": "paper:Persi2025", "kind": "paper", "title": "Persi 2025"})
+
+    assert isinstance(entity, PaperEntity)
+    assert entity.kind == "paper"
+    assert entity.canonical_id == "paper:Persi2025"
 
 
 def test_translate_topic_description_flows_to_content_preview() -> None:
