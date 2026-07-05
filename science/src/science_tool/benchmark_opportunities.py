@@ -2031,13 +2031,14 @@ def _fallback_group_from_notes(
         return "blocked-support-fallback"
     if context_fit != "generic-fallback":
         return "specific-fallback"
+    has_fallback_note = any(note.startswith("fallback:") for note in reason_notes)
+    if not has_fallback_note:
+        raise ValueError(f"generic fallback row has no fallback reason note: {benchmark_id}")
     if "fallback:baseline-quality" in reason_notes or "selected:generic-baseline" in reason_notes:
         return "generic-baseline-fallback"
     if "fallback:task-ready" in reason_notes or "selected:task-ready" in reason_notes:
         return "generic-task-ready-fallback"
-    if any(note.startswith("fallback:") for note in reason_notes):
-        return "generic-available-fallback"
-    raise ValueError(f"generic fallback row has no fallback reason note: {benchmark_id}")
+    return "generic-available-fallback"
 
 
 def _fallback_display_group_for_gap_candidate(candidate: GapCandidateBenchmarkRow) -> FallbackDisplayGroup:

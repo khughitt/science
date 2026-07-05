@@ -2668,6 +2668,21 @@ def test_fallback_display_group_rejects_non_fallback_candidate() -> None:
                 "context_fit_warnings": [],
             }
         )
+    with pytest.raises(ValueError, match="non-fallback gap candidate"):
+        _fallback_display_group_for_gap_candidate(
+            {
+                "benchmark_id": "dataset:selected-only",
+                "benchmark_title": "Selected Only",
+                "baseline_score": 80,
+                "candidate_score": 30,
+                "matched_missing_facets": [],
+                "matched_hint_facets": [],
+                "reason_notes": ["selected:generic-baseline"],
+                "context_fit": "generic-fallback",
+                "context_fit_reasons": [],
+                "context_fit_warnings": [],
+            }
+        )
 
 
 def test_fallback_display_group_for_test_rows() -> None:
@@ -2712,6 +2727,18 @@ def test_fallback_display_group_for_test_rows() -> None:
     assert (
         _fallback_display_group_for_test_row(
             _benchmark_test_row_for_triage(
+                entity_id="hypothesis:available",
+                benchmark_id="dataset:available",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["fallback:available-benchmark"],
+            )
+        )
+        == "generic-available-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
                 entity_id="hypothesis:blocked",
                 benchmark_id="dataset:blocked",
                 priority_source="gap-fallback",
@@ -2734,6 +2761,16 @@ def test_fallback_display_group_rejects_non_fallback_test_row() -> None:
                 benchmark_id="dataset:run",
                 priority_source="opportunity-relative",
                 context_fit="direct-fit",
+            )
+        )
+    with pytest.raises(ValueError, match="generic fallback row has no fallback reason note"):
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:selected-only",
+                benchmark_id="dataset:selected-only",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["selected:generic-baseline"],
             )
         )
 
