@@ -22,6 +22,7 @@ from science_model.entity_schema import (
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.identity import EntityScope, ExternalId
 from science_model.ids import CanonicalId, normalize_alias
+from science_model.lenses import LENS_BY_SLUG, LENS_SLUGS, LENSES, Lens, is_valid_lens
 from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
 from science_model.packages import (
     ResearchPackageDescriptor,
@@ -119,6 +120,10 @@ __all__ = [
     "GraphSummary",
     "IdentificationStrength",
     "IndependenceTag",
+    "Lens",
+    "LENS_BY_SLUG",
+    "LENS_SLUGS",
+    "LENSES",
     "LodWeights",
     "ProfileManifest",
     "Project",
@@ -148,6 +153,7 @@ __all__ = [
     "ValidationResult",
     "build_relation_registry",
     "check_freshness",
+    "is_valid_lens",
     "normalize_alias",
     "OntologyCatalog",
     "OntologyPredicate",
