@@ -1,6 +1,6 @@
 ---
 id: "article:p02-legacy-article"
-type: "article"
+kind: "article"
 related: [topic:t04-legacy-covered]
 source_refs: []
 ---

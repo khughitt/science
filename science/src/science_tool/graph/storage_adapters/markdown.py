@@ -61,10 +61,6 @@ class MarkdownAdapter(StorageAdapter):
         raw: dict[str, Any] = dict(fm)
         raw["content"] = body
         raw["file_path"] = ref.path
-        # Normalize `type` → `kind` for registry dispatch while keeping `type` for
-        # back-compat with existing Entity code that reads `.type`.
-        if "kind" not in raw and "type" in raw:
-            raw["kind"] = raw["type"]
         # Normalize `id` → `canonical_id` for registry dispatch.
         if "canonical_id" not in raw and "id" in raw:
             raw["canonical_id"] = raw["id"]

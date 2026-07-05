@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-majority-disagrees"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: majority rule mechanically yields [-] but body says [~]"
 status: "active"
 created: "2026-04-21"

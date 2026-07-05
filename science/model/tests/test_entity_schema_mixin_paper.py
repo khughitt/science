@@ -17,7 +17,7 @@ def base_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "An interesting paper",
         "version": "1.0.0",
         "status": "active",

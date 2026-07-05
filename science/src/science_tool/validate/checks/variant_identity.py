@@ -81,7 +81,7 @@ def _locator_defect(locator: Any) -> str | None:
 
 def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
     for fm in datasets:
-        if fm.get("type") != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         decl = _variant_decl(fm)
         if decl is None:
@@ -206,7 +206,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
         return file_path
 
     for fm in datasets:
-        if fm.get("type") != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         decl = _variant_decl(fm)
         if not _row_layer_decl_is_usable(decl):

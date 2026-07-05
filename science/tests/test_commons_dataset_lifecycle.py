@@ -71,6 +71,8 @@ def test_scaffold_dataset_package_writes_required_files(tmp_path: Path) -> None:
 
     entity_text = result.paths.entity_path.read_text(encoding="utf-8")
     assert "id: dataset:dbsnp-human" in entity_text
+    assert "kind: dataset" in entity_text
+    assert "type: dataset" not in entity_text
     assert 'version: "0.1.0"' in entity_text
     assert "origin: external" in entity_text
     assert "datapackage: datapackage.yaml" in entity_text

@@ -151,7 +151,7 @@ def test_loader_registry_includes_cross_references_after_id_prefixes_at_order_20
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
         id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "per-type id-prefix conformance..."
+            index for index, entry in enumerate(ordered) if entry[0] == "per-kind id-prefix conformance..."
         )
         cross_references_index = next(
             index for index, entry in enumerate(ordered) if entry[0] == "frontmatter cross-references..."

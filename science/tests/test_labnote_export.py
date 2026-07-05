@@ -50,7 +50,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: proposition:0001-example-proposition
-        type: proposition
+        kind: proposition
         title: Example proposition
         status: active
         confidence: supported
@@ -73,7 +73,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: synthesis:0001-example-synthesis
-        type: synthesis
+        kind: synthesis
         title: Example synthesis
         status: active
         sensitivity: public
@@ -86,7 +86,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: paper:internal-paper
-        type: paper
+        kind: paper
         title: Internal paper
         sensitivity: internal
         ---
@@ -98,7 +98,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: paper:Smith2020
-        type: paper
+        kind: paper
         title: Example immune persistence paper
         sensitivity: public
         source_refs:
@@ -185,7 +185,7 @@ def test_export_resolves_content_prose_entity_ref_with_dynamic_namespace(tmp_pat
         """
         ---
         id: question:0001-gene
-        type: question
+        kind: question
         title: Gene question
         sensitivity: public
         ---
@@ -224,7 +224,7 @@ def test_data_version_and_semantic_refs_hash_change_when_public_detail_changes(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -356,7 +356,7 @@ def test_export_omits_semantic_refs_bundle_when_only_exported_semantic_refs_are_
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -406,7 +406,7 @@ def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -447,7 +447,7 @@ def test_export_fails_when_public_prose_references_graph_only_semantic_record(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -497,7 +497,7 @@ def test_content_prose_semantic_record_overrides_graph_record(tmp_path: Path, mo
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -561,7 +561,7 @@ def test_export_writes_referenced_semantic_refs_bundle(tmp_path: Path) -> None:
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -648,7 +648,7 @@ def test_export_fails_when_public_prose_references_non_public_semantic_record(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -682,7 +682,7 @@ def test_failed_rerun_clears_stale_semantic_refs_bundle_when_record_becomes_non_
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -735,7 +735,7 @@ def test_semantic_refs_bundle_excludes_exported_entities_and_unreferenced_record
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -747,7 +747,7 @@ def test_semantic_refs_bundle_excludes_exported_entities_and_unreferenced_record
         """
         ---
         id: question:9999-later
-        type: question
+        kind: question
         title: Later question
         sensitivity: public
         ---
@@ -782,7 +782,7 @@ def test_semantic_refs_bundle_scrubs_internal_paths_from_detail_fields(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -821,7 +821,7 @@ def test_semantic_refs_bundle_rejects_non_finite_public_metadata(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -845,7 +845,7 @@ def test_semantic_ref_to_later_discovered_entity_with_graph_record_gets_route(
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -857,7 +857,7 @@ def test_semantic_ref_to_later_discovered_entity_with_graph_record_gets_route(
         """
         ---
         id: question:9999-later
-        type: question
+        kind: question
         title: Later question
         sensitivity: public
         ---
@@ -907,7 +907,7 @@ def test_export_fails_unknown_semantic_ref(tmp_path: Path) -> None:
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -930,7 +930,7 @@ def test_inline_paper_prefix_is_not_treated_as_semantic_ref(tmp_path: Path) -> N
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -1031,7 +1031,7 @@ def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
         """
         ---
         id: proposition:0001-example-proposition
-        type: proposition
+        kind: proposition
         title: Example proposition
         status: active
         confidence: supported
@@ -1140,7 +1140,7 @@ def test_export_labnote_package_filters_non_public_access_levels(tmp_path: Path)
         """
         ---
         id: dataset:controlled
-        type: dataset
+        kind: dataset
         title: Controlled dataset
         access:
           level: controlled
@@ -1242,7 +1242,7 @@ relations:
         """
         ---
         id: dataset:gse-example
-        type: dataset
+        kind: dataset
         title: Example dataset
         sensitivity: public
         ---
@@ -1254,7 +1254,7 @@ relations:
         """
         ---
         id: method:example-method
-        type: method
+        kind: method
         title: Example method
         sensitivity: public
         ---
@@ -1620,7 +1620,7 @@ def test_data_version_is_stable_golden(tmp_path: Path):
     export_labnote_package(project_root=tmp_path, out_dir=out)
     project = json.loads((out / "project.json").read_text())
     # Golden: exact digest must survive the project_package.core extraction byte-for-byte.
-    assert project["package"]["data_version"] == "2026-06-28+4d829889ef73"
+    assert project["package"]["data_version"] == "2026-06-28+6cd94bebe752"
 
 
 def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Path) -> None:

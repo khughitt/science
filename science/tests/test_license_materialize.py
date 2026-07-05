@@ -22,7 +22,7 @@ _MANIFEST = (
 
 _DATAPACKAGE = (
     "profiles: [science-pkg-entity-1.0]\n"
-    "id: dataset:x\ntype: dataset\ntitle: X\nstatus: active\n"
+    "id: dataset:x\nkind: dataset\ntitle: X\nstatus: active\n"
     "origin: external\ntier: use-now\nlicense: CC-BY-4.0\n"
     # AccessBlock requires both `level` and `verified` (neither has a default).
     "access:\n  level: public\n  availability: available\n  verified: false\n"

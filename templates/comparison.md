@@ -1,6 +1,6 @@
 ---
 id: "discussion:{{NNNN}}-{{slug}}"
-type: "discussion"
+kind: "discussion"
 title: "{{Short Title}}"
 status: "active"
 source_refs: []

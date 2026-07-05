@@ -29,7 +29,7 @@ def _paper_entity(root, citekey):
     path = root / "entities" / "papers" / f"{citekey}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"---\nid: paper:{citekey}\ntype: paper\ntitle: {citekey}\nstatus: active\n---\n\nAbstract.\n",
+        f"---\nid: paper:{citekey}\nkind: paper\ntitle: {citekey}\nstatus: active\n---\n\nAbstract.\n",
         encoding="utf-8",
     )
 
@@ -39,7 +39,7 @@ def _proposition_entity(root, slug, source_refs):
     path.parent.mkdir(parents=True, exist_ok=True)
     refs = "".join(f"  - {ref}\n" for ref in source_refs)
     path.write_text(
-        f"---\nid: proposition:{slug}\ntype: proposition\ntitle: {slug}\nstatus: active\n"
+        f"---\nid: proposition:{slug}\nkind: proposition\ntitle: {slug}\nstatus: active\n"
         f"source_refs:\n{refs}---\n\nClaim.\n",
         encoding="utf-8",
     )

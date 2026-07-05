@@ -74,12 +74,12 @@ def test_reference_graph_frontmatter_matches_collection_profile_only() -> None:
 def test_reference_graph_member_frontmatter_matches_member_profile() -> None:
     assert is_reference_graph_member_frontmatter(
         {
-            "type": "dataset",
+            "kind": "dataset",
             "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         }
     )
     assert not is_reference_graph_member_frontmatter(
-        {"type": "dataset", "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0"}
+        {"kind": "dataset", "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0"}
     )
 
 

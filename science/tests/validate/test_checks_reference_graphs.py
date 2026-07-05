@@ -30,7 +30,7 @@ def _ctx(root: Path) -> ValidateContext:
 def _reference_graph(**extra: object) -> dict[str, object]:
     return {
         "id": "dataset:mondo",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0",
         "_path": "data/mondo/datapackage.yaml",
         "source_class": "reference",
@@ -96,7 +96,7 @@ def _write_reference_graph_datapackage(
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": "dataset:mondo",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "MONDO",
                 "status": "active",
                 "origin": "external",
@@ -129,7 +129,7 @@ def _write_reference_graph_commons(root: Path, *, graph_bytes: bytes) -> Path:
 ---
 schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0
 id: dataset:mondo
-type: dataset
+kind: dataset
 title: MONDO
 version: "1.0.0"
 datapackage: datapackage.yaml
@@ -440,7 +440,7 @@ def test_member_count_counts_deprecated_rows() -> None:
 def test_member_count_mismatch_still_allows_promoted_member_resolution() -> None:
     member = {
         "id": "dataset:missing",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "_path": "data/missing/entity.md",
         "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:missing"},
@@ -561,7 +561,7 @@ def test_jsonl_edges_format_is_enum_validated_without_distinct_edge_resource() -
 def test_deprecated_promoted_member_warns_with_replaced_by() -> None:
     member = {
         "id": "dataset:mondo-obsolete",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "_path": "data/mondo-obsolete/entity.md",
         "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:obsolete"},
@@ -611,7 +611,7 @@ def test_malformed_promoted_member_derivation_errors_without_raising(
 ) -> None:
     member = {
         "id": "dataset:malformed",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "_path": "data/malformed/entity.md",
         "derivation": derivation,
@@ -666,7 +666,7 @@ def test_reference_graph_accepts_mondo_style_replacement_and_xref_edges() -> Non
 def test_unresolved_promoted_member_errors() -> None:
     member = {
         "id": "dataset:missing",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "_path": "data/missing/entity.md",
         "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:missing"},

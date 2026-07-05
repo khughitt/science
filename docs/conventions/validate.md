@@ -134,7 +134,7 @@ implements this normalization for migration tooling.
 # data/derived/.../datapackage.yaml
 profiles: [science-pkg-entity-1.0]
 id: dataset:my-result
-type: dataset
+kind: dataset
 title: My result
 status: active
 origin: derived

@@ -55,7 +55,7 @@ def test_duplicate_topic_ids_in_topic_directory_raise(tmp_path: Path) -> None:
     project = tmp_path / "p"
     # A second file in entities/topics/ sharing an existing topic id collides.
     (project / "entities" / "topics" / "t01-covered-dup.md").write_text(
-        '---\nid: "topic:t01-covered"\ntype: "topic"\nrelated: []\n---\n'
+        '---\nid: "topic:t01-covered"\nkind: "topic"\nrelated: []\n---\n'
     )
     with pytest.raises(ValueError, match="t01-covered"):
         _load_topics(project)
@@ -66,7 +66,7 @@ def test_duplicate_paper_ids_in_paper_directory_raise(tmp_path: Path) -> None:
     project = tmp_path / "p"
     # A second file in entities/papers/ canonicalizing to an existing id collides.
     (project / "entities" / "papers" / "p01-example-dup.md").write_text(
-        '---\nid: "paper:p01-example"\ntype: "paper"\nrelated: []\n---\n'
+        '---\nid: "paper:p01-example"\nkind: "paper"\nrelated: []\n---\n'
     )
     with pytest.raises(ValueError, match="p01-example"):
         _load_papers(project)
@@ -157,7 +157,7 @@ def test_demand_zero_for_unreferenced_topic(tmp_path: Path) -> None:
     project = tmp_path / "p"
     # Add an orphan topic nobody references.
     (project / "entities" / "topics" / "t99-orphan.md").write_text(
-        '---\nid: "topic:t99-orphan"\ntype: "topic"\nrelated: []\n---\n'
+        '---\nid: "topic:t99-orphan"\nkind: "topic"\nrelated: []\n---\n'
     )
     resolved = resolve_questions(project)
     demand, demanders = _compute_demand(project, "topic:t99-orphan", set(resolved))
@@ -218,11 +218,11 @@ def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(
     project = tmp_path / "p"
     # Add another thin topic with demand=1, coverage=0 (gap_score=1).
     (project / "entities" / "topics" / "t05-also-thin.md").write_text(
-        '---\nid: "topic:t05-also-thin"\ntype: "topic"\nrelated: []\nsource_refs: []\n---\n'
+        '---\nid: "topic:t05-also-thin"\nkind: "topic"\nrelated: []\nsource_refs: []\n---\n'
     )
     # Add a new question referencing only t05 so we have a gap_score=1 topic.
     (project / "entities" / "questions" / "q99-extra.md").write_text(
-        '---\nid: "question:q99-extra"\ntype: "question"\nrelated:\n  - "topic:t05-also-thin"\n---\nExtra.\n'
+        '---\nid: "question:q99-extra"\nkind: "question"\nrelated:\n  - "topic:t05-also-thin"\n---\nExtra.\n'
     )
     resolved = resolve_questions(project)
     gaps = compute_topic_gaps(project, resolved, set(resolved))

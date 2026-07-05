@@ -71,7 +71,7 @@ def _write_scan_project(root: Path, propositions: Sequence[Mapping[str, object]]
         lines = [
             "---",
             f'id: "{proposition_id}"',
-            'type: "proposition"',
+            'kind: "proposition"',
             f'title: "{title}"',
             'status: "draft"',
             "related: []",
@@ -127,7 +127,7 @@ def _write_project(root: Path, *, with_layered_metadata: bool) -> Path:
     frontmatter_lines = [
         "---",
         'id: "proposition:p01-layered"',
-        'type: "proposition"',
+        'kind: "proposition"',
         'title: "Layered proposition"',
         'status: "draft"',
         "related: []",

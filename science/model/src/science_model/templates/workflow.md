@@ -1,6 +1,6 @@
 ---
 id: "workflow:<slug>"
-type: "workflow"
+kind: "workflow"
 title: "<Workflow Name>"
 status: "active"
 method: "<method-slug>"

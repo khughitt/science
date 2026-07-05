@@ -4,10 +4,8 @@ Checks discussion files under both ``entities/discussions/`` (new layout) and
 the legacy ``$DOC_DIR/discussions/`` root, skipping comparison-* files and
 requiring discussion sections; double-blind mode requires addendum sections.
 
-Checks synthesis frontmatter under both ``entities/synthesis/`` (new layout)
-and the legacy ``$DOC_DIR/reports/synthesis/`` dir (plus the singleton
-``$DOC_DIR/reports/synthesis.md``), validating report_kind and related fields
-for files with ``type: synthesis``.
+Checks synthesis frontmatter under ``entities/synthesis/``, validating
+report_kind and related fields for files with ``kind: synthesis``.
 """
 
 from __future__ import annotations
@@ -84,30 +82,30 @@ def _check_synthesis_frontmatter(ctx: ValidateContext) -> Iterator[Result]:
             continue
         relative = path.relative_to(ctx.project_root).as_posix()
         text = ctx.read_text_cached(path)
-        parsed_type = _raw_field_value(text, "type")
-        if parsed_type != "synthesis":
+        parsed_kind = _raw_field_value(text, "kind")
+        if parsed_kind != "synthesis":
             continue
 
-        parsed_kind = _raw_field_value(text, "report_kind")
-        if parsed_kind in _VALID_SYNTHESIS_KINDS:
+        parsed_report_kind = _raw_field_value(text, "report_kind")
+        if parsed_report_kind in _VALID_SYNTHESIS_KINDS:
             pass
-        elif parsed_kind == "":
+        elif parsed_report_kind == "":
             yield _result(Severity.WARN, relative, f"{relative}: missing report_kind")
         else:
-            yield _result(Severity.WARN, relative, f"{relative}: invalid report_kind '{parsed_kind}'")
+            yield _result(Severity.WARN, relative, f"{relative}: invalid report_kind '{parsed_report_kind}'")
 
         if not _has_raw_key(text, "source_commit"):
             yield _result(Severity.WARN, relative, f"{relative}: missing source_commit")
 
-        if parsed_kind == "synthesis-rollup":
+        if parsed_report_kind == "synthesis-rollup":
             if not _has_raw_key(text, "synthesized_from"):
                 yield _result(Severity.WARN, relative, f"{relative}: missing synthesized_from")
-        elif parsed_kind == "hypothesis-synthesis":
+        elif parsed_report_kind == "hypothesis-synthesis":
             if not _has_raw_key(text, "hypothesis"):
                 yield _result(Severity.WARN, relative, f"{relative}: missing hypothesis")
             if not _has_raw_key(text, "provenance_coverage"):
                 yield _result(Severity.WARN, relative, f"{relative}: missing provenance_coverage")
-        elif parsed_kind == "emergent-threads":
+        elif parsed_report_kind == "emergent-threads":
             if not _has_raw_key(text, "orphan_question_count"):
                 yield _result(Severity.WARN, relative, f"{relative}: missing orphan_question_count")
             if not _has_raw_key(text, "orphan_interpretation_count"):

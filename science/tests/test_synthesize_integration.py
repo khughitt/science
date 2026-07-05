@@ -29,7 +29,7 @@ def _project_with_statement(tmp_path: Path, exact: str):
     papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "p.md").write_text(
-        "---\nid: paper:p\ntype: paper\ntitle: Demo\nstatus: active\n"
+        "---\nid: paper:p\nkind: paper\ntitle: Demo\nstatus: active\n"
         'created: "2026-06-16"\nupdated: "2026-06-16"\n---\n# Demo\n\nx\n', encoding="utf-8")
     (tmp_path / "papers").mkdir()
     md = tmp_path / "papers" / "p.source.md"

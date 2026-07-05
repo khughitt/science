@@ -32,7 +32,7 @@ def _project(root: Path) -> None:
                 "references": [
                     {
                         "id": "protein:BCMA",
-                        "type": "protein",
+                        "kind": "protein",
                         "title": "BCMA",
                         "primary_external_id": {
                             "source": "UniProtKB",
@@ -73,7 +73,7 @@ def test_owned_entity_with_curie_is_not_external_ref_but_still_exactmatches(tmp_
     owners = tmp_path / "entities" / "concepts"
     owners.mkdir(parents=True, exist_ok=True)
     (owners / "bcma-marker.md").write_text(
-        "---\nid: concept:bcma-marker\ntype: concept\ntitle: BCMA marker\n"
+        "---\nid: concept:bcma-marker\nkind: concept\ntitle: BCMA marker\n"
         "same_as: [UniProtKB:Q02223]\n---\n\nOwned concept that asserts a curie equivalence.\n",
         encoding="utf-8",
     )

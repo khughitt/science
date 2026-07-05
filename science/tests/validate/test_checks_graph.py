@@ -443,7 +443,7 @@ def _write_duplicate_markdown_owners(root: Path) -> None:
     d.mkdir(parents=True, exist_ok=True)
     for fname in ("x.md", "x-dup.md"):
         (d / fname).write_text(
-            '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "x"\n'
+            '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "x"\n'
             'origin: "external"\n'
             'access:\n  level: "public"\n  verified: false\n---\n',
             encoding="utf-8",

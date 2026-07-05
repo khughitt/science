@@ -69,7 +69,7 @@ def test_compiled_proposition_has_required_frontmatter(tmp_path: Path) -> None:
     assert not missing, f"Missing frontmatter fields in proposition entity: {missing}"
 
     # Type must be the plain string "proposition".
-    assert fm["type"] == "proposition", f"Expected type='proposition', got {fm['type']!r}"
+    assert fm["kind"] == "proposition", f"Expected kind='proposition', got {fm['kind']!r}"
     assert fm["created"] == "2026-06-13"
     assert fm["updated"] == "2026-06-13"
 
@@ -114,7 +114,7 @@ def test_compiled_evidence_line_has_required_frontmatter(tmp_path: Path) -> None
     assert not missing, f"Missing frontmatter fields in evidence-line entity: {missing}"
 
     # Type must be the plain string "evidence-line".
-    assert fm["type"] == "evidence-line", f"Expected type='evidence-line', got {fm['type']!r}"
+    assert fm["kind"] == "evidence-line", f"Expected kind='evidence-line', got {fm['kind']!r}"
     assert fm["created"] == "2026-06-13"
     assert fm["updated"] == "2026-06-13"
 

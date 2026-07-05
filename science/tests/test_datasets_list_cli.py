@@ -13,19 +13,19 @@ def _seed_filterable(root: Path) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "cand.md").write_text(
-        '---\nid: "dataset:cand"\ntype: "dataset"\ntitle: "Cand"\nstatus: "candidate"\n'
+        '---\nid: "dataset:cand"\nkind: "dataset"\ntitle: "Cand"\nstatus: "candidate"\n'
         'origin: "external"\ntier: "use-now"\naccess: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
     )
     (d / "acq.md").write_text(
-        '---\nid: "dataset:acq"\ntype: "dataset"\ntitle: "Acq"\nstatus: "active"\n'
+        '---\nid: "dataset:acq"\nkind: "dataset"\ntitle: "Acq"\nstatus: "active"\n'
         'origin: "external"\ntier: "track"\ndatapackage: "r/dp.yaml"\n'
         'access: {level: "controlled", verified: true}\n---\n',
         encoding="utf-8",
     )
     # A derived dataset (no access block) — must NOT appear under --unverified.
     (d / "der.md").write_text(
-        '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\nstatus: "active"\n'
+        '---\nid: "dataset:der"\nkind: "dataset"\ntitle: "Der"\nstatus: "active"\n'
         'origin: "derived"\ntier: "track"\ndatapackage: "r/dp.yaml"\n---\n',
         encoding="utf-8",
     )
@@ -88,12 +88,12 @@ def test_list_commons_missing_registry_degrades(tmp_path: Path) -> None:
 def _seed_two_origins(root: Path) -> None:
     (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "datasets" / "ext.md").write_text(
-        '---\nid: "dataset:ext"\ntype: "dataset"\ntitle: "Ext"\norigin: "external"\n'
+        '---\nid: "dataset:ext"\nkind: "dataset"\ntitle: "Ext"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
     )
     (root / "entities" / "datasets" / "der.md").write_text(
-        '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\norigin: "derived"\n'
+        '---\nid: "dataset:der"\nkind: "dataset"\ntitle: "Der"\norigin: "derived"\n'
         'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:r", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}\n'
         'datapackage: "results/w/r/x/datapackage.yaml"\n---\n',
         encoding="utf-8",
@@ -143,13 +143,13 @@ def _seed_gated_mix(root: Path) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "pub.md").write_text(
-        '---\nid: "dataset:pub"\ntype: "dataset"\ntitle: "Pub"\norigin: "external"\n'
+        '---\nid: "dataset:pub"\nkind: "dataset"\ntitle: "Pub"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n', encoding="utf-8")
     (d / "reg.md").write_text(
-        '---\nid: "dataset:reg"\ntype: "dataset"\ntitle: "Reg"\norigin: "external"\n'
+        '---\nid: "dataset:reg"\nkind: "dataset"\ntitle: "Reg"\norigin: "external"\n'
         'access: {level: "registration", verified: false}\n---\n', encoding="utf-8")
     (d / "ctrl.md").write_text(
-        '---\nid: "dataset:ctrl"\ntype: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
+        '---\nid: "dataset:ctrl"\nkind: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
         'access: {level: "controlled", verified: true}\n---\n', encoding="utf-8")
 
 

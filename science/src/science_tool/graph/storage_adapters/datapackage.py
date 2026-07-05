@@ -81,7 +81,7 @@ class DatapackageAdapter(StorageAdapter):
                 except ValueError:
                     rel_path = str(dp_path)
                 # Fail-fast validation: entity-profile must carry required fields.
-                for field in ("id", "type", "title"):
+                for field in ("id", "kind", "title"):
                     if not dp.get(field):
                         raise EntityDatapackageInvalidError(
                             rel_path,
@@ -96,7 +96,6 @@ class DatapackageAdapter(StorageAdapter):
             path = Path.cwd() / path
         dp = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw = {k: dp[k] for k in _ENTITY_FIELDS if k in dp}
-        raw.setdefault("kind", raw.get("type") or "dataset")
         raw.setdefault("canonical_id", raw.get("id", ""))
         raw.setdefault("file_path", ref.path)
         return raw

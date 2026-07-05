@@ -22,7 +22,7 @@ _SEQCOL = "SQ.assembly"
 def _ds(variant, **fm) -> dict:
     identity_context = {"molecular_ids": {"variant": variant}} if variant is not None else {}
     return {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:x",
         "schema_profile": _PROFILE,
         "_path": "data/x/datapackage.yaml",
@@ -435,7 +435,7 @@ def test_markdown_entity_without_datapackage_reports_resource_unavailable(tmp_pa
     tmp_path.joinpath("science.yaml").write_text("name: demo\n", encoding="utf-8")
     entity_path = tmp_path / "data" / "v" / "entity.md"
     entity_path.parent.mkdir(parents=True)
-    entity_path.write_text("---\nid: dataset:v\ntype: dataset\ntitle: Variant markdown\n---\n", encoding="utf-8")
+    entity_path.write_text("---\nid: dataset:v\nkind: dataset\ntitle: Variant markdown\n---\n", encoding="utf-8")
     monkeypatch.setattr(
         "science_tool.commons.variant.vrs_id",
         lambda expr, *, fmt, assembly_seqcol: VariantMatch(vrs_id="ga4gh:VA.good", refget_digest="SQ.ref"),
@@ -529,7 +529,7 @@ def _variant_project_bytes(
         f"""\
 profiles: [science-pkg-entity-1.0]
 id: dataset:variants
-type: dataset
+kind: dataset
 title: Variants
 schema_profile: {_PROFILE}
 {datapackage_line}\

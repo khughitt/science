@@ -12,7 +12,7 @@ def base_cna_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.cna/1.0",
         "id": "dataset:example-cna",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Example CNA dataset",
         "version": "1.0.0",
         "created": "2026-05-19",

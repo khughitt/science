@@ -1,18 +1,18 @@
 r"""
-# ─── 17. Per-type id-prefix conformance ──────────────────────────
-# Catches drift like `type: report` paired with `id: doc:...` (audit synthesis
+# ─── 17. Per-kind id-prefix conformance ──────────────────────────
+# Catches drift like `kind: report` paired with `id: doc:...` (audit synthesis
 # §9.3 / §5.3). Implemented as a warn (not error): existing downstream projects
 # carry violations and an error here would block adoption on first managed
 # update. Set SCIENCE_VALIDATE_SKIP_ID_PREFIX=1 to skip for projects mid-migration.
 #
 # Note: rows for `pre-registration` and `synthesis` are forward-compatible —
-# they fire only after those type-promotions ship downstream (synthesis §3.2/§3.3).
-# Until then, files using legacy shapes (e.g., `type: plan` for pre-regs,
-# `type: report` with `id: report:synthesis-...`) are unaffected because the
-# rule only fires when `type:` matches a row in PREFIX_RULES.
+# they fire only after those kind-promotions ship downstream (synthesis §3.2/§3.3).
+# Until then, files using older shapes (e.g., `kind: plan` for pre-regs,
+# `kind: report` with `id: report:synthesis-...`) are unaffected because the
+# rule only fires when `kind:` matches a row in PREFIX_RULES.
 if [ -z "${SCIENCE_VALIDATE_SKIP_ID_PREFIX:-}" ]; then
     echo ""
-    echo "Checking per-type id-prefix conformance..."
+    echo "Checking per-kind id-prefix conformance..."
     id_prefix_result=$(IDP_DOC="$DOC_DIR" IDP_SPECS="$SPECS_DIR" python3 - <<'PYEOF'
 import os
 import re
@@ -61,7 +61,7 @@ for root in roots:
         if not m:
             continue
         fm = m.group(1)
-        t = extract_field(fm, "type")
+        t = extract_field(fm, "kind")
         i = extract_field(fm, "id")
         if not t or not i:
             continue
@@ -69,7 +69,7 @@ for root in roots:
             continue
         expected = PREFIX_RULES[t]
         if not i.startswith(expected):
-            violations.append(f"{md}: type={t} but id={i} (expected prefix '{expected}')")
+            violations.append(f"{md}: kind={t} but id={i} (expected prefix '{expected}')")
 
 for v in violations:
     print(v)
@@ -81,7 +81,7 @@ PYEOF
             warn "id-prefix mismatch: ${line}"
         done <<< "$id_prefix_result"
     else
-        info "  all type/id prefixes conform"
+        info "  all kind/id prefixes conform"
     fi
 fi
 """
@@ -140,7 +140,7 @@ def _extract_field(text: str, name: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-@Check(section="per-type id-prefix conformance...", order=19)
+@Check(section="per-kind id-prefix conformance...", order=19)
 def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
     if os.environ.get("SCIENCE_VALIDATE_SKIP_ID_PREFIX"):
         return
@@ -158,7 +158,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
                 continue
 
             raw_frontmatter = frontmatter.group(1)
-            item_type = _extract_field(raw_frontmatter, "type")
+            item_type = _extract_field(raw_frontmatter, "kind")
             item_id = _extract_field(raw_frontmatter, "id")
             if not item_type or not item_id:
                 continue
@@ -168,7 +168,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
                 continue
             if not item_id.startswith(expected):
                 violations.append(
-                    f"{_display_path(ctx.project_root, path)}: type={item_type} but id={item_id} "
+                    f"{_display_path(ctx.project_root, path)}: kind={item_type} but id={item_id} "
                     f"(expected prefix '{expected}')"
                 )
 
@@ -176,4 +176,4 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
         for violation in violations:
             yield _result(Severity.WARN, f"id-prefix mismatch: {violation}")
     else:
-        yield _result(Severity.INFO, "  all type/id prefixes conform")
+        yield _result(Severity.INFO, "  all kind/id prefixes conform")

@@ -233,7 +233,7 @@ def _dataset_with_qa_report(slug: str, *, qa_report_rel: str) -> str:
     return (
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug}\n"
         "status: active\n"
         "origin: external\n"

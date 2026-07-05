@@ -61,7 +61,7 @@ def test_rollup_orphan_count_mismatch(tmp_path: Path) -> None:
         tmp_path,
         "synthesis.md",
         """---
-type: "synthesis-rollup"
+kind: "synthesis-rollup"
 orphan_question_count: 99
 synthesized_from: []
 ---
@@ -78,7 +78,7 @@ def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
         tmp_path,
         "synthesis.md",
         """---
-type: "synthesis-rollup"
+kind: "synthesis-rollup"
 orphan_question_count: 1
 synthesized_from: []
 ---

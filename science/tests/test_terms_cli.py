@@ -316,7 +316,7 @@ def test_terms_add_rejects_existing_markdown_owner() -> None:
             "entities/concepts/treatment-response.md",
             {
                 "id": "concept:treatment-response",
-                "type": "concept",
+                "kind": "concept",
                 "title": "Treatment Response",
                 "status": "active",
             },
@@ -421,7 +421,7 @@ def test_terms_add_rejects_existing_commons_owner(tmp_path: Path, monkeypatch) -
             "entities/concepts/local-context.md",
             {
                 "id": "concept:local-context",
-                "type": "concept",
+                "kind": "concept",
                 "title": "Local context",
                 "status": "active",
                 "related": ["topic:single-cell-foundation-models"],
@@ -458,7 +458,7 @@ def test_terms_add_reports_unrelated_genuine_identity_collision_distinctly() -> 
             "entities/concepts/one.md",
             {
                 "id": "concept:duplicate",
-                "type": "concept",
+                "kind": "concept",
                 "title": "Duplicate One",
                 "status": "active",
             },
@@ -468,7 +468,7 @@ def test_terms_add_reports_unrelated_genuine_identity_collision_distinctly() -> 
             "entities/concepts/two.md",
             {
                 "id": "concept:duplicate",
-                "type": "concept",
+                "kind": "concept",
                 "title": "Duplicate Two",
                 "status": "active",
             },

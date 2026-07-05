@@ -209,7 +209,7 @@ whether the line is admissible.
 ```markdown
 ---
 id: evidence-line:sleep-extension-reaction-time-pilot
-type: evidence-line
+kind: evidence-line
 title: "Pilot trial reports faster reaction time after sleep extension"
 status: active
 stance: supports

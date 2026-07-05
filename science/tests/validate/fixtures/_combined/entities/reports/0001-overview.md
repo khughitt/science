@@ -1,6 +1,6 @@
 ---
 id: report:overview
-type: report
+kind: report
 title: Overview
 status: active
 created: 2026-05-20

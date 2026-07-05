@@ -1,7 +1,7 @@
 ---
 schema_profile: science-entity-base/1.0+dataset/1.0
 id: dataset:cytoband-hg19
-type: dataset
+kind: dataset
 title: UCSC hg19 cytobands
 version: "1.0.0"
 created: "2026-07-03"

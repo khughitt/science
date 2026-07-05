@@ -24,7 +24,7 @@ def _project_with_bad_dataset(tmp_path: Path) -> Path:
     dataset.write_text(
         "---\n"
         'id: "dataset:t007-cohort"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "t007 cohort"\n'
         'origin: "derived"\n'
         'source_class: "derived"\n'

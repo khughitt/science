@@ -24,7 +24,7 @@ def _write(root: Path, rel: str, text: str) -> None:
 def _question(slug: str, title: str, status: str) -> str:
     return (
         "---\n"
-        "type: question\n"
+        "kind: question\n"
         f"title: {title}\n"
         f"status: {status}\n"
         "created: '2026-05-01'\n"
@@ -39,7 +39,7 @@ def _question(slug: str, title: str, status: str) -> str:
 def _hypothesis(slug: str, title: str, status: str) -> str:
     return (
         "---\n"
-        "type: hypothesis\n"
+        "kind: hypothesis\n"
         f"title: {title}\n"
         f"status: {status}\n"
         "created: '2026-05-01'\n"

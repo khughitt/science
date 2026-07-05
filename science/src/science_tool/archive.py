@@ -132,7 +132,7 @@ def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[Archiv
             ArchiveRow(
                 op="archive",
                 id=str(fm["id"]),
-                kind=fm.get("type") or fm.get("kind"),
+                kind=fm.get("kind"),
                 title=fm.get("title"),
                 aliases=[a for a in (fm.get("aliases") or []) if isinstance(a, str)],
                 same_as=[s for s in (fm.get("same_as") or []) if isinstance(s, str)],

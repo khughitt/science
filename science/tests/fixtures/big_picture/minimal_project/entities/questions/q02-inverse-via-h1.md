@@ -1,6 +1,6 @@
 ---
 id: "question:q02-inverse-via-h1"
-type: "question"
+kind: "question"
 related:
   - "topic:t02-thin"
 ---

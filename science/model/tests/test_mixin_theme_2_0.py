@@ -55,7 +55,7 @@ def test_theme_mixin_2_0_merge_policies() -> None:
 def test_theme_mixin_2_0_keeps_required_kind_and_scope() -> None:
     schema = _load_theme_schema()
     assert schema["$id"] == "https://schemas.science/mixin-theme-2.0.json"
-    assert schema["required"] == ["id", "type", "theme_kind", "theme_scope"]
+    assert schema["required"] == ["id", "kind", "theme_kind", "theme_scope"]
 
 
 def test_theme_mixin_2_0_keeps_theme_kind_enum_canonical() -> None:

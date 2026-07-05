@@ -20,7 +20,7 @@ def _write_dataset_md(root: Path, slug: str, ident: str) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{slug}.md").write_text(
-        f'---\nid: "{ident}"\ntype: "dataset"\ntitle: "{ident}"\n'
+        f'---\nid: "{ident}"\nkind: "dataset"\ntitle: "{ident}"\n'
         'origin: "external"\naccess:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )

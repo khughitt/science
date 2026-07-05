@@ -132,7 +132,7 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
     reach: dict[str, set[str]] = {}
     # Collect dataset ids and the Q/H ids; build every source-authored direction.
     for ent_id, fm in _iter_entity_frontmatter(project_root):
-        kind = fm.get("kind") or fm.get("type") or ""
+        kind = fm.get("kind") or ""
         related = [r for r in (fm.get("related") or []) if isinstance(r, str)]
         if kind == "dataset":
             reach.setdefault(ent_id, set())

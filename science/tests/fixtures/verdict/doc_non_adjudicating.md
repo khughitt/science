@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-non-adjudicating"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: non-adjudicating terminal"
 status: "active"
 created: "2026-04-21"

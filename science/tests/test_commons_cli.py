@@ -125,7 +125,7 @@ def test_index_rebuild_exit_1_when_entity_errors(
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:badname"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Bad"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -266,7 +266,7 @@ def _write_reference_graph_member_commons(root: Path, data_root: Path) -> None:
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0\n"
         "id: dataset:mondo-v1\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: MONDO\n"
         "version: 1.0.0\n"
         "status: active\n"
@@ -318,7 +318,7 @@ def _write_reference_graph_member_commons(root: Path, data_root: Path) -> None:
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0\n"
         "id: dataset:mondo-0005148\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: MONDO 0005148\n"
         "version: 1.0.0\n"
         "status: active\n"
@@ -416,7 +416,7 @@ def test_reference_graph_scaffold_member_json_dry_run(
     assert frontmatter == {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "id": "dataset:mondo-0005148-scaffold",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "multiple myeloma",
         "version": "1.0.0",
         "status": "active",
@@ -621,7 +621,7 @@ def test_find_warns_on_stale_registry_for_all_entity_types(
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:Brown2026"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "A second representative paper"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -697,7 +697,7 @@ def test_validate_reports_per_entity_errors(
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:badname"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Bad"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -946,7 +946,7 @@ _NO_DP_ENTITY = (
     "---\n"
     'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
     'id: "dataset:no-dp"\n'
-    'type: "dataset"\n'
+    'kind: "dataset"\n'
     'title: "No datapackage"\n'
     'version: "1.0.0"\n'
     'status: "active"\n'

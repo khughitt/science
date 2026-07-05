@@ -77,7 +77,7 @@ def scaffold_reference_graph_member(
     frontmatter: dict[str, Any] = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "id": canonical_id,
-        "type": "dataset",
+        "kind": "dataset",
         "title": title or node.label,
         "version": "1.0.0",
         "status": node.status,

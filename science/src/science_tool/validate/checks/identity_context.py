@@ -183,7 +183,7 @@ def evaluate_identity_context(
     """
     reported_registries: set[str] = set()
     for fm in datasets:
-        if fm.get("type") != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         schema_profile = str(fm.get("schema_profile") or "")
         idc = fm.get("identity_context") or {}
@@ -260,7 +260,7 @@ def evaluate_datapackage_identity_stamps(
     identity_context remains authoritative.
     """
     for fm in datasets:
-        if fm.get("type") != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         ident = fm.get("id")
         if not isinstance(ident, str) or not ident:
@@ -444,7 +444,7 @@ def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator
     `derivation.inputs`. Reference artifacts are intentionally not required in
     `derivation.inputs`.
     """
-    dataset_list = [fm for fm in datasets if fm.get("type") == "dataset"]
+    dataset_list = [fm for fm in datasets if fm.get("kind") == "dataset"]
     by_id = {fm["id"]: fm for fm in dataset_list if isinstance(fm.get("id"), str)}
     for fm in dataset_list:
         ident = fm.get("id", "?")
@@ -714,7 +714,7 @@ def evaluate_tier_identity(
     """
     reported_registries: set[str] = set()
     for fm in datasets:
-        if fm.get("type") != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         decl = _tier_decl(fm, spec.tier)
         if decl is None:

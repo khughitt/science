@@ -37,7 +37,7 @@ def _seed_workflow_and_run(
     outputs_yaml = yaml.safe_dump(workflow_outputs, sort_keys=False)
     outputs_yaml = "".join(f"  {line}" if line.strip() else line for line in outputs_yaml.splitlines(True))
     (wf_dir / "wf.md").write_text(
-        f'---\nid: "workflow:wf"\ntype: "workflow"\ntitle: "WF"\noutputs:\n{outputs_yaml}---\n',
+        f'---\nid: "workflow:wf"\nkind: "workflow"\ntitle: "WF"\noutputs:\n{outputs_yaml}---\n',
         encoding="utf-8",
     )
     runs_dir = root / "entities" / "workflow-runs"
@@ -45,7 +45,7 @@ def _seed_workflow_and_run(
     (runs_dir / "wf-r1.md").write_text(
         "---\n"
         'id: "workflow-run:wf-r1"\n'
-        'type: "workflow-run"\n'
+        'kind: "workflow-run"\n'
         'title: "WF r1"\n'
         'workflow: "workflow:wf"\n'
         "produces: []\n"
@@ -77,7 +77,7 @@ def _seed_dataset(root: Path, slug: str, identity_context: dict | None = None) -
     dataset: dict = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0",
         "id": f"dataset:{slug}",
-        "type": "dataset",
+        "kind": "dataset",
         "title": slug,
         "origin": "external",
         "consumed_by": [],
@@ -1104,7 +1104,7 @@ def test_register_run_appends_to_workflow_run_produces(tmp_path: Path) -> None:
 def test_register_run_appends_workflow_run_to_upstream_consumed_by(tmp_path: Path) -> None:
     (tmp_path / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
     (tmp_path / "entities" / "datasets" / "up.md").write_text(
-        '---\nid: "dataset:up"\ntype: "dataset"\ntitle: "Up"\norigin: "external"\n'
+        '---\nid: "dataset:up"\nkind: "dataset"\ntitle: "Up"\norigin: "external"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'
         "consumed_by: []\n---\n",
         encoding="utf-8",
@@ -1129,7 +1129,7 @@ def test_append_preserves_inline_comments(tmp_path: Path) -> None:
     p = tmp_path / "x.md"
     original = """---
 id: "dataset:x"  # the dataset
-type: "dataset"
+kind: "dataset"
 # A leading comment.
 consumed_by: []
 title: "X"
@@ -1150,7 +1150,7 @@ def test_append_handles_block_form_list(tmp_path: Path) -> None:
 
     p = tmp_path / "y.md"
     p.write_text(
-        '---\nid: "dataset:y"\ntype: "dataset"\ntitle: "Y"\nconsumed_by:\n  - "plan:existing"\n---\n',
+        '---\nid: "dataset:y"\nkind: "dataset"\ntitle: "Y"\nconsumed_by:\n  - "plan:existing"\n---\n',
         encoding="utf-8",
     )
     _append_yaml_list_item(p, "consumed_by", "plan:p2")
@@ -1164,7 +1164,7 @@ def test_append_handles_zero_indent_block_form_list(tmp_path: Path) -> None:
 
     p = tmp_path / "zero-indent.md"
     p.write_text(
-        '---\nid: "dataset:y"\ntype: "dataset"\ntitle: "Y"\nconsumed_by:\n- "plan:existing"\n---\n',
+        '---\nid: "dataset:y"\nkind: "dataset"\ntitle: "Y"\nconsumed_by:\n- "plan:existing"\n---\n',
         encoding="utf-8",
     )
     _append_yaml_list_item(p, "consumed_by", "plan:p2")
@@ -1178,7 +1178,7 @@ def test_append_idempotent(tmp_path: Path) -> None:
 
     p = tmp_path / "z.md"
     p.write_text(
-        '---\nid: "dataset:z"\ntype: "dataset"\ntitle: "Z"\nconsumed_by: ["plan:p1"]\n---\n',
+        '---\nid: "dataset:z"\nkind: "dataset"\ntitle: "Z"\nconsumed_by: ["plan:p1"]\n---\n',
         encoding="utf-8",
     )
     snapshot = p.read_text()
@@ -1234,7 +1234,7 @@ def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
     (runs_dir / "wf-r2.md").write_text(
         "---\n"
         'id: "workflow-run:wf-r2"\n'
-        'type: "workflow-run"\n'
+        'kind: "workflow-run"\n'
         'title: "WF r2"\n'
         'workflow: "workflow:wf"\n'
         "produces: []\n"

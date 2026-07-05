@@ -1,6 +1,6 @@
 """Cross-reference validation for Science research projects.
 
-Scans markdown files in doc/, specs/, and RESEARCH_PLAN.md for internal
+Scans markdown files in doc/, entities/, and RESEARCH_PLAN.md for internal
 references (hypothesis IDs, citations, markdown links, markers) and validates
 them against the project file system and bibliography.
 """
@@ -78,7 +78,7 @@ _TASK_FALSE_POSITIVE_PARENTS = (
 )
 
 # Directories/files to scan
-_SCAN_DIRS = ("doc", "specs", "entities")
+_SCAN_DIRS = ("doc", "entities")
 _SCAN_FILES = ("RESEARCH_PLAN.md",)
 # Skip directories
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
@@ -130,7 +130,7 @@ def _collect_markdown_files(
 ) -> list[Path]:
     """Collect all markdown files to scan.
 
-    Defaults to `paths.doc_dir` + `paths.specs_dir`. `extra_roots` (from
+    Defaults to `paths.doc_dir` + `paths.entities_dir`. `extra_roots` (from
     `RefsConfig.scan_roots`) appends additional dirs; the special value `"."`
     means root-level `.md` files only (non-recursive).
     """
@@ -138,7 +138,7 @@ def _collect_markdown_files(
         from science_tool.paths import resolve_paths
 
         pp = resolve_paths(root)
-        scan_dirs = [pp.doc_dir, pp.specs_dir, pp.entities_dir]
+        scan_dirs = [pp.doc_dir, pp.entities_dir]
     except Exception:
         scan_dirs = [root / d for d in _SCAN_DIRS]
 
@@ -173,18 +173,15 @@ def _collect_markdown_files(
 def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
     """Map legacy HNN aliases (e.g. '03') to hypothesis files.
 
-    Searches both the v3 layout (``entities/hypotheses/``) and the legacy v2
-    layout (``specs/hypotheses/``); both can coexist mid-migration. The v3
-    location wins on alias collision.
+    Searches the v3 layout (``entities/hypotheses/``).
     """
     result: dict[str, Path] = {}
-    for rel in ("entities/hypotheses", "specs/hypotheses"):
-        hyp_dir = root / rel
-        if not hyp_dir.is_dir():
-            continue
-        for p in sorted(hyp_dir.glob("*.md")):
-            for alias in _hypothesis_aliases_from_path(p):
-                result.setdefault(alias, p)
+    hyp_dir = root / "entities" / "hypotheses"
+    if not hyp_dir.is_dir():
+        return result
+    for p in sorted(hyp_dir.glob("*.md")):
+        for alias in _hypothesis_aliases_from_path(p):
+            result.setdefault(alias, p)
     return result
 
 
@@ -423,7 +420,7 @@ def _load_doi_corpus(root: Path) -> set[str]:
     Sources (in order of authority):
     - ``papers/references.bib`` — the canonical citation database; DOIs appear
       in the ``doi = {…}`` field.
-    - ``doc/papers/*.md`` — per-paper note files often record the DOI in
+    - ``entities/papers/*.md`` — per-paper note files often record the DOI in
       free-text ``DOI: 10.…`` lines (per the paper template).
     """
     dois: set[str] = set()
@@ -435,11 +432,9 @@ def _load_doi_corpus(root: Path) -> set[str]:
             text = ""
         for m in _BIB_DOI_FIELD_RE.finditer(text):
             dois.add(_normalize_doi_token(m.group(1)))
-    # Paper notes contribute their recorded DOIs to the corpus. They live under
-    # doc/papers/ (v2) and entities/papers/ (v3 layout); scan both.
-    for papers_dir in (root / "doc" / "papers", root / "entities" / "papers"):
-        if not papers_dir.is_dir():
-            continue
+    # Paper notes contribute their recorded DOIs to the corpus.
+    papers_dir = root / "entities" / "papers"
+    if papers_dir.is_dir():
         for path in papers_dir.rglob("*.md"):
             try:
                 text = path.read_text(encoding="utf-8")
@@ -461,10 +456,9 @@ def _load_pmid_corpus(root: Path) -> set[str]:
             text = ""
         for m in _BIB_PMID_FIELD_RE.finditer(text):
             pmids.add(m.group(1))
-    # Paper notes (doc/papers/ in v2, entities/papers/ in v3) contribute PMIDs.
-    for papers_dir in (root / "doc" / "papers", root / "entities" / "papers"):
-        if not papers_dir.is_dir():
-            continue
+    # Paper notes contribute PMIDs.
+    papers_dir = root / "entities" / "papers"
+    if papers_dir.is_dir():
         for path in papers_dir.rglob("*.md"):
             try:
                 text = path.read_text(encoding="utf-8")
@@ -642,9 +636,9 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
         # Files inside tasks/ legitimately reference their own and other task
         # IDs in headers — declarations are not "broken refs". Skip those.
         skip_task_check = skip_task_check or rel_path.startswith("tasks/")
-        # DOI/PMID corpus is built FROM doc/papers/ — checking it against
+        # DOI/PMID corpus is built from entities/papers/ — checking it against
         # DOI/PMID identifiers in exempt dirs are not citations requiring a bib
-        # entry: doc/papers notes are corpus contributors (checking them against
+        # entry: entities/papers notes are corpus contributors (checking them against
         # the corpus they build would flag every new note), and doc/searches are
         # literature-discovery logs full of surveyed-but-not-adopted candidates.
         # Configurable via refs.doi_pmid_exempt_dirs (see project_config).
@@ -693,8 +687,8 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                             line=line_num,
                             ref_type="doi",
                             ref_value=doi,
-                            message=f"DOI {doi} not declared in papers/references.bib or doc/papers/",
-                            suggestion="Add the entry to references.bib (with `doi = {…}`) or create a doc/papers/<key>.md note.",
+                            message=f"DOI {doi} not declared in papers/references.bib or entities/papers/",
+                            suggestion="Add the entry to references.bib (with `doi = {…}`) or create an entities/papers/<key>.md note.",
                         )
                     )
 
@@ -710,7 +704,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                             line=line_num,
                             ref_type="pmid",
                             ref_value=f"PMID:{pmid}",
-                            message=f"PMID {pmid} not declared in papers/references.bib or doc/papers/",
+                            message=f"PMID {pmid} not declared in papers/references.bib or entities/papers/",
                         )
                     )
 
@@ -731,7 +725,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                             line=line_num,
                             ref_type="hypothesis",
                             ref_value=f"H{hyp_num}",
-                            message=f"H{hyp_num} — no matching hypothesis in entities/hypotheses/ or specs/hypotheses/",
+                            message=f"H{hyp_num} — no matching hypothesis in entities/hypotheses/",
                             suggestion=suggestion,
                         )
                     )

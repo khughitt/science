@@ -63,7 +63,7 @@ def _write_dataset_md(root: Path, slug: str, ident: str) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{slug}.md").write_text(
-        f'---\nid: "{ident}"\ntype: "dataset"\ntitle: "{ident}"\n'
+        f'---\nid: "{ident}"\nkind: "dataset"\ntitle: "{ident}"\n'
         'origin: "external"\naccess:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )
@@ -117,7 +117,7 @@ def _write_dataset_md_related(root: Path, slug: str, ident: str, related: list[s
     d.mkdir(parents=True, exist_ok=True)
     related_block = "".join(f"  - {r}\n" for r in related)
     (d / f"{slug}.md").write_text(
-        f'---\nid: "{ident}"\ntype: "dataset"\ntitle: "{ident}"\n'
+        f'---\nid: "{ident}"\nkind: "dataset"\ntitle: "{ident}"\n'
         f'origin: "external"\naccess:\n  level: "public"\n  verified: false\nrelated:\n{related_block}---\n',
         encoding="utf-8",
     )

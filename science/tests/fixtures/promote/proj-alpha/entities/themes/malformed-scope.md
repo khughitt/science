@@ -1,6 +1,6 @@
 ---
 id: "theme:malformed-scope"
-type: "theme"
+kind: "theme"
 title: "Theme with missing theme_scope"
 theme_kind: "methodological"
 ---

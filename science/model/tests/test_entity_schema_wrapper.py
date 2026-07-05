@@ -9,7 +9,7 @@ def test_wrapper_loads_paper_entity() -> None:
     raw = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "An example",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -20,7 +20,7 @@ def test_wrapper_loads_paper_entity() -> None:
     }
     entity = SharedEntity.model_validate(raw)
     assert entity.id == "paper:Adams2025"
-    assert entity.type == "paper"
+    assert entity.kind == "paper"
     assert entity.version == "1.0.0"
     assert entity.extra.get("bibkey") == "Adams2025"
     assert entity.extra.get("datasets") == ["dataset:cath-domains"]
@@ -31,7 +31,7 @@ def test_wrapper_validates_with_validator() -> None:
     raw = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "An example",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -45,7 +45,7 @@ def test_wrapper_raises_on_schema_violation() -> None:
     raw = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "An example",
         "version": "1.0.0",
         # missing required: created, updated

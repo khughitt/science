@@ -35,7 +35,7 @@ def test_validate_collects_per_entity_errors(tmp_path: Path) -> None:
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:badname"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Bad"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -79,7 +79,7 @@ def test_validate_type_filter_excludes_error_of_other_type(tmp_path: Path) -> No
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:badname"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Bad"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

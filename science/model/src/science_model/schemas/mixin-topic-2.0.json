@@ -4,7 +4,7 @@
   "title": "science entity topic mixin",
   "$comment": "2.0 adds x-canonical-body-sections + project_only annotations on status/created/updated.",
   "type": "object",
-  "required": ["id", "type"],
+  "required": ["id", "kind"],
   "x-canonical-body-sections": [
     "Summary",
     "Key Concepts",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "id":   {"type": "string", "pattern": "^topic:[a-z0-9][a-z0-9-]{1,63}$"},
-    "type": {"const": "topic"},
+    "kind": {"const": "topic"},
     "datasets":    {"type": "array", "items": {"type": "string", "pattern": "^dataset:"},
                     "science:merge": "append"},
     "source_refs": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
@@ -34,7 +34,7 @@
         },
         "allOf": [
           {
-            "if": {"properties": {"type": {"const": "literature"}}, "required": ["type"]},
+            "if": {"properties": {"kind": {"const": "literature"}}, "required": ["type"]},
             "then": {"required": ["ref"], "properties": {"ref": {"pattern": "^(paper|cite):"}}}
           }
         ]

@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-and"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: and rule, two claims, both positive"
 status: "active"
 created: "2026-04-21"

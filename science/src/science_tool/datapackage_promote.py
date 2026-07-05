@@ -103,8 +103,7 @@ def plan_orphan_promotions(project_root: Path) -> list[OrphanPromotion]:
 
 def _owner_frontmatter(dp: dict, *, datapackage_rel: str) -> dict:
     fm = {k: v for k, v in dp.items() if k not in _RESOURCE_ONLY_FIELDS}
-    fm["type"] = fm.get("type") or fm.pop("kind", None) or "dataset"
-    fm.pop("kind", None)
+    fm["kind"] = fm.get("kind") or "dataset"
     fm["datapackage"] = datapackage_rel
     created = str(dp.get("created") or _UNDATED_SENTINEL)
     fm["created"] = created

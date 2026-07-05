@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+paper/1.0"
 id: "paper:bad-name"
-type: "paper"
+kind: "paper"
 title: "Paper with non-camelcase bibkey"
 version: "1.0.0"
 status: "active"

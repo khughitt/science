@@ -3,10 +3,10 @@
   "$id": "https://schemas.science/mixin-topic-1.0.json",
   "title": "science entity topic mixin",
   "type": "object",
-  "required": ["id", "type"],
+  "required": ["id", "kind"],
   "properties": {
     "id": {"type": "string", "pattern": "^topic:[a-z0-9][a-z0-9-]{1,63}$"},
-    "type": {"const": "topic"},
+    "kind": {"const": "topic"},
     "datasets": {
       "type": "array",
       "items": {"type": "string", "pattern": "^dataset:"}

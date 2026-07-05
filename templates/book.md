@@ -1,6 +1,6 @@
 ---
 id: "book:{{nn}}-{{slug}}"
-type: "book"
+kind: "book"
 title: "{{title}}"
 status: "active"
 ontology_terms: []
@@ -11,7 +11,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "book" }
+    kind: { default: "book" }
     title: { from: title }
     status: { from: status }
     ontology_terms: { default: [] }

@@ -19,7 +19,7 @@ def _proposition(root: Path, slug: str, *, status: str = "active", extra_frontma
     path.write_text(
         "---\n"
         f"id: proposition:{slug}\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         f"title: {slug}\n"
         f"status: {status}\n"
         f"{extra_frontmatter}"

@@ -243,7 +243,7 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
     project_root = project_root.resolve()
     results: list[LingeringTagsRecord] = []
 
-    for scan_dir in ["doc", "specs"]:
+    for scan_dir in ["doc", "entities"]:
         base = project_root / scan_dir
         if not base.is_dir():
             continue
@@ -1254,11 +1254,11 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
         return []
 
     findings: list[InvalidEntityAspectsFinding] = []
-    for relative in ("specs/hypotheses", "doc/questions", "doc/interpretations"):
-        directory = project_root / relative
-        if not directory.is_dir():
-            continue
-        for path in directory.rglob("*.md"):
+    entities_root = project_root / "entities"
+    if entities_root.is_dir():
+        from science_tool.entity_scan import iter_entity_markdown
+
+        for path in iter_entity_markdown(entities_root):
             result = parse_frontmatter(path)
             if result is None:
                 continue
@@ -1376,7 +1376,7 @@ def _load_research_packages(project_root: Path) -> dict[str, list[str]]:
         if not result:
             continue
         fm, _ = result
-        if fm.get("type") == "research-package" and fm.get("id"):
+        if fm.get("kind") == "research-package" and fm.get("id"):
             rps[str(fm["id"])] = list(fm.get("displays") or [])
     return rps
 
@@ -1414,7 +1414,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             if not result:
                 continue
             fm, _ = result
-            if fm.get("type") == "dataset" and fm.get("id"):
+            if fm.get("kind") == "dataset" and fm.get("id"):
                 datasets_by_id[str(fm["id"])] = fm
     gate_memo: dict[str, tuple[bool, str]] = {}
 
@@ -1427,7 +1427,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             if not result:
                 continue
             fm, _ = result
-            if fm.get("type") != "dataset":
+            if fm.get("kind") != "dataset":
                 continue
             entity_id = str(fm.get("id", md.stem))
             origin = fm.get("origin", "external")  # legacy default
@@ -1774,7 +1774,7 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
         if not result:
             continue
         fm, _ = result
-        if fm.get("type") == "workflow-run" and fm.get("id"):
+        if fm.get("kind") == "workflow-run" and fm.get("id"):
             runs[str(fm["id"])] = fm
     return runs
 

@@ -133,14 +133,14 @@ Check explicitly: did this agent author or substantively edit any artifact under
 
 Follow `.ai/templates/bias-audit.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/bias-audit.md`, and fill all sections.
 
-The template emits a `type: report` entity saved to
+The template emits a `kind: report` entity saved to
 `entities/reports/<NNNN>-bias-audit-<slug>.md`, with frontmatter
 `id: report:<NNNN>-bias-audit-<slug>`. Pick `<NNNN>` as the next free numeric
 report prefix, and keep the filename stem exactly equal to the `report:` local
-part. The validator rejects `type: report` entities outside `entities/reports/`
+part. The validator rejects `kind: report` entities outside `entities/reports/`
 and rejects stem/id mismatches. If the project keeps critical reviews of
-pre-registrations under a `review` entity type (`entities/review/`) and has a
-precedent for it, prefer that home and set the frontmatter `type`/`id` to match.
+pre-registrations under a `review` entity kind (`entities/review/`) and has a
+precedent for it, prefer that home and set the frontmatter `kind`/`id` to match.
 
 ## After Writing
 

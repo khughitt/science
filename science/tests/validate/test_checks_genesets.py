@@ -25,7 +25,7 @@ _MANIFEST = (
 def _geneset(**extra: object) -> dict[str, object]:
     return {
         "id": "dataset:reactome-v89",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
         "_path": "data/reactome/datapackage.yaml",
         "source_class": "reference",
@@ -68,7 +68,7 @@ def _write_geneset_datapackage(root: Path, *, resource_path: str, n_sets: int = 
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": "dataset:reactome-v89",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "Reactome v89",
                 "status": "active",
                 "origin": "external",
@@ -107,7 +107,7 @@ def _write_gene_crosswalk_dataset(root: Path) -> None:
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": _GENE_REGISTRY,
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "HGNC crosswalk",
                 "status": "active",
                 "origin": "external",
@@ -132,7 +132,7 @@ def _write_gene_crosswalk_commons(root: Path) -> Path:
 ---
 schema_profile: "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0"
 id: "dataset:gene-crosswalk-hgnc"
-type: "dataset"
+kind: "dataset"
 title: "HGNC crosswalk"
 version: "1.0.0"
 status: "active"
@@ -203,7 +203,7 @@ def test_geneset_resource_helper_reads_commons_data_root_rows(
 ---
 schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0
 id: dataset:reactome
-type: dataset
+kind: dataset
 title: Reactome
 version: "1.0.0"
 datapackage: datapackage.yaml
@@ -251,7 +251,7 @@ identifier_space:
 
     fm = {
         "id": "dataset:reactome",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
         "_path": str(dataset_dir / "datapackage.yaml"),
         "members_resource": "sets",

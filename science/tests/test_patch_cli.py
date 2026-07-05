@@ -21,7 +21,7 @@ def _project(root: Path) -> None:
         root / "entities" / "hypotheses" / "h1.md",
         [
             'id: "hypothesis:h1"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             'title: "H1"',
             'status: "proposed"',
             "ontology_terms: []",
@@ -33,7 +33,7 @@ def _project(root: Path) -> None:
         root / "entities" / "propositions" / "p1.md",
         [
             'id: "proposition:p1"',
-            'type: "proposition"',
+            'kind: "proposition"',
             'title: "P1"',
             'status: "active"',
             "ontology_terms: []",
@@ -46,7 +46,7 @@ def _project(root: Path) -> None:
         root / "entities" / "patches" / "local-demo.md",
         [
             'id: "patch-definition:local-demo"',
-            'type: "patch-definition"',
+            'kind: "patch-definition"',
             'title: "Local demo patch"',
             'status: "active"',
             "ontology_terms: []",

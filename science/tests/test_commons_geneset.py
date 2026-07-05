@@ -15,7 +15,7 @@ def _write_geneset_datapackage(path):
     path.write_text(
         'profiles: ["science-pkg-entity-1.0"]\n'
         'id: "dataset:gs"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "GS"\n'
         'status: "active"\n'
         'origin: "external"\n'

@@ -535,7 +535,7 @@ def test_scaffold_retired_edge_workbench_skipped_rows_fail_before_write(tmp_path
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a
@@ -695,7 +695,7 @@ def test_plan_skips_matching_compiled_proposition(tmp_path: Path) -> None:
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a

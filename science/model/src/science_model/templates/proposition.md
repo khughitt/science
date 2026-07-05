@@ -1,6 +1,6 @@
 ---
 id: "proposition:{{slug}}"
-type: "proposition"
+kind: "proposition"
 title: "{{title}}"
 status: "{{status}}"
 claim_layer: "empirical_regularity"
@@ -18,7 +18,7 @@ updated: "{{updated}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "proposition" }
+    kind: { default: "proposition" }
     title: { from: title }
     status: { from: status }
     claim_layer: { default: "empirical_regularity" }

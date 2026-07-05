@@ -19,7 +19,7 @@ def _project(tmp_path: Path, discusses_yaml: str) -> ValidateContext:
             [
                 "---",
                 'id: "proposition:p1"',
-                'type: "proposition"',
+                'kind: "proposition"',
                 'title: "P1"',
                 'status: "active"',
                 "ontology_terms: []",
@@ -113,7 +113,7 @@ def _write_hyp(tmp_path: Path, hid: str) -> None:
         tmp_path / "entities" / "hypotheses" / f"{hid}.md",
         [
             f'id: "hypothesis:{hid}"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             f'title: "{hid}"',
             'status: "proposed"',
             "ontology_terms: []",
@@ -128,7 +128,7 @@ def _write_prop(tmp_path: Path, pid: str, discusses_yaml: str = "[]") -> None:
         tmp_path / "entities" / "propositions" / f"{pid}.md",
         [
             f'id: "proposition:{pid}"',
-            'type: "proposition"',
+            'kind: "proposition"',
             f'title: "{pid}"',
             'status: "active"',
             "ontology_terms: []",
@@ -185,7 +185,7 @@ def test_role_to_topic_object_is_error(tmp_path: Path):
         tmp_path / "entities" / "topics" / "t1.md",
         [
             'id: "topic:t1"',
-            'type: "topic"',
+            'kind: "topic"',
             'title: "t1"',
             'status: "active"',
             "ontology_terms: []",
@@ -285,7 +285,7 @@ def _write_hyp_with_alias(tmp_path: Path, hid: str, alias: str) -> None:
         tmp_path / "entities" / "hypotheses" / f"{hid}.md",
         [
             f'id: "hypothesis:{hid}"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             f'title: "{hid}"',
             'status: "proposed"',
             "ontology_terms: []",

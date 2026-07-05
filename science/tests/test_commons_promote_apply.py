@@ -135,8 +135,8 @@ def test_audit_log_yaml_type_field_uses_kind_kind() -> None:
         kind=PROMOTE_KIND_TOPIC,
     )
     yaml_str = _render_audit_log_yaml(result, Path("/tmp/x"), invocation="x")
-    assert "type: topic" in yaml_str
-    assert "type: paper" not in yaml_str
+    assert "kind: topic" in yaml_str
+    assert "kind: paper" not in yaml_str
 
 
 def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp_path) -> None:
@@ -833,7 +833,7 @@ def test_plan_routes_existing_tag_to_overlay_existing(tmp_path, monkeypatch) -> 
     _init_commons(commons)
     # A real committed canonical + tag (the consistent state a tag implies).
     (commons / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\nbibkey: Adams2025\n"
+        "---\nid: paper:Adams2025\nkind: paper\nbibkey: Adams2025\n"
         "schema_profile: science-entity-base/1.0+paper/2.0\nversion: 1.0.0\n"
         "title: A\ntags: []\n---\n",
         encoding="utf-8",
@@ -911,7 +911,7 @@ def _commit_canonical_and_tag(commons: Path, slug: str, version: str = "1.0.0") 
     """Commit a canonical paper file + version tag into the commons, mirroring
     the consistent state a promoted entity leaves behind (t063 overlay tests)."""
     (commons / "papers" / f"{slug}.md").write_text(
-        f"---\nid: paper:{slug}\ntype: paper\nbibkey: {slug}\n"
+        f"---\nid: paper:{slug}\nkind: paper\nbibkey: {slug}\n"
         f"schema_profile: science-entity-base/1.0+paper/2.0\nversion: {version}\n"
         f"title: A\ntags: []\n---\n",
         encoding="utf-8",

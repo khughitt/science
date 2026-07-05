@@ -187,7 +187,7 @@ def test_entity_validator_accepts_access_reproducibility_block() -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0",
         "id": "dataset:enclave-cohort",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Enclave cohort",
         "version": "1.0.0",
         "created": "2026-06-30",
@@ -236,7 +236,7 @@ def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch)
             "---\n"
             "schema_profile: science-entity-base/1.0+dataset/1.0\n"
             "id: dataset:x\n"
-            "type: dataset\n"
+            "kind: dataset\n"
             "title: x\n"
             "version: 1.0.0\n"
             "created: '2026-05-18'\n"

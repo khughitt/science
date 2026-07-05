@@ -13,14 +13,14 @@ from science_tool.cli import main as science_cli
 def _seed_full_pipeline(root: Path) -> None:
     (root / "entities" / "workflows").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "workflows" / "toy.md").write_text(
-        '---\nid: "workflow:toy"\ntype: "workflow"\ntitle: "Toy"\n'
+        '---\nid: "workflow:toy"\nkind: "workflow"\ntitle: "Toy"\n'
         "outputs:\n"
         '  - slug: "result"\n    title: "Result"\n    resource_names: ["result"]\n    ontology_terms: []\n---\n',
         encoding="utf-8",
     )
     (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "datasets" / "src.md").write_text(
-        '---\nid: "dataset:src"\ntype: "dataset"\ntitle: "Src"\norigin: "external"\n'
+        '---\nid: "dataset:src"\nkind: "dataset"\ntitle: "Src"\norigin: "external"\n'
         'datapackage: "data/src/datapackage.yaml"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://s"}\n'
         "---\n",
@@ -28,7 +28,7 @@ def _seed_full_pipeline(root: Path) -> None:
     )
     (root / "entities" / "workflow-runs").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "workflow-runs" / "toy-r1.md").write_text(
-        '---\nid: "workflow-run:toy-r1"\ntype: "workflow-run"\ntitle: "Toy r1"\n'
+        '---\nid: "workflow-run:toy-r1"\nkind: "workflow-run"\ntitle: "Toy r1"\n'
         'workflow: "workflow:toy"\nproduces: []\ninputs: ["dataset:src"]\n'
         'git_commit: "abc"\nlast_run: "2026-04-19T12:00:00Z"\n---\n',
         encoding="utf-8",

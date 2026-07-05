@@ -1,6 +1,6 @@
 ---
 id: "interpretation:{{slug}}"
-type: "interpretation"
+kind: "interpretation"
 mode: "dev"
 title: "{{Short Title}}"
 status: "active"

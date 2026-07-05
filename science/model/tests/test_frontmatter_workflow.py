@@ -15,7 +15,7 @@ def test_workflow_frontmatter_coerces_outputs_identity(tmp_path: Path) -> None:
             """
             ---
             id: "workflow:normalize-expression"
-            type: "workflow"
+            kind: "workflow"
             title: "Normalize expression"
             status: "active"
             method: "method:normalization"

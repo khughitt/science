@@ -63,7 +63,7 @@ def _paper_md(pid: str, *, dataset_ref: str, overlap: str = "full") -> str:
     return (
         "---\n"
         f"id: paper:{pid}\n"
-        "type: paper\n"
+        "kind: paper\n"
         f"title: {pid}\n"
         "status: active\n"
         "created: '2026-05-01'\n"
@@ -80,7 +80,7 @@ def _evidence_line_md(eid: str, *, target: str, source: str) -> str:
     return (
         "---\n"
         f"id: evidence-line:{eid}\n"
-        "type: evidence-line\n"
+        "kind: evidence-line\n"
         f"title: {eid}\n"
         "status: active\n"
         "stance: supports\n"
@@ -99,7 +99,7 @@ def _evidence_line_with_usage_md(eid: str, *, target: str, dataset_ref: str, ove
     return (
         "---\n"
         f"id: evidence-line:{eid}\n"
-        "type: evidence-line\n"
+        "kind: evidence-line\n"
         f"title: {eid}\n"
         "status: active\n"
         "stance: supports\n"
@@ -123,7 +123,7 @@ def _dataset_dp(root: Path, slug: str) -> None:
     dp.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug}\n"
         "status: active\n"
         "origin: external\n"
@@ -274,7 +274,7 @@ def test_unregistered_dataset_ref_warns_ref_unresolved(tmp_path: Path, monkeypat
             [
                 {
                     "id": "paper:Adams2025",
-                    "type": "paper",
+                    "kind": "paper",
                     "_path": "entities/papers/Adams2025.md",
                     "dataset_usage": [{"ref": "dataset:does-not-exist", "role": "analyzed", "overlap": "full"}],
                 }
@@ -309,7 +309,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             [
                 {
                     "id": "paper:Adams2025",
-                    "type": "paper",
+                    "kind": "paper",
                     "_path": "entities/papers/Adams2025.md",
                     "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed"}],
                 }
@@ -329,7 +329,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             [
                 {
                     "id": "paper:Adams2025",
-                    "type": "paper",
+                    "kind": "paper",
                     "_path": "entities/papers/Adams2025.md",
                     "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed", "overlap": "unknown"}],
                 }
@@ -349,7 +349,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             [
                 {
                     "id": "paper:Adams2025",
-                    "type": "paper",
+                    "kind": "paper",
                     "_path": "entities/papers/Adams2025.md",
                     "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed", "overlap": "full"}],
                 }
@@ -450,7 +450,7 @@ def _dataset_dp_with_parent(root: Path, slug: str, parent_slug: str) -> None:
     dp.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug}\n"
         "status: active\n"
         "origin: external\n"

@@ -19,7 +19,7 @@ def _seed(root: Path, name: str = "proj") -> None:
 def _write_md(root: Path, rel: str, cid: str, kind: str, title: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f'---\nid: "{cid}"\ntype: "{kind}"\ntitle: "{title}"\n---\n', encoding="utf-8")
+    p.write_text(f'---\nid: "{cid}"\nkind: "{kind}"\ntitle: "{title}"\n---\n', encoding="utf-8")
 
 
 def _write_aggregate_stub(root: Path, cid: str, kind: str, title: str) -> None:

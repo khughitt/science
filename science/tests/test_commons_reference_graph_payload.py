@@ -136,7 +136,7 @@ def _write_reference_graph_commons(
     parent_fm: dict[str, Any] = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0",
         "id": "dataset:mondo",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "MONDO",
         "version": "1.0.0",
         "status": "active",
@@ -173,7 +173,7 @@ def _write_reference_graph_commons(
         {
             "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
             "id": "dataset:mondo-0005148",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "MONDO:0005148",
             "version": "1.0.0",
             "status": "active",

@@ -17,7 +17,7 @@ def _write_book(tmp_path: Path, body: str) -> None:
     d = tmp_path / "entities" / "books"
     d.mkdir(parents=True, exist_ok=True)
     (d / "Kelly1982.md").write_text(
-        '---\nid: "book:Kelly1982"\ntype: book\nstatus: active\n---\n# Book\n' + body,
+        '---\nid: "book:Kelly1982"\nkind: book\nstatus: active\n---\n# Book\n' + body,
         encoding="utf-8",
     )
 

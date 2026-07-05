@@ -131,7 +131,7 @@ def test_cli_promote_dataset_single_slug_omits_unrelated_failed_candidates(
     broken.write_text(
         "---\n"
         "id: dataset:unrelated-broken\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Unrelated broken dataset\n"
         "origin: external\n"
         "tier: evaluate-next\n"

@@ -30,12 +30,12 @@ def test_reconcile_links_reports_free_text_dataset_entry_resolving_to_slug(tmp_p
     _write_entity(
         tmp_path,
         "entities/datasets/boiarsky2022.md",
-        'id: "dataset:boiarsky2022"\ntype: "dataset"\ntitle: "Boiarsky 2022"\n',
+        'id: "dataset:boiarsky2022"\nkind: "dataset"\ntitle: "Boiarsky 2022"\n',
     )
     _write_entity(
         tmp_path,
         "entities/questions/q.md",
-        'id: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets:\n  - Boiarsky2022\n',
+        'id: "question:q"\nkind: "question"\ntitle: "Q"\ndatasets:\n  - Boiarsky2022\n',
     )
 
     res = _run(tmp_path, "--format", "json")
@@ -57,13 +57,13 @@ def test_reconcile_links_fix_rewrites_entries_idempotently(tmp_path: Path) -> No
     target = _write_entity(
         tmp_path,
         "entities/datasets/gse136410.md",
-        'id: "dataset:gse136410"\ntype: "dataset"\ntitle: "GSE136410"\naccessions:\n  - GSE136410\n',
+        'id: "dataset:gse136410"\nkind: "dataset"\ntitle: "GSE136410"\naccessions:\n  - GSE136410\n',
     )
     assert target.exists()
     question = _write_entity(
         tmp_path,
         "entities/questions/q.md",
-        'id: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets: [GSE136410]\n',
+        'id: "question:q"\nkind: "question"\ntitle: "Q"\ndatasets: [GSE136410]\n',
         body="# Q\n\nBody stays.\n",
     )
 
@@ -83,7 +83,7 @@ def test_reconcile_links_ignores_unresolved_free_text_entries(tmp_path: Path) ->
     _write_entity(
         tmp_path,
         "entities/questions/q.md",
-        'id: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets:\n  - Unknown cohort\n',
+        'id: "question:q"\nkind: "question"\ntitle: "Q"\ndatasets:\n  - Unknown cohort\n',
     )
 
     res = _run(tmp_path, "--format", "json")

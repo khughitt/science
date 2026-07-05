@@ -37,7 +37,7 @@ def _write_datapackage(root: Path, slug: str, ident: str) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": slug,
                 "id": ident,
-                "type": "dataset",
+                "kind": "dataset",
                 "title": ident,
                 "origin": "external",
                 "access": {"level": "public", "verified": False},
@@ -68,7 +68,7 @@ def test_non_orphan_datapackage_not_flagged(tmp_path: Path) -> None:
     # datapackage owner declaration remains -> nothing to flag.
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
-        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md"\n'
+        '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X md"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",

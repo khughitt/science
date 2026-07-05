@@ -115,7 +115,7 @@ Use this frontmatter:
 ```yaml
 ---
 id: "plan:<NNNN>-<slug>-analysis-plan"
-type: "plan"
+kind: "plan"
 title: "<short title>"
 status: ready | ready-with-caveats | not-ready
 created: "YYYY-MM-DD"
@@ -132,7 +132,7 @@ skills_loaded:
 ```
 
 Reference saved analysis plans as `plan:<NNNN>-<slug>-analysis-plan`. Do not emit
-`type: analysis-plan`, `id: analysis-plan:<slug>`, or a date-prefixed filename;
+`kind: analysis-plan`, `id: analysis-plan:<slug>`, or a date-prefixed filename;
 `analysis-plan` is not a registered entity kind, and non-numeric stems collide
 with numeric entity validation in layout version 3 projects.
 

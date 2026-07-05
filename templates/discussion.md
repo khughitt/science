@@ -1,6 +1,6 @@
 ---
 id: "discussion:{{YYYY-MM-DD-slug}}"
-type: "discussion"
+kind: "discussion"
 title: "{{title}}"
 status: "active"
 source_refs: []
@@ -13,7 +13,7 @@ mode: "standard | double-blind"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "discussion" }
+    kind: { default: "discussion" }
     title: { from: title }
     status: { from: status }
     source_refs: { from: source_refs }

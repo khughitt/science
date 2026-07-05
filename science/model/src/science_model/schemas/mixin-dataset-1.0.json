@@ -3,10 +3,10 @@
   "$id": "https://schemas.science/mixin-dataset-1.0.json",
   "title": "science entity dataset mixin",
   "type": "object",
-  "required": ["id", "type", "origin", "tier"],
+  "required": ["id", "kind", "origin", "tier"],
   "properties": {
     "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{1,63}$"},
-    "type": {"const": "dataset"},
+    "kind": {"const": "dataset"},
     "datapackage": {"type": "string", "minLength": 1, "science:merge": "forbidden"},
     "origin": {"enum": ["external", "derived"]},
     "tier": {"enum": ["use-now", "evaluate-next", "track"]},

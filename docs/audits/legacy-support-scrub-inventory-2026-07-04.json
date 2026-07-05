@@ -1,0 +1,437 @@
+{
+  "config_path": "~/.config/science/config.yaml",
+  "generated_at_utc": "2026-07-05T11:29:06Z",
+  "projects": [
+    {
+      "counts": {
+        "aggregate_manifest": 1,
+        "article_prefix_alias": 10,
+        "legacy_marker_alias": 1
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Cech2014.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/DallaTorre2023.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Furlong2018.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/LiebermanAiden2009.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Nguyen2023a.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Nguyen2024.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Rao2014.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Rouskin2014.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Schiff2024.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "archive/project-layout-legacy/notes/articles/Zhou2023.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "[NEEDS CITATION]",
+          "path": "AGENTS.md",
+          "surface": "legacy_marker_alias"
+        }
+      ],
+      "project_root": "~/d/3d-attention-bias"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/breast"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/head-and-neck"
+    },
+    {
+      "counts": {
+        "aggregate_manifest": 2,
+        "article_prefix_alias": 3,
+        "retired_edges_yaml": 1
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/terms.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": ".labnote/app_export/entities/index.json",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/claim-registry.yaml",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/questions/0099-bmsc-ap1-chromatin-cytogenetic-subtype.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "retired DAG edge file",
+          "path": "tests/migration/fixtures/mini_patch.edges.yaml",
+          "surface": "retired_edges_yaml"
+        }
+      ],
+      "project_root": "~/d/cancer/cancer-types/multiple-myeloma"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/ovarian"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/prostate"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/conditions/pre-cancer"
+    },
+    {
+      "counts": {
+        "aggregate_manifest": 1,
+        "article_prefix_alias": 26,
+        "retired_edges_yaml": 2
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/AACRGENIEConsortium2017.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Alexandrov2020.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Bailey2018.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Bandlamudi2026.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Bolton2020.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Cerami2012.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Chakravarty2017.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/ChakravartySolit2021.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Chang2016.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Cheng2015.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Ciriello2013.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Ellrott2018.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Gao2013.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Gao2017.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Hoadley2018.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Jee2024.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Kandoth2013.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Lawrence2014.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Martincorena2017.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Nguyen2022.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/PCAWG2020.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Pugh2022.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/SanchezVega2018.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Suehnholz2024.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Tate2019.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "article:<bibkey> reference",
+          "path": "entities/papers/Zehir2017.md",
+          "surface": "article_prefix_alias"
+        },
+        {
+          "detail": "retired DAG edge file",
+          "path": "doc/figures/dags/h02-cross-study-ranking-divergence.edges.yaml",
+          "surface": "retired_edges_yaml"
+        },
+        {
+          "detail": "retired DAG edge file",
+          "path": "doc/figures/dags/h08-agnostic-covariate-association.edges.yaml",
+          "surface": "retired_edges_yaml"
+        }
+      ],
+      "project_root": "~/d/cancer/data-sources/cbioportal"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/mechanisms/evolution"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/therapeutics"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cats"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/comparisons/pan-disease"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/cycles"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/immunity"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/post-acute-infection"
+    },
+    {
+      "counts": {
+        "aggregate_manifest": 1,
+        "legacy_marker_alias": 2
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "[NEEDS CITATION]",
+          "path": "AGENTS.md",
+          "surface": "legacy_marker_alias"
+        },
+        {
+          "detail": "[NEEDS CITATION]",
+          "path": "tasks/done/2026-05.md",
+          "surface": "legacy_marker_alias"
+        }
+      ],
+      "project_root": "~/d/natural-systems"
+    },
+    {
+      "counts": {
+        "aggregate_manifest": 1,
+        "retired_edges_yaml": 1
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "retired DAG edge file",
+          "path": "doc/figures/dags/h01-multi-manifold-protein-universe.edges.yaml",
+          "surface": "retired_edges_yaml"
+        }
+      ],
+      "project_root": "~/d/protein-landscape"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/science/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/science-commons"
+    },
+    {
+      "counts": {
+        "aggregate_manifest": 1,
+        "legacy_marker_alias": 1
+      },
+      "findings": [
+        {
+          "detail": "aggregate manifest",
+          "path": "knowledge/sources/local/entities.yaml",
+          "surface": "aggregate_manifest"
+        },
+        {
+          "detail": "[NEEDS CITATION]",
+          "path": "AGENTS.md",
+          "surface": "legacy_marker_alias"
+        }
+      ],
+      "project_root": "~/d/seq-feats"
+    }
+  ],
+  "schema_version": "legacy-surfaces-v1",
+  "skipped_registered_projects": [
+    {
+      "path": "~/d/natural-systems/.worktrees/validation-strict-cleanup",
+      "reason": "missing directory"
+    }
+  ],
+  "summary": {
+    "duplicate_registered_entries": 0,
+    "registered_entries": 23,
+    "scanned_projects": 22,
+    "shared_repository_entries": 1,
+    "skipped_registered_projects": 1,
+    "total_findings": 54,
+    "unique_registered_paths": 23,
+    "unregistered_science_yaml": 0
+  },
+  "surface_totals": {
+    "aggregate_manifest": 7,
+    "article_prefix_alias": 39,
+    "legacy_marker_alias": 4,
+    "retired_edges_yaml": 4
+  },
+  "unregistered_science_yaml": []
+}

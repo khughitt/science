@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+dataset/1.0"
 id: "dataset:cath-domains"
-type: "dataset"
+kind: "dataset"
 title: "CATH domain database"
 version: "1.0.0"
 status: "active"

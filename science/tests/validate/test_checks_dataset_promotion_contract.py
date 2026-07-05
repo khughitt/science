@@ -65,7 +65,7 @@ def _write_commons_dataset(root: Path, *, slug: str = "demo-dataset", version: s
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Demo Dataset\n"
         f"version: \"{version}\"\n"
         "created: \"2026-01-01\"\n"
@@ -107,7 +107,7 @@ def _write_descriptor(
     path.write_text(
         "---\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Demo Dataset\n"
         "profiles: [science-pkg-entity-1.0]\n"
         "origin: derived\n"
@@ -224,7 +224,7 @@ def test_plain_dataset_reference_doc_is_not_a_promotion_candidate(tmp_path: Path
     path.write_text(
         "---\n"
         "id: dataset:reference-only\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reference-only Dataset\n"
         "status: active\n"
         "source_refs: []\n"

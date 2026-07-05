@@ -60,15 +60,15 @@ def _build_strict_project(root: Path) -> None:
     _write(
         root,
         "entities/hypotheses/h1.md",
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\nbody\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\nbody\n',
     )
     # branch 2: core hypothesis missing identity → skip-warn even under strict
-    _write(root, "entities/hypotheses/bad.md", '---\ntype: "hypothesis"\ntitle: "Bad"\n---\n')
+    _write(root, "entities/hypotheses/bad.md", '---\nkind: "hypothesis"\ntitle: "Bad"\n---\n')
     # branch 3: markdown dataset owner that a datapackage will defer to
     _write(
         root,
         "entities/datasets/ds2.md",
-        '---\nid: "dataset:ds2"\ntype: "dataset"\ntitle: "DS2"\n'
+        '---\nid: "dataset:ds2"\nkind: "dataset"\ntitle: "DS2"\n'
         'origin: "external"\naccess: {level: "public", verified: false}\n---\n',
     )
     # branch 3: the deferring datapackage (same id as the markdown owner) + an orphan
@@ -81,7 +81,7 @@ def _build_strict_project(root: Path) -> None:
                     "profiles": ["science-pkg-entity-1.0"],
                     "name": dsid,
                     "id": f"dataset:{dsid}",
-                    "type": "dataset",
+                    "kind": "dataset",
                     "title": dsid.upper(),
                     "origin": "external",
                     "access": {"level": "public", "verified": False},
@@ -128,13 +128,13 @@ EXPECTED_STRICT: dict[str, Any] = {
     "markdown_documents": [
         (
             "entities/datasets/ds2.md",
-            ("access", "canonical_id", "file_path", "id", "kind", "origin", "title", "type"),
+            ("access", "canonical_id", "file_path", "id", "kind", "origin", "title"),
             "",
         ),
-        ("entities/hypotheses/bad.md", ("file_path", "kind", "title", "type"), ""),
+        ("entities/hypotheses/bad.md", ("file_path", "kind", "title"), ""),
         (
             "entities/hypotheses/h1.md",
-            ("canonical_id", "file_path", "id", "kind", "title", "type"),
+            ("canonical_id", "file_path", "id", "kind", "title"),
             "body\n",
         ),
     ],

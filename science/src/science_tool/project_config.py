@@ -92,13 +92,12 @@ class EntityIndexSource(StrEnum):
 
 
 # Directories whose DOI/PMID identifiers are NOT citations requiring a
-# bibliography entry. `doc/papers` (v2) and `entities/papers` (v3 layout) notes
-# are corpus contributors (they declare DOIs), and `doc/searches` are
-# literature-discovery logs full of candidate identifiers the project has
-# surveyed but not adopted. All are exempt from the DOI/PMID broken-ref check by
-# default; a project may override via `refs.doi_pmid_exempt_dirs`.
+# bibliography entry. `entities/papers` notes are corpus contributors (they
+# declare DOIs), and `doc/searches` are literature-discovery logs full of
+# candidate identifiers the project has surveyed but not adopted. All are exempt
+# from the DOI/PMID broken-ref check by default; a project may override via
+# `refs.doi_pmid_exempt_dirs`.
 DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = (
-    "doc/papers",
     "doc/searches",
     "entities/papers",
     "entities/searches",

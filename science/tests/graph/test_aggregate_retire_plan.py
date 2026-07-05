@@ -71,7 +71,7 @@ def test_referenced_migration_row_is_not_cruft_deleted(tmp_path: Path) -> None:
     d = tmp_path / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "referrer.md").write_text(
-        '---\nid: "dataset:referrer"\ntype: "dataset"\ntitle: "referrer"\n'
+        '---\nid: "dataset:referrer"\nkind: "dataset"\ntitle: "referrer"\n'
         'origin: "external"\naccess:\n  level: "public"\n  verified: false\n'
         "related:\n  - concept:referenced\n---\n",
         encoding="utf-8",
@@ -146,7 +146,7 @@ def _write_owner_file(root: Path, kind: str, slug: str, cid: str, title: str) ->
     """Write a real (non-aggregate) markdown owner file for `cid`."""
     owner_dir = root / "entities" / f"{kind}s"
     owner_dir.mkdir(parents=True, exist_ok=True)
-    frontmatter = f"---\nid: {cid}\ntype: {kind}\ntitle: {title}\n---\n\nBody text.\n"
+    frontmatter = f"---\nid: {cid}\nkind: {kind}\ntitle: {title}\n---\n\nBody text.\n"
     (owner_dir / f"{slug}.md").write_text(frontmatter, encoding="utf-8")
 
 

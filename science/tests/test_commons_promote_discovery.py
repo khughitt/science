@@ -139,16 +139,13 @@ def test_classify_file_kind_existing_paper_explicit_paper() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
 
     assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
-    assert _classify_file_kind({"type": "paper"}, PROMOTE_KIND_PAPER) == "match"
 
 
 def test_classify_file_kind_existing_paper_explicit_other_kind() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
 
     assert _classify_file_kind({"kind": "review-article"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
-    assert _classify_file_kind({"type": "dataset"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
     assert _classify_file_kind({"kind": ""}, PROMOTE_KIND_PAPER) == "skip-other-kind"
-    assert _classify_file_kind({"type": ""}, PROMOTE_KIND_PAPER) == "skip-other-kind"
 
 
 def test_classify_file_kind_existing_paper_no_kind_inferred_as_match() -> None:
@@ -179,22 +176,19 @@ def test_classify_file_kind_paper_explicit_match() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
 
     assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
-    assert _classify_file_kind({"type": "paper"}, PROMOTE_KIND_PAPER) == "match"
-    assert _classify_file_kind({"kind": "dataset", "type": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"kind": "dataset"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
 
 
 def test_classify_file_kind_topic_explicit_match() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
 
     assert _classify_file_kind({"kind": "topic"}, PROMOTE_KIND_TOPIC) == "match"
-    assert _classify_file_kind({"type": "topic"}, PROMOTE_KIND_TOPIC) == "match"
 
 
 def test_classify_file_kind_topic_disagreeing_kind_is_skip_other_kind() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
 
     assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_TOPIC) == "skip-other-kind"
-    assert _classify_file_kind({"type": "theme"}, PROMOTE_KIND_TOPIC) == "skip-other-kind"
 
 
 def test_classify_file_kind_topic_id_prefix_disagreement_is_skip_other_id() -> None:
@@ -207,16 +201,15 @@ def test_classify_file_kind_topic_id_prefix_disagreement_is_skip_other_id() -> N
 def test_classify_file_kind_no_kind_inferred() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
 
-    # No kind/type, no id -> infer "match" from directory placement.
+    # No kind, no id -> infer "match" from directory placement.
     assert _classify_file_kind({"title": "Foo"}, PROMOTE_KIND_TOPIC) == "match"
 
 
 def test_classify_file_kind_explicit_kind_overrides_contradictory_id() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
 
-    # Rule ordering: explicit kind/type wins over id-prefix.
+    # Rule ordering: explicit kind wins over id-prefix.
     assert _classify_file_kind({"id": "dataset:foo", "kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
-    assert _classify_file_kind({"id": "dataset:foo", "type": "paper"}, PROMOTE_KIND_PAPER) == "match"
 
 
 def test_parse_entity_file_returns_frontmatter_and_body(tmp_path) -> None:
@@ -322,7 +315,7 @@ def test_scan_project_skips_other_kind_with_warning(tmp_path, caplog) -> None:
     candidates, failures = _scan_project(tmp_path, "test-project", PROMOTE_KIND_PAPER)
     assert candidates == []
     assert failures == []
-    assert "kind/type is not 'paper'" in caplog.text
+    assert "kind is not 'paper'" in caplog.text
 
 
 def test_scan_project_fails_when_id_does_not_match_stem(tmp_path) -> None:
@@ -427,18 +420,16 @@ def test_discover_candidates_paper_kind_returns_expected_result(tmp_path, monkey
     assert len(result.candidates_by_slug["adams2025"]) == 1
 
 
-def test_discover_candidates_iterates_multiple_source_subdirs(tmp_path, monkeypatch) -> None:
-    """Topic kind walks both doc/topics and doc/background/topics."""
+def test_discover_candidates_topic_kind_reads_entities_topics(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     proj = tmp_path / "proj_y"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "hypothesis.md").write_text(
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "hypothesis.md").write_text(
         "---\nid: topic:hypothesis\ntitle: H\n---\n",
         encoding="utf-8",
     )
-    (proj / "doc" / "background" / "topics").mkdir(parents=True)
-    (proj / "doc" / "background" / "topics" / "primitives.md").write_text(
+    (proj / "entities" / "topics" / "primitives.md").write_text(
         "---\nid: topic:primitives\ntitle: P\n---\n",
         encoding="utf-8",
     )
@@ -595,14 +586,12 @@ def test_discover_candidates_theme_malformed_scope_is_failed_candidate(tmp_path,
     assert "eligibility filter rejected" in result.failed_candidates[0].error_message
 
 
-def test_discover_candidates_same_project_intra_kind_collision(tmp_path, monkeypatch) -> None:
-    """A slug appearing in BOTH entities/topics/ and doc/background/topics/ within
-    the same project is a hard failure (cannot resolve canonical source)."""
+def test_discover_candidates_ignores_legacy_doc_topic_duplicate(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     proj = tmp_path / "proj_z"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "collide.md").write_text("---\nid: topic:collide\n---\n", encoding="utf-8")
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "collide.md").write_text("---\nid: topic:collide\n---\n", encoding="utf-8")
     (proj / "doc" / "background" / "topics").mkdir(parents=True)
     (proj / "doc" / "background" / "topics" / "collide.md").write_text(
         "---\nid: topic:collide\n---\n", encoding="utf-8"
@@ -613,9 +602,5 @@ def test_discover_candidates_same_project_intra_kind_collision(tmp_path, monkeyp
     )
 
     result = discover_candidates(["proj_z"], PROMOTE_KIND_TOPIC)
-    assert result.candidates_by_slug == {}
-    assert len(result.failed_candidates) >= 1
-    msgs = [fc.error_message for fc in result.failed_candidates]
-    assert any("collide" in m and "both" in m.lower() for m in msgs)
-
-
+    assert set(result.candidates_by_slug) == {"collide"}
+    assert result.failed_candidates == []

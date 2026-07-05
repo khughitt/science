@@ -155,7 +155,7 @@ def _write_existing_proposition(root: Path) -> None:
     dest.write_text(
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Basalt flows record the cooling history.\n"
         "status: active\n"
         "source_refs: []\n"
@@ -172,7 +172,7 @@ def _write_recovered_proposition(root: Path, source_ref: str) -> None:
     dest.write_text(
         "---\n"
         "id: proposition:recovered\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Basalt flows record the cooling history.\n"
         "status: active\n"
         "source_refs:\n"

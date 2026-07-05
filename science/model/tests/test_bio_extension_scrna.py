@@ -12,7 +12,7 @@ def base_scrna_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.scrna/1.0",
         "id": "dataset:example-scrna",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Example scRNA-seq dataset",
         "version": "1.0.0",
         "created": "2026-05-19",

@@ -1,6 +1,6 @@
 ---
 id: "method:{{nn}}-{{slug}}"
-type: "method"
+kind: "method"
 title: "{{title}}"
 status: "active"
 ontology_terms: []
@@ -12,7 +12,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "method" }
+    kind: { default: "method" }
     title: { from: title }
     status: { from: status }
     ontology_terms: { default: [] }

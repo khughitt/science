@@ -96,7 +96,7 @@ def test_benchmark_sources_preserve_task_details_notes_and_limitations(tmp_path:
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -152,7 +152,7 @@ def test_load_opportunity_datasets_preserves_facets_only_and_task_rows(tmp_path:
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -169,7 +169,7 @@ benchmark:
         "cptac",
         """
 id: dataset:cptac
-type: dataset
+kind: dataset
 title: CPTAC Proteogenomics
 dataset_class: reference
 benchmark:
@@ -206,7 +206,7 @@ def test_baseline_score_is_component_sum_and_credits_perturbation_axes(tmp_path:
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -249,7 +249,7 @@ def test_opportunity_report_matches_shorthand_related_belief_and_controlled_face
         "0005-dynamic-homeostasis",
         """
 id: hypothesis:0005-dynamic-homeostasis
-type: hypothesis
+kind: hypothesis
 title: Dynamic perturbation recovery
 status: active
 """,
@@ -260,7 +260,7 @@ status: active
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -305,7 +305,7 @@ def test_benchmark_tests_report_includes_concrete_opportunity_rows(tmp_path: Pat
         "0001-perturbation",
         """
 id: hypothesis:0001-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response hypothesis
 """,
         body="Drug perturbation should shift single-cell response states.",
@@ -315,7 +315,7 @@ title: Perturbation response hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -377,7 +377,7 @@ def test_benchmark_tests_report_projects_context_fit_fields(tmp_path: Path) -> N
         "0500-perturbation",
         """
 id: hypothesis:0500-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation benchmark hypothesis
 """,
         body="Sci-plex drug perturbation should shift response states.",
@@ -387,7 +387,7 @@ title: Perturbation benchmark hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -437,7 +437,7 @@ def test_context_fit_readiness_blocked_rows_are_blocked_fit(tmp_path: Path) -> N
         "0500-embargoed-sciplex",
         """
 id: hypothesis:0500-embargoed-sciplex
-type: hypothesis
+kind: hypothesis
 title: Embargoed Sci-Plex hypothesis
 """,
         body="Sci-plex drug perturbation should shift response states.",
@@ -447,7 +447,7 @@ title: Embargoed Sci-Plex hypothesis
         "embargoed-sciplex",
         """
 id: dataset:embargoed-sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex embargoed package
 dataset_class: deposit
 access:
@@ -492,7 +492,7 @@ def test_context_fit_classifies_adjacent_cross_disease_rows(tmp_path: Path) -> N
         "0501-myeloma-outcome",
         """
 id: hypothesis:0501-myeloma-outcome
-type: hypothesis
+kind: hypothesis
 title: Myeloma outcome benchmark hypothesis
 """,
         body="Multiple myeloma survival risk needs clinical benchmark evidence.",
@@ -502,7 +502,7 @@ title: Myeloma outcome benchmark hypothesis
         "brca-metabric",
         """
 id: dataset:brca-metabric
-type: dataset
+kind: dataset
 title: BRCA METABRIC breast cancer outcomes
 dataset_class: deposit
 local_path: data/brca-metabric
@@ -712,7 +712,7 @@ def test_context_fit_coarse_domain_tokens_are_broad_context(tmp_path: Path) -> N
         "0501-health-response",
         """
 id: hypothesis:0501-health-response
-type: hypothesis
+kind: hypothesis
 title: Health response hypothesis
 """,
         body="Health single-cell-rna-seq evidence should be benchmarked.",
@@ -722,7 +722,7 @@ title: Health response hypothesis
         "health-perturbation",
         """
 id: dataset:health-perturbation
-type: dataset
+kind: dataset
 title: General health perturbation benchmark
 dataset_class: pointer
 benchmark:
@@ -761,7 +761,7 @@ def test_context_fit_classifies_method_fit_without_specific_context(tmp_path: Pa
         "0502-temporal",
         """
 id: hypothesis:0502-temporal
-type: hypothesis
+kind: hypothesis
 title: Temporal mechanism hypothesis
 """,
         body="Temporal mechanism predictions need a time-series benchmark.",
@@ -771,7 +771,7 @@ title: Temporal mechanism hypothesis
         "dream4-in-silico-network",
         """
 id: dataset:dream4-in-silico-network
-type: dataset
+kind: dataset
 title: DREAM4 in silico network
 dataset_class: pointer
 benchmark:
@@ -812,7 +812,7 @@ def test_context_fit_limitations_do_not_promote_direct_fit(tmp_path: Path) -> No
         "0502-context-subset",
         """
 id: hypothesis:0502-context-subset
-type: hypothesis
+kind: hypothesis
 title: Context subset hypothesis
 """,
         body="Context subset method validation needs a time-series benchmark.",
@@ -822,7 +822,7 @@ title: Context subset hypothesis
         "dream4-in-silico-network",
         """
 id: dataset:dream4-in-silico-network
-type: dataset
+kind: dataset
 title: DREAM4 in silico network
 dataset_class: pointer
 benchmark:
@@ -863,7 +863,7 @@ def test_context_fit_numeric_tokens_do_not_promote_direct_fit(tmp_path: Path) ->
         "0502-2021-benchmark",
         """
 id: question:0502-2021-benchmark
-type: question
+kind: question
 title: 2021 benchmark question
 """,
         body="Could a 2021 time-series benchmark test this assumption?",
@@ -873,7 +873,7 @@ title: 2021 benchmark question
         "dream4-2021",
         """
 id: dataset:dream4-2021
-type: dataset
+kind: dataset
 title: DREAM4 2021 challenge
 dataset_class: pointer
 benchmark:
@@ -912,7 +912,7 @@ def test_context_fit_totality_and_filter_or_semantics(tmp_path: Path) -> None:
         "0504-mixed-context",
         """
 id: hypothesis:0504-mixed-context
-type: hypothesis
+kind: hypothesis
 title: Mixed benchmark context
 """,
         body="Drug perturbation and time-series temporal mechanism evidence should be benchmarked.",
@@ -922,7 +922,7 @@ title: Mixed benchmark context
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -951,7 +951,7 @@ benchmark:
         "dream4-in-silico-network",
         """
 id: dataset:dream4-in-silico-network
-type: dataset
+kind: dataset
 title: DREAM4 in silico network
 dataset_class: pointer
 benchmark:
@@ -1039,7 +1039,7 @@ def test_context_fit_uses_dataset_metadata_not_public_row_only(tmp_path: Path) -
         "0503-hidden-source",
         """
 id: hypothesis:0503-hidden-source
-type: hypothesis
+kind: hypothesis
 title: Hidden source context
 """,
         body="Sci-plex perturbation response should not be benchmarked.",
@@ -1049,7 +1049,7 @@ title: Hidden source context
         "source-hidden",
         """
 id: dataset:source-hidden
-type: dataset
+kind: dataset
 title: Should not perturbation response benchmark
 dataset_class: deposit
 local_path: data/source-hidden
@@ -1091,7 +1091,7 @@ def test_context_fit_broad_terms_do_not_remove_raw_clinical_matching(tmp_path: P
         "0504-clinical",
         """
 id: hypothesis:0504-clinical
-type: hypothesis
+kind: hypothesis
 title: Clinical benchmark hypothesis
 """,
         body="Clinical validation needs a supported task.",
@@ -1101,7 +1101,7 @@ title: Clinical benchmark hypothesis
         "clinical-reference",
         """
 id: dataset:clinical-reference
-type: dataset
+kind: dataset
 title: Reference cohort
 dataset_class: deposit
 local_path: data/clinical-reference
@@ -1142,7 +1142,7 @@ def test_context_fit_broad_tokens_do_not_promote_direct_fit(tmp_path: Path) -> N
         "0509-broad-only",
         """
 id: hypothesis:0509-broad-only
-type: hypothesis
+kind: hypothesis
 title: Cancer genomics clinical model
 """,
         body="Cancer genomics clinical data model analysis needs evidence.",
@@ -1152,7 +1152,7 @@ title: Cancer genomics clinical model
         "broad-cancer",
         """
 id: dataset:broad-cancer
-type: dataset
+kind: dataset
 title: Cancer genomics clinical model
 dataset_class: deposit
 local_path: data/broad-cancer
@@ -1190,7 +1190,7 @@ def test_context_fit_blocked_fallback_without_context_is_generic(tmp_path: Path)
         "0510-unmapped",
         """
 id: hypothesis:0510-unmapped
-type: hypothesis
+kind: hypothesis
 title: Unmapped benchmark entity
 """,
         body="No specific benchmark facet appears here.",
@@ -1200,7 +1200,7 @@ title: Unmapped benchmark entity
         "blocked-mmrf",
         """
 id: dataset:blocked-mmrf
-type: dataset
+kind: dataset
 title: MMRF CoMMpass
 dataset_class: pointer
 benchmark:
@@ -1240,7 +1240,7 @@ def test_gaps_report_projects_context_fit_fields_for_entity_specific_candidate(t
         "0600-sciplex-gap",
         """
 id: hypothesis:0600-sciplex-gap
-type: hypothesis
+kind: hypothesis
 title: Sci-Plex benchmark gap
 """,
         body="Sci-plex drug compound knockout screen should be benchmarked.",
@@ -1250,7 +1250,7 @@ title: Sci-Plex benchmark gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1301,7 +1301,7 @@ def test_gaps_report_context_fit_matches_benchmark_tests_projection(tmp_path: Pa
         "0601-sciplex-gap",
         """
 id: hypothesis:0601-sciplex-gap
-type: hypothesis
+kind: hypothesis
 title: Sci-Plex consistency gap
 """,
         body="Sci-plex drug compound screen should be tested.",
@@ -1311,7 +1311,7 @@ title: Sci-Plex consistency gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1370,7 +1370,7 @@ def test_gaps_report_blocked_fallback_without_context_is_generic(tmp_path: Path)
         "0602-unmapped",
         """
 id: hypothesis:0602-unmapped
-type: hypothesis
+kind: hypothesis
 title: Unmapped benchmark entity
 """,
         body="No specific benchmark facet appears here.",
@@ -1380,7 +1380,7 @@ title: Unmapped benchmark entity
         "blocked-mmrf",
         """
 id: dataset:blocked-mmrf
-type: dataset
+kind: dataset
 title: MMRF CoMMpass
 dataset_class: pointer
 benchmark:
@@ -1421,7 +1421,7 @@ def test_gaps_report_filters_context_fit_and_recomputes_candidate_mode(tmp_path:
         "0603-direct",
         """
 id: hypothesis:0603-direct
-type: hypothesis
+kind: hypothesis
 title: Direct Sci-Plex gap
 """,
         body="Sci-plex drug compound screen should be benchmarked.",
@@ -1432,7 +1432,7 @@ title: Direct Sci-Plex gap
         "0604-generic",
         """
 id: hypothesis:0604-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback gap
 """,
         body="No specific benchmark facet appears here.",
@@ -1442,7 +1442,7 @@ title: Generic fallback gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1486,7 +1486,7 @@ def test_gaps_report_context_fit_filter_accepts_or_values(tmp_path: Path) -> Non
         "0605-direct",
         """
 id: hypothesis:0605-direct
-type: hypothesis
+kind: hypothesis
 title: Direct Sci-Plex gap
 """,
         body="Sci-plex drug compound screen should be benchmarked.",
@@ -1497,7 +1497,7 @@ title: Direct Sci-Plex gap
         "0606-generic",
         """
 id: hypothesis:0606-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback gap
 """,
         body="No specific benchmark facet appears here.",
@@ -1507,7 +1507,7 @@ title: Generic fallback gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1560,7 +1560,7 @@ def test_gaps_report_calibration_candidate_evidence_includes_context_fit(tmp_pat
         "0607-sciplex-calibration",
         """
 id: hypothesis:0607-sciplex-calibration
-type: hypothesis
+kind: hypothesis
 title: Sci-Plex calibration gap
 """,
         body="Sci-plex drug compound screen should be benchmarked.",
@@ -1570,7 +1570,7 @@ title: Sci-Plex calibration gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1613,7 +1613,7 @@ def test_context_fit_domain_conflict_recognizes_split_natural_systems_project(tm
         "0505-ecosystem-validation",
         """
 id: hypothesis:0505-ecosystem-validation
-type: hypothesis
+kind: hypothesis
 title: Ecosystem validation hypothesis
 """,
         body="Clinical assessment should use a supported task.",
@@ -1623,7 +1623,7 @@ title: Ecosystem validation hypothesis
         "cancer-cohort",
         """
 id: dataset:cancer-cohort
-type: dataset
+kind: dataset
 title: Patient cohort
 dataset_class: deposit
 local_path: data/cancer-cohort
@@ -1662,7 +1662,7 @@ def test_benchmark_tests_report_marks_incomplete_tasks_draft_needed(tmp_path: Pa
         "0002-incomplete-task",
         """
 id: hypothesis:0002-incomplete-task
-type: hypothesis
+kind: hypothesis
 title: Incomplete perturbation task
 """,
         body="Drug perturbation should be validated.",
@@ -1672,7 +1672,7 @@ title: Incomplete perturbation task
         "incomplete-task",
         """
 id: dataset:incomplete-task
-type: dataset
+kind: dataset
 title: Incomplete Task
 dataset_class: deposit
 local_path: data/incomplete
@@ -1705,7 +1705,7 @@ def test_benchmark_tests_report_benchmark_filter_accepts_slug(tmp_path: Path) ->
         "0003-filter",
         """
 id: hypothesis:0003-filter
-type: hypothesis
+kind: hypothesis
 title: Perturbation filter
 """,
         body="Drug perturbation should shift response states.",
@@ -1715,7 +1715,7 @@ title: Perturbation filter
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1750,7 +1750,7 @@ def test_benchmark_tests_report_keeps_non_hint_declared_facets(tmp_path: Path) -
         "0004-related",
         """
 id: hypothesis:0004-related
-type: hypothesis
+kind: hypothesis
 title: Bulk expression model
 """,
         body="Expression model.",
@@ -1760,7 +1760,7 @@ title: Bulk expression model
         "bulk-expression",
         """
 id: dataset:bulk-expression
-type: dataset
+kind: dataset
 title: Bulk Expression
 dataset_class: deposit
 local_path: data/bulk
@@ -1797,7 +1797,7 @@ def test_benchmark_tests_report_rejects_display_only_facet_filter(tmp_path: Path
         "0005-related",
         """
 id: hypothesis:0005-related
-type: hypothesis
+kind: hypothesis
 title: Bulk expression model
 """,
         body="Expression model.",
@@ -1807,7 +1807,7 @@ title: Bulk expression model
         "bulk-expression",
         """
 id: dataset:bulk-expression
-type: dataset
+kind: dataset
 title: Bulk Expression
 dataset_class: deposit
 local_path: data/bulk
@@ -1846,7 +1846,7 @@ def test_benchmark_tests_report_extra_facets_must_be_declared_by_benchmark(tmp_p
         "bulk-expression",
         """
 id: dataset:bulk-expression
-type: dataset
+kind: dataset
 title: Bulk Expression
 dataset_class: deposit
 local_path: data/bulk
@@ -1873,7 +1873,7 @@ def test_benchmark_tests_report_includes_draft_needed_gap_candidates(tmp_path: P
         "0002-spatial",
         """
 id: hypothesis:0002-spatial
-type: hypothesis
+kind: hypothesis
 title: Region validation hypothesis
 """,
         body="Tumor microenvironment region structure needs validation.",
@@ -1883,7 +1883,7 @@ title: Region validation hypothesis
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -1920,7 +1920,7 @@ def test_benchmark_tests_report_filters_state_facet_and_benchmark(tmp_path: Path
         "0003-drug",
         """
 id: hypothesis:0003-drug
-type: hypothesis
+kind: hypothesis
 title: Drug response hypothesis
 """,
         body="Drug compound knockout screen should be tested.",
@@ -1930,7 +1930,7 @@ title: Drug response hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -1955,7 +1955,7 @@ benchmark:
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -1985,7 +1985,7 @@ def test_benchmark_tests_report_filters_gap_candidates_after_projection(tmp_path
         "0004-spatial",
         """
 id: hypothesis:0004-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial gap hypothesis
 """,
         body="Microenvironment region needs benchmark support.",
@@ -1995,7 +1995,7 @@ title: Spatial gap hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -2031,7 +2031,7 @@ def test_benchmark_tests_report_filters_source_and_readiness(tmp_path: Path) -> 
         "0005-triage",
         """
 id: hypothesis:0005-triage
-type: hypothesis
+kind: hypothesis
 title: Triage hypothesis
 """,
         body="Drug perturbation should shift response states. Microenvironment region needs benchmark support.",
@@ -2041,7 +2041,7 @@ title: Triage hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -2067,7 +2067,7 @@ benchmark:
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -2096,7 +2096,7 @@ def test_benchmark_tests_report_sorts_by_state_source_readiness_before_score(tmp
         "0042-spatial",
         """
 id: hypothesis:0042-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial perturbation hypothesis
 """,
         body="Spatial perturbation response should be benchmarked.",
@@ -2107,7 +2107,7 @@ title: Spatial perturbation hypothesis
         "0043-generic",
         """
 id: hypothesis:0043-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -2117,7 +2117,7 @@ title: Generic fallback benchmark gap
         "matched-metadata",
         """
 id: dataset:matched-metadata
-type: dataset
+kind: dataset
 title: Matched Metadata
 dataset_class: pointer
 benchmark:
@@ -2141,7 +2141,7 @@ benchmark:
         "matched-runnable",
         """
 id: dataset:matched-runnable
-type: dataset
+kind: dataset
 title: Matched Runnable
 dataset_class: deposit
 local_path: data/matched-runnable
@@ -2166,7 +2166,7 @@ benchmark:
         "fallback-high-score",
         """
 id: dataset:fallback-high-score
-type: dataset
+kind: dataset
 title: Fallback High Score
 dataset_class: deposit
 local_path: data/fallback-high-score
@@ -2208,7 +2208,7 @@ def test_benchmark_tests_report_summary_counts_sources_and_fallback_ratio(tmp_pa
         "0043-generic",
         """
 id: hypothesis:0043-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -2218,7 +2218,7 @@ title: Generic benchmark gap
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic Benchmark
 dataset_class: deposit
 local_path: data/generic
@@ -2259,7 +2259,7 @@ def test_benchmark_tests_report_excludes_fallback_rows(tmp_path: Path) -> None:
         "0006-spatial",
         """
 id: hypothesis:0006-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial fallback hypothesis
 """,
         body="Microenvironment region needs benchmark support.",
@@ -2269,7 +2269,7 @@ title: Spatial fallback hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -2307,7 +2307,7 @@ def test_benchmark_tests_report_does_not_project_gap_current_matches_as_rows(tmp
         "0004-weak",
         """
 id: hypothesis:0004-weak
-type: hypothesis
+kind: hypothesis
 title: Weak spatial hypothesis
 """,
         body="Spatial hypothesis.",
@@ -2317,7 +2317,7 @@ title: Weak spatial hypothesis
         "atlas",
         """
 id: dataset:atlas
-type: dataset
+kind: dataset
 title: Atlas
 dataset_class: reference
 benchmark:
@@ -2434,7 +2434,7 @@ def test_benchmark_tests_report_readiness_labels_handle_special_states(tmp_path:
             slug,
             f"""
 id: dataset:{slug}
-type: dataset
+kind: dataset
 title: {slug}
 {access_block}
 benchmark:
@@ -2579,7 +2579,7 @@ def test_benchmark_test_triage_report_buckets_and_preserves_summary_fields(tmp_p
         "0100-perturbation",
         """
 id: hypothesis:0100-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response hypothesis
 """,
         body="Drug perturbation should shift response states.",
@@ -2590,7 +2590,7 @@ title: Perturbation response hypothesis
         "0101-spatial",
         """
 id: hypothesis:0101-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial validation hypothesis
 """,
         body="Microenvironment region structure needs validation.",
@@ -2600,7 +2600,7 @@ title: Spatial validation hypothesis
         "runnable-perturbation",
         """
 id: dataset:runnable-perturbation
-type: dataset
+kind: dataset
 title: Runnable Perturbation
 dataset_class: deposit
 local_path: data/runnable-perturbation
@@ -2625,7 +2625,7 @@ benchmark:
         "spatial-reference",
         """
 id: dataset:spatial-reference
-type: dataset
+kind: dataset
 title: Spatial Reference
 dataset_class: reference
 benchmark:
@@ -2681,7 +2681,7 @@ def test_benchmark_test_triage_report_preserves_filtered_row_order_and_fallback_
         "0102-generic",
         """
 id: hypothesis:0102-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -2691,7 +2691,7 @@ title: Generic benchmark gap
         "fallback-a",
         """
 id: dataset:fallback-a
-type: dataset
+kind: dataset
 title: Fallback A
 dataset_class: deposit
 local_path: data/fallback-a
@@ -2716,7 +2716,7 @@ benchmark:
         "fallback-b",
         """
 id: dataset:fallback-b
-type: dataset
+kind: dataset
 title: Fallback B
 dataset_class: deposit
 local_path: data/fallback-b
@@ -2785,7 +2785,7 @@ def test_benchmark_test_triage_sorts_with_context_fit_inside_bucket(tmp_path: Pa
         "0505-context-triage",
         """
 id: hypothesis:0505-context-triage
-type: hypothesis
+kind: hypothesis
 title: Context triage
 """,
         body="Sci-plex perturbation and temporal mechanism benchmarks should be considered.",
@@ -2795,7 +2795,7 @@ title: Context triage
         "assay-a",
         """
 id: dataset:assay-a
-type: dataset
+kind: dataset
 title: Assay A
 dataset_class: deposit
 local_path: data/assay-a
@@ -2823,7 +2823,7 @@ benchmark:
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -2877,7 +2877,7 @@ def test_benchmark_test_triage_fallback_diagnostics_roll_up_visible_fallback_row
             slug,
             f"""
 id: hypothesis:{slug}
-type: hypothesis
+kind: hypothesis
 title: {title}
 """,
             body=body,
@@ -2887,7 +2887,7 @@ title: {title}
         "supported-fallback-rollup",
         """
 id: dataset:supported-fallback-rollup
-type: dataset
+kind: dataset
 title: Supported Fallback Rollup
 dataset_class: deposit
 local_path: data/supported-fallback-rollup
@@ -2957,7 +2957,7 @@ def test_benchmark_test_triage_fallback_rollups_sort_and_cap_examples(tmp_path: 
             f"0110-generic-{index}",
             f"""
 id: hypothesis:0110-generic-{index}
-type: hypothesis
+kind: hypothesis
 title: Generic fallback {index}
 """,
             body=f"Recovery pattern {index} remains under-tested.",
@@ -2967,7 +2967,7 @@ title: Generic fallback {index}
         "fallback-small",
         """
 id: dataset:fallback-small
-type: dataset
+kind: dataset
 title: Fallback Small
 dataset_class: reference
 benchmark:
@@ -2995,7 +2995,7 @@ benchmark:
         "fallback-large",
         """
 id: dataset:fallback-large
-type: dataset
+kind: dataset
 title: Fallback Large
 dataset_class: deposit
 local_path: data/fallback-large
@@ -3103,7 +3103,7 @@ def test_benchmark_test_triage_fallback_diagnostics_count_supported_task_support
         "0102-supported-generic",
         """
 id: hypothesis:0102-supported-generic
-type: hypothesis
+kind: hypothesis
 title: Generic supported benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -3113,7 +3113,7 @@ title: Generic supported benchmark gap
         "supported-fallback",
         """
 id: dataset:supported-fallback
-type: dataset
+kind: dataset
 title: Supported Fallback
 dataset_class: deposit
 local_path: data/supported-fallback
@@ -3157,7 +3157,7 @@ def test_benchmark_test_triage_report_suppresses_blocked_support_fallback_by_def
         "0103-generic",
         """
 id: hypothesis:0103-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -3167,7 +3167,7 @@ title: Generic benchmark gap
         "mmrf-like",
         """
 id: dataset:mmrf-like
-type: dataset
+kind: dataset
 title: MMRF Like
 dataset_class: deposit
 local_path: data/mmrf-like
@@ -3253,7 +3253,7 @@ def test_benchmark_test_triage_report_include_blocked_fallback_restores_rows(tmp
         "0104-generic",
         """
 id: hypothesis:0104-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -3263,7 +3263,7 @@ title: Generic benchmark gap
         "blocked-fallback",
         """
 id: dataset:blocked-fallback
-type: dataset
+kind: dataset
 title: Blocked Fallback
 dataset_class: deposit
 local_path: data/blocked-fallback
@@ -3313,7 +3313,7 @@ def test_benchmark_test_triage_report_exclude_fallback_prevents_suppression(tmp_
         "0105-generic",
         """
 id: hypothesis:0105-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -3323,7 +3323,7 @@ title: Generic benchmark gap
         "excluded-fallback",
         """
 id: dataset:excluded-fallback
-type: dataset
+kind: dataset
 title: Excluded Fallback
 dataset_class: deposit
 local_path: data/excluded-fallback
@@ -3404,7 +3404,7 @@ def test_opportunity_report_matches_prefixed_shorthand_related_belief(tmp_path: 
         "0001-perturbation",
         """
 id: hypothesis:0001-perturbation
-type: hypothesis
+kind: hypothesis
 title: Response shift model
 status: active
 """,
@@ -3414,7 +3414,7 @@ status: active
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -3445,7 +3445,7 @@ def test_stoplist_blocks_generic_token_only_match(tmp_path: Path) -> None:
         "0001-model",
         """
 id: hypothesis:0001-model
-type: hypothesis
+kind: hypothesis
 title: Model response analysis
 status: active
 """,
@@ -3456,7 +3456,7 @@ status: active
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic
 benchmark:
   domains: [biology]
@@ -3482,7 +3482,7 @@ def test_stoplist_blocks_model_token_only_match(tmp_path: Path) -> None:
         "0001-model",
         """
 id: hypothesis:0001-model
-type: hypothesis
+kind: hypothesis
 title: Model hypothesis
 status: active
 """,
@@ -3493,7 +3493,7 @@ status: active
         "model-facet",
         """
 id: dataset:model-facet
-type: dataset
+kind: dataset
 title: Model Facet
 benchmark:
   domains: [biology]
@@ -3517,7 +3517,7 @@ def test_broad_domain_facet_is_not_scored_as_opportunity_match(tmp_path: Path) -
         "0001-biology",
         """
 id: hypothesis:0001-biology
-type: hypothesis
+kind: hypothesis
 title: Biology framing
 status: active
 """,
@@ -3528,7 +3528,7 @@ status: active
         "proteogenomics",
         """
 id: dataset:proteogenomics
-type: dataset
+kind: dataset
 title: Proteogenomics benchmark
 benchmark:
   domains: [biology]
@@ -3557,7 +3557,7 @@ def test_diversity_credit_requires_specific_match_signal(tmp_path: Path) -> None
         "0001-biology",
         """
 id: hypothesis:0001-biology
-type: hypothesis
+kind: hypothesis
 title: Biology framing
 status: active
 """,
@@ -3567,7 +3567,7 @@ status: active
         "spatial",
         """
 id: dataset:spatial
-type: dataset
+kind: dataset
 title: Spatial benchmark
 benchmark:
   domains: [biology]
@@ -3591,7 +3591,7 @@ def test_facets_only_rows_use_null_task_and_diversity_is_per_entity(tmp_path: Pa
         "0002-spatial",
         """
 id: hypothesis:0002-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial proteomics transfer
 status: active
 """,
@@ -3601,7 +3601,7 @@ status: active
         "atlas",
         """
 id: dataset:atlas
-type: dataset
+kind: dataset
 title: Spatial atlas
 benchmark:
   domains: [biology]
@@ -3617,7 +3617,7 @@ benchmark:
         "multi-task",
         """
 id: dataset:multi-task
-type: dataset
+kind: dataset
 title: Spatial proteomics tasks
 benchmark:
   domains: [biology]
@@ -3654,7 +3654,7 @@ def test_multi_task_rows_share_relative_score_when_first_match(tmp_path: Path) -
         "0002-spatial",
         """
 id: hypothesis:0002-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial proteomics transfer
 status: active
 """,
@@ -3664,7 +3664,7 @@ status: active
         "multi-task",
         """
 id: dataset:multi-task
-type: dataset
+kind: dataset
 title: Spatial proteomics tasks
 benchmark:
   domains: [biology]
@@ -3699,7 +3699,7 @@ def test_related_belief_id_match_sorts_above_token_only_match(tmp_path: Path) ->
         "0005-perturbation",
         """
 id: hypothesis:0005-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response
 status: active
 """,
@@ -3709,7 +3709,7 @@ status: active
         "token-only",
         """
 id: dataset:token-only
-type: dataset
+kind: dataset
 title: Token-only
 benchmark:
   domains: [biology]
@@ -3723,7 +3723,7 @@ benchmark:
         "id-linked",
         """
 id: dataset:id-linked
-type: dataset
+kind: dataset
 title: ID linked
 benchmark:
   domains: [biology]
@@ -3750,7 +3750,7 @@ def test_benchmark_opportunities_json_and_calibration_shape(tmp_path: Path) -> N
         "0001-perturbation",
         """
 id: hypothesis:0001-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response
 status: active
 """,
@@ -3761,7 +3761,7 @@ status: active
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 benchmark:
   domains: [biology]
@@ -3817,7 +3817,7 @@ def test_benchmark_opportunities_table_uses_candidate_language(tmp_path: Path) -
         "0001-spatial",
         """
 id: hypothesis:0001-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial transfer
 status: active
 """,
@@ -3827,7 +3827,7 @@ status: active
         "atlas",
         """
 id: dataset:atlas
-type: dataset
+kind: dataset
 title: Atlas
 benchmark:
   domains: [biology]
@@ -3859,7 +3859,7 @@ def test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows(tmp_
         "0001-static",
         """
 id: hypothesis:0001-static
-type: hypothesis
+kind: hypothesis
 title: Static spatial association
 status: active
 """,
@@ -3869,7 +3869,7 @@ status: active
         "local",
         """
 id: dataset:local
-type: dataset
+kind: dataset
 title: Local
 benchmark:
   domains: [biology]
@@ -3897,7 +3897,7 @@ def test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows
         "0001-static",
         """
 id: hypothesis:0001-static
-type: hypothesis
+kind: hypothesis
 title: Static spatial association
 status: active
 """,
@@ -3907,7 +3907,7 @@ status: active
         "local",
         """
 id: dataset:local
-type: dataset
+kind: dataset
 title: Local
 benchmark:
   domains: [biology]
@@ -3935,7 +3935,7 @@ def test_benchmark_gaps_cli_json_output(tmp_path: Path) -> None:
         "0006-proteomics",
         """
 id: hypothesis:0006-proteomics
-type: hypothesis
+kind: hypothesis
 title: Proteomics gap
 """,
         body="Proteomics coverage is missing.",
@@ -3957,7 +3957,7 @@ def test_benchmark_gaps_cli_reports_commons_notice(tmp_path: Path) -> None:
         "0010-proteomics",
         """
 id: hypothesis:0010-proteomics
-type: hypothesis
+kind: hypothesis
 title: Proteomics commons gap
 """,
         body="Proteomics coverage is missing.",
@@ -3978,7 +3978,7 @@ def test_benchmark_gaps_cli_table_empty_state(tmp_path: Path) -> None:
         "0007-covered",
         """
 id: hypothesis:0007-covered
-type: hypothesis
+kind: hypothesis
 title: Spatial covered
 """,
         body="Spatial transfer is covered.",
@@ -3988,7 +3988,7 @@ title: Spatial covered
         "spatial-covered",
         """
 id: dataset:spatial-covered
-type: dataset
+kind: dataset
 title: Spatial Covered
 dataset_class: reference
 benchmark:
@@ -4023,7 +4023,7 @@ def test_benchmark_gaps_cli_facet_filter(tmp_path: Path) -> None:
         "0008-proteomics",
         """
 id: hypothesis:0008-proteomics
-type: hypothesis
+kind: hypothesis
 title: Proteomics gap
 """,
         body="Proteomics coverage is missing.",
@@ -4034,7 +4034,7 @@ title: Proteomics gap
         "0009-temporal",
         """
 id: hypothesis:0009-temporal
-type: hypothesis
+kind: hypothesis
 title: Time-series gap
 """,
         body="Time-series coverage is missing.",
@@ -4054,7 +4054,7 @@ def test_benchmark_gaps_cli_facet_filter_uses_report_normalization(tmp_path: Pat
         "0010-perturbation",
         """
 id: hypothesis:0010-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation gap
 """,
         body="Perturbation coverage is missing.",
@@ -4077,7 +4077,7 @@ def test_gaps_report_calibration_payload_explains_gap_and_candidates(tmp_path: P
         "0021-calibration",
         """
 id: hypothesis:0021-calibration
-type: hypothesis
+kind: hypothesis
 title: Drug screen summary gap
 """,
         body="Summary response needs drug compound screening evidence.",
@@ -4087,7 +4087,7 @@ title: Drug screen summary gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology, cancer]
@@ -4132,7 +4132,7 @@ def test_benchmark_gaps_cli_calibration_report_json(tmp_path: Path) -> None:
         "0022-cli-calibration",
         """
 id: hypothesis:0022-cli-calibration
-type: hypothesis
+kind: hypothesis
 title: Perturbation CLI gap
 """,
         body="Perturbation evidence is needed.",
@@ -4153,7 +4153,7 @@ def test_benchmark_gaps_cli_calibration_summary_json(tmp_path: Path) -> None:
         "0029-cli-summary",
         """
 id: hypothesis:0029-cli-summary
-type: hypothesis
+kind: hypothesis
 title: Drug screen CLI summary gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -4163,7 +4163,7 @@ title: Drug screen CLI summary gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -4191,7 +4191,7 @@ def test_benchmark_gaps_cli_calibration_summary_table(tmp_path: Path) -> None:
         "0030-cli-summary-table",
         """
 id: hypothesis:0030-cli-summary-table
-type: hypothesis
+kind: hypothesis
 title: Drug screen CLI summary table gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -4226,7 +4226,7 @@ def test_gap_hint_facets_are_the_facet_filter_valid_set(tmp_path: Path) -> None:
         "0011-single-cell",
         """
 id: hypothesis:0011-single-cell
-type: hypothesis
+kind: hypothesis
 title: Single-cell longitudinal benchmark gap
 """,
         body="Single-cell longitudinal data would test the model.",
@@ -4246,7 +4246,7 @@ def test_broad_dataset_and_entity_tokens_do_not_create_opportunity_matches(tmp_p
         "0012-broad",
         """
 id: hypothesis:0012-broad
-type: hypothesis
+kind: hypothesis
 title: Cancer hypothesis summary
 status: active
 """,
@@ -4257,7 +4257,7 @@ status: active
         "broad",
         """
 id: dataset:broad
-type: dataset
+kind: dataset
 title: Broad Dataset
 benchmark:
   domains: [biology, cancer]
@@ -4291,7 +4291,7 @@ def test_gap_report_uses_shared_opportunity_analysis_for_entity_filter(tmp_path:
         "0013-target",
         """
 id: hypothesis:0013-target
-type: hypothesis
+kind: hypothesis
 title: Target perturbation benchmark gap
 """,
         body="Perturbation benchmark coverage is missing.",
@@ -4302,7 +4302,7 @@ title: Target perturbation benchmark gap
         "0014-other",
         """
 id: hypothesis:0014-other
-type: hypothesis
+kind: hypothesis
 title: Other spatial benchmark gap
 """,
         body="Spatial benchmark coverage is missing.",
@@ -4325,7 +4325,7 @@ def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_pa
         "0001-unmapped",
         """
 id: hypothesis:0001-unmapped
-type: hypothesis
+kind: hypothesis
 title: Homeostatic recovery has no benchmark yet
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -4335,7 +4335,7 @@ title: Homeostatic recovery has no benchmark yet
         "atlas",
         """
 id: dataset:atlas
-type: dataset
+kind: dataset
 title: Atlas Benchmark
 dataset_class: reference
 benchmark:
@@ -4401,7 +4401,7 @@ def test_gaps_report_infers_suggested_facets_for_uncovered_entity(tmp_path: Path
         "0015-longitudinal",
         """
 id: hypothesis:0015-longitudinal
-type: hypothesis
+kind: hypothesis
 title: Dynamic single-cell proteomics gap
 """,
         body="Longitudinal perturbation trajectories require proteomics and single-cell data.",
@@ -4429,7 +4429,7 @@ def test_gaps_report_facet_filter_uses_inferred_hints(tmp_path: Path) -> None:
         "0016-single-cell",
         """
 id: hypothesis:0016-single-cell
-type: hypothesis
+kind: hypothesis
 title: Single-cell benchmark gap
 """,
         body="Single-cell assays are needed.",
@@ -4440,7 +4440,7 @@ title: Single-cell benchmark gap
         "0017-proteomics",
         """
 id: hypothesis:0017-proteomics
-type: hypothesis
+kind: hypothesis
 title: Proteomics benchmark gap
 """,
         body="Proteomics assays are needed.",
@@ -4460,7 +4460,7 @@ def test_gaps_report_cross_context_hint_requires_phrase(tmp_path: Path) -> None:
         "0020-cross-context",
         """
 id: hypothesis:0020-cross-context
-type: hypothesis
+kind: hypothesis
 title: Cross context benchmark gap
 """,
         body="Cross context evidence is needed.",
@@ -4471,7 +4471,7 @@ title: Cross context benchmark gap
         "0021-validation-only",
         """
 id: hypothesis:0021-validation-only
-type: hypothesis
+kind: hypothesis
 title: Validation benchmark gap
 """,
         body="Validation evidence is needed.",
@@ -4491,7 +4491,7 @@ def test_gaps_report_projects_existing_coverage_gaps_as_missing_facet(tmp_path: 
         "0002-spatial-proteomics",
         """
 id: hypothesis:0002-spatial-proteomics
-type: hypothesis
+kind: hypothesis
 title: Spatial proteomics transfer
 """,
         body="Spatial proteomics transfer should generalize.",
@@ -4501,7 +4501,7 @@ title: Spatial proteomics transfer
         "spatial",
         """
 id: dataset:spatial
-type: dataset
+kind: dataset
 title: Spatial Atlas
 dataset_class: reference
 benchmark:
@@ -4527,7 +4527,7 @@ benchmark:
         "unrelated",
         """
 id: dataset:unrelated
-type: dataset
+kind: dataset
 title: Unrelated Benchmark
 dataset_class: reference
 benchmark:
@@ -4568,7 +4568,7 @@ def test_gaps_report_prioritizes_weak_matches_over_missing_facets(tmp_path: Path
         "0002-spatial-proteomics",
         """
 id: hypothesis:0002-spatial-proteomics
-type: hypothesis
+kind: hypothesis
 title: Spatial proteomics transfer
 """,
         body="Spatial proteomics transfer should generalize.",
@@ -4578,7 +4578,7 @@ title: Spatial proteomics transfer
         "spatial",
         """
 id: dataset:spatial
-type: dataset
+kind: dataset
 title: Spatial Atlas
 dataset_class: reference
 benchmark:
@@ -4615,7 +4615,7 @@ def test_gaps_report_prefers_taskless_weak_over_missing_facet(tmp_path: Path) ->
         "0003-taskless-spatial-proteomics",
         """
 id: hypothesis:0003-taskless-spatial-proteomics
-type: hypothesis
+kind: hypothesis
 title: Spatial proteomics taskless coverage
 """,
         body="Spatial proteomics transfer remains under-tested.",
@@ -4625,7 +4625,7 @@ title: Spatial proteomics taskless coverage
         "spatial-facets",
         """
 id: dataset:spatial-facets
-type: dataset
+kind: dataset
 title: Spatial Facets
 dataset_class: reference
 benchmark:
@@ -4642,7 +4642,7 @@ benchmark:
         "unrelated-task",
         """
 id: dataset:unrelated-task
-type: dataset
+kind: dataset
 title: Unrelated Task
 dataset_class: reference
 benchmark:
@@ -4689,7 +4689,7 @@ def test_gaps_report_filters_by_high_value_facet(tmp_path: Path) -> None:
         "0004-temporal",
         """
 id: hypothesis:0004-temporal
-type: hypothesis
+kind: hypothesis
 title: Time-series missing gap
 """,
         body="Time-series dynamics remain untested.",
@@ -4700,7 +4700,7 @@ title: Time-series missing gap
         "0005-proteomics",
         """
 id: hypothesis:0005-proteomics
-type: hypothesis
+kind: hypothesis
 title: Proteomics missing gap
 """,
         body="Proteomics transfer remains untested.",
@@ -4722,7 +4722,7 @@ def test_gaps_report_candidates_are_entity_specific_near_misses(tmp_path: Path) 
         "0018-perturbation",
         """
 id: hypothesis:0018-perturbation
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -4733,7 +4733,7 @@ title: Drug screen benchmark gap
         "0019-proteomics",
         """
 id: hypothesis:0019-proteomics
-type: hypothesis
+kind: hypothesis
 title: Protein abundance benchmark gap
 """,
         body="Phosphoproteomic protein abundance should be tested.",
@@ -4743,7 +4743,7 @@ title: Protein abundance benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -4766,7 +4766,7 @@ benchmark:
         "cptac",
         """
 id: dataset:cptac
-type: dataset
+kind: dataset
 title: CPTAC
 benchmark:
   domains: [biology]
@@ -4807,7 +4807,7 @@ def test_gaps_report_evidence_report_explains_fallback_only_unmapped_terms(tmp_p
         "0035-organoid",
         """
 id: hypothesis:0035-organoid
-type: hypothesis
+kind: hypothesis
 title: Organoid therapy benchmark gap
 """,
         body="Organoid therapy clone validation should be tested.",
@@ -4817,7 +4817,7 @@ title: Organoid therapy benchmark gap
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic benchmark
 benchmark:
   domains: [biology]
@@ -4864,7 +4864,7 @@ def test_gaps_report_evidence_report_categorizes_unmapped_terms_without_redefini
         "0044-benchmark-context",
         """
 id: hypothesis:0044-benchmark-context
-type: hypothesis
+kind: hypothesis
 title: cBioPortal benchmark context
 """,
         body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
@@ -4874,7 +4874,7 @@ title: cBioPortal benchmark context
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic Benchmark
 benchmark:
   domains: [biology]
@@ -4922,7 +4922,7 @@ def test_hint_candidates_report_projects_evidence_categories_and_reason_notes(tm
             f"005{index}-alpha",
             f"""
 id: hypothesis:005{index}-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic lesion model {index}
 """,
             body="Cytogenetic lesion mutation evidence should be benchmarked against project catalog models.",
@@ -4932,7 +4932,7 @@ title: Cytogenetic lesion model {index}
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic Benchmark
 benchmark:
   domains: [biology]
@@ -4989,7 +4989,7 @@ def test_hint_candidates_report_filters_min_count_within_capped_evidence_rows(tm
             f"006{index}-alpha",
             f"""
 id: hypothesis:006{index}-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic signal {index}
 """,
             body="Cytogenetic lesion evidence should be reviewed.",
@@ -5000,7 +5000,7 @@ title: Cytogenetic signal {index}
         "0069-beta",
         """
 id: hypothesis:0069-beta
-type: hypothesis
+kind: hypothesis
 title: Rare signal
 """,
         body="Epigenetic marker evidence should be reviewed.",
@@ -5026,7 +5026,7 @@ def test_hint_candidates_report_does_not_leak_existing_hints_from_project_local_
         "0070-local",
         """
 id: hypothesis:0070-local
-type: hypothesis
+kind: hypothesis
 title: Local proteomics term
 """,
         body="Unmapped cytogenetic evidence should be reviewed.",
@@ -5078,7 +5078,7 @@ def test_hint_candidates_report_routes_generic_terms_to_workflow_category(tmp_pa
         "0001-generic-prose",
         """
 id: hypothesis:0001-generic-prose
-type: hypothesis
+kind: hypothesis
 title: Generic prose
 """,
         body="All our organizing conjecture goes beyond shared structure.",
@@ -5110,7 +5110,7 @@ def test_hint_candidates_report_routes_report_prose_terms_to_workflow_category(t
         "0080-report-prose",
         """
 id: hypothesis:0080-report-prose
-type: hypothesis
+kind: hypothesis
 title: Report prose
 """,
         body=(
@@ -5152,7 +5152,7 @@ def test_hint_candidates_report_classifies_project_identity_from_science_yaml(tm
         "0001-expression-signal",
         """
 id: hypothesis:0001-expression-signal
-type: hypothesis
+kind: hypothesis
 title: Expression signal
 """,
         body="MM30 multiple myeloma expression signal.",
@@ -5179,7 +5179,7 @@ def test_hint_candidates_report_ignores_science_yaml_tags_for_project_identity(t
         "0001-tag-check",
         """
 id: hypothesis:0001-tag-check
-type: hypothesis
+kind: hypothesis
 title: Tag check
 """,
         body="tagalias expression signal.",
@@ -5200,7 +5200,7 @@ def test_hint_candidates_report_classifies_split_entity_id_stems_as_project_loca
         "0014-pais-small-fiber-structural-lesion",
         """
 id: proposition:0014-pais-small-fiber-structural-lesion
-type: proposition
+kind: proposition
 title: PAIS small fiber lesion
 """,
         body="PAIS small fiber lesion.",
@@ -5225,7 +5225,7 @@ def test_hint_candidates_report_missing_science_yaml_keeps_existing_project_loca
         "0001-project-alpha-check",
         """
 id: question:0001-project-alpha-check
-type: question
+kind: question
 title: Project alpha check
 """,
         body="Project alpha signal.",
@@ -5301,7 +5301,7 @@ def test_project_local_tokens_ignore_same_as_and_source_refs(tmp_path: Path) -> 
         "0045-local-term",
         """
 id: hypothesis:0045-local-term
-type: hypothesis
+kind: hypothesis
 title: Local term hypothesis
 same_as:
   - externalalias
@@ -5328,7 +5328,7 @@ def test_gaps_report_evidence_report_distinguishes_entity_specific_candidates(tm
         "0036-drug",
         """
 id: hypothesis:0036-drug
-type: hypothesis
+kind: hypothesis
 title: Drug benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -5338,7 +5338,7 @@ title: Drug benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -5375,7 +5375,7 @@ def test_gaps_report_evidence_report_filters_generic_unmapped_terms(tmp_path: Pa
         "0037-generic",
         """
 id: hypothesis:0037-generic
-type: hypothesis
+kind: hypothesis
 title: Does the therapy claim need evidence
 """,
         body="Notes: the therapy and cohort question should not be tested across generic prose.",
@@ -5398,7 +5398,7 @@ def test_gaps_report_maps_clinical_outcome_terms_to_entity_specific_candidates(t
         "0038-survival",
         """
 id: hypothesis:0038-survival
-type: hypothesis
+kind: hypothesis
 title: Survival and relapse benchmark gap
 """,
         body="Prognostic survival relapse progression evidence should be tested.",
@@ -5408,7 +5408,7 @@ title: Survival and relapse benchmark gap
         "clinical",
         """
 id: dataset:clinical
-type: dataset
+kind: dataset
 title: Clinical outcome benchmark
 benchmark:
   domains: [biology]
@@ -5447,7 +5447,7 @@ def test_gaps_report_omits_generic_candidates_when_entity_specific_candidates_ex
         "0025-drug-screen",
         """
 id: hypothesis:0025-drug-screen
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -5457,7 +5457,7 @@ title: Drug screen benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -5480,7 +5480,7 @@ benchmark:
         "generic-proteomics",
         """
 id: dataset:generic-proteomics
-type: dataset
+kind: dataset
 title: Generic Proteomics
 benchmark:
   domains: [biology]
@@ -5516,7 +5516,7 @@ def test_gaps_report_uses_labeled_high_baseline_fallback_when_no_entity_specific
         "0026-generic-gap",
         """
 id: hypothesis:0026-generic-gap
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -5527,7 +5527,7 @@ title: Generic benchmark gap
             slug,
             f"""
 id: dataset:{slug}
-type: dataset
+kind: dataset
 title: Generic {slug.title()}
 benchmark:
   domains: [biology]
@@ -5567,7 +5567,7 @@ def test_gaps_report_rotates_equal_quality_fallbacks_across_entities(tmp_path: P
             f"10{index}-generic-gap",
             f"""
 id: hypothesis:10{index}-generic-gap
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap {index}
 """,
             body="Homeostatic recovery remains under-tested.",
@@ -5578,7 +5578,7 @@ title: Generic benchmark gap {index}
             slug,
             f"""
 id: dataset:{slug}
-type: dataset
+kind: dataset
 title: Generic {slug.title()}
 benchmark:
   domains: [biology]
@@ -5621,7 +5621,7 @@ def test_gaps_report_fallback_rotation_preserves_quality_tiers(tmp_path: Path) -
             f"20{index}-generic-gap",
             f"""
 id: hypothesis:20{index}-generic-gap
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap {index}
 """,
             body="Homeostatic recovery remains under-tested.",
@@ -5631,7 +5631,7 @@ title: Generic benchmark gap {index}
         "highest",
         """
 id: dataset:highest
-type: dataset
+kind: dataset
 title: Highest Quality
 benchmark:
   domains: [biology]
@@ -5656,7 +5656,7 @@ benchmark:
             slug,
             f"""
 id: dataset:{slug}
-type: dataset
+kind: dataset
 title: Generic {slug.title()}
 benchmark:
   domains: [biology]
@@ -5689,7 +5689,7 @@ def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
         "0023-compat",
         """
 id: hypothesis:0023-compat
-type: hypothesis
+kind: hypothesis
 title: Protein abundance compatibility gap
 """,
         body="Phosphoproteomic protein abundance is needed.",
@@ -5699,7 +5699,7 @@ title: Protein abundance compatibility gap
         "cptac",
         """
 id: dataset:cptac
-type: dataset
+kind: dataset
 title: CPTAC
 benchmark:
   domains: [biology]
@@ -5730,7 +5730,7 @@ def test_benchmark_gaps_cli_calibration_table(tmp_path: Path) -> None:
         "0024-table",
         """
 id: hypothesis:0024-table
-type: hypothesis
+kind: hypothesis
 title: Perturbation table gap
 """,
         body="Perturbation evidence is needed.",
@@ -5751,7 +5751,7 @@ def test_candidate_score_does_not_double_count_task_readiness_in_baseline_qualit
         "task-ready-only",
         """
 id: dataset:task-ready-only
-type: dataset
+kind: dataset
 title: Task Ready Only
 benchmark:
   domains: [biology]
@@ -5789,7 +5789,7 @@ def test_candidate_score_caps_missing_facet_overlap(tmp_path: Path) -> None:
         "broad-gap",
         """
 id: dataset:broad-gap
-type: dataset
+kind: dataset
 title: Broad Gap
 benchmark:
   domains: [biology]
@@ -5827,7 +5827,7 @@ def test_gap_calibration_summary_projects_gap_report_metrics(tmp_path: Path) -> 
         "0027-drug-screen",
         """
 id: hypothesis:0027-drug-screen
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -5838,7 +5838,7 @@ title: Drug screen benchmark gap
         "0028-generic",
         """
 id: hypothesis:0028-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -5848,7 +5848,7 @@ title: Generic benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -5871,7 +5871,7 @@ benchmark:
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic Benchmark
 benchmark:
   domains: [biology]
@@ -5932,7 +5932,7 @@ def test_gaps_report_summary_includes_actionability_candidate_counts(tmp_path: P
         "0040-drug-screen",
         """
 id: hypothesis:0040-drug-screen
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -5943,7 +5943,7 @@ title: Drug screen benchmark gap
         "0041-generic",
         """
 id: hypothesis:0041-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -5953,7 +5953,7 @@ title: Generic benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -5976,7 +5976,7 @@ benchmark:
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic Benchmark
 benchmark:
   domains: [biology]
@@ -6029,7 +6029,7 @@ def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> N
         "0001-drug",
         """
 id: hypothesis:0001-drug
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -6039,7 +6039,7 @@ title: Drug screen benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -6054,7 +6054,7 @@ benchmark:
         "0002-temporal",
         """
 id: hypothesis:0002-temporal
-type: hypothesis
+kind: hypothesis
 title: Temporal benchmark gap
 """,
         body="Temporal dynamic measurements should be tested.",
@@ -6088,7 +6088,7 @@ def test_gap_calibration_batch_preserves_commons_notices(tmp_path: Path, monkeyp
         "0001-drug",
         """
 id: hypothesis:0001-drug
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -6115,7 +6115,7 @@ def test_gap_calibration_batch_aggregates_fallback_diagnostics(tmp_path: Path) -
             f"0001-{label}",
             f"""
 id: hypothesis:0001-{label}
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap {label}
 """,
             body="Homeostatic recovery remains under-tested.",
@@ -6125,7 +6125,7 @@ title: Generic benchmark gap {label}
             "ready",
             """
 id: dataset:ready
-type: dataset
+kind: dataset
 title: Ready Benchmark
 benchmark:
   domains: [biology]

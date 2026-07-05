@@ -1,6 +1,6 @@
 ---
 id: "evidence-line:{{slug}}"
-type: "evidence-line"
+kind: "evidence-line"
 title: "{{title}}"
 status: "{{status}}"
 stance: "supports"
@@ -17,7 +17,7 @@ updated: "{{updated}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "evidence-line" }
+    kind: { default: "evidence-line" }
     title: { from: title }
     status: { from: status }
     stance: { default: "supports" }

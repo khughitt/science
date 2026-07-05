@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+paper/1.0"
 id: "paper:Adams2025"
-type: "paper"
+kind: "paper"
 title: "A representative paper about homology-aware evaluation"
 version: "1.0.0"
 status: "active"

@@ -1,6 +1,6 @@
 ---
 id: "synthesis:{{nn}}-{{slug}}"    # synthesis:<hyp-id> | synthesis:rollup | synthesis:emergent-threads
-type: "synthesis"
+kind: "synthesis"
 title: "{{title}}"
 status: "active"
 report_kind: "hypothesis-synthesis"   # hypothesis-synthesis | synthesis-rollup | emergent-threads | cluster-digest
@@ -12,7 +12,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "synthesis" }
+    kind: { default: "synthesis" }
     title: { from: title }
     status: { from: status }
     report_kind: { default: "hypothesis-synthesis" }

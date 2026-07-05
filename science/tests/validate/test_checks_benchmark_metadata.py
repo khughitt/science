@@ -17,7 +17,7 @@ def _load_checks_with_benchmark_metadata_fresh() -> None:
 
 def _ds(**kw) -> dict:
     base = {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:x",
         "_path": "entities/datasets/x.md",
         "dataset_class": "deposit",
@@ -43,7 +43,7 @@ def test_dataset_without_benchmark_is_ignored() -> None:
 
 
 def test_non_dataset_with_benchmark_is_ignored() -> None:
-    assert _rules([_ds(type="paper", benchmark={"benchmark_kinds": ["static-association"]})]) == []
+    assert _rules([_ds(kind="paper", benchmark={"benchmark_kinds": ["static-association"]})]) == []
 
 
 def test_non_mapping_benchmark_warns() -> None:
@@ -545,7 +545,7 @@ def test_runner_surfaces_benchmark_warning_through_full_profile(tmp_path: Path) 
     (ds_dir / "x.md").write_text(
         "---\n"
         "id: dataset:x\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: X\n"
         "status: active\n"
         "origin: external\n"

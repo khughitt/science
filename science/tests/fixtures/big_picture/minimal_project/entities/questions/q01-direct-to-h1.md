@@ -1,6 +1,6 @@
 ---
 id: "question:q01-direct-to-h1"
-type: "question"
+kind: "question"
 hypothesis: "hypothesis:h1-alpha"
 related:
   - "topic:t01-covered"

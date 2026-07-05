@@ -29,7 +29,7 @@ Science has two inquiry-related source surfaces:
 | Surface | Role |
 |---|---|
 | `entities/inquiries/<slug>.md` | A normal inquiry entity for prose-first records, legacy projects, and human-readable scoped work notes. |
-| `entities/patches/<slug>.md` with `type: patch-definition` and `patch_type: inquiry` | The source-first graph inquiry profile compiled by `science graph build`. |
+| `entities/patches/<slug>.md` with `kind: patch-definition` and `patch_type: inquiry` | The source-first graph inquiry profile compiled by `science graph build`. |
 
 The queryable inquiry graph is derived state. Do not hand-edit
 `knowledge/graph.trig` to change an inquiry. Edit the source file, then run

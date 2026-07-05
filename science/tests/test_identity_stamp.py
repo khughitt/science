@@ -97,7 +97,7 @@ def test_write_per_output_datapackages_stamps_output_identity(tmp_path: Path) ->
     workflow_fm = yaml.safe_dump(
         {
             "id": "workflow:wf",
-            "type": "workflow",
+            "kind": "workflow",
             "title": "WF",
             "outputs": [
                 {
@@ -115,7 +115,7 @@ def test_write_per_output_datapackages_stamps_output_identity(tmp_path: Path) ->
     run_fm = yaml.safe_dump(
         {
             "id": "workflow-run:wf-r1",
-            "type": "workflow-run",
+            "kind": "workflow-run",
             "title": "WF r1",
             "workflow": "workflow:wf",
         },

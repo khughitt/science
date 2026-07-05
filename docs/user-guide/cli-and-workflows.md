@@ -168,7 +168,6 @@ lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 Migration tools are useful when curating older projects, but they are not the
 normal path for new work. Examples include:
 
-- `science entities migrate`
 - `science entities triage-aggregate`
 - `science data-package ...`
 - `science graph migrate-addresses`

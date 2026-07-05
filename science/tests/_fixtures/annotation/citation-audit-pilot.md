@@ -1,6 +1,6 @@
 ---
 id: "interpretation:citation-audit-pilot"
-type: "interpretation"
+kind: "interpretation"
 ---
 
 ## Background

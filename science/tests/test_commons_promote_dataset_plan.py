@@ -672,7 +672,7 @@ def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypat
 
     assert fm["schema_profile"] == "science-entity-base/1.0+dataset/1.0"
     assert fm["id"] == "dataset:fixture-ds"
-    assert fm["type"] == "dataset"
+    assert fm["kind"] == "dataset"
     assert fm["title"] == "Fixture dataset"
     assert fm["version"] == "1.0.0"
     assert "created" in fm
@@ -731,7 +731,7 @@ def test_dataset_dropped_fields_records_unrouted_keys():
 
     raw_fm = {
         "id": "dataset:x",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0",
         "version": "1.0.0",
         "title": "T",

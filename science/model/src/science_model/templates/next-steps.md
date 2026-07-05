@@ -1,6 +1,6 @@
 ---
 id: "meta:[NNNN-]next-steps-YYYY-MM-DD"  # under layout_version 3 include the entities/meta NNNN- prefix
-type: "meta"
+kind: "meta"
 title: "Next Steps — YYYY-MM-DD"
 status: "active"
 created: "YYYY-MM-DD"

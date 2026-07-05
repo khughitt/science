@@ -1,6 +1,6 @@
 ---
 id: "talk:{{citekey}}"
-type: "talk"
+kind: "talk"
 title: "{{title}}"
 status: "active"
 ontology_terms: []
@@ -11,7 +11,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "talk" }
+    kind: { default: "talk" }
     title: { from: title }
     status: { from: status }
     ontology_terms: { default: [] }

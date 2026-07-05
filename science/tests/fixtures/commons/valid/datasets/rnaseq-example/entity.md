@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0"
 id: "dataset:rnaseq-example"
-type: "dataset"
+kind: "dataset"
 title: "Example bulk RNA-seq dataset"
 version: "1.0.0"
 status: "active"

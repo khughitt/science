@@ -56,7 +56,7 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
     for fm in datasets:
         # `kind` is canonical; `type` is the authored alias — accept either.
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")

@@ -22,7 +22,7 @@ def _setup_project_with_dataset(tmp_path: Path) -> Path:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:foo\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Foo\n"
         "status: active\n"
         "origin: external\n"

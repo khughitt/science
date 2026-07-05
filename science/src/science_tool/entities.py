@@ -185,7 +185,7 @@ _SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND
 _DEFAULT_STATUS: dict[str, str] = {ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status}
 _STATUS_VALUES: dict[str, frozenset[str]] = {ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses}
 _EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset(
-    {"id", "type", "title", "status", "related", "source_refs", "created", "updated"}
+    {"id", "kind", "title", "status", "related", "source_refs", "created", "updated"}
 )
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
@@ -667,7 +667,7 @@ def find_entity(project_root: Path, ref: str) -> EntityLocation:
             continue
         path = entity["path"]
         frontmatter, body = _parse_markdown_file(path)
-        kind = str(frontmatter.get("type") or frontmatter.get("kind") or entity_id.split(":", 1)[0])
+        kind = str(frontmatter.get("kind") or entity_id.split(":", 1)[0])
         return EntityLocation(
             entity_id=entity_id,
             kind=kind,
@@ -735,7 +735,7 @@ def build_entity_markdown(
 
     frontmatter: dict[str, object] = {
         "id": validate_entity_id(kind, entity_id),
-        "type": kind,
+        "kind": kind,
         "title": title,
         "status": status,
         "related": related,
@@ -1081,7 +1081,7 @@ def _resolve_removal_location(project_root: Path, target: str) -> EntityLocation
         entity_id = frontmatter.get("id")
         if not isinstance(entity_id, str) or not entity_id:
             raise EntityCommandError(f"Entity file has no frontmatter id: {target}")
-        kind = str(frontmatter.get("type") or frontmatter.get("kind") or entity_id.split(":", 1)[0])
+        kind = str(frontmatter.get("kind") or entity_id.split(":", 1)[0])
         return EntityLocation(
             entity_id=entity_id,
             kind=kind,
@@ -1519,7 +1519,7 @@ def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list
         for path in iter_entity_markdown(root):
             frontmatter, _ = _parse_markdown_file(path)
             entity_id = frontmatter.get("id")
-            entity_kind = frontmatter.get("type") or frontmatter.get("kind")
+            entity_kind = frontmatter.get("kind")
             if isinstance(entity_id, str) and isinstance(entity_kind, str):
                 entities.append({"id": entity_id, "kind": entity_kind, "path": path, "frontmatter": frontmatter})
     return entities

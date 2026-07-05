@@ -20,7 +20,7 @@ def _valid_external_entity() -> dict:
     return {
         "profiles": ["science-pkg-entity-1.0"],
         "id": "dataset:example",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Example",
         "status": "active",
         "origin": "external",
@@ -124,7 +124,7 @@ def _valid_derived_entity() -> dict:
     return {
         "profiles": ["science-pkg-entity-1.0"],
         "id": "dataset:wf-r1-out1",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Derived",
         "status": "active",
         "origin": "derived",

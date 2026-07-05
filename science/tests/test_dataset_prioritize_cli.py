@@ -15,12 +15,12 @@ def _seed(root: Path) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "a.md").write_text(
-        '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\norigin: "external"\n'
+        '---\nid: "dataset:a"\nkind: "dataset"\ntitle: "A"\norigin: "external"\n'
         'access: {level: "controlled", verified: true}\n---\n',
         encoding="utf-8",
     )
     (d / "b.md").write_text(
-        '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\norigin: "external"\n'
+        '---\nid: "dataset:b"\nkind: "dataset"\ntitle: "B"\norigin: "external"\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
@@ -47,20 +47,20 @@ def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
     d.mkdir(parents=True, exist_ok=True)
     h.mkdir(parents=True, exist_ok=True)
     (d / "d.md").write_text(
-        '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        '---\nid: "dataset:d"\nkind: "dataset"\ntitle: "D"\norigin: "external"\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: true}\n---\n',
         encoding="utf-8",
     )
     (h / "h.md").write_text(
-        '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n'
+        '---\nid: "hypothesis:h"\nkind: "hypothesis"\ntitle: "H"\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
         encoding="utf-8",
     )
     if include_paper:
         p.mkdir(parents=True, exist_ok=True)
         (p / "p.md").write_text(
-            '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+            '---\nid: "paper:p"\nkind: "paper"\ntitle: "P"\n'
             'related: ["hypothesis:h"]\n'
             "dataset_usage:\n"
             '  - ref: "dataset:d"\n'
@@ -121,12 +121,12 @@ def test_prioritize_include_reference_pointer_and_runtime_filter(tmp_path: Path)
     _seed(tmp_path)
     d = tmp_path / "entities" / "datasets"
     (d / "ref.md").write_text(
-        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        '---\nid: "dataset:ref"\nkind: "dataset"\ntitle: "Ref"\norigin: "external"\n'
         'dataset_class: "reference"\naccess: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
         encoding="utf-8",
     )
     (d / "ptr.md").write_text(
-        '---\nid: "dataset:ptr"\ntype: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
+        '---\nid: "dataset:ptr"\nkind: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
         'dataset_class: "pointer"\naccess: {level: "public", verified: true, source_url: "https://example.org/p"}\n---\n',
         encoding="utf-8",
     )
@@ -165,12 +165,12 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
     qdir = tmp_path / "entities" / "questions"
     qdir.mkdir(parents=True, exist_ok=True)
     (qdir / "q-covered.md").write_text(
-        '---\nid: "question:q-covered"\ntype: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n'
+        '---\nid: "question:q-covered"\nkind: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
         encoding="utf-8",
     )
     (qdir / "q-gap.md").write_text(
-        '---\nid: "question:q-gap"\ntype: "question"\ntitle: "Gap"\n---\n',
+        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n---\n',
         encoding="utf-8",
     )
 
@@ -192,7 +192,7 @@ def test_prioritize_coverage_json_reports_capability_fit_details(tmp_path: Path)
     qdir = tmp_path / "entities" / "questions"
     qdir.mkdir(parents=True, exist_ok=True)
     (qdir / "q-atac.md").write_text(
-        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "ATAC"\nrelated: ["dataset:b"]\n'
+        '---\nid: "question:q-atac"\nkind: "question"\ntitle: "ATAC"\nrelated: ["dataset:b"]\n'
         'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n---\n',
         encoding="utf-8",
     )

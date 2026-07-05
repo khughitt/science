@@ -590,7 +590,7 @@ def _title_from_frontmatter(frontmatter: dict[str, Any], entity_id: str) -> str:
 
 
 def _entity_type_for_path(path: Path, frontmatter: dict[str, Any]) -> str:
-    declared = frontmatter.get("type")
+    declared = frontmatter.get("kind")
     if isinstance(declared, str) and declared.strip():
         return declared.strip().replace("-", "_")
     parent = path.parent.name

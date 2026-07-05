@@ -48,7 +48,7 @@ def _raw_entities(project_root: Path) -> dict[str, _RawEntity]:
         raw_id = fm.get("id")
         if not isinstance(raw_id, str) or not raw_id:
             continue
-        kind = fm.get("type") or fm.get("kind")
+        kind = fm.get("kind")
         if not isinstance(kind, str) or not kind:
             continue
         rows[raw_id] = _RawEntity(

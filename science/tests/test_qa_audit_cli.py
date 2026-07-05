@@ -17,7 +17,7 @@ def _setup(tmp_path: Path):
     (run_dir / "datapackage.yaml").write_text(yaml.safe_dump(
         {"name": "run", "resources": [{"name": "qa_report", "path": "qa_report.json"}]}))
     (runs_dir / "r1.md").write_text(
-        '---\nid: "workflow-run:r1"\ntype: "workflow-run"\nworkflow: "wf-a"\n'
+        '---\nid: "workflow-run:r1"\nkind: "workflow-run"\nworkflow: "wf-a"\n'
         f'manifest_path: "{run_dir / "datapackage.yaml"}"\n---\nbody\n')
 
 

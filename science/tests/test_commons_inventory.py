@@ -16,7 +16,7 @@ _NO_DP_ENTITY = (
     "---\n"
     'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
     'id: "dataset:no-dp"\n'
-    'type: "dataset"\n'
+    'kind: "dataset"\n'
     'title: "No datapackage"\n'
     'version: "1.0.0"\n'
     'status: "active"\n'
@@ -38,7 +38,7 @@ _BAD_PAPER = (
     "---\n"
     'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
     'id: "paper:badname"\n'
-    'type: "paper"\n'
+    'kind: "paper"\n'
     'title: "Bad"\n'
     'version: "1.0.0"\n'
     'status: "active"\n'
@@ -96,7 +96,7 @@ def test_build_commons_inventory_projects_benchmark_metadata(tmp_path: Path, mon
         "---\n"
         'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
         'id: "dataset:benchmark-example"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "Benchmark Example"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

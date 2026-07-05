@@ -9,12 +9,12 @@ from science_tool.datasets.semantics import (
 
 
 def test_missing_dataset_class_defaults_to_deposit() -> None:
-    assert dataset_class_for({"type": "dataset", "id": "dataset:x"}) == "deposit"
+    assert dataset_class_for({"kind": "dataset", "id": "dataset:x"}) == "deposit"
 
 
 def test_source_class_reference_does_not_imply_runtime_reference() -> None:
     fm = {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:grch38",
         "source_class": "reference",
         "datapackage": "data/grch38/datapackage.yaml",

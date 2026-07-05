@@ -226,7 +226,7 @@ class _StubCanonical:
 
 def _merged(frontmatter: dict[str, object]) -> MergedEntity:
     canonical_id = str(frontmatter["id"])
-    kind = str(frontmatter["type"])
+    kind = str(frontmatter["kind"])
     canonical = _StubCanonical(
         canonical_id=canonical_id,
         type=kind,
@@ -255,7 +255,7 @@ def _translate(frontmatter: dict[str, object]) -> Entity:
 
 
 def test_translate_topic_sets_scope_shared() -> None:
-    entity = _translate({"id": "topic:phf19", "type": "topic", "title": "PHF19"})
+    entity = _translate({"id": "topic:phf19", "kind": "topic", "title": "PHF19"})
 
     assert entity.scope == EntityScope.SHARED
     assert entity.canonical_id == "topic:phf19"
@@ -267,7 +267,7 @@ def test_translate_topic_sets_scope_shared() -> None:
 def test_translate_topic_description_flows_to_content_preview() -> None:
     description = "Shared topic description."
 
-    entity = _translate({"id": "topic:phf19", "type": "topic", "title": "PHF19", "description": description})
+    entity = _translate({"id": "topic:phf19", "kind": "topic", "title": "PHF19", "description": description})
 
     assert not hasattr(entity, "summary")
     assert entity.content_preview == description
@@ -276,7 +276,7 @@ def test_translate_topic_description_flows_to_content_preview() -> None:
 def test_translate_theme_description_flows_to_summary() -> None:
     description = "Shared theme description."
 
-    entity = _translate({"id": "theme:program", "type": "theme", "title": "Program", "description": description})
+    entity = _translate({"id": "theme:program", "kind": "theme", "title": "Program", "description": description})
 
     assert isinstance(entity, ThemeEntity)
     assert entity.summary == description
@@ -286,7 +286,7 @@ def test_translate_dataset_carries_mixin_fields() -> None:
     entity = _translate(
         {
             "id": "dataset:rnaseq",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "RNA-seq",
             "origin": "external",
             "access": {"level": "public", "verified": False},
@@ -311,7 +311,7 @@ def test_translate_derived_dataset_accepts_commons_workflow_recipe_derivation() 
     entity = _translate(
         {
             "id": "dataset:clean-base",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "Clean base",
             "origin": "derived",
             "datapackage": "datapackage.yaml",
@@ -338,7 +338,7 @@ def test_translate_paper_carries_mixin_fields() -> None:
     entity = _translate(
         {
             "id": "paper:Adams2025",
-            "type": "paper",
+            "kind": "paper",
             "title": "Adams paper",
             "bibkey": "Adams2025",
             "authors": ["Adams, A.", "Baker, B."],
@@ -366,7 +366,7 @@ def test_translate_paper_legacy_journal_flows_to_venue() -> None:
     entity = _translate(
         {
             "id": "paper:Adams2025",
-            "type": "paper",
+            "kind": "paper",
             "title": "Adams paper",
             "schema_profile": "science-entity-base/1.0+paper/1.0",
             "bibkey": "Adams2025",
@@ -382,7 +382,7 @@ def test_translate_theme_with_cross_project_scope() -> None:
     entity = _translate(
         {
             "id": "theme:program",
-            "type": "theme",
+            "kind": "theme",
             "title": "Program",
             "theme_kind": "conceptual",
             "theme_scope": "cross-project",
@@ -407,7 +407,7 @@ def test_translate_drops_overlay_only_fields() -> None:
     entity = _translate(
         {
             "id": "topic:phf19",
-            "type": "topic",
+            "kind": "topic",
             "title": "PHF19",
             "relevance": "high",
             "hypothesis_links": ["hypothesis:h1"],
@@ -603,7 +603,7 @@ def test_load_project_sources_pulls_commons_referenced_topic(tmp_path: Path, mon
     hypothesis_path.write_text(
         """---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: ["topic:single-cell-foundation-models"]
 ---
@@ -635,7 +635,7 @@ def test_load_project_sources_pulls_commons_dataset_usage_ref(tmp_path: Path, mo
     paper_path.write_text(
         """---
 id: "paper:Adams2025"
-type: "paper"
+kind: "paper"
 title: "Adams"
 dataset_usage:
   - ref: "dataset:rnaseq-example"
@@ -677,7 +677,7 @@ def test_load_project_sources_pulls_transitive_commons_dataset_usage_ref(
     hypothesis_path.write_text(
         """---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: ["paper:Adams2025"]
 ---
@@ -707,7 +707,7 @@ def test_load_project_sources_pulls_commons_geneset_row_usage_ref(
     (dp_dir / "datapackage.yaml").write_text(
         """profiles: [science-pkg-entity-1.0]
 id: dataset:reactome-v89
-type: dataset
+kind: dataset
 title: Reactome
 status: active
 origin: external

@@ -1,5 +1,5 @@
 ---
 id: "question:q05-orphan"
-type: "question"
+kind: "question"
 ---
 Orphan: no hypothesis association anywhere.

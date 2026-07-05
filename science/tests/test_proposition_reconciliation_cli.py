@@ -54,7 +54,7 @@ def _proposition(
     if source_refs:
         refs = "source_refs:\n" + "".join(f"  - {ref}\n" for ref in source_refs)
     path.write_text(
-        f"---\nid: proposition:{slug}\ntype: proposition\ntitle: {title}\n"
+        f"---\nid: proposition:{slug}\nkind: proposition\ntitle: {title}\n"
         f"status: active\nsubject: {subject}\npredicate: {predicate}\n"
         f"object: {object}\npolarity: {polarity}\n{refs}---\n\nClaim.\n",
         encoding="utf-8",

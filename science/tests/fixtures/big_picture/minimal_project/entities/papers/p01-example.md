@@ -1,6 +1,6 @@
 ---
 id: "paper:p01-example"
-type: "paper"
+kind: "paper"
 related: [topic:t01-covered]
 source_refs: [cite:Example2024]
 ---

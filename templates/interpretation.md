@@ -1,6 +1,6 @@
 ---
 id: "interpretation:{{slug}}"
-type: "interpretation"
+kind: "interpretation"
 title: "{{title}}"
 status: "active"
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
@@ -15,7 +15,7 @@ relations: []  # optional graph relations; use sci:amends or sci:supersedes for 
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "interpretation" }
+    kind: { default: "interpretation" }
     title: { from: title }
     status: { from: status }
     source_refs: { from: source_refs }

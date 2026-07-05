@@ -139,7 +139,7 @@ def test_missing_required_frontmatter_fields_warn(tmp_path: Path) -> None:
     _write_note(
         tmp_path,
         "notes/topics/a.md",
-        "\n".join(["---", "id: topic:a", "type: topic", "---", "## Summary"]),
+        "\n".join(["---", "id: topic:a", "kind: topic", "---", "## Summary"]),
     )
 
     messages = _messages(check_notes(_ctx(tmp_path)))
@@ -190,7 +190,7 @@ def test_quoted_type_mismatch_warns(tmp_path: Path) -> None:
     _write_note(
         tmp_path,
         "notes/topics/a.md",
-        _valid_note("article", note_id="topic:a").replace("type: article", 'type: "article"'),
+        _valid_note("article", note_id="topic:a").replace("kind: article", 'kind: "article"'),
     )
 
     assert "notes/topics/a.md type 'article' does not match expected 'topic'" in _messages(check_notes(_ctx(tmp_path)))
@@ -229,7 +229,7 @@ def test_missing_common_sections_warn(tmp_path: Path) -> None:
             [
                 "---",
                 "id: topic:a",
-                "type: topic",
+                "kind: topic",
                 "title: Demo",
                 "status: draft",
                 "tags: []",

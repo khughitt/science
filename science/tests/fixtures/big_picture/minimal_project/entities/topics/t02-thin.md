@@ -1,6 +1,6 @@
 ---
 id: "topic:t02-thin"
-type: "topic"
+kind: "topic"
 related: []
 source_refs: []
 ---
