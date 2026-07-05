@@ -111,7 +111,7 @@ class RetiredEdgeMigrationPlan:
         }
 
 
-ScaffoldStatus = Literal["written", "no-op"]
+ScaffoldStatus = Literal["written", "no-op", "complete"]
 
 
 @dataclass(frozen=True)
@@ -122,9 +122,12 @@ class RetiredEdgeWorkbenchScaffoldResult:
     output_path: str
     status: ScaffoldStatus
     row_count: int
+    total_row_count: int
+    closed_row_count: int
     predicate_review_required: int
     evidence_stub_count: int
     byte_count: int
+    closed_by: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def written(self) -> bool:
@@ -139,6 +142,10 @@ class RetiredEdgeWorkbenchScaffoldResult:
             "status": self.status,
             "written": self.written,
             "rows": self.row_count,
+            "written_rows": self.row_count,
+            "total_rows": self.total_row_count,
+            "closed_rows": self.closed_row_count,
+            "closed_by": list(self.closed_by),
             "predicate_review_required": self.predicate_review_required,
             "evidence_stubs": self.evidence_stub_count,
             "byte_count": self.byte_count,
@@ -815,11 +822,11 @@ def scaffold_retired_edge_workbench(
     if not focal_hypothesis.strip():
         raise ValueError("--focal-hypothesis is required")
 
-    resolved_output = _resolve_scaffold_output_path(project_root, output_path)
     plan = build_retired_edge_migration_plan(project_root, dag=dag, focal_hypothesis=focal_hypothesis)
     if not plan.rows:
         raise ValueError(f"retired DAG edge file for dag {dag!r} contains no migration rows")
 
+    closed = [row for row in plan.rows if row.status == "closed"]
     blocked = [row for row in plan.rows if row.status == "blocked"]
     skipped = [row for row in plan.rows if row.status == "skipped"]
     evidence_warnings = [warning for row in plan.rows for warning in row.evidence_warnings]
@@ -836,9 +843,26 @@ def scaffold_retired_edge_workbench(
     ready_count = sum(1 for row in plan.rows if row.status == "ready")
     if len(ready_rows) != ready_count:
         raise AssertionError("Phase 5g invariant violated: ready row lacks proposed_row")
+    closed_by = tuple(closed_id for row in closed for closed_id in row.closed_by)
+    if closed and not ready_rows:
+        return RetiredEdgeWorkbenchScaffoldResult(
+            project_root=project_root.as_posix(),
+            dag=dag,
+            focal_hypothesis=focal_hypothesis,
+            output_path=_project_relative_or_absolute(project_root, project_root / output_path),
+            status="complete",
+            row_count=0,
+            total_row_count=len(plan.rows),
+            closed_row_count=len(closed),
+            closed_by=closed_by,
+            predicate_review_required=0,
+            evidence_stub_count=0,
+            byte_count=0,
+        )
     if not ready_rows:
         raise ValueError("no ready retired edge migration rows to scaffold")
 
+    resolved_output = _resolve_scaffold_output_path(project_root, output_path)
     rendered = migration_plan_to_workbench_yaml(plan)
     # Write-boundary honesty check: persist only YAML accepted by the strict workbench schema.
     WorkbenchFile.model_validate(yaml.safe_load(rendered) or {})
@@ -860,6 +884,9 @@ def scaffold_retired_edge_workbench(
         output_path=_project_relative_or_absolute(project_root, resolved_output),
         status=status,
         row_count=len(ready_rows),
+        total_row_count=len(plan.rows),
+        closed_row_count=len(closed),
+        closed_by=closed_by,
         predicate_review_required=sum(1 for row in ready_rows if row.predicate_review_required),
         evidence_stub_count=_evidence_stub_count(ready_rows),
         byte_count=rendered_byte_count,
@@ -893,6 +920,14 @@ def render_migration_plan_table(plan: RetiredEdgeMigrationPlan) -> str:
 
 
 def render_retired_edge_workbench_scaffold_table(result: RetiredEdgeWorkbenchScaffoldResult) -> str:
+    if result.status == "complete":
+        return (
+            f"Retired edge workbench scaffold complete: {result.dag}\n"
+            f"  status: {result.status}\n"
+            f"  focal_hypothesis: {result.focal_hypothesis}\n"
+            f"  rows: {result.total_row_count}\n"
+            f"  closed_rows: {result.closed_row_count}\n"
+        )
     action = "Wrote" if result.written else "No-op"
     return (
         f"{action} retired edge workbench scaffold: {result.output_path}\n"
@@ -900,6 +935,8 @@ def render_retired_edge_workbench_scaffold_table(result: RetiredEdgeWorkbenchSca
         f"  dag: {result.dag}\n"
         f"  focal_hypothesis: {result.focal_hypothesis}\n"
         f"  rows: {result.row_count}\n"
+        f"  total_rows: {result.total_row_count}\n"
+        f"  closed_rows: {result.closed_row_count}\n"
         f"  predicate_review_required: {result.predicate_review_required}\n"
         f"  evidence_stubs: {result.evidence_stub_count}\n"
     )

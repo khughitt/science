@@ -217,6 +217,9 @@ def test_scaffold_retired_edge_workbench_writes_strict_yaml(tmp_path: Path) -> N
     assert result.status == "written"
     assert result.written is True
     assert result.row_count == 1
+    assert result.total_row_count == 1
+    assert result.closed_row_count == 0
+    assert result.closed_by == ()
     assert result.predicate_review_required == 1
     assert result.evidence_stub_count == 2
     assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
@@ -262,8 +265,81 @@ def test_scaffold_retired_edge_workbench_relative_output_is_project_relative(tmp
     )
 
     assert result.status == "written"
+    assert result.total_row_count == 1
+    assert result.closed_row_count == 0
+    assert result.closed_by == ()
     assert result.output_path == "doc/figures/dags/h1.workbench.yaml"
     assert (project / "doc/figures/dags/h1.workbench.yaml").exists()
+
+
+def test_scaffold_retired_edge_workbench_all_closed_returns_complete_without_output_checks(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=Path("missing-parent/h1.workbench.yaml"),
+    )
+
+    assert result.status == "complete"
+    assert result.written is False
+    assert result.row_count == 0
+    assert result.total_row_count == 1
+    assert result.closed_row_count == 1
+    assert result.closed_by == ("proposition:a-affects-b",)
+    assert not (project / "missing-parent").exists()
+
+
+def test_scaffold_retired_edge_workbench_writes_remaining_ready_rows_when_some_closed(tmp_path: Path) -> None:
+    from science_tool.dag.retired_edge_migration import scaffold_retired_edge_workbench
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    dag_file = project / "doc/figures/dags/h1.edges.yaml"
+    dag_file.write_text(
+        dag_file.read_text(encoding="utf-8")
+        + """
+  - id: 2
+    source: c
+    target: d
+    relation: yields
+    edge_status: supported
+    identification: observational
+    description: Another retired claim.
+    lit_support:
+      - paper: Jones2021
+        description: Literature support.
+""",
+        encoding="utf-8",
+    )
+    (project / "doc/figures/dags/h1.dot").write_text(
+        "digraph h1 {\n  a -> b;\n  c -> d;\n}\n",
+        encoding="utf-8",
+    )
+    _write_lineage_proposition(project)
+    output = project / "doc/figures/dags/h1.workbench.yaml"
+
+    result = scaffold_retired_edge_workbench(
+        project,
+        dag="h1",
+        focal_hypothesis="hypothesis:h1",
+        output_path=output,
+    )
+
+    assert result.status == "written"
+    assert result.row_count == 1
+    assert result.total_row_count == 2
+    assert result.closed_row_count == 1
+    payload = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert len(payload["rows"]) == 1
+    assert payload["rows"][0]["legacy_edge_id"] == 2
+    assert payload["rows"][0]["subject"] == "c"
+    assert payload["rows"][0]["object"] == "d"
 
 
 def test_scaffold_retired_edge_workbench_identical_existing_file_is_noop(tmp_path: Path) -> None:
@@ -287,8 +363,14 @@ def test_scaffold_retired_edge_workbench_identical_existing_file_is_noop(tmp_pat
     )
 
     assert first.status == "written"
+    assert first.total_row_count == 1
+    assert first.closed_row_count == 0
+    assert first.closed_by == ()
     assert second.status == "no-op"
     assert second.written is False
+    assert second.total_row_count == 1
+    assert second.closed_row_count == 0
+    assert second.closed_by == ()
     assert second.byte_count == first.byte_count
 
 
