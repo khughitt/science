@@ -1,10 +1,8 @@
 from pathlib import Path
 
-import pytest
 from science_model.entities import Entity, EntityType
 from science_model.source_ref import SourceRef
 
-from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
     IdentityDeclaration,
     IdentityTable,
@@ -26,12 +24,12 @@ def _owner(cid, adapter, path, deprecated=False):
     )
 
 
-def test_audit_identity_table_transitional_shadow_is_warn():
-    # markdown owner + deprecated aggregate STUB shadow -> carried (warn), not a build blocker (§C4)
+def test_audit_identity_table_transitional_datapackage_shadow_is_warn():
+    # markdown owner + deprecated datapackage owner -> carried (warn), not a build blocker (§C4)
     table = IdentityTable(
         rows=[
-            _owner("question:q1", "markdown", "entities/question/0007-q1.md"),
-            _owner("question:q1", "aggregate", "knowledge/sources/local/entities.yaml", deprecated=True),
+            _owner("dataset:x", "markdown", "entities/datasets/x.md"),
+            _owner("dataset:x", "datapackage", "datasets/x/datapackage.yaml", deprecated=True),
         ]
     )
     rows = audit_identity_table(table)
@@ -39,11 +37,11 @@ def test_audit_identity_table_transitional_shadow_is_warn():
     row = rows[0]
     assert row["check"] == "identity_collision"
     assert row["status"] == "warn"
-    assert row["source"] == "question:q1"
+    assert row["source"] == "dataset:x"
     assert row["field"] == "owner_scope"
     assert row["target"] == "proj"
-    assert "entities/question/0007-q1.md" in row["details"]
-    assert "knowledge/sources/local/entities.yaml" in row["details"]
+    assert "entities/datasets/x.md" in row["details"]
+    assert "datasets/x/datapackage.yaml" in row["details"]
 
 
 def test_audit_identity_table_genuine_duplicate_is_fail():
@@ -75,39 +73,6 @@ def _md(root: Path, rel: str, cid: str, kind: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(f'---\nid: "{cid}"\nkind: "{kind}"\ntitle: "{cid}"\n---\n', encoding="utf-8")
-
-
-def _agg(root: Path, cid: str, kind: str) -> None:
-    # AggregateAdapter reads the `entities:` key of a mapping (aggregate.py:69).
-    local = root / "knowledge" / "sources" / "local"
-    local.mkdir(parents=True, exist_ok=True)
-    (local / "entities.yaml").write_text(
-        f"entities:\n  - canonical_id: {cid}\n    kind: {kind}\n    title: {cid}\n"
-        f"    profile: local\n    source_path: knowledge/sources/local/entities.yaml\n",
-        encoding="utf-8",
-    )
-
-
-def test_strict_load_still_raises_on_stub_shadow(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    _md(tmp_path, "entities/questions/q1.md", "question:q1", "question")
-    _agg(tmp_path, "question:q1", "question")
-    with pytest.raises(EntityIdentityCollisionError):
-        load_project_sources(tmp_path, include_commons=False)
-
-
-def test_nonstrict_load_then_audit_reports_identity_collision(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    _md(tmp_path, "entities/questions/q1.md", "question:q1", "question")
-    _agg(tmp_path, "question:q1", "question")
-    sources = load_project_sources(tmp_path, include_commons=False, strict_identity=False)
-    rows, failed = audit_project_sources(sources)
-    # transitional stub-shadow is carried (§C4): surfaced as a warn row, does NOT fail the build
-    assert failed is False
-    collision_rows = [r for r in rows if r["check"] == "identity_collision"]
-    assert len(collision_rows) == 1
-    assert collision_rows[0]["source"] == "question:q1"
-    assert collision_rows[0]["status"] == "warn"
 
 
 def test_clean_project_audit_has_no_identity_collision(tmp_path: Path) -> None:

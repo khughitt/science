@@ -21,29 +21,6 @@ class MarkdownSourceDocument(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
-class AggregateRowMeta:
-    """Row-level triage metadata for one aggregate (`entities.yaml`) entry.
-
-    Captured at load time — before non-strict dedup can drop a shadowed entry's
-    Entity (sources.py emit point) — so the §B5 triage classifier can bucket every
-    aggregate row. Joined to its IdentityDeclaration by (path, line), which
-    AggregateAdapter always populates.
-    """
-
-    path: str
-    line: int
-    canonical_id: str
-    kind: str
-    source_path: str | None
-    # 4c: the row's external authority identifier, captured from the VALIDATED
-    # entity. `entity.primary_external_id` is a typed ExternalId (or None); a
-    # malformed value never reaches capture (it fails ExternalId validation and the
-    # row is skipped). So this is the full {source, id, curie, provenance} dump or
-    # None — never a half-filled mapping that could masquerade as a backed ref.
-    primary_external_id: dict[str, str] | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class SourceChange:
     """A freshness-origin event: a source's observed content identity changed.
 

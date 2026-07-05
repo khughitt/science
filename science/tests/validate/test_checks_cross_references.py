@@ -82,7 +82,7 @@ def test_inline_and_block_related_parsing_ignores_templates(tmp_path: Path) -> N
     assert _messages(check_cross_references(_ctx(tmp_path))) == ["All frontmatter cross-references valid"]
 
 
-def test_tasks_entities_and_terms_ids_resolve_refs(tmp_path: Path) -> None:
+def test_task_ids_resolve_refs_but_retired_aggregate_ids_do_not(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
     _write(
@@ -94,7 +94,10 @@ def test_tasks_entities_and_terms_ids_resolve_refs(tmp_path: Path) -> None:
     _write(tmp_path / "knowledge" / "sources" / "demo" / "entities.yaml", "entities:\n  - canonical_id: entity:one\n")
     _write(tmp_path / "knowledge" / "sources" / "demo" / "terms.yaml", "terms:\n  - id: term:one\n")
 
-    assert _messages(check_cross_references(_ctx(tmp_path))) == ["All frontmatter cross-references valid"]
+    assert _messages(check_cross_references(_ctx(tmp_path)), Severity.WARN) == [
+        "Broken reference in a.md: related ID 'entity:one' not found",
+        "Broken reference in a.md: related ID 'term:one' not found",
+    ]
 
 
 def test_unknown_namespace_errors_and_known_cross_project_ref_is_ignored(tmp_path: Path) -> None:

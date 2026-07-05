@@ -15,10 +15,8 @@ different policies.
 
 Graded policy:
 - >=2 NON-deprecated owners -> ERROR: the genuine duplicate §B1 forbids.
-- otherwise -> WARN: a deprecated transitional owner (an entities.yaml aggregate
-  stub, §C3) shadows a real owner — rollout debt carried until §B5 retirement.
-  Visible so the debt is not lost, but non-blocking (the migration must not be
-  bricked before its content migrates, §C4).
+- otherwise -> WARN: a deprecated transitional owner shadows a real owner.
+  Visible so the debt is not lost, but non-blocking while that source migrates.
 """
 
 from __future__ import annotations

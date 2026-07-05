@@ -3,7 +3,7 @@ r"""
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" XREF_TERMS="$LOCAL_PROFILE_DIR/terms.yaml" XREF_SCIENCE_YAML="science.yaml" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_SCIENCE_YAML="science.yaml" python3 << 'PYEOF'
 import os, re
 
 try:
@@ -120,47 +120,6 @@ def classify_ref(ref, project_ids):
     return "local"
 
 
-def load_structured_ids(path):
-    ids = set()
-    if yaml is None or not os.path.isfile(path):
-        return ids
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
-    except Exception:
-        return ids
-    items = data.get("entities") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return ids
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        canonical_id = item.get("canonical_id")
-        if isinstance(canonical_id, str) and canonical_id:
-            ids.add(canonical_id)
-    return ids
-
-
-def load_terms_ids(path):
-    ids = set()
-    if yaml is None or not os.path.isfile(path):
-        return ids
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
-    except Exception:
-        return ids
-    items = data.get("terms") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return ids
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        term_id = item.get("id") or item.get("canonical_id")
-        if isinstance(term_id, str) and term_id:
-            ids.add(term_id)
-    return ids
-
 search_dirs = [os.environ['XREF_SPECS'], os.environ['XREF_DOC']]
 all_ids = set()
 refs_by_file = {}
@@ -179,8 +138,6 @@ for search_dir in search_dirs:
                 refs_by_file[path] = related
 
 all_ids.update(load_task_ids(os.environ["XREF_TASKS"]))
-all_ids.update(load_structured_ids(os.environ["XREF_ENTITIES"]))
-all_ids.update(load_terms_ids(os.environ["XREF_TERMS"]))
 project_ids = load_project_ids(os.environ["XREF_SCIENCE_YAML"])
 
 
@@ -340,49 +297,6 @@ def _load_task_ids(ctx: ValidateContext) -> set[str]:
     return task_ids
 
 
-def _local_profile(ctx: ValidateContext) -> str:
-    knowledge_profiles = ctx.manifest.get("knowledge_profiles", {})
-    if isinstance(knowledge_profiles, dict):
-        local = knowledge_profiles.get("local")
-        if isinstance(local, str) and local:
-            return local
-    return "local"
-
-
-def _load_structured_ids(ctx: ValidateContext, path: Path) -> set[str]:
-    ids: set[str] = set()
-    if not path.is_file():
-        return ids
-    data = ctx.read_yaml(path)
-    items = data.get("entities") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return ids
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        canonical_id = item.get("canonical_id")
-        if isinstance(canonical_id, str) and canonical_id:
-            ids.add(canonical_id)
-    return ids
-
-
-def _load_terms_ids(ctx: ValidateContext, path: Path) -> set[str]:
-    ids: set[str] = set()
-    if not path.is_file():
-        return ids
-    data = ctx.read_yaml(path)
-    items = data.get("terms") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return ids
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        term_id = item.get("id") or item.get("canonical_id")
-        if isinstance(term_id, str) and term_id:
-            ids.add(term_id)
-    return ids
-
-
 def _load_project_ids(ctx: ValidateContext) -> set[str]:
     ids: set[str] = set()
     project_id = ctx.manifest.get("id")
@@ -429,11 +343,7 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
             if related:
                 refs_by_file[path] = related
 
-    profile = _local_profile(ctx)
-    profile_dir = ctx.project_root / "knowledge" / "sources" / profile
     all_ids.update(_load_task_ids(ctx))
-    all_ids.update(_load_structured_ids(ctx, profile_dir / "entities.yaml"))
-    all_ids.update(_load_terms_ids(ctx, profile_dir / "terms.yaml"))
     from science_tool.archive import load_archive_index
     all_ids.update(load_archive_index(ctx.project_root).resolvable_ids())
     project_ids = _load_project_ids(ctx)

@@ -1,19 +1,13 @@
 {
   "config_path": "~/.config/science/config.yaml",
-  "generated_at_utc": "2026-07-05T11:29:06Z",
+  "generated_at_utc": "2026-07-05T13:39:41Z",
   "projects": [
     {
       "counts": {
-        "aggregate_manifest": 1,
         "article_prefix_alias": 10,
         "legacy_marker_alias": 1
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "article:<bibkey> reference",
           "path": "archive/project-layout-legacy/notes/articles/Cech2014.md",
@@ -84,21 +78,10 @@
     },
     {
       "counts": {
-        "aggregate_manifest": 2,
         "article_prefix_alias": 3,
         "retired_edges_yaml": 1
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/terms.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "article:<bibkey> reference",
           "path": ".labnote/app_export/entities/index.json",
@@ -139,16 +122,10 @@
     },
     {
       "counts": {
-        "aggregate_manifest": 1,
         "article_prefix_alias": 26,
         "retired_edges_yaml": 2
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "article:<bibkey> reference",
           "path": "entities/papers/AACRGENIEConsortium2017.md",
@@ -339,15 +316,9 @@
     },
     {
       "counts": {
-        "aggregate_manifest": 1,
         "legacy_marker_alias": 2
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "[NEEDS CITATION]",
           "path": "AGENTS.md",
@@ -363,15 +334,9 @@
     },
     {
       "counts": {
-        "aggregate_manifest": 1,
         "retired_edges_yaml": 1
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "retired DAG edge file",
           "path": "doc/figures/dags/h01-multi-manifold-protein-universe.edges.yaml",
@@ -392,15 +357,9 @@
     },
     {
       "counts": {
-        "aggregate_manifest": 1,
         "legacy_marker_alias": 1
       },
       "findings": [
-        {
-          "detail": "aggregate manifest",
-          "path": "knowledge/sources/local/entities.yaml",
-          "surface": "aggregate_manifest"
-        },
         {
           "detail": "[NEEDS CITATION]",
           "path": "AGENTS.md",
@@ -423,12 +382,11 @@
     "scanned_projects": 22,
     "shared_repository_entries": 1,
     "skipped_registered_projects": 1,
-    "total_findings": 54,
+    "total_findings": 47,
     "unique_registered_paths": 23,
     "unregistered_science_yaml": 0
   },
   "surface_totals": {
-    "aggregate_manifest": 7,
     "article_prefix_alias": 39,
     "legacy_marker_alias": 4,
     "retired_edges_yaml": 4

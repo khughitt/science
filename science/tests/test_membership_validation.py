@@ -140,15 +140,18 @@ def _write_prop(tmp_path: Path, pid: str, discusses_yaml: str = "[]") -> None:
 
 
 def _write_paper(tmp_path: Path, pid: str) -> None:
-    """Write a paper entity via entities.yaml (papers are source-yaml-backed)."""
-    entities_yaml = tmp_path / "knowledge" / "sources" / "local" / "entities.yaml"
-    if not entities_yaml.exists():
-        entities_yaml.parent.mkdir(parents=True, exist_ok=True)
-        entities_yaml.write_text("entities:\n", encoding="utf-8")
-    with entities_yaml.open("a", encoding="utf-8") as fh:
-        fh.write(f"  - canonical_id: paper:{pid}\n")
-        fh.write("    kind: paper\n")
-        fh.write(f"    title: {pid}\n")
+    _write_entity_file(
+        tmp_path / "entities" / "papers" / f"{pid}.md",
+        [
+            f'id: "paper:{pid}"',
+            'kind: "paper"',
+            f'title: "{pid}"',
+            'status: "active"',
+            "ontology_terms: []",
+            "source_refs: []",
+            "related: []",
+        ],
+    )
 
 
 def _write_relations(local_sources: Path, lines: list[str]) -> None:

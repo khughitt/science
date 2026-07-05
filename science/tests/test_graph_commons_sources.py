@@ -142,7 +142,7 @@ def test_collect_referenced_commons_ids_collects_relation_endpoints() -> None:
         subject="paper:subject",
         predicate="supports",
         object="topic:object",
-        source_path="knowledge/sources/local/entities.yaml",
+        source_path="knowledge/sources/local/relations.yaml",
     )
 
     assert _collect(relations=[relation]) == {"paper:subject", "topic:object"}
@@ -549,8 +549,8 @@ relevance: "central to this project"
         project_root,
         identity_table={
             "topic:single-cell-foundation-models": SourceRef(
-                adapter_name="aggregate",
-                path="knowledge/sources/local/entities.yaml:1",
+                adapter_name="markdown",
+                path="entities/topics/single-cell-foundation-models.md",
             )
         },
     )

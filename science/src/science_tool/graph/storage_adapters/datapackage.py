@@ -107,7 +107,6 @@ class DatapackageAdapter(StorageAdapter):
         self, *, entity: Entity, ref: SourceRef
     ) -> tuple[str, str] | None:
         # §B4: a datapackage is attached resource metadata, not a second owner.
-        # When its id is already owned (markdown owner or transitional aggregate
-        # stub — both precede DatapackageAdapter), defer and record the path so
+        # When its id is already owned by a markdown owner, defer and record the path so
         # member-resource resolution can still find the datapackage's resources.
         return (entity.canonical_id, ref.path)

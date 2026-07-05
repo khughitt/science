@@ -51,8 +51,7 @@ from science_tool.graph.identity_table import (
     ParticipationMode,
     classify_owner_scope,
 )
-from science_tool.graph.source_records import AggregateRowMeta, MarkdownSourceDocument
-from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
+from science_tool.graph.source_records import MarkdownSourceDocument
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
@@ -175,9 +174,6 @@ class ProjectSources(BaseModel):
     skipped_entities: list[SkippedEntity] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     identity_declarations: list[IdentityDeclaration] = Field(default_factory=list)
-    # §B5: row-level metadata for every aggregate (entities.yaml) owner row, captured
-    # before non-strict dedup so shadowed rows (whose Entity is dropped) stay triable.
-    aggregate_rows: list[AggregateRowMeta] = Field(default_factory=list)
     freshness_enabled: bool = True
     # Registered cross-project scopes (this project's id + declared peer ids). The
     # graph audit accepts `<peer>:<kind>:<slug>` addresses to these scopes (design
@@ -309,10 +305,6 @@ def load_project_sources(
             scan_roots=["entities", "research/packages"],
             virtual_files=markdown_overrides,
         ),
-        AggregateAdapter(local_profile=local_profile, virtual_files=markdown_overrides),
-        # NOTE: AggregateAdapter must precede the external-reference adapters
-        # (BibAdapter, CurieRefAdapter) — their defer guard relies on aggregate
-        # stubs (and markdown owners) being declared first this load.
         BibAdapter(),
         CurieRefAdapter(local_profile=local_profile),
         DatapackageAdapter(),
@@ -329,7 +321,6 @@ def load_project_sources(
     project_name = str(config["name"])
     identity_table: dict[str, SourceRef] = {}
     identity_declarations: list[IdentityDeclaration] = []
-    aggregate_rows: list[AggregateRowMeta] = []
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
     dataset_datapackages: dict[str, str] = {}
@@ -462,9 +453,6 @@ def load_project_sources(
                         deprecated=deprecated,
                     )
                 )
-                meta = adapter.on_owner_declared(entity=entity, ref=ref, raw=raw, kind=kind)
-                if meta is not None:
-                    aggregate_rows.append(meta)
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
                     if strict_identity:
@@ -651,7 +639,6 @@ def load_project_sources(
         skipped_entities=skipped_entities,
         commons_overlay_paths=commons_overlay_paths,
         identity_declarations=identity_declarations,
-        aggregate_rows=aggregate_rows,
         freshness_enabled=freshness_enabled,
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
         dataset_parents=dataset_parents,
@@ -943,8 +930,8 @@ def _load_structured_source_records(
     kinds with `structured_source` set, and CORE kinds the project augments via
     `core_structured_sources`. Each row becomes an owner entity of that kind, so
     generated kinds (e.g. local limit-relation/morphism-edge, or core `finding`
-    rows from an audit) need not ride the multi-type entities.yaml/terms.yaml
-    aggregate that v3 retirement forbids.
+    rows from an audit) use a declared single-type source file rather than a
+    retired aggregate manifest.
     """
     out: list[tuple[Entity, SourceRef]] = []
     if local_profile_manifest is None:

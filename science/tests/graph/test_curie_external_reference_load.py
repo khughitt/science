@@ -51,13 +51,17 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
     assert "UniProtKB:Q02223" in list(ent.same_as)
 
 
-def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path) -> None:
-    # Same id present as BOTH an aggregate stub (terms.yaml) and a curie authority
-    # row. Under STRICT load this must not raise: the curie defers to the stub.
+def test_curie_defers_to_markdown_owner_no_collision(tmp_path: Path) -> None:
+    # Same id present as BOTH a markdown owner and a curie authority row. Under
+    # STRICT load this must not raise: the curie reference defers to the owner.
     _base(tmp_path)
     src = _src(tmp_path)
-    src.joinpath("terms.yaml").write_text(
-        yaml.safe_dump({"terms": [{"id": "protein:BCMA", "title": "BCMA"}]}), encoding="utf-8"
+    owner = tmp_path / "entities" / "proteins" / "BCMA.md"
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text(
+        '---\nid: "protein:BCMA"\nkind: "protein"\ntitle: "BCMA"\n'
+        'status: "active"\ncreated: "2026-01-01"\nupdated: "2026-01-01"\n---\n',
+        encoding="utf-8",
     )
     src.joinpath("external_refs.yaml").write_text(
         yaml.safe_dump(
@@ -83,5 +87,4 @@ def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path
     sources = load_project_sources(tmp_path, include_commons=False, strict_core_schema=False, strict_identity=True)
     table = build_identity_table(sources)
     owners = table.owners()[("demo", "protein:BCMA")]
-    # Only the aggregate stub is an owner row; the curie row deferred (no second decl).
-    assert all(r.adapter == "aggregate" for r in owners)
+    assert all(r.adapter == "markdown" for r in owners)

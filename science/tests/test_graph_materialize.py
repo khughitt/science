@@ -323,7 +323,6 @@ def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> 
         {
             "id": "topic:demo",
             "kind": "topic",
-            "kind": "topic",
             "title": "Demo",
             "project": "demo",
             "ontology_terms": [],
@@ -357,7 +356,6 @@ def test_add_entity_emits_one_provenance_triple_without_overlay() -> None:
     entity = Entity.model_validate(
         {
             "id": "topic:demo",
-            "kind": "topic",
             "kind": "topic",
             "title": "Demo",
             "project": "demo",
@@ -580,18 +578,12 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: lab-note:evaluation",
-                "    kind: lab-note",
-                "    title: Evaluation",
-                "    related: [question:q01-demo]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "lab-notes" / "evaluation.md",
+        "lab-note:evaluation",
+        "lab-note",
+        "Evaluation",
+        ['related: ["question:q01-demo"]'],
     )
 
     trig_path = materialize_graph(project)
@@ -611,20 +603,12 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
 def test_materialize_graph_uses_kind_for_domain_rdf_class(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: gene:phf19",
-                "    kind: gene",
-                "    title: PHF19",
-                "    related: [question:q01-demo]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "genes" / "phf19.md",
+        "gene:phf19",
+        "gene",
+        "PHF19",
+        ['related: ["question:q01-demo"]'],
     )
 
     trig_path = materialize_graph(project)
@@ -643,31 +627,34 @@ def test_materialize_graph_uses_kind_for_domain_rdf_class(tmp_path: Path) -> Non
 def test_materialize_graph_emits_mechanism_participants_and_propositions(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: concept:translation",
-                "    kind: concept",
-                "    title: Translation",
-                "  - canonical_id: concept:cell-state",
-                "    kind: concept",
-                "    title: Cell state",
-                "  - canonical_id: proposition:anti-coupling",
-                "    kind: proposition",
-                "    title: Translation and cell state move in opposite directions",
-                "  - canonical_id: mechanism:anti-coupling-axis",
-                "    kind: mechanism",
-                "    title: Anti-coupling axis",
-                "    summary: Translation and cell-state programs move in opposite directions.",
-                "    participants: [concept:translation, concept:cell-state]",
-                "    propositions: [proposition:anti-coupling]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "concepts" / "translation.md",
+        "concept:translation",
+        "concept",
+        "Translation",
+    )
+    _write_minimal_entity(
+        project / "entities" / "concepts" / "cell-state.md",
+        "concept:cell-state",
+        "concept",
+        "Cell state",
+    )
+    _write_minimal_entity(
+        project / "entities" / "propositions" / "anti-coupling.md",
+        "proposition:anti-coupling",
+        "proposition",
+        "Translation and cell state move in opposite directions",
+    )
+    _write_minimal_entity(
+        project / "entities" / "mechanisms" / "anti-coupling-axis.md",
+        "mechanism:anti-coupling-axis",
+        "mechanism",
+        "Anti-coupling axis",
+        [
+            'summary: "Translation and cell-state programs move in opposite directions."',
+            "participants: [concept:translation, concept:cell-state]",
+            "propositions: [proposition:anti-coupling]",
+        ],
     )
 
     trig_path = materialize_graph(project)
@@ -736,20 +723,12 @@ def test_materialize_graph_emits_theme_node_and_related_edges(tmp_path: Path) ->
 def test_materialize_graph_uses_kind_for_task_edge_special_case(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: task:t100",
-                "    kind: task",
-                "    title: Follow-up task",
-                "    related: [hypothesis:h01-demo]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "tasks" / "t100.md",
+        "task:t100",
+        "task",
+        "Follow-up task",
+        ['related: ["hypothesis:h01-demo"]'],
     )
 
     trig_path = materialize_graph(project)
@@ -767,21 +746,12 @@ def test_materialize_graph_uses_kind_for_task_edge_special_case(tmp_path: Path) 
 def test_materialize_graph_materializes_structured_entity_confidence_in_provenance(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: hypothesis:h02-confidence",
-                "    kind: hypothesis",
-                "    title: Confidence-backed hypothesis",
-                "    confidence: 0.7",
-                "    domain: structural-biology",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "hypotheses" / "h02-confidence.md",
+        "hypothesis:h02-confidence",
+        "hypothesis",
+        "Confidence-backed hypothesis",
+        ["confidence: 0.7", "domain: structural-biology"],
     )
 
     trig_path = materialize_graph(project)
@@ -800,19 +770,11 @@ def test_materialize_graph_materializes_structured_entity_confidence_in_provenan
 def test_materialize_graph_resolves_cross_kind_slug_reference(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: concept:treatment-response",
-                "    kind: concept",
-                "    title: Treatment response",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "concepts" / "treatment-response.md",
+        "concept:treatment-response",
+        "concept",
+        "Treatment response",
     )
     hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
@@ -835,22 +797,15 @@ def test_materialize_graph_resolves_cross_kind_slug_reference(tmp_path: Path) ->
     assert (hypothesis_uri, SKOS.related, concept_uri) in knowledge
 
 
-def test_materialize_graph_loads_lightweight_terms_yaml(tmp_path: Path) -> None:
+def test_materialize_graph_loads_concept_markdown_owner(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    local_sources = project / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "terms.yaml").write_text(
-        "\n".join(
-            [
-                "terms:",
-                "  - id: concept:treatment-response",
-                "    title: Treatment response",
-                "    description: Lightweight local concept",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "concepts" / "treatment-response.md",
+        "concept:treatment-response",
+        "concept",
+        "Treatment response",
+        ['summary: "Project-local concept"'],
     )
     hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
@@ -879,17 +834,11 @@ def test_materialize_graph_applies_structured_relations_with_internal_targets(tm
     _write_demo_project(project)
     local_sources = project / "knowledge" / "sources" / "local"
     local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: paper:legatiuk2021",
-                "    kind: paper",
-                "    title: Legatiuk 2021",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "papers" / "legatiuk2021.md",
+        "paper:legatiuk2021",
+        "paper",
+        "Legatiuk 2021",
     )
     (local_sources / "relations.yaml").write_text(
         "\n".join(
@@ -1177,17 +1126,11 @@ def test_materialize_graph_applies_structured_relations_with_external_targets(tm
     _write_demo_project(project)
     local_sources = project / "knowledge" / "sources" / "local"
     local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: paper:legatiuk2021",
-                "    kind: paper",
-                "    title: Legatiuk 2021",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_minimal_entity(
+        project / "entities" / "papers" / "legatiuk2021.md",
+        "paper:legatiuk2021",
+        "paper",
+        "Legatiuk 2021",
     )
     (local_sources / "relations.yaml").write_text(
         "\n".join(

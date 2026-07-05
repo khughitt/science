@@ -40,19 +40,19 @@ def test_owners_keyed_by_scope_and_id_no_collision_when_clean():
     assert table.collisions() == []
 
 
-def test_collision_when_two_owners_share_key_stub_shadow():
+def test_collision_when_two_owners_share_key_datapackage_shadow():
     table = IdentityTable(
         rows=[
-            _decl("question:q1", adapter="markdown", path="entities/question/0007-q1.md"),
-            _decl("question:q1", adapter="aggregate", path="knowledge/sources/local/entities.yaml", deprecated=True),
+            _decl("dataset:x", adapter="markdown", path="entities/datasets/x.md"),
+            _decl("dataset:x", adapter="datapackage", path="datasets/x/datapackage.yaml", deprecated=True),
         ]
     )
     cols = table.collisions()
     assert len(cols) == 1
     assert cols[0].owner_scope == "proj"
-    assert cols[0].canonical_id == "question:q1"
+    assert cols[0].canonical_id == "dataset:x"
     assert len(cols[0].rows) == 2
-    assert any(r.deprecated for r in cols[0].rows)  # the stub is flagged
+    assert any(r.deprecated for r in cols[0].rows)
 
 
 def test_no_collision_across_scopes_or_for_borrower():
@@ -71,10 +71,9 @@ _COMMONS = "commons"
 
 
 def test_classify_owner_scope():
-    # aggregate AND datapackage are transitional deprecated owners (design §B4/§C3):
-    # in the target state datapackages are attachments, not owners, so any datapackage
+    # Datapackages are transitional deprecated owners (design §B4/§C3): in the
+    # target state datapackages are attachments, not owners, so any datapackage
     # currently emitting an entity is an orphan/transitional owner to be migrated.
-    assert classify_owner_scope("aggregate", project_name="proj") == ("proj", True)
     assert classify_owner_scope("datapackage", project_name="proj") == ("proj", True)
     # commons-merged is owned by the commons scope, not deprecated
     assert classify_owner_scope("commons-merged", project_name="proj") == (_COMMONS, False)
@@ -96,15 +95,15 @@ class _Sources:
 def test_build_identity_table_wraps_declarations_and_finds_collisions():
     src = _Sources(
         identity_declarations=[
-            _decl("question:q1", adapter="markdown", path="entities/question/0007-q1.md"),
-            _decl("question:q1", adapter="aggregate", path="knowledge/sources/local/entities.yaml", deprecated=True),
+            _decl("dataset:x", adapter="markdown", path="entities/datasets/x.md"),
+            _decl("dataset:x", adapter="datapackage", path="datasets/x/datapackage.yaml", deprecated=True),
             _decl("hypothesis:h1"),
         ]
     )
     table = build_identity_table(src)
     assert len(table.rows) == 3
     cols = table.collisions()
-    assert [c.canonical_id for c in cols] == ["question:q1"]
+    assert [c.canonical_id for c in cols] == ["dataset:x"]
 
 
 def test_owner_scopes_by_id_groups_scopes_per_canonical_id() -> None:
@@ -156,7 +155,7 @@ def test_is_genuine_two_real_owners() -> None:
 
 
 def test_is_genuine_transitional_shadow_is_not_genuine() -> None:
-    # one real markdown owner + one deprecated aggregate/datapackage stub -> carried, not a hard error
+    # one real markdown owner + one deprecated datapackage owner -> carried, not a hard error
     assert _collision(False, True).is_genuine is False
 
 

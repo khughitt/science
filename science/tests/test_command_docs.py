@@ -1180,8 +1180,7 @@ def test_sketch_model_uses_source_first_inquiry_authoring() -> None:
     assert "Use the most specific registered source kind available before creating a local concept." in normalized
     assert "Use `science entity create concept" in normalized
     assert "when the model genuinely needs a reusable project-local concept" in normalized
-    assert "Use `science terms add concept:" in normalized
-    assert "when the term only needs a resolvable lightweight identity" in normalized
+    assert "Keep weak ideas in prose when they do not need graph refs yet." in normalized
     assert (
         "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
         in normalized
@@ -1202,19 +1201,19 @@ def test_specify_model_marks_direct_graph_concepts_as_non_durable() -> None:
         "For inquiry-patch projects, record durable variable refs in `entities/patches/<slug>.md`."
         in normalized
     )
-    assert "Make sure those refs resolve through source records, `science terms add` rows, or concept entity owners" in normalized
+    assert "Make sure those refs resolve through source records or entity owners" in normalized
     assert "Direct `science graph add concept` writes are exploratory and non-durable." in normalized
     assert "They write to `knowledge/graph.trig`, which is regenerated from source files." in normalized
     assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in normalized
 
 
-def test_graph_and_health_commands_use_terms_add_for_lightweight_terms() -> None:
+def test_graph_and_health_commands_use_entity_owners_for_project_concepts() -> None:
     create_graph = _norm(_read("commands/create-graph.md"))
     health = _norm(_read("commands/health.md"))
 
-    assert "Use `science terms add <id> --title \"<title>\"` for simple project-scoped concepts" in create_graph
-    assert "add a lightweight term with `science terms add`" in health
-    assert "hand-edit `terms.yaml`" not in create_graph
+    assert 'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity' in create_graph
+    assert 'create a concept entity with `science entity create concept "<title>"`' in health
+    assert "terms.yaml" not in create_graph
 
 
 def test_add_hypothesis_keeps_cli_creation_before_template_body_editing() -> None:

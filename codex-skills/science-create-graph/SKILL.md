@@ -111,9 +111,8 @@ Before adding new entities, check the cross-project registry for existing defini
 For every new entity, read `docs/process/entity-creation-cookbook.md` and
 check shared kinds before creating project-local entries. If no shared identity fits,
 prefer the most specific registered kind. Use
-`science terms add <id> --title "<title>"` for simple project-scoped concepts, or
-`science entity create concept "<title>"` when
-the concept needs a full Markdown owner.
+`science entity create concept "<title>"` when a project-scoped concept needs a
+durable graph identity. Keep weak ideas in prose until they need an owner.
 
 ## Canonical Inputs
 
@@ -122,8 +121,7 @@ Build the graph from these upstream sources:
 - Typed markdown entities in `specs/` and `doc/` with YAML frontmatter (`id`, `type`, `title`, `related`, `source_refs`, etc.)
 - Task files in `tasks/active.md` and `tasks/done/*.md`
 - Structured local extensions in:
-  - `knowledge/sources/<local-profile>/entities.yaml`
-  - `knowledge/sources/<local-profile>/terms.yaml`
+  - `knowledge/sources/<local-profile>/external_refs.yaml`
   - `knowledge/sources/<local-profile>/relations.yaml`
   - `knowledge/sources/<local-profile>/mappings.yaml`
 
@@ -154,20 +152,22 @@ For each project entity:
    - interpretations, discussions, pre-registrations, bias audits, methods, datasets, and similar entities in their typed `doc/` locations
 2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
-   - `entities.yaml` for local entities such as project topics or legacy questions not yet migrated into standalone docs
-   - `terms.yaml` for lightweight local semantic term rows
+   - `external_refs.yaml` for external authority rows
    - `mappings.yaml` for explicit aliases during migration
    - `relations.yaml` only when you need project-local relation declarations
 
-Example `entities.yaml` entry:
+Example `external_refs.yaml` entry:
 
 ```yaml
-entities:
-  - canonical_id: topic:evaluation
-    kind: topic
-    title: Evaluation
-    profile: local
-    source_path: knowledge/sources/local/entities.yaml
+refs:
+  - canonical_id: paper:smith2024
+    kind: paper
+    title: Smith 2024
+    primary_external_id:
+      source: DOI
+      id: 10.1000/example
+      curie: doi:10.1000/example
+      provenance: manual
 ```
 
 ### Step 3: Audit canonical reference resolution

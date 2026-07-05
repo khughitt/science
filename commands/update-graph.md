@@ -88,8 +88,8 @@ science graph stats --format json
 If the update involved legacy ID cleanup or new project-local semantics, keep the
 project-local source files current:
 
-- `knowledge/sources/<local-profile>/entities.yaml`
 - `knowledge/sources/<local-profile>/mappings.yaml`
+New durable entity owners belong under `entities/`.
 
 ## Important Notes
 

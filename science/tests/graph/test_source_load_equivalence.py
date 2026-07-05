@@ -1,11 +1,9 @@
 """Behavior-neutral pinning test for the Spec 3 Slice A loop refactor.
 
-Two fixtures exercise every branch that moves from the load loop onto adapter
-policy: 1 markdown source_document, 2 missing-identity skip under strict, 3
-datapackage defer onto a markdown owner, 4 external-ref (bib) defer onto an
-aggregate stub, 5 aggregate row-meta capture. `_snapshot` captures the full
-normalized load output; the test asserts it equals a frozen value captured from
-the pre-refactor loop. The flip in Task 4 must keep this green field-for-field.
+Two fixtures exercise the source-load adapter policy branches: markdown
+source_document capture, missing-identity skip under strict, datapackage defer
+onto a markdown owner, and external-ref (bib) defer onto a markdown owner.
+`_snapshot` captures the full normalized load output.
 """
 
 from __future__ import annotations
@@ -37,17 +35,6 @@ def _snapshot(s: ProjectSources) -> dict[str, Any]:
         "skipped_entities": sorted((x.path, x.kind, x.reason) for x in s.skipped_entities),
         "markdown_documents": sorted(
             (d.path, tuple(sorted(d.frontmatter)), d.body) for d in s.markdown_documents
-        ),
-        "aggregate_rows": sorted(
-            (
-                m.path,
-                m.line,
-                m.canonical_id,
-                m.kind,
-                m.source_path,
-                tuple(sorted(m.primary_external_id.items())) if m.primary_external_id else None,
-            )
-            for m in s.aggregate_rows
         ),
         "dataset_datapackages": dict(s.dataset_datapackages),
         "entity_source_adapters": dict(s.entity_source_adapters),
@@ -92,25 +79,13 @@ def _build_strict_project(root: Path) -> None:
 
 def _build_nonstrict_project(root: Path) -> None:
     _write(root, "science.yaml", _MANIFEST)
-    # branch 5: aggregate rows captured; branch 4: paper stub the bib defers to
     _write(
         root,
-        "knowledge/sources/local/entities.yaml",
-        yaml.safe_dump(
-            {
-                "entities": [
-                    {
-                        "canonical_id": "concept:coined",
-                        "kind": "concept",
-                        "title": "Coined",
-                        "source_path": "knowledge/sources/local/entities.yaml",
-                    },
-                    {"canonical_id": "paper:Smith2024", "kind": "paper", "title": "S"},
-                ]
-            }
-        ),
+        "entities/papers/Smith2024.md",
+        '---\nid: "paper:Smith2024"\nkind: "paper"\ntitle: "S"\n'
+        'status: "active"\ncreated: "2026-01-01"\nupdated: "2026-01-01"\n---\n',
     )
-    # branch 4: bib has the same paper id → defers to the aggregate stub
+    # Bib has the same paper id -> defers to the markdown owner.
     _write(root, "papers/references.bib", "@article{Smith2024,\n  title = {Cells},\n}\n")
 
 
@@ -138,7 +113,6 @@ EXPECTED_STRICT: dict[str, Any] = {
             "body\n",
         ),
     ],
-    "aggregate_rows": [],
     "dataset_datapackages": {"dataset:ds2": "data/ds2/datapackage.yaml"},
     "entity_source_adapters": {
         "dataset:ds1": "datapackage",
@@ -148,26 +122,20 @@ EXPECTED_STRICT: dict[str, Any] = {
 }
 
 EXPECTED_NONSTRICT: dict[str, Any] = {
-    "entities": ["concept:coined", "paper:Smith2024"],
+    "entities": ["paper:Smith2024"],
     "identity_declarations": [
-        ("concept:coined", "owner", "slice-a", "aggregate", True),
-        ("paper:Smith2024", "owner", "slice-a", "aggregate", True),
+        ("paper:Smith2024", "owner", "slice-a", "markdown", False),
     ],
     "skipped_entities": [],
-    "markdown_documents": [],
-    "aggregate_rows": [
+    "markdown_documents": [
         (
-            "knowledge/sources/local/entities.yaml",
-            0,
-            "concept:coined",
-            "concept",
-            "knowledge/sources/local/entities.yaml",
-            None,
+            "entities/papers/Smith2024.md",
+            ("canonical_id", "created", "file_path", "id", "kind", "status", "title", "updated"),
+            "",
         ),
-        ("knowledge/sources/local/entities.yaml", 1, "paper:Smith2024", "paper", None, None),
     ],
     "dataset_datapackages": {},
-    "entity_source_adapters": {"concept:coined": "aggregate", "paper:Smith2024": "aggregate"},
+    "entity_source_adapters": {"paper:Smith2024": "markdown"},
 }
 
 
