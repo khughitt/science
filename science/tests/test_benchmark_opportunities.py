@@ -2616,6 +2616,12 @@ def test_fallback_display_group_for_gap_candidates() -> None:
     )
     assert (
         _fallback_display_group_for_gap_candidate(
+            {**base, "reason_notes": ["fallback:available-benchmark", "selected:generic-baseline"]}
+        )
+        == "generic-available-fallback"
+    )
+    assert (
+        _fallback_display_group_for_gap_candidate(
             {
                 **base,
                 "context_fit": "adjacent-fit",
@@ -2732,6 +2738,18 @@ def test_fallback_display_group_for_test_rows() -> None:
                 priority_source="gap-fallback",
                 context_fit="generic-fallback",
                 reason_notes=["fallback:available-benchmark"],
+            )
+        )
+        == "generic-available-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:available-selected",
+                benchmark_id="dataset:available-selected",
+                priority_source="gap-fallback",
+                context_fit="generic-fallback",
+                reason_notes=["fallback:available-benchmark", "selected:generic-baseline"],
             )
         )
         == "generic-available-fallback"
