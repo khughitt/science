@@ -48,6 +48,40 @@ edges:
     )
 
 
+def _write_lineage_proposition(
+    project: Path,
+    *,
+    slug: str = "a-affects-b",
+    subject: str = "a",
+    object_: str = "b",
+    legacy_patch: str = "h1",
+    legacy_edge_id: int = 1,
+) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / f"{slug}.md").write_text(
+        f"""---
+id: proposition:{slug}
+type: proposition
+title: {subject} affects {object_}
+status: active
+subject: {subject}
+predicate: affects
+object: {object_}
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+legacy_relation_label: biases
+legacy_patch: {legacy_patch}
+legacy_edge_id: {legacy_edge_id}
+---
+
+{subject} affects {object_}.
+""",
+        encoding="utf-8",
+    )
+
+
 def test_plan_blocks_migrated_row_without_focal_hypothesis(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_edge_project(project)
@@ -533,6 +567,178 @@ A affects B.
     assert row["blockers"] == ["matching-proposition-exists"]
     assert row["matching_propositions"] == ["proposition:a-affects-b"]
     assert row["notes"] == ["matching proposition lacks legacy_patch/legacy_edge_id"]
+
+
+def test_plan_closes_matching_legacy_lineage_proposition(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["rows"] == 1
+    assert payload["summary"]["closed"] == 1
+    assert payload["summary"]["ready"] == 0
+    assert payload["summary"]["blocked"] == 0
+    assert payload["summary"]["skipped"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+    assert row["closure_reason"] == "derived-legacy-edge-lineage"
+    assert row["matching_propositions"] == []
+    assert row["blockers"] == []
+    assert row["proposed_row"] is None
+
+
+def test_plan_blocks_duplicate_legacy_lineage_claims(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project, slug="a-affects-b")
+    _write_lineage_proposition(project, slug="a-affects-b-copy")
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["blocked"] == 1
+    assert payload["summary"]["closed"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "blocked"
+    assert row["blockers"] == ["duplicate-legacy-edge-claim"]
+    assert row["closed_by"] == []
+    assert row["closure_conflicts"] == [
+        {
+            "proposition": "proposition:a-affects-b",
+            "subject": "a",
+            "object": "b",
+            "file_path": "entities/propositions/a-affects-b.md",
+        },
+        {
+            "proposition": "proposition:a-affects-b-copy",
+            "subject": "a",
+            "object": "b",
+            "file_path": "entities/propositions/a-affects-b-copy.md",
+        },
+    ]
+
+
+def test_plan_blocks_legacy_lineage_subject_object_mismatch(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project, subject="a", object_="c")
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["blocked"] == 1
+    assert payload["summary"]["closed"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "blocked"
+    assert row["blockers"] == ["legacy-edge-claim-mismatch"]
+    assert row["closure_conflicts"] == [
+        {
+            "proposition": "proposition:a-affects-b",
+            "subject": "a",
+            "object": "c",
+            "file_path": "entities/propositions/a-affects-b.md",
+        }
+    ]
+
+
+def test_plan_closure_wins_soft_retired_state_blockers(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    (project / "doc/figures/dags/h1.dot").unlink()
+    _write_lineage_proposition(project)
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["closed"] == 1
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["blockers"] == []
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+
+
+def test_plan_closure_wins_eliminated_edge_blocker(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    dag_dir = _dag_dir(project)
+    (dag_dir / "h1.dot").write_text("digraph h1 {\n  a -> b;\n}\n", encoding="utf-8")
+    (dag_dir / "h1.edges.yaml").write_text(
+        """
+dag: h1
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: eliminated
+    identification: observational
+    description: Refuted legacy edge.
+    eliminated_by:
+      - task: t002
+        description: Refutation.
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_lineage_proposition(project)
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["closed"] == 1
+    assert payload["summary"]["blocked"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["blockers"] == []
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+
+
+def test_plan_pair_only_match_without_lineage_remains_skipped(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True)
+    (prop_dir / "a-affects-b.md").write_text(
+        """---
+id: proposition:a-affects-b
+type: proposition
+title: A affects B
+status: active
+subject: a
+predicate: affects
+object: b
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+---
+
+A affects B.
+""",
+        encoding="utf-8",
+    )
+
+    payload = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert payload["summary"]["skipped"] == 1
+    assert payload["summary"]["closed"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "skipped"
+    assert row["blockers"] == ["matching-proposition-exists"]
+    assert row["matching_propositions"] == ["proposition:a-affects-b"]
+    assert row["closed_by"] == []
+
+
+def test_plan_resurfaces_ready_when_closing_proposition_is_removed(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+
+    first = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+    assert first["summary"]["closed"] == 1
+
+    (project / "entities/propositions/a-affects-b.md").unlink()
+    second = build_retired_edge_migration_plan(project, focal_hypothesis="hypothesis:h1").to_json()
+
+    assert second["summary"]["closed"] == 0
+    assert second["summary"]["ready"] == 1
+    assert second["rows"][0]["status"] == "ready"
 
 
 def test_plan_blocks_orphan_dot(tmp_path: Path) -> None:
