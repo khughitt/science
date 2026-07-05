@@ -151,6 +151,13 @@ already has.
    `predates:` anchor's date flows into its independent literature origin.
    Finalize each candidate's `origin_plan` from the resolution per the
    origin-plan rules in Phase 4 below.
+4. **Convergence detection.** If candidates from two or more lenses
+   independently describe the same idea, tag them internally with a shared
+   `convergence_group: <id>` so Phase 4 knows to merge them into one block.
+   Convergent lenses are **not** collapsed to one: keep the whole idea as a
+   single block carrying multiple `lens_views`. `convergence_group` (if used)
+   is an internal Phase-3 classification aid only; Phase 4 emits exactly one
+   block per apply unit.
 
 ## Generate — Phase 4: Report
 
@@ -179,6 +186,12 @@ lens: mechanism
 rationale: >
   The cholinergic anti-inflammatory pathway is established in acute sepsis but
   under-explored as a chronic feedback failure in post-acute syndromes.
+lens_views:
+  - lens: mechanism
+    rationale: >
+      Same framing as the top-level rationale; one entry per lens that frames
+      this idea. A single-lens candidate has one entry.
+    origin_ref: explore-ideas-mechanism
 literature_anchors:
   - doi: 10.1000/example
     openalex_id: W1234567890
@@ -195,6 +208,36 @@ origin_plan:
   origins:
     - type: assistant
       ref: explore-ideas-mechanism
+```
+
+When two lenses independently converge on the **same idea**, emit **one block**
+for the whole idea (not one per lens): carry every converged lens as a
+`lens_views` entry and one `origin_plan.origins` entry per lens, each marked
+`independent: true`. Every `lens_views[].origin_ref` MUST equal one of the
+planned `origin_plan.origins[].ref`.
+
+```yaml
+candidate_id: cand-hspc-trained-immunity
+proposed_kind: question
+title: Progenitor imprinting sustains PAIS inflammation
+question_or_claim: Does IL-6/STAT3 imprinting of HSPCs sustain PAIS inflammation independent of antigen?
+lens_views:
+  - lens: mechanism
+    rationale: IL-6/STAT3 imprinting of progenitors as an antigen-independent driver.
+    origin_ref: explore-ideas-mechanism
+  - lens: analogy
+    rationale: Read as a maladaptive trained-immunity set-point in progenitor epigenetic memory.
+    origin_ref: explore-ideas-analogy
+novelty_bucket: novel
+related_existing: []
+decision: defer
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+    - type: assistant
+      ref: explore-ideas-analogy
+      independent: true
 ```
 
 `decision` defaults to `defer`; the human edits it to `keep` or `drop` in
@@ -214,6 +257,11 @@ block in Phase 3→4):
 - A resolvable anchor that merely supports (no `predates:` prefix) → the
   paper belongs in the entity's `source_refs` at apply time, **not** as an
   origin. Keep the origin `assistant` only.
+- Every `lens_views[]` entry links to the origin that produced it via
+  `origin_ref`, which MUST match one of this block's `origin_plan.origins[].ref`.
+  Apply creates `origins` and `lens_views` together atomically; a legacy block
+  with only a top-level `lens`+`rationale` (no `lens_views`) synthesizes a single
+  view at apply time.
 
 `origin_plan` holds `origins` only — `added_by` is not stored in the block;
 apply stamps it fresh (below) as `explore-ideas:<model-id>:<candidate_id>`.
