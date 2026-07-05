@@ -362,9 +362,9 @@ class Entity(BaseModel):
         if not self.lens_views:
             return self
         non_null_refs = [o.ref for o in self.origins if o.ref is not None]
-        if len(non_null_refs) != len(set(non_null_refs)):
-            raise ValueError("non-null origin refs must be unique when lens_views are present")
         ref_set = set(non_null_refs)
+        if len(non_null_refs) != len(ref_set):
+            raise ValueError("non-null origin refs must be unique when lens_views are present")
         seen: set[str] = set()
         for view in self.lens_views:
             if view.lens in seen:

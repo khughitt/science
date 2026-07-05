@@ -58,3 +58,16 @@ def test_entity_rejects_duplicate_lens() -> None:
                 LensView(lens="mechanism", rationale="b"),
             ],
         )
+
+
+def test_entity_rejects_duplicate_origin_refs_when_lens_views_present() -> None:
+    with pytest.raises(ValidationError):
+        _entity(
+            origins=[
+                OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism"),
+                OriginRecord(type=OriginType.ASSISTANT, ref="explore-ideas-mechanism", independent=True),
+            ],
+            lens_views=[
+                LensView(lens="mechanism", rationale="m", origin_ref="explore-ideas-mechanism"),
+            ],
+        )
