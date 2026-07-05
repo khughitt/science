@@ -542,7 +542,7 @@ benchmark:
     assert "fallback-only" in result.output
 
 
-def test_benchmark_gaps_cli_table_shows_candidate_mode_and_compacts_fallbacks(tmp_path: Path) -> None:
+def test_benchmark_gaps_cli_table_collapses_generic_fallback_candidates(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -564,8 +564,8 @@ type: dataset
 title: {slug}
 benchmark:
   domains: [biology]
-  modalities: [assay]
-  signal_types: [unrelated]
+  modalities: [proteomics]
+  signal_types: [time-series]
   benchmark_kinds: [static-association]
   tasks:
     - id: ready
@@ -583,7 +583,86 @@ benchmark:
 
     assert result.exit_code == 0
     assert "fallback-only" in result.output
-    assert "+2 fallback" in result.output
+    assert "generic fallback: 3 candidates" in result.output
+    assert "Collapsed 3 generic fallback candidates" in result.output
+    assert "dataset:generic-a [" not in result.output
+    assert "+2 fallback" not in result.output
+
+
+def test_benchmark_gaps_cli_json_keeps_raw_generic_fallback_candidates(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0004-generic",
+        """
+id: hypothesis:0004-generic
+type: hypothesis
+title: Generic fallback benchmark gap
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    for slug in ("generic-a", "generic-b"):
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: {slug}
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    result = _invoke_gaps(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    candidates = payload["benchmark_gaps"][0]["candidate_benchmarks"]
+    assert len(candidates) == 2
+    assert {candidate["benchmark_id"] for candidate in candidates} == {"dataset:generic-a", "dataset:generic-b"}
+    assert payload["fallback_diagnostics"]["generic_fallback_candidate_rows"] == 2
+
+
+def test_format_gap_candidates_renders_mixed_fallback_without_raising() -> None:
+    from science_tool.cli import _format_gap_candidates_for_table
+
+    row = {
+        "candidate_mode": "fallback-only",
+        "candidate_benchmarks": [
+            {
+                "benchmark_id": "dataset:specific-a",
+                "candidate_score": 2.0,
+                "context_fit": "adjacent-fit",
+                "context_fit_warnings": [],
+                "reason_notes": ["fallback:task-ready"],
+            },
+            {
+                "benchmark_id": "dataset:generic-a",
+                "candidate_score": 1.0,
+                "context_fit": "generic-fallback",
+                "context_fit_warnings": [],
+                "reason_notes": ["fallback:baseline-quality"],
+            },
+        ],
+    }
+
+    rendered = _format_gap_candidates_for_table(row)
+
+    assert "dataset:specific-a" in rendered
+    assert "generic fallback: 1 candidates (top: dataset:generic-a)" in rendered
 
 
 def test_benchmark_gaps_cli_filters_context_fit_json(tmp_path: Path) -> None:
@@ -1930,7 +2009,7 @@ def test_benchmark_test_triage_cli_table_output_shows_fallback_rollups(tmp_path:
         """
 id: hypothesis:0306-generic
 type: hypothesis
-title: Generic fallback hypothesis
+title: Generic hypothesis
 """,
         body="Homeostatic recovery remains under-tested.",
     )
@@ -1950,7 +2029,6 @@ benchmark:
   benchmark_kinds: [static-association]
   tasks:
     - id: ready
-      task_type: protein-lineage-association
       prediction_target: label
       held_out_unit: cohort
       metric: auroc
@@ -1967,16 +2045,12 @@ benchmark:
     result = _invoke_test_triage(tmp_path, "--source", "gap-fallback")
 
     assert result.exit_code == 0
-    assert "Benchmark Test Triage: fallback-diagnostic" in result.output
-    assert "1 fallback rows grouped into 1 rollups" in result.output
-    assert "visible-fallback" in result.output
-    assert "ready (protein-lineage-association)" in result.output
-    assert "supported" in result.output
-    assert "runnable" in result.output
-    assert "deposit" in result.output
-    assert "proteomics:1" in result.output
-    assert "hypothesis:0306-generic" in result.output
-    assert "top benchmarks" not in result.output
+    assert "Benchmark Test Triage: fallback-diagnostic" not in result.output
+    assert "Benchmark Test Triage: generic fallback summary" in result.output
+    assert "1 generic fallback rows hidden from detailed table" in result.output
+    assert "dataset:visible-fallback:1" in result.output
+    assert "ready (protein-lineage-association)" not in result.output
+    assert "hypothesis:0306-generic" not in result.output
     assert "runnable:1" not in result.output
     assert "deposit:1" not in result.output
     assert "none:1" not in result.output
@@ -1990,6 +2064,7 @@ def test_benchmark_test_triage_cli_table_output_shows_hidden_fallback_rollup_cou
         {
             "benchmark_id": f"dataset:fallback-{index:02d}",
             "benchmark_title": f"Fallback {index:02d}",
+            "display_group": "specific-fallback",
             "task_id": f"dataset:fallback-{index:02d}#ready",
             "task_type": "",
             "count": 1,
@@ -2067,7 +2142,7 @@ def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path
                 "blocked-or-reference": [],
                 "fallback-diagnostic": [],
             },
-            "fallback_diagnostics": {"rollups": []},
+            "fallback_diagnostics": {"rollups": [], "terminal_visible_rollup_count": 1},
             "commons_notice": "",
             "filters": {},
             "review_file": None,
@@ -2087,6 +2162,63 @@ def test_benchmark_test_triage_cli_errors_when_fallback_rollups_missing(tmp_path
 
     assert result.exit_code != 0
     assert "fallback diagnostics rollups missing for fallback rows" in result.output
+
+
+def test_benchmark_test_triage_cli_table_hides_generic_but_keeps_json_rollups(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0307-generic",
+        """
+id: hypothesis:0307-generic
+type: hypothesis
+title: Generic hypothesis
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "visible-fallback",
+        """
+id: dataset:visible-fallback
+type: dataset
+title: Visible Fallback
+dataset_class: deposit
+local_path: data/visible-fallback
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [time-series]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+      support:
+        state: supported
+        checked_at: '2026-07-03'
+""",
+    )
+
+    table_result = _invoke_test_triage(tmp_path, "--source", "gap-fallback")
+
+    assert table_result.exit_code == 0
+    assert "Benchmark Test Triage: fallback-diagnostic" not in table_result.output
+    assert "Benchmark Test Triage: generic fallback summary" in table_result.output
+
+    json_result = _invoke_test_triage(tmp_path, "--source", "gap-fallback", "--format", "json")
+
+    assert json_result.exit_code == 0
+    payload = json.loads(json_result.output)
+    rollup = payload["fallback_diagnostics"]["rollups"][0]
+    assert rollup["benchmark_id"] == "dataset:visible-fallback"
+    assert rollup["display_group"] == "generic-baseline-fallback"
+    assert payload["buckets"]["fallback-diagnostic"][0]["benchmark_id"] == "dataset:visible-fallback"
 
 
 def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) -> None:
@@ -2226,6 +2358,19 @@ benchmark:
             "reference": [],
             "pointer": [],
         },
+        "display_group_counts": {
+            "specific-fallback": 0,
+            "blocked-support-fallback": 0,
+            "generic-baseline-fallback": 0,
+            "generic-task-ready-fallback": 0,
+            "generic-available-fallback": 0,
+        },
+        "hidden_generic_fallback_rows": 0,
+        "shown_fallback_rows": 0,
+        "top_generic_fallback_benchmarks": [],
+        "top_generic_fallback_reasons": [],
+        "terminal_visible_rollup_count": 0,
+        "terminal_hidden_rollup_count": 0,
         "rollups": [],
     }
 

@@ -6411,29 +6411,51 @@ def benchmark_test_triage(
     if fallback_count:
         diagnostics = payload["fallback_diagnostics"]
         rollups = diagnostics["rollups"]
-        visible_rollups = rollups[:10]
-        if not visible_rollups:
+        visible_terminal_rollups = [
+            rollup for rollup in rollups if not str(rollup.get("display_group") or "").startswith("generic-")
+        ]
+        visible_rollups = visible_terminal_rollups[:10]
+        terminal_visible_total = diagnostics.get("terminal_visible_rollup_count", len(rollups))
+        if terminal_visible_total > 0 and not visible_rollups:
             raise click.ClickException("fallback diagnostics rollups missing for fallback rows")
-        table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
-        for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        row_label = f"{fallback_count} fallback rows grouped into {len(rollups)} rollups"
-        if len(visible_rollups) < len(rollups):
-            hidden_rollups = len(rollups) - len(visible_rollups)
-            row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
-        for index, rollup in enumerate(visible_rollups):
-            table.add_row(
-                row_label if index == 0 else "",
-                str(rollup.get("benchmark_id") or "-"),
-                _format_test_triage_rollup_task(rollup),
-                _format_test_triage_rollup_support(rollup),
-                str(rollup.get("readiness_label") or "-"),
-                str(rollup.get("dataset_class") or "-"),
-                _format_test_triage_rollup_facets(rollup),
-                _format_test_triage_rollup_examples(rollup),
+        if visible_rollups:
+            table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
+            for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
+                table.add_column(col, overflow="fold", no_wrap=False)
+            shown_fallback_rows = diagnostics.get("shown_fallback_rows", fallback_count)
+            row_label = f"{shown_fallback_rows} fallback rows grouped into {len(visible_terminal_rollups)} rollups"
+            if len(visible_rollups) < len(visible_terminal_rollups):
+                hidden_rollups = len(visible_terminal_rollups) - len(visible_rollups)
+                row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
+            for index, rollup in enumerate(visible_rollups):
+                table.add_row(
+                    row_label if index == 0 else "",
+                    str(rollup.get("benchmark_id") or "-"),
+                    _format_test_triage_rollup_task(rollup),
+                    _format_test_triage_rollup_support(rollup),
+                    str(rollup.get("readiness_label") or "-"),
+                    str(rollup.get("dataset_class") or "-"),
+                    _format_test_triage_rollup_facets(rollup),
+                    _format_test_triage_rollup_examples(rollup),
+                )
+            Console(width=200).print(table)
+            visible_rows += len(visible_rollups)
+        hidden_generic_fallback_rows = diagnostics.get("hidden_generic_fallback_rows", 0)
+        if hidden_generic_fallback_rows:
+            table = Table(
+                title="Benchmark Test Triage: generic fallback summary",
+                show_header=True,
+                header_style="bold",
             )
-        Console(width=200).print(table)
-        visible_rows += len(visible_rollups)
+            for col in ("rows", "top benchmarks", "top reasons"):
+                table.add_column(col, overflow="fold", no_wrap=False)
+            table.add_row(
+                f"{hidden_generic_fallback_rows} generic fallback rows hidden from detailed table",
+                _format_count_rows(diagnostics.get("top_generic_fallback_benchmarks", []), key="benchmark_id"),
+                _format_count_rows(diagnostics.get("top_generic_fallback_reasons", []), key="reason"),
+            )
+            Console(width=200).print(table)
+            visible_rows += 1
     suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
     if suppressed:
         table = Table(
@@ -6464,11 +6486,30 @@ def _format_gap_candidates_for_table(row: Mapping[str, Any]) -> str:
     candidates = row["candidate_benchmarks"]
     if not candidates:
         return "-"
-    if row.get("candidate_mode") == "fallback-only":
-        first = _format_gap_candidate_for_table(candidates[0])
-        remainder = len(candidates) - 1
-        return first if remainder <= 0 else f"{first} +{remainder} fallback"
-    return ", ".join(_format_gap_candidate_for_table(candidate) for candidate in candidates[:3])
+    if row.get("candidate_mode") != "fallback-only":
+        return ", ".join(_format_gap_candidate_for_table(candidate) for candidate in candidates[:3])
+
+    from science_tool.benchmark_opportunities import (
+        _fallback_display_group_for_gap_candidate,
+        _is_generic_fallback_display_group,
+    )
+
+    rendered: list[str] = []
+    generic_candidates: list[Mapping[str, Any]] = []
+    for candidate in candidates:
+        try:
+            display_group = _fallback_display_group_for_gap_candidate(candidate)
+        except ValueError:
+            rendered.append(_format_gap_candidate_for_table(candidate))
+            continue
+        if _is_generic_fallback_display_group(display_group):
+            generic_candidates.append(candidate)
+        else:
+            rendered.append(_format_gap_candidate_for_table(candidate))
+    if generic_candidates:
+        top_benchmark = generic_candidates[0]["benchmark_id"]
+        rendered.append(f"generic fallback: {len(generic_candidates)} candidates (top: {top_benchmark})")
+    return ", ".join(rendered) if rendered else "-"
 
 
 def _format_test_triage_task(row: Mapping[str, Any]) -> str:
@@ -6914,6 +6955,12 @@ def benchmark_gaps(
                 row["reason"],
             )
         Console(width=200).print(table)
+    generic_fallback_rows = payload["fallback_diagnostics"]["generic_fallback_candidate_rows"]
+    if generic_fallback_rows:
+        click.echo(
+            f"Collapsed {generic_fallback_rows} generic fallback candidates; "
+            "use --calibration-summary or --format json for diagnostics."
+        )
 
     if summary_payload is not None:
         summary_table = Table(title="Gap Calibration Summary", show_header=True, header_style="bold")
