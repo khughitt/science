@@ -1,4 +1,4 @@
-"""parse_entity_file extensions for dataset entities — back-compat + new shape."""
+"""parse_entity_file extensions for dataset entities."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def tmp_md(tmp_path: Path):
     return _write
 
 
-def test_legacy_flat_access_parses_as_access_level(tmp_md) -> None:
+def test_scalar_access_is_invalid(tmp_md) -> None:
     p = tmp_md(
         """
         ---
@@ -39,13 +39,8 @@ def test_legacy_flat_access_parses_as_access_level(tmp_md) -> None:
     """,
         name="legacy.md",
     )
-    e = parse_entity_file(p, project_slug="testproj")
-    assert e is not None
-    assert e.origin == "external"  # default for legacy datasets
-    assert e.access is not None
-    assert e.access.level == "public"
-    assert e.access.verified is False
-    assert e.accessions == ["EGAD00001"]  # `datasets:` aliased
+    with pytest.raises(ValueError, match="access must be a mapping"):
+        parse_entity_file(p, project_slug="testproj")
 
 
 def test_new_shape_origin_external(tmp_md) -> None:
@@ -159,7 +154,9 @@ def test_dataset_frontmatter_preserves_identity_metadata(tmp_md) -> None:
         deprecated_ids: ["dataset:old-demo"]
         taxon: "NCBITaxon:9606"
         origin: "external"
-        access: "public"
+        access:
+          level: "public"
+          verified: false
         ---
         Body.
     """,
@@ -194,7 +191,9 @@ def test_dataset_frontmatter_coerces_identity_context(tmp_md) -> None:
         kind: "dataset"
         title: "Identity Context"
         origin: "external"
-        access: "public"
+        access:
+          level: "public"
+          verified: false
         identity_context:
           taxon: 9606
           assembly:

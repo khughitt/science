@@ -55,7 +55,6 @@ def _usage_defect(entry: Any) -> str | None:
 def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
     for fm in datasets:
-        # `kind` is canonical; `type` is the authored alias — accept either.
         if fm.get("kind") != "dataset":
             continue
         path = fm.get("_path")

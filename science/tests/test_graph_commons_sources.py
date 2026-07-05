@@ -13,7 +13,7 @@ from science_model.source_contracts import BindingSource
 from science_model.source_ref import SourceRef
 
 from science_tool.commons.adapter import CommonsEntityAdapter
-from science_tool.commons.errors import CommonsRootNotFoundError, OverlayValidationError
+from science_tool.commons.errors import CommonsEntityError, CommonsRootNotFoundError, OverlayValidationError
 from science_tool.commons.overlay import MergedEntity
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.graph.commons_sources import (
@@ -270,6 +270,11 @@ def test_translate_commons_record_accepts_kind_without_type() -> None:
     assert isinstance(entity, PaperEntity)
     assert entity.kind == "paper"
     assert entity.canonical_id == "paper:Persi2025"
+
+
+def test_translate_commons_record_rejects_type_without_kind() -> None:
+    with pytest.raises(CommonsEntityError, match="missing kind"):
+        _translate({"id": "paper:Persi2025", "type": "paper", "title": "Persi 2025"})
 
 
 def test_translate_topic_description_flows_to_content_preview() -> None:

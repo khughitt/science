@@ -54,11 +54,10 @@
   repository (`~/d/science-commons`), 1 skipped stale registered path
   (`~/d/natural-systems/.worktrees/validation-strict-cleanup`), and no
   unregistered `science.yaml` files in the configured search roots.
-- Next low-risk slice: finish strict frontmatter cleanup. Downstream data is
-  already clean, but toolkit support still includes one `kind`/`type` dual-read
-  in `science/src/science_tool/graph/commons_sources.py` and scalar `access:`
-  coercion in `science/model/src/science_model/frontmatter.py`.
-- Next data-bearing slice after that: `article:<bibkey>` alias migration.
+- Strict frontmatter cleanup is complete in
+  `refactor/strict-frontmatter-cleanup`: remaining `type:` reader fallbacks and
+  scalar `access:` coercion paths were removed from active toolkit code.
+- Next data-bearing slice: `article:<bibkey>` alias migration.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -173,15 +172,20 @@ cd science && uv run --frozen pytest
 > building one before any data can be migrated.
 
 Status 2026-07-05: project data and active authoring surfaces are clean in the
-registered-project inventory. One reader fallback remains:
-`science/src/science_tool/graph/commons_sources.py` still uses
-`fm.get("kind") or fm.get("type")`; remove that before closing this surface.
+registered-project inventory. The remaining reader fallbacks were removed in
+`refactor/strict-frontmatter-cleanup`, including commons entity translation,
+workbench-apply existing-target validation, and curation inventory
+classification.
 
-- [ ] **Step 0: Build the frontmatter migrator (TDD)**
+- [x] **Step 0: Build the frontmatter migrator (TDD) or confirm it is not needed**
 
 Write a rewriter that replaces entity-frontmatter `type:` with `kind:`,
 preserving surrounding field order and body bytes, idempotent, with a
 `--write`/dry-run split. Cover with tests before running it on any project.
+
+No new migrator was needed in this slice: the registered-project inventory was
+already zero for `type:` entity frontmatter after earlier project migration
+work.
 
 - [x] **Step 1: Inventory authoring and data**
 
@@ -204,12 +208,12 @@ Re-run the registered-project inventory. Proceed only when `type:` hits are
 zero in project entity files and toolkit templates, **and** each migrated
 project still builds under `science validate` / `graph materialize`.
 
-- [ ] **Step 5: Remove dual-read support**
+- [x] **Step 5: Remove dual-read support**
 
 Replace `fm.get("kind") or fm.get("type")` and equivalent normalization with
 strict `kind:` reads. Remove tests whose only purpose is `type:` compatibility.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run frontmatter/entity tests, then the full `science` and `science/model`
 suites.
@@ -226,17 +230,20 @@ suites.
 > No scalar-`access:` migrator exists today — build one before migrating data.
 
 Status 2026-07-05: registered-project inventory reports zero scalar `access:`
-hits, so no project data migration is currently required. The remaining work is
-to remove scalar coercion from
-`science/model/src/science_model/frontmatter.py` and prove scalar input is
-invalid.
+hits, so no project data migration is currently required. Scalar coercion was
+removed in `refactor/strict-frontmatter-cleanup`; scalar input now fails
+frontmatter parsing and health reports malformed scalar access instead of
+normalizing it.
 
-- [ ] **Step 0: Build the access migrator (TDD)**
+- [x] **Step 0: Build the access migrator (TDD) or confirm it is not needed**
 
 Write a rewriter that converts scalar `access: <level>` to a structured block.
 It **must preserve the current coercion semantics** — `verified: false` (the
 existing `_coerce_access` behavior); a scalar value was never verified, so the
 migration must not assert `verified: true`. Cover with tests before running.
+
+No new migrator was needed in this slice: the registered-project inventory was
+already zero for scalar `access:` fields after earlier project migration work.
 
 - [x] **Step 1: Inventory scalar access**
 
@@ -252,11 +259,11 @@ with explicit `level` and `verified: false` fields.
 Proceed only when project scalar access hits are zero **and** each migrated
 project still builds under `science validate` / `graph materialize`.
 
-- [ ] **Step 4: Remove scalar coercion**
+- [x] **Step 4: Remove scalar coercion**
 
 Make scalar `access:` invalid instead of normalized.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run frontmatter and health tests plus package suites.
 

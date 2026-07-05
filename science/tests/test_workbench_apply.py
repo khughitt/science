@@ -393,6 +393,24 @@ def test_apply_workbench_rejects_malformed_existing_target_before_write(tmp_path
     assert "evidence-line:a-affects-b-ev0" not in workbench_path.read_text(encoding="utf-8")
 
 
+def test_apply_workbench_rejects_type_only_existing_target_before_write(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    prop_path.parent.mkdir(parents=True)
+    prop_path.write_text(
+        "---\nid: proposition:a-affects-b\ntype: proposition\ncreated: '2026-07-04'\nupdated: '2026-07-04'\n---\nBody\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WorkbenchApplyError, match="expected proposition proposition:a-affects-b"):
+        apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    assert "evidence-line:a-affects-b-ev0" not in workbench_path.read_text(encoding="utf-8")
+
+
 def test_build_workbench_apply_plan_rejects_escaping_entity_target_before_write(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"

@@ -241,13 +241,13 @@ def _materialize_commons_entity(
     ontology_catalogs: list[OntologyCatalog],
 ) -> Entity:
     fm = dict(merged.merged_frontmatter)
-    raw_kind = fm.get("kind") or fm.get("type")
+    raw_kind = fm.get("kind")
     if not isinstance(raw_kind, str) or not raw_kind:
         canonical_id = fm.get("id")
         raise CommonsEntityError(
             merged.canonical.body_path,
             canonical_id=canonical_id if isinstance(canonical_id, str) else None,
-            cause=ValueError("missing type/kind"),
+            cause=ValueError("missing kind"),
         )
     kind = _normalize_kind(raw_kind)
     schema = registry.resolve(kind)

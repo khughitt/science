@@ -236,7 +236,7 @@ def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str
         frontmatter, body = _parse_existing_target_text(current_text)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise WorkbenchApplyError(f"malformed existing entity target {path}: {exc}") from exc
-    existing_kind = frontmatter.get("kind") or frontmatter.get("type")
+    existing_kind = frontmatter.get("kind")
     if frontmatter.get("id") != expected_id or existing_kind != expected_kind:
         raise WorkbenchApplyError(
             f"malformed existing entity target {path}: expected {expected_kind} {expected_id}"
