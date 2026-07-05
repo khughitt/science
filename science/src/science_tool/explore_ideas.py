@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from science_model.entities import OriginRecord
+from science_model.entities import LensView, OriginRecord
 from science_tool.entities import EntityCommandError, create_entity
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
@@ -39,6 +39,7 @@ class CreatePlan:
     title: str
     origins: list[dict]
     source_refs: list[str]
+    lens_views: list[dict]
     added_by: str
 
 
@@ -142,6 +143,47 @@ def _normalize_origin(origin: object, candidate_id: str) -> dict:
         raise ApplyValidationError(f"{candidate_id}: invalid origin {normalized!r}: {exc}") from exc
 
 
+def _normalize_lens_view(view: object, candidate_id: str, planned_refs: set[str]) -> dict:
+    if not isinstance(view, dict):
+        raise ApplyValidationError(f"{candidate_id}: lens_views entry must be a mapping")
+    try:
+        record = LensView.model_validate(dict(view))
+    except ValidationError as exc:
+        raise ApplyValidationError(f"{candidate_id}: invalid lens_view {view!r}: {exc}") from exc
+    if record.origin_ref is not None and record.origin_ref not in planned_refs:
+        raise ApplyValidationError(
+            f"{candidate_id}: lens_view origin_ref {record.origin_ref!r} is not one of the "
+            "block's planned origin refs"
+        )
+    return record.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+
+
+def derive_lens_views(data: dict, origins: list[dict], candidate_id: str = "?") -> list[dict]:
+    """Return the lens_views for a candidate block.
+
+    Explicit ``lens_views`` are validated against the planned origin refs. A
+    legacy block (no ``lens_views``) with a top-level ``lens``+``rationale``
+    synthesizes one view, linked to the ``explore-ideas-<lens>`` origin when the
+    block planned it. Returns ``[]`` when neither is present.
+    """
+    planned_refs = {o["ref"] for o in origins if o.get("ref")}
+    raw = data.get("lens_views")
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise ApplyValidationError(f"{candidate_id}: 'lens_views' must be a list")
+        return [_normalize_lens_view(v, candidate_id, planned_refs) for v in raw]
+
+    lens = data.get("lens")
+    rationale = data.get("rationale")
+    if isinstance(lens, str) and isinstance(rationale, str) and rationale.strip():
+        view: dict = {"lens": lens, "rationale": rationale}
+        origin_ref = f"explore-ideas-{lens}"
+        if origin_ref in planned_refs:
+            view["origin_ref"] = origin_ref
+        return [_normalize_lens_view(view, candidate_id, planned_refs)]
+    return []
+
+
 def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePlan:
     kind = data.get("proposed_kind")
     if not isinstance(kind, str) or kind not in _ROUTABLE_KINDS:
@@ -158,6 +200,23 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     origins: list[dict] = []
     for origin in origins_raw:
         origins.append(_normalize_origin(origin, candidate_id))
+
+    planned_refs = [o["ref"] for o in origins if o.get("ref")]
+    if len(planned_refs) != len(set(planned_refs)):
+        raise ApplyValidationError(
+            f"{candidate_id}: duplicate non-null origin_plan.origins[].ref"
+        )
+
+    lens_views = derive_lens_views(data, origins, candidate_id)
+
+    seen_lenses: set[str] = set()
+    for view in lens_views:
+        if view["lens"] in seen_lenses:
+            raise ApplyValidationError(
+                f"{candidate_id}: duplicate lens_views[].lens {view['lens']!r} "
+                "(at most one view per lens)"
+            )
+        seen_lenses.add(view["lens"])
 
     anchors = data.get("literature_anchors") or []
     source_refs: list[str] = []
@@ -187,6 +246,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
         title=title,
         origins=origins,
         source_refs=source_refs,
+        lens_views=lens_views,
         added_by=f"explore-ideas:{model_id}:{candidate_id}",
     )
 
@@ -331,6 +391,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
                 extra_frontmatter={
                     "origins": create_plan.origins,
                     "added_by": create_plan.added_by,
+                    **({"lens_views": create_plan.lens_views} if create_plan.lens_views else {}),
                 },
             )
         except EntityCommandError as exc:
