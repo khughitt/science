@@ -413,6 +413,32 @@ edges:
     )
 
 
+def _write_retired_migration_lineage_proposition(project: Path) -> None:
+    prop_dir = project / "entities/propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    (prop_dir / "a-affects-b.md").write_text(
+        """---
+id: proposition:a-affects-b
+type: proposition
+title: A affects B
+status: active
+subject: a
+predicate: affects
+object: b
+polarity: positive
+claim_layer: causal_effect
+identification_strength: observational
+legacy_relation_label: biases
+legacy_patch: h1
+legacy_edge_id: 1
+---
+
+A affects B.
+""",
+        encoding="utf-8",
+    )
+
+
 def test_cli_dag_retired_edge_migration_plan_json_blocks_without_membership(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_migration_project(project)
@@ -430,6 +456,37 @@ def test_cli_dag_retired_edge_migration_plan_json_blocks_without_membership(tmp_
     assert payload["rows"][0]["predicate_review_required"] is True
 
 
+def test_cli_dag_retired_edge_migration_plan_json_reports_closed_rows(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "retired-edge-migration-plan",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["closed"] == 1
+    assert payload["summary"]["ready"] == 0
+    row = payload["rows"][0]
+    assert row["status"] == "closed"
+    assert row["closed_by"] == ["proposition:a-affects-b"]
+    assert row["closure_reason"] == "derived-legacy-edge-lineage"
+
+
 def test_cli_dag_retired_edge_migration_plan_table_reports_blockers(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_migration_project(project)
@@ -443,6 +500,30 @@ def test_cli_dag_retired_edge_migration_plan_table_reports_blockers(tmp_path: Pa
     assert "Retired edge migration plan" in result.output
     assert "h1#1" in result.output
     assert "membership-required" in result.output
+
+
+def test_cli_dag_retired_edge_migration_plan_table_reports_closed_rows(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "retired-edge-migration-plan",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "1 closed" in result.output
+    assert "closed by proposition:a-affects-b" in result.output
 
 
 def test_cli_dag_retired_edge_migration_plan_missing_project_is_click_error(tmp_path: Path) -> None:
@@ -595,6 +676,74 @@ def test_cli_dag_scaffold_retired_edge_workbench_json_reports_noop(tmp_path: Pat
     assert second_payload["written"] is False
     assert second_payload["output"] == "doc/figures/dags/h1.workbench.yaml"
     assert second_payload["rows"] == 1
+    assert first_payload["written_rows"] == 1
+    assert first_payload["total_rows"] == 1
+    assert first_payload["closed_rows"] == 0
+    assert second_payload["written_rows"] == 1
+    assert second_payload["total_rows"] == 1
+    assert second_payload["closed_rows"] == 0
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_json_reports_complete(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "missing-parent/h1.workbench.yaml",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "complete"
+    assert payload["written"] is False
+    assert payload["rows"] == 0
+    assert payload["written_rows"] == 0
+    assert payload["total_rows"] == 1
+    assert payload["closed_rows"] == 1
+    assert payload["closed_by"] == ["proposition:a-affects-b"]
+    assert not (project / "missing-parent").exists()
+
+
+def test_cli_dag_scaffold_retired_edge_workbench_table_reports_complete(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "scaffold-retired-edge-workbench",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--focal-hypothesis",
+            "hypothesis:h1",
+            "--output",
+            "missing-parent/h1.workbench.yaml",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "status: complete" in result.output
+    assert "closed_rows: 1" in result.output
+    assert not (project / "missing-parent").exists()
 
 
 def test_cli_dag_scaffold_retired_edge_workbench_requires_focal_hypothesis(tmp_path: Path) -> None:
