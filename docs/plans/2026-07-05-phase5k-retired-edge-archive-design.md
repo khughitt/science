@@ -87,6 +87,39 @@ YAML as writable migration state and keep obsolete source files in the active
 DAG directory. Closure already exists in live proposition lineage and should not
 be duplicated inside retired YAML.
 
+### Open Decision: Archive Destination Path
+
+Approach A is chosen, but *where* the closed file lands is a deliberate choice
+this phase must make explicitly, because the two candidates differ in how
+visible the archived file stays to unrelated project-wide tooling.
+
+- **Option 1 — top-level `archive/dag-retired-edges/`.** A new top-level
+  location that signals "this file is dead and no longer part of the DAG
+  directory tree," matching the Section 1 goal of moving the file *out of*
+  `doc/figures/dags/`. Downside: `archive/` is not on any scanner's skip list,
+  so project-wide walkers still visit it — the `science entities remove`
+  reference scanner (`_REFERENCE_SCAN_SKIP_DIRS` does not include `archive`) and
+  `data_audit`'s `os.walk` both read files under it. Nothing in Section 9
+  breaks, but "invisible after archive" is only true for the DAG inspection
+  surfaces, not for every tool.
+
+- **Option 2 — co-located `doc/figures/dags/_archive/`.** Matches the existing
+  archive idiom: the entity archive lives at `entities/_archive/`, and
+  underscore-prefixed segments are what convention-aware scanners already skip
+  (`entity_scan.iter_entity_markdown`). Because the default DAG scanners use a
+  non-recursive `dag_dir.glob("*.edges.yaml")`, an `_archive/` subdirectory is
+  still excluded from them. Downside: the file stays physically *inside* the DAG
+  directory tree, which reads as less final than Section 1 implies.
+
+Neither extends the entity archive index (Approach B stays rejected either way);
+this is purely about the destination directory. The default recommendation is
+**Option 1** for the clearer "out of the DAG tree" signal, on the condition that
+the phase accepts that non-DAG project-wide walkers still see the archived file.
+If scanner-invisibility matters more than physical relocation, switch to
+Option 2. The rest of this document is written against Option 1's paths; a
+switch to Option 2 changes only the literal directory prefix, not the planning,
+manifest, or apply semantics.
+
 ## 5. Planning Semantics
 
 The archive planner computes one candidate for the requested DAG slug. It first
@@ -177,6 +210,22 @@ Manifest fields:
 
 Paths stored in the manifest should be project-relative and use `~/d/` only in
 documentation examples, not absolute machine paths.
+
+Concrete field values follow existing precedent: `schema_version: 1` (as in
+`archive.py`), `tool: "science dag archive-retired-edges"`, and `sha256`
+computed with the established `hashlib.sha256(data).hexdigest()` idiom. There is
+no existing per-file `.archive.json` sidecar in the codebase — the closest
+precedents are the single `manifest.json` from `science project serialize` and
+the append-only `archive-index.jsonl` from the entity archive — so this sidecar
+format is new and owned by this feature.
+
+`archived_at` must be deterministic for tests. Follow the archive layer's
+clock-injection convention rather than reading the wall clock inside the archive
+function: the pure archive function takes an injected `now: str | None = None`
+argument (as `archive_entities(..., now=...)` does), and only the CLI command
+body reads the clock —
+`datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")` — and threads it in.
+Tests then pass a fixed `now` string and assert the manifest byte-for-byte.
 
 ## 7. Apply Semantics
 
@@ -291,6 +340,12 @@ Unit and CLI tests should cover:
 The real-project smoke test should apply the command to
 `~/d/protein-landscape` for `h01-multi-manifold-protein-universe` and verify:
 
+- **baseline first:** `science dag validate --dag h01-multi-manifold-protein-universe`
+  passes *before* archiving. Section 9's claim that validate stays OK afterward
+  rests on the retired `.dot` still validating without its `.edges.yaml`; the
+  baseline confirms the DAG already validates independently of the retired file,
+  so a post-archive failure cannot be misattributed to the move (and a
+  pre-existing failure is caught before any mutation);
 - dry run reports `ready_to_archive` and `closed_rows: 6`;
 - apply moves the retired file into `archive/dag-retired-edges/`;
 - the manifest lists the six closing propositions;
