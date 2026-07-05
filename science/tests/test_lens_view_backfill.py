@@ -25,4 +25,36 @@ def test_validate_warns_on_lens_origin_without_lens_views(tmp_path) -> None:
     seed_project(root)
     _write_entity(root, "0001-x.md", "origins:\n  - type: assistant\n    ref: explore-ideas-mechanism\n")
     result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
-    assert "no lens_views" in result.output or "lens_views" in result.output
+    assert "but no lens_views" in result.output
+
+
+def test_validate_does_not_warn_with_lens_views_populated(tmp_path) -> None:
+    root = tmp_path
+    seed_project(root)
+    _write_entity(
+        root,
+        "0002-y.md",
+        "origins:\n"
+        "  - type: assistant\n"
+        "    ref: explore-ideas-mechanism\n"
+        "lens_views:\n"
+        "  - lens: mechanism\n"
+        "    rationale: m\n"
+        "    origin_ref: explore-ideas-mechanism\n",
+    )
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
+    assert "but no lens_views" not in result.output
+
+
+def test_validate_does_not_warn_on_non_lens_origin(tmp_path) -> None:
+    root = tmp_path
+    seed_project(root)
+    _write_entity(
+        root,
+        "0003-z.md",
+        "origins:\n"
+        "  - type: assistant\n"
+        "    ref: explore-ideas-frobnicate\n",
+    )
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(root)])
+    assert "but no lens_views" not in result.output
