@@ -31,7 +31,7 @@ def prose_group() -> None:
 )
 @click.option("--strict", is_flag=True, help="Promote info-severity issues to warn; exit non-zero on any issue.")
 def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> None:
-    """Run prose-quality lints across the project's doc/ and specs/ trees."""
+    """Run prose-quality lints across the project's doc/ and entities/ trees."""
     selected = list(checks) if checks else None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     enabled_from_config: list[str] | None = None

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Robust Bayesian Meta-Analysis: Addressing Publication Bias With Model-Averaging'
 status: active
 created: '2026-05-05'

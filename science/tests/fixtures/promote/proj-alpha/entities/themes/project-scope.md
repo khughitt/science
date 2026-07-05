@@ -1,6 +1,6 @@
 ---
 id: "theme:project-scope"
-type: "theme"
+kind: "theme"
 title: "Project-scoped theme"
 theme_kind: "methodological"
 theme_scope: "project"

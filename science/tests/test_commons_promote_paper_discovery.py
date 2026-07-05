@@ -14,8 +14,8 @@ def _resolver(monkeypatch) -> None:
     )
 
 
-def test_paper_discover_walks_background_papers(monkeypatch) -> None:
-    """Discovery walks both entities/papers/ and doc/background/papers/."""
+def test_paper_discover_ignores_background_papers(monkeypatch) -> None:
+    """Paper promotion reads owner entities from entities/papers only."""
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     _resolver(monkeypatch)
@@ -23,7 +23,7 @@ def test_paper_discover_walks_background_papers(monkeypatch) -> None:
 
     slugs = set(result.candidates_by_slug)
     assert "adams2025" in slugs
-    assert "flint2026" in slugs
+    assert "flint2026" not in slugs
 
 
 def test_paper_discover_walks_v3_entities_papers(monkeypatch) -> None:
@@ -43,13 +43,12 @@ def test_paper_discover_walks_v3_entities_papers(monkeypatch) -> None:
     assert "entities/papers" in str(candidates[0].overlay_source_path)
 
 
-def test_paper_background_candidate_carries_original_path(monkeypatch) -> None:
-    """Background-papers candidates keep their original source path for apply."""
+def test_paper_candidate_carries_entities_source_path(monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     _resolver(monkeypatch)
     result = discover_candidates(["proj-alpha"], PROMOTE_KIND_PAPER)
 
-    candidates = result.candidates_by_slug["flint2026"]
+    candidates = result.candidates_by_slug["brenner2026"]
     assert len(candidates) == 1
-    assert "background/papers" in str(candidates[0].overlay_source_path)
+    assert "entities/papers" in str(candidates[0].overlay_source_path)

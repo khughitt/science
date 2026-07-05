@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Sequential evidence improves attention
 status: active
 created: '2026-05-06'

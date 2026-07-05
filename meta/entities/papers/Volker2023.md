@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Combining Support for Hypotheses over Heterogeneous Studies with Bayesian
   Evidence Synthesis: A Simulation Study'
 status: active

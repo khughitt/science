@@ -19,7 +19,7 @@ def _write_dataset(root: Path, slug: str, reproducibility: dict | None, *, origi
     lines = [
         "---",
         f"id: dataset:{slug}",
-        "type: dataset",
+        "kind: dataset",
         f"title: {slug}",
         f"origin: {origin}",
         "access:",
@@ -89,12 +89,12 @@ def _write_derived(root: Path, slug: str, upstreams: str | list[str]):
     wr.mkdir(parents=True, exist_ok=True)
     run_slug = f"{slug}-r1"
     (wr / f"{run_slug}.md").write_text(
-        f'---\nid: "workflow-run:{run_slug}"\ntype: "workflow-run"\ntitle: "WF {slug}"\n'
+        f'---\nid: "workflow-run:{run_slug}"\nkind: "workflow-run"\ntitle: "WF {slug}"\n'
         f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: {upstreams_yaml}\n---\n',
         encoding="utf-8",
     )
     (ds / f"{slug}.md").write_text(
-        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        f'---\nid: "dataset:{slug}"\nkind: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
         'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
         "derivation:\n"
         '  workflow: "workflow:wf"\n'
@@ -115,12 +115,12 @@ def _write_derived_with_reference_transform(root: Path, slug: str, upstream: str
     wr.mkdir(parents=True, exist_ok=True)
     run_slug = f"{slug}-r1"
     (wr / f"{run_slug}.md").write_text(
-        f'---\nid: "workflow-run:{run_slug}"\ntype: "workflow-run"\ntitle: "WF {slug}"\n'
+        f'---\nid: "workflow-run:{run_slug}"\nkind: "workflow-run"\ntitle: "WF {slug}"\n'
         f'workflow: "workflow:wf"\nproduces: ["dataset:{slug}"]\ninputs: ["dataset:{upstream}"]\n---\n',
         encoding="utf-8",
     )
     (ds / f"{slug}.md").write_text(
-        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        f'---\nid: "dataset:{slug}"\nkind: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
         'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
         "derivation:\n"
         '  workflow: "workflow:wf"\n'
@@ -178,7 +178,7 @@ def _write_recipe_derived(root: Path, slug: str, upstreams: str | list[str]):
     ds = root / "entities" / "datasets"
     ds.mkdir(parents=True, exist_ok=True)
     (ds / f"{slug}.md").write_text(
-        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        f'---\nid: "dataset:{slug}"\nkind: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
         'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
         "derivation:\n"
         '  kind: "workflow"\n'
@@ -224,7 +224,7 @@ def _write_member_derived(root: Path, slug: str, parent: str):
     ds = root / "entities" / "datasets"
     ds.mkdir(parents=True, exist_ok=True)
     (ds / f"{slug}.md").write_text(
-        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
+        f'---\nid: "dataset:{slug}"\nkind: "dataset"\ntitle: "{slug}"\norigin: "derived"\n'
         "derivation:\n"
         '  kind: "member_of"\n'
         f'  parent_dataset: "dataset:{parent}"\n'
@@ -265,7 +265,7 @@ def test_end_to_end_plan_waiver_from_frontmatter(tmp_path):
     plans = tmp_path / "entities" / "plans"
     plans.mkdir(parents=True)
     (plans / "p.md").write_text(
-        '---\nid: "plan:p"\ntype: "plan"\ntitle: "P"\n'
+        '---\nid: "plan:p"\nkind: "plan"\ntitle: "P"\n'
         "reproducibility_policy:\n"
         "  waivers:\n"
         '    - dataset: "dataset:n3c"\n'

@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Causal Integration of Multi-Omics Data with Prior Knowledge to Generate Mechanistic
   Hypotheses
 status: active

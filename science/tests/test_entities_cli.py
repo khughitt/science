@@ -27,7 +27,7 @@ def test_entity_create_question_writes_source() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-existing.md",
-            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "create", "question", "New Question"])
@@ -70,7 +70,7 @@ def test_entity_create_concept_writes_source() -> None:
         assert path.is_file()
         frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
         assert frontmatter["id"] == "concept:treatment-response"
-        assert frontmatter["type"] == "concept"
+        assert frontmatter["kind"] == "concept"
         assert frontmatter["title"] == "Treatment Response"
         assert frontmatter["status"] == "active"
 
@@ -111,7 +111,7 @@ def test_entity_create_concept_loads_and_resolves_in_graph_build() -> None:
             "entities/hypotheses/h1.md",
             {
                 "id": "hypothesis:h1",
-                "type": "hypothesis",
+                "kind": "hypothesis",
                 "title": "H1",
                 "status": "proposed",
                 "related": ["concept:treatment-response"],
@@ -141,7 +141,7 @@ def test_entity_create_construct_still_uses_generic_slug_path() -> None:
         assert path.is_file()
         frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
         assert frontmatter["id"] == "construct:treatment-response-construct"
-        assert frontmatter["type"] == "construct"
+        assert frontmatter["kind"] == "construct"
 
 
 def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
@@ -152,7 +152,7 @@ def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-existing.md",
-            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "active"},
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "active"},
         )
 
         result = runner.invoke(main, ["questions", "create", "New Question"])
@@ -173,7 +173,7 @@ def test_questions_show_rejects_other_entity_kinds() -> None:
         write_markdown_entity(
             root,
             "entities/hypotheses/0001-alpha.md",
-            {"id": "hypothesis:0001-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed"},
+            {"id": "hypothesis:0001-alpha", "kind": "hypothesis", "title": "Alpha", "status": "proposed"},
         )
 
         result = runner.invoke(main, ["questions", "show", "h1"])
@@ -190,7 +190,7 @@ def test_questions_show_accepts_q_shortform_for_numbered_question_id() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "active"},
         )
 
         result = runner.invoke(main, ["questions", "show", "q1"])
@@ -208,20 +208,20 @@ def test_plural_entity_list_and_show_commands() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "active"},
             "# Alpha\n\n## Summary\n\nBody content.\n",
         )
         write_markdown_entity(
             root,
             "entities/hypotheses/0001-beta.md",
-            {"id": "hypothesis:0001-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
+            {"id": "hypothesis:0001-beta", "kind": "hypothesis", "title": "Beta", "status": "proposed"},
         )
         write_markdown_entity(
             root,
             "entities/discussions/0001-gamma.md",
             {
                 "id": "discussion:0001-gamma",
-                "type": "discussion",
+                "kind": "discussion",
                 "title": "Gamma",
                 "status": "active",
             },
@@ -248,7 +248,7 @@ def test_plural_entity_list_uses_shared_color_styles() -> None:
         write_markdown_entity(
             root,
             "entities/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            {"id": "question:q01-alpha", "kind": "question", "title": "Alpha", "status": "active"},
         )
 
         result = runner.invoke(main, ["--color", "always", "questions", "list"])
@@ -290,7 +290,7 @@ def test_entity_create_with_unresolved_related_prints_warning() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-existing.md",
-            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "create", "question", "New Question", "--related", "hypothesis:h01"])
@@ -307,7 +307,7 @@ def test_entity_show_finds_source_entity_by_shorthand() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "show", "q1"])
@@ -325,7 +325,7 @@ def test_entity_show_emits_body_content() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n\n## Summary\n\nBody content.\n",
         )
 
@@ -344,7 +344,7 @@ def test_entity_show_json_outputs_machine_readable_payload() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "show", "q1", "--format", "json"])
@@ -371,14 +371,14 @@ def test_entity_remove_dry_run_reports_safe_and_manual_references() -> None:
         write_markdown_entity(
             root,
             "entities/reports/0001-target-report.md",
-            {"id": "report:0001-target-report", "type": "report", "title": "Target", "status": "complete"},
+            {"id": "report:0001-target-report", "kind": "report", "title": "Target", "status": "complete"},
         )
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
             {
                 "id": "question:0001-alpha",
-                "type": "question",
+                "kind": "question",
                 "title": "Alpha",
                 "status": "open",
                 "related": ["report:0001-target-report"],
@@ -411,14 +411,14 @@ def test_entity_remove_apply_deletes_file_and_rewrites_safe_frontmatter_refs() -
         write_markdown_entity(
             root,
             "entities/reports/0001-target-report.md",
-            {"id": "report:0001-target-report", "type": "report", "title": "Target", "status": "complete"},
+            {"id": "report:0001-target-report", "kind": "report", "title": "Target", "status": "complete"},
         )
         dependent = write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
             {
                 "id": "question:0001-alpha",
-                "type": "question",
+                "kind": "question",
                 "title": "Alpha",
                 "status": "open",
                 "related": ["report:0001-target-report", "hypothesis:0001-other"],
@@ -446,7 +446,7 @@ def test_entity_edit_adds_related_without_replacing_existing() -> None:
             "entities/questions/0001-alpha.md",
             {
                 "id": "question:0001-alpha",
-                "type": "question",
+                "kind": "question",
                 "title": "Alpha",
                 "status": "open",
                 "related": ["hypothesis:h01"],
@@ -470,7 +470,7 @@ def test_entity_note_adds_dated_note() -> None:
         path = write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n",
         )
 
@@ -489,12 +489,12 @@ def test_entity_list_filters_exact_status() -> None:
         write_markdown_entity(
             root,
             "entities/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:q01-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
         write_markdown_entity(
             root,
             "entities/questions/q02-beta.md",
-            {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "answered"},
+            {"id": "question:q02-beta", "kind": "question", "title": "Beta", "status": "answered"},
         )
 
         result = runner.invoke(
@@ -514,12 +514,12 @@ def test_entity_list_accepts_positional_kind_filter() -> None:
         write_markdown_entity(
             root,
             "entities/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:q01-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
         write_markdown_entity(
             root,
             "entities/hypotheses/h01-beta.md",
-            {"id": "hypothesis:h01-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
+            {"id": "hypothesis:h01-beta", "kind": "hypothesis", "title": "Beta", "status": "proposed"},
         )
 
         result = runner.invoke(main, ["entity", "list", "hypothesis", "--format", "json"])
@@ -551,7 +551,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
             "entities/hypotheses/h01-anchor.md",
             {
                 "id": "hypothesis:h01-anchor",
-                "type": "hypothesis",
+                "kind": "hypothesis",
                 "title": "Anchor",
                 "status": "proposed",
                 "aliases": ["hypothesis:anchor-alias"],
@@ -562,7 +562,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
             "entities/questions/q01-alpha.md",
             {
                 "id": "question:q01-alpha",
-                "type": "question",
+                "kind": "question",
                 "title": "Alpha",
                 "status": "open",
                 "related": ["hypothesis:anchor-alias"],
@@ -573,7 +573,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
             "entities/questions/q02-beta.md",
             {
                 "id": "question:q02-beta",
-                "type": "question",
+                "kind": "question",
                 "title": "Beta",
                 "status": "open",
                 "related": ["hypothesis:h02-other"],
@@ -1102,7 +1102,7 @@ def test_question_create_wrapper_delegates_to_entity_create() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-existing.md",
-            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["questions", "create", "Wrapper Question", "--slug", "wrapper"])
@@ -1206,7 +1206,7 @@ def test_proposition_create_writes_source() -> None:
         path = Path("entities/propositions/0001-cadence-shapes-switch-history.md")
         assert path.is_file()
         text = path.read_text(encoding="utf-8")
-        assert "type: proposition" in text or 'type: "proposition"' in text
+        assert "kind: proposition" in text or 'kind: "proposition"' in text
         assert "## Claim" in text
 
 
@@ -1244,7 +1244,7 @@ def test_evidence_lines_create_writes_durable_source() -> None:
         text = path.read_text(encoding="utf-8")
         frontmatter = yaml.safe_load(text.split("---")[1])
         assert frontmatter["id"] == "evidence-line:cadence-result-supports-switch-proposition"
-        assert frontmatter["type"] == "evidence-line"
+        assert frontmatter["kind"] == "evidence-line"
         assert frontmatter["target"] == "proposition:0001-switch-history"
         assert frontmatter["stance"] == "supports"
         assert frontmatter["source"] == "paper:doe-2026"
@@ -1285,7 +1285,7 @@ def test_evidence_lines_list_and_show_round_trip() -> None:
             "entities/evidence-lines/0001-line.md",
             {
                 "id": "evidence-line:0001-line",
-                "type": "evidence-line",
+                "kind": "evidence-line",
                 "title": "Line",
                 "target": "proposition:0001-target",
                 "stance": "supports",
@@ -1418,10 +1418,10 @@ def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
         graph = Path("knowledge/graph.trig")
-        graph.parent.mkdir(parents=True)
+        graph.parent.mkdir(parents=True, exist_ok=True)
         graph.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
         os.utime(graph, (1, 1))
         os.utime(Path("entities/questions/0001-alpha.md"), (2, 2))
@@ -1443,7 +1443,7 @@ def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "neighbors", "question:0001-alpha"])
@@ -1462,7 +1462,7 @@ def test_entity_note_without_date_prints_today() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-alpha.md",
-            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n",
         )
 
@@ -1626,7 +1626,7 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
         assert path.is_file()
         fm = yaml.safe_load(path.read_text().split("---")[1])
         assert fm["id"] == "observation:an-observation"
-        assert fm["type"] == "observation"
+        assert fm["kind"] == "observation"
         assert {"title", "status", "created", "updated"} <= set(fm)
 
 
@@ -1638,7 +1638,7 @@ def test_entities_dir_is_discovered_by_graph() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0001-loadable.md",
-            {"id": "question:0001-loadable", "type": "question", "title": "Loadable", "status": "active"},
+            {"id": "question:0001-loadable", "kind": "question", "title": "Loadable", "status": "active"},
         )
         sources = load_project_sources(root)
         ids = {doc.frontmatter.get("id") for doc in sources.markdown_documents}
@@ -1653,58 +1653,8 @@ def test_entity_show_resolves_shortform() -> None:
         write_markdown_entity(
             root,
             "entities/questions/0005-granularity.md",
-            {"id": "question:0005-granularity", "type": "question", "title": "Granularity", "status": "active"},
+            {"id": "question:0005-granularity", "kind": "question", "title": "Granularity", "status": "active"},
         )
         result = runner.invoke(main, ["entity", "show", "q5"])
         assert result.exit_code == 0, result.output
         assert "question:0005-granularity" in result.output
-
-
-
-def test_entities_migrate_dry_run_emits_report() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        root = Path.cwd()
-        (root / "science.yaml").write_text("name: t\nlayout_version: 2\n", encoding="utf-8")
-        write_markdown_entity(
-            root, "specs/hypotheses/h01-alpha.md",
-            {"id": "hypothesis:h01-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed",
-             "created": "2026-01-01", "updated": "2026-01-01"},
-        )
-        result = runner.invoke(main, ["entities", "migrate"])
-        assert result.exit_code == 0, result.output
-        assert "hypothesis:0001-alpha" in result.output  # report shows planned id
-        assert Path("specs/hypotheses/h01-alpha.md").is_file()  # dry run: unchanged
-
-
-def test_entities_migrate_apply_blocks_with_clean_error() -> None:
-    """--apply with a path collision must exit non-zero with a clean ClickException message."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        root = Path.cwd()
-        (root / "science.yaml").write_text("name: t\nlayout_version: 2\n", encoding="utf-8")
-        # Two paper files with the same citekey from both legacy paper homes → both
-        # would map to entities/papers/Adams2025.md, triggering a path collision.
-        write_markdown_entity(
-            root, "doc/papers/Adams2025.md",
-            {"id": "paper:Adams2025", "type": "paper", "title": "Adams 2025", "status": "read",
-             "created": "2025-01-01", "updated": "2025-01-01"},
-        )
-        write_markdown_entity(
-            root, "specs/papers/Adams2025.md",
-            {"id": "paper:Adams2025", "type": "paper", "title": "Adams 2025 (dup)", "status": "read",
-             "created": "2025-01-01", "updated": "2025-01-01"},
-        )
-
-        result = runner.invoke(main, ["entities", "migrate", "--apply"])
-
-        # Must exit non-zero.
-        assert result.exit_code != 0
-        # The error message must mention the collision — clean ClickException, not a traceback.
-        assert "collision" in result.output
-        # A ClickException produces a SystemExit, not a raw ValueError/Exception traceback.
-        assert not isinstance(result.exception, ValueError)
-        # No migration happened: source files still present, target absent.
-        assert Path("doc/papers/Adams2025.md").is_file()
-        assert Path("specs/papers/Adams2025.md").is_file()
-        assert not Path("entities/papers/Adams2025.md").exists()

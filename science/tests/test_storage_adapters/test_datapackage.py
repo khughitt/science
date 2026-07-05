@@ -32,7 +32,7 @@ def test_discovers_entity_profile_only(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-runtime-1.0", "science-pkg-entity-1.0"],
                 "name": "myset",
                 "id": "dataset:myset",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "My set",
             }
         ),
@@ -51,7 +51,7 @@ def test_load_raw_extracts_entity_subset(tmp_path: Path, monkeypatch: pytest.Mon
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "myset",
                 "id": "dataset:myset",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "My set",
                 "description": "Set description.",
                 "resources": [{"name": "r", "path": "r.csv"}],  # runtime-only
@@ -98,7 +98,7 @@ def test_walks_results_directory(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "wf-r1",
                 "id": "dataset:wf-r1",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "WF R1",
             }
         ),
@@ -127,7 +127,7 @@ def test_load_raw_surfaces_a1_taxonomy_fields(tmp_path: Path, monkeypatch: pytes
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "refcoll",
                 "id": "dataset:refcoll",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "Ref coll",
                 "origin": "external",
                 "access": {"level": "public", "verified": True},
@@ -155,7 +155,7 @@ def test_load_raw_surfaces_derived_kind(tmp_path: Path, monkeypatch: pytest.Monk
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "am",
                 "id": "dataset:am",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "AlphaMissense",
                 "origin": "external",
                 "access": {"level": "public", "verified": True},
@@ -182,7 +182,7 @@ def test_datapackage_adapter_preserves_geneset_extension_fields(
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": "dataset:reactome-v89",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "Reactome v89",
                 "status": "active",
                 "origin": "external",

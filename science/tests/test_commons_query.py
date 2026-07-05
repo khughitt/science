@@ -99,7 +99,7 @@ def test_show_warns_on_stale(tmp_path: Path, capsys: pytest.CaptureFixture[str])
         "---\n"
         'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
         'id: "topic:new-topic"\n'
-        'type: "topic"\n'
+        'kind: "topic"\n'
         'title: "New"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -166,7 +166,7 @@ def test_stale_warning_suppressed_by_env(
         "---\n"
         'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
         'id: "topic:x"\n'
-        'type: "topic"\n'
+        'kind: "topic"\n'
         'title: "X"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

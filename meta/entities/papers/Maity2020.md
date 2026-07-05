@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian Data Integration and Variable Selection for Pan-Cancer Survival Prediction
   Using Protein Expression Data
 status: active

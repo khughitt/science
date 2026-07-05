@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: 'Science working model: a federated patchwork of provenance-typed, uncertainty-bearing
   epistemic models'
 status: proposed

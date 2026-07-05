@@ -25,7 +25,7 @@ def _hash(content: bytes) -> str:
 def _reference_graph_frontmatter(*, edge_resource: bool = True) -> dict[str, Any]:
     fm: dict[str, Any] = {
         "id": "dataset:mondo",
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0",
         "title": "MONDO",
         "version": "1.0.0",

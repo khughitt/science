@@ -105,7 +105,7 @@ def _render_stub(
     today = date.today().isoformat()
     frontmatter = {
         "id": qid,
-        "type": "question",
+        "kind": "question",
         "title": title,
         "status": "active",
         "ontology_terms": list(ontology_terms),

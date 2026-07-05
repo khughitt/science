@@ -28,7 +28,7 @@ def _project_tree_with_rnaseq(tmp_path: Path) -> Path:
     (proj / "entities" / "datasets" / "mockrna.md").write_text(
         """---
 id: dataset:mockrna
-type: dataset
+kind: dataset
 title: Mock RNA-seq dataset
 description: Synthetic fixture for Phase H integration tests.
 datapackage: data/mockrna/datapackage.json

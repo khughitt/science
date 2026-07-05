@@ -62,7 +62,7 @@ _CANONICAL_FOO = (
     "---\n"
     "schema_profile: science-entity-base/1.0+paper/2.0\n"
     "id: paper:Foo\n"
-    "type: paper\n"
+    "kind: paper\n"
     "bibkey: Foo\n"
     "version: 1.0.0\n"
     "title: A study of foo\n"

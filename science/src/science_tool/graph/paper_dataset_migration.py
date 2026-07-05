@@ -143,7 +143,7 @@ def migrate_paper_frontmatter(path: str | Path, text: str) -> PaperDatasetMigrat
             "frontmatter must be a mapping",
         )
 
-    kind = loaded.get("kind") or loaded.get("type")
+    kind = loaded.get("kind")
     if kind != "paper":
         return PaperDatasetMigrationResult(path=path_str, changed=False, updated_text=text)
 
@@ -259,7 +259,7 @@ def _source_scan(project_root: Path) -> _SourceScan:
             if absolute.suffix != ".md":
                 continue
             files.add(absolute)
-            kind = doc.frontmatter.get("kind") or doc.frontmatter.get("type")
+            kind = doc.frontmatter.get("kind")
             if kind == "paper":
                 paper_roots.add(absolute.parent)
     except yaml.YAMLError:

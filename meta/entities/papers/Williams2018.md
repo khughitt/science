@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian Meta-Analysis with Weakly Informative Prior Distributions
 status: active
 created: '2026-05-05'

@@ -50,7 +50,7 @@ def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path:
     dest.write_text(
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Existing\n"
         "status: draft\n"
         "source_refs:\n"
@@ -75,7 +75,7 @@ def test_append_entity_source_ref_noops_when_ref_exists(tmp_path: Path):
     original = (
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Existing\n"
         "status: draft\n"
         "source_refs:\n"
@@ -96,7 +96,7 @@ def test_render_entity_source_refs_computes_text_without_writing(tmp_path: Path)
     original = (
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Existing\n"
         "status: active\n"
         "source_refs:\n"
@@ -135,7 +135,7 @@ def test_render_entity_source_refs_noops_when_all_refs_exist(tmp_path: Path):
     original = (
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Existing\n"
         "status: active\n"
         "source_refs:\n"
@@ -160,7 +160,7 @@ def test_render_entity_source_refs_preserves_leading_body_blank_lines(tmp_path: 
     original = (
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Existing\n"
         "status: active\n"
         "source_refs:\n"
@@ -185,7 +185,7 @@ def test_render_entity_frontmatter_updates_sets_supersession_without_writing(tmp
     original = (
         "---\n"
         "id: proposition:duplicate\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Duplicate\n"
         "status: active\n"
         'updated: "2026-06-01"\n'
@@ -218,7 +218,7 @@ def test_render_entity_frontmatter_updates_noops_when_values_unchanged(tmp_path:
     original = (
         "---\n"
         "id: proposition:duplicate\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Duplicate\n"
         "status: superseded\n"
         "superseded_by: proposition:canonical\n"
@@ -251,7 +251,7 @@ def test_entity_removal_treats_resynthesized_into_as_managed_frontmatter_ref(tmp
     original.write_text(
         "---\n"
         "id: proposition:broad\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Broad\n"
         "status: superseded\n"
         "resynthesized_into:\n"
@@ -263,7 +263,7 @@ def test_entity_removal_treats_resynthesized_into_as_managed_frontmatter_ref(tmp
     replacement.write_text(
         "---\n"
         "id: proposition:narrow\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Narrow\n"
         "status: active\n"
         "---\n\n"

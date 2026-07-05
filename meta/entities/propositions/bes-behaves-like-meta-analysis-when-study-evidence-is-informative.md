@@ -4,7 +4,7 @@ polarity: positive
 predicate: associates_with
 subject: Bayesian Evidence Synthesis
 id: proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative
-type: proposition
+kind: proposition
 title: BES behaves like meta-analysis when study evidence is informative
 status: active
 created: &id001 2026-07-03

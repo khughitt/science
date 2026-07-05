@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Efficient Causal Graph Discovery Using Large Language Models
 status: active
 created: '2026-05-06'

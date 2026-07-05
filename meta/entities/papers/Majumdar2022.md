@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Joint Estimation and Inference for Data Integration Problems based on Multiple
   Multi-layered Gaussian Graphical Models
 status: active

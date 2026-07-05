@@ -17,7 +17,7 @@ def test_base_accepts_minimal_valid_entity(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "Example",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -29,7 +29,7 @@ def test_base_accepts_minimal_valid_entity(base_schema: dict) -> None:
 def test_base_rejects_missing_id(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
-        "type": "paper",
+        "kind": "paper",
         "title": "x",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -43,7 +43,7 @@ def test_base_rejects_invalid_version_format(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "x",
         "version": "v1",  # invalid; must be semver
         "created": "2026-05-13",
@@ -71,7 +71,7 @@ def test_base_accepts_optional_fields_when_present(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "x",
         "version": "1.0.0",
         "description": "A description",
@@ -91,7 +91,7 @@ def test_base_accepts_reference_dataset_usage_role(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "Example",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -107,7 +107,7 @@ def test_base_rejects_invalid_date_format(base_schema: dict) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+paper/1.0",
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "title": "x",
         "version": "1.0.0",
         "created": "not-a-date",

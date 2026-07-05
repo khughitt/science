@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: A Primer on Bayesian Model-Averaged Meta-Analysis
 status: active
 created: '2026-05-05'

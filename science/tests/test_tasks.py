@@ -1382,7 +1382,7 @@ def _seed_with_dataset(tmp_path: Path) -> Path:
         "entities/datasets/foo.md",
         {
             "id": "dataset:foo",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "Foo",
             "status": "active",
             "origin": "external",
@@ -1452,7 +1452,7 @@ def test_block_task_multiple_blockers(tmp_path: Path):
         "entities/datasets/bar.md",
         {
             "id": "dataset:bar",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "Bar",
             "status": "active",
             "origin": "external",

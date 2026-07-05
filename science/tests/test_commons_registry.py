@@ -135,7 +135,7 @@ def test_is_stale_detects_addition(tmp_path: Path) -> None:
         "---\n"
         'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
         'id: "topic:another-topic"\n'
-        'type: "topic"\n'
+        'kind: "topic"\n'
         'title: "Another"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

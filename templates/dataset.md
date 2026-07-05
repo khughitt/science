@@ -1,6 +1,6 @@
 ---
 id: "dataset:<slug>"
-type: "dataset"
+kind: "dataset"
 title: "<Dataset Name — artefact-level specific>"
 status: "active"
 profiles: ["science-pkg-entity-1.0"]

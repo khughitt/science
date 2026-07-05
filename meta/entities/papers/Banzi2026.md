@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: An International Consensus on Core Reproducibility Items in Research
 status: active
 created: '2026-05-06'

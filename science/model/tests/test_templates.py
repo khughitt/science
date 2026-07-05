@@ -211,7 +211,7 @@ def test_evidence_line_template_renders() -> None:
     text = Renderer(today=date(2026, 5, 3)).render("evidence-line", fields=_evidence_line_fields())
     frontmatter = _frontmatter(text)
     assert frontmatter["id"] == "evidence-line:2026-05-03-example"
-    assert frontmatter["type"] == "evidence-line"
+    assert frontmatter["kind"] == "evidence-line"
     assert frontmatter["stance"] == "supports"
     assert frontmatter["target"] not in ("", None)
     assert "_template" not in frontmatter
@@ -287,7 +287,7 @@ def test_finding_template_renders_id_without_raw_placeholders() -> None:
     text = Renderer(today=date(2026, 5, 3)).render("finding", fields=_fields("finding"))
     frontmatter = _frontmatter(text)
     assert frontmatter["id"] == "finding:2026-05-03-example"
-    assert frontmatter["type"] == "finding"
+    assert frontmatter["kind"] == "finding"
     assert "_template" not in frontmatter
     # No raw / unfilled placeholders survive in the rendered output.
     assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
@@ -298,7 +298,7 @@ def test_synthesis_template_renders_id_without_raw_placeholders() -> None:
     text = Renderer(today=date(2026, 5, 3)).render("synthesis", fields=_fields("synthesis"))
     frontmatter = _frontmatter(text)
     assert frontmatter["id"] == "synthesis:2026-05-03-example"
-    assert frontmatter["type"] == "synthesis"
+    assert frontmatter["kind"] == "synthesis"
     assert "_template" not in frontmatter
     assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
 
@@ -307,7 +307,7 @@ def test_paper_template_renders_id_without_raw_placeholders() -> None:
     text = Renderer(today=date(2026, 5, 3)).render("paper", fields=_fields("paper"))
     frontmatter = _frontmatter(text)
     assert frontmatter["id"] == "paper:2026-05-03-example"
-    assert frontmatter["type"] == "paper"
+    assert frontmatter["kind"] == "paper"
     assert "_template" not in frontmatter
     assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
 

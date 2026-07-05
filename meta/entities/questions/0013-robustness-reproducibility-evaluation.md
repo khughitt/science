@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science represent robustness, reproducibility, and replication evaluation
   claims?
 status: active

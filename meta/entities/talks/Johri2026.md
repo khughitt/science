@@ -1,5 +1,5 @@
 ---
-type: talk
+kind: talk
 title: Evaluating AI agents in biological discovery
 status: active
 created: '2026-06-10'

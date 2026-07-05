@@ -36,12 +36,12 @@ def _project_owning_and_referencing_shared_id(tmp_path: Path) -> Path:
     # A LOCAL owner file for the same id commons owns.
     topic = project_root / "entities" / "topics" / "single-cell-foundation-models.md"
     topic.parent.mkdir(parents=True)
-    topic.write_text(f'---\nid: "{_SHARED_ID}"\ntype: "topic"\ntitle: "SCFM (local)"\n---\n', encoding="utf-8")
+    topic.write_text(f'---\nid: "{_SHARED_ID}"\nkind: "topic"\ntitle: "SCFM (local)"\n---\n', encoding="utf-8")
     # A hypothesis that references the shared id with a BARE ref.
     hyp = project_root / "entities" / "hypotheses" / "h1.md"
     hyp.parent.mkdir(parents=True)
     hyp.write_text(
-        f'---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\nrelated: ["{_SHARED_ID}"]\n---\n',
+        f'---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\nrelated: ["{_SHARED_ID}"]\n---\n',
         encoding="utf-8",
     )
     return project_root
@@ -81,7 +81,7 @@ def _project_with_scoped_ref(tmp_path: Path) -> Path:
     # Re-author the hypothesis to use the scoped form -> unambiguous, must materialize.
     hyp = project_root / "entities" / "hypotheses" / "h1.md"
     hyp.write_text(
-        f'---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
+        f'---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
         encoding="utf-8",
     )
     return project_root
@@ -155,7 +155,7 @@ def _project_scoped_ref_no_local_owner(tmp_path: Path) -> Path:
     hyp = project_root / "entities" / "hypotheses" / "h1.md"
     hyp.parent.mkdir(parents=True)
     hyp.write_text(
-        f'---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
+        f'---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
         encoding="utf-8",
     )
     return project_root

@@ -1,6 +1,6 @@
 ---
 id: "interpretation:i01-example"
-type: "interpretation"
+kind: "interpretation"
 related: []
 ---
 

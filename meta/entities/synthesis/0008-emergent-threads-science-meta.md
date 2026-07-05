@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Emergent threads - science meta
 status: active
 created: '2026-05-06'

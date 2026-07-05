@@ -124,7 +124,7 @@ The prompt passed to each sub-agent includes:
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
 - Target output path: `entities/synthesis/<hyp-id>.md`.
-- Frontmatter: emit `type: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
+- Frontmatter: emit `kind: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
 - If `--since <date>` is set: pass it through AND the `--output <path>` target. Tell the sub-agent to include `since: <date>` in its frontmatter.
@@ -144,7 +144,7 @@ The prompt includes:
 - Project root path.
 - Full resolver output (JSON from Phase 1).
 - Target output path: `entities/synthesis/<emergent-threads>.md`.
-- Frontmatter: emit `type: synthesis` + `title: "Emergent threads - <project name>"` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
+- Frontmatter: emit `kind: synthesis` + `title: "Emergent threads - <project name>"` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
 - `generated_at` and `source_commit` values.
 
 **Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
@@ -160,7 +160,7 @@ After the dispatch phase completes, read back each just-written per-hypothesis f
 Write the `report_kind: synthesis-rollup` entity under `entities/synthesis/`
 with this structure:
 
-The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, emergent threads, and the project rollup) share `type: synthesis` and differ by `report_kind`. `science validate` warns when any `type: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
+The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, emergent threads, and the project rollup) share `kind: synthesis` and differ by `report_kind`. `science validate` warns when any `kind: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
 
 Frontmatter:
 
@@ -169,7 +169,7 @@ The block-list form (one field per line) is canonical — see Plan #4 follow-on 
 ```yaml
 ---
 id: "synthesis:rollup"
-type: "synthesis"
+kind: "synthesis"
 title: "Project synthesis - <project name>"
 report_kind: "synthesis-rollup"
 generated_at: "<ISO-8601>"

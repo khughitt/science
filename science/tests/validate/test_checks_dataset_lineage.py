@@ -4,7 +4,7 @@ from science_tool.validate.checks.dataset_lineage import evaluate_dataset_lineag
 
 
 def _ds(id_, **kw):
-    return {"_path": f"entities/datasets/{id_.split(':')[1]}.md", "type": "dataset", "id": id_, **kw}
+    return {"_path": f"entities/datasets/{id_.split(':')[1]}.md", "kind": "dataset", "id": id_, **kw}
 
 
 def test_parent_dataset_unresolved_in_project_and_commons_is_error():

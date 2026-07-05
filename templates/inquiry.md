@@ -1,6 +1,6 @@
 ---
 id: "inquiry:{{nn}}-{{slug}}"
-type: "inquiry"
+kind: "inquiry"
 title: "{{title}}"
 status: "active"
 source_refs: []
@@ -11,7 +11,7 @@ target: ""
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "inquiry" }
+    kind: { default: "inquiry" }
     title: { from: title }
     status: { from: status }
     source_refs: { from: source_refs }

@@ -21,7 +21,7 @@ from science_tool.validate.result import Result, Severity
 def evaluate_dataset_acquisition(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
     for fm in datasets:
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         if fm.get("status") == "candidate":
             continue  # not-yet-acquired: pointer optional

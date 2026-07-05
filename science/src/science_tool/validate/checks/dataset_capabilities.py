@@ -70,7 +70,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
         ident = fm.get("id")
         if not isinstance(ident, str) or not ident:
             continue
-        kind = fm.get("kind") or fm.get("type")
+        kind = fm.get("kind")
         path = fm.get("_path")
         path_value = path if isinstance(path, str) else None
 
@@ -120,7 +120,7 @@ def _frontmatter_reach(records: list[dict[str, Any]]) -> tuple[dict[str, set[str
         ent_id = fm.get("id")
         if not isinstance(ent_id, str) or not ent_id:
             continue
-        kind = fm.get("kind") or fm.get("type") or ""
+        kind = fm.get("kind") or ""
         related = _string_list(fm.get("related"))
         if kind == "dataset":
             for target in (ref for ref in related if _is_qh(ref)):

@@ -710,7 +710,7 @@ def _write_dp(tmp_path: Path, slug: str) -> None:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug.capitalize()}\n"
         "status: active\n"
         "origin: external\n"
@@ -1001,7 +1001,7 @@ def test_tasks_list_shows_mixed_blocker_states(tmp_path, monkeypatch):
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:bar\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Bar\n"
         "status: active\n"
         "origin: external\n"
@@ -1045,7 +1045,7 @@ def _write_embargoed_dp(tmp_path: Path) -> None:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:embargoed\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: E\n"
         "status: active\n"
         "origin: external\n"

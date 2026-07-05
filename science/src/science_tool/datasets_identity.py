@@ -85,7 +85,7 @@ def _load_dataset(path: Path, ref: str) -> tuple[dict[str, Any], str]:
     frontmatter = yaml.safe_load(parts[1]) or {}
     if not isinstance(frontmatter, dict):
         raise click.ClickException(f"no such dataset {ref!r}: {path} frontmatter is not a mapping")
-    if (frontmatter.get("kind") or frontmatter.get("type")) != "dataset":
+    if frontmatter.get("kind") != "dataset":
         raise click.ClickException(f"no such dataset {ref!r}: {path} is not a dataset entity")
     return frontmatter, parts[2]
 

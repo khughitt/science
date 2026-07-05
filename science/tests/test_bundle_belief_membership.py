@@ -73,13 +73,13 @@ def _mini_project(tmp_path: Path, p2_discusses: str) -> Path:
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     _write(
         tmp_path / "entities" / "hypotheses" / "h1.md",
-        ['id: "hypothesis:h1"', 'type: "hypothesis"', 'title: "H1"', 'status: "proposed"',
+        ['id: "hypothesis:h1"', 'kind: "hypothesis"', 'title: "H1"', 'status: "proposed"',
          "ontology_terms: []", "source_refs: []", "related: []"],
     )
     for pid, disc in (("p1", '["hypothesis:h1"]'), ("p2", p2_discusses)):
         _write(
             tmp_path / "entities" / "propositions" / f"{pid}.md",
-            [f'id: "proposition:{pid}"', 'type: "proposition"', f'title: "{pid}"',
+            [f'id: "proposition:{pid}"', 'kind: "proposition"', f'title: "{pid}"',
              'status: "active"', "ontology_terms: []", "source_refs: []", "related: []",
              f"discusses: {disc}"],
         )

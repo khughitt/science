@@ -12,7 +12,7 @@ def base_geneset_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
         "id": "dataset:reactome-v89",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Reactome v89 gene-set collection",
         "version": "1.0.0",
         "created": "2026-05-28",
@@ -66,7 +66,7 @@ def test_minimal_valid_geneset_member_passes() -> None:
         {
             "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0",
             "id": "dataset:reactome-r-hsa-1",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "R-HSA-1",
             "version": "1.0.0",
             "created": "2026-05-28",
@@ -97,7 +97,7 @@ def test_geneset_member_requires_extension_fields(field: str) -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0",
         "id": "dataset:reactome-r-hsa-1",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "R-HSA-1",
         "version": "1.0.0",
         "created": "2026-05-28",
@@ -127,7 +127,7 @@ def test_geneset_member_rejects_scalar_member_key_duplicate() -> None:
             {
                 "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0",
                 "id": "dataset:reactome-r-hsa-1",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "R-HSA-1",
                 "version": "1.0.0",
                 "created": "2026-05-28",

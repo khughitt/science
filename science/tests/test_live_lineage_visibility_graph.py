@@ -33,7 +33,7 @@ def _proposition(
     path.write_text(
         "---\n"
         f"id: proposition:{slug}\n"
-        f"type: {kind}\n"
+        f"kind: {kind}\n"
         f"title: {title or slug}\n"
         f"status: {status}\n"
         f"{extra_frontmatter}"

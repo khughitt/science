@@ -7,7 +7,7 @@ def _run(dirpath: Path, slug, workflow, supersedes=None, manifest_path="results/
     fm = [
         "---",
         f'id: "workflow-run:{slug}"',
-        'type: "workflow-run"',
+        'kind: "workflow-run"',
         f'workflow: "{workflow}"',
         f'manifest_path: "{manifest_path}"',
     ]
@@ -27,7 +27,7 @@ def test_load_runs_parses_frontmatter(tmp_path):
 
 
 def test_missing_manifest_path_marks_error(tmp_path):
-    (tmp_path / "bad.md").write_text('---\nid: "workflow-run:bad"\ntype: "workflow-run"\nworkflow: "wf-a"\n---\n')
+    (tmp_path / "bad.md").write_text('---\nid: "workflow-run:bad"\nkind: "workflow-run"\nworkflow: "wf-a"\n---\n')
     runs = load_runs(tmp_path)
     assert runs[0].error is not None
 

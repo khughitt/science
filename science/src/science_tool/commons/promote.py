@@ -149,7 +149,7 @@ class PromoteKindConfig:
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
     kind="paper",
-    source_subdirs=("entities/papers", "doc/papers", "doc/background/papers"),
+    source_subdirs=("entities/papers",),
     overlay_dest_subdir="overlays/papers",
     commons_subdir="papers",
     id_prefix="paper:",
@@ -162,7 +162,7 @@ PROMOTE_KIND_PAPER = PromoteKindConfig(
 
 PROMOTE_KIND_TOPIC = PromoteKindConfig(
     kind="topic",
-    source_subdirs=("entities/topics", "doc/topics", "doc/background/topics"),
+    source_subdirs=("entities/topics",),
     overlay_dest_subdir="overlays/topics",
     commons_subdir="topics",
     id_prefix="topic:",
@@ -191,7 +191,7 @@ def _theme_eligibility(fm: Mapping[str, Any]) -> EligibilityVerdict:
 
 PROMOTE_KIND_THEME = PromoteKindConfig(
     kind="theme",
-    source_subdirs=("entities/themes", "doc/themes"),
+    source_subdirs=("entities/themes",),
     overlay_dest_subdir="overlays/themes",
     commons_subdir="themes",
     id_prefix="theme:",
@@ -499,7 +499,7 @@ class PromoteResult:
         | None
     )
     failure_detail: str | None
-    # Project slugs whose `doc/papers/<file>.md` were actually modified by this
+    # Project slugs whose source entity file was actually modified by this
     # operation. On the success path, every overlay slug; on a partial step-6
     # failure, just the slugs reached before the failure; on
     # preflight/tag/commit failures (no project file touched), the empty list.
@@ -1273,9 +1273,8 @@ def _project_target_files_clean(
 ) -> tuple[bool, list[str]]:
     """For each filename in `target_filenames`, check whether the overlay
     destination AND every source subdir's same-named file are clean against
-    HEAD. The multi-path scan covers the topic flatten case: when a candidate
-    came from doc/background/topics/, the apply path unlinks that file, so
-    the preflight must catch dirtiness there too."""
+    HEAD. The multi-path scan covers cases where the source and overlay
+    destination are distinct, so the preflight catches dirtiness in both."""
     dirty: list[str] = []
     subdirs_to_check = [kind.overlay_dest_subdir, *kind.source_subdirs]
     seen: set[str] = set()
@@ -1958,16 +1957,16 @@ def _classify_file_kind(
     """Decide whether a file under `kind.source_subdirs` matches this kind.
 
     Rule order (design §4.1, Phase E §6.3 step 2):
-    1. Explicit `kind:` or `type:` equal to `kind.kind` -> match.
-    2. Explicit `kind` / `type` with any other value -> skip-other-kind.
-    3. No `kind` / `type`, `id` present and NOT starting with `kind.id_prefix` ->
+    1. Explicit `kind:` equal to `kind.kind` -> match.
+    2. Explicit `kind` with any other value -> skip-other-kind.
+    3. No `kind`, `id` present and NOT starting with `kind.id_prefix` ->
        skip-other-id.
     4. Otherwise infer from directory: match.
     """
-    explicit_values = [frontmatter[key] for key in ("kind", "type") if key in frontmatter]
-    if any(value == kind.kind for value in explicit_values):
+    explicit_kind = frontmatter.get("kind")
+    if explicit_kind == kind.kind:
         return "match"
-    if explicit_values:
+    if explicit_kind is not None:
         return "skip-other-kind"
     id_val = frontmatter.get("id")
     if isinstance(id_val, str) and not id_val.startswith(kind.id_prefix):
@@ -2252,7 +2251,7 @@ def _scan_project(
 
             classification = _classify_file_kind(fm, kind)
             if classification == "skip-other-kind":
-                logger.warning("%s: kind/type is not %r; skipping", source_path, kind.kind)
+                logger.warning("%s: kind is not %r; skipping", source_path, kind.kind)
                 continue
             if classification == "skip-other-id":
                 continue
@@ -2279,8 +2278,8 @@ def _scan_project(
                     continue
 
             # Id check. The classifier may have matched purely on explicit
-            # `kind:` / `type:`, while the file also carries a contradictory
-            # `id:`. In that case, report failure.
+            # `kind:`, while the file also carries a contradictory `id:`. In
+            # that case, report failure.
             id_val = fm.get("id")
             if "id" in fm and not isinstance(id_val, str):
                 failures.append(
@@ -2529,7 +2528,7 @@ _GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset({"schema_profile", "versi
 # canonical slug case is picked. They are stripped from the canonical merge
 # bucket so case-divergent overlays don't surface a bogus `id` conflict
 # (design §4.1.3).
-_PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "type", "bibkey"})
+_PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "kind", "bibkey"})
 
 
 def _split_body_by_headings(body: str) -> dict[str, str]:
@@ -2565,7 +2564,7 @@ def _classify_entity(
       lookup — the canonical writer fills its own from the apply timestamp.
     - Overlay-management fields (overlay_of, pin_version) NEVER appear on either
       side (they're written by the overlay renderer alone).
-    - Promote-derived identity fields (id, type, bibkey) NEVER appear on either
+    - Promote-derived identity fields (id, kind, bibkey) NEVER appear on either
       side either — the canonical writer re-emits them from the PromoteDecision
       (after `_pick_canonical_bibkey_case` chooses the canonical-case slug).
       Letting them flow through the canonical bucket would surface a bogus
@@ -3126,7 +3125,7 @@ def _render_canonical(
     Emits schema_profile from `active_profile` (which equals
     `kind.default_profile` for bare promotes, or `kind.default_profile`
     augmented with `--mixin` extensions for Phase H bio promotes). id
-    from kind.id_prefix, type from kind.kind. For paper kind only, also
+    from kind.id_prefix, kind from kind.kind. For paper kind only, also
     emits a `bibkey:` field (preserved from Phase E; not in topic/theme
     mixins).
     """
@@ -3134,7 +3133,7 @@ def _render_canonical(
     head: dict = {
         "schema_profile": profile_str,
         "id": f"{kind.id_prefix}{decision.slug}",
-        "type": kind.kind,
+        "kind": kind.kind,
         "title": canonical_fields.get("title", ""),
         "version": decision.canonical_version,
         "created": _coerce_date_for_yaml(created),
@@ -3280,7 +3279,7 @@ def _render_audit_log_yaml(
 
     log: dict = {
         "op_id": result.op_id,
-        "type": result.kind.kind,
+        "kind": result.kind.kind,
         "invocation": invocation,
         "status": result.status,
         "started_at": result.started_at.isoformat(),
@@ -3323,8 +3322,8 @@ def _render_audit_log_yaml(
             "commons": (f"git -C {commons_root} revert {result.commons_commit}" if result.commons_commit else None),
             # Per design §6.5: each entry is a copy-pasteable git command,
             # not a placeholder. Derive project_root by walking up from each
-            # overlay path (`<root>/doc/papers/<file>`) and list every rewritten
-            # path so the operator can restore exactly the touched files.
+            # overlay path and list every rewritten path so the operator can
+            # restore exactly the touched files.
             "projects": {
                 slug: _build_project_rollback_command(rewrites["overlay_rewrites"], result.kind)
                 for slug, rewrites in projects_touched.items()

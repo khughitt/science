@@ -10,7 +10,7 @@ context.
 ```markdown
 ---
 id: proposition:example
-type: proposition
+kind: proposition
 title: "Example proposition"
 status: draft
 related:
@@ -31,19 +31,17 @@ Important fields:
 | Field | Purpose |
 |---|---|
 | `id` | Stable typed reference, usually `<kind>:<local-part>`. |
-| `type` | Entity kind. Usually matches the prefix in `id`. |
+| `kind` | Entity kind. Usually matches the prefix in `id`. |
 | `title` | Human-readable title. |
 | `status` | Lifecycle state for the kind. |
 | `related` | Other entity refs connected to this record. |
 | `source_refs` | Sources or annotations that support the existence or content of this record. |
 | Body prose | Explanation, caveats, rationale, and review context. |
 
-`kind` is the authoritative load-time discriminator. Markdown frontmatter may
-use the legacy `type:` field; storage adapters normalize it to `kind` before
-registry dispatch. Core Science kinds also carry a `type` projection internally,
-but catalog, profile, and project-extension kinds load as open-ended strings
-rather than being forced through a closed enum or an `unknown` fallback. Kind
-matching is exact after adapter normalization.
+`kind` is the authoritative load-time discriminator. Core Science kinds also
+carry a `type` projection internally, but catalog, profile, and
+project-extension kinds load as open-ended strings rather than being forced
+through a closed enum or an `unknown` fallback. Kind matching is exact.
 
 ## Authored And Derived Fields
 
@@ -711,7 +709,7 @@ and `derivation.kind: member_of` pointing back to the parent collection:
 ```yaml
 schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0
 id: dataset:reactome-r-hsa-1
-type: dataset
+kind: dataset
 origin: derived
 source_class: reference
 parent_dataset: dataset:reactome-v89

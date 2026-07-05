@@ -1,6 +1,6 @@
 ---
 id: "paper:{{nn}}-{{slug}}"
-type: "paper"
+kind: "paper"
 title: "{{title}}"
 status: "active"
 # Optional: literature-survey | literature-review | review | survey
@@ -16,7 +16,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "paper" }
+    kind: { default: "paper" }
     title: { from: title }
     status: { from: status }
     paper_kind: { default: "" }

@@ -60,7 +60,7 @@ def _write_reference_graph_commons(tmp_path: Path) -> tuple[Path, Path]:
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0\n"
         "id: dataset:mondo\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: MONDO\n"
         "version: 1.0.0\n"
         "status: active\n"

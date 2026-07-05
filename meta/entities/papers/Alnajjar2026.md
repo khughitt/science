@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: A Fast Integrative Clustering and Feature Selection Approach for High-Dimensional
   Multiview Data
 status: active

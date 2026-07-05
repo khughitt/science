@@ -41,7 +41,7 @@ def _check_paper_dataset_refs(ctx: ValidateContext) -> Iterator[Result]:
     author fix it before promotion (fb-2026-05-29-006).
     """
     for fm in entity_frontmatters(ctx):
-        if (fm.get("kind") or fm.get("type")) != "paper":
+        if fm.get("kind") != "paper":
             continue
         datasets = fm.get("datasets")
         if not isinstance(datasets, list):

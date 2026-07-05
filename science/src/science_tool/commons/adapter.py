@@ -173,10 +173,10 @@ class CommonsEntityAdapter:
                 raise EntityValidationError(
                     f"frontmatter id {declared_id!r} does not match path-derived canonical id {canonical_id!r}"
                 )
-            declared_type = frontmatter.get("type")
-            if declared_type != type_name:
+            declared_kind = frontmatter.get("kind")
+            if declared_kind != type_name:
                 raise EntityValidationError(
-                    f"frontmatter type {declared_type!r} does not match path-derived type {type_name!r}"
+                    f"frontmatter kind {declared_kind!r} does not match path-derived type {type_name!r}"
                 )
         except EntityValidationError as exc:
             return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)

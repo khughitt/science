@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Applying the Bradford Hill Criteria in the 21st Century: How Data Integration
   Has Changed Causal Inference in Molecular Epidemiology'
 status: active

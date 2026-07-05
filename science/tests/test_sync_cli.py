@@ -46,7 +46,7 @@ def _write_entity_md(
         )
     scope_block = f"scope: {scope}\n" if scope is not None else ""
     (doc_dir / filename).write_text(
-        f'---\nid: "{entity_id}"\ntype: {entity_type}\ntitle: "{title}"\n'
+        f'---\nid: "{entity_id}"\nkind: {entity_type}\ntitle: "{title}"\n'
         f"{scope_block}{primary_block}related: []\nontology_terms: []\naliases: []\n---\nBody.\n",
         encoding="utf-8",
     )

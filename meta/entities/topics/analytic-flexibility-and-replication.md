@@ -1,5 +1,5 @@
 ---
-type: topic
+kind: topic
 title: Analytic Flexibility and the Replication Crisis
 status: active
 created: '2026-04-24'

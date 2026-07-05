@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Causal-estimand guardrails reduce false causal edge strengthening
 status: proposed
 created: '2026-05-05'

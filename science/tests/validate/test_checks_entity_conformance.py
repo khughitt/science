@@ -32,11 +32,11 @@ def _write(root: Path, rel: str, fm: dict) -> None:
     p.write_text("---\n" + yaml.safe_dump(fm) + "---\n", encoding="utf-8")
 
 
-def test_location_coherence_flags_stranded_entity(tmp_path: Path) -> None:
-    _write(tmp_path, "doc/questions/0001-x.md", {"id": "question:0001-x", "type": "question"})
+def test_location_coherence_does_not_scan_legacy_roots(tmp_path: Path) -> None:
+    _write(tmp_path, "doc/questions/0001-x.md", {"id": "question:0001-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
-    assert any(r.severity is Severity.ERROR and "doc/questions/0001-x.md" in str(r.path) for r in results)
+    assert not [r for r in results if "doc/questions/0001-x.md" in str(r.path)]
 
 
 def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:
@@ -45,7 +45,7 @@ def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:
         "entities/questions/0001-x.md",
         {
             "id": "question:0001-x",
-            "type": "question",
+            "kind": "question",
             "title": "X",
             "status": "active",
             "created": "2026-01-01",
@@ -56,16 +56,16 @@ def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:
     assert not [r for r in check_entity_location_coherence(ctx) if r.severity is Severity.ERROR]
 
 
-def test_location_coherence_flags_type_in_wrong_dir(tmp_path: Path) -> None:
+def test_location_coherence_flags_kind_in_wrong_dir(tmp_path: Path) -> None:
     # a hypothesis-typed file living under entities/questions/
-    _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "type": "hypothesis"})
+    _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "kind": "hypothesis"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
-    assert any(r.severity is Severity.ERROR and "type" in r.message for r in results)
+    assert any(r.severity is Severity.ERROR and "kind" in r.message for r in results)
 
 
 def test_filename_conformance_flags_legacy_name(tmp_path: Path) -> None:
-    _write(tmp_path, "entities/questions/q01-x.md", {"id": "question:q01-x", "type": "question"})
+    _write(tmp_path, "entities/questions/q01-x.md", {"id": "question:q01-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_filename_conformance(ctx))
     assert any(r.severity is Severity.ERROR for r in results)
@@ -73,21 +73,21 @@ def test_filename_conformance_flags_legacy_name(tmp_path: Path) -> None:
 
 def test_filename_conformance_flags_stem_id_mismatch(tmp_path: Path) -> None:
     # well-formed name, but id local-part does not match the filename stem
-    _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0002-y", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0002-y", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_filename_conformance(ctx))
     assert any(r.severity is Severity.ERROR and "id" in r.message for r in results)
 
 
 def test_filename_conformance_passes_for_padded(tmp_path: Path) -> None:
-    _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0001-x", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0001-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_filename_conformance(ctx) if r.severity is Severity.ERROR]
 
 
 def test_location_coherence_flags_id_kind_in_wrong_dir(tmp_path: Path) -> None:
     # correct type, but the id's kind prefix disagrees with the directory
-    _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
     assert any(r.severity is Severity.ERROR and "id kind" in r.message for r in results)
@@ -104,8 +104,8 @@ def test_frontmatter_completeness_flags_missing_fields(tmp_path: Path) -> None:
 
 
 def test_number_hygiene_flags_duplicate(tmp_path: Path) -> None:
-    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "type": "question"})
-    _write(tmp_path, "entities/questions/0001-b.md", {"id": "question:0001-b", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "kind": "question"})
+    _write(tmp_path, "entities/questions/0001-b.md", {"id": "question:0001-b", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_number_hygiene(ctx))
     assert any(r.severity is Severity.ERROR and "0001" in r.message for r in results)
@@ -125,7 +125,7 @@ def test_stray_files_ignore_paired_annotation_sidecars(tmp_path: Path) -> None:
         "entities/questions/0001-x.md",
         {
             "id": "question:0001-x",
-            "type": "question",
+            "kind": "question",
             "title": "X",
             "status": "active",
             "created": "2026-01-01",
@@ -168,8 +168,8 @@ def test_stray_subdirectory_flagged(tmp_path: Path) -> None:
 
 
 def test_number_hygiene_passes_for_distinct_numbers(tmp_path: Path) -> None:
-    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "type": "question"})
-    _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "kind": "question"})
+    _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "kind": "question"})
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_number_hygiene(ctx) if r.severity is Severity.ERROR]
 
@@ -196,7 +196,7 @@ def test_stray_files_ignores_reservation_sentinel(tmp_path: Path) -> None:
     d = tmp_path / "entities" / "questions"
     d.mkdir(parents=True)
     (d / ".0001.reserving").write_text("", encoding="utf-8")
-    (d / "0001-x.md").write_text("---\nid: question:0001-x\ntype: question\n---\n", encoding="utf-8")
+    (d / "0001-x.md").write_text("---\nid: question:0001-x\nkind: question\n---\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
     assert not [r for r in results if r.severity is Severity.ERROR]
@@ -207,7 +207,7 @@ def test_overlay_of_in_owner_root_flagged_as_error_at_v3(tmp_path: Path) -> None
     _write(
         tmp_path,
         "entities/topics/0001-x.md",
-        {"id": "topic:0001-x", "type": "topic", "overlay_of": "topic:0001-x"},
+        {"id": "topic:0001-x", "kind": "topic", "overlay_of": "topic:0001-x"},
     )
     ctx = _ctx(tmp_path)  # _ctx writes layout_version: 3 -> ERROR
     results = list(check_overlay_of_in_owner_root(ctx))
@@ -242,7 +242,7 @@ def test_clean_owner_entity_is_not_flagged(tmp_path: Path) -> None:
         "entities/topics/0001-x.md",
         {
             "id": "topic:0001-x",
-            "type": "topic",
+            "kind": "topic",
             "title": "X",
             "status": "active",
             "created": "2026-01-01",
@@ -262,7 +262,7 @@ def test_overlay_of_in_owner_root_warns_during_transition(tmp_path: Path) -> Non
     _write(
         tmp_path,
         "entities/topics/0001-x.md",
-        {"id": "topic:0001-x", "type": "topic", "overlay_of": "topic:0001-x"},
+        {"id": "topic:0001-x", "kind": "topic", "overlay_of": "topic:0001-x"},
     )
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     results = list(check_overlay_of_in_owner_root(ctx))
@@ -276,7 +276,7 @@ def test_overlay_of_under_entities_templates_is_ignored(tmp_path: Path) -> None:
     _write(
         tmp_path,
         "entities/questions/templates/example.md",
-        {"id": "question:example", "type": "question", "overlay_of": "question:example"},
+        {"id": "question:example", "kind": "question", "overlay_of": "question:example"},
     )
     ctx = _ctx(tmp_path)
     assert list(check_overlay_of_in_owner_root(ctx)) == []

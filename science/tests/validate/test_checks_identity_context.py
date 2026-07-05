@@ -21,7 +21,7 @@ _COORD_PROFILE = "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identit
 
 
 def _ds(profile: str, **fm) -> dict:
-    return {"type": "dataset", "id": "dataset:x", "schema_profile": profile, "_path": "data/x/entity.md", **fm}
+    return {"kind": "dataset", "id": "dataset:x", "schema_profile": profile, "_path": "data/x/entity.md", **fm}
 
 
 def _assembly(digest: str, *, status: str = "resolved", registry: str = _REGISTRY) -> dict:
@@ -279,7 +279,7 @@ def test_bad_resolution_status_errors() -> None:
 def _with_assembly(id_: str, digest: str, **extra) -> dict:
     return {
         "id": id_,
-        "type": "dataset",
+        "kind": "dataset",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
         "_path": f"data/{id_.split(':')[-1]}/entity.md",
         "identity_context": {"taxon": 9606, "assembly": {"seqcol_digest": digest, "resolution_status": "resolved"}},
@@ -630,7 +630,7 @@ def _declared_unresolved_proxy_assembly() -> dict:
 
 def _derived_with_identity(identity_context: dict, *, derivation: dict) -> dict:
     return {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:derived",
         "schema_profile": _COORD_PROFILE,
         "_path": "data/derived/entity.md",
@@ -917,7 +917,7 @@ def test_tier_declaration_defect_is_public_and_registry_agnostic() -> None:
 
 def _gene_ds(gene, id_="dataset:g") -> dict:
     return {
-        "type": "dataset",
+        "kind": "dataset",
         "id": id_,
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
         "_path": "data/g/entity.md",
@@ -1017,7 +1017,7 @@ def test_gene_bad_resolution_status_errors() -> None:
 
 def test_dataset_without_gene_decl_ignored() -> None:
     ds = {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:x",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
         "_path": "data/x/entity.md",
@@ -1040,7 +1040,7 @@ _PROTEIN_META_BY_ID = {_PROTEIN_REGISTRY: _VALID_PROTEIN_META}
 
 def _protein_ds(protein, id_="dataset:p") -> dict:
     return {
-        "type": "dataset",
+        "kind": "dataset",
         "id": id_,
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.proteomics/1.0+bio.identity_context/1.0",
         "_path": "data/p/entity.md",
@@ -1136,7 +1136,7 @@ def test_protein_not_a_dict_errors() -> None:
 
 def test_dataset_without_protein_decl_ignored() -> None:
     ds = {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:q",
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.proteomics/1.0+bio.identity_context/1.0",
         "_path": "data/q/entity.md",

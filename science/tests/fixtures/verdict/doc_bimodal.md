@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-bimodal"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: bimodal rule with 4 atoms"
 status: "active"
 created: "2026-04-21"

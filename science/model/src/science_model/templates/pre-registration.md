@@ -1,6 +1,6 @@
 ---
 id: "pre-registration:{{nn}}-{{slug}}"
-type: "pre-registration"
+kind: "pre-registration"
 title: "{{title}}"
 status: "committed"
 committed: "{{YYYY-MM-DD}}"
@@ -11,7 +11,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "pre-registration" }
+    kind: { default: "pre-registration" }
     title: { from: title }
     status: { from: status }
     committed: { from: created }

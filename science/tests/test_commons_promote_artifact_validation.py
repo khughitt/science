@@ -15,7 +15,7 @@ def test_validate_artifact_wraps_schema_not_found_as_resolution_error() -> None:
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.bogus/1.0\n"
         "id: dataset:x\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: x\n"
         "version: 1.0.0\n"
         "created: '2026-05-19'\n"

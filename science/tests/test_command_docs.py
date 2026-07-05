@@ -595,7 +595,7 @@ def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
         "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
         "${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md",
         "entities/plans/<NNNN>-<slug>-analysis-plan.md",
-        'type: "plan"',
+        'kind: "plan"',
         'plan_kind: "analysis-plan"',
         "skills_loaded:",
         "Readiness Decision",
@@ -1078,7 +1078,7 @@ def test_bias_audit_templates_emit_report_not_task() -> None:
     for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
         text = _read(path)
         assert 'id: "report:{{NNNN}}-bias-audit-{{slug}}"' in text
-        assert 'type: "report"' in text
+        assert 'kind: "report"' in text
         assert 'id: "task:{{slug}}"' not in text
         assert 'type: "task"' not in text
 
@@ -1124,11 +1124,11 @@ def test_pre_registration_templates_include_calibration_gate() -> None:
 def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> None:
     command = _read("commands/big-picture.md")
     assert (
-        "Frontmatter: emit `type: synthesis` + `title: \"Synthesis: <hyp-id>\"` + "
+        "Frontmatter: emit `kind: synthesis` + `title: \"Synthesis: <hyp-id>\"` + "
         "`report_kind: hypothesis-synthesis`"
     ) in command
     assert (
-        "Frontmatter: emit `type: synthesis` + `title: \"Emergent threads - <project name>\"` + "
+        "Frontmatter: emit `kind: synthesis` + `title: \"Emergent threads - <project name>\"` + "
         "`report_kind: emergent-threads`"
     ) in command
     assert 'title: "Project synthesis - <project name>"' in command

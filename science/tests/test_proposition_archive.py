@@ -55,7 +55,7 @@ def _proposition(
     return _entity(
         root,
         f"entities/propositions/{slug}.md",
-        f"id: proposition:{slug}\ntype: proposition\ntitle: {slug}\nstatus: {status}\n{extra_frontmatter}",
+        f"id: proposition:{slug}\nkind: proposition\ntitle: {slug}\nstatus: {status}\n{extra_frontmatter}",
         "Claim.\n",
     )
 
@@ -429,7 +429,7 @@ def test_report_surfaces_generic_inbound_live_refs_as_context(tmp_path: Path) ->
         tmp_path,
         "entities/propositions/observer.md",
         "id: proposition:observer\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Observer\n"
         "status: active\n"
         "related:\n"
@@ -602,7 +602,7 @@ def test_apply_moves_ready_candidates_and_leaves_blocked_candidates_live(tmp_pat
     _entity(
         tmp_path,
         "entities/papers/Smith2020.md",
-        "id: paper:Smith2020\ntype: paper\ntitle: Smith 2020\nstatus: active\n",
+        "id: paper:Smith2020\nkind: paper\ntitle: Smith 2020\nstatus: active\n",
     )
     _proposition(tmp_path, "canonical")
     ready = _proposition(

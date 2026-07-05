@@ -1,6 +1,6 @@
 ---
 id: "spec:research-question"
-type: "spec"
+kind: "spec"
 title: "Research question spec"
 status: "active"
 related: []

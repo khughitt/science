@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Bayesian meta-analysis now - let's do it
 status: active
 created: '2026-05-05'

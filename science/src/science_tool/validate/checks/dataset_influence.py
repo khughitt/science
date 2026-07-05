@@ -83,7 +83,7 @@ def evaluate_dataset_influence(
     for fm in frontmatters:
         ident = str(fm.get("id") or "?")
         path = fm.get("_path")
-        kind = fm.get("kind") or fm.get("type")
+        kind = fm.get("kind")
         usage_entries, defect = _iter_usage_entries(fm)
         if defect is not None:
             yield _result(
@@ -237,7 +237,7 @@ def _dataset_ref_statuses(
         except CommonsError:
             out[ref] = "missing"
             continue
-        kind = record.frontmatter.get("kind") or record.frontmatter.get("type")
+        kind = record.frontmatter.get("kind")
         out[ref] = "resolved" if kind == "dataset" else "non_dataset"
     return out
 
@@ -246,7 +246,7 @@ def _local_entity_kinds(frontmatters: Iterable[dict[str, Any]]) -> dict[str, str
     out: dict[str, str] = {}
     for fm in frontmatters:
         ident = fm.get("id")
-        kind = fm.get("kind") or fm.get("type")
+        kind = fm.get("kind")
         if isinstance(ident, str) and ident and isinstance(kind, str) and kind:
             out[ident] = kind
     return out

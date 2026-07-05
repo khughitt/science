@@ -36,7 +36,7 @@ def _handler(request: httpx.Request) -> httpx.Response:
 
 
 def _entity(tmp_path):
-    d = tmp_path / "doc" / "background" / "papers"
+    d = tmp_path / "entities" / "papers"
     d.mkdir(parents=True)
     (d / "doe2020.md").write_text("---\nkind: paper\npmid: 12345678\n---\n\n# Doe 2020\n")
     return d

@@ -86,7 +86,7 @@ def test_frontmatter_parses_origins(tmp_path):
     p.write_text(
         "---\n"
         "id: hypothesis:0001-x\n"
-        "type: hypothesis\n"
+        "kind: hypothesis\n"
         "title: X\n"
         "origins:\n"
         "  - {type: user, date: '2026-05-10'}\n"
@@ -151,7 +151,7 @@ def test_render_defaults_origins_to_empty_list(kind):
 def _topic(**extra):
     entity = {
         "id": "topic:immune-set-point",
-        "type": "topic",
+        "kind": "topic",
         "schema_profile": "science-entity-base/1.0+topic/2.0",
         "title": "T",
         "version": "1.0.0",
@@ -168,7 +168,7 @@ def _topic(**extra):
 def _theme(**extra):
     entity = {
         "id": "theme:reproducibility",
-        "type": "theme",
+        "kind": "theme",
         "schema_profile": "science-entity-base/1.0+theme/2.0",
         "title": "T",
         "version": "1.0.0",

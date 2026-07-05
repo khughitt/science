@@ -1,6 +1,6 @@
 ---
 id: "topic:t01-covered"
-type: "topic"
+kind: "topic"
 related: [paper:p01-example]
 source_refs: []
 ---

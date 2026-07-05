@@ -40,7 +40,7 @@ def test_resolver_preserves_authored_notes(tmp_path):
     existing.write_text(
         "---\n"
         "id: prose-source:example\n"
-        "type: prose-source\n"
+            "kind: prose-source\n"
         "title: Example\n"
         "status: active\n"
         "source_path: old.md\n"

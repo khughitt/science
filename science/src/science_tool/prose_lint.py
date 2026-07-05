@@ -556,7 +556,7 @@ def _paper_note_has_source_context(path: Path, frontmatter: dict) -> bool:
     is_paper_path = any(left == "entities" and right == "papers" for left, right in zip(parts, parts[1:]))
     if not is_paper_path:
         return False
-    if frontmatter.get("type") != "paper" and not str(frontmatter.get("id", "")).startswith("paper:"):
+    if frontmatter.get("kind") != "paper" and not str(frontmatter.get("id", "")).startswith("paper:"):
         return False
     source_refs = frontmatter.get("source_refs")
     if isinstance(source_refs, list) and any(isinstance(ref, str) and ref.strip() for ref in source_refs):
@@ -672,7 +672,7 @@ _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
     "numeric-anchor": detect_numeric_anchor,
     "unsupported-citation-syntax": detect_unsupported_citation_syntax,
 }
-_SCAN_DIRS = ("doc", "specs", "entities")
+_SCAN_DIRS = ("doc", "entities")
 _SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md", "RESEARCH_PLAN.md")
 _SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "templates"}
 

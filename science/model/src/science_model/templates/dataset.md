@@ -1,6 +1,6 @@
 ---
 id: "dataset:<slug>"
-type: "dataset"
+kind: "dataset"
 title: "<Dataset Name — artefact-level specific>"
 status: "candidate"               # candidate (not yet acquired) | active (acquired, has datapackage/local_path)
 profiles: ["science-pkg-entity-1.0"]

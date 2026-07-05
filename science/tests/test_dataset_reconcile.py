@@ -13,7 +13,7 @@ from science_tool.cli import main as science_cli
 def _seed(tmp_path: Path, *, entity_license: str, runtime_license: str) -> None:
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
-        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X"\norigin: "external"\n'
+        '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X"\norigin: "external"\n'
         f'license: "{entity_license}"\n'
         'datapackage: "data/x/datapackage.yaml"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'

@@ -1,5 +1,5 @@
 ---
 id: "question:q03-transitive-via-interp"
-type: "question"
+kind: "question"
 ---
 Transitive: linked only via interpretation i01.

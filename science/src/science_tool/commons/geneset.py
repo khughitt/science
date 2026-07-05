@@ -46,7 +46,7 @@ class GenesetRow:
 
 def is_geneset_frontmatter(fm: dict[str, Any]) -> bool:
     profile = str(fm.get("schema_profile") or "")
-    return (fm.get("kind") or fm.get("type")) == "dataset" and GENESET_PROFILE_TOKEN in f"+{profile}"
+    return fm.get("kind") == "dataset" and GENESET_PROFILE_TOKEN in f"+{profile}"
 
 
 def _split_semicolon(raw: str, *, field: str, row_number: int) -> tuple[str, ...]:

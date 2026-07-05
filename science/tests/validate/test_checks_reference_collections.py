@@ -17,7 +17,7 @@ _MANIFEST = (
 _PARENT_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:ref-collection
-type: dataset
+kind: dataset
 title: Reference Collection
 status: active
 tier: use-now
@@ -26,7 +26,7 @@ tier: use-now
 _MEMBER_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-a
-type: dataset
+kind: dataset
 title: Member A
 status: active
 origin: derived
@@ -41,7 +41,7 @@ derivation:
 _MEMBER_DECLARED_UNRESOLVED_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-b
-type: dataset
+kind: dataset
 title: Member B
 status: active
 origin: derived
@@ -57,7 +57,7 @@ derivation:
 _MEMBER_MISSING_PARENT_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-orphan
-type: dataset
+kind: dataset
 title: Member Orphan
 status: active
 origin: derived
@@ -72,7 +72,7 @@ derivation:
 _MEMBER_DECLARED_UNRESOLVED_MISSING_PARENT_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-orphan-dec
-type: dataset
+kind: dataset
 title: Member Orphan Declared
 status: active
 origin: derived
@@ -88,7 +88,7 @@ derivation:
 _WORKFLOW_DATASET_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:workflow-out
-type: dataset
+kind: dataset
 title: Workflow Output
 status: active
 tier: use-now
@@ -99,7 +99,7 @@ tier: use-now
 _MEMBER_PARENT_MISMATCH_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-mismatch
-type: dataset
+kind: dataset
 title: Member Mismatch
 status: active
 origin: derived
@@ -114,7 +114,7 @@ derivation:
 _PARENT_COLLECTION_FOR_MISMATCH_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:parent-collection
-type: dataset
+kind: dataset
 title: Parent Collection
 status: active
 tier: use-now
@@ -126,7 +126,7 @@ tier: use-now
 _MEMBER_MALFORMED_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-malformed
-type: dataset
+kind: dataset
 title: Member Malformed
 status: active
 origin: derived
@@ -141,7 +141,7 @@ derivation:
 _MEMBER_COMMONS_PARENT_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-commons
-type: dataset
+kind: dataset
 title: Member Commons Parent
 status: active
 origin: derived
@@ -159,7 +159,7 @@ _COMMONS_PARENT_ENTITY_MD = """\
 ---
 schema_profile: "science-entity-base/1.0+dataset/1.0"
 id: "dataset:commons-parent"
-type: "dataset"
+kind: "dataset"
 title: "Commons parent reference collection"
 version: "1.0.0"
 status: "active"

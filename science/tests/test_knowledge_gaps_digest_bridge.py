@@ -14,9 +14,9 @@ def test_topic_gap_hypotheses_include_a_digest_bridged_hypothesis(tmp_path) -> N
         p.write_text(txt, encoding="utf-8")
 
     # topic t01 has demand (q01 references it) and zero paper coverage -> a gap.
-    w("topics/t01.md", '---\nid: "topic:t01"\ntype: "topic"\nrelated: []\n---\n')
-    w("questions/q01.md", '---\nid: "question:q01"\ntype: "question"\nrelated: ["topic:t01"]\n---\n')
-    w("hypotheses/h01.md", '---\nid: "hypothesis:h01"\ntype: "hypothesis"\n---\n')
+    w("topics/t01.md", '---\nid: "topic:t01"\nkind: "topic"\nrelated: []\n---\n')
+    w("questions/q01.md", '---\nid: "question:q01"\nkind: "question"\nrelated: ["topic:t01"]\n---\n')
+    w("hypotheses/h01.md", '---\nid: "hypothesis:h01"\nkind: "hypothesis"\n---\n')
     # q01 reaches h01 ONLY through the digest bridge (no live interpretation exists).
     w("synthesis/0001-d.md",
       '---\nid: "synthesis:0001-d"\ntitle: "D"\nreport_kind: "cluster-digest"\nstatus: "active"\n'

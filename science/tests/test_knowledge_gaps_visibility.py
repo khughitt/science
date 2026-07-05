@@ -9,10 +9,10 @@ def test_superseded_topic_is_excluded_from_topic_load(tmp_path: Path) -> None:
     (tmp_path / "entities" / "topics").mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: kg\n")
     (tmp_path / "entities" / "topics" / "t01.md").write_text(
-        '---\nid: "topic:t01"\ntype: "topic"\nstatus: "active"\n---\nlive.\n'
+        '---\nid: "topic:t01"\nkind: "topic"\nstatus: "active"\n---\nlive.\n'
     )
     (tmp_path / "entities" / "topics" / "t02.md").write_text(
-        '---\nid: "topic:t02"\ntype: "topic"\nstatus: "superseded"\n---\nold.\n'
+        '---\nid: "topic:t02"\nkind: "topic"\nstatus: "superseded"\n---\nold.\n'
     )
 
     from science_tool.big_picture.knowledge_gaps import _load_topics

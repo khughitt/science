@@ -29,7 +29,7 @@ def test_legacy_flat_access_parses_as_access_level(tmp_md) -> None:
         """
         ---
         id: "dataset:legacy"
-        type: "dataset"
+        kind: "dataset"
         title: "Legacy"
         access: "public"
         datasets:
@@ -53,7 +53,7 @@ def test_new_shape_origin_external(tmp_md) -> None:
         """
         ---
         id: "dataset:new"
-        type: "dataset"
+        kind: "dataset"
         title: "New"
         profiles: ["science-pkg-entity-1.0"]
         origin: "external"
@@ -83,7 +83,7 @@ def test_derived_frontmatter_parses(tmp_md) -> None:
         """
         ---
         id: "dataset:wf-r1-out1"
-        type: "dataset"
+        kind: "dataset"
         title: "Derived"
         profiles: ["science-pkg-entity-1.0"]
         origin: "derived"
@@ -143,7 +143,7 @@ def test_dataset_frontmatter_preserves_identity_metadata(tmp_md) -> None:
         """
         ---
         id: "dataset:identity-demo"
-        type: "dataset"
+        kind: "dataset"
         title: "Identity Demo"
         primary_external_id:
           source: "GEO"
@@ -191,7 +191,7 @@ def test_dataset_frontmatter_coerces_identity_context(tmp_md) -> None:
         """
         ---
         id: "dataset:identity-context"
-        type: "dataset"
+        kind: "dataset"
         title: "Identity Context"
         origin: "external"
         access: "public"

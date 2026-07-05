@@ -57,8 +57,8 @@ def _supersedes_targets(fm: dict[str, Any]) -> list[str]:
 
 
 def _kind_of(entity_id: str, fm: dict[str, Any]) -> str:
-    """The entity's kind: `type`, else `kind`, else the id prefix before `:`."""
-    return str(fm.get("type") or fm.get("kind") or entity_id.split(":", 1)[0])
+    """The entity's kind: `kind`, else the id prefix before `:`."""
+    return str(fm.get("kind") or entity_id.split(":", 1)[0])
 
 
 def _supports_superseded(kind: str) -> bool:

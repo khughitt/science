@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science represent graph-valued, cluster-valued, and selected-feature
   synthesis artifacts?
 status: active

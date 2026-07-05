@@ -9,7 +9,7 @@ def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
 
 
 def _ds(**kw) -> dict:
-    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
+    base = {"kind": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
     base.update(kw)
     return base
 
@@ -96,7 +96,7 @@ def test_non_list_dataset_usage_errors() -> None:
 
 
 def test_non_dataset_ignored() -> None:
-    assert _rules([{"type": "paper", "id": "paper:p", "_path": "x"}]) == []
+    assert _rules([{"kind": "paper", "id": "paper:p", "_path": "x"}]) == []
 
 
 def test_kind_dataset_without_type_is_checked() -> None:

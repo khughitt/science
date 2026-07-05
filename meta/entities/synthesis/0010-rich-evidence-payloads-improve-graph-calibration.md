@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: Rich evidence payloads improve graph calibration
 status: active
 created: '2026-05-06'

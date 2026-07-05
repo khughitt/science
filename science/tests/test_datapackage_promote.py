@@ -27,7 +27,7 @@ def _write_orphan_external_datapackage(tmp_path: Path, slug: str = "z") -> Path:
     p.write_text(
         'profiles: ["science-pkg-entity-1.0"]\n'
         f'id: "dataset:{slug}"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         f'title: "Z {slug}"\n'
         'status: "active"\n'
         'origin: "external"\n'
@@ -68,7 +68,7 @@ def test_apply_writes_owner_with_pointer_and_no_resource_fields(tmp_path: Path) 
     assert owner.exists()
     fm, _ = parse_frontmatter(owner)
     assert fm["id"] == "dataset:z"
-    assert fm["type"] == "dataset"
+    assert fm["kind"] == "dataset"
     assert fm["origin"] == "external"
     assert fm["access"]["level"] == "public"
     assert fm["datapackage"] == "data/z/datapackage.yaml"
@@ -111,7 +111,7 @@ def test_undated_datapackage_promotes_with_sentinel(tmp_path: Path) -> None:
     p.write_text(
         'profiles: ["science-pkg-entity-1.0"]\n'
         'id: "dataset:u"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "U"\n'
         'status: "active"\n'
         'origin: "external"\n'
@@ -134,7 +134,7 @@ def test_path_traversal_id_is_rejected_not_written(tmp_path: Path) -> None:
     p.write_text(
         'profiles: ["science-pkg-entity-1.0"]\n'
         'id: "dataset:../../escape"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "Evil"\n'
         'status: "active"\n'
         'origin: "external"\n'

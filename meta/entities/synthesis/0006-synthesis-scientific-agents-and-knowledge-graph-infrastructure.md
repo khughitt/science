@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Scientific Agents and Knowledge Graph Infrastructure'
 status: active
 created: '2026-05-06'

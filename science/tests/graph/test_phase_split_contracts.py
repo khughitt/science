@@ -36,7 +36,7 @@ _SEED = "name: proj\nprofile: research\nprofiles: {local: local}\n"
 def _question(root: Path, filename: str, cid: str) -> None:
     _write(
         root / "entities" / "questions" / filename,
-        f'---\nid: "{cid}"\ntype: "question"\ntitle: "{cid}"\n---\n',
+        f'---\nid: "{cid}"\nkind: "question"\ntitle: "{cid}"\n---\n',
     )
 
 

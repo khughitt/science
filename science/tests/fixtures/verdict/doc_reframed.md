@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-reframed"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: reframed prior finding"
 status: "active"
 created: "2026-04-21"

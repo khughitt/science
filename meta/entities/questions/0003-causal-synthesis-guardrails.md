@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: When should synthesized or discovered evidence be allowed to strengthen causal
   propositions?
 status: active

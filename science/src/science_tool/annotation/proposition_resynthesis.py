@@ -47,7 +47,6 @@ DEFAULT_RESYNTHESIS_SOURCE_MODEL = "codex-gpt-5"
 RESYNTHESIS_DISPOSITIONS = frozenset({"replace", "split_partial"})
 ALLOWED_REPLACEMENT_FRONTMATTER_KEYS = frozenset(
     {
-        "type",
         "kind",
         "status",
         "related",
@@ -802,7 +801,7 @@ def render_replacement_proposition(
     frontmatter.update(
         {
             "id": replacement.id,
-            "type": "proposition",
+            "kind": "proposition",
             "title": replacement.title,
             "status": "active",
             "created": today,

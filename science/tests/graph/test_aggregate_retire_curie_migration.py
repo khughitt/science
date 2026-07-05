@@ -80,7 +80,7 @@ def test_migrate_is_idempotent_on_matching_curie(tmp_path: Path) -> None:
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA", "primary_external_id": pei}],
-        external_refs=[{"id": "protein:BCMA", "type": "protein", "title": "BCMA", "primary_external_id": backed_pei}],
+        external_refs=[{"id": "protein:BCMA", "kind": "protein", "title": "BCMA", "primary_external_id": backed_pei}],
     )
     report = _run(tmp_path)
     assert "protein:BCMA" in report.migrated
@@ -107,7 +107,7 @@ def test_migrate_rejects_conflicting_curie_without_mutation(tmp_path: Path) -> N
         external_refs=[
             {
                 "id": "protein:BCMA",
-                "type": "protein",
+                "kind": "protein",
                 "title": "BCMA",
                 "primary_external_id": {
                     "source": "UniProtKB",

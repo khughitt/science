@@ -26,7 +26,7 @@ Write one file at the target output path. Base length target: 200–400 words. O
 
 ```yaml
 id: "synthesis:emergent-threads"
-type: "synthesis"
+kind: "synthesis"
 report_kind: "emergent-threads"
 generated_at: "{{ISO 8601}}"
 source_commit: "{{40-char sha}}"

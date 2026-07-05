@@ -69,7 +69,7 @@ def _proposition(
     path.write_text(
         "---\n"
         f"id: proposition:{slug}\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         f"title: {title}\n"
         f"status: {status}\n"
         f"{optional}"

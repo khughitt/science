@@ -60,7 +60,7 @@ def _write_demo_project(
             [
                 "---",
                 'id: "hypothesis:h01-demo"',
-                'type: "hypothesis"',
+                'kind: "hypothesis"',
                 'title: "Demo hypothesis"',
                 'status: "proposed"',
                 "ontology_terms: [GO:0008150]",
@@ -82,7 +82,7 @@ def _write_demo_project(
             [
                 "---",
                 'id: "question:q01-demo"',
-                'type: "question"',
+                'kind: "question"',
                 'title: "Demo question"',
                 'status: "open"',
                 "ontology_terms: []",
@@ -105,7 +105,7 @@ def _write_demo_project(
                 [
                     "---",
                     'id: "hypothesis:h02-demo"',
-                    'type: "hypothesis"',
+                    'kind: "hypothesis"',
                     'title: "Conflicting alias hypothesis"',
                     "aliases: [H01]",
                     'status: "proposed"',
@@ -271,7 +271,7 @@ def test_materialize_with_commons_topic_emits_scope_and_dual_provenance(
     hypothesis_path.write_text(
         """---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: ["topic:single-cell-foundation-models"]
 ---
@@ -323,7 +323,7 @@ def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> 
         {
             "id": "topic:demo",
             "kind": "topic",
-            "type": "topic",
+            "kind": "topic",
             "title": "Demo",
             "project": "demo",
             "ontology_terms": [],
@@ -358,7 +358,7 @@ def test_add_entity_emits_one_provenance_triple_without_overlay() -> None:
         {
             "id": "topic:demo",
             "kind": "topic",
-            "type": "topic",
+            "kind": "topic",
             "title": "Demo",
             "project": "demo",
             "ontology_terms": [],
@@ -701,7 +701,7 @@ def test_materialize_graph_emits_theme_node_and_related_edges(tmp_path: Path) ->
             [
                 "---",
                 'id: "theme:transportability"',
-                'type: "theme"',
+                'kind: "theme"',
                 'title: "Transportability"',
                 'status: "active"',
                 'theme_kind: "methodological"',
@@ -1255,7 +1255,7 @@ def test_materialize_graph_emits_skos_exact_match_for_same_as_external(tmp_path:
             [
                 "---",
                 'id: "topic:phf19"',
-                'type: "topic"',
+                'kind: "topic"',
                 'title: "PHF19 (PHD finger protein 19)"',
                 "ontology_terms: []",
                 "source_refs: []",
@@ -1434,7 +1434,7 @@ def _write_skip_project(project: Path) -> None:
     (project / "entities" / "audit-note.md").write_text(
         "---\n"
         'id: "audit:a01-some-review"\n'
-        'type: "audit"\n'
+        'kind: "audit"\n'
         'title: "A review doc"\n'
         "---\n"
         "# Some review\n",
@@ -1459,7 +1459,7 @@ def test_load_project_sources_records_schema_validation_skip(tmp_path: Path) -> 
     # A core-kind doc missing only its identity (no id) is skipped silently today.
     (tmp_path / "entities" / "hypotheses" / "broken.md").write_text(
         "---\n"
-        'type: "hypothesis"\n'
+        'kind: "hypothesis"\n'
         'title: "Missing id"\n'
         'status: "active"\n'
         "---\n"
@@ -1601,7 +1601,7 @@ def test_source_authored_hypothesis_and_graph_added_hypothesis_do_not_double_cou
     (tmp_path / "entities" / "hypotheses" / "h01-source.md").write_text(
         "---\n"
         'id: "hypothesis:h01-source"\n'
-        'type: "hypothesis"\n'
+        'kind: "hypothesis"\n'
         'title: "Source hypothesis"\n'
         'status: "active"\n'
         "---\n"

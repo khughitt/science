@@ -62,7 +62,7 @@ def test_promote_apply_input_override_links(tmp_path):
     # End-to-end --input contract: read-only JSON → edit a row to LINK → feed back via --apply.
     md, sp = _setup(tmp_path)
     (tmp_path / "entities" / "propositions" / "preexisting.md").write_text(
-        '---\nid: proposition:preexisting\ntype: proposition\ntitle: Preexisting\n'
+        '---\nid: proposition:preexisting\nkind: proposition\ntitle: Preexisting\n'
         'status: draft\ncreated: "2026-06-16"\nupdated: "2026-06-16"\n---\n# Preexisting\n',
         encoding="utf-8",
     )

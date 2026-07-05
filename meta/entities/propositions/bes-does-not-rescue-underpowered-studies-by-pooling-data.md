@@ -4,7 +4,7 @@ polarity: negative
 predicate: associates_with
 subject: Bayesian Evidence Synthesis
 id: proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data
-type: proposition
+kind: proposition
 title: BES does not rescue underpowered studies by pooling data
 status: active
 created: &id001 2026-07-03

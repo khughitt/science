@@ -10,7 +10,7 @@ from science_model.frontmatter import parse_entity_file
 _DATASET_MD = """\
 ---
 id: "dataset:demo"
-type: "dataset"
+kind: "dataset"
 title: "Demo dataset"
 status: "active"
 origin: "external"

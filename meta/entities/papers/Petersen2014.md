@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Causal Models and Learning from Data: Integrating Causal Modeling and Statistical
   Estimation'
 status: active

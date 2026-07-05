@@ -1,5 +1,5 @@
 ---
-type: synthesis
+kind: synthesis
 title: 'Synthesis: Bayesian Evidence Synthesis and Meta-Analysis'
 status: active
 created: '2026-05-05'

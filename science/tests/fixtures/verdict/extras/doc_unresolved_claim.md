@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-unresolved"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: claim ID missing from registry (advisory warning case)"
 status: "active"
 created: "2026-04-21"

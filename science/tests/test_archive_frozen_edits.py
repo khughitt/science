@@ -22,7 +22,7 @@ def _write(root: Path, name: str, fm: str) -> None:
 
 
 def _seed_archived(root: Path) -> str:
-    _write(root, "0001-x", "---\nid: interpretation:0001-x\ntype: interpretation\nstatus: superseded\n---\nbody\n")
+    _write(root, "0001-x", "---\nid: interpretation:0001-x\nkind: interpretation\nstatus: superseded\n---\nbody\n")
     archive_entities(root, apply=True, now="T1")
     return "interpretation:0001-x"
 
@@ -45,7 +45,7 @@ def test_edit_rejects_archived_member_by_alias(tmp_path: Path) -> None:
     _write(
         tmp_path,
         "0001-x",
-        "---\nid: interpretation:0001-x\ntype: interpretation\nstatus: superseded\n"
+        "---\nid: interpretation:0001-x\nkind: interpretation\nstatus: superseded\n"
         "aliases:\n  - interpretation:old-x\n---\nbody\n",
     )
     archive_entities(tmp_path, apply=True, now="T1")

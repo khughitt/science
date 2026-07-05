@@ -127,7 +127,7 @@ class TestReserveQuestion:
         )
         fm = _read_frontmatter(result.path)
         assert fm["id"] == result.id
-        assert fm["type"] == "question"
+        assert fm["kind"] == "question"
         assert fm["title"] == "Does X drive Y?"
         assert fm["status"] == "active"
         assert fm["related"] == ["question:0001-prior", "hypothesis:h1"]

@@ -1,6 +1,6 @@
 ---
 id: "theme:{{slug}}"
-type: "theme"
+kind: "theme"
 title: "{{title}}"
 status: "{{status}}"
 theme_kind: "methodological"  # methodological | conceptual | empirical | domain. Active profiles may extend or replace this enum — check the project's resolved schema (or `science-tool entity sections theme` once it surfaces frontmatter constraints) for accepted values. Canonical enum lives in schemas/mixin-theme-2.0.json.
@@ -16,7 +16,7 @@ updated: "{{updated}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "theme" }
+    kind: { default: "theme" }
     title: { from: title }
     status: { from: status }
     theme_kind: { default: "methodological" }

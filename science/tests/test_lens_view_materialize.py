@@ -87,7 +87,7 @@ def test_lens_vocabulary_emits_all_six_lenses() -> None:
 _ENTITY_MD = """\
 ---
 id: question:0001-lens-demo
-type: question
+kind: question
 title: Lens demo
 status: open
 ontology_terms: []

@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science detect and prevent epistemic drift between an entity's claims
   and its operationalization?
 status: active

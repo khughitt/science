@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: 'Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction'
 status: active
 created: '2026-05-05'

@@ -25,7 +25,7 @@ def test_migrate_paper_frontmatter_adds_dataset_usage_and_removes_legacy_field()
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "title": "Smith 2025",
             "datasets": ["dataset:gtex-v8"],
         }
@@ -77,7 +77,7 @@ def test_analyzed_full_same_ref_is_not_a_conflict() -> None:
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "dataset_usage": [
                 {"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"},
             ],
@@ -101,7 +101,7 @@ def test_non_analyzed_same_ref_is_role_conflict_and_leaves_text_unchanged() -> N
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "dataset_usage": [{"ref": "dataset:gtex-v8", "role": "cited"}],
             "datasets": ["dataset:gtex-v8"],
         }
@@ -126,7 +126,7 @@ def test_unresolved_dataset_ref_moves_verbatim_when_syntactically_valid() -> Non
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "datasets": ["dataset:not-in-commons"],
         }
     )
@@ -144,7 +144,7 @@ def test_alias_equivalent_refs_are_not_deduped_by_the_migration() -> None:
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "dataset_usage": [{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}],
             "datasets": ["dataset:gtex"],
         }
@@ -161,7 +161,7 @@ def test_alias_equivalent_refs_are_not_deduped_by_the_migration() -> None:
 
 
 def test_empty_datasets_field_is_removed_without_adding_usage() -> None:
-    original = _body({"id": "paper:smith-2025", "type": "paper", "datasets": []})
+    original = _body({"id": "paper:smith-2025", "kind": "paper", "datasets": []})
 
     result = migrate_paper_frontmatter("entities/papers/smith-2025.md", original)
 
@@ -173,7 +173,7 @@ def test_empty_datasets_field_is_removed_without_adding_usage() -> None:
 
 
 def test_malformed_datasets_conflict_leaves_text_unchanged() -> None:
-    original = _body({"id": "paper:smith-2025", "type": "paper", "datasets": ["gtex"]})
+    original = _body({"id": "paper:smith-2025", "kind": "paper", "datasets": ["gtex"]})
 
     result = migrate_paper_frontmatter("entities/papers/smith-2025.md", original)
 
@@ -186,7 +186,7 @@ def test_malformed_dataset_usage_conflict_leaves_text_unchanged() -> None:
     original = _body(
         {
             "id": "paper:smith-2025",
-            "type": "paper",
+            "kind": "paper",
             "dataset_usage": [{"ref": "dataset:gtex-v8"}],
             "datasets": ["dataset:gtex-v8"],
         }
@@ -211,8 +211,8 @@ def test_plan_scans_only_paper_frontmatter_documents(tmp_path: Path) -> None:
     _write_project(root)
     paper = root / "entities" / "papers" / "smith.md"
     topic = root / "entities" / "topics" / "dataset-note.md"
-    paper.write_text(_body({"id": "paper:smith", "type": "paper", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
-    topic.write_text(_body({"id": "topic:data", "type": "topic", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
+    paper.write_text(_body({"id": "paper:smith", "kind": "paper", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
+    topic.write_text(_body({"id": "topic:data", "kind": "topic", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
 
     report = plan_paper_dataset_migration(root)
 
@@ -274,7 +274,7 @@ def test_plan_uses_configured_local_profile_paper_surface(tmp_path: Path) -> Non
     paper_dir = root / "literature" / "papers"
     paper_dir.mkdir(parents=True)
     paper = paper_dir / "smith.md"
-    paper.write_text(_body({"id": "paper:smith", "type": "paper", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
+    paper.write_text(_body({"id": "paper:smith", "kind": "paper", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
 
     report = plan_paper_dataset_migration(root)
 

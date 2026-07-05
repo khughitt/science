@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-weighted-majority"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: weighted-majority rule with load-bearing minority"
 status: "active"
 created: "2026-04-21"

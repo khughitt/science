@@ -36,7 +36,7 @@ def _datapackage(root: Path, slug: str, ident: str, *, with_url: bool) -> None:
         "profiles": ["science-pkg-entity-1.0"],
         "name": slug,
         "id": ident,
-        "type": "dataset",
+        "kind": "dataset",
         "title": ident,
         "origin": "external",
         "access": {"level": "public", "verified": False},
@@ -80,7 +80,7 @@ def test_non_url_source_materializes_as_dcterms_source(tmp_path: Path) -> None:
         "profiles": ["science-pkg-entity-1.0"],
         "name": "ds_local",
         "id": "dataset:ds_local",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "dataset:ds_local",
         "origin": "external",
         "access": {"level": "public", "verified": False},
@@ -113,7 +113,7 @@ def test_deferred_owner_datapackage_resources_materialize(tmp_path: Path) -> Non
     md = tmp_path / "entities" / "datasets" / "ds1.md"
     md.parent.mkdir(parents=True, exist_ok=True)
     md.write_text(
-        '---\nid: "dataset:ds1"\ntype: "dataset"\ntitle: "DS1"\norigin: "external"\n'
+        '---\nid: "dataset:ds1"\nkind: "dataset"\ntitle: "DS1"\norigin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )
@@ -131,7 +131,7 @@ def test_dataset_without_datapackage_has_no_distribution(tmp_path: Path) -> None
     md = tmp_path / "entities" / "datasets" / "ds2.md"
     md.parent.mkdir(parents=True, exist_ok=True)
     md.write_text(
-        '---\nid: "dataset:ds2"\ntype: "dataset"\ntitle: "DS2"\norigin: "external"\n'
+        '---\nid: "dataset:ds2"\nkind: "dataset"\ntitle: "DS2"\norigin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )

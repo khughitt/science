@@ -99,7 +99,7 @@ def test_access_reproducibility_round_trips_through_parse_entity_file(tmp_path: 
     d = tmp_path / "entities" / "datasets"
     d.mkdir(parents=True)
     (d / "ds.md").write_text(
-        '---\nid: "dataset:ds"\ntype: "dataset"\ntitle: "DS"\norigin: "external"\n'
+        '---\nid: "dataset:ds"\nkind: "dataset"\ntitle: "DS"\norigin: "external"\n'
         "access:\n"
         '  level: "controlled"\n'
         "  verified: true\n"
@@ -525,7 +525,7 @@ def _write_dataset_md(tmp_path: Path, *extra_lines: str) -> Path:
     md.write_text(
         "---\n"
         "id: dataset:ds\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: A dataset\n"
         "origin: external\n"
         "tier: evaluate-next\n"
@@ -761,7 +761,7 @@ def test_parse_non_dataset_benchmark_block_is_dropped(tmp_path: Path) -> None:
     md.write_text(
         "---\n"
         "id: hypothesis:h1\n"
-        "type: hypothesis\n"
+        "kind: hypothesis\n"
         "title: H1\n"
         "benchmark:\n"
         "  tasks:\n"

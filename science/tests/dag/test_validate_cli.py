@@ -21,7 +21,7 @@ def _write_proposition(project: Path, slug: str, source: str, target: str) -> No
     (prop_dir / f"{slug}.md").write_text(
         f"""---
 id: proposition:{slug}
-type: proposition
+kind: proposition
 title: {source} affects {target}
 status: active
 subject: {source}

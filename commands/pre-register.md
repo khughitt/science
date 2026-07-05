@@ -205,7 +205,7 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 - **Filename:** `entities/pre-registrations/<slug>.md`.
 - **Frontmatter** must use the canonical pre-registration shape:
   - `id: "pre-registration:<slug>"`
-  - `type: "pre-registration"`
+  - `kind: "pre-registration"`
   - `status: "committed"` once the user has signed off on the criteria
   - `committed: "<YYYY-MM-DD>"` — the date the criteria are locked
   - `spec: "<path-to-design-doc>"` — optional; empty string if no paired design doc exists
@@ -217,7 +217,7 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 
 ## After Writing
 
-1. Save to `entities/pre-registrations/<slug>.md`. The frontmatter must declare `type: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
+1. Save to `entities/pre-registrations/<slug>.md`. The frontmatter must declare `kind: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 2. If relevant hypotheses exist, note in the output that pre-registration is now on record.
 3. Suggest next steps:
    - `/science:plan-pipeline` — if no pipeline plan exists yet

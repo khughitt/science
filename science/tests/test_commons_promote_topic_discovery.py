@@ -24,21 +24,18 @@ def test_topic_discover_single_project_finds_single_instance(monkeypatch) -> Non
     assert "single-instance" in slugs
     assert "shared-no-conflict" in slugs
     assert "shared-conflict" in slugs
-    assert "flatten-source" in slugs
-    assert "collide" not in slugs
+    assert "flatten-source" not in slugs
+    assert "collide" in slugs
 
 
-def test_topic_discover_collide_records_failed_candidate(monkeypatch) -> None:
+def test_topic_discover_doc_topic_collision_is_ignored(monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     _resolver(monkeypatch)
     result = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
 
-    collide_failures = [
-        fc for fc in result.failed_candidates if "collide" in fc.error_message
-    ]
-    assert len(collide_failures) >= 1
-    assert "both" in collide_failures[0].error_message.lower()
+    assert "collide" in result.candidates_by_slug
+    assert not [fc for fc in result.failed_candidates if "collide" in fc.error_message]
 
 
 def test_topic_discover_two_projects_groups_shared_slugs(monkeypatch) -> None:
@@ -51,13 +48,10 @@ def test_topic_discover_two_projects_groups_shared_slugs(monkeypatch) -> None:
     assert len(result.candidates_by_slug["shared-conflict"]) == 2
 
 
-def test_topic_discover_flatten_source_carries_original_path(monkeypatch) -> None:
-    """Background-topic candidates keep their original source path for apply."""
+def test_topic_discover_ignores_background_topic_sources(monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     _resolver(monkeypatch)
     result = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
 
-    candidates = result.candidates_by_slug["flatten-source"]
-    assert len(candidates) == 1
-    assert "background/topics" in str(candidates[0].overlay_source_path)
+    assert "flatten-source" not in result.candidates_by_slug

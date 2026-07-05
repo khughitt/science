@@ -147,7 +147,7 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
     return hits
 
 
-_SCAN_DIRS = ("doc", "specs", "entities")
+_SCAN_DIRS = ("doc", "entities")
 _SCAN_FILES = ("RESEARCH_PLAN.md",)
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
 
@@ -155,15 +155,15 @@ _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
 def _collect_markdown_files(root: Path) -> list[Path]:
     """Collect all markdown files to scan under a project root.
 
-    Mirrors `refs.py`'s `_collect_markdown_files`. Resolves doc/, specs/, and
-    the v3 entities/ root via the project's `paths` config when available,
-    falling back to the conventional layout.
+    Mirrors `refs.py`'s `_collect_markdown_files`. Resolves doc/ and entities/
+    via the project's `paths` config when available, falling back to the
+    conventional layout.
     """
     try:
         from science_tool.paths import resolve_paths
 
         pp = resolve_paths(root)
-        scan_dirs = [pp.doc_dir, pp.specs_dir, pp.entities_dir]
+        scan_dirs = [pp.doc_dir, pp.entities_dir]
     except Exception:
         scan_dirs = [root / d for d in _SCAN_DIRS]
 

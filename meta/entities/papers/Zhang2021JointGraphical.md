@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: A Joint Graphical Model for Inferring Gene Networks Across Multiple Subpopulations
   and Data Types
 status: active

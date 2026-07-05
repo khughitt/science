@@ -1,6 +1,6 @@
 ---
 id: "question:q01"
-type: "question"
+kind: "question"
 status: "open"
 related:
   - article:Smith2024

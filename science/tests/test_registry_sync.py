@@ -49,7 +49,7 @@ def _write_entity_md(
     lines = [
         "---",
         f'id: "{entity_id}"',
-        f"type: {entity_type}",
+        f"kind: {entity_type}",
         f'title: "{title}"',
     ]
     if scope is not None:

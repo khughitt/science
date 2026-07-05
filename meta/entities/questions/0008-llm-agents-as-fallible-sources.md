@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How should Science model LLM agents as fallible evidence sources and graph-governed
   operators?
 status: active

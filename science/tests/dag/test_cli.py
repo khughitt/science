@@ -22,7 +22,7 @@ def _write_proposition(project: Path, slug: str, source: str, target: str) -> No
     (prop_dir / f"{slug}.md").write_text(
         f"""---
 id: proposition:{slug}
-type: proposition
+kind: proposition
 title: {source} affects {target}
 status: active
 subject: {source}
@@ -46,7 +46,7 @@ def _write_malformed_proposition(project: Path) -> None:
     (prop_dir / "malformed.md").write_text(
         """---
 id: proposition:malformed
-type: proposition
+kind: proposition
 title: Malformed
 status: active
 subject: a
@@ -419,7 +419,7 @@ def _write_retired_migration_lineage_proposition(project: Path) -> None:
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a

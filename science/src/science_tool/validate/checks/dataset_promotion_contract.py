@@ -233,7 +233,7 @@ def evaluate_dataset_promotion_contract(
     ctx: ValidateContext,
 ) -> Iterator[Result]:
     for fm in datasets:
-        if (fm.get("kind") or fm.get("type")) != "dataset" or not _is_dataset_descriptor(fm):
+        if fm.get("kind") != "dataset" or not _is_dataset_descriptor(fm):
             continue
 
         path = fm.get("_path")

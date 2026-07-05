@@ -13,7 +13,7 @@ def _seed(root: Path) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "foo.md").write_text(
-        '---\nid: "dataset:foo"\ntype: "dataset"\ntitle: "Foo"\nstatus: "candidate"\n'
+        '---\nid: "dataset:foo"\nkind: "dataset"\ntitle: "Foo"\nstatus: "candidate"\n'
         'origin: "external"\ntier: "track"\nconsumed_by: ["plan:p1", "workflow-run:r1"]\n'
         'access: {level: "public", verified: false}\n---\n\nBody text here.\n',
         encoding="utf-8",
@@ -61,7 +61,7 @@ def test_consumers_empty(tmp_path: Path) -> None:
     d = tmp_path / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "bar.md").write_text(
-        '---\nid: "dataset:bar"\ntype: "dataset"\ntitle: "Bar"\nstatus: "candidate"\n---\n',
+        '---\nid: "dataset:bar"\nkind: "dataset"\ntitle: "Bar"\nstatus: "candidate"\n---\n',
         encoding="utf-8",
     )
     res = _run(tmp_path, "dataset", "consumers", "bar")

@@ -21,7 +21,7 @@ class SharedEntity(BaseModel):
 
     schema_profile: str
     id: str
-    type: str
+    kind: str
     title: str
     version: str
     created: date | None = None

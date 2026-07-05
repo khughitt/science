@@ -21,13 +21,13 @@ def _seed(tmp_path: Path) -> None:
     d.mkdir(parents=True, exist_ok=True)
     # live entity references the soon-to-be-archived one via related + relations + source_refs
     (d / "0001-live.md").write_text(
-        "---\nid: interpretation:0001-live\ntype: interpretation\ntitle: Live\nstatus: complete\n"
+        "---\nid: interpretation:0001-live\nkind: interpretation\ntitle: Live\nstatus: complete\n"
         "related:\n  - interpretation:0002-gone\n"
         "source_refs:\n  - interpretation:0002-gone\n"
         "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-gone\n---\n",
         encoding="utf-8")
     (d / "0002-gone.md").write_text(
-        "---\nid: interpretation:0002-gone\ntype: interpretation\nstatus: superseded\ntitle: Gone v1\n---\n",
+        "---\nid: interpretation:0002-gone\nkind: interpretation\nstatus: superseded\ntitle: Gone v1\n---\n",
         encoding="utf-8")
 
 

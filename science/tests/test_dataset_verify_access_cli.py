@@ -14,7 +14,7 @@ from science_tool.cli import main as science_cli
 def _legacy(tmp_path: Path, slug: str = "foo", **overrides) -> Path:
     fm = {
         "id": f"dataset:{slug}",
-        "type": "dataset",
+        "kind": "dataset",
         "title": slug.title(),
         "status": "candidate",
         "source_class": "observational",
@@ -137,7 +137,7 @@ def _seed_preexisting_audit_failure(tmp_path: Path) -> None:
     broken.parent.mkdir(parents=True, exist_ok=True)
     fm = {
         "id": "question:q01-foo",
-        "type": "question",
+        "kind": "question",
         "title": "Foo",
         "status": "active",
         "created": "2026-01-01",

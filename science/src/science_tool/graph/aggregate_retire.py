@@ -273,7 +273,7 @@ def _owner_text(
     real entity, not a half-filled stub). The aggregate rows carry none of these,
     so the caller resolves them from the kind's default status and the run date.
     """
-    fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title, "status": status}
+    fm: dict[str, object] = {"id": canonical_id, "kind": kind, "title": title, "status": status}
     fm["created"] = created
     fm["updated"] = updated
     if extra_fm:

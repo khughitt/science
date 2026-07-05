@@ -30,7 +30,7 @@ def test_non_empty_description_becomes_body() -> None:
     fm, body = _split(_render("A definition."))
     assert fm == {
         "id": "concept:x",
-        "type": "concept",
+        "kind": "concept",
         "title": "X",
         "status": "active",
         "created": "2026-06-09",
@@ -43,7 +43,7 @@ def test_non_empty_description_becomes_body() -> None:
 def test_required_conformance_fields_are_present() -> None:
     fm, _ = _split(_render("Def."))
     # Mirrors entity_conformance._REQUIRED_FRONTMATTER — a promoted owner must be conformant.
-    for field in ("id", "type", "title", "status", "created", "updated"):
+    for field in ("id", "kind", "title", "status", "created", "updated"):
         assert field in fm, f"missing required frontmatter field {field!r}"
 
 

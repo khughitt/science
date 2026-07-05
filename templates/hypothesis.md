@@ -1,6 +1,6 @@
 ---
 id: "hypothesis:{{nn}}-{{slug}}"
-type: "hypothesis"
+kind: "hypothesis"
 title: "{{title}}"
 status: "proposed"
 phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
@@ -15,7 +15,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "hypothesis" }
+    kind: { default: "hypothesis" }
     title: { from: title }
     status: { from: status }
     phase: { from: phase, default: "active" }

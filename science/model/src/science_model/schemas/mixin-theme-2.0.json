@@ -4,7 +4,7 @@
   "title": "science entity theme mixin",
   "$comment": "2.0 adds x-canonical-body-sections + project_only annotations. theme_scope stays canonical.",
   "type": "object",
-  "required": ["id", "type", "theme_kind", "theme_scope"],
+  "required": ["id", "kind", "theme_kind", "theme_scope"],
   "x-canonical-body-sections": [
     "Definition",
     "Why It Matters",
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "id":   {"type": "string", "pattern": "^theme:[a-z0-9][a-z0-9-]{1,63}$"},
-    "type": {"const": "theme"},
+    "kind": {"const": "theme"},
     "theme_kind":  {"enum": ["methodological", "conceptual", "empirical", "domain"]},
     "theme_scope": {"enum": ["project", "cross-project"]},
     "source_refs":   {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
@@ -35,7 +35,7 @@
         },
         "allOf": [
           {
-            "if": {"properties": {"type": {"const": "literature"}}, "required": ["type"]},
+            "if": {"properties": {"kind": {"const": "literature"}}, "required": ["type"]},
             "then": {"required": ["ref"], "properties": {"ref": {"pattern": "^(paper|cite):"}}}
           }
         ]

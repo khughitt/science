@@ -63,7 +63,7 @@ def _write_lineage_proposition(
     (prop_dir / f"{slug}.md").write_text(
         f"""---
 id: proposition:{slug}
-type: proposition
+kind: proposition
 title: {subject} affects {object_}
 status: {status}
 subject: {subject}
@@ -535,7 +535,7 @@ def test_scaffold_retired_edge_workbench_skipped_rows_fail_before_write(tmp_path
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a
@@ -695,7 +695,7 @@ def test_plan_skips_matching_compiled_proposition(tmp_path: Path) -> None:
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a
@@ -850,7 +850,7 @@ def test_plan_pair_only_match_without_lineage_remains_skipped(tmp_path: Path) ->
     (prop_dir / "a-affects-b.md").write_text(
         """---
 id: proposition:a-affects-b
-type: proposition
+kind: proposition
 title: A affects B
 status: active
 subject: a

@@ -62,7 +62,7 @@ def test_terms_coined_concept_promotes_with_description_body(tmp_path: Path) -> 
     text = owner.read_text(encoding="utf-8")
     fm = yaml.safe_load(text.split("---")[1])
     assert fm["id"] == "concept:prc2-complex"
-    assert fm["type"] == "concept"
+    assert fm["kind"] == "concept"
     assert fm["title"] == "PRC2 complex"
     assert fm["promoted_from"] == _TERMS_REL
     assert "Polycomb repressive complex 2 as a local semantic placeholder." in text

@@ -1,6 +1,6 @@
 ---
 id: "topic:{{slug}}"
-type: "topic"
+kind: "topic"
 title: "{{Title}}"
 status: "active"
 ontology_terms: []

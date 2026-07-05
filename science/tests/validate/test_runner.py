@@ -555,7 +555,7 @@ _MALFORMED_MEMBER_MANIFEST = (
 _MALFORMED_MEMBER_DP = """\
 profiles: [science-pkg-entity-1.0]
 id: dataset:member-malformed
-type: dataset
+kind: dataset
 title: Member Malformed
 status: active
 origin: derived
@@ -584,7 +584,7 @@ def _write_dataset_influence_project(
     root.joinpath("science.yaml").write_text(_DATASET_INFLUENCE_MANIFEST, encoding="utf-8")
     (root / "entities" / "papers").mkdir(parents=True)
     (root / "entities" / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
+        "---\nid: paper:Adams2025\nkind: paper\ntitle: Adams\ndataset_usage:\n"
         f"  - ref: {usage_ref}\n    role: analyzed\n    overlap: full\n---\n",
         encoding="utf-8",
     )
@@ -592,7 +592,7 @@ def _write_dataset_influence_project(
         dp_dir = root / "data" / "gtex"
         dp_dir.mkdir(parents=True)
         (dp_dir / "datapackage.yaml").write_text(
-            "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\ntype: dataset\ntitle: GTEx\n"
+            "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\nkind: dataset\ntitle: GTEx\n"
             "aliases: [dataset:gtex]\n"
             "origin: external\ntier: use-now\ndatapackage: datapackage.yaml\naccess: {level: public, verified: true}\n",
             encoding="utf-8",

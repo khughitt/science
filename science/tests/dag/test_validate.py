@@ -64,7 +64,7 @@ def _write_proposition(
         f"""---
 kind: proposition
 id: proposition:{slug}
-type: proposition
+kind: proposition
 subject: {subject}
 predicate: affects
 object: {obj}

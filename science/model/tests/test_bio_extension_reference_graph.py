@@ -11,7 +11,7 @@ def _base_collection(**extra: object) -> dict[str, object]:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0",
         "id": "dataset:mondo",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "MONDO disease ontology reference graph",
         "version": "1.0.0",
         "created": "2026-05-31",
@@ -37,7 +37,7 @@ def _base_member(**extra: object) -> dict[str, object]:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
         "id": "dataset:mondo-0005148",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "MONDO:0005148",
         "version": "1.0.0",
         "created": "2026-05-31",

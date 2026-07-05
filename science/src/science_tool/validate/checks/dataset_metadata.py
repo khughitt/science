@@ -70,7 +70,7 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
     values become warnings, never exceptions (this runs on un-validated input).
     """
     for fm in datasets:
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")

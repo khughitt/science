@@ -1,5 +1,5 @@
 ---
-type: topic
+kind: topic
 title: Bayesian Methods and the Continuous-Belief Representation of Evidence
 status: active
 created: '2026-04-24'

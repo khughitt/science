@@ -31,8 +31,8 @@ def _git_init(root: Path) -> None:
 
 def test_full_pipeline(tmp_path: Path) -> None:
     _git_init(tmp_path)
-    # prose_lint._collect_markdown_files only scans doc/ and specs/ subdirs,
-    # so the fixture must live inside one of those directories.
+    # prose_lint._collect_markdown_files scans project markdown roots, so keep
+    # the fixture inside doc/.
     doc_dir = tmp_path / "doc"
     doc_dir.mkdir()
     md = doc_dir / "fixture.md"

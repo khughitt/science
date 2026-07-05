@@ -1,6 +1,6 @@
 ---
 id: "question:q07-back-inverse-to-h2"
-type: "question"
+kind: "question"
 related:
   - "hypothesis:h2-beta"
 ---

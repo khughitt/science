@@ -12,7 +12,7 @@ def base_registry_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.assembly_registry/1.0",
         "id": "dataset:assembly-registry",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Assembly registry (seqcol-keyed reference collection)",
         "version": "1.0.0",
         "created": "2026-05-26",

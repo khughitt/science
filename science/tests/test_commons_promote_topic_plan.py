@@ -44,7 +44,7 @@ def test_topic_plan_single_instance_no_prompt(tmp_path, monkeypatch) -> None:
     assert "single-instance" in by_slug
     canonical_content = by_slug["single-instance"].canonical_artifacts[0].content
     assert "id: topic:single-instance" in canonical_content
-    assert "type: topic" in canonical_content
+    assert "kind: topic" in canonical_content
 
 
 def test_topic_plan_shared_no_conflict_unifies_canonical(tmp_path, monkeypatch) -> None:

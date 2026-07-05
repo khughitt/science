@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 import shutil
+import subprocess
+from importlib.metadata import PackageNotFoundError, version
 from urllib.parse import quote
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +37,31 @@ PROSE_CONTRACT = "science.entity_prose"
 LINK_CONTRACT = "science.entity_links"
 SEMANTIC_REFS_CONTRACT = "science.semantic_refs"
 BUNDLE_SCHEMA_VERSION = "1"
+EXPORT_STAMP_SCHEMA_VERSION = "science.labnote_export_stamp.v1"
+EXPORTER_NAME = "science.labnote_export"
+EXPORTER_VERSION = "1"
+REQUIRED_EXPORT_FILES = (
+    "project.json",
+    "views.json",
+    "entities/index.json",
+    "prose_bundles/entity_prose_bundles.json",
+    "references/index.json",
+    "links/index.json",
+    "export_diagnostics.json",
+    "manifest.json",
+)
+FALLBACK_SOURCE_EXCLUDED_DIRS = {
+    ".git",
+    ".hg",
+    ".labnote",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+}
 INTERNAL_PUBLIC_PROSE_PATH_RE = re.compile(
     r"(?:/data/proj|/home/keith|/mnt/ssd)[^\s`'\"<>)\]]*"
     r"|~/\.claude/projects/[^\s`'\"<>)\]]*"
@@ -404,6 +432,146 @@ def _clear_export_output_dir(project_root: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _science_package_version() -> str:
+    try:
+        return version("science")
+    except PackageNotFoundError:
+        return "0+unknown"
+
+
+def _git_output(project_root: Path, args: list[str]) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(project_root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def _hash_paths(root: Path, relative_paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    deduped_paths = {path.as_posix(): path for path in relative_paths}
+    for relative_path_text in sorted(deduped_paths):
+        relative_path = deduped_paths[relative_path_text]
+        path = root / relative_path
+        digest.update(relative_path.as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        if not path.exists():
+            digest.update(b"missing")
+            digest.update(b"\0")
+            continue
+        if not path.is_file():
+            continue
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _fallback_source_paths(project_root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for path in project_root.rglob("*"):
+        relative_path = path.relative_to(project_root)
+        if any(part in FALLBACK_SOURCE_EXCLUDED_DIRS for part in relative_path.parts):
+            continue
+        if path.is_file():
+            paths.append(relative_path)
+    return paths
+
+
+def _git_source_stamp(project_root: Path) -> dict[str, Any] | None:
+    git_root_text = _git_output(project_root, ["rev-parse", "--show-toplevel"])
+    head = _git_output(project_root, ["rev-parse", "HEAD"])
+    if git_root_text is None or head is None:
+        return None
+
+    git_root = Path(git_root_text).resolve()
+    try:
+        project_relative_to_git = project_root.relative_to(git_root)
+    except ValueError:
+        return None
+    pathspec = "." if str(project_relative_to_git) == "." else project_relative_to_git.as_posix()
+    listing = subprocess.run(
+        ["git", "-C", str(git_root), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", pathspec],
+        check=False,
+        capture_output=True,
+    )
+    if listing.returncode != 0:
+        return None
+
+    project_paths: list[Path] = []
+    for raw_path in listing.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        git_relative_path = Path(raw_path.decode("utf-8"))
+        try:
+            project_relative_path = git_relative_path.relative_to(project_relative_to_git)
+        except ValueError:
+            continue
+        if project_relative_path.parts and project_relative_path.parts[0] == ".labnote":
+            continue
+        project_paths.append(project_relative_path)
+
+    return {
+        "strategy": "git",
+        "head": head,
+        "fingerprint": _hash_paths(project_root, project_paths),
+    }
+
+
+def _source_stamp(project_root: Path) -> dict[str, Any]:
+    git_stamp = _git_source_stamp(project_root)
+    if git_stamp is not None:
+        return git_stamp
+    return {
+        "strategy": "content",
+        "fingerprint": _hash_paths(project_root, _fallback_source_paths(project_root)),
+    }
+
+
+def _export_stamp(project_root: Path) -> dict[str, Any]:
+    return {
+        "schema_version": EXPORT_STAMP_SCHEMA_VERSION,
+        "source": _source_stamp(project_root),
+        "exporter": {
+            "name": EXPORTER_NAME,
+            "version": EXPORTER_VERSION,
+            "package_version": _science_package_version(),
+        },
+        "package": {
+            "project_schema_version": PROJECT_SCHEMA_VERSION,
+            "bundle_schema_version": BUNDLE_SCHEMA_VERSION,
+        },
+    }
+
+
+def _load_json_if_object(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _required_export_files_present(out_dir: Path) -> bool:
+    return all((out_dir / path).is_file() for path in REQUIRED_EXPORT_FILES)
+
+
+def _current_export_diagnostics(out_dir: Path, stamp: dict[str, Any]) -> dict[str, Any] | None:
+    existing_stamp = _load_json_if_object(out_dir / "export_stamp.json")
+    if existing_stamp != stamp or not _required_export_files_present(out_dir):
+        return None
+    diagnostics = _load_json_if_object(out_dir / "export_diagnostics.json")
+    if diagnostics is None:
+        return None
+    diagnostics["skipped"] = True
+    return diagnostics
+
+
 def _load_raw_project_yaml(project_root: Path) -> dict[str, Any]:
     science_yaml = project_root / "science.yaml"
     if not science_yaml.exists():
@@ -422,7 +590,7 @@ def _title_from_frontmatter(frontmatter: dict[str, Any], entity_id: str) -> str:
 
 
 def _entity_type_for_path(path: Path, frontmatter: dict[str, Any]) -> str:
-    declared = frontmatter.get("type")
+    declared = frontmatter.get("kind")
     if isinstance(declared, str) and declared.strip():
         return declared.strip().replace("-", "_")
     parent = path.parent.name
@@ -1242,9 +1410,14 @@ def _link_bundle(
     }
 
 
-def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
+def export_labnote_package(project_root: Path, out_dir: Path, *, force: bool = False) -> dict[str, Any]:
     project_root = project_root.expanduser().resolve()
     out_dir = out_dir.expanduser().resolve()
+    stamp = _export_stamp(project_root)
+    if not force:
+        current_diagnostics = _current_export_diagnostics(out_dir, stamp)
+        if current_diagnostics is not None:
+            return current_diagnostics
     _clear_export_output_dir(project_root, out_dir)
     raw_config = _load_raw_project_yaml(project_root)
     config = load_project_config(project_root)
@@ -1322,7 +1495,9 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     if semantic_ref_bundle is not None:
         _json_write(out_dir / "semantic_refs" / "index.json", semantic_ref_bundle)
     public_diagnostics = _public_export_diagnostics(diagnostics)
+    public_diagnostics["skipped"] = False
     _json_write(out_dir / "export_diagnostics.json", public_diagnostics)
+    _json_write(out_dir / "export_stamp.json", stamp)
 
     resources = [
         _json_resource("project.json", "project.json", "descriptor", out_dir),
@@ -1335,6 +1510,7 @@ def export_labnote_package(project_root: Path, out_dir: Path) -> dict[str, Any]:
     if semantic_ref_bundle is not None:
         resources.append(_json_resource("semantic_refs", "semantic_refs/index.json", "bundle", out_dir))
     resources.append(_json_resource("export_diagnostics", "export_diagnostics.json", "descriptor", out_dir))
+    resources.append(_json_resource("export_stamp", "export_stamp.json", "descriptor", out_dir))
     manifest = {
         "data_version": data_version,
         "resources": resources,

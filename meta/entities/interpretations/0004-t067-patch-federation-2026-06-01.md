@@ -1,5 +1,5 @@
 ---
-type: interpretation
+kind: interpretation
 title: 'Patch federation: the bias-corrected latent coordinate as data-driven glue'
 status: active
 created: '2026-06-01'

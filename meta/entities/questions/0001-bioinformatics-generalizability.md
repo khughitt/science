@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: How well do replication-crisis findings generalize from psychology, cancer
   biology, and neuroimaging to bioinformatics and genomics?
 status: active

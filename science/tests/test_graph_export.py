@@ -489,7 +489,7 @@ def test_dcat_downloadurl_is_metadata_not_an_edge(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "ds1",
                 "id": "dataset:ds1",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "DS1",
                 "origin": "external",
                 "access": {"level": "public", "verified": False},

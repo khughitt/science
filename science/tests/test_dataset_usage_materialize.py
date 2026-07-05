@@ -381,7 +381,7 @@ def _write_dataset(path, slug, extra):
     path.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug}\n"
         "status: active\n"
         "tier: use-now\n"
@@ -426,7 +426,7 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -524,7 +524,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
     (prop_dir / "p1.md").write_text(
         "---\n"
         "id: proposition:p1\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: P1\n"
         "status: active\n"
         "claim_layer: empirical_regularity\n"
@@ -541,7 +541,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
         (paper_dir / f"{slug}.md").write_text(
             "---\n"
             f"id: paper:{slug}\n"
-            "type: paper\n"
+            "kind: paper\n"
             f"title: {slug.upper()}\n"
             "status: active\n"
             "created: '2026-05-29'\n"
@@ -559,7 +559,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
         (evidence_dir / f"{slug}.md").write_text(
             "---\n"
             f"id: evidence-line:{slug}\n"
-            "type: evidence-line\n"
+            "kind: evidence-line\n"
             f"title: Evidence {slug.upper()}\n"
             "status: active\n"
             "stance: supports\n"
@@ -608,7 +608,7 @@ def test_materialize_graph_rejects_unresolved_paper_usage_refs(tmp_path, frontma
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -672,7 +672,7 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -711,7 +711,7 @@ def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -811,7 +811,7 @@ def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, fro
     (paper_dir / "Smith2024.md").write_text(
         "---\n"
         "id: paper:Smith2024\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Smith\n"
         "aliases: [dataset:smith]\n"
         "status: active\n"
@@ -823,7 +823,7 @@ def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, fro
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -859,7 +859,7 @@ def test_materialize_graph_audits_derivation_inputs_as_dataset_only(tmp_path):
     (paper_dir / "Smith2024.md").write_text(
         "---\n"
         "id: paper:Smith2024\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Smith\n"
         "aliases: [dataset:smith]\n"
         "status: active\n"
@@ -909,7 +909,7 @@ def _write_geneset_collection(root, *, with_members=True):
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "status: active\n"
         "origin: external\n"
@@ -944,7 +944,7 @@ def _write_reference_graph_collection(root, *, with_nodes=True):
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:mondo-v1\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: MONDO\n"
         "status: active\n"
         "origin: external\n"
@@ -1079,7 +1079,7 @@ def test_geneset_usage_records_require_commons_members_resource(tmp_path):
     commons_entity.write_text(
         "---\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
         "members_resource: sets\n"
@@ -1127,7 +1127,7 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0\n"
         "id: dataset:rnaseq-example\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: RNA-seq\n"
         "version: 1.0.0\n"
         "status: active\n"
@@ -1150,7 +1150,7 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
         "---\n"
         "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "version: 1.0.0\n"
         "status: active\n"
@@ -1187,7 +1187,7 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "status: active\n"
         "created: '2026-05-29'\n"
@@ -1252,7 +1252,7 @@ def test_materialization_audit_reports_non_dataset_geneset_row_usage_refs(tmp_pa
     (paper_dir / "Smith2024.md").write_text(
         "---\n"
         "id: paper:Smith2024\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Smith\n"
         "aliases: [dataset:smith]\n"
         "status: active\n"
@@ -1291,7 +1291,7 @@ def _write_promoted_geneset_collection(root):
     (ds_dir / "reactome-v89.md").write_text(
         "---\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "status: active\n"
         "origin: external\n"
@@ -1309,7 +1309,7 @@ def _write_promoted_geneset_collection(root):
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "status: active\n"
         "origin: external\n"
@@ -1389,7 +1389,7 @@ def _write_orphan_geneset_collection(root):
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "status: active\n"
         "origin: external\n"

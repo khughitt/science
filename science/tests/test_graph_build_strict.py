@@ -50,7 +50,7 @@ def _seed(root: Path) -> None:
 def _question_md(root: Path, filename: str, cid: str) -> None:
     p = root / "entities" / "questions" / filename
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f'---\nid: "{cid}"\ntype: "question"\ntitle: "{cid}"\n---\n', encoding="utf-8")
+    p.write_text(f'---\nid: "{cid}"\nkind: "question"\ntitle: "{cid}"\n---\n', encoding="utf-8")
 
 
 def _aggregate_stub(root: Path, cid: str) -> None:

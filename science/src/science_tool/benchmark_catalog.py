@@ -60,7 +60,7 @@ def _dataset_class(fm: Mapping[str, object]) -> str:
 
 
 def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: str) -> BenchmarkRow | None:
-    if (fm.get("kind") or fm.get("type")) != "dataset":
+    if fm.get("kind") != "dataset":
         return None
 
     benchmark = fm.get("benchmark")
@@ -92,7 +92,7 @@ def _source_from_frontmatter(
     fallback_id: str,
     scope: str,
 ) -> BenchmarkSource | None:
-    if (fm.get("kind") or fm.get("type")) != "dataset":
+    if fm.get("kind") != "dataset":
         return None
     if not isinstance(fm.get("benchmark"), Mapping):
         return None

@@ -24,7 +24,7 @@ def test_discover_one_ref_per_row_and_load_raw_shape(tmp_path: Path) -> None:
         [
             {
                 "id": "protein:BCMA",
-                "type": "protein",
+                "kind": "protein",
                 "title": "BCMA",
                 "primary_external_id": {
                     "source": "UniProtKB",
@@ -65,7 +65,7 @@ def test_title_defaults_to_id_when_absent(tmp_path: Path) -> None:
         [
             {
                 "id": "gene:MYC",
-                "type": "gene",
+                "kind": "gene",
                 "primary_external_id": {"source": "HGNC", "id": "7553", "curie": "HGNC:7553", "provenance": "manual"},
             }
         ],
@@ -81,7 +81,7 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
         [
             {
                 "id": "protein:BCMA",
-                "type": "protein",
+                "kind": "protein",
                 "primary_external_id": {
                     "source": "UniProtKB",
                     "id": "Q02223",
@@ -91,7 +91,7 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
             },
             {
                 "id": "protein:BCMA",
-                "type": "protein",
+                "kind": "protein",
                 "primary_external_id": {
                     "source": "UniProt",
                     "id": "OTHER",
@@ -108,7 +108,7 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
 def test_malformed_primary_external_id_raises(tmp_path: Path) -> None:
     # Missing id, curie, provenance — ExternalId requires all four, and external_refs.yaml
     # is the durable authority, so discover() fails loud rather than skipping the row.
-    _write(tmp_path, [{"id": "protein:X", "type": "protein", "primary_external_id": {"source": "UniProt"}}])
+    _write(tmp_path, [{"id": "protein:X", "kind": "protein", "primary_external_id": {"source": "UniProt"}}])
     with pytest.raises(ValueError, match="primary_external_id"):
         CurieRefAdapter(local_profile="local").discover(tmp_path)
 

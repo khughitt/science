@@ -247,7 +247,7 @@ def test_pre_registration_related_epistemic_targets_derive_bears_on_by_default(t
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"
@@ -284,7 +284,7 @@ def test_pre_registration_commits_to_overrides_related_for_bears_on_derivation(t
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"
@@ -312,7 +312,7 @@ def test_pre_registration_empty_commits_to_suppresses_related_fallback(tmp_path:
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"
@@ -336,7 +336,7 @@ def test_pre_registration_commits_to_unresolved_ref_blocks_materialization(tmp_p
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"
@@ -373,7 +373,7 @@ def test_pre_registration_can_bear_on_inquiry_after_reclassification(tmp_path: P
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"
@@ -423,7 +423,7 @@ def test_commits_to_does_not_lock_target_against_other_upstream_changes(tmp_path
     _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
-        type: "pre-registration"
+        kind: "pre-registration"
         title: "Demo pre-reg"
         status: "committed"
         committed: "2026-04-15"

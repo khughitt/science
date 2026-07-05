@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Causal Data Integration
 status: active
 created: '2026-05-06'

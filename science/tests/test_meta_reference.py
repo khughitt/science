@@ -54,7 +54,7 @@ class TestMetaRefsInAudit:
         spec_dir = tmp_path / "specs" / "hypotheses"
         spec_dir.mkdir(parents=True)
         (spec_dir / "h01.md").write_text(
-            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            '---\nid: "hypothesis:h01-test"\nkind: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\n'
             "related: [meta:phase3b, meta:cycle1]\n"
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
@@ -128,7 +128,7 @@ class TestMetaRefsInMaterialize:
         spec_dir = tmp_path / "specs" / "hypotheses"
         spec_dir.mkdir(parents=True)
         (spec_dir / "h01.md").write_text(
-            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            '---\nid: "hypothesis:h01-test"\nkind: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\n'
             "related: [meta:phase3b]\n"
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
@@ -229,7 +229,7 @@ class TestMetaRefsInBlockedByAndSourceRefs:
         spec_dir = tmp_path / "specs" / "hypotheses"
         spec_dir.mkdir(parents=True)
         (spec_dir / "h01.md").write_text(
-            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            '---\nid: "hypothesis:h01-test"\nkind: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\nrelated: []\n'
             "blocked_by: [meta:phase3b]\n"
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
@@ -254,7 +254,7 @@ class TestMetaRefsInBlockedByAndSourceRefs:
         spec_dir = tmp_path / "specs" / "hypotheses"
         spec_dir.mkdir(parents=True)
         (spec_dir / "h01.md").write_text(
-            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            '---\nid: "hypothesis:h01-test"\nkind: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\nrelated: []\n'
             "source_refs: [meta:phase3b]\n"
             'created: "2026-04-13"\n---\nBody.\n'

@@ -1,6 +1,6 @@
 ---
 id: "topic:t04-legacy-covered"
-type: "topic"
+kind: "topic"
 related: []
 source_refs: []
 ---

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from textwrap import dedent
 from types import SimpleNamespace
@@ -49,7 +50,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: proposition:0001-example-proposition
-        type: proposition
+        kind: proposition
         title: Example proposition
         status: active
         confidence: supported
@@ -72,7 +73,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: synthesis:0001-example-synthesis
-        type: synthesis
+        kind: synthesis
         title: Example synthesis
         status: active
         sensitivity: public
@@ -85,7 +86,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: paper:internal-paper
-        type: paper
+        kind: paper
         title: Internal paper
         sensitivity: internal
         ---
@@ -97,7 +98,7 @@ def write_minimal_project(root: Path) -> None:
         """
         ---
         id: paper:Smith2020
-        type: paper
+        kind: paper
         title: Example immune persistence paper
         sensitivity: public
         source_refs:
@@ -184,7 +185,7 @@ def test_export_resolves_content_prose_entity_ref_with_dynamic_namespace(tmp_pat
         """
         ---
         id: question:0001-gene
-        type: question
+        kind: question
         title: Gene question
         sensitivity: public
         ---
@@ -223,7 +224,7 @@ def test_data_version_and_semantic_refs_hash_change_when_public_detail_changes(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -355,7 +356,7 @@ def test_export_omits_semantic_refs_bundle_when_only_exported_semantic_refs_are_
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -405,7 +406,7 @@ def test_export_resolves_content_prose_entity_ref_as_known_not_exported(tmp_path
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -446,7 +447,7 @@ def test_export_fails_when_public_prose_references_graph_only_semantic_record(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -496,7 +497,7 @@ def test_content_prose_semantic_record_overrides_graph_record(tmp_path: Path, mo
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -560,7 +561,7 @@ def test_export_writes_referenced_semantic_refs_bundle(tmp_path: Path) -> None:
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -647,7 +648,7 @@ def test_export_fails_when_public_prose_references_non_public_semantic_record(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -681,7 +682,7 @@ def test_failed_rerun_clears_stale_semantic_refs_bundle_when_record_becomes_non_
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -734,7 +735,7 @@ def test_semantic_refs_bundle_excludes_exported_entities_and_unreferenced_record
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -746,7 +747,7 @@ def test_semantic_refs_bundle_excludes_exported_entities_and_unreferenced_record
         """
         ---
         id: question:9999-later
-        type: question
+        kind: question
         title: Later question
         sensitivity: public
         ---
@@ -781,7 +782,7 @@ def test_semantic_refs_bundle_scrubs_internal_paths_from_detail_fields(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -820,7 +821,7 @@ def test_semantic_refs_bundle_rejects_non_finite_public_metadata(
         """
         ---
         id: question:0001-patterns
-        type: question
+        kind: question
         title: Pattern formation
         sensitivity: public
         ---
@@ -844,7 +845,7 @@ def test_semantic_ref_to_later_discovered_entity_with_graph_record_gets_route(
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -856,7 +857,7 @@ def test_semantic_ref_to_later_discovered_entity_with_graph_record_gets_route(
         """
         ---
         id: question:9999-later
-        type: question
+        kind: question
         title: Later question
         sensitivity: public
         ---
@@ -906,7 +907,7 @@ def test_export_fails_unknown_semantic_ref(tmp_path: Path) -> None:
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -929,7 +930,7 @@ def test_inline_paper_prefix_is_not_treated_as_semantic_ref(tmp_path: Path) -> N
         """
         ---
         id: question:0001-source
-        type: question
+        kind: question
         title: Source question
         sensitivity: public
         ---
@@ -1030,7 +1031,7 @@ def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
         """
         ---
         id: proposition:0001-example-proposition
-        type: proposition
+        kind: proposition
         title: Example proposition
         status: active
         confidence: supported
@@ -1139,7 +1140,7 @@ def test_export_labnote_package_filters_non_public_access_levels(tmp_path: Path)
         """
         ---
         id: dataset:controlled
-        type: dataset
+        kind: dataset
         title: Controlled dataset
         access:
           level: controlled
@@ -1241,7 +1242,7 @@ relations:
         """
         ---
         id: dataset:gse-example
-        type: dataset
+        kind: dataset
         title: Example dataset
         sensitivity: public
         ---
@@ -1253,7 +1254,7 @@ relations:
         """
         ---
         id: method:example-method
-        type: method
+        kind: method
         title: Example method
         sensitivity: public
         ---
@@ -1455,6 +1456,87 @@ def test_export_labnote_package_clears_stale_output_files(tmp_path: Path) -> Non
     assert (out / "manifest.json").exists()
 
 
+def test_export_labnote_package_writes_incremental_export_stamp(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = project_root / ".labnote" / "app_export"
+    write_minimal_project(project_root)
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    stamp = read_json(out / "export_stamp.json")
+    assert diagnostics["skipped"] is False
+    assert stamp["schema_version"] == "science.labnote_export_stamp.v1"
+    assert stamp["source"]["strategy"] == "content"
+    assert len(stamp["source"]["fingerprint"]) == 64
+    assert stamp["exporter"]["name"] == "science.labnote_export"
+
+
+def test_export_labnote_package_skips_when_incremental_stamp_matches(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = project_root / ".labnote" / "app_export"
+    write_minimal_project(project_root)
+    export_labnote_package(project_root=project_root, out_dir=out)
+    stale = out / "stale.txt"
+    write_text(stale, "preserved only when export is skipped")
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert diagnostics["skipped"] is True
+    assert stale.exists()
+
+
+def test_export_labnote_package_git_stamp_ignores_untracked_generated_output(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = project_root / ".labnote" / "app_export"
+    write_minimal_project(project_root)
+    subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Science Test"], cwd=project_root, check=True)
+    subprocess.run(["git", "config", "user.email", "science@example.test"], cwd=project_root, check=True)
+    subprocess.run(["git", "add", "science.yaml", "papers", "entities"], cwd=project_root, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=project_root, check=True, capture_output=True)
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+    first_stamp = read_json(out / "export_stamp.json")
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert first_stamp["source"]["strategy"] == "git"
+    assert first_stamp["source"]["head"]
+    assert diagnostics["skipped"] is True
+
+
+def test_export_labnote_package_force_rebuild_ignores_matching_stamp(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = project_root / ".labnote" / "app_export"
+    write_minimal_project(project_root)
+    export_labnote_package(project_root=project_root, out_dir=out)
+    stale = out / "stale.txt"
+    write_text(stale, "removed by forced rebuild")
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out, force=True)
+
+    assert diagnostics["skipped"] is False
+    assert not stale.exists()
+
+
+def test_export_labnote_package_rebuilds_when_source_fingerprint_changes(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = project_root / ".labnote" / "app_export"
+    write_minimal_project(project_root)
+    export_labnote_package(project_root=project_root, out_dir=out)
+    first_stamp = read_json(out / "export_stamp.json")
+    stale = out / "stale.txt"
+    write_text(stale, "removed after source change")
+    source = project_root / "entities" / "propositions" / "0001-example-proposition.md"
+    source.write_text(source.read_text(encoding="utf-8") + "\nAdditional public prose.\n", encoding="utf-8")
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    second_stamp = read_json(out / "export_stamp.json")
+    assert diagnostics["skipped"] is False
+    assert first_stamp["source"]["fingerprint"] != second_stamp["source"]["fingerprint"]
+    assert not stale.exists()
+
+
 def test_export_labnote_package_refuses_source_subtree_output_dir(tmp_path: Path) -> None:
     project_root = tmp_path / "pais"
     write_minimal_project(project_root)
@@ -1509,13 +1591,36 @@ def test_science_labnote_export_cli_writes_package(tmp_path: Path) -> None:
     assert "Exported Labnote package" in result.output
 
 
+def test_science_labnote_export_cli_reports_skip_and_supports_force(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    runner = CliRunner()
+
+    first = runner.invoke(main, ["labnote", "export", "--project-root", str(project_root), "--out", str(out)])
+    second = runner.invoke(main, ["labnote", "export", "--project-root", str(project_root), "--out", str(out)])
+    forced = runner.invoke(
+        main,
+        ["labnote", "export", "--project-root", str(project_root), "--out", str(out), "--force"],
+    )
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert forced.exit_code == 0, forced.output
+    assert "already up to date" in second.output
+    assert "Exported Labnote package" in forced.output
+
+
 def test_data_version_is_stable_golden(tmp_path: Path):
     write_minimal_project(tmp_path)
     out = tmp_path / ".labnote" / "app_export"
     export_labnote_package(project_root=tmp_path, out_dir=out)
     project = json.loads((out / "project.json").read_text())
     # Golden: exact digest must survive the project_package.core extraction byte-for-byte.
-    assert project["package"]["data_version"] == "2026-06-28+4d829889ef73"
+    assert project["package"]["data_version"] == "2026-06-28+6cd94bebe752"
 
 
 def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Path) -> None:

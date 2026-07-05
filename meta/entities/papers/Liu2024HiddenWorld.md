@@ -1,5 +1,5 @@
 ---
-type: paper
+kind: paper
 title: Discovery of the Hidden World with Large Language Models
 status: active
 created: '2026-05-06'

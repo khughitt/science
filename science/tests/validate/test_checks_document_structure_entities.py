@@ -14,7 +14,7 @@ def test_topics_checked_under_entities(tmp_path: Path) -> None:
     d = tmp_path / "entities" / "topics"
     d.mkdir(parents=True)
     (d / "0001-t.md").write_text(
-        '---\nid: "topic:0001-t"\ntype: topic\nstatus: active\n---\n# Topic\n',
+        '---\nid: "topic:0001-t"\nkind: topic\nstatus: active\n---\n# Topic\n',
         encoding="utf-8",
     )
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)

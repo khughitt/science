@@ -1,5 +1,5 @@
 ---
-type: question
+kind: question
 title: What metadata should Science require for quantitative evidence and synthesis
   updates?
 status: active

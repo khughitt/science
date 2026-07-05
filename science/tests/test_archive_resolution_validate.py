@@ -22,7 +22,7 @@ def _ctx(tmp_path: Path) -> ValidateContext:
 
 def test_ref_to_archived_id_resolves(tmp_path: Path) -> None:
     _write(tmp_path, "interpretations", "0001-live",
-           "---\nid: interpretation:0001-live\ntype: interpretation\nrelated:\n  - interpretation:0002-gone\n---\n")
+           "---\nid: interpretation:0001-live\nkind: interpretation\nrelated:\n  - interpretation:0002-gone\n---\n")
     append_row(archive_index_path(tmp_path), ArchiveRow(op="archive", id="interpretation:0002-gone",
                original_path="entities/interpretations/0002-gone.md", archived_at="T1"))
     msgs = [r.message for r in check_cross_references(_ctx(tmp_path))]
@@ -31,6 +31,6 @@ def test_ref_to_archived_id_resolves(tmp_path: Path) -> None:
 
 def test_unknown_ref_still_flagged(tmp_path: Path) -> None:
     _write(tmp_path, "interpretations", "0001-live",
-           "---\nid: interpretation:0001-live\ntype: interpretation\nrelated:\n  - interpretation:0099-typo\n---\n")
+           "---\nid: interpretation:0001-live\nkind: interpretation\nrelated:\n  - interpretation:0099-typo\n---\n")
     msgs = [r.message for r in check_cross_references(_ctx(tmp_path))]
     assert any("0099-typo" in m and "not found" in m for m in msgs)

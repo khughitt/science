@@ -1,5 +1,5 @@
 ---
-type: hypothesis
+kind: hypothesis
 title: Adaptive project topology improves research fit
 status: proposed
 created: '2026-05-17'

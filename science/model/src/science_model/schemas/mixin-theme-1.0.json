@@ -3,10 +3,10 @@
   "$id": "https://schemas.science/mixin-theme-1.0.json",
   "title": "science entity theme mixin",
   "type": "object",
-  "required": ["id", "type", "theme_kind", "theme_scope"],
+  "required": ["id", "kind", "theme_kind", "theme_scope"],
   "properties": {
     "id": {"type": "string", "pattern": "^theme:[a-z0-9][a-z0-9-]{1,63}$"},
-    "type": {"const": "theme"},
+    "kind": {"const": "theme"},
     "theme_kind": {
       "enum": ["methodological", "conceptual", "empirical", "domain"]
     },

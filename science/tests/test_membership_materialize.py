@@ -21,7 +21,7 @@ def _hyp(path: Path, hid: str) -> None:
         path / "entities" / "hypotheses" / f"{hid}.md",
         [
             f'id: "hypothesis:{hid}"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             f'title: "{hid}"',
             'status: "proposed"',
             "ontology_terms: []",
@@ -36,7 +36,7 @@ def _prop(path: Path, pid: str, discusses_yaml: str) -> None:
         path / "entities" / "propositions" / f"{pid}.md",
         [
             f'id: "proposition:{pid}"',
-            'type: "proposition"',
+            'kind: "proposition"',
             f'title: "{pid}"',
             'status: "active"',
             "ontology_terms: []",
@@ -139,7 +139,7 @@ def _write_subject_entity(project: Path, ref: str) -> None:
             project / "entities" / "propositions" / f"{slug}.md",
             [
                 f'id: "{ref}"',
-                'type: "proposition"',
+                'kind: "proposition"',
                 f'title: "{slug}"',
                 'status: "active"',
                 "ontology_terms: []",
@@ -155,7 +155,7 @@ def _write_subject_entity(project: Path, ref: str) -> None:
             project / "entities" / "questions" / f"{slug}.md",
             [
                 f'id: "{ref}"',
-                'type: "question"',
+                'kind: "question"',
                 f'title: "{slug}"',
                 'status: "open"',
                 "ontology_terms: []",
