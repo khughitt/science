@@ -10,6 +10,7 @@ from science_model.entities import (
     EntityType,
     EntityUpdate,
     EvidenceLineEntity,
+    LensView,
     MechanismEntity,
     StructuralChainEntity,
 )
@@ -130,6 +131,7 @@ __all__ = [
     "ProvenanceType",
     "ProjectDetail",
     "MeasurementModel",
+    "LensView",
     "MechanismEntity",
     "MergePolicy",
     "ModelSource",
