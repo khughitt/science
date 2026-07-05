@@ -120,7 +120,6 @@ def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
       after the 2026-06-21 owner/overlay root split. An owner and its overlay never
       coexist for one id, so the id-dedup below is safe across both roots.
 
-    `kind` is the canonical field; `type` is the authored alias — accept either.
     Each dict carries `_path` (project-relative). De-duped by entity id (first wins).
     """
     out: list[dict[str, Any]] = []

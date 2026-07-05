@@ -154,13 +154,14 @@ def _collect_entity_paths(project_root: Path) -> list[Path]:
 
 
 def _entity_artifact_class(frontmatter: dict[str, object]) -> str | None:
-    """Entity kind from frontmatter: `type`, then `kind`, then the `id` prefix
-    before ':'. A bare/unprefixed `id` (no colon) yields no kind. Returns None
-    when none applies — the record is then skipped (it can key no signal)."""
-    for key in ("type", "kind"):
-        value = frontmatter.get(key)
-        if isinstance(value, str) and value:
-            return value
+    """Entity kind from `kind`, then the `id` prefix before ':'.
+
+    A bare/unprefixed `id` yields no kind. Returns None when none applies, so the
+    record is skipped because it can key no signal.
+    """
+    value = frontmatter.get("kind")
+    if isinstance(value, str) and value:
+        return value
     raw_id = frontmatter.get("id")
     if isinstance(raw_id, str) and ":" in raw_id:
         return raw_id.split(":", 1)[0]

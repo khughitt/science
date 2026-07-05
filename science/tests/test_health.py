@@ -1641,6 +1641,20 @@ def test_external_consumed_unverified_flagged(tmp_path: Path) -> None:
     assert any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
 
 
+def test_external_scalar_access_flagged_as_malformed(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "scalar",
+        origin="external",
+        body='access: "public"\nconsumed_by: ["plan:p1"]',
+    )
+
+    issues = check_dataset_anomalies(tmp_path)
+
+    assert any(i["code"] == "dataset_access_invalid" for i in issues)
+    assert not any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
+
+
 def test_external_stale_review_flagged(tmp_path: Path) -> None:
     _write_dataset(
         tmp_path,

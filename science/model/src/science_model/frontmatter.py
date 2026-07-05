@@ -28,6 +28,7 @@ from science_model.packages.schema import (
     MemberOfDerivationBlock,
     WorkflowRecipeDerivationBlock,
 )
+from science_model.reasoning import EvidenceStance
 from science_model.sync import SyncSource
 
 
@@ -235,13 +236,10 @@ _AccessLevel = Literal["public", "registration", "controlled", "commercial", "mi
 
 
 def _coerce_access(fm: dict) -> AccessBlock | None:
-    """Build AccessBlock from frontmatter, supporting legacy flat `access: <level>` shorthand."""
+    """Build AccessBlock from structured frontmatter."""
     raw = fm.get("access")
     if raw is None:
         return None
-    if isinstance(raw, str):
-        # Legacy: flat scalar -> AccessBlock with level only, verified=False.
-        return AccessBlock(level=cast(_AccessLevel, raw), verified=False)
     if isinstance(raw, dict):
         ex_raw = raw.get("exception") or {}
         repro_raw = raw.get("reproducibility") or {}
@@ -256,7 +254,7 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
             exception=AccessException(**ex_raw) if ex_raw else AccessException(),
             reproducibility=AccessReproducibility(**repro_raw) if repro_raw else AccessReproducibility(),
         )
-    return None
+    raise ValueError("access must be a mapping")
 
 
 def _coerce_benchmark(fm: dict) -> BenchmarkBlock | None:
@@ -426,8 +424,8 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     if kind == EntityType.EVIDENCE_LINE.value:
         return EvidenceLineEntity(
             **entity_kwargs,
-            stance=fm.get("stance"),  # required; pydantic raises if missing/invalid
-            target=fm.get("target"),  # required; pydantic raises if missing
+            stance=cast(EvidenceStance, fm.get("stance")),  # required; pydantic raises if missing/invalid
+            target=cast(str, fm.get("target")),  # required; pydantic raises if missing
             source=fm.get("source"),
             strength=fm.get("strength"),  # optional; pydantic coerces or None
             independence=fm.get("independence"),

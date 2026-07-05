@@ -118,20 +118,23 @@ Current refreshed inventory:
   frontmatter, scalar `access:`, active legacy data-package entities, bare
   `profiles:`, and removed `science.yaml` fields.
 
-Remaining code-only cleanup before the next data-bearing migration:
+Completed in `refactor/strict-frontmatter-cleanup`:
 
 - Remove the last `kind`/`type` dual-read in
   `science/src/science_tool/graph/commons_sources.py`.
 - Remove scalar `access:` coercion in
   `science/model/src/science_model/frontmatter.py`.
+- Remove adjacent strict-frontmatter fallbacks in workbench-apply existing
+  target validation, curation inventory classification, and graph health access
+  checks.
 
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
 | --- | --- | --- | --- | --- |
 | v2-to-v3 entity layout | Entity markdown under `doc/` or `specs/`; toolkit scanners reading `doc`, `specs`, and `entities` together | `science/src/science_tool/entity_layout_migration.py` and related commands | `_SCAN_DIRS=("doc","specs","entities")` plumbing in `science/src/science_tool/refs.py`, `markers.py`, `prose_lint.py`, validation checks, graph health, materialize preflight, commons promotion helpers | Largest dependency cluster. Remove migrator last for this surface. |
-| `type:` frontmatter | Entity frontmatter with `type:` instead of `kind:`; templates and commands that still author `type:` | **MUST BUILD** — no `type:`→`kind:` rewriter exists; build a field-order-preserving, idempotent frontmatter migrator (TDD) before migrating data | All `fm.get("kind") or fm.get("type")` dual reads; templates and command docs that author `type:` | Sharp sequencing constraint: templates must emit `kind:` before the reader shim is removed. |
-| Flat scalar `access:` | Frontmatter with `access: public` or another scalar value | **MUST BUILD** — no scalar-`access:` migrator exists; build one that emits a block with `verified: false` (matches current `_coerce_access` — a scalar was never verified) | `science/model/src/science_model/frontmatter.py` scalar coercion and health/reporting shims | Run after entity layout so paths are canonical. |
+| `type:` frontmatter | Entity frontmatter with `type:` instead of `kind:`; templates and commands that still author `type:` | Complete; no new migrator needed because inventory was already zero | Complete; active `kind`/`type` dual reads removed from commons translation, workbench apply, and curation inventory | Current inventory reports zero `type:` frontmatter findings. |
+| Flat scalar `access:` | Frontmatter with `access: public` or another scalar value | Complete; no new migrator needed because inventory was already zero | Complete; scalar coercion removed from frontmatter parsing and graph health | Current inventory reports zero scalar `access:` findings. |
 | `article:<bibkey>` prefix alias | Structured/project refs containing `article:<bibkey>` where the intended target is a literature record | **MUST BUILD** — no `article:`→`paper:` rewriter exists (`add_article` is unrelated entity creation); build one scoped to the alias prefix only | Literature-prefix alias checks and canonicalization paths | Do not remove the live `article` entity kind or BibTeX `@article` support. |
 | Retired DAG `.edges.yaml` | Any `*.edges.yaml` file in project DAG areas | `science dag retired-edge-migration-plan`, `science dag scaffold-retired-edge-workbench`, and related retired-edge tools | `science/src/science_tool/dag/` retired-edge readers, schemas, CLI commands, warnings, and validation adapters | Keep migration commands until every registered project has zero edge YAML files. |
 | Aggregate manifests | `knowledge/sources/<local>/entities.yaml`, `terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` aggregate owners | Complete; migration commits exist in affected project repos | Complete; aggregate readers, migrators, command paths, validators, and tests removed | Merged 2026-07-05; current inventory reports zero aggregate-manifest findings. |
@@ -170,10 +173,11 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 1. Complete: build the multi-project inventory wrapper and produce the first
    table.
 2. Complete: migrate and gate v2-to-v3 entity layout.
-3. Next: finish strict `kind:` reader cleanup now that `type:` data hits are
+3. Complete: finish strict `kind:` reader cleanup now that `type:` data hits
+   are zero.
+4. Complete: remove scalar `access:` coercion now that scalar data hits are
    zero.
-4. Next: remove scalar `access:` coercion now that scalar data hits are zero.
-5. Migrate and gate `article:<bibkey>` aliases.
+5. Next: migrate and gate `article:<bibkey>` aliases.
 6. Migrate and gate retired DAG `.edges.yaml`.
 7. Complete: migrate and gate aggregate manifests.
 8. Reconfirm and, if needed, migrate legacy data-package entities.

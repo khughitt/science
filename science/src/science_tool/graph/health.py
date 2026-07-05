@@ -1340,8 +1340,9 @@ def _passes_gate(
     origin = fm.get("origin", "external")
     if origin == "external":
         access = fm.get("access") or {}
-        if isinstance(access, str):
-            access = {"level": access, "verified": False}
+        if not isinstance(access, dict):
+            memo[entity_id] = (False, f"external {entity_id} access must be a mapping")
+            return memo[entity_id]
         verified = bool(access.get("verified", False))
         exception_mode = (access.get("exception") or {}).get("mode", "")
         if verified or exception_mode:
@@ -1467,8 +1468,17 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             # External-access anomalies
             if origin == "external":
                 access = fm.get("access") or {}
-                if isinstance(access, str):  # legacy flat shorthand
-                    access = {"level": access, "verified": False}
+                if not isinstance(access, dict):
+                    issues.append(
+                        {
+                            "code": "dataset_access_invalid",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": "origin: external entity access must be a mapping",
+                        }
+                    )
+                    continue
                 verified = bool(access.get("verified", False))
                 exception_mode = (access.get("exception") or {}).get("mode", "")
                 consumed_by = list(fm.get("consumed_by") or [])
