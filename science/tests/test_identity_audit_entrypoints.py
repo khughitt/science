@@ -15,7 +15,7 @@ def _seed(root: Path, name: str = "proj") -> None:
 def _md(root: Path, rel: str, cid: str, kind: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f'---\nid: "{cid}"\ntype: "{kind}"\ntitle: "{cid}"\n---\n', encoding="utf-8")
+    p.write_text(f'---\nid: "{cid}"\nkind: "{kind}"\ntitle: "{cid}"\n---\n', encoding="utf-8")
 
 
 def _agg(root: Path, cid: str, kind: str) -> None:

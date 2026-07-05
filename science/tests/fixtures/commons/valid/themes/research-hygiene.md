@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+theme/1.0"
 id: "theme:research-hygiene"
-type: "theme"
+kind: "theme"
 title: "Research hygiene"
 version: "1.0.0"
 status: "active"

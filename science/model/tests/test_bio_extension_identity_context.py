@@ -12,7 +12,7 @@ def base_idc_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.identity_context/1.0",
         "id": "dataset:example-idc",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Example dataset with identity context",
         "version": "1.0.0",
         "created": "2026-05-26",

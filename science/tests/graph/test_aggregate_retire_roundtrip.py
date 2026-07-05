@@ -9,7 +9,7 @@ from science_tool.graph.aggregate_retire import apply_retirement, plan_retiremen
 from science_tool.graph.aggregate_triage import classify_aggregate_rows
 from science_tool.graph.sources import load_project_sources
 
-_REQUIRED_FRONTMATTER = ("id", "type", "title", "status", "created", "updated")
+_REQUIRED_FRONTMATTER = ("id", "kind", "title", "status", "created", "updated")
 
 _MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
 _AGG_REL = "knowledge/sources/local/entities.yaml"

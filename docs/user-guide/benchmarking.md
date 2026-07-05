@@ -12,7 +12,7 @@ Benchmark metadata lives on dataset entities under `benchmark:`:
 
 ```yaml
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 benchmark:

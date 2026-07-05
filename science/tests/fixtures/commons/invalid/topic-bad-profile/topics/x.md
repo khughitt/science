@@ -1,7 +1,7 @@
 ---
 schema_profile: "not-a-real-profile/1.0"
 id: "topic:x"
-type: "topic"
+kind: "topic"
 title: "Topic with an unrecognized schema profile"
 version: "1.0.0"
 status: "active"

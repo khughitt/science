@@ -15,7 +15,7 @@ def base_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0",
         "id": "dataset:cath-domains",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "CATH domain database",
         "version": "1.0.0",
         "created": "2026-05-13",
@@ -331,7 +331,7 @@ def test_validator_composes_base_plus_dataset_mixin() -> None:
     entity = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0",
         "id": "dataset:cath-domains",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "CATH domain database",
         "version": "1.0.0",
         "created": "2026-05-13",

@@ -28,7 +28,7 @@ def _rules(entities: list[dict]) -> list[tuple[Severity, str]]:
 def _dataset(**kw) -> dict:
     base = {
         "id": "dataset:rna",
-        "type": "dataset",
+        "kind": "dataset",
         "_path": "entities/datasets/rna.md",
         "provided_capabilities": [{"assay": "gene-expression", "modality": "bulk-rna"}],
     }
@@ -39,7 +39,7 @@ def _dataset(**kw) -> dict:
 def _question(**kw) -> dict:
     base = {
         "id": "question:q1",
-        "type": "question",
+        "kind": "question",
         "_path": "entities/questions/q1.md",
         "datasets": ["dataset:rna"],
         "required_capabilities": [{"assay": "gene-expression", "modality": "bulk-rna"}],
@@ -75,7 +75,7 @@ def test_dataset_related_to_target_counts_as_capability_relevant() -> None:
     dataset.pop("provided_capabilities")
     hypothesis = {
         "id": "hypothesis:h1",
-        "type": "hypothesis",
+        "kind": "hypothesis",
         "_path": "entities/hypotheses/h1.md",
         "required_capabilities": [{"assay": "gene-expression"}],
     }
@@ -132,7 +132,7 @@ def test_supported_hypothesis_keeps_provided_missing_warn() -> None:
     dataset.pop("provided_capabilities")
     hypothesis = {
         "id": "hypothesis:h1",
-        "type": "hypothesis",
+        "kind": "hypothesis",
         "_path": "entities/hypotheses/h1.md",
         "status": "supported",
         "required_capabilities": [{"assay": "gene-expression"}],
@@ -181,7 +181,7 @@ def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
     (ds_dir / "rna.md").write_text(
         "---\n"
         'id: "dataset:rna"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "RNA"\n'
         'status: "active"\n'
         'origin: "external"\n'
@@ -194,7 +194,7 @@ def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
     (q_dir / "q1.md").write_text(
         "---\n"
         'id: "question:q1"\n'
-        'type: "question"\n'
+        'kind: "question"\n'
         'title: "Q1"\n'
         'status: "open"\n'
         'datasets: ["dataset:rna"]\n'

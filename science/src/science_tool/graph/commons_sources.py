@@ -241,7 +241,7 @@ def _materialize_commons_entity(
     ontology_catalogs: list[OntologyCatalog],
 ) -> Entity:
     fm = dict(merged.merged_frontmatter)
-    kind = _normalize_kind(fm["type"])
+    kind = _normalize_kind(fm["kind"])
     schema = registry.resolve(kind)
     raw: dict[str, object] = dict(fm)
     raw["kind"] = kind

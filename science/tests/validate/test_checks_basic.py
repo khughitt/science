@@ -392,7 +392,7 @@ def test_document_structure_skips_literature_survey_paper_notes(tmp_path: Path) 
     papers_dir = tmp_path / "entities" / "papers"
     papers_dir.mkdir(parents=True)
     papers_dir.joinpath("survey.md").write_text(
-        "---\nid: paper:survey\ntype: paper\ntitle: Survey\npaper_kind: literature-survey\n---\n"
+        "---\nid: paper:survey\nkind: paper\ntitle: Survey\npaper_kind: literature-survey\n---\n"
         "## Scope\n\nBody\n## Synthesis\n\nBody\n",
         encoding="utf-8",
     )

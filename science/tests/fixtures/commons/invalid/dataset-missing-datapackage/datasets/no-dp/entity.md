@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+dataset/1.0"
 id: "dataset:no-dp"
-type: "dataset"
+kind: "dataset"
 title: "Dataset whose datapackage.yaml sibling is missing"
 version: "1.0.0"
 status: "active"

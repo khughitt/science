@@ -1,6 +1,6 @@
 ---
 id: "article:Smith2024"
-type: "article"
+kind: "article"
 title: "Example"
 source_refs:
   - "cite:Smith2024"

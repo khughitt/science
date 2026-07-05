@@ -1,6 +1,6 @@
 ---
 id: "hypothesis:h2-beta"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H2: Beta"
 status: "supported"
 related:

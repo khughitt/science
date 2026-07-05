@@ -26,7 +26,7 @@ from science_tool.explore_ideas import (
 
 _REPORT = """\
 ---
-type: meta
+kind: meta
 id: explore-2026-07-04
 ---
 
@@ -524,7 +524,7 @@ def test_write_back_missing_candidate_raises() -> None:
 
 _FIXTURE = """\
 ---
-type: meta
+kind: meta
 id: explore-2026-07-04
 title: Exploration report - 2026-07-04
 created: 2026-07-04
@@ -705,7 +705,7 @@ def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
 
 _TWO_KEEP = """\
 ---
-type: meta
+kind: meta
 id: explore-2026-07-04
 ---
 
@@ -743,7 +743,7 @@ def _write_two_keep(root: Path) -> Path:
 
 _KEEP_TOPIC = """\
 ---
-type: meta
+kind: meta
 id: explore-2026-07-04
 ---
 

@@ -18,17 +18,17 @@ def test_graph_build_emits_inquiry_view_and_membership(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     _write_entity(
         tmp_path / "entities" / "hypotheses" / "h1.md",
-        ['id: "hypothesis:h1"', 'type: "hypothesis"', 'title: "H1"', 'status: "proposed"',
+        ['id: "hypothesis:h1"', 'kind: "hypothesis"', 'title: "H1"', 'status: "proposed"',
          "ontology_terms: []", "source_refs: []", "related: []"],
     )
     _write_entity(
         tmp_path / "entities" / "concepts" / "x.md",
-        ['id: "concept:x"', 'type: "concept"', 'title: "X"', 'status: "active"',
+        ['id: "concept:x"', 'kind: "concept"', 'title: "X"', 'status: "active"',
          "ontology_terms: []", "source_refs: []", "related: []"],
     )
     _write_entity(
         tmp_path / "entities" / "patches" / "i1.md",
-        ['id: "patch-definition:i1"', 'type: "patch-definition"', 'title: "Inquiry one"',
+        ['id: "patch-definition:i1"', 'kind: "patch-definition"', 'title: "Inquiry one"',
          'status: "active"', "ontology_terms: []", "source_refs: []", "related: []",
          'focal: "hypothesis:h1"',
          "scope_set:", '  - scope: "local"',

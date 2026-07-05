@@ -83,7 +83,7 @@ def test_plan_carries_kind(tmp_path) -> None:
 def test_classify_entity_splits_canonical_vs_project_only() -> None:
     fm = {
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "bibkey": "Adams2025",
         "title": "A title",
         "authors": ["Adams, J."],
@@ -114,8 +114,8 @@ def test_classify_entity_splits_canonical_vs_project_only() -> None:
 
 
 def test_classify_entity_drops_id_even_on_case_divergent_input() -> None:
-    fm_upper = {"id": "paper:Adams2025", "type": "paper", "title": "T"}
-    fm_lower = {"id": "paper:adams2025", "type": "paper", "title": "T"}
+    fm_upper = {"id": "paper:Adams2025", "kind": "paper", "title": "T"}
+    fm_lower = {"id": "paper:adams2025", "kind": "paper", "title": "T"}
     upper_can, _, _, _ = _classify_entity(fm_upper, "", _PAPER_POLICY, _PAPER_SECTIONS)
     lower_can, _, _, _ = _classify_entity(fm_lower, "", _PAPER_POLICY, _PAPER_SECTIONS)
     assert "id" not in upper_can
@@ -125,7 +125,7 @@ def test_classify_entity_drops_id_even_on_case_divergent_input() -> None:
 def test_classify_entity_coerces_string_authors_to_single_element_list() -> None:
     fm = {
         "id": "paper:X",
-        "type": "paper",
+        "kind": "paper",
         "title": "T",
         "authors": "Wang et al.",
     }
@@ -134,7 +134,7 @@ def test_classify_entity_coerces_string_authors_to_single_element_list() -> None
 
 
 def test_classify_entity_renames_journal_to_venue() -> None:
-    fm = {"id": "paper:X", "type": "paper", "title": "T", "journal": "Cell"}
+    fm = {"id": "paper:X", "kind": "paper", "title": "T", "journal": "Cell"}
     can_f, _, _, _ = _classify_entity(fm, "", _PAPER_POLICY, _PAPER_SECTIONS)
     assert can_f.get("venue") == "Cell"
     assert "journal" not in can_f
@@ -143,7 +143,7 @@ def test_classify_entity_renames_journal_to_venue() -> None:
 def test_classify_entity_strips_overlay_only_keys_from_input() -> None:
     fm = {
         "id": "paper:X",
-        "type": "paper",
+        "kind": "paper",
         "title": "T",
         "overlay_of": "paper:X",
         "pin_version": "1.0.0",
@@ -156,7 +156,7 @@ def test_classify_entity_strips_overlay_only_keys_from_input() -> None:
 
 
 def test_classify_entity_body_section_match_is_case_insensitive() -> None:
-    fm = {"id": "paper:X", "type": "paper", "title": "T"}
+    fm = {"id": "paper:X", "kind": "paper", "title": "T"}
     body = "## key findings\n\nlowercase heading\n"
     _, _, can_b, _ = _classify_entity(fm, body, _PAPER_POLICY, _PAPER_SECTIONS)
     assert any(k.casefold() == "key findings" for k in can_b)
@@ -262,7 +262,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
     assert "schema_profile: science-entity-base/1.0+paper/2.0" in rendered
     assert 'version: "1.0.0"' in rendered
     assert "id: paper:Adams2025" in rendered
-    assert "type: paper" in rendered
+    assert "kind: paper" in rendered
     assert "title: T" in rendered
     assert 'created: "2026-05-15"' in rendered
     assert "tags: []" in rendered
@@ -375,7 +375,7 @@ def test_render_canonical_paper_emits_bibkey_field() -> None:
         active_profile=PROMOTE_KIND_PAPER.default_profile,
     )
     assert "id: paper:Adams2025" in rendered
-    assert "type: paper" in rendered
+    assert "kind: paper" in rendered
     assert "bibkey: Adams2025" in rendered  # paper-only field
     assert rendered.index("bibkey: Adams2025") < rendered.index("tags: []")
 
@@ -412,7 +412,7 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
     )
     assert f"schema_profile: {PROMOTE_KIND_TOPIC.default_profile.render()}" in rendered
     assert "id: topic:hypothesis" in rendered
-    assert "type: topic" in rendered
+    assert "kind: topic" in rendered
     assert "bibkey" not in rendered
 
 
@@ -505,7 +505,7 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
             project_only_fields={},
             canonical_body={},
             project_only_body={
-                "__raw_frontmatter__": {"id": f"paper:{bibkey}", "type": "paper", "title": "T", **fields},
+                "__raw_frontmatter__": {"id": f"paper:{bibkey}", "kind": "paper", "title": "T", **fields},
                 "__raw_body__": "",
             },
         )
@@ -557,7 +557,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
             project_only_body={
                 "__raw_frontmatter__": {
                     "id": "paper:Dang2023",
-                    "type": "paper",
+                    "kind": "paper",
                     "title": "T",
                     "year": year,
                 },
@@ -604,7 +604,7 @@ def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
             project_only_body={
                 "__raw_frontmatter__": {
                     "id": f"paper:{bibkey}",
-                    "type": "paper",
+                    "kind": "paper",
                     "title": "T",
                 },
                 "__raw_body__": "",

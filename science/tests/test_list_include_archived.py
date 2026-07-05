@@ -14,7 +14,7 @@ def _seed(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
     d = tmp_path / "entities" / "interpretations"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "0001-live.md").write_text("---\nid: interpretation:0001-live\ntype: interpretation\ntitle: Live\nstatus: complete\n---\n", encoding="utf-8")
+    (d / "0001-live.md").write_text("---\nid: interpretation:0001-live\nkind: interpretation\ntitle: Live\nstatus: complete\n---\n", encoding="utf-8")
     append_row(archive_index_path(tmp_path), ArchiveRow(op="archive", id="interpretation:0002-gone",
                kind="interpretation", title="Gone", status="superseded",
                original_path="entities/interpretations/0002-gone.md", archived_at="T1"))

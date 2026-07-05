@@ -97,14 +97,14 @@ def test_load_corpora_indexes_each_kind(tmp_path):
     (tmp_path / "entities" / "questions").mkdir(parents=True)
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
-    q1 = "---\nid: \"question:0001-dup\"\ntype: question\ntitle: \"Same question\"\nstatus: active\n---\n# Same question\n"
-    q2 = "---\nid: \"question:0002-dup\"\ntype: question\ntitle: \"same QUESTION\"\nstatus: active\n---\n# same QUESTION\n"
+    q1 = "---\nid: \"question:0001-dup\"\nkind: question\ntitle: \"Same question\"\nstatus: active\n---\n# Same question\n"
+    q2 = "---\nid: \"question:0002-dup\"\nkind: question\ntitle: \"same QUESTION\"\nstatus: active\n---\n# same QUESTION\n"
     (tmp_path / "entities" / "questions" / "0001-dup.md").write_text(q1, encoding="utf-8")
     (tmp_path / "entities" / "questions" / "0002-dup.md").write_text(q2, encoding="utf-8")
-    hyp = ("---\nid: \"hypothesis:0001-h\"\ntype: hypothesis\ntitle: \"A hypothesis\"\nstatus: proposed\n"
+    hyp = ("---\nid: \"hypothesis:0001-h\"\nkind: hypothesis\ntitle: \"A hypothesis\"\nstatus: proposed\n"
            "source_refs: [\"annotation:papers/p#fx\"]\n---\n# A hypothesis\n")
     (tmp_path / "entities" / "hypotheses" / "0001-h.md").write_text(hyp, encoding="utf-8")
-    prop = "---\nid: \"proposition:a-claim\"\ntype: proposition\ntitle: \"A claim\"\nstatus: draft\n---\n# A claim\n"
+    prop = "---\nid: \"proposition:a-claim\"\nkind: proposition\ntitle: \"A claim\"\nstatus: draft\n---\n# A claim\n"
     (tmp_path / "entities" / "propositions" / "a-claim.md").write_text(prop, encoding="utf-8")
 
     corpora, derived = load_corpora(tmp_path)
@@ -265,7 +265,7 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
     existing = tmp_path / "entities" / "propositions" / "known-claim.md"
     existing.write_text(
-        '---\nid: proposition:known-claim\ntype: proposition\ntitle: Known claim\n'
+        '---\nid: proposition:known-claim\nkind: proposition\ntitle: Known claim\n'
         'status: draft\nsource_refs:\n  - "paper:other"\n'
         'created: "2026-06-01"\nupdated: "2026-06-01"\n---\n'
         "# Known claim\n\n## Claim\n\nHand-authored prose.\n",
@@ -305,7 +305,7 @@ def test_apply_refuses_overwrite_of_different_claim(tmp_path):
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
     existing = tmp_path / "entities" / "propositions" / "shared.md"
     existing.write_text(
-        '---\nid: proposition:shared\ntype: proposition\ntitle: Totally different claim\n'
+        '---\nid: proposition:shared\nkind: proposition\ntitle: Totally different claim\n'
         'status: draft\ncreated: "2026-06-16"\nupdated: "2026-06-16"\n---\n# x\n',
         encoding="utf-8",
     )

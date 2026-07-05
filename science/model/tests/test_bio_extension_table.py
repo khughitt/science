@@ -12,7 +12,7 @@ def base_table_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.table/1.0",
         "id": "dataset:example-table",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "Example table dataset",
         "version": "1.0.0",
         "created": "2026-05-19",

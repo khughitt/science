@@ -15,7 +15,7 @@ from science_tool.dataset_prioritize import (
 def _ext(level: str, verified: bool, availability: str = "available") -> dict:
     return {
         "id": "dataset:x",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "X",
         "status": "candidate",
         "origin": "external",
@@ -42,7 +42,7 @@ def test_readiness_weight_ordering_and_flagged_default() -> None:
     assert w_avail > w_pub > w_ctrl > w_emb
     assert f_avail == []
     # an unparseable / unknown-origin entity flags rather than silently bucketing
-    w_unk, f_unk = readiness_weight({"id": "dataset:b", "type": "dataset", "title": "B"})
+    w_unk, f_unk = readiness_weight({"id": "dataset:b", "kind": "dataset", "title": "B"})
     assert w_unk == 0.1
     assert "readiness-unresolved" in f_unk
 
@@ -56,16 +56,16 @@ def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) 
     # dataset A points outward to a question; question Q2 points back to dataset B.
     _write(
         tmp_path / "entities/datasets/a.md",
-        '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\nrelated: ["question:q1", "topic:t1"]\n---\n',
+        '---\nid: "dataset:a"\nkind: "dataset"\ntitle: "A"\nrelated: ["question:q1", "topic:t1"]\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/b.md",
-        '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\nsource_refs: ["question:qX"]\n---\n',
+        '---\nid: "dataset:b"\nkind: "dataset"\ntitle: "B"\nsource_refs: ["question:qX"]\n---\n',
     )  # source_refs must NOT count
-    _write(tmp_path / "entities/questions/q1.md", '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
+    _write(tmp_path / "entities/questions/q1.md", '---\nid: "question:q1"\nkind: "question"\ntitle: "Q1"\n---\n')
     _write(
         tmp_path / "entities/questions/q2.md",
-        '---\nid: "question:q2"\ntype: "question"\ntitle: "Q2"\nrelated: ["dataset:b"]\n---\n',
+        '---\nid: "question:q2"\nkind: "question"\ntitle: "Q2"\nrelated: ["dataset:b"]\n---\n',
     )
 
     reach = frontmatter_reach(tmp_path)
@@ -75,10 +75,10 @@ def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) 
 
 
 def test_frontmatter_reach_reads_question_datasets_field(tmp_path: Path) -> None:
-    _write(tmp_path / "entities/datasets/d.md", '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\nrelated: []\n---\n')
+    _write(tmp_path / "entities/datasets/d.md", '---\nid: "dataset:d"\nkind: "dataset"\ntitle: "D"\nrelated: []\n---\n')
     _write(
         tmp_path / "entities/questions/q.md",
-        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets: ["dataset:d"]\nrelated: []\n---\n',
+        '---\nid: "question:q"\nkind: "question"\ntitle: "Q"\ndatasets: ["dataset:d"]\nrelated: []\n---\n',
     )
 
     reach = frontmatter_reach(tmp_path)
@@ -87,11 +87,11 @@ def test_frontmatter_reach_reads_question_datasets_field(tmp_path: Path) -> None
 
 
 def test_frontmatter_reach_bridges_consumer_dataset_usage_to_related_qh(tmp_path: Path) -> None:
-    _write(tmp_path / "entities/datasets/d.md", '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\nrelated: []\n---\n')
-    _write(tmp_path / "entities/hypotheses/h.md", '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    _write(tmp_path / "entities/datasets/d.md", '---\nid: "dataset:d"\nkind: "dataset"\ntitle: "D"\nrelated: []\n---\n')
+    _write(tmp_path / "entities/hypotheses/h.md", '---\nid: "hypothesis:h"\nkind: "hypothesis"\ntitle: "H"\n---\n')
     _write(
         tmp_path / "entities/papers/p.md",
-        '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+        '---\nid: "paper:p"\nkind: "paper"\ntitle: "P"\n'
         'related: ["hypothesis:h"]\n'
         "dataset_usage:\n"
         '  - ref: "dataset:d"\n'
@@ -111,15 +111,15 @@ def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: 
     # covered separately by test_prioritize_excludes_gated_by_default.
     _write(
         tmp_path / "entities/datasets/avail.md",
-        '---\nid: "dataset:avail"\ntype: "dataset"\ntitle: "Avail"\norigin: "external"\n'
+        '---\nid: "dataset:avail"\nkind: "dataset"\ntitle: "Avail"\norigin: "external"\n'
         'related: ["question:q1"]\naccess: {level: "controlled", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/unv.md",
-        '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
+        '---\nid: "dataset:unv"\nkind: "dataset"\ntitle: "Unv"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
     )
-    _write(tmp_path / "entities/questions/q1.md", '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
+    _write(tmp_path / "entities/questions/q1.md", '---\nid: "question:q1"\nkind: "question"\ntitle: "Q1"\n---\n')
 
     rows = prioritize(tmp_path, include_gated=True)
     ids = [r["id"] for r in rows]
@@ -135,32 +135,32 @@ def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
     # access block → level "") are actionable and stay. Default hides the gated set.
     _write(
         tmp_path / "entities/datasets/pub.md",
-        '---\nid: "dataset:pub"\ntype: "dataset"\ntitle: "Pub"\norigin: "external"\n'
+        '---\nid: "dataset:pub"\nkind: "dataset"\ntitle: "Pub"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/mix.md",
-        '---\nid: "dataset:mix"\ntype: "dataset"\ntitle: "Mix"\norigin: "external"\n'
+        '---\nid: "dataset:mix"\nkind: "dataset"\ntitle: "Mix"\norigin: "external"\n'
         'access: {level: "mixed", verified: false}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/reg.md",
-        '---\nid: "dataset:reg"\ntype: "dataset"\ntitle: "Reg"\norigin: "external"\n'
+        '---\nid: "dataset:reg"\nkind: "dataset"\ntitle: "Reg"\norigin: "external"\n'
         'access: {level: "registration", verified: false}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/ctrl.md",
-        '---\nid: "dataset:ctrl"\ntype: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
+        '---\nid: "dataset:ctrl"\nkind: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
         'access: {level: "controlled", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/com.md",
-        '---\nid: "dataset:com"\ntype: "dataset"\ntitle: "Com"\norigin: "external"\n'
+        '---\nid: "dataset:com"\nkind: "dataset"\ntitle: "Com"\norigin: "external"\n'
         'access: {level: "commercial", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/der.md",
-        '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\norigin: "derived"\ndatapackage: "r/dp.yaml"\n---\n',
+        '---\nid: "dataset:der"\nkind: "dataset"\ntitle: "Der"\norigin: "derived"\ndatapackage: "r/dp.yaml"\n---\n',
     )
 
     default_ids = {r["id"] for r in prioritize(tmp_path)}
@@ -185,17 +185,17 @@ def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
 def test_prioritize_excludes_reference_and_pointer_by_default(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/datasets/dep.md",
-        '---\nid: "dataset:dep"\ntype: "dataset"\ntitle: "Dep"\norigin: "external"\n'
+        '---\nid: "dataset:dep"\nkind: "dataset"\ntitle: "Dep"\norigin: "external"\n'
         'dataset_class: "deposit"\naccess: {level: "public", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/ref.md",
-        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        '---\nid: "dataset:ref"\nkind: "dataset"\ntitle: "Ref"\norigin: "external"\n'
         'dataset_class: "reference"\naccess: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/ptr.md",
-        '---\nid: "dataset:ptr"\ntype: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
+        '---\nid: "dataset:ptr"\nkind: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
         'dataset_class: "pointer"\naccess: {level: "public", verified: true, source_url: "https://example.org/p"}\n---\n',
     )
 
@@ -208,31 +208,31 @@ def test_prioritize_excludes_reference_and_pointer_by_default(tmp_path: Path) ->
 def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/questions/q-run.md",
-        '---\nid: "question:q-run"\ntype: "question"\ntitle: "Runnable"\n'
+        '---\nid: "question:q-run"\nkind: "question"\ntitle: "Runnable"\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-ref.md",
-        '---\nid: "question:q-ref"\ntype: "question"\ntitle: "Reference"\n'
+        '---\nid: "question:q-ref"\nkind: "question"\ntitle: "Reference"\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-gated.md",
-        '---\nid: "question:q-gated"\ntype: "question"\ntitle: "Gated"\n'
+        '---\nid: "question:q-gated"\nkind: "question"\ntitle: "Gated"\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-unverified.md",
-        '---\nid: "question:q-unverified"\ntype: "question"\ntitle: "Unverified"\n'
+        '---\nid: "question:q-unverified"\nkind: "question"\ntitle: "Unverified"\n'
         'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-gap.md",
-        '---\nid: "question:q-gap"\ntype: "question"\ntitle: "Gap"\n---\n',
+        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/run.md",
-        '---\nid: "dataset:run"\ntype: "dataset"\ntitle: "Run"\norigin: "external"\n'
+        '---\nid: "dataset:run"\nkind: "dataset"\ntitle: "Run"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
         'related: ["question:q-run"]\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
@@ -240,21 +240,21 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
     )
     _write(
         tmp_path / "entities/datasets/ref.md",
-        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        '---\nid: "dataset:ref"\nkind: "dataset"\ntitle: "Ref"\norigin: "external"\n'
         'dataset_class: "reference"\nrelated: ["question:q-ref"]\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/gated.md",
-        '---\nid: "dataset:gated"\ntype: "dataset"\ntitle: "Gated"\norigin: "external"\n'
+        '---\nid: "dataset:gated"\nkind: "dataset"\ntitle: "Gated"\norigin: "external"\n'
         'dataset_class: "deposit"\nrelated: ["question:q-gated"]\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "controlled", verified: false}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/unv.md",
-        '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
+        '---\nid: "dataset:unv"\nkind: "dataset"\ntitle: "Unv"\norigin: "external"\n'
         'dataset_class: "deposit"\nrelated: ["question:q-unverified"]\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: false}\n---\n',
@@ -278,13 +278,13 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
 def test_target_coverage_rejects_runtime_dataset_with_wrong_capability(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/questions/q-atac.md",
-        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "Chromatin accessibility"\n'
+        '---\nid: "question:q-atac"\nkind: "question"\ntitle: "Chromatin accessibility"\n'
         'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n'
         'datasets: ["dataset:scrna"]\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/scrna.md",
-        '---\nid: "dataset:scrna"\ntype: "dataset"\ntitle: "scRNA"\norigin: "external"\n'
+        '---\nid: "dataset:scrna"\nkind: "dataset"\ntitle: "scRNA"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/scrna/datapackage.json"\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "scRNA"}]\n'
         'access: {level: "public", verified: true}\n---\n',
@@ -304,13 +304,13 @@ def test_target_coverage_rejects_runtime_dataset_with_wrong_capability(tmp_path:
 def test_target_coverage_accepts_multicapability_dataset(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/questions/q-atac.md",
-        '---\nid: "question:q-atac"\ntype: "question"\ntitle: "Chromatin accessibility"\n'
+        '---\nid: "question:q-atac"\nkind: "question"\ntitle: "Chromatin accessibility"\n'
         'required_capabilities: [{assay: "chromatin-accessibility", modality: "scATAC"}]\n'
         'datasets: ["dataset:multiome"]\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/multiome.md",
-        '---\nid: "dataset:multiome"\ntype: "dataset"\ntitle: "Multiome"\norigin: "external"\n'
+        '---\nid: "dataset:multiome"\nkind: "dataset"\ntitle: "Multiome"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/multiome/datapackage.json"\n'
         'provided_capabilities:\n'
         '  - {assay: "gene-expression", modality: "scRNA"}\n'
@@ -331,25 +331,25 @@ def test_target_coverage_accepts_multicapability_dataset(tmp_path: Path) -> None
 def test_target_coverage_reports_missing_capability_metadata(tmp_path: Path) -> None:
     _write(
         tmp_path / "entities/questions/q-unassessed.md",
-        '---\nid: "question:q-unassessed"\ntype: "question"\ntitle: "Unassessed"\n'
+        '---\nid: "question:q-unassessed"\nkind: "question"\ntitle: "Unassessed"\n'
         'datasets: ["dataset:run"]\n---\n',
     )
     _write(
         tmp_path / "entities/questions/q-required.md",
-        '---\nid: "question:q-required"\ntype: "question"\ntitle: "Required"\n'
+        '---\nid: "question:q-required"\nkind: "question"\ntitle: "Required"\n'
         'required_capabilities: [{assay: "proteomics", modality: "mass-spec"}]\n'
         'datasets: ["dataset:unknown"]\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/run.md",
-        '---\nid: "dataset:run"\ntype: "dataset"\ntitle: "Run"\norigin: "external"\n'
+        '---\nid: "dataset:run"\nkind: "dataset"\ntitle: "Run"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
         'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
         'access: {level: "public", verified: true}\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/unknown.md",
-        '---\nid: "dataset:unknown"\ntype: "dataset"\ntitle: "Unknown"\norigin: "external"\n'
+        '---\nid: "dataset:unknown"\nkind: "dataset"\ntitle: "Unknown"\norigin: "external"\n'
         'dataset_class: "deposit"\ndatapackage: "data/unknown/datapackage.json"\n'
         'access: {level: "public", verified: true}\n---\n',
     )

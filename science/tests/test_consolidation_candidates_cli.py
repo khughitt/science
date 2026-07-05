@@ -23,8 +23,8 @@ def _seed(root: Path) -> None:
 
 def _fixture(root: Path) -> None:
     _seed(root)
-    _write(root, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "type": "interpretation"})
-    _write(root, "interpretations", "0002-foo-v2", {"id": "interpretation:0002-foo-v2", "type": "interpretation"})
+    _write(root, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "kind": "interpretation"})
+    _write(root, "interpretations", "0002-foo-v2", {"id": "interpretation:0002-foo-v2", "kind": "interpretation"})
 
 
 def test_cli_json_format(tmp_path: Path) -> None:

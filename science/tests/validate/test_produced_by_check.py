@@ -28,7 +28,7 @@ def test_dangling_produced_by_is_flagged(tmp_path: Path) -> None:
     dp = tmp_path / "data" / "x" / "datapackage.yaml"
     dp.parent.mkdir(parents=True)
     dp.write_text(
-        "profiles: [science-pkg-entity-1.0]\nid: dataset:x\ntype: dataset\ntitle: X\n"
+        "profiles: [science-pkg-entity-1.0]\nid: dataset:x\nkind: dataset\ntitle: X\n"
         "status: active\norigin: derived\ntier: use-now\nproduced_by: [code-file:missing.py]\n",
         encoding="utf-8",
     )
@@ -49,7 +49,7 @@ def test_resolved_produced_by_is_not_flagged(tmp_path: Path) -> None:
     dp = tmp_path / "data" / "x" / "datapackage.yaml"
     dp.parent.mkdir(parents=True)
     dp.write_text(
-        "profiles: [science-pkg-entity-1.0]\nid: dataset:x\ntype: dataset\ntitle: X\n"
+        "profiles: [science-pkg-entity-1.0]\nid: dataset:x\nkind: dataset\ntitle: X\n"
         "status: active\norigin: derived\ntier: use-now\nproduced_by: [code-file:run.py]\n",
         encoding="utf-8",
     )

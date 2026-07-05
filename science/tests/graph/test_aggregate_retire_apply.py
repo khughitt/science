@@ -52,7 +52,7 @@ def test_promote_writes_owner_preserving_id_and_drops_entry(tmp_path: Path) -> N
     assert owner.exists()
     fm = yaml.safe_load(owner.read_text(encoding="utf-8").split("---")[1])
     assert fm["id"] == "concept:1q-gain"
-    assert fm["type"] == "concept"
+    assert fm["kind"] == "concept"
     assert fm["title"] == "Chromosome 1q gain"
     assert fm["promoted_from"] == _AGG_REL
     assert _entities_on_disk(tmp_path) == []  # both promoted out
@@ -104,7 +104,7 @@ def test_foreign_real_owner_is_left_as_shadow(tmp_path: Path) -> None:
     _write_entities(tmp_path, [_concept("concept:1q-gain")])
     owner = tmp_path / "entities/concepts/1q-gain.md"
     owner.parent.mkdir(parents=True, exist_ok=True)
-    owner.write_text("---\nid: concept:1q-gain\ntype: concept\ntitle: Hand authored\n---\nReal content.\n", "utf-8")
+    owner.write_text("---\nid: concept:1q-gain\nkind: concept\ntitle: Hand authored\n---\nReal content.\n", "utf-8")
     report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
     assert "concept:1q-gain" not in report.promoted
     assert "Real content." in owner.read_text(encoding="utf-8")  # owner untouched
@@ -126,7 +126,7 @@ def test_crash_recovery_completes_stranded_promotion(tmp_path: Path) -> None:
     owner = tmp_path / "entities/concepts/1q-gain.md"
     owner.parent.mkdir(parents=True, exist_ok=True)
     owner.write_text(
-        f"---\nid: concept:1q-gain\ntype: concept\ntitle: x\npromoted_from: {_AGG_REL}\n---\n\nstub\n", "utf-8"
+        f"---\nid: concept:1q-gain\nkind: concept\ntitle: x\npromoted_from: {_AGG_REL}\n---\n\nstub\n", "utf-8"
     )
     report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
     assert "concept:1q-gain" in report.promoted
@@ -161,7 +161,7 @@ def test_promote_target_exists_unmarked_is_skipped_entry_retained(tmp_path: Path
     _write_entities(tmp_path, [_concept("concept:1q-gain")])
     owner = tmp_path / "entities/concepts/1q-gain.md"
     owner.parent.mkdir(parents=True, exist_ok=True)
-    owner.write_text("---\nid: concept:1q-gain\ntype: concept\ntitle: Foreign\n---\nForeign body.\n", "utf-8")
+    owner.write_text("---\nid: concept:1q-gain\nkind: concept\ntitle: Foreign\n---\nForeign body.\n", "utf-8")
     triage = AggregateRowTriage("concept:1q-gain", "concept", _AGG_REL, False, AggregateBucket.COINED, "x", _AGG_REL, 0)
     plan = RetirementPlan(
         promote=(PlannedRow(triage, RetireAction.PROMOTE, _AGG_REL, 0, "entities/concepts/1q-gain.md"),),

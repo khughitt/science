@@ -10,7 +10,7 @@ def base_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+topic/1.0",
         "id": "topic:single-cell-foundation-models",
-        "type": "topic",
+        "kind": "topic",
         "title": "Single-cell foundation models",
         "version": "1.0.0",
         "status": "active",

@@ -47,76 +47,76 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
 def test_matching_prefixes_emit_info(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: report:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nkind: report\nid: report:a\n---\n")
 
     results = list(check_id_prefixes(_ctx(tmp_path)))
 
-    assert _messages(results) == ["  all type/id prefixes conform"]
+    assert _messages(results) == ["  all kind/id prefixes conform"]
     assert [result.severity for result in results] == [Severity.INFO]
 
 
 def test_mismatched_report_id_under_entities_warns_exactly(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nkind: report\nid: doc:a\n---\n")
 
     results = list(check_id_prefixes(_ctx(tmp_path)))
 
     assert _messages(results, Severity.WARN) == [
-        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: kind=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
 def test_scans_entities_in_deterministic_order(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "reports" / "z.md", "---\ntype: report\nid: doc:z\n---\n")
-    _write(tmp_path / "entities" / "questions" / "a.md", "---\ntype: question\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "z.md", "---\nkind: report\nid: doc:z\n---\n")
+    _write(tmp_path / "entities" / "questions" / "a.md", "---\nkind: question\nid: doc:a\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path)), Severity.WARN) == [
-        "id-prefix mismatch: entities/questions/a.md: type=question but id=doc:a (expected prefix 'question:')",
-        "id-prefix mismatch: entities/reports/z.md: type=report but id=doc:z (expected prefix 'report:')",
+        "id-prefix mismatch: entities/questions/a.md: kind=question but id=doc:a (expected prefix 'question:')",
+        "id-prefix mismatch: entities/reports/z.md: kind=report but id=doc:z (expected prefix 'report:')",
     ]
 
 
 def test_skips_templates_path(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "templates" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
-    _write(tmp_path / "entities" / "nested" / "templates" / "b.md", "---\ntype: report\nid: doc:b\n---\n")
+    _write(tmp_path / "entities" / "templates" / "a.md", "---\nkind: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "nested" / "templates" / "b.md", "---\nkind: report\nid: doc:b\n---\n")
 
-    assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all type/id prefixes conform"]
+    assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all kind/id prefixes conform"]
 
 
 def test_templates_ancestor_outside_project_does_not_skip_project_files(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
     project_root = tmp_path / "templates" / "project"
-    _write(project_root / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(project_root / "entities" / "reports" / "a.md", "---\nkind: report\nid: doc:a\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(project_root)), Severity.WARN) == [
-        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: kind=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
 def test_ignores_missing_frontmatter_missing_fields_and_unknown_type(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "reports" / "body.md", "type: report\nid: doc:a\n")
+    _write(tmp_path / "entities" / "reports" / "body.md", "kind: report\nid: doc:a\n")
     _write(tmp_path / "entities" / "reports" / "missing-type.md", "---\nid: doc:a\n---\n")
-    _write(tmp_path / "entities" / "reports" / "missing-id.md", "---\ntype: report\n---\n")
-    _write(tmp_path / "entities" / "reports" / "unknown.md", "---\ntype: custom\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "missing-id.md", "---\nkind: report\n---\n")
+    _write(tmp_path / "entities" / "reports" / "unknown.md", "---\nkind: custom\nid: doc:a\n---\n")
 
-    assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all type/id prefixes conform"]
+    assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all kind/id prefixes conform"]
 
 
-def test_handles_quoted_type_and_id_like_bash_regex(tmp_path: Path) -> None:
+def test_handles_quoted_kind_and_id_like_bash_regex(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: 'report'\nid: \"doc:a\"\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nkind: 'report'\nid: \"doc:a\"\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path)), Severity.WARN) == [
-        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: kind=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
@@ -124,7 +124,7 @@ def test_skip_environment_emits_no_results(tmp_path: Path, monkeypatch) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
     monkeypatch.setenv("SCIENCE_VALIDATE_SKIP_ID_PREFIX", "1")
-    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nkind: report\nid: doc:a\n---\n")
 
     assert list(check_id_prefixes(_ctx(tmp_path))) == []
 
@@ -134,7 +134,7 @@ def test_read_encoding_errors_propagate(tmp_path: Path) -> None:
 
     path = tmp_path / "entities" / "reports" / "bad.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"---\ntype: report\nid: report:\xff\n---\n")
+    path.write_bytes(b"---\nkind: report\nid: report:\xff\n---\n")
 
     with pytest.raises(UnicodeDecodeError):
         list(check_id_prefixes(_ctx(tmp_path)))
@@ -164,11 +164,11 @@ def test_prefix_rules_retain_nonpolicy_kinds() -> None:
 
 
 def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
-    # a type/id mismatch under entities/ must be detected
+    # a kind/id mismatch under entities/ must be detected
     (tmp_path / "science.yaml").write_text("name: t\nlayout_version: 3\n", encoding="utf-8")
     d = tmp_path / "entities" / "questions"
     d.mkdir(parents=True)
-    (d / "0001-x.md").write_text('---\ntype: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
+    (d / "0001-x.md").write_text('---\nkind: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
     from science_tool.validate.context import ValidateContext
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
@@ -189,12 +189,12 @@ def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:
 
         tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "task queue...")
         id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "per-type id-prefix conformance..."
+            index for index, entry in enumerate(ordered) if entry[0] == "per-kind id-prefix conformance..."
         )
 
         assert id_prefixes_index == tasks_index + 1
         assert ordered[id_prefixes_index] == (
-            "per-type id-prefix conformance...",
+            "per-kind id-prefix conformance...",
             19,
             "science_tool.validate.checks.id_prefixes",
         )

@@ -12,7 +12,7 @@ def base_rnaseq_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0",
         "id": "dataset:tcga-brca-rnaseq",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "TCGA-BRCA RNA-seq",
         "version": "1.0.0",
         "created": "2026-05-13",

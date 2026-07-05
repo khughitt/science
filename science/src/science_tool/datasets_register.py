@@ -179,7 +179,7 @@ def _entity_yaml_block(
         "---\n"
         f'schema_profile: "{schema_profile}"\n'
         f'id: "{entity_id}"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         f'title: "{title}"\n'
         'status: "active"\n'
         'profiles: ["science-pkg-entity-1.0"]\n'

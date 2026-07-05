@@ -1,6 +1,6 @@
 ---
 id: "manuscript:{{manuscript_id}}"
-type: "manuscript"
+kind: "manuscript"
 title: "{{title}}"
 status: "outline"  # outline | draft | revision | final
 stories:

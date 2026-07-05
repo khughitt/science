@@ -34,7 +34,7 @@ def _setup_statement(tmp_path: Path, *, atype: str, exact: str, frag: str = "s1"
     papers_dir = tmp_path / "entities" / "papers"
     papers_dir.mkdir(parents=True)
     (papers_dir / "p.md").write_text(
-        "---\nid: paper:p\ntype: paper\ntitle: Demo Paper\nstatus: active\n"
+        "---\nid: paper:p\nkind: paper\ntitle: Demo Paper\nstatus: active\n"
         'created: "2026-06-16"\nupdated: "2026-06-16"\n---\n# Demo Paper\n\nSummary.\n',
         encoding="utf-8",
     )

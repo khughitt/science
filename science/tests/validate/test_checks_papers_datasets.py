@@ -35,7 +35,7 @@ def _write_paper(root: Path, slug: str, datasets: list[str]) -> None:
     papers_dir.mkdir(parents=True, exist_ok=True)
     ds = "\n".join(f"  - {entry!r}" for entry in datasets)
     papers_dir.joinpath(f"{slug}.md").write_text(
-        f'---\ntype: "paper"\nid: "paper:{slug}"\ntitle: "T"\ndatasets:\n{ds}\n---\n\nBody.\n',
+        f'---\nkind: "paper"\nid: "paper:{slug}"\ntitle: "T"\ndatasets:\n{ds}\n---\n\nBody.\n',
         encoding="utf-8",
     )
 
@@ -75,7 +75,7 @@ def test_paper_without_datasets_does_not_warn(tmp_path: Path) -> None:
     papers_dir = tmp_path / "doc" / "background" / "papers"
     papers_dir.mkdir(parents=True, exist_ok=True)
     papers_dir.joinpath("Nodata2025.md").write_text(
-        '---\ntype: "paper"\nid: "paper:Nodata2025"\ntitle: "T"\n---\n\nBody.\n',
+        '---\nkind: "paper"\nid: "paper:Nodata2025"\ntitle: "T"\n---\n\nBody.\n',
         encoding="utf-8",
     )
 

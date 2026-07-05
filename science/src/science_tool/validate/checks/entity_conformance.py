@@ -28,7 +28,7 @@ def _result(severity: Severity, path: Path | None, message: str) -> Result:
 
 def _entity_type(ctx: ValidateContext, path: Path) -> str | None:
     data = ctx.frontmatter(path)
-    value = data.get("type") or data.get("kind")
+    value = data.get("kind")
     return str(value) if value else None
 
 
@@ -80,14 +80,14 @@ def check_local_kind_manifest(ctx: ValidateContext) -> Iterator[Result]:
 
 @Check(section="entity location coherence...", order=37)
 def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
-    """Flag files under entities/<kind>/ whose frontmatter type or id-kind
-    disagrees with the directory (directory/type/id coherence)."""
+    """Flag files under entities/<kind>/ whose frontmatter kind or id-kind
+    disagrees with the directory (directory/kind/id coherence)."""
     for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
             data = ctx.frontmatter(path)
-            ftype = data.get("type") or data.get("kind")
+            ftype = data.get("kind")
             if ftype and str(ftype) != kind:
-                yield _result(_severity(ctx), _rel(ctx, path), f"type {ftype!r} in {kind}/ directory (expected {kind})")
+                yield _result(_severity(ctx), _rel(ctx, path), f"kind {ftype!r} in {kind}/ directory (expected {kind})")
             id_kind, _ = _id_kind_and_local(data.get("id"))
             if id_kind is not None and id_kind != kind:
                 yield _result(
@@ -120,7 +120,7 @@ def _severity(ctx: ValidateContext) -> Severity:
     return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
 
 
-_REQUIRED_FRONTMATTER = ("id", "type", "title", "status", "created", "updated")
+_REQUIRED_FRONTMATTER = ("id", "kind", "title", "status", "created", "updated")
 _NUMBER_RE = re.compile(rf"^(\d{{{LOCAL_PART_WIDTH}}})-")
 
 

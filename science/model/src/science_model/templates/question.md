@@ -1,6 +1,6 @@
 ---
 id: "question:{{nn}}-{{slug}}"
-type: "question"
+kind: "question"
 title: "{{title}}"
 status: "active"
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
@@ -16,7 +16,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "question" }
+    kind: { default: "question" }
     title: { from: title }
     status: { from: status }
     ontology_terms: { default: [] }

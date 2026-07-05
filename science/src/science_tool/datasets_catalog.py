@@ -55,7 +55,7 @@ def _render_candidate(
     fm: dict = {
         "schema_profile": schema_profile,
         "id": entity_id,
-        "type": "dataset",
+        "kind": "dataset",
         "title": title,
         "status": "candidate",
         "created": iso,
@@ -173,7 +173,7 @@ def _load_local_dataset(project_root: Path, ref: str) -> tuple[str, Path, dict, 
     if not dest.exists():
         raise EntityCommandError(f"no such local dataset {ref!r} under entities/datasets/")
     parsed = parse_frontmatter(dest)
-    if parsed is None or (parsed[0].get("kind") or parsed[0].get("type")) != "dataset":
+    if parsed is None or (parsed[0].get("kind")) != "dataset":
         raise EntityCommandError(f"{ref!r} is not a dataset entity")
     fm, body = parsed
     return slug, dest, fm, body
@@ -218,7 +218,7 @@ def _dataset_match_key(value: object) -> str:
 def _dataset_resolution_index(project_root: Path) -> dict[str, tuple[str, str] | None]:
     index: dict[str, tuple[str, str] | None] = {}
     for path, fm, _body in _iter_local_entities(project_root):
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         dataset_id = fm.get("id")
         if not isinstance(dataset_id, str) or not dataset_id.startswith("dataset:"):
@@ -252,7 +252,7 @@ def reconcile_dataset_links(project_root: Path, *, fix: bool = False) -> list[di
     rows: list[dict[str, str]] = []
     rewrites: list[tuple[Path, dict, str]] = []
     for path, fm, body in _iter_local_entities(project_root):
-        entity_kind = fm.get("kind") or fm.get("type")
+        entity_kind = fm.get("kind")
         if entity_kind not in {"question", "hypothesis"}:
             continue
         entity_id = fm.get("id")
@@ -315,7 +315,7 @@ def link_dataset_to_target(project_root: Path, dataset_ref: str, target_ref: str
     if loaded is None:
         raise EntityCommandError(f"no such target entity {target_ref!r}")
     target_path, target_fm, target_body = loaded
-    target_kind = target_fm.get("kind") or target_fm.get("type")
+    target_kind = target_fm.get("kind")
     if target_kind not in {"question", "hypothesis"}:
         raise EntityCommandError("dataset link target must be a question or hypothesis entity")
 
@@ -493,7 +493,7 @@ def _local_rows(project_root: Path) -> list[dict]:
         if parsed is None:
             continue
         fm, _ = parsed
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
         access = fm.get("access") or {}
         rows.append(
@@ -620,7 +620,7 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
             fm, body = parsed
             # Same guard as `list`: a non-dataset file under entities/datasets/ is a
             # local miss, not a match — fall through to commons.
-            if (fm.get("kind") or fm.get("type")) == "dataset":
+            if fm.get("kind") == "dataset":
                 return ("local", fm, body)
     from science_tool.commons.config import resolve_commons_root
     from science_tool.commons.errors import CommonsEntityError, CommonsRegistryError

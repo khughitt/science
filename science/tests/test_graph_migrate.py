@@ -31,7 +31,7 @@ def test_audit_unresolved_topic_includes_commons_hint(tmp_path: Path, monkeypatc
     hypothesis_path.write_text(
         """---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: ["topic:does-not-exist"]
 source_refs: []
@@ -64,7 +64,7 @@ def _scaffold_project_with_related(project: Path, related: str) -> None:
     hypothesis_path.write_text(
         f"""---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: [{related}]
 source_refs: []
@@ -125,7 +125,7 @@ def _scaffold_project_with_related_and_peer(project: Path, related: str, peer_id
     hypothesis_path.write_text(
         f"""---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: [{related}]
 source_refs: []
@@ -171,7 +171,7 @@ def test_audit_unresolved_dataset_includes_dataset_commons_hint(tmp_path: Path, 
     hypothesis_path.write_text(
         """---
 id: "hypothesis:h1"
-type: "hypothesis"
+kind: "hypothesis"
 title: "H1"
 related: ["dataset:does-not-exist"]
 source_refs: []
@@ -209,7 +209,7 @@ def test_audit_paper_datasets_bare_freetext_is_descriptive(tmp_path: Path) -> No
     paper_path.write_text(
         """---
 id: "paper:Adams2025"
-type: "paper"
+kind: "paper"
 title: "A paper that uses several datasets"
 status: "active"
 datasets:
@@ -253,7 +253,7 @@ def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
                 [
                     "---",
                     "id: paper:smith",
-                    "type: paper",
+                    "kind: paper",
                     "dataset_usage:",
                     "  - ref: dataset:gtex-v8",
                     "    role: cited",
@@ -273,7 +273,7 @@ def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
                 [
                     "---",
                     "id: paper:smith",
-                    "type: paper",
+                    "kind: paper",
                     "datasets:",
                     "  - dataset:gtex-v8",
                     "---",

@@ -22,7 +22,7 @@ def stacked_rnaseq_matrix_entity() -> dict:
     return {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0",
         "id": "dataset:tcga-brca-rnaseq",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "TCGA-BRCA RNA-seq counts matrix",
         "version": "1.0.0",
         "created": "2026-05-19",
@@ -81,7 +81,7 @@ def test_stacked_table_scrna_valid_entity_passes() -> None:
     fm = {
         "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.table/1.0+bio.scrna/1.0",
         "id": "dataset:scrna-deg-table",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "scRNA-seq DEG table",
         "version": "1.0.0",
         "created": "2026-05-19",
@@ -133,7 +133,7 @@ def test_unknown_extension_in_middle_of_stack_also_raises() -> None:
             "science-entity-base/1.0+dataset/1.0+bio.unknownmiddle/1.0+bio.rnaseq/1.0"
         ),
         "id": "dataset:x",
-        "type": "dataset",
+        "kind": "dataset",
         "title": "x",
         "version": "1.0.0",
         "created": "2026-05-19",

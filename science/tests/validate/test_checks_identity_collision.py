@@ -101,7 +101,7 @@ def _write_dataset_md(root: Path, filename: str, ident: str) -> None:
     d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / filename).write_text(
-        f'---\nid: "{ident}"\ntype: "dataset"\ntitle: "{ident} {filename}"\n'
+        f'---\nid: "{ident}"\nkind: "dataset"\ntitle: "{ident} {filename}"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
@@ -117,7 +117,7 @@ def _write_datapackage(root: Path, slug: str, ident: str) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": slug,
                 "id": ident,
-                "type": "dataset",
+                "kind": "dataset",
                 "title": ident,
                 "origin": "external",
                 "access": {"level": "public", "verified": False},

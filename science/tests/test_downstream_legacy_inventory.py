@@ -93,7 +93,6 @@ def test_legacy_scan_reports_precise_project_surfaces(tmp_path: Path) -> None:
         "retired_edges_yaml": 1,
         "scalar_access": 1,
         "aggregate_manifest": 1,
-        "type_frontmatter": 1,
         "validate_local_sh": 1,
     }
     assert result.paths_for("article_prefix_alias") == ["doc/findings/f001.md"]
@@ -133,6 +132,37 @@ def test_legacy_entity_roots_reports_only_registered_markdown_entity_kinds(tmp_p
     result = downstream_inventory.scan_legacy_surfaces(project)
 
     assert result.paths_for("legacy_entity_roots") == ["specs/datasets/reference.md"]
+
+
+def test_type_frontmatter_reports_live_entities_not_archived_legacy_notes(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _science_yaml(project)
+    _write(
+        project / "archive" / "project-layout-legacy" / "notes" / "articles" / "smith.md",
+        """
+        ---
+        type: paper
+        id: paper:smith
+        title: Archived paper
+        ---
+        Archived legacy layout note.
+        """,
+    )
+    _write(
+        project / "entities" / "papers" / "smith.md",
+        """
+        ---
+        type: paper
+        id: paper:smith
+        title: Live paper
+        ---
+        Current entity.
+        """,
+    )
+
+    result = downstream_inventory.scan_legacy_surfaces(project)
+
+    assert result.paths_for("type_frontmatter") == ["entities/papers/smith.md"]
 
 
 def test_legacy_scan_ignores_nested_worktrees_and_git_dirs(tmp_path: Path) -> None:

@@ -147,7 +147,7 @@ def test_benchmark_list_filters_domain_and_kind_json(tmp_path: Path) -> None:
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 benchmark:
@@ -169,7 +169,7 @@ benchmark:
         "imagenet",
         """
 id: dataset:imagenet
-type: dataset
+kind: dataset
 title: ImageNet
 benchmark:
   domains: [vision]
@@ -202,7 +202,7 @@ def test_belief_ref_text_is_case_insensitive_exact_token_match(tmp_path: Path) -
         "h1",
         """
 id: dataset:h1
-type: dataset
+kind: dataset
 title: H1
 benchmark:
   related_beliefs:
@@ -215,7 +215,7 @@ benchmark:
         "h10",
         """
 id: dataset:h10
-type: dataset
+kind: dataset
 title: H10
 benchmark:
   related_beliefs:
@@ -237,7 +237,7 @@ def test_coverage_summary_json_omits_rows_and_counts_facets_only_reference(tmp_p
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA spatial reference
 dataset_class: reference
 benchmark:
@@ -266,7 +266,7 @@ def test_benchmark_list_counts_only_tasks_with_string_id(tmp_path: Path) -> None
         "legacy-task-id",
         """
 id: dataset:legacy-task-id
-type: dataset
+kind: dataset
 title: Legacy task id
 benchmark:
   domains: [biology]
@@ -307,7 +307,7 @@ def test_benchmark_list_commons_missing_registry_json_degrades_to_local_rows(tmp
         "local",
         """
 id: dataset:local
-type: dataset
+kind: dataset
 title: Local
 benchmark:
   domains: [biology]
@@ -332,7 +332,7 @@ def test_benchmark_list_commons_corrupt_registry_json_degrades_to_local_rows(tmp
         "local",
         """
 id: dataset:local
-type: dataset
+kind: dataset
 title: Local
 benchmark:
   domains: [biology]
@@ -357,7 +357,7 @@ def test_benchmark_list_commons_non_object_registry_json_degrades_to_local_rows(
         "local",
         """
 id: dataset:local
-type: dataset
+kind: dataset
 title: Local
 benchmark:
   domains: [biology]
@@ -393,7 +393,7 @@ def test_benchmark_gap_calibration_json_summarizes_projects(tmp_path: Path) -> N
         "0001-drug",
         """
 id: hypothesis:0001-drug
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -403,7 +403,7 @@ title: Drug screen benchmark gap
         "sciplex",
         """
 id: dataset:sciplex
-type: dataset
+kind: dataset
 title: Sci-Plex
 benchmark:
   domains: [biology]
@@ -418,7 +418,7 @@ benchmark:
         "0002-temporal",
         """
 id: hypothesis:0002-temporal
-type: hypothesis
+kind: hypothesis
 title: Temporal benchmark gap
 """,
         body="Temporal dynamic measurements should be tested.",
@@ -459,7 +459,7 @@ def test_benchmark_gap_calibration_table_renders_sections(tmp_path: Path) -> Non
         "0001-drug",
         """
 id: hypothesis:0001-drug
-type: hypothesis
+kind: hypothesis
 title: Drug screen benchmark gap
 """,
         body="Drug compound knockout screen should be tested.",
@@ -484,7 +484,7 @@ def test_benchmark_gaps_cli_evidence_report_json(tmp_path: Path) -> None:
         "0001-organoid",
         """
 id: hypothesis:0001-organoid
-type: hypothesis
+kind: hypothesis
 title: Organoid therapy benchmark gap
 """,
         body="Organoid therapy clone validation should be tested.",
@@ -506,7 +506,7 @@ def test_benchmark_gaps_cli_evidence_report_table(tmp_path: Path) -> None:
         "0002-organoid",
         """
 id: hypothesis:0002-organoid
-type: hypothesis
+kind: hypothesis
 title: Organoid therapy benchmark gap
 """,
         body="Organoid therapy clone validation should be tested.",
@@ -516,7 +516,7 @@ title: Organoid therapy benchmark gap
         "generic",
         """
 id: dataset:generic
-type: dataset
+kind: dataset
 title: Generic benchmark
 benchmark:
   domains: [biology]
@@ -549,7 +549,7 @@ def test_benchmark_gaps_cli_table_shows_candidate_mode_and_compacts_fallbacks(tm
         "0004-generic",
         """
 id: hypothesis:0004-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -560,7 +560,7 @@ title: Generic fallback benchmark gap
             slug,
             f"""
 id: dataset:{slug}
-type: dataset
+kind: dataset
 title: {slug}
 benchmark:
   domains: [biology]
@@ -593,7 +593,7 @@ def test_benchmark_gaps_cli_filters_context_fit_json(tmp_path: Path) -> None:
         "0600-direct",
         """
 id: hypothesis:0600-direct
-type: hypothesis
+kind: hypothesis
 title: Direct Sci-Plex gap
 """,
         body="Sci-plex drug compound screen should be benchmarked.",
@@ -604,7 +604,7 @@ title: Direct Sci-Plex gap
         "0601-generic",
         """
 id: hypothesis:0601-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback gap
 """,
         body="No specific benchmark facet appears here.",
@@ -614,7 +614,7 @@ title: Generic fallback gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -662,7 +662,7 @@ def test_benchmark_gaps_cli_table_shows_candidate_context_fit(tmp_path: Path) ->
         "0602-context-table",
         """
 id: hypothesis:0602-context-table
-type: hypothesis
+kind: hypothesis
 title: Context table gap
 """,
         body="Sci-plex drug compound screen should be benchmarked.",
@@ -672,7 +672,7 @@ title: Context table gap
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -710,7 +710,7 @@ def test_benchmark_hint_candidates_cli_json_and_commons_notice(tmp_path: Path) -
         "0070-alpha",
         """
 id: hypothesis:0070-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic benchmark gap
 """,
         body="Cytogenetic lesion mutation evidence should be reviewed.",
@@ -739,7 +739,7 @@ def test_benchmark_hint_candidates_cli_table_shows_only_domain_candidates(tmp_pa
         "0071-alpha",
         """
 id: hypothesis:0071-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic project model
 """,
         body="Cytogenetic lesion evidence should be benchmarked against project catalog models.",
@@ -784,7 +784,7 @@ def test_benchmark_hint_candidates_cli_writes_default_review_file(tmp_path: Path
         "0072-alpha",
         """
 id: hypothesis:0072-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic benchmark gap
 """,
         body="Cytogenetic lesion mutation evidence should be reviewed.",
@@ -819,7 +819,7 @@ def test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical
         "0074-alpha",
         """
 id: hypothesis:0074-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic benchmark gap
 """,
         body="Cytogenetic lesion mutation evidence should be reviewed.",
@@ -848,7 +848,7 @@ def test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_
         "0075-beta",
         """
 id: hypothesis:0075-beta
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic benchmark gap
 """,
         body="Cytogenetic lesion mutation evidence should be reviewed.",
@@ -874,7 +874,7 @@ def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_fil
         "0073-alpha",
         """
 id: hypothesis:0073-alpha
-type: hypothesis
+kind: hypothesis
 title: Cytogenetic benchmark gap
 """,
         body="Cytogenetic lesion mutation evidence should be reviewed.",
@@ -950,7 +950,7 @@ def test_benchmark_tests_cli_json_output(tmp_path: Path) -> None:
         "0001-perturbation",
         """
 id: hypothesis:0001-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response hypothesis
 """,
         body="Sci-plex drug perturbation should shift response states.",
@@ -960,7 +960,7 @@ title: Perturbation response hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1007,7 +1007,7 @@ def test_benchmark_tests_cli_projects_task_support_fields(tmp_path: Path) -> Non
         "0301-progression",
         """
 id: hypothesis:0301-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked in multiple myeloma.",
@@ -1017,7 +1017,7 @@ title: Progression benchmark hypothesis
         "mmrf-commpass",
         """
 id: dataset:mmrf-commpass
-type: dataset
+kind: dataset
 title: MMRF CoMMpass
 dataset_class: pointer
 benchmark:
@@ -1070,7 +1070,7 @@ def test_benchmark_tests_cli_rejects_invalid_task_support_state(tmp_path: Path) 
         "0302-progression",
         """
 id: hypothesis:0302-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked.",
@@ -1080,7 +1080,7 @@ title: Progression benchmark hypothesis
         "bad-support",
         """
 id: dataset:bad-support
-type: dataset
+kind: dataset
 title: Bad Support
 dataset_class: pointer
 benchmark:
@@ -1117,7 +1117,7 @@ def test_benchmark_tests_cli_rejects_scalar_task_support_evidence(tmp_path: Path
         "0304-progression",
         """
 id: hypothesis:0304-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked.",
@@ -1127,7 +1127,7 @@ title: Progression benchmark hypothesis
         "bad-support-evidence",
         """
 id: dataset:bad-support-evidence
-type: dataset
+kind: dataset
 title: Bad Support Evidence
 dataset_class: pointer
 benchmark:
@@ -1165,7 +1165,7 @@ def test_benchmark_tests_cli_rejects_unknown_task_support_key(tmp_path: Path) ->
         "0305-progression",
         """
 id: hypothesis:0305-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked.",
@@ -1175,7 +1175,7 @@ title: Progression benchmark hypothesis
         "bad-support-field",
         """
 id: dataset:bad-support-field
-type: dataset
+kind: dataset
 title: Bad Support Field
 dataset_class: pointer
 benchmark:
@@ -1213,7 +1213,7 @@ def test_benchmark_opportunities_cli_rejects_invalid_task_support_cleanly(tmp_pa
         "0303-progression",
         """
 id: hypothesis:0303-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked.",
@@ -1223,7 +1223,7 @@ title: Progression benchmark hypothesis
         "bad-support-opportunities",
         """
 id: dataset:bad-support-opportunities
-type: dataset
+kind: dataset
 title: Bad Support Opportunities
 dataset_class: pointer
 benchmark:
@@ -1255,7 +1255,7 @@ def test_benchmark_tests_cli_table_output(tmp_path: Path) -> None:
         "0002-spatial",
         """
 id: hypothesis:0002-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial hypothesis
 """,
         body="Microenvironment region needs spatial validation.",
@@ -1265,7 +1265,7 @@ title: Spatial hypothesis
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -1297,7 +1297,7 @@ def test_benchmark_tests_cli_filters_context_fit_or_values(tmp_path: Path) -> No
         "0506-context-cli",
         """
 id: hypothesis:0506-context-cli
-type: hypothesis
+kind: hypothesis
 title: Context CLI
 """,
         body="Sci-plex perturbation and temporal benchmark evidence should be considered.",
@@ -1307,7 +1307,7 @@ title: Context CLI
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1362,7 +1362,7 @@ def test_benchmark_tests_cli_table_shows_context_fit(tmp_path: Path) -> None:
         "0507-context-table",
         """
 id: hypothesis:0507-context-table
-type: hypothesis
+kind: hypothesis
 title: Context table
 """,
         body="Sci-plex perturbation should be benchmarked.",
@@ -1372,7 +1372,7 @@ title: Context table
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1411,7 +1411,7 @@ def test_benchmark_tests_cli_filters_and_empty_state(tmp_path: Path) -> None:
         "0003-drug",
         """
 id: hypothesis:0003-drug
-type: hypothesis
+kind: hypothesis
 title: Drug hypothesis
 """,
         body="Drug compound knockout screen should be tested.",
@@ -1421,7 +1421,7 @@ title: Drug hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -1445,7 +1445,7 @@ def test_benchmark_tests_cli_source_and_readiness_filters(tmp_path: Path) -> Non
         "0004-triage",
         """
 id: hypothesis:0004-triage
-type: hypothesis
+kind: hypothesis
 title: Triage hypothesis
 """,
         body="Drug perturbation should shift response states. Microenvironment region needs benchmark support.",
@@ -1455,7 +1455,7 @@ title: Triage hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1481,7 +1481,7 @@ benchmark:
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -1512,7 +1512,7 @@ def test_benchmark_tests_cli_exclude_fallback(tmp_path: Path) -> None:
         "0005-spatial",
         """
 id: hypothesis:0005-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial fallback hypothesis
 """,
         body="Microenvironment region needs benchmark support.",
@@ -1522,7 +1522,7 @@ title: Spatial fallback hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: pointer
 benchmark:
@@ -1575,7 +1575,7 @@ def test_benchmark_tests_cli_commons_unavailable_degrades_to_local_rows(tmp_path
         "0004-local",
         """
 id: hypothesis:0004-local
-type: hypothesis
+kind: hypothesis
 title: Local hypothesis
 """,
         body="Drug response should be tested.",
@@ -1585,7 +1585,7 @@ title: Local hypothesis
         "local-benchmark",
         """
 id: dataset:local-benchmark
-type: dataset
+kind: dataset
 title: Local Benchmark
 dataset_class: pointer
 benchmark:
@@ -1612,7 +1612,7 @@ def test_benchmark_test_triage_cli_json_output(tmp_path: Path) -> None:
         "0200-perturbation",
         """
 id: hypothesis:0200-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response hypothesis
 """,
         body="Drug perturbation should shift response states.",
@@ -1622,7 +1622,7 @@ title: Perturbation response hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1667,7 +1667,7 @@ def test_benchmark_test_triage_routes_blocked_task_support_to_blocked_bucket(tmp
         "0303-progression",
         """
 id: hypothesis:0303-progression
-type: hypothesis
+kind: hypothesis
 title: Progression benchmark hypothesis
 """,
         body="Progression risk should be benchmarked with bulk RNA-seq time-series survival data.",
@@ -1677,7 +1677,7 @@ title: Progression benchmark hypothesis
         "blocked-progress",
         """
 id: dataset:blocked-progress
-type: dataset
+kind: dataset
 title: Blocked Progression
 dataset_class: deposit
 local_path: data/blocked-progress
@@ -1722,7 +1722,7 @@ def test_benchmark_test_triage_candidate_support_does_not_enter_run_now(tmp_path
         "0304-survival",
         """
 id: hypothesis:0304-survival
-type: hypothesis
+kind: hypothesis
 title: Survival benchmark hypothesis
 """,
         body="Overall survival should be benchmarked with bulk RNA-seq time-series expression data.",
@@ -1732,7 +1732,7 @@ title: Survival benchmark hypothesis
         "candidate-survival",
         """
 id: dataset:candidate-survival
-type: dataset
+kind: dataset
 title: Candidate Survival
 dataset_class: deposit
 local_path: data/candidate-survival
@@ -1778,7 +1778,7 @@ def test_benchmark_test_triage_cli_filters_context_fit(tmp_path: Path) -> None:
         "0508-context-triage-cli",
         """
 id: hypothesis:0508-context-triage-cli
-type: hypothesis
+kind: hypothesis
 title: Context triage CLI
 """,
         body="Sci-plex perturbation should be benchmarked.",
@@ -1788,7 +1788,7 @@ title: Context triage CLI
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -1835,7 +1835,7 @@ def _write_blocked_fallback_triage_fixture(tmp_path: Path) -> None:
         "0305-homeostatic-recovery",
         """
 id: hypothesis:0305-homeostatic-recovery
-type: hypothesis
+kind: hypothesis
 title: Homeostatic recovery hypothesis
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -1845,7 +1845,7 @@ title: Homeostatic recovery hypothesis
         "blocked-fallback",
         """
 id: dataset:blocked-fallback
-type: dataset
+kind: dataset
 title: Blocked Fallback
 dataset_class: deposit
 local_path: data/blocked-fallback
@@ -1929,7 +1929,7 @@ def test_benchmark_test_triage_cli_table_output_shows_fallback_rollups(tmp_path:
         "0306-generic",
         """
 id: hypothesis:0306-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback hypothesis
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -1939,7 +1939,7 @@ title: Generic fallback hypothesis
         "visible-fallback",
         """
 id: dataset:visible-fallback
-type: dataset
+kind: dataset
 title: Visible Fallback
 dataset_class: deposit
 local_path: data/visible-fallback
@@ -2096,7 +2096,7 @@ def test_benchmark_test_triage_cli_table_output_shows_buckets(tmp_path: Path) ->
         "0201-spatial",
         """
 id: hypothesis:0201-spatial
-type: hypothesis
+kind: hypothesis
 title: Spatial hypothesis
 """,
         body="Microenvironment region needs spatial validation.",
@@ -2106,7 +2106,7 @@ title: Spatial hypothesis
         "hca-spatial",
         """
 id: dataset:hca-spatial
-type: dataset
+kind: dataset
 title: HCA Spatial
 dataset_class: reference
 benchmark:
@@ -2149,7 +2149,7 @@ def test_benchmark_test_triage_cli_writes_default_review_file(tmp_path: Path, mo
         "0202-perturbation",
         """
 id: hypothesis:0202-perturbation
-type: hypothesis
+kind: hypothesis
 title: Perturbation response hypothesis
 """,
         body="Drug perturbation should shift response states.",
@@ -2159,7 +2159,7 @@ title: Perturbation response hypothesis
         "sciplex3",
         """
 id: dataset:sciplex3
-type: dataset
+kind: dataset
 title: Sci-Plex 3
 dataset_class: deposit
 local_path: data/sciplex3
@@ -2241,7 +2241,7 @@ def test_benchmark_test_triage_review_file_includes_visible_fallback_rollups(
         "0307-generic",
         """
 id: hypothesis:0307-generic
-type: hypothesis
+kind: hypothesis
 title: Generic fallback hypothesis
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -2251,7 +2251,7 @@ title: Generic fallback hypothesis
         "visible-review-fallback",
         """
 id: dataset:visible-review-fallback
-type: dataset
+kind: dataset
 title: Visible Review Fallback
 dataset_class: deposit
 local_path: data/visible-review-fallback
@@ -2299,7 +2299,7 @@ def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_
         "0308-generic",
         """
 id: hypothesis:0308-generic
-type: hypothesis
+kind: hypothesis
 title: Generic benchmark gap
 """,
         body="Homeostatic recovery remains under-tested.",
@@ -2309,7 +2309,7 @@ title: Generic benchmark gap
         "blocked-fallback",
         """
 id: dataset:blocked-fallback
-type: dataset
+kind: dataset
 title: Blocked Fallback
 dataset_class: deposit
 local_path: data/blocked-fallback

@@ -34,7 +34,7 @@ def _legacy(root: Path, slug: str = "foo", **overrides) -> Path:
     """A legacy dataset entity: source_class but no origin/license/access/tier."""
     fm = {
         "id": f"dataset:{slug}",
-        "type": "dataset",
+        "kind": "dataset",
         "title": slug.title(),
         "status": "candidate",
         "source_class": "observational",

@@ -286,7 +286,7 @@ updated: 2026-05-01
     dp.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:refset\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reference Set\n"
         "status: active\n"
         "origin: external\n"

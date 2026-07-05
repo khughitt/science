@@ -1,6 +1,6 @@
 ---
 id: "theme:cross-no-conflict"
-type: "theme"
+kind: "theme"
 title: "Methodological theme shared across projects"
 status: "active"
 theme_kind: "methodological"

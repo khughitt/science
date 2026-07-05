@@ -1,6 +1,6 @@
 ---
 id: dataset:fixture-ds
-type: dataset
+kind: dataset
 title: "Fixture dataset"
 description: "Synthetic fixture for Phase G tests."
 datapackage: data/fixture-ds/datapackage.json

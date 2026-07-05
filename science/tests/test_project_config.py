@@ -174,7 +174,7 @@ parent: ../meta
 def test_load_plan_reproducibility_policy_from_frontmatter(tmp_path: Path):
     p = tmp_path / "plan.md"
     p.write_text(
-        '---\nid: "plan:x"\ntype: "plan"\ntitle: "X"\n'
+        '---\nid: "plan:x"\nkind: "plan"\ntitle: "X"\n'
         "reproducibility_policy:\n"
         '  bar: "trust-based-output"\n'
         "  waivers:\n"
@@ -190,7 +190,7 @@ def test_load_plan_reproducibility_policy_from_frontmatter(tmp_path: Path):
 
 def test_load_plan_policy_absent_is_none(tmp_path: Path):
     p = tmp_path / "plain.md"
-    p.write_text('---\nid: "plan:y"\ntype: "plan"\ntitle: "Y"\n---\n', encoding="utf-8")
+    p.write_text('---\nid: "plan:y"\nkind: "plan"\ntitle: "Y"\n---\n', encoding="utf-8")
     assert load_plan_reproducibility_policy(p) is None
 
 

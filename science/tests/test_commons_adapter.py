@@ -39,7 +39,7 @@ def _write_dataset_entity(
         "---\n"
         'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
         f'id: "dataset:{slug}"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         f'title: "{slug}"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -106,7 +106,7 @@ def test_scan_yields_entity_error_for_dataset_missing_datapackage(
         "---\n"
         'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
         'id: "dataset:no-dp"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "No datapackage"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -312,7 +312,7 @@ def test_scan_continues_after_per_entity_error(tmp_path: Path) -> None:
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:bad-name"\n'
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Bad"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -346,7 +346,7 @@ def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:Other2025"\n'  # contradicts path-derived paper:Adams2025
-        'type: "paper"\n'
+        'kind: "paper"\n'
         'title: "Impostor"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'
@@ -371,14 +371,14 @@ def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
 
 
 def test_scan_rejects_type_path_mismatch(tmp_path: Path) -> None:
-    """An entity in papers/Foo2025.md claiming type: dataset must error."""
+    """An entity in papers/Foo2025.md claiming kind: dataset must error."""
     root = _make_store(tmp_path, "valid")
     impostor = root / "papers" / "Adams2025.md"
     impostor.write_text(
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
         'id: "paper:Adams2025"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "Misfiled"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

@@ -76,7 +76,7 @@ def test_single_type_observation_promotes_to_owner_file_id_preserving(tmp_path: 
     head, body = owner.read_text(encoding="utf-8").split("---\n", 2)[1:]
     fm = yaml.safe_load(head)
     assert fm["id"] == "observation:swan-stage-shift"
-    assert fm["type"] == "observation"
+    assert fm["kind"] == "observation"
     assert fm["status"] == "active"
     assert fm["created"] == "2026-06-10"
     # reference fields are PRESERVED (load-bearing edges) — not dropped.
@@ -103,7 +103,7 @@ def test_single_type_row_with_real_owner_buckets_shadow(tmp_path: Path) -> None:
     owner = tmp_path / "entities/observations"
     owner.mkdir(parents=True, exist_ok=True)
     owner.joinpath("swan-stage-shift.md").write_text(
-        "---\nid: observation:swan-stage-shift\ntype: observation\ntitle: SWAN stage shift\n"
+        "---\nid: observation:swan-stage-shift\nkind: observation\ntitle: SWAN stage shift\n"
         "status: active\ncreated: '2026-06-01'\nupdated: '2026-06-01'\n---\n\nOwned.\n",
         encoding="utf-8",
     )

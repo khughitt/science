@@ -1,6 +1,6 @@
 ---
 id: "theme:cross-biological"
-type: "theme"
+kind: "theme"
 title: "Cross-project theme with out-of-enum theme_kind"
 theme_kind: "biological"
 theme_scope: "cross-project"

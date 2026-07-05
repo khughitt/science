@@ -9,9 +9,9 @@ def _mk(tmp_path):
     for sub in ("questions", "hypotheses", "synthesis"):
         (tmp_path / "entities" / sub).mkdir(parents=True)
     (tmp_path / "entities" / "questions" / "q01.md").write_text(
-        '---\nid: "question:q01"\ntype: "question"\n---\nQ.\n', encoding="utf-8")
+        '---\nid: "question:q01"\nkind: "question"\n---\nQ.\n', encoding="utf-8")
     (tmp_path / "entities" / "hypotheses" / "h01.md").write_text(
-        '---\nid: "hypothesis:h01"\ntype: "hypothesis"\n---\nH.\n', encoding="utf-8")
+        '---\nid: "hypothesis:h01"\nkind: "hypothesis"\n---\nH.\n', encoding="utf-8")
     return tmp_path
 
 
@@ -49,7 +49,7 @@ def test_digest_does_not_downgrade_a_direct_match(tmp_path) -> None:
     # pass runs last and only fills gaps.
     root = _mk(tmp_path)
     (root / "entities" / "questions" / "q01.md").write_text(
-        '---\nid: "question:q01"\ntype: "question"\nhypothesis: "hypothesis:h01"\n---\nQ.\n',
+        '---\nid: "question:q01"\nkind: "question"\nhypothesis: "hypothesis:h01"\n---\nQ.\n',
         encoding="utf-8")
     (root / "entities" / "synthesis" / "0001-d.md").write_text(
         '---\nid: "synthesis:0001-d"\ntitle: "D"\nreport_kind: "cluster-digest"\n'

@@ -1,6 +1,6 @@
 ---
 id: dataset:assembly-registry
-type: dataset
+kind: dataset
 schema_profile: science-entity-base/1.0+dataset/1.0+bio.assembly_registry/1.0
 title: "Assembly registry (C4a contig + alias fixture)"
 version: "1.0.0"

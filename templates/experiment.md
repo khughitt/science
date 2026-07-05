@@ -1,6 +1,6 @@
 ---
 id: "experiment:<slug>"
-type: "experiment"
+kind: "experiment"
 title: "<Experiment Name>"
 status: "planned"
 inquiry: "<inquiry-slug>"

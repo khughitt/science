@@ -1,6 +1,6 @@
 ---
 id: "research-package:<slug>"
-type: "research-package"
+kind: "research-package"
 title: "<Rendered analysis title>"
 status: "active"
 

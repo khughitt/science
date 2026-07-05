@@ -1,7 +1,7 @@
 ---
 schema_profile: "science-entity-base/1.0+theme/1.0"
 id: "theme:homology-aware-evaluation"
-type: "theme"
+kind: "theme"
 title: "Homology-aware evaluation"
 version: "1.0.0"
 status: "active"

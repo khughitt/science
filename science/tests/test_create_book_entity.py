@@ -18,4 +18,4 @@ def test_create_book_entity_writes_template(tmp_path: Path) -> None:
     text = written.read_text(encoding="utf-8")
     # MIGRATED_KINDS routing => the book template, not the generic Summary/Notes fallback.
     assert "## Whole-Book Synthesis" in text
-    assert "type: book" in text
+    assert "kind: book" in text

@@ -45,12 +45,12 @@ class ReferenceGraphEdge:
 
 def is_reference_graph_frontmatter(fm: dict[str, Any]) -> bool:
     profile = str(fm.get("schema_profile") or "")
-    return (fm.get("kind") or fm.get("type")) == "dataset" and REFERENCE_GRAPH_PROFILE_TOKEN in f"+{profile}"
+    return fm.get("kind") == "dataset" and REFERENCE_GRAPH_PROFILE_TOKEN in f"+{profile}"
 
 
 def is_reference_graph_member_frontmatter(fm: dict[str, Any]) -> bool:
     profile = str(fm.get("schema_profile") or "")
-    return (fm.get("kind") or fm.get("type")) == "dataset" and REFERENCE_GRAPH_MEMBER_PROFILE_TOKEN in f"+{profile}"
+    return fm.get("kind") == "dataset" and REFERENCE_GRAPH_MEMBER_PROFILE_TOKEN in f"+{profile}"
 
 
 def _split_semicolon(raw: str, *, field: str, row_number: int) -> tuple[str, ...]:

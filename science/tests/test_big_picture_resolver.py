@@ -99,16 +99,16 @@ def test_superseded_interpretation_is_excluded_from_resolution(tmp_path) -> None
     (tmp_path / "entities" / "interpretations").mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: vis\n")
     (tmp_path / "entities" / "questions" / "q01.md").write_text(
-        '---\nid: "question:q01"\ntype: "question"\nrelated: ["interpretation:i01-old", "interpretation:i02-new"]\n---\nQ.\n'
+        '---\nid: "question:q01"\nkind: "question"\nrelated: ["interpretation:i01-old", "interpretation:i02-new"]\n---\nQ.\n'
     )
     (tmp_path / "entities" / "hypotheses" / "h01.md").write_text(
-        '---\nid: "hypothesis:h01"\ntype: "hypothesis"\n---\nH.\n'
+        '---\nid: "hypothesis:h01"\nkind: "hypothesis"\n---\nH.\n'
     )
     (tmp_path / "entities" / "interpretations" / "i01-old.md").write_text(
-        '---\nid: "interpretation:i01-old"\ntype: "interpretation"\nstatus: "superseded"\nrelated: ["question:q01", "hypothesis:h01"]\n---\nold.\n'
+        '---\nid: "interpretation:i01-old"\nkind: "interpretation"\nstatus: "superseded"\nrelated: ["question:q01", "hypothesis:h01"]\n---\nold.\n'
     )
     (tmp_path / "entities" / "interpretations" / "i02-new.md").write_text(
-        '---\nid: "interpretation:i02-new"\ntype: "interpretation"\nstatus: "active"\nrelated: ["question:q01", "hypothesis:h01"]\n---\nnew.\n'
+        '---\nid: "interpretation:i02-new"\nkind: "interpretation"\nstatus: "active"\nrelated: ["question:q01", "hypothesis:h01"]\n---\nnew.\n'
     )
 
     from science_tool.big_picture.layout import entity_dir
@@ -123,7 +123,7 @@ def test_load_entities_can_include_hidden_when_requested(tmp_path) -> None:
     (tmp_path / "entities" / "interpretations").mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: vis\n")
     (tmp_path / "entities" / "interpretations" / "i01-old.md").write_text(
-        '---\nid: "interpretation:i01-old"\ntype: "interpretation"\nstatus: "superseded"\n---\nold.\n'
+        '---\nid: "interpretation:i01-old"\nkind: "interpretation"\nstatus: "superseded"\n---\nold.\n'
     )
 
     from science_tool.big_picture.layout import entity_dir

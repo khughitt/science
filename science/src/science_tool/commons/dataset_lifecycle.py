@@ -330,12 +330,12 @@ def _validate_entity_frontmatter(
             )
         )
 
-    entity_type = frontmatter.get("type")
-    if entity_type != "dataset":
+    entity_kind = frontmatter.get("kind")
+    if entity_kind != "dataset":
         findings.append(
             DatasetPackageFinding(
                 "type-mismatch",
-                "frontmatter type must be dataset",
+                "frontmatter kind must be dataset",
                 paths.entity_path,
             )
         )
@@ -592,7 +592,7 @@ def _entity_text(
         )
     return f"""---
 {schema_profile_text}id: dataset:{slug}
-type: dataset
+kind: dataset
 title: {yaml_title}
 version: "{version}"
 created: {yaml_today}

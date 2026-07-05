@@ -3,7 +3,7 @@
   "$id": "https://schemas.science/science-pkg-entity-1.0.json",
   "title": "science-pkg entity surface",
   "type": "object",
-  "required": ["profiles", "id", "type", "title", "status", "origin", "tier"],
+  "required": ["profiles", "id", "kind", "title", "status", "origin", "tier"],
   "properties": {
     "profiles": {
       "type": "array",
@@ -11,7 +11,7 @@
       "contains": {"const": "science-pkg-entity-1.0"}
     },
     "id": {"type": "string", "pattern": "^dataset:"},
-    "type": {"const": "dataset"},
+    "kind": {"const": "dataset"},
     "title": {"type": "string"},
     "status": {"type": "string"},
     "origin": {"enum": ["external", "derived"]},

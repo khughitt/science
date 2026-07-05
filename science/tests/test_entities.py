@@ -93,7 +93,7 @@ def test_generate_entity_id_respects_existing_numeric_prefix(tmp_path: Path) -> 
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     assert generate_entity_id(tmp_path, "question", "New Thing", None, None) == "question:0002-new-thing"
 
@@ -104,12 +104,12 @@ def test_generate_entity_id_picks_max_when_multiple_siblings(tmp_path: Path) -> 
     write_markdown_entity(
         tmp_path,
         "entities/questions/0003-later.md",
-        {"id": "question:0003-later", "type": "question", "title": "Later"},
+        {"id": "question:0003-later", "kind": "question", "title": "Later"},
     )
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-earlier.md",
-        {"id": "question:0001-earlier", "type": "question", "title": "Earlier"},
+        {"id": "question:0001-earlier", "kind": "question", "title": "Earlier"},
     )
     assert generate_entity_id(tmp_path, "question", "New Thing", None, None) == "question:0004-new-thing"
 
@@ -125,7 +125,7 @@ def test_generate_entity_id_uses_slug_override(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     assert generate_entity_id(tmp_path, "question", "Ignored Title", None, "chosen-slug") == "question:0002-chosen-slug"
 
@@ -150,12 +150,12 @@ def test_resolve_entity_ref_distinguishes_similar_local_parts(tmp_path: Path) ->
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-draft-alpha.md",
-        {"id": "question:0001-draft-alpha", "type": "question", "title": "DraftAlpha"},
+        {"id": "question:0001-draft-alpha", "kind": "question", "title": "DraftAlpha"},
     )
     write_markdown_entity(
         tmp_path,
         "entities/questions/0002-draft-beta.md",
-        {"id": "question:0002-draft-beta", "type": "question", "title": "DraftBeta"},
+        {"id": "question:0002-draft-beta", "kind": "question", "title": "DraftBeta"},
     )
 
     assert resolve_entity_ref(tmp_path, "question:0001-draft-alpha") == "question:0001-draft-alpha"
@@ -175,7 +175,7 @@ def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     _, frontmatter_text, _ = text.split("---\n", 2)
     frontmatter = yaml.safe_load(frontmatter_text)
     assert frontmatter["id"] == "question:0002-new-thing"
-    assert frontmatter["type"] == "question"
+    assert frontmatter["kind"] == "question"
     assert frontmatter["status"] == "open"
     assert frontmatter["related"] == ["hypothesis:0001-foo"]
     assert "# New Thing" in text
@@ -290,7 +290,7 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-seed.md",
-        {"id": "question:0001-seed", "type": "question", "title": "Seed", "status": "active"},
+        {"id": "question:0001-seed", "kind": "question", "title": "Seed", "status": "active"},
     )
 
     cases: list[tuple[str, str, str | None]] = [
@@ -367,7 +367,7 @@ def test_create_entity_writes_question_source_and_loads_it(tmp_path: Path) -> No
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
     )
 
     result = create_entity(
@@ -401,7 +401,7 @@ def test_create_entity_writes_theme_source_and_loads_it(tmp_path: Path) -> None:
     assert result.path == tmp_path / "entities/themes/0001-transportability-across-cancer-types.md"
     assert result.warnings == []
     text = result.path.read_text(encoding="utf-8")
-    assert "type: theme" in text or 'type: "theme"' in text or "type: 'theme'" in text
+    assert "kind: theme" in text or 'kind: "theme"' in text or "type: 'theme'" in text
     assert "theme_kind: methodological" in text or 'theme_kind: "methodological"' in text
     assert "## Definition" in text
     sources = load_project_sources(tmp_path)
@@ -426,7 +426,7 @@ def test_create_entity_writes_proposition_source_and_loads_it(tmp_path: Path) ->
     assert result.path == tmp_path / "entities/propositions/treatment-exposure-changes-under-sparse-psa-monitoring.md"
     assert result.warnings == []
     text = result.path.read_text(encoding="utf-8")
-    assert "type: proposition" in text or 'type: "proposition"' in text or "type: 'proposition'" in text
+    assert "kind: proposition" in text or 'kind: "proposition"' in text or "type: 'proposition'" in text
     assert "claim_layer: empirical_regularity" in text or 'claim_layer: "empirical_regularity"' in text
     assert "identification_strength: observational" in text or 'identification_strength: "observational"' in text
     assert "## Claim" in text
@@ -476,7 +476,7 @@ def test_create_entity_rejects_existing_destination(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     with pytest.raises(EntityCommandError, match="already exists"):
         create_entity(
@@ -493,7 +493,7 @@ def test_create_entity_with_unresolved_related_succeeds_with_warning(tmp_path: P
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
 
     result = create_entity(
@@ -513,7 +513,7 @@ def test_create_entity_unresolved_warning_names_failing_ref(tmp_path: Path) -> N
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
 
     result = create_entity(
@@ -547,7 +547,7 @@ def test_create_entity_concept_writes_source(tmp_path: Path) -> None:
     assert result.path.is_file()
     frontmatter = yaml.safe_load(result.path.read_text(encoding="utf-8").split("---")[1])
     assert frontmatter["id"] == "concept:local"
-    assert frontmatter["type"] == "concept"
+    assert frontmatter["kind"] == "concept"
     assert frontmatter["status"] == "active"
 
 
@@ -556,7 +556,7 @@ def test_create_entity_prewrite_validation_removes_no_tmp_file(tmp_path: Path) -
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     with pytest.raises(EntityCommandError, match="prefix"):
         create_entity(
@@ -574,7 +574,7 @@ def test_create_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monk
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     calls = 0
 
@@ -616,7 +616,7 @@ def test_create_entity_reports_preexisting_audit_failures_as_warnings(
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-existing.md",
-        {"id": "question:0001-existing", "type": "question", "title": "Existing"},
+        {"id": "question:0001-existing", "kind": "question", "title": "Existing"},
     )
     preexisting_row = {
         "check": "unresolved_reference",
@@ -646,7 +646,7 @@ def test_create_entity_reports_preexisting_audit_failures_as_warnings(
 def test_resolve_entity_ref_accepts_canonical_and_unique_prefix(tmp_path: Path) -> None:
     seed_project(tmp_path)
     write_markdown_entity(
-        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "type": "question", "title": "Alpha"}
+        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"}
     )
     assert resolve_entity_ref(tmp_path, "question:0001-alpha") == "question:0001-alpha"
     assert resolve_entity_ref(tmp_path, "q01") == "question:0001-alpha"
@@ -657,7 +657,7 @@ def test_resolve_entity_ref_accepts_question_shortform_for_numbered_local_part(t
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"},
     )
 
     assert resolve_entity_ref(tmp_path, "q01") == "question:0001-alpha"
@@ -666,10 +666,10 @@ def test_resolve_entity_ref_accepts_question_shortform_for_numbered_local_part(t
 def test_resolve_entity_ref_rejects_ambiguous_prefix(tmp_path: Path) -> None:
     seed_project(tmp_path)
     write_markdown_entity(
-        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "type": "question", "title": "Alpha"}
+        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"}
     )
     write_markdown_entity(
-        tmp_path, "entities/questions/0001-beta.md", {"id": "question:0001-beta", "type": "question", "title": "Beta"}
+        tmp_path, "entities/questions/0001-beta.md", {"id": "question:0001-beta", "kind": "question", "title": "Beta"}
     )
     with pytest.raises(EntityCommandError, match="Ambiguous"):
         resolve_entity_ref(tmp_path, "q01")
@@ -682,7 +682,7 @@ def test_edit_entity_preserves_unknown_frontmatter_and_adds_related(tmp_path: Pa
         "entities/questions/0001-alpha.md",
         {
             "id": "question:0001-alpha",
-            "type": "question",
+            "kind": "question",
             "title": "Alpha",
             "status": "open",
             "tags": ["biology"],
@@ -716,7 +716,7 @@ def test_edit_entity_rejects_invalid_question_status(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
     )
     with pytest.raises(EntityCommandError, match="Invalid status"):
         edit_entity(tmp_path, "question:0001-alpha", status="closed")
@@ -727,7 +727,7 @@ def test_append_entity_note_creates_notes_section_and_updated_field(tmp_path: Pa
     path = write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         "# Alpha\n\n## Summary\n\nBody.\n",
     )
 
@@ -741,7 +741,7 @@ def test_append_entity_note_creates_notes_section_and_updated_field(tmp_path: Pa
 def test_append_entity_note_rejects_blank(tmp_path: Path) -> None:
     seed_project(tmp_path)
     write_markdown_entity(
-        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "type": "question", "title": "Alpha"}
+        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"}
     )
     with pytest.raises(EntityCommandError, match="cannot be empty"):
         append_entity_note(tmp_path, "q01", "   ", note_date=date(2026, 4, 28))
@@ -752,7 +752,7 @@ def test_edit_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monkey
     path = write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         "# Alpha\n",
     )
     original = path.read_text(encoding="utf-8")
@@ -790,7 +790,7 @@ def test_append_entity_note_prospective_audit_failure_rolls_back(
     path = write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
         "# Alpha\n",
     )
     original = path.read_text(encoding="utf-8")
@@ -826,12 +826,12 @@ def test_list_entities_filters_kind_and_exact_status(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
     )
     write_markdown_entity(
         tmp_path,
         "entities/questions/0002-beta.md",
-        {"id": "question:0002-beta", "type": "question", "title": "Beta", "status": "answered"},
+        {"id": "question:0002-beta", "kind": "question", "title": "Beta", "status": "answered"},
     )
     rows = list_entities(tmp_path, kind="question", status="answered")
     assert [row["id"] for row in rows] == ["question:0002-beta"]
@@ -842,12 +842,12 @@ def test_list_entities_orders_by_canonical_id(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/questions/0002-beta.md",
-        {"id": "question:0002-beta", "type": "question", "title": "Beta", "status": "open"},
+        {"id": "question:0002-beta", "kind": "question", "title": "Beta", "status": "open"},
     )
     write_markdown_entity(
         tmp_path,
         "entities/questions/0001-alpha.md",
-        {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        {"id": "question:0001-alpha", "kind": "question", "title": "Alpha", "status": "open"},
     )
     rows = list_entities(tmp_path, kind="question")
     assert [row["id"] for row in rows] == ["question:0001-alpha", "question:0002-beta"]
@@ -859,7 +859,7 @@ def test_graph_is_stale_when_source_newer_than_graph(tmp_path: Path) -> None:
     graph_path.parent.mkdir(parents=True)
     graph_path.write_text("", encoding="utf-8")
     source = write_markdown_entity(
-        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "type": "question", "title": "Alpha"}
+        tmp_path, "entities/questions/0001-alpha.md", {"id": "question:0001-alpha", "kind": "question", "title": "Alpha"}
     )
     os.utime(graph_path, (1, 1))
     os.utime(source, (2, 2))
@@ -915,12 +915,12 @@ def test_list_entities_hides_superseded_by_default(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/interpretations/0001-active.md",
-        {"id": "interpretation:0001-active", "type": "interpretation", "title": "Active", "status": "active"},
+        {"id": "interpretation:0001-active", "kind": "interpretation", "title": "Active", "status": "active"},
     )
     write_markdown_entity(
         tmp_path,
         "entities/interpretations/0002-old.md",
-        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+        {"id": "interpretation:0002-old", "kind": "interpretation", "title": "Old", "status": "superseded"},
     )
 
     ids = {row["id"] for row in list_entities(tmp_path)}
@@ -936,7 +936,7 @@ def test_list_entities_explicit_status_returns_hidden(tmp_path: Path) -> None:
     write_markdown_entity(
         tmp_path,
         "entities/interpretations/0002-old.md",
-        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+        {"id": "interpretation:0002-old", "kind": "interpretation", "title": "Old", "status": "superseded"},
     )
     # An explicit status request is honored even though the status is hidden.
     rows = list_entities(tmp_path, status="superseded")
@@ -952,7 +952,7 @@ def test_cli_entity_list_include_hidden_flag(tmp_path: Path, monkeypatch: pytest
     write_markdown_entity(
         tmp_path,
         "entities/interpretations/0002-old.md",
-        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+        {"id": "interpretation:0002-old", "kind": "interpretation", "title": "Old", "status": "superseded"},
     )
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -985,5 +985,5 @@ def test_create_prose_source_entity(tmp_path):
     text = path.read_text(encoding="utf-8")
     frontmatter = yaml.safe_load(text.split("---", 2)[1])
     assert frontmatter["id"] == "prose-source:example-prose-source"
-    assert frontmatter["type"] == "prose-source"
+    assert frontmatter["kind"] == "prose-source"
     assert frontmatter["status"] == "active"

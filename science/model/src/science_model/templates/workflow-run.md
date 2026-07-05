@@ -1,6 +1,6 @@
 ---
 id: "workflow-run:<slug>"
-type: "workflow-run"
+kind: "workflow-run"
 title: "<Run Description>"
 status: "complete"
 workflow: "<workflow-slug>"

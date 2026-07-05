@@ -7,7 +7,7 @@ from science_tool.validate.result import Severity
 
 
 def _fm(**kw):
-    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
+    base = {"kind": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
     base.update(kw)
     return base
 
@@ -32,7 +32,7 @@ def test_active_with_local_path_is_ok():
 
 
 def test_non_dataset_is_skipped():
-    assert list(evaluate_dataset_acquisition([{"type": "paper", "status": "active", "_path": "p"}])) == []
+    assert list(evaluate_dataset_acquisition([{"kind": "paper", "status": "active", "_path": "p"}])) == []
 
 
 def test_template_default_status_is_candidate():

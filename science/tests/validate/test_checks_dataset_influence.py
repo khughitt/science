@@ -24,7 +24,7 @@ def _ctx(root: Path) -> ValidateContext:
 def _fm(**extra):
     return {
         "id": "paper:Adams2025",
-        "type": "paper",
+        "kind": "paper",
         "_path": "entities/papers/Adams2025.md",
         **extra,
     }
@@ -37,7 +37,7 @@ def _write_project(root: Path) -> None:
 def _write_dataset_usage_paper(root: Path, ref: str = "dataset:gtex-v8") -> None:
     (root / "entities" / "papers").mkdir(parents=True)
     (root / "entities" / "papers" / "Adams2025.md").write_text(
-        f"---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
+        f"---\nid: paper:Adams2025\nkind: paper\ntitle: Adams\ndataset_usage:\n"
         f"  - ref: {ref}\n    role: analyzed\n    overlap: full\n---\n",
         encoding="utf-8",
     )
@@ -49,7 +49,7 @@ def _write_dataset(root: Path, slug: str, extra: str = "") -> None:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         f"id: dataset:{slug}\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         f"title: {slug}\n"
         "status: active\n"
         "tier: use-now\n"
@@ -72,7 +72,7 @@ def _write_geneset_collection(root: Path, dataset_ref: str) -> None:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:reactome-v89\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Reactome\n"
         "status: active\n"
         "origin: external\n"
@@ -243,7 +243,7 @@ def test_dataset_self_reference_errors() -> None:
             [
                 {
                     "id": "dataset:self",
-                    "type": "dataset",
+                    "kind": "dataset",
                     "_path": "data/self/datapackage.yaml",
                     "dataset_usage": [{"ref": "dataset:self", "role": "analyzed"}],
                 }
@@ -264,7 +264,7 @@ def test_dataset_derivation_inputs_self_reference_errors() -> None:
             [
                 {
                     "id": "dataset:self",
-                    "type": "dataset",
+                    "kind": "dataset",
                     "_path": "data/self/datapackage.yaml",
                     "derivation": {"inputs": ["dataset:self"]},
                 }
@@ -313,7 +313,7 @@ def test_check_dataset_influence_resolves_local_dataset_ref(tmp_path: Path, monk
     dp_dir = tmp_path / "data" / "gtex"
     dp_dir.mkdir(parents=True)
     (dp_dir / "datapackage.yaml").write_text(
-        "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\ntype: dataset\ntitle: GTEx\n"
+        "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\nkind: dataset\ntitle: GTEx\n"
         "origin: external\ntier: use-now\ndatapackage: datapackage.yaml\naccess: {level: public, verified: true}\n",
         encoding="utf-8",
     )
@@ -338,7 +338,7 @@ def test_check_dataset_influence_resolves_local_markdown_dataset_ref(
     ds_dir = tmp_path / "entities" / "datasets"
     ds_dir.mkdir(parents=True)
     (ds_dir / "swan.md").write_text(
-        '---\nid: "dataset:swan"\ntype: "dataset"\ntitle: "SWAN"\n'
+        '---\nid: "dataset:swan"\nkind: "dataset"\ntitle: "SWAN"\n'
         'status: "active"\norigin: "external"\ntier: "use-now"\n---\n\nSWAN cohort.\n',
         encoding="utf-8",
     )
@@ -396,7 +396,7 @@ def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
     )
     (tmp_path / "entities" / "papers").mkdir(parents=True)
     (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [gtex]\n---\n",
+        "---\nid: paper:Adams2025\nkind: paper\ntitle: Adams\ndatasets: [gtex]\n---\n",
         encoding="utf-8",
     )
 
@@ -439,7 +439,7 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
     (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "dataset_usage:\n"
         "  - ref: dataset:gtex\n"
@@ -466,11 +466,11 @@ def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
     mappings.write_text('aliases:\n  "dataset:gtex": "paper:Smith2024"\n', encoding="utf-8")
     (tmp_path / "entities" / "papers").mkdir(parents=True)
     (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [dataset:gtex]\n---\n",
+        "---\nid: paper:Adams2025\nkind: paper\ntitle: Adams\ndatasets: [dataset:gtex]\n---\n",
         encoding="utf-8",
     )
     (tmp_path / "entities" / "papers" / "Smith2024.md").write_text(
-        "---\nid: paper:Smith2024\ntype: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
+        "---\nid: paper:Smith2024\nkind: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
         encoding="utf-8",
     )
 
@@ -499,7 +499,7 @@ def test_check_dataset_influence_derivation_input_alias_to_non_dataset_errors(
     )
     (tmp_path / "entities" / "papers").mkdir(parents=True)
     (tmp_path / "entities" / "papers" / "Smith2024.md").write_text(
-        "---\nid: paper:Smith2024\ntype: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
+        "---\nid: paper:Smith2024\nkind: paper\ntitle: Smith\naliases: [dataset:smith]\n---\n",
         encoding="utf-8",
     )
 

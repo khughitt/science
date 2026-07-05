@@ -1376,7 +1376,7 @@ def _load_research_packages(project_root: Path) -> dict[str, list[str]]:
         if not result:
             continue
         fm, _ = result
-        if fm.get("type") == "research-package" and fm.get("id"):
+        if fm.get("kind") == "research-package" and fm.get("id"):
             rps[str(fm["id"])] = list(fm.get("displays") or [])
     return rps
 
@@ -1414,7 +1414,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             if not result:
                 continue
             fm, _ = result
-            if fm.get("type") == "dataset" and fm.get("id"):
+            if fm.get("kind") == "dataset" and fm.get("id"):
                 datasets_by_id[str(fm["id"])] = fm
     gate_memo: dict[str, tuple[bool, str]] = {}
 
@@ -1427,7 +1427,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             if not result:
                 continue
             fm, _ = result
-            if fm.get("type") != "dataset":
+            if fm.get("kind") != "dataset":
                 continue
             entity_id = str(fm.get("id", md.stem))
             origin = fm.get("origin", "external")  # legacy default
@@ -1774,7 +1774,7 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
         if not result:
             continue
         fm, _ = result
-        if fm.get("type") == "workflow-run" and fm.get("id"):
+        if fm.get("kind") == "workflow-run" and fm.get("id"):
             runs[str(fm["id"])] = fm
     return runs
 

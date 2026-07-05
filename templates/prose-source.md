@@ -1,6 +1,6 @@
 ---
 id: "prose-source:{{slug}}"
-type: "prose-source"
+kind: "prose-source"
 title: "{{title}}"
 status: "active"
 source_path: ""
@@ -13,7 +13,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "prose-source" }
+    kind: { default: "prose-source" }
     title: { from: title }
     status: { from: status }
     source_path: { default: "" }

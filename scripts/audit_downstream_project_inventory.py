@@ -448,6 +448,41 @@ def _is_legacy_entity_root(project_root: Path, rel_path: str, fm: dict[str, Any]
     return is_markdown_entity_kind(kind, project_root=project_root)
 
 
+def _is_live_entities_path(rel_path: str) -> bool:
+    parts = Path(rel_path).parts
+    return bool(parts) and parts[0] == "entities" and not any(part.startswith("_") for part in parts[1:-1])
+
+
+def _is_commons_project(project_root: Path) -> bool:
+    path = project_root / "science.yaml"
+    if not path.is_file():
+        return False
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8", errors="replace")) or {}
+    except yaml.YAMLError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    return data.get("role") == "commons" or data.get("id") in {"commons", "science-commons"}
+
+
+def _is_commons_entity_path(rel_path: str) -> bool:
+    parts = Path(rel_path).parts
+    if not parts:
+        return False
+    if parts[0].startswith(".") or parts[0].startswith("_"):
+        return False
+    return not any(part in LEGACY_SCAN_EXCLUDED_DIRS or part.startswith(".") for part in parts[:-1])
+
+
+def _is_current_entity_frontmatter_path(project_root: Path, rel_path: str, fm: dict[str, Any], *, is_commons: bool) -> bool:
+    if not _has_entity_frontmatter(fm):
+        return False
+    if _is_live_entities_path(rel_path):
+        return True
+    return is_commons and _is_commons_entity_path(rel_path)
+
+
 def _is_scalar_access(value: Any) -> bool:
     return value is not None and not isinstance(value, (dict, list))
 
@@ -563,6 +598,7 @@ def scan_legacy_surfaces(project_root: Path) -> LegacySurfaceScan:
     project_root = project_root.expanduser().resolve()
     findings: list[LegacySurfaceFinding] = []
     findings.extend(_legacy_science_yaml_findings(project_root))
+    is_commons = _is_commons_project(project_root)
 
     for path in _iter_scannable_files(project_root):
         rel_path = _rel_posix(project_root, path)
@@ -629,7 +665,7 @@ def scan_legacy_surfaces(project_root: Path) -> LegacySurfaceScan:
                     "entity frontmatter under doc/ or specs/",
                 )
             )
-        if "type" in fm and _has_entity_frontmatter(fm):
+        if "type" in fm and _is_current_entity_frontmatter_path(project_root, rel_path, fm, is_commons=is_commons):
             findings.append(
                 LegacySurfaceFinding(
                     "type_frontmatter",

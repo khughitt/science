@@ -1,6 +1,6 @@
 ---
 id: "finding:{{nn}}-{{slug}}"
-type: "finding"
+kind: "finding"
 title: "{{title}}"
 status: "active"
 propositions: []
@@ -12,7 +12,7 @@ updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
-    type: { default: "finding" }
+    kind: { default: "finding" }
     title: { from: title }
     status: { from: status }
     propositions: { default: [] }

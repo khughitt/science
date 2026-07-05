@@ -57,7 +57,7 @@ def test_apply_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_only_hidden_statuses_are_candidates(tmp_path: Path) -> None:
-    _write(tmp_path, "hypotheses", "0001-a", "---\nid: hypothesis:0001-a\ntype: hypothesis\nstatus: proposed\n---\n")
+    _write(tmp_path, "hypotheses", "0001-a", "---\nid: hypothesis:0001-a\nkind: hypothesis\nstatus: proposed\n---\n")
     _superseded(tmp_path, "interpretations", "0002-b", "interpretation:0002-b")
     report = archive_entities(tmp_path, apply=False, now="T1")
     assert [c["id"] for c in report["candidates"]] == ["interpretation:0002-b"]
@@ -67,7 +67,7 @@ def test_report_surfaces_inbound_live_refs(tmp_path: Path) -> None:
     # A live survivor references the superseded candidate via relations[].target.
     _superseded(tmp_path, "interpretations", "0002-old", "interpretation:0002-old")
     _write(tmp_path, "interpretations", "0003-new",
-           "---\nid: interpretation:0003-new\ntype: interpretation\nstatus: complete\n"
+           "---\nid: interpretation:0003-new\nkind: interpretation\nstatus: complete\n"
            "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-old\n"
            "related:\n  - interpretation:0002-old\n---\n")
     report = archive_entities(tmp_path, apply=False, now="T1")
@@ -116,7 +116,7 @@ def test_generic_archive_preserves_resynthesized_into_when_present(tmp_path: Pat
         "broad",
         "---\n"
         "id: proposition:broad\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "status: superseded\n"
         "resynthesized_into:\n"
         "  - proposition:negative\n"
@@ -139,7 +139,7 @@ def test_report_includes_resynthesized_into_for_dry_run_candidates(tmp_path: Pat
         "broad",
         "---\n"
         "id: proposition:broad\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "status: superseded\n"
         "resynthesized_into:\n"
         "  - proposition:negative\n"
@@ -179,7 +179,7 @@ def test_malformed_resynthesized_into_is_ignored_not_split(
         name,
         "---\n"
         f"id: proposition:{name}\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "status: superseded\n"
         f"resynthesized_into: {raw_resynthesized_into}\n"
         "---\n"

@@ -11,7 +11,7 @@ def test_adapter_surfaces_produced_by(tmp_path: Path) -> None:
     dp.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:x\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: X\n"
         "status: active\n"
         "origin: derived\n"
@@ -29,7 +29,7 @@ def test_adapter_surfaces_tier_and_update_cadence(tmp_path: Path) -> None:
     dp.write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:y\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: Y\n"
         "status: active\n"
         "origin: derived\n"

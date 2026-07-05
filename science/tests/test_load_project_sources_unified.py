@@ -38,7 +38,7 @@ def test_load_produces_typed_entity_instances(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     (tmp_path / "entities" / "hypotheses" / "h1.md").write_text(
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )
     (tmp_path / "tasks").mkdir()
@@ -174,7 +174,7 @@ def test_load_produces_dataset_entity_for_datapackage(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "ds1",
                 "id": "dataset:ds1",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "DS1",
                 "origin": "external",
                 "access": {"level": "public", "verified": False},
@@ -200,7 +200,7 @@ def test_orphan_datapackage_synthesizes_deprecated_owner(tmp_path: Path) -> None
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "ds1",
                 "id": "dataset:ds1",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "DS1",
                 "origin": "external",
                 "access": {"level": "public", "verified": False},
@@ -224,7 +224,7 @@ def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
-        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md"\n'
+        '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X md"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
@@ -236,7 +236,7 @@ def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "x",
                 "id": "dataset:x",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "X dp",
                 "origin": "external",
                 "access": {"level": "public", "verified": False},
@@ -278,7 +278,7 @@ def test_datapackage_defers_to_aggregate_stub_owner(tmp_path: Path) -> None:
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "x",
                 "id": "dataset:x",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "X dp",
                 "origin": "external",
                 "access": {"level": "public", "verified": False},
@@ -300,13 +300,13 @@ def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
-        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md"\n'
+        '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X md"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )
     (tmp_path / "entities" / "datasets" / "x2.md").write_text(
-        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md 2"\n'
+        '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X md 2"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
@@ -319,7 +319,7 @@ def test_concept_markdown_owner_collides_with_terms_yaml_under_strict_identity(t
     _seed(tmp_path)
     (tmp_path / "entities" / "concepts").mkdir(parents=True)
     (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
-        '---\nid: "concept:treatment-response"\ntype: "concept"\n'
+        '---\nid: "concept:treatment-response"\nkind: "concept"\n'
         'title: "Treatment Response"\nstatus: "active"\n---\n',
         encoding="utf-8",
     )
@@ -345,7 +345,7 @@ def test_concept_markdown_owner_wins_over_terms_yaml_in_nonstrict_load(tmp_path:
     _seed(tmp_path)
     (tmp_path / "entities" / "concepts").mkdir(parents=True)
     (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
-        '---\nid: "concept:treatment-response"\ntype: "concept"\n'
+        '---\nid: "concept:treatment-response"\nkind: "concept"\n'
         'title: "Treatment Response"\nstatus: "active"\n---\n',
         encoding="utf-8",
     )
@@ -391,7 +391,7 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "doc" / "hypotheses").mkdir(parents=True)
     (tmp_path / "doc" / "hypotheses" / "h1.md").write_text(
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )
     sources = load_project_sources(tmp_path)
@@ -406,7 +406,7 @@ def test_load_project_sources_includes_research_question_with_rq_prefix(tmp_path
             [
                 "---",
                 'id: "rq:test"',
-                'type: "research-question"',
+                'kind: "research-question"',
                 'title: "Master research question"',
                 'related: ["hypothesis:h1"]',
                 "source_refs: []",
@@ -518,7 +518,7 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
             [
                 "---",
                 'id: "theme:transportability"',
-                'type: "theme"',
+                'kind: "theme"',
                 'title: "Transportability"',
                 'status: "active"',
                 'theme_kind: "methodological"',
@@ -540,7 +540,7 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
             [
                 "---",
                 'id: "question:q001-recurring"',
-                'type: "question"',
+                'kind: "question"',
                 'title: "What recurs?"',
                 "related: []",
                 "source_refs: []",
@@ -570,7 +570,7 @@ def test_load_project_sources_rejects_invalid_reasoning_enum(tmp_path: Path) -> 
             [
                 "---",
                 'id: "proposition:p1"',
-                'type: "proposition"',
+                'kind: "proposition"',
                 'title: "P1"',
                 'claim_layer: "legacy-causal"',
                 "related: []",
@@ -724,7 +724,7 @@ def test_load_project_sources_preserves_external_ref_taxon(tmp_path: Path) -> No
                 "references": [
                     {
                         "id": "protein:EZH2",
-                        "type": "protein",
+                        "kind": "protein",
                         "title": "EZH2",
                         "taxon": "NCBITaxon:9606",
                         "primary_external_id": {
@@ -751,7 +751,7 @@ def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "parameters").mkdir(parents=True)
     (tmp_path / "entities" / "parameters" / "p1.md").write_text(
-        '---\nid: "parameter:kcat"\ntype: "parameter"\ntitle: "kcat"\n---\n',
+        '---\nid: "parameter:kcat"\nkind: "parameter"\ntitle: "kcat"\n---\n',
         encoding="utf-8",
     )
     sources = load_project_sources(tmp_path)
@@ -768,12 +768,12 @@ def test_load_project_sources_accepts_local_gene_entity_when_biology_declared(tm
     )
     (tmp_path / "entities" / "genes").mkdir(parents=True)
     (tmp_path / "entities" / "genes" / "phf19.md").write_text(
-        '---\nid: "gene:phf19"\ntype: "gene"\ntitle: "PHF19"\nrelated: ["question:q01"]\n---\n',
+        '---\nid: "gene:phf19"\nkind: "gene"\ntitle: "PHF19"\nrelated: ["question:q01"]\n---\n',
         encoding="utf-8",
     )
     (tmp_path / "entities" / "questions").mkdir(parents=True)
     (tmp_path / "entities" / "questions" / "q01.md").write_text(
-        '---\nid: "question:q01"\ntype: "question"\ntitle: "Question"\n---\n',
+        '---\nid: "question:q01"\nkind: "question"\ntitle: "Question"\n---\n',
         encoding="utf-8",
     )
 
@@ -789,7 +789,7 @@ def test_load_project_sources_skips_local_gene_entity_without_declared_ontology(
     _seed(tmp_path)
     (tmp_path / "doc" / "genes").mkdir(parents=True)
     (tmp_path / "doc" / "genes" / "phf19.md").write_text(
-        '---\nid: "gene:phf19"\ntype: "gene"\ntitle: "PHF19"\n---\n',
+        '---\nid: "gene:phf19"\nkind: "gene"\ntitle: "PHF19"\n---\n',
         encoding="utf-8",
     )
 
@@ -802,7 +802,7 @@ def test_load_project_sources_preserves_legacy_unknown_type(tmp_path: Path) -> N
     _seed(tmp_path)
     (tmp_path / "entities").mkdir(exist_ok=True)
     (tmp_path / "entities" / "legacy.md").write_text(
-        '---\nid: "unknown:legacy-record"\ntype: "unknown"\ntitle: "Legacy unknown"\n---\n',
+        '---\nid: "unknown:legacy-record"\nkind: "unknown"\ntitle: "Legacy unknown"\n---\n',
         encoding="utf-8",
     )
 
@@ -900,7 +900,7 @@ def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) 
     )
     (tmp_path / "entities" / "meta").mkdir(parents=True)
     (tmp_path / "entities" / "meta" / "next-steps.md").write_text(
-        '---\nid: "meta:next-steps"\ntype: "meta"\ntitle: "Next steps"\n---\n',
+        '---\nid: "meta:next-steps"\nkind: "meta"\ntitle: "Next steps"\n---\n',
         encoding="utf-8",
     )
 
@@ -942,12 +942,12 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
     )
     (tmp_path / "entities" / "notes").mkdir(parents=True)
     (tmp_path / "entities" / "notes" / "labnote.md").write_text(
-        '---\nid: "labnote:rollup"\ntype: "labnote"\n---\n',
+        '---\nid: "labnote:rollup"\nkind: "labnote"\n---\n',
         encoding="utf-8",
     )
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     (tmp_path / "entities" / "hypotheses" / "h1.md").write_text(
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )
 
@@ -996,7 +996,7 @@ def test_load_project_sources_local_kind_graduated_to_core_does_not_crash(tmp_pa
     )
     (tmp_path / "entities" / "synthesis").mkdir(parents=True)
     (tmp_path / "entities" / "synthesis" / "rollup.md").write_text(
-        '---\nid: "synthesis:rollup"\ntype: "synthesis"\ntitle: "Rollup"\n---\n',
+        '---\nid: "synthesis:rollup"\nkind: "synthesis"\ntitle: "Rollup"\n---\n',
         encoding="utf-8",
     )
 
@@ -1054,7 +1054,7 @@ def test_dataset_datapackages_records_deferred_datapackage_path(tmp_path: Path) 
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
         "---\n"
         'id: "dataset:x"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "X md"\n'
         'status: "active"\n'
         'origin: "external"\n'
@@ -1072,7 +1072,7 @@ def test_dataset_datapackages_records_deferred_datapackage_path(tmp_path: Path) 
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": "dataset:x",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "X dp",
                 "status": "active",
                 "origin": "external",
@@ -1098,7 +1098,7 @@ def test_dataset_datapackages_excludes_true_orphan(tmp_path: Path) -> None:
             {
                 "profiles": ["science-pkg-entity-1.0"],
                 "id": "dataset:y",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "Y dp",
                 "status": "active",
                 "origin": "external",

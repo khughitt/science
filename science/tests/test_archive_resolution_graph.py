@@ -52,7 +52,7 @@ def _proposition(tmp_path: Path, slug: str, title: str | None = None) -> None:
     (d / f"{slug}.md").write_text(
         "---\n"
         f"id: proposition:{slug}\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         f"title: {title or slug}\n"
         "---\n"
         "Claim.\n",
@@ -62,7 +62,7 @@ def _proposition(tmp_path: Path, slug: str, title: str | None = None) -> None:
 
 def test_archived_ref_edges_land_per_graph_and_stub(tmp_path: Path) -> None:
     _seed(tmp_path)
-    _live(tmp_path, "---\nid: interpretation:0001-live\ntype: interpretation\ntitle: Live\n"
+    _live(tmp_path, "---\nid: interpretation:0001-live\nkind: interpretation\ntitle: Live\n"
                     "related:\n  - interpretation:0002-gone\n"
                     "source_refs:\n  - interpretation:0002-gone\n"
                     "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-gone\n---\n")
@@ -85,7 +85,7 @@ def test_unknown_ref_still_fails_audit(tmp_path: Path) -> None:
     # The archive fix resolves ACTIVE archived ids only — a genuine unknown ref
     # (neither live nor archived) must still fail the graph audit, NOT get a stub.
     _seed(tmp_path)
-    _live(tmp_path, "---\nid: interpretation:0001-live\ntype: interpretation\ntitle: Live\n"
+    _live(tmp_path, "---\nid: interpretation:0001-live\nkind: interpretation\ntitle: Live\n"
                     "related:\n  - interpretation:0099-typo\n---\n")
     with pytest.raises(ValueError, match="unresolved"):
         _build_graph_text(tmp_path)
@@ -97,7 +97,7 @@ def test_unreferenced_archived_scalar_lineage_emits_stub_and_edge(tmp_path: Path
         tmp_path,
         "---\n"
         "id: interpretation:0001-live\n"
-        "type: interpretation\n"
+        "kind: interpretation\n"
         "title: Live\n"
         "---\n",
     )
@@ -140,7 +140,7 @@ def test_unreferenced_archived_resynthesized_into_emits_all_lineage_edges(tmp_pa
         tmp_path,
         "---\n"
         "id: interpretation:0001-live\n"
-        "type: interpretation\n"
+        "kind: interpretation\n"
         "title: Live\n"
         "---\n",
     )
@@ -176,7 +176,7 @@ def test_archived_resynthesized_into_rejects_unknown_target(tmp_path: Path) -> N
         tmp_path,
         "---\n"
         "id: interpretation:0001-live\n"
-        "type: interpretation\n"
+        "kind: interpretation\n"
         "title: Live\n"
         "---\n",
     )

@@ -45,7 +45,7 @@ def _write_liftover_dataset(tmp_path: Path, chain_bytes: bytes) -> tuple[Path, P
 ---
 schema_profile: science-entity-base/1.0+dataset/1.0
 id: dataset:test-liftover
-type: dataset
+kind: dataset
 title: Test liftover chains
 version: "1.0.0"
 created: "2026-05-31"

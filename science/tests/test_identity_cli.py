@@ -28,7 +28,7 @@ def _run(root: Path, *args: str):
 def _write_dataset(root: Path, slug: str, *, frontmatter: dict | None = None, body: str = "# Body\n") -> Path:
     fm = {
         "id": f"dataset:{slug}",
-        "type": "dataset",
+        "kind": "dataset",
         "title": slug.title(),
         "status": "candidate",
     }

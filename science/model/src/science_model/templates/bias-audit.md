@@ -1,6 +1,6 @@
 ---
 id: "report:{{NNNN}}-bias-audit-{{slug}}"
-type: "report"
+kind: "report"
 title: "Bias Audit: {{Short Title}}"
 status: "proposed"
 source_refs: []

@@ -73,7 +73,7 @@ def _dataset_class(fm: Mapping[str, Any]) -> str:
 
 def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
     for fm in datasets:
-        if (fm.get("kind") or fm.get("type")) != "dataset":
+        if fm.get("kind") != "dataset":
             continue
 
         if "benchmark" not in fm:

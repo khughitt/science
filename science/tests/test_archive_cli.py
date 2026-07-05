@@ -13,7 +13,7 @@ def _superseded(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
     d = tmp_path / "entities" / "interpretations"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "0001-x.md").write_text("---\nid: interpretation:0001-x\ntype: interpretation\nstatus: superseded\n---\n", encoding="utf-8")
+    (d / "0001-x.md").write_text("---\nid: interpretation:0001-x\nkind: interpretation\nstatus: superseded\n---\n", encoding="utf-8")
 
 
 def test_archive_report_then_apply(tmp_path: Path) -> None:

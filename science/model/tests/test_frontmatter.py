@@ -13,7 +13,7 @@ def test_parse_frontmatter_basic(tmp_path: Path):
     md = tmp_path / "test.md"
     md.write_text("""---
 id: "hypothesis:h01-test"
-type: hypothesis
+kind: hypothesis
 title: "Test hypothesis"
 status: proposed
 tags: [genomics, ml]
@@ -34,7 +34,7 @@ Some rationale here.
     assert result is not None
     fm, body = result
     assert fm["id"] == "hypothesis:h01-test"
-    assert fm["type"] == "hypothesis"
+    assert fm["kind"] == "hypothesis"
     assert fm["tags"] == ["genomics", "ml"]
     assert "This is the body content" in body
 
@@ -48,7 +48,7 @@ def test_parse_entity_file(tmp_path: Path):
     md = tmp_path / "test.md"
     md.write_text("""---
 id: "question:q01-test"
-type: question
+kind: question
 title: "What is X?"
 status: open
 created: 2026-03-01
@@ -141,7 +141,7 @@ def test_parse_entity_file_explicit_id_overrides_path_inference(tmp_path: Path):
     md = interp_dir / "anything.md"
     md.write_text("""---
 id: "discussion:custom-id"
-type: discussion
+kind: discussion
 title: "Misfiled but explicitly typed"
 ---
 
@@ -159,7 +159,7 @@ def test_legacy_tags_silently_dropped(tmp_path: Path) -> None:
     The migrate-tags CLI is the canonical way to migrate legacy tags."""
     md = tmp_path / "h01.md"
     md.write_text(
-        '---\nid: "hypothesis:h01-test"\ntype: hypothesis\ntitle: "Test"\n'
+        '---\nid: "hypothesis:h01-test"\nkind: hypothesis\ntitle: "Test"\n'
         'status: proposed\ntags: [genomics, ml]\nrelated: ["question:q01"]\n'
         "source_refs: []\ncreated: 2026-03-01\n---\nBody.\n"
     )
@@ -180,7 +180,7 @@ def test_parse_entity_file_with_sync_source(tmp_path: Path):
     f.write_text(
         "---\n"
         'id: "question:q-from-other"\n'
-        "type: question\n"
+        "kind: question\n"
         'title: "Propagated question"\n'
         "sync_source:\n"
         '  project: "aging-clocks"\n'
@@ -455,7 +455,7 @@ def test_base_entity_reasoning_fields_parse_from_frontmatter(tmp_path):
     p.parent.mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     p.write_text(
-        "---\nid: proposition:p\ntype: proposition\n"
+        "---\nid: proposition:p\nkind: proposition\n"
         "independence_group: g1\nproxy_directness: indirect\nclaim_layer: mechanistic_narrative\n---\n# P\n",
         encoding="utf-8",
     )

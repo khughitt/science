@@ -14,7 +14,7 @@ def test_hypotheses_checked_under_entities_with_numeric_names(tmp_path: Path) ->
     d = tmp_path / "entities" / "hypotheses"
     d.mkdir(parents=True)
     (d / "0001-x.md").write_text(
-        '---\nid: "hypothesis:0001-x"\ntype: hypothesis\nstatus: proposed\n---\n'
+        '---\nid: "hypothesis:0001-x"\nkind: hypothesis\nstatus: proposed\n---\n'
         "## Falsifiability\n\nIt is falsifiable.\n",
         encoding="utf-8",
     )

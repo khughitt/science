@@ -24,7 +24,7 @@ def test_graph_build_emits_patch_membership_context(tmp_path: Path) -> None:
         tmp_path / "entities" / "hypotheses" / "h1.md",
         [
             'id: "hypothesis:h1"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             'title: "H1"',
             'status: "proposed"',
             "ontology_terms: []",
@@ -36,7 +36,7 @@ def test_graph_build_emits_patch_membership_context(tmp_path: Path) -> None:
         tmp_path / "entities" / "propositions" / "p1.md",
         [
             'id: "proposition:p1"',
-            'type: "proposition"',
+            'kind: "proposition"',
             'title: "P1"',
             'status: "active"',
             "ontology_terms: []",
@@ -49,7 +49,7 @@ def test_graph_build_emits_patch_membership_context(tmp_path: Path) -> None:
         tmp_path / "entities" / "patches" / "local-demo.md",
         [
             'id: "patch-definition:local-demo"',
-            'type: "patch-definition"',
+            'kind: "patch-definition"',
             'title: "Local demo patch"',
             'status: "active"',
             "ontology_terms: []",
@@ -84,7 +84,7 @@ def test_graph_build_excludes_provenance_source_nodes(tmp_path: Path) -> None:
         tmp_path / "entities" / "hypotheses" / "h1.md",
         [
             'id: "hypothesis:h1"',
-            'type: "hypothesis"',
+            'kind: "hypothesis"',
             'title: "H1"',
             'status: "proposed"',
             "ontology_terms: []",
@@ -96,7 +96,7 @@ def test_graph_build_excludes_provenance_source_nodes(tmp_path: Path) -> None:
         tmp_path / "entities" / "propositions" / "p1.md",
         [
             'id: "proposition:p1"',
-            'type: "proposition"',
+            'kind: "proposition"',
             'title: "P1"',
             'status: "active"',
             "ontology_terms: []",
@@ -109,7 +109,7 @@ def test_graph_build_excludes_provenance_source_nodes(tmp_path: Path) -> None:
         tmp_path / "entities" / "patches" / "local-demo.md",
         [
             'id: "patch-definition:local-demo"',
-            'type: "patch-definition"',
+            'kind: "patch-definition"',
             'title: "Local demo patch"',
             'status: "active"',
             "ontology_terms: []",

@@ -132,7 +132,7 @@ def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
             if not abs_path.is_file():
                 continue
             fm = raw_frontmatter(abs_path)
-            if (fm.get("kind") or fm.get("type")) != "dataset":
+            if fm.get("kind") != "dataset":
                 continue
             ident = fm.get("id")
             if isinstance(ident, str) and ident:
@@ -162,7 +162,7 @@ def entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
         if not abs_path.is_file():
             continue
         fm = raw_frontmatter(abs_path)
-        kind = fm.get("kind") or fm.get("type")
+        kind = fm.get("kind")
         if not isinstance(kind, str) or not kind:
             continue
         fm["_path"] = path

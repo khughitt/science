@@ -1,6 +1,6 @@
 ---
 id: question:q00
-type: question
+kind: question
 title: Main research question
 status: active
 created: 2026-05-20

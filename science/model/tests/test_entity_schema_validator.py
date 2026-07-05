@@ -11,7 +11,7 @@ from science_model.entity_schema.validator import (
 def test_validator_rejects_entity_with_missing_schema_profile() -> None:
     validator = EntityValidator()
     with pytest.raises(EntityValidationError, match="schema_profile"):
-        validator.validate({"id": "paper:Adams2025", "type": "paper"})
+        validator.validate({"id": "paper:Adams2025", "kind": "paper"})
 
 
 def test_validator_rejects_malformed_schema_profile() -> None:
@@ -27,7 +27,7 @@ def test_validator_rejects_base_only_schema_profile() -> None:
         validator.validate({
             "schema_profile": "science-entity-base/1.0",
             "id": "paper:Adams2025",
-            "type": "paper",
+            "kind": "paper",
             "title": "x",
             "version": "1.0.0",
             "created": "2026-05-13",

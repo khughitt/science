@@ -17,7 +17,7 @@ def _ctx(root: Path) -> _Ctx:
 def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) -> None:
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "gtex.md").write_text(
-        "---\nid: dataset:gtex\ntype: dataset\ntitle: GTEx\n---\nBody.\n", encoding="utf-8"
+        "---\nid: dataset:gtex\nkind: dataset\ntitle: GTEx\n---\nBody.\n", encoding="utf-8"
     )
     (tmp_path / "data" / "refcoll").mkdir(parents=True)
     (tmp_path / "data" / "refcoll" / "datapackage.yaml").write_text(
@@ -26,7 +26,7 @@ def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) ->
                 "profiles": ["science-pkg-entity-1.0"],
                 "name": "refcoll",
                 "id": "dataset:refcoll",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "Ref coll",
             }
         ),
@@ -51,7 +51,7 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
-        "type: paper\n"
+        "kind: paper\n"
         "title: Adams\n"
         "dataset_usage:\n"
         "  - ref: dataset:gtex-v8\n"
@@ -64,7 +64,7 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:gtex-v8\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: GTEx\n"
         "origin: external\n"
         "tier: use-now\n"
@@ -87,7 +87,7 @@ def test_entity_frontmatters_tolerates_entity_datapackage_missing_title(tmp_path
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: [science-pkg-entity-1.0]\n"
         "id: dataset:gtex-v8\n"
-        "type: dataset\n",
+        "kind: dataset\n",
         encoding="utf-8",
     )
 
@@ -105,7 +105,7 @@ def test_entity_frontmatters_skips_datapackage_with_malformed_profiles(tmp_path:
     (dp_dir / "datapackage.yaml").write_text(
         "profiles: 1\n"
         "id: dataset:gtex-v8\n"
-        "type: dataset\n"
+        "kind: dataset\n"
         "title: GTEx\n",
         encoding="utf-8",
     )
@@ -119,9 +119,9 @@ def test_raw_frontmatter_shared_helper_reads_markdown_and_yaml(tmp_path: Path) -
     from science_tool.commons.frontmatter import raw_frontmatter
 
     md = tmp_path / "entity.md"
-    md.write_text("---\nid: paper:Adams2025\ntype: paper\n---\nBody\n", encoding="utf-8")
+    md.write_text("---\nid: paper:Adams2025\nkind: paper\n---\nBody\n", encoding="utf-8")
     yaml_path = tmp_path / "datapackage.yaml"
-    yaml_path.write_text("id: dataset:gtex-v8\ntype: dataset\n", encoding="utf-8")
+    yaml_path.write_text("id: dataset:gtex-v8\nkind: dataset\n", encoding="utf-8")
 
     assert raw_frontmatter(md)["id"] == "paper:Adams2025"
     assert raw_frontmatter(yaml_path)["id"] == "dataset:gtex-v8"

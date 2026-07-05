@@ -192,7 +192,7 @@ def test_reference_dataset_promotes_without_datapackage_or_data_override(
         "catalog-ref",
         (
             "id: dataset:catalog-ref\n"
-            "type: dataset\n"
+            "kind: dataset\n"
             "title: Catalog Reference\n"
             "dataset_class: reference\n"
             "origin: external\n"
@@ -245,7 +245,7 @@ def test_pointer_dataset_promotes_as_metadata_stub_with_runtime_state(
         "pointer-only",
         (
             "id: dataset:pointer-only\n"
-            "type: dataset\n"
+            "kind: dataset\n"
             "title: Pointer Only\n"
             "dataset_class: pointer\n"
             "origin: external\n"

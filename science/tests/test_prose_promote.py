@@ -188,7 +188,7 @@ def test_promote_prose_unit_links_existing_proposition_and_appends_two_refs(tmp_
     dest.write_text(
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Basalt flows record the cooling history.\n"
         "status: active\n"
         "source_refs: []\n"
@@ -223,7 +223,7 @@ def test_promote_prose_unit_recovers_index_when_retry_sees_linked_ref_without_du
     dest.write_text(
         "---\n"
         "id: proposition:existing\n"
-        "type: proposition\n"
+        "kind: proposition\n"
         "title: Basalt flows record the cooling history.\n"
         "status: active\n"
         "source_refs: []\n"

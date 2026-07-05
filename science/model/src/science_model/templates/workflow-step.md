@@ -1,6 +1,6 @@
 ---
 id: "step:<slug>"
-type: "workflow-step"
+kind: "workflow-step"
 title: "<Step Name>"
 status: "planned"
 workflow: "<workflow-slug>"

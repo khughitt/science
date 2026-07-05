@@ -33,7 +33,7 @@ def _write_cross_paper_proposition(root: Path, slug: str, source_refs: list[str]
     path.parent.mkdir(parents=True, exist_ok=True)
     refs = "".join(f"  - {ref}\n" for ref in source_refs)
     path.write_text(
-        f"---\nid: proposition:{slug}\ntype: proposition\ntitle: {slug}\nstatus: active\n"
+        f"---\nid: proposition:{slug}\nkind: proposition\ntitle: {slug}\nstatus: active\n"
         f"source_refs:\n{refs}---\n\nClaim.\n",
         encoding="utf-8",
     )
@@ -169,7 +169,7 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
             [
                 "---",
                 'id: "question:q01"',
-                'type: "question"',
+                'kind: "question"',
                 'title: "Question"',
                 'related: ["gene:RBL1"]',
                 'source_refs: ["gene:RBL1"]',
@@ -193,7 +193,7 @@ def _write_layered_claim_project(tmp_path: Path) -> Path:
             [
                 "---",
                 'id: "proposition:p01"',
-                'type: "proposition"',
+                'kind: "proposition"',
                 'title: "Causal proposition"',
                 'status: "draft"',
                 'claim_layer: "causal_effect"',
@@ -216,7 +216,7 @@ def _write_layered_claim_project(tmp_path: Path) -> Path:
             [
                 "---",
                 'id: "proposition:p02"',
-                'type: "proposition"',
+                'kind: "proposition"',
                 'title: "Mechanistic proposition"',
                 'status: "draft"',
                 "related: []",
@@ -242,12 +242,12 @@ class TestCollectUnresolvedRefs:
         spec.mkdir(parents=True)
         # Two hypotheses both reference topic:foo (which doesn't exist)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:foo]\nsource_refs: []\n'
             'created: "2026-04-13"\n---\nBody.\n'
         )
         (spec / "h02.md").write_text(
-            '---\nid: "hypothesis:h02"\ntype: "hypothesis"\ntitle: "H2"\n'
+            '---\nid: "hypothesis:h02"\nkind: "hypothesis"\ntitle: "H2"\n'
             'status: "proposed"\nrelated: [topic:foo, topic:bar]\nsource_refs: []\n'
             'created: "2026-04-13"\n---\nBody.\n'
         )
@@ -269,7 +269,7 @@ class TestCollectUnresolvedRefs:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [meta:phase3b]\nsource_refs: []\n'
             'created: "2026-04-13"\n---\nBody.\n'
         )
@@ -284,7 +284,7 @@ class TestCollectUnresolvedRefs:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:t143]\nsource_refs: []\n'
             'created: "2026-04-13"\n---\nBody.\n'
         )
@@ -300,7 +300,7 @@ class TestCollectUnresolvedRefs:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:q05-foo, topic:h99-bar, topic:genomics]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
@@ -320,12 +320,12 @@ class TestCollectLingeringTags:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\ntags: [legacy-tag]\nrelated: []\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
         (spec / "h02.md").write_text(  # No tags line
-            '---\nid: "hypothesis:h02"\ntype: "hypothesis"\ntitle: "H2"\n'
+            '---\nid: "hypothesis:h02"\nkind: "hypothesis"\ntitle: "H2"\n'
             'status: "proposed"\nrelated: []\nsource_refs: []\n'
             'created: "2026-04-13"\n---\nBody.\n'
         )
@@ -367,14 +367,14 @@ class TestBuildHealthReport:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:foo]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
         tagged = tmp_path / "entities" / "hypotheses"
         tagged.mkdir(parents=True, exist_ok=True)
         (tagged / "q01.md").write_text(
-            '---\nid: "hypothesis:h02"\ntype: "hypothesis"\ntitle: "H2"\n'
+            '---\nid: "hypothesis:h02"\nkind: "hypothesis"\ntitle: "H2"\n'
             'status: "proposed"\ntags: [legacy]\nrelated: []\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
@@ -471,7 +471,7 @@ class TestBuildHealthReport:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'related: ["gadget:missing", "gizmo:d1"]\n'
@@ -764,7 +764,7 @@ health:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'related: ["decision:d1"]\n'
@@ -808,7 +808,7 @@ health:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'related: ["gadget:d1", "hypothesis:h01"]\n'
@@ -856,7 +856,7 @@ health:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'related: ["immunity:topic:sex-hormone-life-stage-immune-homeostasis", "gadget:d1"]\n'
@@ -886,7 +886,7 @@ health:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'source_refs: ["cite:Smith2024"]\n'
@@ -1014,7 +1014,7 @@ class TestHealthCLI:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:missing, gizmo:d1]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
@@ -1036,7 +1036,7 @@ class TestHealthCLI:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:missing]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
@@ -1073,7 +1073,7 @@ class TestHealthCLI:
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
             'status: "proposed"\nrelated: [topic:missing]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n',
             encoding="utf-8",
@@ -1098,7 +1098,7 @@ class TestHealthCLI:
         (doc / "q01.md").write_text(
             "---\n"
             'id: "question:q01"\n'
-            'type: "question"\n'
+            'kind: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
             'related: ["gadget:missing", "gizmo:d1"]\n'
@@ -1569,7 +1569,7 @@ def _write_dataset(p: Path, slug: str, *, origin: str, body: str) -> Path:
     f = p / "entities" / "datasets" / f"{slug}.md"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(
-        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "{origin}"\n{body}\n---\n',
+        f'---\nid: "dataset:{slug}"\nkind: "dataset"\ntitle: "{slug}"\norigin: "{origin}"\n{body}\n---\n',
         encoding="utf-8",
     )
     return f
@@ -1642,7 +1642,7 @@ def _write_workflow_run(p: Path, slug: str, *, produces: list[str], inputs: list
     f = p / "entities" / "workflow-runs" / f"{slug}.md"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(
-        f'---\nid: "workflow-run:{slug}"\ntype: "workflow-run"\ntitle: "{slug}"\n'
+        f'---\nid: "workflow-run:{slug}"\nkind: "workflow-run"\ntitle: "{slug}"\n'
         f'workflow: "workflow:wf"\nproduces: {produces}\ninputs: {inputs}\n---\n',
         encoding="utf-8",
     )
@@ -1833,7 +1833,7 @@ def _write_research_package(p: Path, slug: str, *, displays: list[str]) -> None:
     f = p / "research" / "packages" / "lens" / slug / "research-package.md"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(
-        f'---\nid: "research-package:{slug}"\ntype: "research-package"\ntitle: "{slug}"\ndisplays: {displays}\n---\n',
+        f'---\nid: "research-package:{slug}"\nkind: "research-package"\ntitle: "{slug}"\ndisplays: {displays}\n---\n',
         encoding="utf-8",
     )
 
@@ -1908,7 +1908,7 @@ def test_umbrella_in_consumed_by_flagged(tmp_path: Path) -> None:
     )
     f = tmp_path / "entities" / "datasets" / "consumer.md"
     f.write_text(
-        '---\nid: "dataset:consumer"\ntype: "dataset"\ntitle: "Consumer"\norigin: "external"\n'
+        '---\nid: "dataset:consumer"\nkind: "dataset"\ntitle: "Consumer"\norigin: "external"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://z"}\n'
         'consumed_by: ["dataset:umb"]\n---\n',
         encoding="utf-8",
@@ -1978,7 +1978,7 @@ def test_cached_field_drift_skips_datapackage_directory_entities(tmp_path: Path)
                 "profiles": ["science-pkg-runtime-1.0", "science-pkg-entity-1.0"],
                 "name": "myset",
                 "id": "dataset:myset",
-                "type": "dataset",
+                "kind": "dataset",
                 "title": "My promoted set",
                 "license": "CC-BY-4.0",
                 "ontology_terms": ["UBERON:0001"],

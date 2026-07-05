@@ -188,12 +188,6 @@ def _normalize_kind(raw: str) -> str:
     return kind
 
 
-def _project_type_for_kind(kind: str, *, legacy_type_input: bool) -> EntityType | None:
-    if legacy_type_input and kind == EntityType.UNKNOWN.value:
-        return EntityType.UNKNOWN
-    return core_entity_type_for_kind(kind)
-
-
 def _infer_kind_from_id(entity_id: str) -> str | None:
     """Infer entity kind from the id prefix (e.g. 'hypothesis:h01' → 'hypothesis')."""
     if ":" not in entity_id:
@@ -203,7 +197,7 @@ def _infer_kind_from_id(entity_id: str) -> str | None:
 
 
 # Maps canonical entity-bearing directory names (plural) to their singular entity kind.
-# Used as a fallback when frontmatter omits both `kind:`/`type:` and `id:`. Keep aligned with
+# Used as a fallback when frontmatter omits both `kind:` and `id:`. Keep aligned with
 # convention: `doc/<plural>/` files are entities of `<singular>` kind, plus root `specs/`.
 _DIR_TO_KIND: dict[str, str] = {
     "interpretations": "interpretation",
@@ -347,12 +341,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
 
     fm, body = result
     raw_kind = fm.get("kind")
-    raw_type = fm.get("type")
-    legacy_type_input = raw_kind is None and isinstance(raw_type, str)
-
     kind = _normalize_kind(str(raw_kind)) if raw_kind else None
-    if kind is None and isinstance(raw_type, str):
-        kind = _normalize_kind(raw_type)
     if kind is None:
         entity_id = fm.get("id", "")
         inferred = _infer_kind_from_id(entity_id) if entity_id else None
@@ -363,7 +352,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         else:
             return None
 
-    entity_type = _project_type_for_kind(kind, legacy_type_input=legacy_type_input)
+    entity_type = core_entity_type_for_kind(kind)
 
     rel_path = str(path)
     # Try to make relative to project root

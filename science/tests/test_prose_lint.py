@@ -473,7 +473,7 @@ class TestNumericAnchor:
         path.write_text(
             "---\n"
             "id: paper:Smith2024\n"
-            "type: paper\n"
+            "kind: paper\n"
             "source_refs:\n"
             "  - doi:10.1000/example\n"
             "---\n"
@@ -488,7 +488,7 @@ class TestNumericAnchor:
         paper_dir.mkdir(parents=True)
         path = paper_dir / "Smith2024.md"
         path.write_text(
-            "---\nid: paper:Smith2024\ntype: paper\n---\nThe cohort included 123 participants.\n",
+            "---\nid: paper:Smith2024\nkind: paper\n---\nThe cohort included 123 participants.\n",
             encoding="utf-8",
         )
 
@@ -647,7 +647,7 @@ class TestUnsupportedCitationSyntax:
         (tmp_path / "entities" / "papers" / "paper.md").write_text(
             "---\n"
             "id: paper:Example2026\n"
-            "type: paper\n"
+            "kind: paper\n"
             "title: Example\n"
             "correspondence: author@example.edu\n"
             "---\n"

@@ -180,7 +180,7 @@ def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_p
         "\n".join(
             [
                 "---",
-                "type: pre-registration",
+                "kind: pre-registration",
                 "committed: 2026-01-01",
                 "spec: ''",
                 "---",
@@ -259,7 +259,7 @@ def test_prereg_discovers_entities_pre_registrations(tmp_path: Path) -> None:
     ent_dir.mkdir(parents=True)
     # Only has one section → should warn for the missing three
     ent_dir.joinpath("0001-x.md").write_text(
-        "---\ntype: pre-registration\ncommitted: 2026-01-01\nspec: ''\n---\n"
+        "---\nkind: pre-registration\ncommitted: 2026-01-01\nspec: ''\n---\n"
         "## Hypotheses Under Test\n",
         encoding="utf-8",
     )
@@ -349,10 +349,10 @@ def test_synthesis_frontmatter_gates_on_type_and_validates_report_kind(tmp_path:
     ctx = _ctx(tmp_path)
     synthesis_dir = tmp_path / "entities" / "synthesis"
     synthesis_dir.mkdir(parents=True)
-    synthesis_dir.joinpath("ignored.md").write_text("type: report\n", encoding="utf-8")
-    synthesis_dir.joinpath("missing-kind.md").write_text("type: synthesis\n", encoding="utf-8")
+    synthesis_dir.joinpath("ignored.md").write_text("kind: report\n", encoding="utf-8")
+    synthesis_dir.joinpath("missing-kind.md").write_text("kind: synthesis\n", encoding="utf-8")
     synthesis_dir.joinpath("invalid-kind.md").write_text(
-        "\n".join(["type: synthesis", "report_kind: other", "source_commit: abc"]),
+        "\n".join(["kind: synthesis", "report_kind: other", "source_commit: abc"]),
         encoding="utf-8",
     )
 
@@ -384,15 +384,15 @@ def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:
     synthesis_dir = tmp_path / "entities" / "synthesis"
     synthesis_dir.mkdir(parents=True)
     synthesis_dir.joinpath("rollup.md").write_text(
-        "\n".join(["type: synthesis", "report_kind: synthesis-rollup", "source_commit: abc"]),
+        "\n".join(["kind: synthesis", "report_kind: synthesis-rollup", "source_commit: abc"]),
         encoding="utf-8",
     )
     synthesis_dir.joinpath("hypothesis.md").write_text(
-        "\n".join(["type: synthesis", "report_kind: hypothesis-synthesis", "source_commit: abc", "hypothesis: h1"]),
+        "\n".join(["kind: synthesis", "report_kind: hypothesis-synthesis", "source_commit: abc", "hypothesis: h1"]),
         encoding="utf-8",
     )
     synthesis_dir.joinpath("emergent.md").write_text(
-        "\n".join(["type: synthesis", "report_kind: emergent-threads", "source_commit: abc", "orphan_ids: []"]),
+        "\n".join(["kind: synthesis", "report_kind: emergent-threads", "source_commit: abc", "orphan_ids: []"]),
         encoding="utf-8",
     )
 

@@ -1,6 +1,6 @@
 ---
 id: "story:{{story_id}}"
-type: "story"
+kind: "story"
 title: "{{title}}"
 about: "{{question_or_hypothesis_ref}}"
 status: "draft"  # draft | developing | mature

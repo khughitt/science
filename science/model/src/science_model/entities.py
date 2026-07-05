@@ -404,6 +404,9 @@ class Entity(BaseModel):
     @model_validator(mode="after")
     def _validate_kind_type_consistency(self) -> "Entity":
         expected = core_entity_type_for_kind(self.kind)
+        if self.type is None:
+            self.type = expected
+            return self
         if self.type != expected:
             raise ValueError("kind/type mismatch")
         return self

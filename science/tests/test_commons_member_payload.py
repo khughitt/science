@@ -35,7 +35,7 @@ def _base_dataset_frontmatter(
     text = (
         f'schema_profile: "{schema_profile}"\n'
         f'id: "dataset:{slug}"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         f'title: "{title}"\n'
         'version: "1.0.0"\n'
         'status: "active"\n'

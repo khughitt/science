@@ -27,9 +27,9 @@ def _supersedes(target: str) -> dict:
 def test_report_linear_chain_lists_members(tmp_path: Path) -> None:
     _seed(tmp_path)
     # v3 <- v4 <- v5 : v5 supersedes v4, v4 supersedes v3. Survivor = v5.
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation"})
-    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
-    _write(tmp_path, "interpretations", "i-v5", {"id": "interpretation:i-v5", "type": "interpretation", "relations": [_supersedes("interpretation:i-v4")]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "kind": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v5", {"id": "interpretation:i-v5", "kind": "interpretation", "relations": [_supersedes("interpretation:i-v4")]})
 
     from science_tool.consolidation import mark_superseded
 
@@ -48,8 +48,8 @@ def test_report_linear_chain_lists_members(tmp_path: Path) -> None:
 def test_amends_relation_does_not_mark_superseded(tmp_path: Path) -> None:
     _seed(tmp_path)
     # sci:amends is a revision, NOT a replacement — it must not mark the target.
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation"})
-    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "relations": [{"predicate": "sci:amends", "target": "interpretation:i-v3"}]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "kind": "interpretation", "relations": [{"predicate": "sci:amends", "target": "interpretation:i-v3"}]})
 
     from science_tool.consolidation import mark_superseded
 
@@ -60,8 +60,8 @@ def test_amends_relation_does_not_mark_superseded(tmp_path: Path) -> None:
 
 def test_report_skips_already_superseded_members(tmp_path: Path) -> None:
     _seed(tmp_path)
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation", "status": "superseded"})
-    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation", "status": "superseded"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "kind": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
 
     from science_tool.consolidation import mark_superseded
 
@@ -76,9 +76,9 @@ def test_report_skips_already_superseded_members(tmp_path: Path) -> None:
 def test_report_flags_non_linear_chain_and_skips_it(tmp_path: Path) -> None:
     _seed(tmp_path)
     # Branched: both v4a and v4b supersede v3 (v3 has in-degree 2). Ambiguous.
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation"})
-    _write(tmp_path, "interpretations", "i-v4a", {"id": "interpretation:i-v4a", "type": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
-    _write(tmp_path, "interpretations", "i-v4b", {"id": "interpretation:i-v4b", "type": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation"})
+    _write(tmp_path, "interpretations", "i-v4a", {"id": "interpretation:i-v4a", "kind": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v4b", {"id": "interpretation:i-v4b", "kind": "interpretation", "relations": [_supersedes("interpretation:i-v3")]})
 
     from science_tool.consolidation import mark_superseded
 
@@ -97,8 +97,8 @@ def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_pat
     _seed(tmp_path)
     # workflow-run is supersedes-eligible but declares NO status vocabulary.
     # The member must be reported under skipped_kinds, never crash.
-    _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "type": "workflow-run"})
-    _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "type": "workflow-run", "relations": [_supersedes("workflow-run:wr-old")]})
+    _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "kind": "workflow-run"})
+    _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "kind": "workflow-run", "relations": [_supersedes("workflow-run:wr-old")]})
 
     from science_tool.consolidation import mark_superseded
 
@@ -110,8 +110,8 @@ def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_pat
 
 def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
     _seed(tmp_path)
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation", "title": "v3"})
-    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation", "title": "v3"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "kind": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
 
     from science_tool.big_picture.frontmatter import read_frontmatter
     from science_tool.consolidation import mark_superseded
@@ -135,8 +135,8 @@ def test_cli_mark_superseded_dry_run_emits_json(tmp_path: Path) -> None:
     from science_tool.cli import main
 
     _seed(tmp_path)
-    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation", "title": "v3"})
-    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "kind": "interpretation", "title": "v3"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "kind": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
 
     runner = CliRunner()
     result = runner.invoke(

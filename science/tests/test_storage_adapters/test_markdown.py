@@ -16,7 +16,7 @@ def test_adapter_name() -> None:
 def test_discovers_under_default_scan_roots(tmp_path: Path) -> None:
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     (tmp_path / "entities" / "hypotheses" / "h1.md").write_text(
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\nProse.\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\nProse.\n',
         encoding="utf-8",
     )
     (tmp_path / "research" / "packages").mkdir(parents=True)
@@ -36,7 +36,7 @@ def test_load_raw_returns_dispatchable_dict(tmp_path: Path, monkeypatch: pytest.
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     p = tmp_path / "entities" / "hypotheses" / "h1.md"
     p.write_text(
-        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\nBody prose.\n',
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\nBody prose.\n',
         encoding="utf-8",
     )
     adapter = MarkdownAdapter()
@@ -54,7 +54,7 @@ def test_load_raw_returns_dispatchable_dict(tmp_path: Path, monkeypatch: pytest.
 def test_custom_scan_roots_honored(tmp_path: Path) -> None:
     (tmp_path / "custom").mkdir()
     (tmp_path / "custom" / "c.md").write_text(
-        '---\nid: "concept:c"\ntype: "concept"\ntitle: "C"\n---\n',
+        '---\nid: "concept:c"\nkind: "concept"\ntitle: "C"\n---\n',
         encoding="utf-8",
     )
     refs = MarkdownAdapter(scan_roots=["custom"]).discover(tmp_path)
@@ -85,7 +85,7 @@ def test_load_raw_handles_file_without_frontmatter(tmp_path: Path, monkeypatch: 
 def test_virtual_markdown_override_is_discovered_and_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = MarkdownAdapter(
         virtual_files={
-            "entities/questions/q01-example.md": '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Q1"\n---\nBody.\n'
+            "entities/questions/q01-example.md": '---\nid: "question:q01-example"\nkind: "question"\ntitle: "Q1"\n---\nBody.\n'
         }
     )
 
@@ -102,12 +102,12 @@ def test_virtual_markdown_override_is_discovered_and_loaded(tmp_path: Path, monk
 def test_virtual_markdown_override_replaces_disk_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "doc" / "questions").mkdir(parents=True)
     (tmp_path / "doc" / "questions" / "q01-example.md").write_text(
-        '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Old"\n---\nOld body.\n',
+        '---\nid: "question:q01-example"\nkind: "question"\ntitle: "Old"\n---\nOld body.\n',
         encoding="utf-8",
     )
     adapter = MarkdownAdapter(
         virtual_files={
-            "entities/questions/q01-example.md": '---\nid: "question:q01-example"\ntype: "question"\ntitle: "New"\n---\nNew body.\n'
+            "entities/questions/q01-example.md": '---\nid: "question:q01-example"\nkind: "question"\ntitle: "New"\n---\nNew body.\n'
         }
     )
 
@@ -123,7 +123,7 @@ def test_virtual_markdown_override_replaces_disk_file(tmp_path: Path, monkeypatc
 def test_md_tmp_files_are_not_discovered(tmp_path: Path) -> None:
     (tmp_path / "doc" / "questions").mkdir(parents=True)
     (tmp_path / "doc" / "questions" / "q01-example.md.tmp").write_text(
-        '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Q1"\n---\n',
+        '---\nid: "question:q01-example"\nkind: "question"\ntitle: "Q1"\n---\n',
         encoding="utf-8",
     )
 

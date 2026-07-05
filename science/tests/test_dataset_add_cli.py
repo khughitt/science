@@ -257,12 +257,12 @@ def test_dataset_link_adds_dataset_to_question_datasets(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
         "entities/datasets/my-set.md",
-        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+        'id: "dataset:my-set"\nkind: "dataset"\ntitle: "My Set"\n',
     )
     target = _write_entity(
         tmp_path,
         "entities/questions/q.md",
-        'id: "question:q"\ntype: "question"\ntitle: "Q"\ndatasets: []\n',
+        'id: "question:q"\nkind: "question"\ntitle: "Q"\ndatasets: []\n',
         body="# Q\n\nBody stays.\n",
     )
 
@@ -279,12 +279,12 @@ def test_dataset_link_is_idempotent(tmp_path: Path) -> None:
     _write_entity(
         tmp_path,
         "entities/datasets/my-set.md",
-        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+        'id: "dataset:my-set"\nkind: "dataset"\ntitle: "My Set"\n',
     )
     target = _write_entity(
         tmp_path,
         "entities/hypotheses/h.md",
-        'id: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\ndatasets:\n  - dataset:my-set\n',
+        'id: "hypothesis:h"\nkind: "hypothesis"\ntitle: "H"\ndatasets:\n  - dataset:my-set\n',
     )
 
     res = _link(tmp_path, "dataset:my-set", "hypothesis:h")
@@ -299,12 +299,12 @@ def test_dataset_link_rejects_non_question_hypothesis_target(tmp_path: Path) -> 
     _write_entity(
         tmp_path,
         "entities/datasets/my-set.md",
-        'id: "dataset:my-set"\ntype: "dataset"\ntitle: "My Set"\n',
+        'id: "dataset:my-set"\nkind: "dataset"\ntitle: "My Set"\n',
     )
     _write_entity(
         tmp_path,
         "entities/papers/Paper2026.md",
-        'id: "paper:Paper2026"\ntype: "paper"\ntitle: "Paper"\n',
+        'id: "paper:Paper2026"\nkind: "paper"\ntitle: "Paper"\n',
     )
 
     res = _link(tmp_path, "my-set", "paper:Paper2026")

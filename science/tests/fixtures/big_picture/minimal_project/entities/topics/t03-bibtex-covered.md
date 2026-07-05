@@ -1,6 +1,6 @@
 ---
 id: "topic:t03-bibtex-covered"
-type: "topic"
+kind: "topic"
 related: []
 source_refs: [cite:Smith2024]
 ---

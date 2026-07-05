@@ -70,7 +70,7 @@ def _write_proposition_with_refs(root: Path, refs: list[str]) -> Path:
         "\n".join(
             [
                 "---",
-                "type: proposition",
+                "kind: proposition",
                 "title: P1",
                 "status: active",
                 "created: '2026-06-30'",
@@ -319,7 +319,7 @@ def test_unstanced_4d_coverage_does_not_load_unrelated_invalid_entities(tmp_path
             [
                 "---",
                 "id: evidence-line:bad",
-                "type: evidence-line",
+                "kind: evidence-line",
                 "title: Bad",
                 "status: active",
                 "created: '2026-06-30'",

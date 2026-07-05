@@ -45,15 +45,15 @@ def _seed_profile(root: Path, *, layout_version: int) -> None:
 
 def test_local_kind_in_wrong_entities_home_is_flagged(tmp_path: Path) -> None:
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
+    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\nkind: design\n---\nb\n')
     results = list(check_entity_location_coherence(_ctx(tmp_path)))
     msgs = [r.message for r in results]
-    assert any("type 'design' in question/ directory" in m for m in msgs)
+    assert any("kind 'design' in question/ directory" in m for m in msgs)
     assert any("id kind 'design' in question/ directory" in m for m in msgs)
 
 
 def test_local_kind_stranded_in_doc_is_not_scanned(tmp_path: Path) -> None:
-    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
+    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\nkind: design\n---\nb\n')
     _seed_profile(tmp_path, layout_version=3)
     results = list(check_entity_location_coherence(_ctx(tmp_path)))
     assert results == []
@@ -65,7 +65,7 @@ def test_local_kind_nonconforming_filename_flagged(tmp_path: Path) -> None:
     _write(
         tmp_path,
         "entities/design/bad.md",
-        '---\nid: "design:bad"\ntype: design\ntitle: Bad\nstatus: active\n'
+        '---\nid: "design:bad"\nkind: design\ntitle: Bad\nstatus: active\n'
         'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n',
     )
     msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
@@ -77,7 +77,7 @@ def test_local_kind_conforming_filename_is_clean(tmp_path: Path) -> None:
     _write(
         tmp_path,
         "entities/design/0001-good.md",
-        '---\nid: "design:0001-good"\ntype: design\ntitle: Good\nstatus: active\n'
+        '---\nid: "design:0001-good"\nkind: design\ntitle: Good\nstatus: active\n'
         'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n',
     )
     msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
@@ -88,8 +88,8 @@ def test_core_and_local_wrong_entities_home_both_flagged(tmp_path: Path) -> None
     # With a local profile loaded, BOTH a misplaced core kind and a misplaced
     # local kind must be flagged (project-awareness must not hide core kinds).
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
-    _write(tmp_path, "entities/design/q.md", '---\nid: "question:q"\ntype: question\n---\nb\n')
+    _write(tmp_path, "entities/questions/x.md", '---\nid: "design:x"\nkind: design\n---\nb\n')
+    _write(tmp_path, "entities/design/q.md", '---\nid: "question:q"\nkind: question\n---\nb\n')
     msgs = [r.message for r in check_entity_location_coherence(_ctx(tmp_path))]
     assert any("id kind 'design' in question/ directory" in m for m in msgs)
     assert any("id kind 'question' in design/ directory" in m for m in msgs)

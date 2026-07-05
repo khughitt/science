@@ -154,7 +154,7 @@ already has.
 
 ## Generate — Phase 4: Report
 
-Write `entities/meta/explorations/explore-<YYYY-MM-DD>.md` with `type: meta`
+Write `entities/meta/explorations/explore-<YYYY-MM-DD>.md` with `kind: meta`
 frontmatter. If a report for today already exists, suffix with `-<HHMM>`
 rather than overwrite it.
 

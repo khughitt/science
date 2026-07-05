@@ -29,7 +29,7 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
                 "references": [
                     {
                         "id": "protein:BCMA",
-                        "type": "protein",
+                        "kind": "protein",
                         "title": "BCMA",
                         "primary_external_id": {
                             "source": "UniProtKB",
@@ -65,7 +65,7 @@ def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path
                 "references": [
                     {
                         "id": "protein:BCMA",
-                        "type": "protein",
+                        "kind": "protein",
                         "title": "BCMA",
                         "primary_external_id": {
                             "source": "UniProtKB",

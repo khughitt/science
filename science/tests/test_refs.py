@@ -96,7 +96,7 @@ def test_slug_named_hypothesis_file_resolves_legacy_h_alias_and_self_reference()
         (root / "entities" / "hypotheses" / "higher-order-topology.md").write_text(
             "---\n"
             "id: hypothesis:h03-higher-order-topology\n"
-            "type: hypothesis\n"
+            "kind: hypothesis\n"
             "title: Higher-order topology\n"
             "---\n\n"
             "# H03: Higher-order topology\n\n"
@@ -120,7 +120,7 @@ def test_slug_named_hypothesis_file_uses_heading_alias_for_self_reference() -> N
         (root / "entities" / "hypotheses" / "higher-order-topology.md").write_text(
             "---\n"
             "id: hypothesis:higher-order-topology\n"
-            "type: hypothesis\n"
+            "kind: hypothesis\n"
             "title: Higher-order topology\n"
             "---\n\n"
             "# H03: Higher-order topology\n\n"
@@ -143,7 +143,7 @@ def test_v3_hypothesis_ref_resolves_from_entities_dir_via_heading() -> None:
         (root / "entities" / "hypotheses" / "0001-rhythms.md").write_text(
             "---\n"
             "id: hypothesis:0001-rhythms\n"
-            "type: hypothesis\n"
+            "kind: hypothesis\n"
             "title: Rhythms\n"
             "---\n\n"
             "# H01: Rhythms are control structure\n"
@@ -167,7 +167,7 @@ def test_v3_hypothesis_ref_resolves_from_numeric_id_prefix_without_heading_label
         (root / "entities" / "hypotheses" / "0003-menstrual-cycle.md").write_text(
             "---\n"
             "id: hypothesis:0003-menstrual-cycle\n"
-            "type: hypothesis\n"
+            "kind: hypothesis\n"
             "title: Menstrual cycle\n"
             "---\n\n"
             "# Hypothesis: The menstrual cycle is a systemic control rhythm\n"
@@ -205,7 +205,7 @@ def test_broken_ref_inside_entities_dir_is_scanned() -> None:
         _scaffold(root)
         (root / "entities" / "papers").mkdir(parents=True)
         (root / "entities" / "papers" / "Foo2024.md").write_text(
-            "---\nid: paper:Foo2024\ntype: paper\ntitle: Foo\n---\n\nAs shown by [@Ghost2099], this holds.\n"
+            "---\nid: paper:Foo2024\nkind: paper\ntitle: Foo\n---\n\nAs shown by [@Ghost2099], this holds.\n"
         )
         issues = check_refs(root)
         cite_issues = [i for i in issues if i.ref_type == "citation" and "Foo2024.md" in i.file]
@@ -247,7 +247,7 @@ def test_valid_frontmatter_cite_ref() -> None:
         (root / "doc" / "background" / "topics" / "test.md").write_text(
             "---\n"
             'id: "topic:test"\n'
-            'type: "topic"\n'
+            'kind: "topic"\n'
             'title: "Test"\n'
             'source_refs: ["cite:Smith2024"]\n'
             "---\n"
@@ -268,7 +268,7 @@ def test_missing_frontmatter_cite_ref_is_flagged() -> None:
         (root / "doc" / "background" / "topics" / "test.md").write_text(
             "---\n"
             'id: "topic:test"\n'
-            'type: "topic"\n'
+            'kind: "topic"\n'
             'title: "Test"\n'
             'source_refs: ["cite:Jones2023"]\n'
             "---\n"
@@ -883,7 +883,7 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared()
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
+            "---\nid: question:x\nkind: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -987,7 +987,7 @@ def test_unknown_namespace_is_reported() -> None:
         _scaffold(root)
         (root / "science.yaml").write_text("name: demo\nid: demo\n", encoding="utf-8")
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
+            "---\nid: question:x\nkind: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -1011,7 +1011,7 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\nid: question:x\ntype: question\nrelated: [cbioportal:q014]\n---\n\n# X\n",
+            "---\nid: question:x\nkind: question\nrelated: [cbioportal:q014]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -1115,7 +1115,7 @@ def test_doi_check_skipped_in_entities_papers() -> None:
         )
         (root / "entities" / "papers").mkdir(parents=True, exist_ok=True)
         (root / "entities" / "papers" / "Jones2025.md").write_text(
-            "---\nid: paper:Jones2025\ntype: paper\ntitle: Jones\n---\n\n"
+            "---\nid: paper:Jones2025\nkind: paper\ntitle: Jones\n---\n\n"
             "- DOI: 10.5281/zenodo.123456\n"
         )
         # A reference to the entities/papers-declared DOI from ordinary prose.
@@ -1134,7 +1134,7 @@ def test_pmid_check_skipped_in_entities_papers() -> None:
         _scaffold_with_bib(root, "@article{Smith2024,\n  title={X},\n}\n")
         (root / "entities" / "papers").mkdir(parents=True, exist_ok=True)
         (root / "entities" / "papers" / "Jones2025.md").write_text(
-            "---\nid: paper:Jones2025\ntype: paper\ntitle: Jones\n---\n\nPMID: 31690722\n"
+            "---\nid: paper:Jones2025\nkind: paper\ntitle: Jones\n---\n\nPMID: 31690722\n"
         )
         (root / "doc" / "background" / "topics" / "x.md").write_text(
             "# X\nSee PMID: 31690722 for details.\n"
@@ -1225,7 +1225,7 @@ def test_doi_pmid_check_skips_uncatalogued_reading_queue_rows() -> None:
         )
         (root / "entities" / "plans").mkdir(parents=True, exist_ok=True)
         (root / "entities" / "plans" / "0084-reading.md").write_text(
-            "---\nid: plan:0084-reading\ntype: plan\ntitle: Reading\n---\n"
+            "---\nid: plan:0084-reading\nkind: plan\ntitle: Reading\n---\n"
             "| source | status | identifier |\n"
             "|---|---|---|\n"
             "| candidate A | missing | DOI: 10.9999/missing.123 |\n"
@@ -1351,7 +1351,7 @@ def test_load_entity_index_collects_kind_id_pairs(tmp_path):
     (tmp_path / "doc" / "q01.md").write_text(
         "---\n"
         "id: question:q01-foo\n"
-        "type: question\n"
+        "kind: question\n"
         "---\n"
         "Body.\n"
     )
@@ -1364,7 +1364,7 @@ def test_load_entity_index_collects_kind_id_pairs(tmp_path):
     )
     (tmp_path / "doc" / "no-id.md").write_text(
         "---\n"
-        "type: discussion\n"
+        "kind: discussion\n"
         "---\n"
         "Body.\n"
     )
@@ -1411,7 +1411,7 @@ class TestBodyTypedRefScan:
     def _project(self, tmp_path):
         (tmp_path / "doc").mkdir()
         (tmp_path / "doc" / "q01.md").write_text(
-            "---\nid: question:q01-foo\ntype: question\n---\nBody.\n"
+            "---\nid: question:q01-foo\nkind: question\n---\nBody.\n"
         )
         (tmp_path / "doc" / "t050.md").write_text(
             "---\nid: task:t050\ntype: task\n---\nBody.\n"
@@ -1423,7 +1423,7 @@ class TestBodyTypedRefScan:
 
         root = self._project(tmp_path)
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+            "---\nkind: report\n---\nSee task:t999 for the gap.\n"
         )
         issues = check_refs(root, include_body=True)
         body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
@@ -1437,7 +1437,7 @@ class TestBodyTypedRefScan:
 
         root = self._project(tmp_path)
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\nSee task:t050 for the work.\n"
+            "---\nkind: report\n---\nSee task:t050 for the work.\n"
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
@@ -1447,7 +1447,7 @@ class TestBodyTypedRefScan:
 
         root = self._project(tmp_path)
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\n```\nExample: task:t999\n```\n"
+            "---\nkind: report\n---\n```\nExample: task:t999\n```\n"
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
@@ -1457,7 +1457,7 @@ class TestBodyTypedRefScan:
 
         root = self._project(tmp_path)
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\nUse the `task:tNN` placeholder.\n"
+            "---\nkind: report\n---\nUse the `task:tNN` placeholder.\n"
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
@@ -1467,7 +1467,7 @@ class TestBodyTypedRefScan:
 
         root = self._project(tmp_path)
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+            "---\nkind: report\n---\nSee task:t999 for the gap.\n"
         )
         issues = check_refs(root)  # include_body=False default
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
@@ -1478,7 +1478,7 @@ class TestBodyTypedRefScan:
         root = self._project(tmp_path)
         # Triple-segment refs like `mm30:task:t050` are cross-project; not our concern.
         (root / "doc" / "report.md").write_text(
-            "---\ntype: report\n---\nSee mm30:task:t050.\n"
+            "---\nkind: report\n---\nSee mm30:task:t050.\n"
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
@@ -1491,7 +1491,7 @@ def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
         "---\nid: task:t050\ntype: task\n---\nBody.\n"
     )
     (tmp_path / "doc" / "report.md").write_text(
-        "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+        "---\nkind: report\n---\nSee task:t999 for the gap.\n"
     )
 
     runner = CliRunner()

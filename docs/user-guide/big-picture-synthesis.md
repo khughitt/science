@@ -13,7 +13,7 @@ The command produces three synthesis roles:
 | `emergent-threads` | Cross-cutting patterns and orphan research questions that are not yet attached to a hypothesis. |
 | `synthesis-rollup` | Project-level rollup across the per-hypothesis files and emergent threads. |
 
-All generated synthesis files use `type: synthesis` and distinguish their role
+All generated synthesis files use `kind: synthesis` and distinguish their role
 with `report_kind`. The canonical section shape lives in
 `templates/synthesis.md`.
 
@@ -45,7 +45,7 @@ All synthesis roles share these fields:
 
 ```yaml
 id: synthesis:<local-part>
-type: synthesis
+kind: synthesis
 title: "<human-readable title>"
 status: active
 report_kind: hypothesis-synthesis | synthesis-rollup | emergent-threads

@@ -102,7 +102,7 @@ def _write_geneset_commons(
         {
             "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
             "id": "dataset:reactome-v89",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "Reactome v89",
             "version": "1.0.0",
             "status": "active",
@@ -136,7 +136,7 @@ def _write_geneset_commons(
         {
             "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0",
             "id": "dataset:reactome-r-hsa-1",
-            "type": "dataset",
+            "kind": "dataset",
             "title": "R-HSA-1",
             "version": "1.0.0",
             "status": "active",

@@ -1,6 +1,6 @@
 ---
 id: "interpretation:fixture-malformed"
-type: "interpretation"
+kind: "interpretation"
 title: "Fixture: intentionally-malformed verdict block"
 status: "active"
 created: "2026-04-21"

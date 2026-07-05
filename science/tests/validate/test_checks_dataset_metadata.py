@@ -41,7 +41,7 @@ def _results(datasets: list[dict]):
 
 def _ds(**kw) -> dict:
     base = {
-        "type": "dataset",
+        "kind": "dataset",
         "id": "dataset:x",
         "_path": "entities/datasets/x.md",
         "dataset_class": "deposit",
@@ -102,7 +102,7 @@ def test_absent_tier_and_cadence_not_flagged() -> None:
 
 def test_non_dataset_rows_ignored() -> None:
     # evaluate_dataset_metadata yields an iterator — must materialize before comparing.
-    assert list(evaluate_dataset_metadata([{"type": "paper", "id": "paper:x", "_path": "p.md"}])) == []
+    assert list(evaluate_dataset_metadata([{"kind": "paper", "id": "paper:x", "_path": "p.md"}])) == []
 
 
 def test_non_string_license_is_unrecognized_not_crash() -> None:
@@ -223,7 +223,7 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
     (ds_dir / "x.md").write_text(
         '---\n'
         'id: "dataset:x"\n'
-        'type: "dataset"\n'
+        'kind: "dataset"\n'
         'title: "X"\n'
         'status: "active"\n'
         'origin: "external"\n'
