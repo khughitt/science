@@ -86,10 +86,10 @@ Use the user input as optional filters, for example: `dev only`, `this week`, `r
 
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
 
-**Next-steps home.** Next-steps files are `type: meta` entities and live under
+**Next-steps home.** Next-steps files are `kind: meta` entities and live under
 `entities/meta/`, named with a zero-padded numeric prefix:
 `entities/meta/<NNNN>-next-steps-<YYYY-MM-DD>.md`. Pick `<NNNN>` as the next free
-index in `entities/meta/`. The validator rejects `type: meta` entities placed
+index in `entities/meta/`. The validator rejects `kind: meta` entities placed
 outside `entities/meta/`.
 
 Throughout this command, **`<meta-home>`** means `entities/meta/` and
@@ -300,7 +300,7 @@ Set the frontmatter `id` to match the filename-derived canonical id:
 ```markdown
 ---
 id: "meta:<NNNN>-next-steps-YYYY-MM-DD"
-type: "meta"
+kind: "meta"
 title: "Next Steps — YYYY-MM-DD"
 status: "active"
 created: "YYYY-MM-DD"

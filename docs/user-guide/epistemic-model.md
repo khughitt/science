@@ -98,17 +98,15 @@ and compiler-minted local nodes for inquiry-local structure.
 
 Unresolved endpoint refs are graph-build errors. Boundary refs, flow endpoints,
 causal treatment/outcome refs, and claim refs must already resolve through
-source records or `science terms add` lightweight rows before the inquiry can be
-materialized.
+source records or entity owner files before the inquiry can be materialized.
 Unknown markers may remain in sketch; non-sketch inquiries should resolve or
 justify them.
 
 Use `concept:*` only when that ref already resolves through a source owner. Use
-`science terms add concept:<slug> --title "<title>"` for lightweight terms, or
 `science entity create concept "<title>"` when the project-local concept needs a
-full Markdown owner under `entities/concepts/`. `science graph add concept` is
-not durable inquiry authoring. Direct graph mutation writes generated graph
-state that `science graph build` overwrites from source files.
+Markdown owner under `entities/concepts/`. `science graph add concept` is not
+durable inquiry authoring. Direct graph mutation writes generated graph state
+that `science graph build` overwrites from source files.
 
 ### Causal Inquiry Profiles
 

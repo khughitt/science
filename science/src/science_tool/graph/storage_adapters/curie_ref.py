@@ -8,10 +8,10 @@ in `same_as` so materialization emits a skos:exactMatch to a URIRef external-ter
 node. These are external references, not owners: the load loop tags their identity
 rows ParticipationMode.EXTERNAL_REFERENCE (never renumbered, never a collision).
 
-Unlike a transitional aggregate row (debt the triage tolerates), this file is the
-DURABLE backing authority once aggregate rows retire, so both integrity failures
--- a duplicate id, or a malformed primary_external_id -- raise loudly rather than
-silently drop a row (which would unresolve citations or lose a curie mapping).
+This file is the durable backing authority for ontology external references, so
+both integrity failures -- a duplicate id, or a malformed primary_external_id --
+raise loudly rather than silently drop a row (which would unresolve citations or
+lose a curie mapping).
 """
 
 from __future__ import annotations
@@ -31,10 +31,9 @@ _ROOT_KEY = "references"
 # NOTE: do NOT import `local_profile_sources_dir` from `science_tool.graph.sources`
 # here — Task 6 registers this adapter *inside* sources.py, so importing from
 # sources would create a circular import at module load. Build the path directly
-# from the resolved `local_profile`, exactly as AggregateAdapter does
-# (`project_root / "knowledge" / "sources" / self._local_profile`). The profile is
-# still resolved (passed in by the loader), so nothing is hardcoded except the
-# universal `knowledge/sources` structural prefix that AggregateAdapter also fixes.
+# from the resolved `local_profile`. The profile is still resolved (passed in by
+# the loader), so nothing is hardcoded except the universal `knowledge/sources`
+# structural prefix.
 
 
 class CurieRefAdapter(StorageAdapter):
@@ -49,7 +48,6 @@ class CurieRefAdapter(StorageAdapter):
         self._rel: str | None = None
 
     def _path(self, project_root: Path) -> Path:
-        # Mirror AggregateAdapter's path construction (no sources.py import; see module note).
         return project_root / "knowledge" / "sources" / self._local_profile / _FILE_NAME
 
     def discover(self, project_root: Path) -> list[SourceRef]:

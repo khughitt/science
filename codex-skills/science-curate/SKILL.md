@@ -221,7 +221,7 @@ Suggested frontmatter:
 
 ```yaml
 ---
-type: "curation-sweep"
+kind: "curation-sweep"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
 scope: "all"

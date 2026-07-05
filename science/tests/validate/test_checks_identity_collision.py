@@ -48,12 +48,12 @@ def test_graded_two_real_owners_is_error() -> None:
 
 
 def test_graded_transitional_shadow_is_warn() -> None:
-    # A real markdown owner shadowed by a deprecated aggregate/datapackage stub is a
+    # A real markdown owner shadowed by a deprecated datapackage owner is a
     # rollout state carried until §B5/§B4 — visible (WARN) but NOT a hard error.
     table = IdentityTable(
         rows=[
             _owner("dataset:x", path="entities/datasets/x.md"),
-            _owner("dataset:x", path="knowledge/sources/local/entities.yaml", deprecated=True),
+            _owner("dataset:x", path="datasets/x/datapackage.yaml", deprecated=True),
         ]
     )
     graded = graded_collisions(table)
@@ -151,42 +151,6 @@ def test_single_owner_not_flagged(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     _write_dataset_md(tmp_path, "x.md", "dataset:x")
     assert list(check_forbidden_second_declaration(ctx)) == []
-
-
-# A deprecated entities.yaml aggregate stub is only discovered when the manifest
-# keys the profile via `profiles:` (the aggregate scan root), NOT `knowledge_profiles:`
-# (what the other tests' _MANIFEST sets), so the WARN path needs this manifest style.
-_AGG_MANIFEST = "name: demo-project\nprofile: research\nprofiles: {local: local}\n"
-
-
-def _agg_ctx(root: Path) -> ValidateContext:
-    (root / "science.yaml").write_text(_AGG_MANIFEST, encoding="utf-8")
-    return ValidateContext.from_project_root(root, strict=False, verbose=False)
-
-
-def _write_aggregate_stub(root: Path, ident: str, kind: str = "dataset") -> None:
-    local = root / "knowledge" / "sources" / "local"
-    local.mkdir(parents=True, exist_ok=True)
-    (local / "entities.yaml").write_text(
-        f"entities:\n  - canonical_id: {ident}\n    kind: {kind}\n    title: {ident}\n"
-        "    profile: local\n    source_path: knowledge/sources/local/entities.yaml\n",
-        encoding="utf-8",
-    )
-
-
-def test_aggregate_stub_shadow_flagged_warn(tmp_path: Path) -> None:
-    # A real markdown owner shadowed by a DEPRECATED entities.yaml aggregate stub is a
-    # transitional collision (§C3): one non-deprecated owner + one deprecated -> WARN,
-    # visible but non-blocking, carried until §B5 retirement. Exercises the WARN grade
-    # through the real loader end-to-end (the unit test only hand-builds the table).
-    ctx = _agg_ctx(tmp_path)
-    _write_dataset_md(tmp_path, "x.md", "dataset:x")
-    _write_aggregate_stub(tmp_path, "dataset:x")
-    results = list(check_forbidden_second_declaration(ctx))
-    assert len(results) == 1
-    assert results[0].severity is Severity.WARN
-    assert "dataset:x" in results[0].message
-    assert results[0].rule == "forbidden-second-declaration"
 
 
 def test_check_registered_via_canonical_loader() -> None:

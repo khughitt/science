@@ -99,57 +99,81 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    for gene_id in ("ATP5B", "ATP5F1B"):
+        (genes_dir / f"{gene_id.lower()}.md").write_text(
+            "\n".join(
+                [
+                    "---",
+                    f'id: "gene:{gene_id}"',
+                    'kind: "gene"',
+                    f'title: "{gene_id}"',
+                    "primary_external_id:",
+                    "  source: HGNC",
+                    "  id: '830'",
+                    "  curie: HGNC:830",
+                    "  provenance: manual",
+                    "taxon: NCBITaxon:9606",
+                    "---",
+                    "",
+                    f"{gene_id} body.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    concepts_dir = tmp_path / "entities" / "concepts"
+    concepts_dir.mkdir(parents=True)
+    (concepts_dir / "aaa-consumer.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "concept:aaa-consumer"',
+                'kind: "concept"',
+                'title: "Consumer"',
+                "related:",
+                "  - concept:zzz-old",
+                "---",
+                "",
+                "Consumer body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (concepts_dir / "zzz-new.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "concept:zzz-new"',
+                'kind: "concept"',
+                'title: "Replacement"',
+                "deprecated_ids:",
+                "  - concept:zzz-old",
+                "---",
+                "",
+                "Replacement body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (concepts_dir / "HighProliferationRate.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "concept:HighProliferationRate"',
+                'kind: "concept"',
+                'title: "High proliferation rate"',
+                "---",
+                "",
+                "Invalid local id casing.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     relations_dir = tmp_path / "knowledge" / "sources" / "local"
     relations_dir.mkdir(parents=True)
-    (relations_dir / "entities.yaml").write_text(
-        "\n".join(
-            [
-                "entities:",
-                "  - canonical_id: gene:ATP5B",
-                "    kind: gene",
-                "    title: ATP5B",
-                "    primary_external_id:",
-                "      source: HGNC",
-                "      id: '830'",
-                "      curie: HGNC:830",
-                "      provenance: manual",
-                "    taxon: NCBITaxon:9606",
-                "  - canonical_id: gene:ATP5F1B",
-                "    kind: gene",
-                "    title: ATP5F1B",
-                "    primary_external_id:",
-                "      source: HGNC",
-                "      id: '830'",
-                "      curie: HGNC:830",
-                "      provenance: manual",
-                "    taxon: NCBITaxon:9606",
-                "  - canonical_id: concept:aaa-consumer",
-                "    kind: concept",
-                "    title: Consumer",
-                "    related:",
-                "      - concept:zzz-old",
-                "  - canonical_id: concept:zzz-new",
-                "    kind: concept",
-                "    title: Replacement",
-                "    deprecated_ids:",
-                "      - concept:zzz-old",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (relations_dir / "terms.yaml").write_text(
-        "\n".join(
-            [
-                "terms:",
-                "  - id: concept:HighProliferationRate",
-                "    title: High proliferation rate",
-                "    description: Invalid local id casing.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
     (relations_dir / "relations.yaml").write_text(
         "\n".join(
             [
@@ -916,7 +940,8 @@ health:
         assert "relation_endpoint_disambiguation" in codes
         assert "invalid_local_id_syntax" in codes
         assert any(
-            row["check"] == "invalid_local_id_syntax" and row["source_file"] == "knowledge/sources/local/terms.yaml"
+            row["check"] == "invalid_local_id_syntax"
+            and row["source_file"] == "entities/concepts/HighProliferationRate.md"
             for row in report["identity_policy"]
         )
 
@@ -1492,14 +1517,14 @@ def test_health_flags_legacy_article_prefixes_in_structured_sources(tmp_path) ->
     (project_root / "science.yaml").write_text("name: demo\n")
     sources_dir = project_root / "knowledge" / "sources" / "local"
     sources_dir.mkdir(parents=True)
-    (sources_dir / "entities.yaml").write_text(
-        "entities:\n- canonical_id: article:Smith2024\n  kind: paper\n  title: Smith\n",
+    (sources_dir / "external_refs.yaml").write_text(
+        "refs:\n- ref: article:Smith2024\n  kind: paper\n",
         encoding="utf-8",
     )
 
     findings = collect_legacy_structured_literature_prefixes(project_root)
     assert len(findings) == 1
-    assert findings[0]["source_file"] == "knowledge/sources/local/entities.yaml"
+    assert findings[0]["source_file"] == "knowledge/sources/local/external_refs.yaml"
     assert findings[0]["legacy_ref"] == "article:Smith2024"
 
 
@@ -1535,8 +1560,8 @@ def test_build_health_report_includes_legacy_structured_literature_findings(tmp_
     (project_root / "science.yaml").write_text("name: demo\n")
     sources_dir = project_root / "knowledge" / "sources" / "local"
     sources_dir.mkdir(parents=True)
-    (sources_dir / "entities.yaml").write_text(
-        "entities:\n- canonical_id: article:Smith2024\n  kind: paper\n  title: Smith\n",
+    (sources_dir / "external_refs.yaml").write_text(
+        "refs:\n- ref: article:Smith2024\n  kind: paper\n",
         encoding="utf-8",
     )
 

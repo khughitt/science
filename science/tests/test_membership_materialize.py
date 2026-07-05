@@ -164,24 +164,24 @@ def _write_subject_entity(project: Path, ref: str) -> None:
             ],
         )
     else:
-        # Fallback: put non-file-backed kinds in entities.yaml via _write_source_entity
         raise ValueError(f"Unsupported kind for file-backed entity: {kind!r}")
 
 
 def _write_source_entity(local_sources: Path, ref: str) -> None:
-    """Append an entity entry to entities.yaml for source-backed kinds (e.g. paper)."""
     kind, slug = ref.split(":", 1)
-    entities_yaml = local_sources / "entities.yaml"
-    if not entities_yaml.exists():
-        entities_yaml.write_text("entities:\n", encoding="utf-8")
-    with entities_yaml.open("a", encoding="utf-8") as fh:
-        fh.write(f"  - canonical_id: {ref}\n")
-        fh.write(f"    kind: {kind}\n")
-        fh.write(f"    title: {slug}\n")
-
-
-# Kinds that live in entities.yaml rather than standalone entity files.
-_SOURCE_YAML_KINDS = frozenset({"paper"})
+    project = local_sources.parents[2]
+    _write_entity(
+        project / "entities" / f"{kind}s" / f"{slug}.md",
+        [
+            f'id: "{ref}"',
+            f'kind: "{kind}"',
+            f'title: "{slug}"',
+            'status: "active"',
+            "ontology_terms: []",
+            "source_refs: []",
+            "related: []",
+        ],
+    )
 
 
 @pytest.fixture
@@ -199,7 +199,7 @@ def make_project_with_relation(tmp_path: Path) -> Callable[..., object]:
         # Write entity files for subject and object.
         for ref in (subject, object):
             kind = ref.split(":", 1)[0]
-            if kind in _SOURCE_YAML_KINDS:
+            if kind == "paper":
                 _write_source_entity(local_sources, ref)
             else:
                 _write_subject_entity(project, ref)
@@ -299,7 +299,7 @@ def make_project_with_relations(tmp_path: Path) -> Callable[..., object]:
                     continue
                 seen.add(ref)
                 kind = ref.split(":", 1)[0]
-                if kind in _SOURCE_YAML_KINDS:
+                if kind == "paper":
                     _write_source_entity(local_sources, ref)
                 else:
                     _write_subject_entity(project, ref)

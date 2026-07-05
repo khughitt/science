@@ -3,8 +3,8 @@
 A project-local kind may declare `structured_source: <file>.yaml` in its profile
 manifest. Each row in that single-type YAML file (under knowledge/sources/<profile>/)
 loads as an OWNER entity of that kind — generalizing the hardcoded model/parameter
-loaders so generated structural kinds (limit-relation, morphism-edge, …) need not
-ride the multi-type entities.yaml/terms.yaml aggregate that v3 retirement forbids.
+loaders so generated structural kinds (limit-relation, morphism-edge, …) can use
+a declared current structured source instead of an ad hoc manifest.
 """
 
 from __future__ import annotations
@@ -66,14 +66,6 @@ def test_structured_source_rows_load_as_owner_entities(tmp_path: Path) -> None:
     assert e.kind == "limit-relation"
     # Loaded by the structured-source adapter, not the multi-type aggregate.
     assert src.entity_source_adapters[e.canonical_id] == "structured-source"
-
-
-def test_structured_source_rows_are_owner_declarations_not_aggregate(tmp_path: Path) -> None:
-    """The rows must NOT appear as aggregate rows (which v3 would flag for retirement)."""
-    _seed(tmp_path)
-    src = load_project_sources(tmp_path, strict_core_schema=False, strict_identity=False)
-    agg_ids = {r.canonical_id for r in src.aggregate_rows}
-    assert "limit-relation:allee-effect__logistic-growth__a" not in agg_ids
 
 
 def test_root_key_defaults_to_kind_name_and_missing_file_is_noop(tmp_path: Path) -> None:
@@ -138,11 +130,3 @@ def test_core_structured_source_rows_load_as_owner_entities(tmp_path: Path) -> N
         "limit-relation:asep__burgers-equation__a",
         "limit-relation:burgers-equation__heat-equation__amplitude",
     ]
-
-
-def test_core_structured_source_rows_are_not_aggregate_rows(tmp_path: Path) -> None:
-    """Augmented core-kind rows must NOT be aggregate rows (v3 §B5 retirement target)."""
-    _seed_core(tmp_path)
-    src = load_project_sources(tmp_path, strict_core_schema=False, strict_identity=False)
-    agg_ids = {r.canonical_id for r in src.aggregate_rows}
-    assert "finding:t291-path2-audit-asep__burgers-equation__heat-equation" not in agg_ids

@@ -154,20 +154,21 @@ def test_entities_chapter_documents_reference_semantics_and_topic_deprecation() 
 
     assert "## Reference Semantics" in text
     assert "cross-kind slug fallback" in normalized
-    assert "`terms.yaml` is for lightweight semantic rows" in normalized
+    assert "Project-local concepts use the same owner-file model as other durable entities." in normalized
     assert "Field-scoped `tag:*`" in text
     assert "`topic` remains registered for legacy projects and migration surfaces" in normalized
     assert "Do not create topic stubs to silence unresolved-reference checks." in normalized
 
 
-def test_entities_documents_terms_add_for_lightweight_terms() -> None:
+def test_entities_documents_project_local_concept_owner_files() -> None:
     normalized = _norm(_read(GUIDE_ROOT / "entities.md"))
 
-    assert "`terms.yaml` is for lightweight semantic rows" in normalized
-    assert 'Use `science terms add <id> --title "<title>"` for routine lightweight term creation' in normalized
-    assert "The command writes to the configured local profile's `terms.yaml`" in normalized
-    assert "Do not pass external ontology CURIEs as the term id; put them in `--ontology-term`." in normalized
-    assert "Promote the row to a Markdown entity owner when it accumulates body prose" in normalized
+    assert "Project-local concepts use the same owner-file model as other durable entities." in normalized
+    assert 'Use `science entity create concept "<title>"` when a `concept:*` ref needs to resolve in the graph' in normalized
+    assert "For weak or temporary ideas, keep the mention in prose until it needs a graph identity." in normalized
+    assert "Aggregate entity manifests" in normalized
+    assert "`terms.yaml`" in normalized
+    assert "are retired" in normalized
 
 
 def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
@@ -196,11 +197,10 @@ def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     assert "`science graph add concept` is not durable inquiry authoring" in normalized
 
 
-def test_epistemic_model_references_terms_add_for_lightweight_refs() -> None:
+def test_epistemic_model_references_entity_owners_for_refs() -> None:
     normalized = _norm(_read(GUIDE_ROOT / "epistemic-model.md"))
 
-    assert "source records or `science terms add` lightweight rows before the inquiry can be materialized" in normalized
-    assert "Use `science terms add concept:" in normalized
+    assert "source records or entity owner files before the inquiry can be materialized" in normalized
     assert "`science entity create concept" in normalized
 
 
@@ -213,10 +213,9 @@ def test_entities_chapter_documents_source_authored_concepts() -> None:
     )
     normalized = _norm(section)
 
-    assert "`terms.yaml` is the lightweight concept tier" in normalized
-    assert "Use `science terms add concept:" in normalized
     assert "`science entity create concept" in normalized
     assert "`entities/concepts/<slug>.md`" in normalized
     assert "Use the most specific registered kind before creating a local concept" in normalized
+    assert "For weak or temporary ideas, keep the mention in prose until it needs a graph identity." in normalized
     assert "`science graph add concept` writes derived graph state" in normalized
     assert "Do not use graph-added concepts as durable owners" in normalized

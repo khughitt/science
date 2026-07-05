@@ -33,7 +33,7 @@ class IdentityDeclaration:
     owner_scope: str
     adapter: str
     source_ref: SourceRef | None
-    deprecated: bool = False  # transitional owner (e.g. aggregate), design §C3
+    deprecated: bool = False  # transitional owner, design §C3
 
 
 @dataclass(frozen=True)
@@ -47,8 +47,7 @@ class IdentityCollision:
     @property
     def is_genuine(self) -> bool:
         """True when >=2 owner rows are non-deprecated — the genuine §B1 duplicate the
-        compiler must reject. A collision involving a transitional deprecated owner (an
-        entities.yaml aggregate stub §C3, or a synthesized orphan-datapackage owner §B4)
+        compiler must reject. A collision involving a transitional deprecated owner
         shadowing a real owner is carried as rollout debt (§C4), surfaced as a non-blocking
         WARN, not a hard error. The single source of truth for this grade across the
         validate check, the graph audit, and the migrator.
@@ -112,10 +111,10 @@ def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]
         # External-reference authority scope (design §B3, Phase 4c): curie rows are
         # never owners; this scope labels provenance and is non-deprecated.
         return ("curie-ref", False)
-    # aggregate (entities.yaml) and datapackage are transitional deprecated owners:
-    # the target substrate retires entities.yaml (§B5) and treats datapackages as
-    # attachments, not owners (§B4). Flag them so later phases can find them.
-    if adapter in ("aggregate", "datapackage"):
+    # Datapackages are transitional deprecated owners: the target substrate treats
+    # datapackages as attachments, not owners (§B4). Flag them so later phases can
+    # find them.
+    if adapter == "datapackage":
         return (project_name, True)
     return (project_name, False)
 

@@ -112,7 +112,7 @@ Group `unresolved_refs` by `looks_like` heuristic:
 For the `semantic-triage` cluster, sub-cluster by intended semantics:
 - Catalog-backed entity (`gene`, `protein`, `disease`, `pathway`, etc.)
 - Analytical method (`method`)
-- Project concept (`concept`, as a lightweight `terms.yaml` row or a full `entities/concepts/*.md` owner)
+- Project concept (`concept`, as an `entities/concepts/*.md` owner)
 - Structured explanatory bundle (`mechanism`)
 - Existing project kind (`question`, `hypothesis`, `interpretation`, `story`, `theme`)
 - Metadata or prose-only note
@@ -178,7 +178,7 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
-- Semantic triage: create or reuse the typed entity chosen by the cookbook, add a lightweight term with `science terms add`, create a full concept entity with `science entity create concept "<title>"`, rewrite as `meta:` or field-scoped `tag:` when the mention is classification metadata, or remove the graph ref and keep prose-only notes out of the graph.
+- Semantic triage: create or reuse the typed entity chosen by the cookbook, create a concept entity with `science entity create concept "<title>"` when a durable project-local concept is needed, rewrite as `meta:` or field-scoped `tag:` when the mention is classification metadata, or remove the graph ref and keep prose-only notes out of the graph.
 - Cleaning up lingering tags: remove the `tags:` lines from the frontmatter, or replace each with the intended `meta:` or field-scoped `tag:` ref, by hand
 
 ### 6. Verify

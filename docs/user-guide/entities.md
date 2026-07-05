@@ -334,22 +334,19 @@ source-load loop. The shared policy surface includes:
 | `should_defer(already_owned=...)` | Whether this record yields to an already-loaded owner instead of declaring another owner. |
 | `skip_core_on_missing_identity` | Allows Markdown frontmatter without identity fields to be skipped with a diagnostic rather than crashing schema validation. |
 | `source_document(ref, raw)` | Captures Markdown frontmatter/body for annotation and source-text consumers. |
-| `on_owner_declared(...)` | Captures row-level metadata, currently used by aggregate rows for triage and migration reports. |
-| `deferred_dataset_datapackage(...)` | Lets a deferring datapackage keep package-resource metadata available after a Markdown or aggregate owner wins. |
+| `deferred_dataset_datapackage(...)` | Lets a deferring datapackage keep package-resource metadata available after a Markdown owner wins. |
 
 This policy surface keeps adapter quirks close to the adapter. For example,
 bibliography and CURIE-reference adapters act as external references and defer
 to existing owners; datapackage records are owner-shaped but defer when a
-project source already owns the dataset id; aggregate rows emit row metadata for
-retirement triage; Markdown records are the only records that capture a source
-document body.
+project source already owns the dataset id; Markdown records are the only
+records that capture a source document body.
 
 Current project source loading uses these adapter families:
 
 | Adapter | Source surface | Role |
 |---|---|---|
 | `markdown` | `entities/**/*.md` and `research/packages/**/*.md` | Normal single-entity authoring surface with YAML frontmatter and body prose. |
-| `aggregate` | `knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, and selected `doc/<plural>/<plural>.{json,yaml}` files | Transitional multi-entity rows and single-type aggregate rows. Prefer Markdown owners for new durable entities. |
 | `bib` and `curie-ref` | bibliography and ontology reference inputs | External-reference rows that defer to an existing entity owner when one exists. |
 | `datapackage` | `data/**/datapackage.yaml` and `results/**/datapackage.yaml` with `science-pkg-entity-1.0` | Dataset entity records embedded in promoted runtime packages; if a Markdown owner already exists, the datapackage defers but remains available as resource metadata. |
 | `workflow-run`, `task`, and `code` | workflow run files, task sources, and configured code roots | Specialized storage formats that materialize first-class entities into the same registry flow. |
@@ -465,7 +462,7 @@ Use these destinations instead of new semantic `topic:*` refs:
 |---|---|
 | Catalog-backed thing | Domain kind such as `gene`, `protein`, `disease`, `pathway`, or another declared catalog kind. |
 | Analytical procedure | `method`. |
-| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref only needs a lightweight identity, use `science terms add concept:<slug> --title "<title>"`; when it needs body prose, lifecycle or status work, source refs, or structured relationships, create a Markdown owner with `science entity create concept ...`. |
+| Stable project-local concept | Prefer the most specific registered source kind. When a local `concept:*` ref needs a durable graph identity, create a Markdown owner with `science entity create concept ...`. |
 | Cross-cutting organizing lens | `theme`. |
 | Conjecture under investigation | `hypothesis`. |
 | Analysis-session narrative | `interpretation`. |
@@ -474,32 +471,19 @@ Use these destinations instead of new semantic `topic:*` refs:
 | Temporary classification marker | Field-scoped `tag:*`, only where free-form labels are accepted. |
 | Operational marker | `meta:*`, or prose when it should not enter the graph. |
 
-### Lightweight Semantic Terms
+### Project-Local Concepts
 
-`terms.yaml` is for lightweight semantic rows that are more durable than a
-one-off prose label but do not yet deserve a full Markdown owner. Use
-`science terms add <id> --title "<title>"` for routine lightweight term
-creation:
+Project-local concepts use the same owner-file model as other durable entities.
+Use `science entity create concept "<title>"` when a `concept:*` ref needs to
+resolve in the graph:
 
 ```bash
-science terms add concept:treatment-response --title "Treatment response"
-science terms add method:cox-regression --title "Cox proportional-hazards regression" --ontology-term "biolink:StatisticalMethod"
+science entity create concept "Treatment Response"
 ```
 
-The command writes to the configured local profile's `terms.yaml`, usually
-`knowledge/sources/local/terms.yaml`, and appends a minimal row:
-
-```yaml
-terms:
-  - id: concept:treatment-response
-    title: Treatment response
-```
-
-Keep entries minimal: `id` and `title` are required; `--alias`, `--same-as`,
-`--ontology-term`, and `--description` are optional. Do not pass external
-ontology CURIEs as the term id; put them in `--ontology-term`. Promote the row
-to a Markdown entity owner when it accumulates body prose, structured
-relations, or lifecycle work.
+For weak or temporary ideas, keep the mention in prose until it needs a graph
+identity. For catalog-backed objects or procedures, prefer the most specific
+registered kind instead of a generic concept owner.
 
 ### Source-Authored Concepts
 
@@ -508,10 +492,8 @@ and core reference kinds such as `gene`, `protein`, `disease`, `pathway`,
 `dataset`, `method`, `construct`, or `outcome` carry more meaning than a generic
 `concept:*` owner.
 
-`terms.yaml` is the lightweight concept tier. Use
-`science terms add concept:<slug> --title "<title>"` when a term needs a stable
-resolvable `concept:*` identity but does not need body prose, lifecycle work, or
-structured relationships.
+For weak or temporary ideas, keep the mention in prose until it needs a graph
+identity.
 
 Use `science entity create concept "<title>"` when a project-local concept needs
 a full Markdown owner:
@@ -590,49 +572,13 @@ Rows in this file are external references. They provide a durable authority for
 ontology or catalog identifiers and can materialize exact-match links, but they
 do not replace a project owner file when the project has one.
 
-## Aggregate Retirement
+## Aggregate Manifests
 
-Some older projects still contain aggregate entity rows in
-`knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, or single-type files
-such as `doc/observations/observations.yaml`. These are transitional source
-surfaces. New durable entities should be authored as owner files under
-`entities/`.
-
-Use `science entities triage-aggregate` to inventory aggregate rows:
-
-```bash
-science entities triage-aggregate --project-root <project>
-science entities triage-aggregate --project-root <project> --format json
-```
-
-The read-only report buckets rows by the compiled source model:
-
-| Bucket | Meaning |
-|---|---|
-| `shadow` | A non-aggregate owner for the same id already exists. |
-| `coined` | The row can promote to a first-class owner file. |
-| `decision-log` | The row is backed by a `core/decisions.md` decision section. |
-| `external-ref` | The row is backed by bibliography authority. |
-| `curie-external-ref` | The row has `primary_external_id` and can move to `external_refs.yaml`. |
-| `cruft` | An unreferenced migration artifact row. |
-| `referenced-orphan` | A migration artifact row still referenced by live entities. |
-| `question-deferred` | A question stub that needs epistemic authoring. |
-| `ambiguous` | A row that still needs a human identity decision. |
-
-Mutation requires `--apply` plus explicit bucket flags, and only runs for
-layout-version 3 projects:
-
-```bash
-science entities triage-aggregate --project-root <project> --promote-coined --apply
-science entities triage-aggregate --project-root <project> --promote-decisions --apply
-science entities triage-aggregate --project-root <project> --retire-external-refs --apply
-science entities triage-aggregate --project-root <project> --migrate-curie-refs --apply
-science entities triage-aggregate --project-root <project> --delete-shadow --delete-cruft --apply
-```
-
-Promotion is id-preserving and path-policy aware. A non-conforming or unsafe id
-is rejected rather than silently renamed. Shadow deletion is safe only when a
-real owner exists. Referenced or ambiguous rows stay for human triage.
+Aggregate entity manifests such as `knowledge/sources/<profile>/entities.yaml`,
+`terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` are retired. Current
+projects should author durable entities as owner files under `entities/`, keep
+external authority rows in `external_refs.yaml`, and keep generated graph output
+out of source ownership.
 
 Decision owners are authoritative after promotion. Render the derived decision
 log view with:

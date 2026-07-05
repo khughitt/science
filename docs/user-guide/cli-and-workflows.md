@@ -55,7 +55,6 @@ knowledge, and generated-write commands for materialization or reports.
 | `dag` | Derived-state | Mixed | Render, number, validate, and audit DAG views. This is an older family-local surface and uses `--project` for project roots. |
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
-| `terms` | Canonical | Source-write | Creates lightweight local semantic term rows in the configured local profile's `terms.yaml`. |
 | `patch` | Derived-state | Read-only | Explain or check derived patch membership. |
 | `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |
@@ -73,7 +72,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `project`, `research-package`, `labnote` | Specialized | Generated-write / Read-only | Project bundles, verification, managed artifacts, research packages, and public app exports. |
 | `curate`, `big-picture`, `wander`, `qa-audit` | Specialized | Read-only | Curation support, generated synthesis checks, serendipitous review queues, and advisory QA audits. |
 | `bib`, `doi`, `paper`, `paper-fetch`, `book-split`, `distill` | Specialized | Mixed | Literature metadata, source text, book outlines, and public knowledge graph snapshots. |
-| `entities` | Canonical / migration-only | Mixed | Inventory, archive, consolidation, migration, local-kind registration, and aggregate triage. |
+| `entities` | Canonical / migration-only | Mixed | Inventory, archive, consolidation, migration, and local-kind registration. |
 | `skills` | Specialized | Read-only | Skills tree linting. |
 
 ## Dataset Commands
@@ -168,7 +167,6 @@ lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 Migration tools are useful when curating older projects, but they are not the
 normal path for new work. Examples include:
 
-- `science entities triage-aggregate`
 - `science data-package ...`
 - `science graph migrate-addresses`
 - `science graph migrate-paper-datasets`

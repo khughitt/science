@@ -231,7 +231,7 @@ science inquiry init "<slug>" \
 ```
 
 Treatment and outcome refs may be `concept:*` only when the concept already
-resolves through a source owner such as `terms.yaml` or `entities/concepts/*.md`.
+resolves through a source owner such as `entities/concepts/*.md`.
 
 2. **Create or update durable source entities**
 
@@ -249,10 +249,8 @@ science entity create <kind> "<title>" --id "<kind>:<slug>"
 ```
 
 Use `science entity create concept "<title>"` when the model genuinely needs a
-reusable project-local concept with a full Markdown owner. Use
-`science terms add concept:<slug> --title "<title>"` when the term only needs a
-resolvable lightweight identity. Keep weak ideas in prose when they do not need
-graph refs yet.
+reusable project-local concept with a Markdown owner. Keep weak ideas in prose
+when they do not need graph refs yet.
 
 Do not invent unsupported `variable` or `unknown` entity files just to satisfy a
 sketch. If no supported durable source kind exists yet, describe the term in the
@@ -273,7 +271,7 @@ source files.
 Open `entities/patches/<slug>.md` and add boundary roles and flow edges.
 
 Refs may be `concept:*` only when the concept already resolves through
-`terms.yaml`, `entities/concepts/*.md`, or another supported source owner.
+`entities/concepts/*.md` or another supported source owner.
 
 ```yaml
 inquiry:

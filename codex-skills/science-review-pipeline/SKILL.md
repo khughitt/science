@@ -116,7 +116,7 @@ uv run science <command>
 artifact under review is a graph-backed inquiry (a compiled `inquiry:<slug>` whose
 source normally lives at `entities/patches/<slug>.md`), use the inquiry commands
 below. If it is a prose-first inquiry (`entities/inquiries/<slug>.md`) or a
-standalone `type: plan` document (e.g. `entities/plans/<stem>.md`
+standalone `kind: plan` document (e.g. `entities/plans/<stem>.md`
 with no inquiry slug), the `science inquiry show/validate <slug>` calls do **not** resolve — skip
 them and instead drive the review from the plan document itself plus its frontmatter `related:`
 entities. Save the review outside the entity tree as `doc/reviews/<stem>-pipeline-review.md` so layout

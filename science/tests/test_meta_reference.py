@@ -68,31 +68,34 @@ class TestMetaRefsInAudit:
         unresolved = [r for r in rows if r["status"] == "fail"]
         assert unresolved == []
 
-    def test_load_project_sources_canonicalizes_legacy_article_prefix_in_structured_sources(
+    def test_load_project_sources_canonicalizes_legacy_article_prefix_in_relations(
         self, tmp_path: Path
     ) -> None:
-        """Structured source YAML should load legacy `article:` papers as canonical `paper:` IDs."""
+        """Structured relation YAML should canonicalize legacy `article:` refs to `paper:` IDs."""
         from science_tool.graph.sources import load_project_sources
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        sources_dir = tmp_path / "knowledge" / "sources" / "local"
-        sources_dir.mkdir(parents=True)
-        (sources_dir / "entities.yaml").write_text(
+        paper_dir = tmp_path / "entities" / "papers"
+        paper_dir.mkdir(parents=True)
+        (paper_dir / "Smith2024.md").write_text(
             "\n".join(
                 [
-                    "entities:",
-                    "- canonical_id: article:Smith2024",
-                    "  kind: paper",
-                    "  title: Smith 2024",
-                    "  profile: local",
-                    "  source_path: knowledge/sources/local/entities.yaml",
-                    "  aliases:",
+                    "---",
+                    'id: "paper:Smith2024"',
+                    'kind: "paper"',
+                    'title: "Smith 2024"',
+                    "aliases:",
                     "  - Smith2024",
+                    "---",
+                    "",
+                    "Paper summary.",
                     "",
                 ]
             ),
             encoding="utf-8",
         )
+        sources_dir = tmp_path / "knowledge" / "sources" / "local"
+        sources_dir.mkdir(parents=True)
         (sources_dir / "relations.yaml").write_text(
             "\n".join(
                 [

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 from science_tool.graph.identity_table import ParticipationMode, build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import load_project_sources
@@ -11,15 +9,21 @@ from science_tool.graph.sources import load_project_sources
 _MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
 
 
-def _write(root: Path, *, bib: str | None = None, entities: list[dict] | None = None) -> None:
+def _write(root: Path, *, bib: str | None = None) -> None:
     (root / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
     if bib is not None:
         (root / "papers").mkdir(parents=True, exist_ok=True)
         (root / "papers" / "references.bib").write_text(bib, encoding="utf-8")
-    if entities is not None:
-        src = root / "knowledge" / "sources" / "local"
-        src.mkdir(parents=True, exist_ok=True)
-        (src / "entities.yaml").write_text(yaml.safe_dump({"entities": entities}), encoding="utf-8")
+
+
+def _write_paper_owner(root: Path, citekey: str) -> None:
+    path = root / "entities" / "papers" / f"{citekey}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f'---\nid: "paper:{citekey}"\nkind: "paper"\ntitle: "{citekey}"\n'
+        'status: "active"\ncreated: "2026-01-01"\nupdated: "2026-01-01"\n---\n',
+        encoding="utf-8",
+    )
 
 
 def _load(root: Path, *, strict_identity: bool = False, include_commons: bool = False):
@@ -40,20 +44,15 @@ def test_bib_paper_is_external_reference_and_resolves(tmp_path: Path) -> None:
     assert resolver.resolve("paper:Smith2024").status == "resolved"
 
 
-def test_bib_defers_to_aggregate_stub_under_strict_load(tmp_path: Path) -> None:
-    # entities.yaml owns paper:Smith2024 (aggregate, deprecated) AND the bib has it.
-    # Strict load must NOT raise; the bib defers, leaving a single (aggregate) owner.
-    # NOTE: kind must be "paper" (a registered core kind); "article" is not registered
-    # and would be skipped, preventing the entity from reaching identity_table.
-    _write(
-        tmp_path,
-        bib="@article{Smith2024,\n  title = {Cells},\n}\n",
-        entities=[{"canonical_id": "paper:Smith2024", "kind": "paper", "title": "S"}],
-    )
+def test_bib_defers_to_markdown_owner_under_strict_load(tmp_path: Path) -> None:
+    # A markdown owner and a BibTeX entry with the same id must not collide; the
+    # external-reference adapter defers to the authored owner.
+    _write(tmp_path, bib="@article{Smith2024,\n  title = {Cells},\n}\n")
+    _write_paper_owner(tmp_path, "Smith2024")
     sources = _load(tmp_path, strict_identity=True)  # would raise if bib emitted a 2nd declaration
     rows = [r for r in build_identity_table(sources).rows if r.canonical_id == "paper:Smith2024"]
     assert rows and all(r.participation_mode is ParticipationMode.OWNER for r in rows)
-    assert all(r.adapter == "aggregate" for r in rows)  # the aggregate stub won; bib deferred
+    assert all(r.adapter == "markdown" for r in rows)
 
 
 def test_bib_entry_with_out_of_range_year_still_loads_as_entity(tmp_path: Path) -> None:

@@ -11,7 +11,6 @@ from science_model.entities import (
     DomainEntity,
     Entity,
     EntityType,
-    MechanismEntity,
     ProjectEntity,
     TaskEntity,
     ThemeEntity,
@@ -23,7 +22,6 @@ from science_model.source_contracts import BindingSource
 from science_tool.graph.entity_registry import EntityKindShadowError
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import build_identity_table
-from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
 
 
@@ -253,46 +251,6 @@ def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
     assert build_identity_table(sources).collisions() == []
 
 
-def test_datapackage_defers_to_aggregate_stub_owner(tmp_path: Path) -> None:
-    # §B4: a datapackage defers to ANY existing same-scope owner, including a
-    # transitional entities.yaml aggregate stub. This previously strict-crashed
-    # (EntityIdentityCollisionError); now the aggregate stub remains the (deprecated)
-    # owner, the datapackage defers, nothing collides, and §B5 retires the stub later.
-    _seed(tmp_path)
-    (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "knowledge" / "sources" / "local" / "entities.yaml").write_text(
-        "entities:\n"
-        '  - canonical_id: "dataset:x"\n'
-        '    kind: "dataset"\n'
-        '    title: "X agg"\n'
-        '    origin: "external"\n'
-        "    access:\n"
-        '      level: "public"\n'
-        "      verified: false\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "data" / "x").mkdir(parents=True)
-    (tmp_path / "data" / "x" / "datapackage.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "profiles": ["science-pkg-entity-1.0"],
-                "name": "x",
-                "id": "dataset:x",
-                "kind": "dataset",
-                "title": "X dp",
-                "origin": "external",
-                "access": {"level": "public", "verified": False},
-            }
-        ),
-        encoding="utf-8",
-    )
-    sources = load_project_sources(tmp_path)  # must NOT raise (was a strict crash)
-    owners = [d for d in sources.identity_declarations if d.canonical_id == "dataset:x"]
-    assert len(owners) == 1
-    assert owners[0].adapter == "aggregate" and owners[0].deprecated is True  # stub owns; dp deferred
-    assert build_identity_table(sources).collisions() == []
-
-
 def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:
     # Two REAL markdown owners of one id are a genuine duplicate identity
     # declaration and still raise under strict (the §B4 datapackage deferral does
@@ -313,78 +271,6 @@ def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:
     )
     with pytest.raises(EntityIdentityCollisionError, match="dataset:x"):
         load_project_sources(tmp_path)
-
-
-def test_concept_markdown_owner_collides_with_terms_yaml_under_strict_identity(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    (tmp_path / "entities" / "concepts").mkdir(parents=True)
-    (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
-        '---\nid: "concept:treatment-response"\nkind: "concept"\n'
-        'title: "Treatment Response"\nstatus: "active"\n---\n',
-        encoding="utf-8",
-    )
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "terms.yaml").write_text(
-        "\n".join(
-            [
-                "terms:",
-                "  - id: concept:treatment-response",
-                "    title: Treatment response term",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(EntityIdentityCollisionError, match="concept:treatment-response"):
-        load_project_sources(tmp_path)
-
-
-def test_concept_markdown_owner_wins_over_terms_yaml_in_nonstrict_load(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    (tmp_path / "entities" / "concepts").mkdir(parents=True)
-    (tmp_path / "entities" / "concepts" / "treatment-response.md").write_text(
-        '---\nid: "concept:treatment-response"\nkind: "concept"\n'
-        'title: "Treatment Response"\nstatus: "active"\n---\n',
-        encoding="utf-8",
-    )
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "terms.yaml").write_text(
-        "\n".join(
-            [
-                "terms:",
-                "  - id: concept:treatment-response",
-                "    title: Treatment response term",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(tmp_path, strict_identity=False)
-    concepts = [entity for entity in sources.entities if entity.canonical_id == "concept:treatment-response"]
-    owners = [
-        declaration
-        for declaration in sources.identity_declarations
-        if declaration.canonical_id == "concept:treatment-response"
-    ]
-
-    assert len(concepts) == 1
-    assert concepts[0].title == "Treatment Response"
-    assert sources.entity_source_adapters["concept:treatment-response"] == "markdown"
-    assert {owner.adapter for owner in owners} == {"markdown", "aggregate"}
-    collisions = build_identity_table(sources).collisions()
-    assert len(collisions) == 1
-    assert collisions[0].canonical_id == "concept:treatment-response"
-
-    rows, failed = audit_project_sources(sources)
-    collision_rows = [row for row in rows if row["check"] == "identity_collision"]
-    assert failed is False
-    assert len(collision_rows) == 1
-    assert collision_rows[0]["source"] == "concept:treatment-response"
-    assert collision_rows[0]["status"] == "warn"
 
 
 def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
@@ -427,87 +313,6 @@ def test_load_project_sources_includes_research_question_with_rq_prefix(tmp_path
     assert entity.kind == "research-question"
     assert entity.type == EntityType.RESEARCH_QUESTION
     assert entity.related == ["hypothesis:h1"]
-
-
-def test_load_project_sources_reads_lightweight_terms_yaml(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "terms.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "terms": [
-                    {
-                        "id": "concept:treatment-response",
-                        "title": "Treatment response",
-                        "description": "Lightweight local concept",
-                        "content": "ignored body payload",
-                    }
-                ]
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(tmp_path)
-    by_id = {entity.canonical_id: entity for entity in sources.entities}
-    entity = by_id["concept:treatment-response"]
-
-    assert isinstance(entity, ProjectEntity)
-    assert entity.kind == "concept"
-    assert entity.type == EntityType.CONCEPT
-    assert entity.title == "Treatment response"
-    assert entity.content_preview == "Lightweight local concept"
-    assert entity.content == ""
-    assert entity.file_path == "knowledge/sources/local/terms.yaml"
-
-
-def test_load_project_sources_returns_typed_mechanism_entity(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "entities": [
-                    {
-                        "id": "concept:translation",
-                        "kind": "concept",
-                        "title": "Translation",
-                    },
-                    {
-                        "id": "concept:cell-state",
-                        "kind": "concept",
-                        "title": "Cell state",
-                    },
-                    {
-                        "id": "proposition:anti-coupling",
-                        "kind": "proposition",
-                        "title": "Translation and cell-state programs move in opposite directions",
-                    },
-                    {
-                        "id": "mechanism:anti-coupling-axis",
-                        "kind": "mechanism",
-                        "title": "Anti-coupling axis",
-                        "participants": ["concept:translation", "concept:cell-state"],
-                        "propositions": ["proposition:anti-coupling"],
-                        "summary": "Translation and cell-state programs move in opposite directions.",
-                    },
-                ]
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(tmp_path)
-    by_id = {entity.canonical_id: entity for entity in sources.entities}
-    mechanism = by_id["mechanism:anti-coupling-axis"]
-
-    assert isinstance(mechanism, MechanismEntity)
-    assert mechanism.participants == ["concept:translation", "concept:cell-state"]
-    assert mechanism.propositions == ["proposition:anti-coupling"]
 
 
 def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None:
@@ -648,68 +453,6 @@ def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path)
     assert entity.taxon == "NCBITaxon:9606"
 
 
-def test_load_project_sources_preserves_aggregate_identity_fields(tmp_path: Path) -> None:
-    _seed(tmp_path)
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "entities": [
-                    {
-                        "canonical_id": "concept:chromatin",
-                        "kind": "concept",
-                        "title": "Chromatin",
-                        "primary_external_id": {
-                            "source": "GO",
-                            "id": "0000785",
-                            "curie": "GO:0000785",
-                            "provenance": "manual",
-                        },
-                        "xrefs": [
-                            {
-                                "source": "MeSH",
-                                "id": "D002478",
-                                "curie": "MeSH:D002478",
-                                "provenance": "manual",
-                            }
-                        ],
-                        "scope": "shared",
-                        "deprecated_ids": ["concept:chromatin-state"],
-                        "replaced_by": "concept:chromatin-remodeling-context",
-                        "taxon": "NCBITaxon:9606",
-                    }
-                ]
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(tmp_path)
-    entity = next(e for e in sources.entities if e.canonical_id == "concept:chromatin")
-
-    assert isinstance(entity, ProjectEntity)
-    assert entity.primary_external_id == ExternalId(
-        source="GO",
-        id="0000785",
-        curie="GO:0000785",
-        provenance="manual",
-    )
-    assert entity.xrefs == [
-        ExternalId(
-            source="MeSH",
-            id="D002478",
-            curie="MeSH:D002478",
-            provenance="manual",
-        )
-    ]
-    assert entity.scope == EntityScope.SHARED
-    assert entity.deprecated_ids == ["concept:chromatin-state"]
-    assert entity.replaced_by == "concept:chromatin-remodeling-context"
-    assert entity.taxon == "NCBITaxon:9606"
-
-
 def test_load_project_sources_preserves_external_ref_taxon(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "science.yaml").write_text(
@@ -839,36 +582,6 @@ def test_load_project_sources_raises_when_catalog_collides_with_profile_kind(
 
     with pytest.raises(EntityKindShadowError, match="gene"):
         load_project_sources(tmp_path)
-
-
-def test_load_project_sources_allows_duplicate_kind_names_across_catalogs(tmp_path: Path) -> None:
-    (tmp_path / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [physics, units]\n",
-        encoding="utf-8",
-    )
-    local_sources = tmp_path / "knowledge" / "sources" / "local"
-    local_sources.mkdir(parents=True)
-    (local_sources / "entities.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "entities": [
-                    {
-                        "canonical_id": "electric_field:test-field",
-                        "kind": "electric_field",
-                        "title": "Test field",
-                    }
-                ]
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(tmp_path)
-    entity = next(e for e in sources.entities if e.canonical_id == "electric_field:test-field")
-
-    assert isinstance(entity, DomainEntity)
-    assert entity.kind == "electric_field"
 
 
 def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) -> None:

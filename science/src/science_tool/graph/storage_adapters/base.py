@@ -16,7 +16,7 @@ from science_model.entities import Entity
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.identity_table import ParticipationMode
-from science_tool.graph.source_records import AggregateRowMeta, MarkdownSourceDocument
+from science_tool.graph.source_records import MarkdownSourceDocument
 
 
 class StorageAdapter(ABC):
@@ -85,15 +85,6 @@ class StorageAdapter(ABC):
 
         MarkdownAdapter returns the markdown body + frontmatter for the
         annotation/anchor surface.
-        """
-        return None
-
-    def on_owner_declared(
-        self, *, entity: Entity, ref: SourceRef, raw: dict[str, Any], kind: str
-    ) -> AggregateRowMeta | None:
-        """Optional row-level triage metadata captured right after this entity's
-        owner declaration is emitted. Base: none. AggregateAdapter returns one
-        AggregateRowMeta per entities.yaml row (§B5).
         """
         return None
 
