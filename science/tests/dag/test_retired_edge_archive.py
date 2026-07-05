@@ -145,6 +145,24 @@ def test_archive_plan_missing_source_without_archive_blocks(tmp_path: Path) -> N
     assert payload["archive"] == "archive/dag-retired-edges/h1.edges.yaml"
 
 
+def test_archive_plan_rejects_path_separator_dag_slug(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    _dag_dir(project)
+
+    with pytest.raises(ValueError, match="DAG slug must be a single path segment"):
+        build_retired_edge_archive_plan(project, dag="nested/h1")
+
+
+def test_archive_plan_rejects_parent_path_dag_slug(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_manifest(project)
+    _dag_dir(project)
+
+    with pytest.raises(ValueError, match="DAG slug must be a single path segment"):
+        build_retired_edge_archive_plan(project, dag="../h1")
+
+
 def test_archive_plan_reports_already_archived(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_manifest(project)
@@ -431,6 +449,60 @@ def test_apply_retired_edge_archive_refuses_destination_collision(tmp_path: Path
 
     assert (project / "doc/figures/dags/h1.edges.yaml").exists()
     assert _archive_path(project).read_text(encoding="utf-8") == "collision\n"
+
+
+def test_apply_retired_edge_archive_refuses_archive_race_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import science_tool.dag.retired_edge_archive as module
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    source = project / "doc/figures/dags/h1.edges.yaml"
+    before = source.read_text(encoding="utf-8")
+    original_move = module._move_without_overwrite
+
+    def racing_move(src: Path, dst: Path) -> None:
+        dst.write_text("collision\n", encoding="utf-8")
+        original_move(src, dst)
+
+    monkeypatch.setattr(module, "_move_without_overwrite", racing_move)
+
+    with pytest.raises(FileExistsError):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert source.read_text(encoding="utf-8") == before
+    assert _archive_path(project).read_text(encoding="utf-8") == "collision\n"
+    assert not _manifest_path(project).exists()
+
+
+def test_apply_retired_edge_archive_refuses_manifest_race_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import science_tool.dag.retired_edge_archive as module
+    from science_tool.dag.retired_edge_archive import apply_retired_edge_archive
+
+    project = tmp_path / "project"
+    _write_retired_edge_project(project)
+    _write_lineage_proposition(project)
+    source = project / "doc/figures/dags/h1.edges.yaml"
+    before = source.read_text(encoding="utf-8")
+    original_write_text = module._write_text_without_overwrite
+
+    def racing_write_text(path: Path, text: str) -> None:
+        path.write_text("collision\n", encoding="utf-8")
+        original_write_text(path, text)
+
+    monkeypatch.setattr(module, "_write_text_without_overwrite", racing_write_text)
+
+    with pytest.raises(FileExistsError):
+        apply_retired_edge_archive(project, dag="h1", now="2026-07-05")
+
+    assert source.read_text(encoding="utf-8") == before
+    assert not _archive_path(project).exists()
+    assert _manifest_path(project).read_text(encoding="utf-8") == "collision\n"
 
 
 def test_apply_retired_edge_archive_rolls_back_when_manifest_write_fails(

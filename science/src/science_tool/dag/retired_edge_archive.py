@@ -199,7 +199,7 @@ def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str) -> Ret
         raise ValueError(f"retired edge file {dag!r} entered ambiguous_state before archive")
 
     archive.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(source), str(archive))
+    _move_without_overwrite(source, archive)
     _fsync_dir(archive.parent)
     try:
         _write_manifest_file(
@@ -212,6 +212,11 @@ def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str) -> Ret
             sha256=current_sha,
             archived_at=now,
         )
+    except FileExistsError:
+        shutil.move(str(archive), str(source))
+        _fsync_dir(manifest.parent)
+        _fsync_dir(source.parent)
+        raise
     except Exception:
         manifest.unlink(missing_ok=True)
         shutil.move(str(archive), str(source))
@@ -278,6 +283,8 @@ def _plan(
 def _paths(project_root: Path, dag: str) -> tuple[Path, Path, Path]:
     if not dag.strip():
         raise ValueError("--dag is required")
+    if Path(dag).name != dag or dag in {".", ".."}:
+        raise ValueError("DAG slug must be a single path segment")
     dag_dir = load_dag_paths(project_root).dag_dir
     source = dag_dir / f"{dag}.edges.yaml"
     archive = project_root / ARCHIVE_DIR / f"{dag}.edges.yaml"
@@ -326,9 +333,26 @@ def _write_manifest_file(
         "tool": ARCHIVE_TOOL,
         "reason": ARCHIVE_REASON,
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_text_without_overwrite(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     _fsync_file(path)
     _fsync_dir(path.parent)
+
+
+def _move_without_overwrite(source: Path, destination: Path) -> None:
+    with source.open("rb") as src, destination.open("xb") as dst:
+        shutil.copyfileobj(src, dst)
+        dst.flush()
+        os.fsync(dst.fileno())
+    try:
+        source.unlink()
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+
+def _write_text_without_overwrite(path: Path, text: str) -> None:
+    with path.open("x", encoding="utf-8") as fh:
+        fh.write(text)
 
 
 def _fsync_file(path: Path) -> None:
