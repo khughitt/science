@@ -2053,13 +2053,7 @@ def _fallback_group_from_notes(
     has_fallback_note = any(note.startswith("fallback:") for note in reason_notes)
     if not has_fallback_note:
         raise ValueError(f"generic fallback row has no fallback reason note: {benchmark_id}")
-    if (
-        "fallback:available-benchmark" in reason_notes
-        and "fallback:baseline-quality" not in reason_notes
-        and "fallback:task-ready" not in reason_notes
-    ):
-        return "generic-available-fallback"
-    if "selected:generic-baseline" in reason_notes or "fallback:baseline-quality" in reason_notes:
+    if "fallback:baseline-quality" in reason_notes:
         return "generic-baseline-fallback"
     if "fallback:task-ready" in reason_notes:
         return "generic-task-ready-fallback"
@@ -2080,13 +2074,10 @@ def _fallback_display_group_for_gap_candidate(candidate: GapCandidateBenchmarkRo
 def _fallback_display_group_for_test_row(row: BenchmarkTestRow) -> FallbackDisplayGroup:
     if row["priority_source"] != "gap-fallback":
         raise ValueError(f"non-fallback benchmark test row cannot be grouped: {row['benchmark_id']}")
-    context_fit = row["context_fit"]
-    if "selected:generic-baseline" in row["reason_notes"] or "selected:task-ready" in row["reason_notes"]:
-        context_fit = "generic-fallback"
     return _fallback_group_from_notes(
         benchmark_id=row["benchmark_id"],
         reason_notes=row["reason_notes"],
-        context_fit=context_fit,
+        context_fit=row["context_fit"],
         blocked=_is_blocked_support_fallback(row),
     )
 

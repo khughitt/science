@@ -2701,12 +2701,6 @@ def test_fallback_display_group_for_gap_candidates() -> None:
     )
     assert (
         _fallback_display_group_for_gap_candidate(
-            {**base, "reason_notes": ["fallback:available-benchmark", "selected:generic-baseline"]}
-        )
-        == "generic-available-fallback"
-    )
-    assert (
-        _fallback_display_group_for_gap_candidate(
             {
                 **base,
                 "context_fit": "adjacent-fit",
@@ -2818,23 +2812,23 @@ def test_fallback_display_group_for_test_rows() -> None:
     assert (
         _fallback_display_group_for_test_row(
             _benchmark_test_row_for_triage(
+                entity_id="hypothesis:specific-selected",
+                benchmark_id="dataset:specific-selected",
+                priority_source="gap-fallback",
+                context_fit="adjacent-fit",
+                reason_notes=["fallback:baseline-quality", "selected:generic-baseline"],
+            )
+        )
+        == "specific-fallback"
+    )
+    assert (
+        _fallback_display_group_for_test_row(
+            _benchmark_test_row_for_triage(
                 entity_id="hypothesis:available",
                 benchmark_id="dataset:available",
                 priority_source="gap-fallback",
                 context_fit="generic-fallback",
                 reason_notes=["fallback:available-benchmark"],
-            )
-        )
-        == "generic-available-fallback"
-    )
-    assert (
-        _fallback_display_group_for_test_row(
-            _benchmark_test_row_for_triage(
-                entity_id="hypothesis:available-selected",
-                benchmark_id="dataset:available-selected",
-                priority_source="gap-fallback",
-                context_fit="generic-fallback",
-                reason_notes=["fallback:available-benchmark", "selected:generic-baseline"],
             )
         )
         == "generic-available-fallback"
@@ -3176,8 +3170,8 @@ def test_benchmark_test_triage_fallback_diagnostics_roll_up_visible_fallback_row
     from science_tool.benchmark_opportunities import benchmark_test_triage_report
 
     for slug, title, body in (
-        ("0106-generic-a", "Generic fallback A", "Homeostatic recovery remains under-tested."),
-        ("0107-generic-b", "Generic fallback B", "Adaptive recovery remains under-tested."),
+        ("0106-generic-a", "Generic A", "Homeostatic recovery remains under-tested."),
+        ("0107-generic-b", "Generic B", "Adaptive recovery remains under-tested."),
     ):
         _write_entity(
             tmp_path,
@@ -3267,6 +3261,40 @@ benchmark:
     assert payload["fallback_diagnostics"]["terminal_hidden_rollup_count"] == 1
     assert payload["fallback_diagnostics"]["top_generic_fallback_benchmarks"] == [
         {"benchmark_id": "dataset:supported-fallback-rollup", "count": 2}
+    ]
+
+
+def test_benchmark_test_fallback_rollups_split_by_display_group() -> None:
+    from science_tool.benchmark_opportunities import _benchmark_test_fallback_rollups, _benchmark_test_triage_row
+
+    base = {
+        "benchmark_id": "dataset:mixed-rollup",
+        "task_id": "dataset:mixed-rollup#ready",
+        "priority_source": "gap-fallback",
+        "reason_notes": ["fallback:baseline-quality", "selected:generic-baseline"],
+    }
+    rows = [
+        _benchmark_test_triage_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:specific",
+                context_fit="adjacent-fit",
+                **base,
+            )
+        ),
+        _benchmark_test_triage_row(
+            _benchmark_test_row_for_triage(
+                entity_id="hypothesis:generic",
+                context_fit="generic-fallback",
+                **base,
+            )
+        ),
+    ]
+
+    rollups = _benchmark_test_fallback_rollups(rows)
+
+    assert [(rollup["display_group"], rollup["count"]) for rollup in rollups] == [
+        ("specific-fallback", 1),
+        ("generic-baseline-fallback", 1),
     ]
 
 
