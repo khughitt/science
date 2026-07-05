@@ -36,6 +36,10 @@
 - A surface's gate is not green on sentinel-absence alone: the affected projects
   must still build. Re-run `science validate` (or `graph materialize`) on each
   migrated project before deleting that surface's reader.
+- Treat `~/d/science-commons` as an in-scope shared repository. It is not an
+  ordinary registered research project, but it owns reusable canonical records
+  such as datasets and paper summaries, so any affected commons files must be
+  migrated before a reader is deleted.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -59,7 +63,7 @@ and writes markdown plus JSON output. The single-project scanner must exclude
 nested `.worktrees/` and `.git/` directories so a project's own worktrees do not
 double-count entity files or sentinels.
 
-- [ ] **Step 3: Reconcile the coverage universe**
+- [x] **Step 3: Reconcile the coverage universe**
 
 The safety model deletes readers once the precheck is green, so the scanned set
 must provably cover the at-risk set. Filesystem-sweep for `science.yaml` files
@@ -69,10 +73,12 @@ either register it, migrate it under this campaign, or record an explicit
 exclusion with rationale. Do not trust any zero-hit gate until this delta is
 resolved.
 
-Status 2026-07-05: the initial sweep found one unregistered project,
-`~/d/science-commons`, and one stale registered worktree path,
-`~/d/natural-systems/.worktrees/validation-strict-cleanup`. Resolve those before
-trusting a zero-hit surface gate.
+Status 2026-07-05: `~/d/science-commons` is now included as an in-scope shared
+repository rather than treated as an unresolved unregistered project. The sweep
+still reports one stale registered worktree path,
+`~/d/natural-systems/.worktrees/validation-strict-cleanup`; because that path is
+absent, it is not load-bearing project data, but it should be pruned from the
+global registry before final cleanup.
 
 - [x] **Step 4: Test deduplication and sentinel precision**
 

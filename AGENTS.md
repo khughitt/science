@@ -16,6 +16,13 @@ its object of study (hypotheses, tasks, and decisions about the toolkit's own
 design). Its guide is `meta/AGENTS.md` — don't confuse the two: this file is
 about writing toolkit code, `meta/AGENTS.md` is about that research project.
 
+The sibling `~/d/science-commons` repo is also part of the Science ecosystem,
+but it is not an ordinary research project. It is the shared canonical entity
+store for reusable records such as datasets and paper summaries, and future
+base knowledge representations may live there. Toolkit changes that migrate or
+tighten entity/source formats must include commons in compatibility and
+migration checks when its files are affected.
+
 ## Layout / packages
 
 There is **no root `pyproject.toml`**. This repo holds nested, independently

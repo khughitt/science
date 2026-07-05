@@ -66,12 +66,17 @@ worktrees do not double-count entity files or sentinels.
 The safety model deletes each reader once its precheck is green, so the scanned
 set must provably cover the at-risk set. The registry lists **22 projects**, but
 **23 `science.yaml` files exist on disk** under Dropbox (excluding worktrees) —
-at least one project is unregistered and therefore invisible to the precheck. An
-unregistered project's data breaks silently the moment its reader is removed.
-Before trusting any zero-hit gate, filesystem-sweep for `science.yaml` outside
-the registry and, for each hit, register / migrate / explicitly exclude with
-rationale. Removing a migrator is a one-way door — a project archived,
-off-machine, or reactivated later can no longer be migrated.
+at least one repository is outside the registered-project list and therefore
+invisible to a registry-only precheck. `~/d/science-commons` is the known
+special case: it is not an ordinary research project, but it is an in-scope
+shared canonical entity repository for reusable records such as datasets and
+paper summaries. The legacy-surface inventory must scan commons as a shared
+repository and migrate affected commons files before deleting any reader. Before
+trusting any zero-hit gate, filesystem-sweep for `science.yaml` outside the
+registered set and, for each hit, register it, include it as a shared repository,
+migrate it under this campaign, or record an explicit exclusion with rationale.
+Removing a migrator is a one-way door — a project archived, off-machine, or
+reactivated later can no longer be migrated.
 
 ## Execution Environment
 
@@ -82,6 +87,9 @@ off-machine, or reactivated later can no longer be migrated.
 - Each project migration is a commit in a separate, Dropbox-synced git repo whose
   branch/HEAD can drift mid-session. Verify branch and HEAD in each project repo
   before committing, and path-scope any stashes.
+- Commons migrations are commits in `~/d/science-commons`. Treat it with the
+  same branch/HEAD hygiene as registered projects even though it is included as a
+  shared repository rather than an ordinary research project.
 
 ## Migration Command Retention Decision
 

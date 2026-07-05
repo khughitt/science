@@ -1,6 +1,6 @@
 # Legacy Support Scrub Inventory
 
-Generated at: `2026-07-05T02:16:18Z`
+Generated at: `2026-07-05T02:29:58Z`
 Config path: `~/.config/science/config.yaml`
 
 ## Summary
@@ -10,10 +10,11 @@ Config path: `~/.config/science/config.yaml`
 | `registered_entries` | 22 |
 | `unique_registered_paths` | 22 |
 | `duplicate_registered_entries` | 0 |
-| `scanned_projects` | 21 |
+| `shared_repository_entries` | 1 |
+| `scanned_projects` | 22 |
 | `skipped_registered_projects` | 1 |
-| `unregistered_science_yaml` | 1 |
-| `total_findings` | 7183 |
+| `unregistered_science_yaml` | 0 |
+| `total_findings` | 7522 |
 
 ## Surface Totals
 
@@ -24,7 +25,7 @@ Config path: `~/.config/science/config.yaml`
 | `legacy_entity_roots` | 79 |
 | `legacy_marker_alias` | 4 |
 | `retired_edges_yaml` | 4 |
-| `type_frontmatter` | 7050 |
+| `type_frontmatter` | 7389 |
 
 ## Projects
 
@@ -49,6 +50,7 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/processes/post-acute-infection` | 566 | `legacy_entity_roots`=8, `type_frontmatter`=558 |
 | `~/d/natural-systems` | 1009 | `aggregate_manifest`=1, `legacy_entity_roots`=41, `legacy_marker_alias`=2, `type_frontmatter`=965 |
 | `~/d/protein-landscape` | 285 | `aggregate_manifest`=1, `legacy_entity_roots`=5, `retired_edges_yaml`=1, `type_frontmatter`=278 |
+| `~/d/science-commons` | 339 | `type_frontmatter`=339 |
 | `~/d/science/meta` | 110 | `type_frontmatter`=110 |
 | `~/d/seq-feats` | 212 | `aggregate_manifest`=1, `legacy_entity_roots`=8, `legacy_marker_alias`=1, `type_frontmatter`=202 |
 
@@ -6917,6 +6919,345 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/protein-landscape` | `type_frontmatter` | `entities/topics/visualization-tools.md` | entity frontmatter has type: |
 | `~/d/protein-landscape` | `type_frontmatter` | `entities/workflows/heldout-taxa-benchmark.md` | entity frontmatter has type: |
 | `~/d/protein-landscape` | `type_frontmatter` | `specs/scope-boundaries.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/arxiv-corpus/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/arxiv-source-equations/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/assembly-liftover-grch37-grch38/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/assembly-registry/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/brca-metabric/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/brca-tcga-pancanatlas/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/ccle-proteomics-nusinow-2020/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/cptac-gbm-2021-proteogenomics/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/cptac-proteogenomics/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/ctrpv2/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/cytoband-hg19/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/dream-perturbation/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/dream4-in-silico-network/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/gene-crosswalk-hgnc/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/go/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-allen-hh-glif-rows/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-coblentz-table-rows/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-dart-event-window/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-exomol-transition-subset/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-gause-monoculture-rows/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-gebco-path-samples/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/h07-clean-base-pangaea-darcy-rows/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/hh1952-digitized-conductance/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/human-cell-atlas/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/l1000-cmap/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/mmrf-commpass/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/mondo/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/mouse-gastrulation-atlas/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/oetjen-2018-bone-marrow-atlas/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/openalex-citations/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/opentargets-associations/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/opentargets-platform/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/owid-reported-measles/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/power-grid-frequency-germany-2020-01/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/protein-crosswalk-uniprot/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/reactome/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/sciplex3/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/sequence-store-grch38-grch37/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/tahoe-100m/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `datasets/variant-labels-dbsnp-human/entity.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Aiello2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/AlBakir2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Algazi2020IntermittentMelanoma.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Allada2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Alvord2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Angaroni2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Aras2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Attolini2010.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Azzi2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bafna2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Barkley2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bass2016.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Beaney2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bernard2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bigge2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/BoquetPujadas2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bowling2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Brown2017Aggregation.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Bukkuri2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Burkhardt2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Burrell2013.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Carey2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Cederroth2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Cermakian2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/ChamorroGonzalez2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Cheek2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Chen2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Cho2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ciriello2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Collins2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Coorens2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dabi2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dang2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dayimu2024INTERIM.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Demela2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Deo2014.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Deota2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Derbal2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dhabhai2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dong2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dong2024CtDNANSCLC.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dopico2015.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dowell2001.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Dubois2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ecochard2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Edelman2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/ElTanani2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Evans2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Fehlmann2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/FilipekGorzala2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Finger2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Finger2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Fortin2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Frank2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Funnell2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Galassi2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gallaher2025PSATestosteroneAdaptive.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gao2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gatenby2020Resistance.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gatenby2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gavish2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gerlinger2014.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Getzen2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ghorbian2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/GimenoValiente2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Godos2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/GonzalezCao2021IntermittentMelanoma.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gourmet2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Graham2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Grani2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Gravenmier2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Grechkin2016.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Guo2014.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Guo2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hall2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Halu2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Han2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hanahan2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/He2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hendriksen2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hirsch2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ho2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hu2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Huang2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Huang2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hughitt2025MIPE.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hung2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Hussain2013IntermittentADT.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ince2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Islam2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Islam2024b.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Jadhav2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Janoski2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Jensen2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Jiang2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/JimenezSanchez2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Jurgens2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Karczewski2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Karlsson2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kaufler2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kenrick2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kent2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kim2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kim2024-ecdna-progression.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kim2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kinker2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kliche2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kolbeinsdottir2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Koronowski2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Koskinen2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kotliar2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kotliarov2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kulman2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kumar2022secDrug.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Kuo2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lakatos2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lakiotaki2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lau2016.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lee2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Legrand2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Levine2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Li2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Li2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Li2024a.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Liau2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lieberman2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lim2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Lionetti2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Liu2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Loh2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ludwig2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Luo2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Luquette2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Mao2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Martinez2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/MartinezJimenez2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Marzban2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Mayfield2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Mazaya2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/McKenna2016.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Moriyama2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Mukherjee2024ACTOv.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Munteanu2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nabizadeh2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nagar2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nakajima2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nam2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/NattersonHorowitz2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nikolic2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nishimura2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Noureen2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nuno2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Nussinov2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ogawa2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Park2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Patel2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Patil2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pelissier2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pellegrina2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pellegrini2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pepe2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Persi2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Peters2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pienta2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pietzner2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Placido2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Pressley2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Prinsen2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Qi2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Qin2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Qu2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Quinn2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Reeves2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Riew2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Roenneberg2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Roszkowska2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sakaue2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Saputra2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/SartoreBianchi2022CHRONOS.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Savy2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Schaumberg2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Scheiermann2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Schill2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Schmidt2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Schmidt2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sheehan2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Shen2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Shostak2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Simeonov2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Singh2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/SkoufouPapoutsaki2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Somarelli2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sottoriva2015.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sprouffske2011.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Strobl2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sturgeon2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Sudalagunta2020Synergy.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Talarmain2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Tang2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Tanigawa2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Teimouri2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Tirosh2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Toonsi2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Tuffaha2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Turner2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/VargasCampos2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Vendramin2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Venkatachalapathy2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wang2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wang2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wang2024MPN.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wang2024Pathway.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wang2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Watson2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wei2020.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Weng2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/West2023AdaptiveTherapy.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Williams2016.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Woerner2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wu2019.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Wyse2021.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Xian2024Preprint.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Xian2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Xiao2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Xiong2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Yang2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Yang2025-precancer.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Ye2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Yi2022.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Yuan2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zeng2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zeng2024a.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zgeib2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2017AdaptiveAbiraterone.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2022AdaptiveADT.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2022AdaptiveAbiraterone.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2024.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhang2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhou2017.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zhou2025.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/Zuber2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/deCarvalho2018.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/delOlmo2026.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `papers/vanZeventer2023.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0001-cross-scale-state-transitions.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0002-failure-modes-of-generalization.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0003-intervention-readiness.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0004-observation-and-measurement-bias.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0005-transportability-across-cancer-types.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0006-bayesian-evidence-synthesis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0007-causal-data-integration.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0008-causal-discovery-and-structure-learning.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0009-data-integration-and-multi-omics.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0010-scientific-knowledge-systems-and-agents.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0011-source-reliability-and-truth-discovery.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0012-global-transcriptional-output-as-a-cancer-state-axis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0013-cross-disease-foundations.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `themes/0014-convergent-escape-nodes.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/aging-epigenetic-erosion-clonal-susceptibility.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/aid-germinal-center-mm-origins.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/bayesian.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/cancer-as-singular-evolutionary-disease.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/causal-inference-biology-foundations.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/causal-inference.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/centrosomes-cancer-multiple-myeloma.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/clinical-phenotype.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/cytogenetics.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/disease-stage-progression-methods.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/enrichment.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/epigenetic-chromatin-mm-progression.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/formal-causal-mediation.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/gain-1q.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/gain1q-neg-unique-genes.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/gene-set-novelty-quantification-methods.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/hormone-driven-cancer-and-cycle-timing.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/hyperdiploidy.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/hypothesis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/invariant-causal-prediction-biology.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/meta-analysis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/metafor-ranks16-30-literature-synthesis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/metafor-ranks31-45-literature-synthesis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/metafor-top15-literature-synthesis.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/mm-cell-line-models.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/mm-combination-therapy.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/mm-drug-resistance.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/mm-drug-targets.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/model-classification-and-inter-model-relationships.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/multiple-myeloma.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/nk-boolean-attractor-formalism.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/ordinal-staging-regression-meta-analysis-methods.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/phf19-regulation-chromatin.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/ribosomopathies-hematologic-malignancies.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/selection-vs-drift-mm-progression.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/sex-hormones-and-immune-regulation.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/target-trial-emulation-oncology.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/treatment.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/validation.md` | entity frontmatter has type: |
+| `~/d/science-commons` | `type_frontmatter` | `topics/waddington-landscape-attractor-formalism.md` | entity frontmatter has type: |
 | `~/d/science/meta` | `type_frontmatter` | `entities/_archive/propositions/bes-behaves-like-pooled-meta-analysis.md` | entity frontmatter has type: |
 | `~/d/science/meta` | `type_frontmatter` | `entities/hypotheses/0001-stochastic-revisiting.md` | entity frontmatter has type: |
 | `~/d/science/meta` | `type_frontmatter` | `entities/hypotheses/0002-rich-evidence-payloads-improve-graph-calibration.md` | entity frontmatter has type: |
@@ -7248,6 +7589,4 @@ Config path: `~/.config/science/config.yaml`
 
 ## Coverage Sweep
 
-| project root | science.yaml |
-| --- | --- |
-| `~/d/science-commons` | `~/d/science-commons/science.yaml` |
+_No unregistered `science.yaml` files found in search roots._

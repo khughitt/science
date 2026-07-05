@@ -31,6 +31,7 @@ from science_tool.registry.config import get_default_config_path, load_global_co
 
 DEFAULT_MARKDOWN_OUTPUT = SCIENCE_REPO_ROOT / "docs" / "audits" / "legacy-support-scrub-inventory-2026-07-04.md"
 DEFAULT_JSON_OUTPUT = DEFAULT_MARKDOWN_OUTPUT.with_suffix(".json")
+DEFAULT_COMMONS_ROOT = Path.home() / "d" / "science-commons"
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,15 @@ def _registered_project_paths(config_path: Path) -> tuple[list[Path], int]:
     return sorted(unique.keys()), duplicates
 
 
+def _shared_repository_paths(config_path: Path, cfg: Any) -> list[Path]:
+    paths: set[Path] = set()
+    if cfg.commons.root is not None:
+        paths.add(_safe_resolve(Path(cfg.commons.root)))
+    elif config_path == _safe_resolve(get_default_config_path()):
+        paths.add(_safe_resolve(DEFAULT_COMMONS_ROOT))
+    return sorted(path for path in paths if path.is_dir() and (path / "science.yaml").is_file())
+
+
 def _default_search_roots(registered_paths: Iterable[Path]) -> list[Path]:
     roots = {path.parent for path in registered_paths}
     return sorted(roots)
@@ -144,15 +154,15 @@ def _walk_search_root(search_root: Path) -> Iterable[tuple[Path, list[str], list
 def find_unregistered_science_yaml(
     *,
     search_roots: Iterable[Path],
-    registered_paths: Iterable[Path],
+    in_scope_paths: Iterable[Path],
 ) -> tuple[dict[str, str], ...]:
-    registered = {_safe_resolve(path) for path in registered_paths}
+    in_scope = {_safe_resolve(path) for path in in_scope_paths}
     findings: list[dict[str, str]] = []
     seen: set[Path] = set()
     for root in search_roots:
         for science_yaml in _iter_science_yaml(root):
             project_root = _safe_resolve(science_yaml.parent)
-            if project_root in registered or project_root in seen:
+            if project_root in in_scope or project_root in seen:
                 continue
             if _is_fixture_project(project_root):
                 continue
@@ -174,6 +184,7 @@ def scan_registered_projects(
     config_path = _safe_resolve(config_path or get_default_config_path())
     cfg = load_global_config(config_path)
     registered_paths, duplicates = _registered_project_paths(config_path)
+    shared_repository_paths = _shared_repository_paths(config_path, cfg)
 
     projects: list[LegacySurfaceScan] = []
     skipped_registered_projects: list[dict[str, str]] = []
@@ -187,6 +198,10 @@ def scan_registered_projects(
             )
             continue
         projects.append(scan_legacy_surfaces(project_root))
+    for project_root in shared_repository_paths:
+        if project_root in registered_paths:
+            continue
+        projects.append(scan_legacy_surfaces(project_root))
 
     totals: Counter[str] = Counter()
     for project in projects:
@@ -195,13 +210,14 @@ def scan_registered_projects(
     roots = list(search_roots) if search_roots is not None else _default_search_roots(registered_paths)
     unregistered = find_unregistered_science_yaml(
         search_roots=roots,
-        registered_paths=registered_paths,
+        in_scope_paths=[*registered_paths, *shared_repository_paths],
     )
 
     summary = {
         "registered_entries": len(cfg.projects),
         "unique_registered_paths": len(registered_paths),
         "duplicate_registered_entries": duplicates,
+        "shared_repository_entries": len(shared_repository_paths),
         "scanned_projects": len(projects),
         "skipped_registered_projects": len(skipped_registered_projects),
         "unregistered_science_yaml": len(unregistered),

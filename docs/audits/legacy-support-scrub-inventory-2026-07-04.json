@@ -1,6 +1,6 @@
 {
   "config_path": "~/.config/science/config.yaml",
-  "generated_at_utc": "2026-07-05T02:16:18Z",
+  "generated_at_utc": "2026-07-05T02:29:58Z",
   "projects": [
     {
       "counts": {
@@ -36109,6 +36109,1709 @@
         }
       ],
       "project_root": "~/d/seq-feats"
+    },
+    {
+      "counts": {
+        "type_frontmatter": 339
+      },
+      "findings": [
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/arxiv-corpus/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/arxiv-source-equations/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/assembly-liftover-grch37-grch38/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/assembly-registry/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/brca-metabric/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/brca-tcga-pancanatlas/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/ccle-proteomics-nusinow-2020/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/cptac-gbm-2021-proteogenomics/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/cptac-proteogenomics/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/ctrpv2/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/cytoband-hg19/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/dream-perturbation/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/dream4-in-silico-network/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/gene-crosswalk-hgnc/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/go/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-allen-hh-glif-rows/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-coblentz-table-rows/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-dart-event-window/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-exomol-transition-subset/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-gause-monoculture-rows/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-gebco-path-samples/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/h07-clean-base-pangaea-darcy-rows/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/hh1952-digitized-conductance/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/human-cell-atlas/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/l1000-cmap/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/mmrf-commpass/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/mondo/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/mouse-gastrulation-atlas/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/oetjen-2018-bone-marrow-atlas/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/openalex-citations/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/opentargets-associations/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/opentargets-platform/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/owid-reported-measles/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/power-grid-frequency-germany-2020-01/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/protein-crosswalk-uniprot/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/reactome/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/sciplex3/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/sequence-store-grch38-grch37/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/tahoe-100m/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "datasets/variant-labels-dbsnp-human/entity.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Aiello2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/AlBakir2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Algazi2020IntermittentMelanoma.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Allada2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Alvord2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Angaroni2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Aras2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Attolini2010.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Azzi2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bafna2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Barkley2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bass2016.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Beaney2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bernard2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bigge2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/BoquetPujadas2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bowling2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Brown2017Aggregation.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Bukkuri2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Burkhardt2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Burrell2013.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Carey2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Cederroth2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Cermakian2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/ChamorroGonzalez2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Cheek2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Chen2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Cho2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ciriello2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Collins2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Coorens2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dabi2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dang2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dayimu2024INTERIM.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Demela2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Deo2014.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Deota2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Derbal2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dhabhai2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dong2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dong2024CtDNANSCLC.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dopico2015.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dowell2001.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Dubois2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ecochard2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Edelman2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/ElTanani2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Evans2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Fehlmann2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/FilipekGorzala2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Finger2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Finger2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Fortin2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Frank2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Funnell2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Galassi2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gallaher2025PSATestosteroneAdaptive.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gao2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gatenby2020Resistance.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gatenby2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gavish2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gerlinger2014.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Getzen2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ghorbian2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/GimenoValiente2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Godos2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/GonzalezCao2021IntermittentMelanoma.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gourmet2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Graham2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Grani2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Gravenmier2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Grechkin2016.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Guo2014.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Guo2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hall2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Halu2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Han2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hanahan2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/He2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hendriksen2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hirsch2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ho2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hu2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Huang2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Huang2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hughitt2025MIPE.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hung2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Hussain2013IntermittentADT.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ince2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Islam2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Islam2024b.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Jadhav2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Janoski2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Jensen2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Jiang2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/JimenezSanchez2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Jurgens2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Karczewski2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Karlsson2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kaufler2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kenrick2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kent2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kim2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kim2024-ecdna-progression.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kim2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kinker2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kliche2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kolbeinsdottir2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Koronowski2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Koskinen2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kotliar2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kotliarov2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kulman2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kumar2022secDrug.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Kuo2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lakatos2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lakiotaki2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lau2016.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lee2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Legrand2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Levine2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Li2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Li2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Li2024a.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Liau2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lieberman2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lim2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Lionetti2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Liu2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Loh2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ludwig2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Luo2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Luquette2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Mao2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Martinez2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/MartinezJimenez2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Marzban2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Mayfield2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Mazaya2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/McKenna2016.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Moriyama2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Mukherjee2024ACTOv.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Munteanu2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nabizadeh2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nagar2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nakajima2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nam2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/NattersonHorowitz2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nikolic2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nishimura2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Noureen2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nuno2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Nussinov2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ogawa2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Park2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Patel2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Patil2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pelissier2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pellegrina2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pellegrini2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pepe2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Persi2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Peters2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pienta2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pietzner2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Placido2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Pressley2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Prinsen2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Qi2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Qin2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Qu2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Quinn2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Reeves2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Riew2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Roenneberg2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Roszkowska2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sakaue2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Saputra2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/SartoreBianchi2022CHRONOS.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Savy2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Schaumberg2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Scheiermann2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Schill2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Schmidt2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Schmidt2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sheehan2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Shen2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Shostak2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Simeonov2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Singh2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/SkoufouPapoutsaki2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Somarelli2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sottoriva2015.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sprouffske2011.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Strobl2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sturgeon2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Sudalagunta2020Synergy.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Talarmain2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Tang2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Tanigawa2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Teimouri2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Tirosh2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Toonsi2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Tuffaha2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Turner2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/VargasCampos2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Vendramin2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Venkatachalapathy2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wang2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wang2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wang2024MPN.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wang2024Pathway.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wang2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Watson2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wei2020.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Weng2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/West2023AdaptiveTherapy.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Williams2016.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Woerner2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wu2019.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Wyse2021.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Xian2024Preprint.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Xian2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Xiao2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Xiong2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Yang2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Yang2025-precancer.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Ye2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Yi2022.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Yuan2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zeng2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zeng2024a.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zgeib2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2017AdaptiveAbiraterone.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2022AdaptiveADT.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2022AdaptiveAbiraterone.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2024.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhang2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhou2017.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zhou2025.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/Zuber2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/deCarvalho2018.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/delOlmo2026.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "papers/vanZeventer2023.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0001-cross-scale-state-transitions.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0002-failure-modes-of-generalization.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0003-intervention-readiness.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0004-observation-and-measurement-bias.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0005-transportability-across-cancer-types.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0006-bayesian-evidence-synthesis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0007-causal-data-integration.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0008-causal-discovery-and-structure-learning.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0009-data-integration-and-multi-omics.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0010-scientific-knowledge-systems-and-agents.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0011-source-reliability-and-truth-discovery.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0012-global-transcriptional-output-as-a-cancer-state-axis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0013-cross-disease-foundations.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "themes/0014-convergent-escape-nodes.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/aging-epigenetic-erosion-clonal-susceptibility.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/aid-germinal-center-mm-origins.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/bayesian.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/cancer-as-singular-evolutionary-disease.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/causal-inference-biology-foundations.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/causal-inference.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/centrosomes-cancer-multiple-myeloma.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/clinical-phenotype.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/cytogenetics.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/disease-stage-progression-methods.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/enrichment.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/epigenetic-chromatin-mm-progression.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/formal-causal-mediation.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/gain-1q.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/gain1q-neg-unique-genes.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/gene-set-novelty-quantification-methods.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/hormone-driven-cancer-and-cycle-timing.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/hyperdiploidy.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/hypothesis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/invariant-causal-prediction-biology.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/meta-analysis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/metafor-ranks16-30-literature-synthesis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/metafor-ranks31-45-literature-synthesis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/metafor-top15-literature-synthesis.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/mm-cell-line-models.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/mm-combination-therapy.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/mm-drug-resistance.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/mm-drug-targets.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/model-classification-and-inter-model-relationships.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/multiple-myeloma.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/nk-boolean-attractor-formalism.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/ordinal-staging-regression-meta-analysis-methods.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/phf19-regulation-chromatin.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/ribosomopathies-hematologic-malignancies.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/selection-vs-drift-mm-progression.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/sex-hormones-and-immune-regulation.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/target-trial-emulation-oncology.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/treatment.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/validation.md",
+          "surface": "type_frontmatter"
+        },
+        {
+          "detail": "entity frontmatter has type:",
+          "path": "topics/waddington-landscape-attractor-formalism.md",
+          "surface": "type_frontmatter"
+        }
+      ],
+      "project_root": "~/d/science-commons"
     }
   ],
   "schema_version": "legacy-surfaces-v1",
@@ -36121,11 +37824,12 @@
   "summary": {
     "duplicate_registered_entries": 0,
     "registered_entries": 22,
-    "scanned_projects": 21,
+    "scanned_projects": 22,
+    "shared_repository_entries": 1,
     "skipped_registered_projects": 1,
-    "total_findings": 7183,
+    "total_findings": 7522,
     "unique_registered_paths": 22,
-    "unregistered_science_yaml": 1
+    "unregistered_science_yaml": 0
   },
   "surface_totals": {
     "aggregate_manifest": 7,
@@ -36133,12 +37837,7 @@
     "legacy_entity_roots": 79,
     "legacy_marker_alias": 4,
     "retired_edges_yaml": 4,
-    "type_frontmatter": 7050
+    "type_frontmatter": 7389
   },
-  "unregistered_science_yaml": [
-    {
-      "path": "~/d/science-commons",
-      "science_yaml": "~/d/science-commons/science.yaml"
-    }
-  ]
+  "unregistered_science_yaml": []
 }

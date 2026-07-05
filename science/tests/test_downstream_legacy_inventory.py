@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from types import ModuleType
 
+from science_tool.commons.config import CommonsSettings
 from science_tool.registry.config import GlobalConfig, RegisteredProject, save_global_config
 
 
@@ -214,3 +215,33 @@ def test_coverage_sweep_excludes_nested_worktrees_and_reports_unregistered(
     )
 
     assert [entry["path"] for entry in report.unregistered_science_yaml] == [str(unregistered.resolve())]
+
+
+def test_configured_commons_root_is_scanned_as_shared_repository(tmp_path: Path) -> None:
+    commons = tmp_path / "science-commons"
+    _science_yaml(commons, "id: science-commons\n")
+    _write(
+        commons / "datasets" / "reference" / "entity.md",
+        """
+        ---
+        type: dataset
+        id: dataset:reference
+        title: Reference dataset
+        ---
+        """,
+    )
+    config_path = tmp_path / "config.yaml"
+    save_global_config(
+        GlobalConfig(commons=CommonsSettings(root=commons)),
+        config_path,
+    )
+
+    report = registered_inventory.scan_registered_projects(
+        config_path=config_path,
+        search_roots=[tmp_path],
+    )
+
+    assert report.summary["shared_repository_entries"] == 1
+    assert report.summary["scanned_projects"] == 1
+    assert report.summary["unregistered_science_yaml"] == 0
+    assert report.surface_totals == {"type_frontmatter": 1}
