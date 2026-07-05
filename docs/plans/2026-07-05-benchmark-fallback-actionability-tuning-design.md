@@ -77,34 +77,88 @@ a user explicitly requests a filtering option that already exists
 
 ## Fallback Display Groups
 
-Introduce an internal display grouping derived from existing row fields.
+Introduce an internal display grouping derived from existing row fields. The
+group is a **per-row** function, `display_group(row)`, computed by one pure
+helper in the report layer and consumed by both JSON payloads and tables.
 
-For benchmark-test rows, fallback status is `priority_source == "gap-fallback"`.
-For gap-candidate rows, fallback status is the existing reason-note predicate
-used by `_is_fallback_candidate()` because public gap candidates do not carry a
-`priority_source` field.
+### Normalized inputs
 
-| Group | Predicate | Meaning |
+The two row types expose different fields, so the helper reads a normalized view
+rather than a single field:
+
+| Signal | Gap-candidate row (`GapCandidateBenchmarkRow`) | Benchmark-test row (`BenchmarkTestRow`) |
 | --- | --- | --- |
-| `specific-fallback` | `priority_source == "gap-fallback"` and `context_fit != "generic-fallback"` | A fallback row has some contextual signal despite coming from fallback selection. |
-| `blocked-support-fallback` | existing blocked task-support predicate | A fallback row is blocked by task support and should stay suppressed by default. |
-| `generic-baseline-fallback` | `context_fit == "generic-fallback"` and reason notes include `fallback:baseline-quality` or `selected:generic-baseline` | High-quality benchmark with no project/entity-specific evidence. |
-| `generic-task-ready-fallback` | `context_fit == "generic-fallback"` and reason notes include `fallback:task-ready` or `selected:task-ready`, but not baseline-generic | Task metadata/readiness drove selection without entity evidence. |
-| `generic-available-fallback` | `context_fit == "generic-fallback"` and neither generic-baseline nor generic-task-ready predicates match | Catch-all generic fallback selected because it was available. |
+| `is_fallback` | `_is_fallback_candidate(row)` (reason-note predicate; gap rows have no `priority_source`) | `priority_source == "gap-fallback"` |
+| `context_fit` | present | present |
+| `task_support_state` | **absent** | present |
 
-The groups are presentation categories, not new scientific claims. They should
-be computed from row fields at the edge where tables, review artifacts, and
-diagnostic summaries are built.
+Because gap-candidate rows carry no task-support signal, the
+`blocked-support-fallback` group is **only derivable on benchmark-test rows**. The
+gaps `fallback_diagnostics.groups` therefore omits it entirely (see Benchmark Gaps
+Output). Do not invent a blocked-support count on the gap side.
 
-If a row satisfies multiple generic predicates, precedence is:
+### Groups (per-row, precedence order)
 
-1. `blocked-support-fallback`;
-2. `generic-baseline-fallback`;
-3. `generic-task-ready-fallback`;
-4. `generic-available-fallback`.
+`display_group(row)` is total over fallback rows. Precedence resolves overlaps —
+the first matching rule wins:
 
-`specific-fallback` applies only to non-blocked fallback rows whose
-`context_fit` is not `generic-fallback`.
+| Precedence | Group | Predicate | Row types |
+| --- | --- | --- | --- |
+| 1 | `blocked-support-fallback` | `is_fallback and task_support_state == "blocked"` | test only |
+| 2 | `specific-fallback` | `is_fallback and context_fit != "generic-fallback"` | both |
+| 3 | `generic-baseline-fallback` | `is_fallback and context_fit == "generic-fallback" and "fallback:baseline-quality" in reason_notes` | both |
+| 4 | `generic-task-ready-fallback` | `is_fallback and context_fit == "generic-fallback" and "fallback:task-ready" in reason_notes` | both |
+| 5 | `generic-available-fallback` | `is_fallback and context_fit == "generic-fallback"` (catch-all) | both |
+
+Notes:
+
+- Keying `generic-baseline-fallback` on `fallback:baseline-quality` alone is
+  sufficient — `_selection_reason_note` only emits `selected:generic-baseline`
+  when `fallback:baseline-quality` is already present, so the `selected:*` spelling
+  is redundant. Same for the task-ready pair.
+- `specific-fallback` (precedence 2) sits above the generic rules by construction:
+  a non-generic `context_fit` cannot also be `generic-fallback`. It captures only
+  **non-blocked** fallback rows with a real context signal, because
+  `blocked-support-fallback` (precedence 1) claims blocked rows first.
+- The three `generic-*` groups are the **collapsible** set. `specific-fallback`
+  and (on the test side) `blocked-support-fallback` are handled separately.
+
+### Rollups must be group-homogeneous
+
+`_benchmark_test_fallback_rollups` currently keys on
+`(benchmark_id, task_id, task_support_state, readiness_label, dataset_class,
+test_plan_state)` and unions `reason_notes`. That key omits `context_fit`, and the
+`fallback-diagnostic` bucket is filled purely by `priority_source == "gap-fallback"`
+(`_benchmark_test_triage_bucket`), so a single rollup can currently span
+`specific-fallback` **and** `generic-*` rows. Attaching one `display_group` per
+rollup is only well-defined if the rollup is homogeneous.
+
+Therefore: **add `display_group` to the rollup grouping key.** Each rollup then
+carries exactly one group, and the presentation layer can render or collapse it by
+group. (In practice this splits a benchmark/task rollup into at most two — a
+`specific-fallback` rollup and one `generic-*` rollup — since baseline/task-ready
+notes are constant per benchmark/task and only `context_fit` varies across
+entities.)
+
+## Reconciliation Invariants
+
+The five groups are a precedence **partition** of the fallback rows, so counts
+reconcile by construction. State these invariants and test them:
+
+- `Σ display_group_counts == total_fallback_rows` in the scope being summarized.
+- `generic_fallback_rows := generic-baseline + generic-task-ready +
+  generic-available`. This is the collapsible count. **Define it as the sum of the
+  three generic groups, not as a raw `context_fit == "generic-fallback"` scan.**
+  The two differ: a blocked, no-context fallback row has
+  `context_fit == "generic-fallback"` yet belongs to `blocked-support-fallback` by
+  precedence, so a raw `context_fit` scan double-counts it.
+- `hidden_generic_fallback_rows == generic_fallback_rows` (all three generic
+  groups are hidden from default terminal detail).
+- `shown_fallback_rows == specific-fallback` count.
+- On the gap side there is no blocked-support group, so
+  `generic_fallback_rows` equals the gap rows with `context_fit ==
+  "generic-fallback"` exactly; on the test side the two differ by the
+  blocked-support rows, which are partitioned out before bucketing by default.
 
 ## Benchmark Gaps Output
 
@@ -112,20 +166,22 @@ If a row satisfies multiple generic predicates, precedence is:
 
 Keep `benchmark_gaps[].candidate_benchmarks` unchanged.
 
-Add a top-level `fallback_diagnostics` object to the gap payload:
+Add a top-level `fallback_diagnostics` object to the gap payload. `groups` omits
+`blocked-support-fallback` because gap-candidate rows carry no task-support state:
 
 ```json
 {
   "fallback_diagnostics": {
     "candidate_rows": 2274,
+    "entity_specific_candidate_rows": 473,
+    "fallback_candidate_rows": 1801,
     "generic_fallback_candidate_rows": 1801,
     "specific_fallback_candidate_rows": 0,
     "groups": {
+      "specific-fallback": 0,
       "generic-baseline-fallback": 1200,
       "generic-task-ready-fallback": 550,
-      "generic-available-fallback": 51,
-      "blocked-support-fallback": 308,
-      "specific-fallback": 0
+      "generic-available-fallback": 51
     },
     "top_generic_fallback_benchmarks": [
       {"benchmark_id": "dataset:mmrf-commpass", "count": 758}
@@ -133,6 +189,13 @@ Add a top-level `fallback_diagnostics` object to the gap payload:
   }
 }
 ```
+
+The example reconciles (per Reconciliation Invariants):
+
+- `fallback_candidate_rows` (`1801`) `== Σ groups` (`0 + 1200 + 550 + 51`);
+- `generic_fallback_candidate_rows` (`1801`) `==` the three `generic-*` groups;
+- `candidate_rows` (`2274`) `== entity_specific_candidate_rows` (`473`) `+
+  fallback_candidate_rows` (`1801`).
 
 Counts are computed over the row set after normal gap filters, including
 `--context-fit`. This makes diagnostics explain the current payload, not a
@@ -143,15 +206,26 @@ separate global universe.
 The `benchmark gaps` table should stop printing generic fallback benchmark ids
 as if they were ordinary candidates.
 
-For each gap row:
+`_candidate_rows()` guarantees a gap row's `candidate_benchmarks` is either all
+entity-specific **or** all fallback — never a mix of those two. It does **not**
+guarantee that the fallback set is display-group-homogeneous: `_select_fallback_rows`
+can return several fallback candidates for one entity, and they may differ in
+`context_fit` (one shares a project/entity context token → `specific-fallback`;
+others do not → `generic-*`). So a single gap row can legitimately carry both
+`specific-fallback` and generic fallback candidates, and the table must render
+each candidate by its own group rather than assume a single representation:
 
 - entity-specific candidates: show as today;
-- `specific-fallback`: show candidate ids with their context-fit labels;
-- all-generic fallback rows: show a compact label, e.g.
-  `generic fallback: 3 candidates (top: dataset:mmrf-commpass)`;
-- mixed generic/specific fallback should not occur with the current
-  `_candidate_rows()` contract, but if it appears, fail loudly rather than
-  silently choosing one representation.
+- `specific-fallback` candidates: show candidate ids with their context-fit
+  labels (shown individually even when generic candidates are present in the same
+  row);
+- generic fallback candidates (`generic-*`): collapse into one compact label per
+  row, e.g. `generic fallback: 3 candidates (top: dataset:mmrf-commpass)`.
+
+The only contract that warrants a loud failure is the one `_candidate_rows()`
+actually enforces: a row that mixes **entity-specific and fallback** candidates
+signals a contract change and should raise (see Error Handling). Mixed display
+groups *within the fallback set* are expected and are rendered per bullet above.
 
 The table may show a footer line when generic fallback was collapsed:
 
@@ -206,6 +280,21 @@ metadata:
 that removes them, and `fallback_diagnostics.rollups` remains the complete
 diagnostic rollup list.
 
+Each rollup now carries a single `display_group` because the rollup grouping key
+gains `display_group` (see "Rollups must be group-homogeneous"). `rollups`
+therefore partitions cleanly into terminal-visible (`specific-fallback`) and
+terminal-hidden (`generic-*`) rollups; `terminal_visible_rollup_count` and
+`terminal_hidden_rollup_count` count those two partitions of the full `rollups`
+list.
+
+This example reconciles: `display_group_counts` sums to `1493`
+(`0 + 900 + 500 + 93 + 0`); `hidden_generic_fallback_rows` (`1493`) equals the
+three `generic-*` groups; `shown_fallback_rows` (`0`) equals `specific-fallback`.
+`blocked-support-fallback` is `0` here because blocked task-support rows are
+partitioned out before bucketing by default (`_partition_blocked_support_fallback_rows`)
+and reported under the existing `suppressed_blocked_support` key, not folded into
+the generic collapse.
+
 ### Table
 
 Default `benchmark test-triage` should render fallback detail only for
@@ -249,30 +338,48 @@ avoid a new flag until the table-summary behavior is calibrated.
 
 ## Error Handling
 
-- Fallback group derivation must be total for fallback rows. Unknown combinations
-  raise `ValueError` with the benchmark id and reason notes.
-- Non-fallback rows must not be passed to fallback group helpers; doing so raises
+- Fallback group derivation must be total for fallback rows: every fallback row
+  matches exactly one of the five groups (the `generic-available-fallback`
+  catch-all guarantees totality). A fallback row that somehow matches none raises
+  `ValueError` with the benchmark id and reason notes.
+- Non-fallback rows must not be passed to `display_group(...)`; doing so raises
   immediately.
-- If a table path receives a fallback row set that mixes
-  `specific-fallback` and generic groups in a single gap row, raise an error.
-  Current `_candidate_rows()` makes this impossible, so a mixed row would signal
-  a contract change.
-- Diagnostics counts must reconcile with the raw row counts they summarize.
-  Mismatches fail tests.
+- `blocked-support-fallback` must not be requested for gap-candidate rows (they
+  carry no `task_support_state`). Asking for it on the gap side raises.
+- Raise only on the contract `_candidate_rows()` actually enforces: a gap row
+  whose `candidate_benchmarks` mixes **entity-specific and fallback** candidates
+  signals a contract change and must raise. Do **not** raise on mixed *display
+  groups within the fallback set* — that is expected (see Benchmark Gaps Table).
+- Diagnostics counts must reconcile with the raw row counts they summarize, per
+  Reconciliation Invariants (`Σ display_group_counts == total_fallback_rows`;
+  `generic_fallback_rows` is the sum of the three generic groups, never a raw
+  `context_fit` scan). Mismatches fail tests.
 
 ## Testing
 
 Add focused tests for:
 
-- fallback group derivation from reason notes and `context_fit`;
-- `gaps_report()` includes `fallback_diagnostics` whose counts reconcile with
-  `benchmark_gaps[].candidate_benchmarks`;
-- `benchmark gaps` table collapses all-generic fallback candidates while JSON
-  still includes raw candidate ids;
-- `benchmark test-triage` fallback diagnostics split hidden generic rows from
-  shown non-generic fallback rows;
-- blocked task-support fallback suppression still works and is counted
-  separately from generic fallback collapse;
+- `display_group(...)` per-row derivation on **both** row types, including the
+  precedence partition (blocked-support > specific > generic-baseline >
+  generic-task-ready > generic-available) and totality via the catch-all;
+- `display_group(...)` raises on a non-fallback row, and `blocked-support-fallback`
+  is never produced for a gap-candidate row (no `task_support_state`);
+- `gaps_report()` includes `fallback_diagnostics` whose counts satisfy the
+  Reconciliation Invariants (`fallback_candidate_rows == Σ groups`;
+  `generic_fallback_candidate_rows ==` the three generic groups; gaps `groups`
+  omits `blocked-support-fallback`);
+- a single gap row whose fallback candidates mix `specific-fallback` and
+  `generic-*`: the table shows the specific candidate(s) individually and
+  collapses the generic ones — it does **not** raise;
+- a gap row mixing entity-specific and fallback candidates **does** raise (the
+  real `_candidate_rows()` contract);
+- `benchmark gaps` table collapses generic fallback candidates while JSON still
+  includes raw candidate ids;
+- `benchmark test-triage` rollups are group-homogeneous (each rollup has exactly
+  one `display_group`) and diagnostics split hidden generic rows from shown
+  `specific-fallback` rows;
+- blocked task-support fallback suppression still works, is reported under
+  `suppressed_blocked_support`, and is counted separately from generic collapse;
 - existing filters (`--context-fit generic-fallback`, `--source gap-fallback`,
   `--exclude-fallback`) interact deterministically with diagnostics.
 
