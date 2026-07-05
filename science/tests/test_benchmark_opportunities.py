@@ -3247,12 +3247,27 @@ benchmark:
             "hypothesis:0106-generic-a",
             "hypothesis:0107-generic-b",
         ],
+        "display_group": "generic-baseline-fallback",
         "reason_notes": [
             "fallback:baseline-quality",
             "fallback:task-ready",
             "selected:generic-baseline",
         ],
     }
+    assert payload["fallback_diagnostics"]["display_group_counts"] == {
+        "specific-fallback": 0,
+        "blocked-support-fallback": 0,
+        "generic-baseline-fallback": 2,
+        "generic-task-ready-fallback": 0,
+        "generic-available-fallback": 0,
+    }
+    assert payload["fallback_diagnostics"]["hidden_generic_fallback_rows"] == 2
+    assert payload["fallback_diagnostics"]["shown_fallback_rows"] == 0
+    assert payload["fallback_diagnostics"]["terminal_visible_rollup_count"] == 0
+    assert payload["fallback_diagnostics"]["terminal_hidden_rollup_count"] == 1
+    assert payload["fallback_diagnostics"]["top_generic_fallback_benchmarks"] == [
+        {"benchmark_id": "dataset:supported-fallback-rollup", "count": 2}
+    ]
 
 
 def test_benchmark_test_triage_fallback_rollups_sort_and_cap_examples(tmp_path: Path) -> None:
@@ -3355,6 +3370,8 @@ def test_benchmark_test_fallback_rollups_raise_on_inconsistent_support_reason() 
         "task_id": "dataset:drift#ready",
         "task_type": "protein-lineage-association",
         "task_support_state": "candidate",
+        "priority_source": "gap-fallback",
+        "context_fit": "direct-fit",
         "readiness_label": "runnable",
         "dataset_class": "deposit",
         "test_plan_state": "concrete",
@@ -3383,6 +3400,8 @@ def test_benchmark_test_fallback_rollups_raise_on_empty_and_nonempty_support_rea
         "task_id": "dataset:drift-empty#ready",
         "task_type": "protein-lineage-association",
         "task_support_state": "candidate",
+        "priority_source": "gap-fallback",
+        "context_fit": "direct-fit",
         "readiness_label": "runnable",
         "dataset_class": "deposit",
         "test_plan_state": "concrete",
@@ -3481,8 +3500,8 @@ dataset_class: deposit
 local_path: data/mmrf-like
 benchmark:
   domains: [biology]
-  modalities: [clinical]
-  signal_types: [time-to-event]
+  modalities: [proteomics]
+  signal_types: [time-series]
   benchmark_kinds: [prognostic-modeling]
   tasks:
     - id: progression-risk
@@ -3542,6 +3561,15 @@ benchmark:
         "rows": 1,
         "top_benchmarks": [{"benchmark_id": "dataset:mmrf-like", "count": 1}],
     }
+    assert payload["fallback_diagnostics"]["display_group_counts"] == {
+        "specific-fallback": 0,
+        "blocked-support-fallback": 0,
+        "generic-baseline-fallback": 1,
+        "generic-task-ready-fallback": 0,
+        "generic-available-fallback": 0,
+    }
+    assert payload["fallback_diagnostics"]["hidden_generic_fallback_rows"] == 1
+    assert payload["fallback_diagnostics"]["shown_fallback_rows"] == 0
     rollups = payload["fallback_diagnostics"]["rollups"]
     assert len(rollups) == 1
     assert rollups[0]["task_id"] == "dataset:mmrf-like#overall-survival"
@@ -3606,7 +3634,17 @@ benchmark:
     assert rollups[0]["task_support_reason"] == "open-metadata-missing-progression-endpoint"
     assert rollups[0]["count"] == 1
     assert rollups[0]["example_entities"] == ["hypothesis:0104-generic"]
+    assert rollups[0]["display_group"] == "blocked-support-fallback"
     assert "task-support:blocked:open-metadata-missing-progression-endpoint" in rollups[0]["reason_notes"]
+    assert payload["fallback_diagnostics"]["display_group_counts"] == {
+        "specific-fallback": 0,
+        "blocked-support-fallback": 1,
+        "generic-baseline-fallback": 0,
+        "generic-task-ready-fallback": 0,
+        "generic-available-fallback": 0,
+    }
+    assert payload["fallback_diagnostics"]["hidden_generic_fallback_rows"] == 0
+    assert payload["fallback_diagnostics"]["shown_fallback_rows"] == 1
     assert payload["summary"]["suppressed_blocked_support_fallback_rows"] == 0
     assert "suppressed_blocked_support" not in payload["fallback_diagnostics"]
     assert payload["filters"]["include_blocked_fallback"] is True

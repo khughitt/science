@@ -786,6 +786,7 @@ class BenchmarkTestFallbackRollup(TypedDict):
     test_plan_state: TestPlanState
     top_facets: list[FacetCountRow]
     example_entities: list[str]
+    display_group: FallbackDisplayGroup
     reason_notes: list[str]
 
 
@@ -797,6 +798,13 @@ class BenchmarkTestTriageFallbackDiagnostics(TypedDict):
     task_support_counts: dict[TaskSupportCountKey, int]
     top_benchmarks_by_readiness: dict[ReadinessLabel, list[BenchmarkCountRow]]
     top_benchmarks_by_dataset_class: dict[DatasetClass, list[BenchmarkCountRow]]
+    display_group_counts: dict[FallbackDisplayGroup, int]
+    hidden_generic_fallback_rows: int
+    shown_fallback_rows: int
+    top_generic_fallback_benchmarks: list[BenchmarkCountRow]
+    top_generic_fallback_reasons: list[ReasonCountRow]
+    terminal_visible_rollup_count: int
+    terminal_hidden_rollup_count: int
     rollups: list[BenchmarkTestFallbackRollup]
     suppressed_blocked_support: NotRequired[BenchmarkTestSuppressedBlockedSupportDiagnostics]
 
@@ -2045,7 +2053,13 @@ def _fallback_group_from_notes(
     has_fallback_note = any(note.startswith("fallback:") for note in reason_notes)
     if not has_fallback_note:
         raise ValueError(f"generic fallback row has no fallback reason note: {benchmark_id}")
-    if "fallback:baseline-quality" in reason_notes:
+    if (
+        "fallback:available-benchmark" in reason_notes
+        and "fallback:baseline-quality" not in reason_notes
+        and "fallback:task-ready" not in reason_notes
+    ):
+        return "generic-available-fallback"
+    if "selected:generic-baseline" in reason_notes or "fallback:baseline-quality" in reason_notes:
         return "generic-baseline-fallback"
     if "fallback:task-ready" in reason_notes:
         return "generic-task-ready-fallback"
@@ -2066,10 +2080,13 @@ def _fallback_display_group_for_gap_candidate(candidate: GapCandidateBenchmarkRo
 def _fallback_display_group_for_test_row(row: BenchmarkTestRow) -> FallbackDisplayGroup:
     if row["priority_source"] != "gap-fallback":
         raise ValueError(f"non-fallback benchmark test row cannot be grouped: {row['benchmark_id']}")
+    context_fit = row["context_fit"]
+    if "selected:generic-baseline" in row["reason_notes"] or "selected:task-ready" in row["reason_notes"]:
+        context_fit = "generic-fallback"
     return _fallback_group_from_notes(
         benchmark_id=row["benchmark_id"],
         reason_notes=row["reason_notes"],
-        context_fit=row["context_fit"],
+        context_fit=context_fit,
         blocked=_is_blocked_support_fallback(row),
     )
 
@@ -3418,7 +3435,7 @@ _TASK_SUPPORT_ROLLUP_ORDER: dict[BenchmarkTaskSupportState | None, int] = {
 
 def _benchmark_test_fallback_rollup_sort_key(
     rollup: BenchmarkTestFallbackRollup,
-) -> tuple[int, str, str, int, int, int, int]:
+) -> tuple[int, str, str, int, int, int, int, int]:
     return (
         -rollup["count"],
         rollup["benchmark_id"],
@@ -3427,6 +3444,7 @@ def _benchmark_test_fallback_rollup_sort_key(
         READINESS_LABELS.index(rollup["readiness_label"]),
         DATASET_CLASSES.index(rollup["dataset_class"]),
         ("concrete", "draft-needed").index(rollup["test_plan_state"]),
+        FALLBACK_DISPLAY_GROUPS.index(rollup["display_group"]),
     )
 
 
@@ -3454,6 +3472,7 @@ def _benchmark_test_fallback_rollups(
             ReadinessLabel,
             DatasetClass,
             TestPlanState,
+            FallbackDisplayGroup,
         ],
         list[BenchmarkTestTriageRow],
     ] = {}
@@ -3465,6 +3484,7 @@ def _benchmark_test_fallback_rollups(
             row["readiness_label"],
             row["dataset_class"],
             row["test_plan_state"],
+            _fallback_display_group_for_test_row(row),
         )
         grouped.setdefault(key, []).append(row)
 
@@ -3476,6 +3496,7 @@ def _benchmark_test_fallback_rollups(
         readiness_label,
         dataset_class,
         test_plan_state,
+        display_group,
     ), group_rows in grouped.items():
         benchmark_titles = _distinct_row_strings(group_rows, lambda row: row["benchmark_title"])
         if len(benchmark_titles) > 1:
@@ -3515,6 +3536,7 @@ def _benchmark_test_fallback_rollups(
                 "test_plan_state": test_plan_state,
                 "top_facets": _top_triage_facet_counts(group_rows),
                 "example_entities": example_entities,
+                "display_group": display_group,
                 "reason_notes": reason_notes,
             }
         )
@@ -3522,9 +3544,40 @@ def _benchmark_test_fallback_rollups(
     return sorted(rollups, key=_benchmark_test_fallback_rollup_sort_key)
 
 
+def _fallback_display_group_counts(rows: Sequence[BenchmarkTestRow]) -> dict[FallbackDisplayGroup, int]:
+    groups = _empty_fallback_display_group_counts()
+    for row in rows:
+        groups[_fallback_display_group_for_test_row(row)] += 1
+    return groups
+
+
+def _generic_fallback_test_rows(rows: Sequence[BenchmarkTestRow]) -> list[BenchmarkTestRow]:
+    return [
+        row for row in rows if _is_generic_fallback_display_group(_fallback_display_group_for_test_row(row))
+    ]
+
+
+def _visible_fallback_rollups_for_terminal(
+    rollups: Sequence[BenchmarkTestFallbackRollup],
+) -> list[BenchmarkTestFallbackRollup]:
+    return [
+        rollup for rollup in rollups if not _is_generic_fallback_display_group(rollup["display_group"])
+    ]
+
+
 def _benchmark_test_fallback_diagnostics(
     rows: list[BenchmarkTestTriageRow],
 ) -> BenchmarkTestTriageFallbackDiagnostics:
+    rollups = _benchmark_test_fallback_rollups(rows)
+    visible_rollups = _visible_fallback_rollups_for_terminal(rollups)
+    generic_rows = _generic_fallback_test_rows(rows)
+    generic_benchmarks: Counter[str] = Counter(row["benchmark_id"] for row in generic_rows)
+    generic_reasons: Counter[str] = Counter(
+        note
+        for row in generic_rows
+        for note in row["reason_notes"]
+        if note.startswith(("fallback:", "selected:"))
+    )
     return {
         "top_benchmarks": _top_triage_benchmark_counts(rows),
         "top_facets": _top_triage_facet_counts(rows),
@@ -3533,7 +3586,14 @@ def _benchmark_test_fallback_diagnostics(
         "task_support_counts": _benchmark_test_task_support_counts(rows),
         "top_benchmarks_by_readiness": _top_triage_benchmark_counts_by_readiness(rows),
         "top_benchmarks_by_dataset_class": _top_triage_benchmark_counts_by_dataset_class(rows),
-        "rollups": _benchmark_test_fallback_rollups(rows),
+        "display_group_counts": _fallback_display_group_counts(rows),
+        "hidden_generic_fallback_rows": len(generic_rows),
+        "shown_fallback_rows": sum(rollup["count"] for rollup in visible_rollups),
+        "top_generic_fallback_benchmarks": _top_benchmark_counts(generic_benchmarks, top=10),
+        "top_generic_fallback_reasons": _top_reason_counts(generic_reasons, top=10),
+        "terminal_visible_rollup_count": len(visible_rollups),
+        "terminal_hidden_rollup_count": len(rollups) - len(visible_rollups),
+        "rollups": rollups,
     }
 
 
