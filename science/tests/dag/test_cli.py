@@ -439,6 +439,141 @@ A affects B.
     )
 
 
+def test_cli_dag_archive_retired_edges_json_reports_ready(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "archive-retired-edges",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ready_to_archive"
+    assert payload["applied"] is False
+    assert payload["closed_rows"] == 1
+    assert payload["closed_by"] == ["proposition:a-affects-b"]
+    assert payload["source"] == "doc/figures/dags/h1.edges.yaml"
+    assert payload["archive"] == "archive/dag-retired-edges/h1.edges.yaml"
+    assert (project / "doc/figures/dags/h1.edges.yaml").exists()
+    assert not (project / "archive/dag-retired-edges/h1.edges.yaml").exists()
+
+
+def test_cli_dag_archive_retired_edges_table_reports_ready(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "archive-retired-edges", "--project", str(project), "--dag", "h1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Retired edge archive plan: h1 ready_to_archive" in result.output
+    assert "closed_rows: 1" in result.output
+    assert "archive/dag-retired-edges/h1.edges.yaml" in result.output
+
+
+def test_cli_dag_archive_retired_edges_apply_moves_file(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dag",
+            "archive-retired-edges",
+            "--project",
+            str(project),
+            "--dag",
+            "h1",
+            "--apply",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "already_archived"
+    assert payload["applied"] is True
+    assert not (project / "doc/figures/dags/h1.edges.yaml").exists()
+    assert (project / "archive/dag-retired-edges/h1.edges.yaml").exists()
+    assert (project / "archive/dag-retired-edges/h1.edges.yaml.archive.json").exists()
+
+
+def test_cli_dag_archive_retired_edges_apply_rerun_reports_already_archived(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+    _write_retired_migration_lineage_proposition(project)
+    args = [
+        "dag",
+        "archive-retired-edges",
+        "--project",
+        str(project),
+        "--dag",
+        "h1",
+        "--apply",
+        "--format",
+        "json",
+    ]
+
+    first = CliRunner().invoke(main, args)
+    second = CliRunner().invoke(main, args)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert json.loads(first.stdout)["applied"] is True
+    second_payload = json.loads(second.stdout)
+    assert second_payload["status"] == "already_archived"
+    assert second_payload["applied"] is False
+
+
+def test_cli_dag_archive_retired_edges_dry_run_reports_blocked_without_failing(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "archive-retired-edges", "--project", str(project), "--dag", "h1", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["blockers"] == ["not-all-retired-edge-rows-closed"]
+    assert payload["applied"] is False
+    assert (project / "doc/figures/dags/h1.edges.yaml").exists()
+
+
+def test_cli_dag_archive_retired_edges_apply_blocked_is_click_error(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    _write_retired_migration_project(project)
+
+    result = CliRunner().invoke(
+        main,
+        ["dag", "archive-retired-edges", "--project", str(project), "--dag", "h1", "--apply"],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "not ready to archive" in result.output
+    assert (project / "doc/figures/dags/h1.edges.yaml").exists()
+
+
 def test_cli_dag_retired_edge_migration_plan_json_blocks_without_membership(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_retired_migration_project(project)
@@ -1006,6 +1141,13 @@ def test_cli_dag_help_lists_retired_edge_migration_plan() -> None:
 
     assert result.exit_code == 0
     assert "retired-edge-migration-plan" in result.output
+
+
+def test_cli_dag_help_lists_archive_retired_edges() -> None:
+    result = CliRunner().invoke(main, ["dag", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "archive-retired-edges" in result.output
 
 
 def test_cli_dag_schema_says_schema_is_retired(cli_project: Path) -> None:

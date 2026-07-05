@@ -227,6 +227,23 @@ def apply_retired_edge_archive(project_root: Path, *, dag: str, now: str) -> Ret
     )
 
 
+def render_retired_edge_archive_table(plan: RetiredEdgeArchivePlan) -> str:
+    lines = [f"Retired edge archive plan: {plan.dag} {plan.status}"]
+    lines.append(f"  source: {plan.source}")
+    lines.append(f"  archive: {plan.archive}")
+    lines.append(f"  manifest: {plan.manifest}")
+    lines.append(f"  applied: {str(plan.applied).lower()}")
+    lines.append(f"  closed_rows: {plan.closed_rows}")
+    if plan.closed_by:
+        lines.append(f"  closed_by: {', '.join(plan.closed_by)}")
+    if plan.blockers:
+        lines.append(f"  blockers: {', '.join(plan.blockers)}")
+    if plan.row_status_counts:
+        counts = ", ".join(f"{key}={value}" for key, value in sorted(plan.row_status_counts.items()))
+        lines.append(f"  row_status_counts: {counts}")
+    return "\n".join(lines) + "\n"
+
+
 def _plan(
     project_root: Path,
     dag: str,

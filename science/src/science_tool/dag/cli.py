@@ -490,6 +490,65 @@ def scaffold_retired_edge_workbench_cmd(
         raise click.ClickException(str(exc)) from exc
 
 
+@dag_group.command("archive-retired-edges")
+@click.option(
+    "--dag",
+    "slug",
+    required=True,
+    help="Retired DAG slug whose closed *.edges.yaml file should be archived.",
+)
+@click.option(
+    "--apply",
+    "apply_changes",
+    is_flag=True,
+    default=False,
+    help="Move the retired edge file and write the archive manifest.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def archive_retired_edges_cmd(
+    slug: str,
+    apply_changes: bool,
+    output_format: str,
+    project_path: Path | None,
+) -> None:
+    """Archive a fully closed retired DAG *.edges.yaml file."""
+    from datetime import datetime, timezone
+
+    from science_tool.dag.retired_edge_archive import (
+        apply_retired_edge_archive,
+        build_retired_edge_archive_plan,
+        render_retired_edge_archive_table,
+    )
+
+    project = (project_path or Path.cwd()).resolve()
+    try:
+        if apply_changes:
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            result = apply_retired_edge_archive(project, dag=slug, now=now)
+        else:
+            result = build_retired_edge_archive_plan(project, dag=slug)
+        if output_format == "json":
+            click.echo(json.dumps(result.to_json(), indent=2, sort_keys=True))
+            return
+        click.echo(render_retired_edge_archive_table(result), nl=False)
+    except (FileNotFoundError, KeyError, OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # schema
 # ---------------------------------------------------------------------------
