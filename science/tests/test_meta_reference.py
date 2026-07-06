@@ -68,10 +68,10 @@ class TestMetaRefsInAudit:
         unresolved = [r for r in rows if r["status"] == "fail"]
         assert unresolved == []
 
-    def test_load_project_sources_canonicalizes_legacy_article_prefix_in_relations(
+    def test_load_project_sources_preserves_article_prefix_in_relations(
         self, tmp_path: Path
     ) -> None:
-        """Structured relation YAML should canonicalize legacy `article:` refs to `paper:` IDs."""
+        """Structured relation YAML should not silently rewrite article refs."""
         from science_tool.graph.sources import load_project_sources
 
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -115,8 +115,8 @@ class TestMetaRefsInAudit:
         relation = sources.relations[0]
 
         assert entity.canonical_id == "paper:Smith2024"
-        assert relation.subject == "paper:Smith2024"
-        assert relation.object == "paper:Jones2023"
+        assert relation.subject == "article:Smith2024"
+        assert relation.object == "article:Jones2023"
 
 
 class TestMetaRefsInMaterialize:

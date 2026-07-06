@@ -23,7 +23,6 @@ from science_tool.annotation.cross_paper_evidence import (
     build_cross_paper_evidence_report,
     proposition_source_refs_map,
 )
-from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
@@ -346,7 +345,6 @@ class HealthReport(TypedDict):
     cross_paper_evidence: "CrossPaperEvidenceHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
-    legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
     dataset_anomalies: list[dict]
     schema_invalid: list[SchemaInvalidFinding]
     archive_lag: TaskArchiveLag
@@ -660,7 +658,6 @@ def _empty_check_results(project_root: Path) -> dict[str, object]:
         "unregistered_ref_kinds": [],
         "lingering_tags": [],
         "agent_context": [],
-        "legacy_structured_literature_prefixes": [],
         "dataset_anomalies": [],
         "legacy_task_type": [],
         "invalid_entity_aspects": [],
@@ -749,10 +746,6 @@ def build_health_report(
     unregistered_ref_kinds = cast("list[UnregisteredRefKind]", check_results["unregistered_ref_kinds"])
     lingering_tags_lines = cast("list[LingeringTagsRecord]", check_results["lingering_tags"])
     agent_context = cast("list[AgentContextFinding]", check_results["agent_context"])
-    legacy_structured_literature_prefixes = cast(
-        "list[LegacyStructuredLiteraturePrefixFinding]",
-        check_results["legacy_structured_literature_prefixes"],
-    )
     dataset_anomalies = cast("list[dict]", check_results["dataset_anomalies"])
     schema_invalid: list[SchemaInvalidFinding] = [
         {
@@ -804,7 +797,6 @@ def build_health_report(
         + len(agent_context)
         + len(identity_policy_findings)
         + len(entity_identity)
-        + len(legacy_structured_literature_prefixes)
         + layered_claim_issue_count
         + coverage_gaps
         + len(dataset_anomalies)
@@ -833,7 +825,6 @@ def build_health_report(
         "cross_paper_evidence": cross_paper_evidence,
         "legacy_task_type": legacy_task_type,
         "invalid_entity_aspects": invalid_entity_aspects,
-        "legacy_structured_literature_prefixes": legacy_structured_literature_prefixes,
         "dataset_anomalies": dataset_anomalies,
         "schema_invalid": schema_invalid,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
@@ -1057,11 +1048,6 @@ class InvalidEntityAspectsFinding(TypedDict):
     message: str
 
 
-class LegacyStructuredLiteraturePrefixFinding(TypedDict):
-    source_file: str
-    legacy_ref: str
-
-
 class IdentityPolicyFinding(TypedDict):
     check: str
     entity_id: str
@@ -1069,7 +1055,6 @@ class IdentityPolicyFinding(TypedDict):
     message: str
 
 
-_LEGACY_ARTICLE_REF_RE = re.compile(r"\barticle:[A-Za-z0-9_.-]+\b")
 _LOCAL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _IDENTITY_REQUIRED_KINDS = frozenset(
     {
@@ -1285,33 +1270,6 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
                         message=str(exc),
                     )
                 )
-    return findings
-
-
-def collect_legacy_structured_literature_prefixes(project_root: Path) -> list[LegacyStructuredLiteraturePrefixFinding]:
-    """Return legacy `article:` refs still present in structured KG source YAML."""
-    findings: list[LegacyStructuredLiteraturePrefixFinding] = []
-    sources_dir = project_root / "knowledge" / "sources"
-    if not sources_dir.is_dir():
-        return findings
-
-    for path in sorted(sources_dir.rglob("*.yaml")):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        seen: set[str] = set()
-        for match in _LEGACY_ARTICLE_REF_RE.finditer(text):
-            legacy_ref = match.group(0)
-            if canonical_paper_id(legacy_ref) == legacy_ref or legacy_ref in seen:
-                continue
-            seen.add(legacy_ref)
-            findings.append(
-                LegacyStructuredLiteraturePrefixFinding(
-                    source_file=str(path.relative_to(project_root)),
-                    legacy_ref=legacy_ref,
-                )
-            )
     return findings
 
 
@@ -2014,12 +1972,6 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Find legacy tags fields in document and task metadata.",
         requires_sources=False,
         run=lambda context: collect_lingering_tags(context.project_root),
-    ),
-    HealthCheck(
-        name="legacy_structured_literature_prefixes",
-        description="Find legacy article: refs in structured literature sources.",
-        requires_sources=False,
-        run=lambda context: collect_legacy_structured_literature_prefixes(context.project_root),
     ),
     HealthCheck(
         name="dataset_anomalies",

@@ -1508,26 +1508,6 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     assert "not-declared" in findings[0]["message"]
 
 
-def test_health_flags_legacy_article_prefixes_in_structured_sources(tmp_path) -> None:
-    from pathlib import Path
-
-    from science_tool.graph.health import collect_legacy_structured_literature_prefixes
-
-    project_root = Path(tmp_path)
-    (project_root / "science.yaml").write_text("name: demo\n")
-    sources_dir = project_root / "knowledge" / "sources" / "local"
-    sources_dir.mkdir(parents=True)
-    (sources_dir / "external_refs.yaml").write_text(
-        "refs:\n- ref: article:Smith2024\n  kind: paper\n",
-        encoding="utf-8",
-    )
-
-    findings = collect_legacy_structured_literature_prefixes(project_root)
-    assert len(findings) == 1
-    assert findings[0]["source_file"] == "knowledge/sources/local/external_refs.yaml"
-    assert findings[0]["legacy_ref"] == "article:Smith2024"
-
-
 def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     from pathlib import Path
 
@@ -1551,7 +1531,7 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     assert len(report["invalid_entity_aspects"]) == 1
 
 
-def test_build_health_report_includes_legacy_structured_literature_findings(tmp_path) -> None:
+def test_build_health_report_has_no_legacy_structured_literature_check(tmp_path) -> None:
     from pathlib import Path
 
     from science_tool.graph.health import build_health_report
@@ -1561,13 +1541,12 @@ def test_build_health_report_includes_legacy_structured_literature_findings(tmp_
     sources_dir = project_root / "knowledge" / "sources" / "local"
     sources_dir.mkdir(parents=True)
     (sources_dir / "external_refs.yaml").write_text(
-        "refs:\n- ref: article:Smith2024\n  kind: paper\n",
+        "refs:\n- ref: paper:Smith2024\n  kind: paper\n",
         encoding="utf-8",
     )
 
     report = build_health_report(project_root)
-    assert "legacy_structured_literature_prefixes" in report
-    assert len(report["legacy_structured_literature_prefixes"]) == 1
+    assert "legacy_structured_literature_prefixes" not in report
 
 
 def test_dataset_anomaly_codes_registered() -> None:

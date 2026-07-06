@@ -42,7 +42,6 @@ from science_model.source_contracts import (
 from science_model.source_ref import SourceRef
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
-from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.commons.aliases import load_manual_aliases
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
@@ -721,7 +720,6 @@ def _enrich_raw(
 
     Mutates `raw` in place. Fills Entity defaults + legacy normalization:
     - `project`, `ontology_terms`, `related`, `source_refs`, `content_preview`
-    - Paper-ID canonicalization (when kind == "paper" and on refs)
     - Profile defaulting (core/ontology/local)
     - Alias derivation for hypothesis/question/task
     - Normalize `kind` and optional core-only `type` projection
@@ -755,22 +753,10 @@ def _enrich_raw(
 
     raw["type"] = _project_type_value(kind, raw.get("type"))
 
-    # Paper canonicalization on the entity's own id + reference lists.
-    # Apply unconditionally: canonical_paper_id is a no-op for non-article/paper
-    # prefixes, and the migration-window spec treats `article:<X>` as a legacy
-    # alias of `paper:<X>` regardless of the source file's declared `kind`.
-    # The previous `kind == "paper"` gate meant legacy files with `type: article`
-    # were loaded as `article:<X>` while mentions in other files were canonicalized
-    # to `paper:<X>`, producing spurious "unresolved reference" audit rows.
     canonical_id = raw.get("canonical_id") or raw.get("id")
     if isinstance(canonical_id, str) and canonical_id:
-        canonical_id = canonical_paper_id(canonical_id)
         raw["canonical_id"] = canonical_id
         raw.setdefault("id", canonical_id)
-    for ref_field in ("related", "commits_to", "source_refs", "evidence_refs", "same_as", "blocked_by"):
-        vals = raw.get(ref_field)
-        if isinstance(vals, list):
-            raw[ref_field] = [canonical_paper_id(str(v)) for v in vals]
 
     # Profile defaulting.
     profile = raw.get("profile")
@@ -1035,7 +1021,7 @@ def _entity_nested_relations(entities: list[Entity]) -> list[SourceRelation]:
                 SourceRelation(
                     subject=entity.canonical_id,
                     predicate=relation.predicate,
-                    object=canonical_paper_id(relation.target),
+                    object=relation.target,
                     graph_layer=relation.graph_layer,
                     source_path=entity.file_path,
                 )
@@ -1082,9 +1068,6 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
             continue
         if not isinstance(obj, str) or not obj:
             continue
-
-        subject = canonical_paper_id(subject)
-        obj = canonical_paper_id(obj)
 
         raw_role = item.get("role")
         role: MembershipRole | None = None

@@ -14,10 +14,6 @@ from pathlib import Path
 
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.layout import entity_dir
-from science_tool.big_picture.literature_prefix import (
-    canonical_paper_id,
-    is_external_paper_id,
-)
 from science_tool.big_picture.resolver import ResolverOutput
 from science_tool.entities import is_default_visible
 
@@ -81,13 +77,7 @@ def _load_topics(project_root: Path) -> dict[str, dict]:
 
 
 def _load_papers(project_root: Path) -> dict[str, dict]:
-    """Return ``{canonical_paper_id: frontmatter_dict}`` for every paper.
-
-    External-literature IDs are normalized via
-    :func:`literature_prefix.canonical_paper_id` before use as keys. A raw
-    ``article:X`` file and a raw ``paper:X`` file across the scanned
-    directories would collide at the canonical form — that collision raises.
-    """
+    """Return ``{paper_id: frontmatter_dict}`` for every external paper."""
     papers: dict[str, dict] = {}
     origins: dict[str, Path] = {}
     for root in (entity_dir(project_root, "paper"),):
@@ -96,13 +86,13 @@ def _load_papers(project_root: Path) -> dict[str, dict]:
         for md in sorted(root.glob("*.md")):
             fm = read_frontmatter(md) or {}
             raw_id = fm.get("id")
-            if not raw_id or not is_external_paper_id(raw_id):
+            if not raw_id or not str(raw_id).startswith("paper:"):
                 continue
-            canonical = canonical_paper_id(raw_id)
-            if canonical in papers:
-                raise ValueError(f"Duplicate paper id {canonical!r} (via {raw_id}): {origins[canonical]} vs {md}")
-            papers[canonical] = fm
-            origins[canonical] = md
+            paper_id = str(raw_id)
+            if paper_id in papers:
+                raise ValueError(f"Duplicate paper id {paper_id!r}: {origins[paper_id]} vs {md}")
+            papers[paper_id] = fm
+            origins[paper_id] = md
     return papers
 
 
@@ -130,9 +120,8 @@ def _compute_coverage(
 
     # related_papers(T): T.related entries that are external paper IDs.
     for ref in topic_fm.get("related", []) or []:
-        if is_external_paper_id(ref):
-            canonical = canonical_paper_id(ref)
-            bibkey = _bibkey_of(canonical)
+        if isinstance(ref, str) and ref.startswith("paper:"):
+            bibkey = _bibkey_of(ref)
             if bibkey:
                 covering_bibkeys.add(bibkey)
 

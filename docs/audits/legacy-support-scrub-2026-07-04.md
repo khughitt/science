@@ -111,12 +111,11 @@ Merged to `main`:
 
 Current refreshed inventory:
 
-- `article_prefix_alias`: 39 findings.
 - `retired_edges_yaml`: 4 findings.
 - `legacy_marker_alias`: 4 findings.
-- Zero findings for aggregate manifests, entity-layout roots, `type:`
-  frontmatter, scalar `access:`, active legacy data-package entities, bare
-  `profiles:`, and removed `science.yaml` fields.
+- Zero findings for article prefix aliases, aggregate manifests,
+  entity-layout roots, `type:` frontmatter, scalar `access:`, active legacy
+  data-package entities, bare `profiles:`, and removed `science.yaml` fields.
 
 Completed in `refactor/strict-frontmatter-cleanup`:
 
@@ -128,6 +127,14 @@ Completed in `refactor/strict-frontmatter-cleanup`:
   target validation, curation inventory classification, and graph health access
   checks.
 
+Completed in `refactor/article-prefix-alias-retirement`:
+
+- Migrated all registered/shared `article:<bibkey>` reference aliases to
+  `paper:<bibkey>` in affected project repos.
+- Removed toolkit `article:` to `paper:` canonicalization, the dedicated health
+  sentinel, and the short-lived migration command/module after the zero-hit
+  inventory gate.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -135,7 +142,7 @@ Completed in `refactor/strict-frontmatter-cleanup`:
 | v2-to-v3 entity layout | Entity markdown under `doc/` or `specs/`; toolkit scanners reading `doc`, `specs`, and `entities` together | `science/src/science_tool/entity_layout_migration.py` and related commands | `_SCAN_DIRS=("doc","specs","entities")` plumbing in `science/src/science_tool/refs.py`, `markers.py`, `prose_lint.py`, validation checks, graph health, materialize preflight, commons promotion helpers | Largest dependency cluster. Remove migrator last for this surface. |
 | `type:` frontmatter | Entity frontmatter with `type:` instead of `kind:`; templates and commands that still author `type:` | Complete; no new migrator needed because inventory was already zero | Complete; active `kind`/`type` dual reads removed from commons translation, workbench apply, and curation inventory | Current inventory reports zero `type:` frontmatter findings. |
 | Flat scalar `access:` | Frontmatter with `access: public` or another scalar value | Complete; no new migrator needed because inventory was already zero | Complete; scalar coercion removed from frontmatter parsing and graph health | Current inventory reports zero scalar `access:` findings. |
-| `article:<bibkey>` prefix alias | Structured/project refs containing `article:<bibkey>` where the intended target is a literature record | **MUST BUILD** — no `article:`→`paper:` rewriter exists (`add_article` is unrelated entity creation); build one scoped to the alias prefix only | Literature-prefix alias checks and canonicalization paths | Do not remove the live `article` entity kind or BibTeX `@article` support. |
+| `article:<bibkey>` prefix alias | Structured/project refs containing `article:<bibkey>` where the intended target is a literature record | Complete; short-lived scoped rewriter committed in history and removed after migration | Complete; literature-prefix alias checks, canonicalization paths, health sentinel, and migrator removed | Live `article` entity kind and BibTeX `@article` support remain. |
 | Retired DAG `.edges.yaml` | Any `*.edges.yaml` file in project DAG areas | `science dag retired-edge-migration-plan`, `science dag scaffold-retired-edge-workbench`, and related retired-edge tools | `science/src/science_tool/dag/` retired-edge readers, schemas, CLI commands, warnings, and validation adapters | Keep migration commands until every registered project has zero edge YAML files. |
 | Aggregate manifests | `knowledge/sources/<local>/entities.yaml`, `terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` aggregate owners | Complete; migration commits exist in affected project repos | Complete; aggregate readers, migrators, command paths, validators, and tests removed | Merged 2026-07-05; current inventory reports zero aggregate-manifest findings. |
 | Legacy data-package entities | `doc/data-packages/*.md` with active `type: data-package` | `data-package` CLI group and dataset/research-package promotion helpers | `science/src/science_tool/graph/materialize.py:_preflight_migration`, `science/src/science_tool/cli.py` `data-package` group, promote helpers, docs | Precheck must look at project data, not only toolkit code. |
@@ -177,7 +184,7 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
    are zero.
 4. Complete: remove scalar `access:` coercion now that scalar data hits are
    zero.
-5. Next: migrate and gate `article:<bibkey>` aliases.
+5. Complete: migrate and gate `article:<bibkey>` aliases.
 6. Migrate and gate retired DAG `.edges.yaml`.
 7. Complete: migrate and gate aggregate manifests.
 8. Reconfirm and, if needed, migrate legacy data-package entities.

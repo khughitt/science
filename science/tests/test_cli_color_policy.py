@@ -126,7 +126,6 @@ def _health_report_with_archive_lag() -> dict:
         "unresolved_refs": [],
         "lingering_tags_lines": [],
         "identity_policy": [],
-        "legacy_structured_literature_prefixes": [],
         "dataset_anomalies": [],
         "layered_claims": {
             "migration_issues": [],

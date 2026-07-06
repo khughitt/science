@@ -39,15 +39,14 @@ def test_load_topics_finds_all_fixture_topics() -> None:
         "topic:t01-covered",
         "topic:t02-thin",
         "topic:t03-bibtex-covered",
-        "topic:t04-legacy-covered",
+        "topic:t04-paper-covered",
     }
 
 
-def test_load_papers_finds_both_prefix_styles() -> None:
+def test_load_papers_finds_paper_prefix_records() -> None:
     papers = _load_papers(FIXTURE)
-    # Legacy `article:` entity canonicalizes to `paper:` in the returned keys.
     assert "paper:p01-example" in papers
-    assert "paper:p02-legacy-article" in papers
+    assert "paper:p02-modern-paper" in papers
 
 
 def test_duplicate_topic_ids_in_topic_directory_raise(tmp_path: Path) -> None:
@@ -64,7 +63,7 @@ def test_duplicate_topic_ids_in_topic_directory_raise(tmp_path: Path) -> None:
 def test_duplicate_paper_ids_in_paper_directory_raise(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
-    # A second file in entities/papers/ canonicalizing to an existing id collides.
+    # A second file in entities/papers/ sharing an existing id collides.
     (project / "entities" / "papers" / "p01-example-dup.md").write_text(
         '---\nid: "paper:p01-example"\nkind: "paper"\nrelated: []\n---\n'
     )
@@ -100,14 +99,12 @@ def test_coverage_via_bibtex_source_refs() -> None:
     assert _compute_coverage("topic:t03-bibtex-covered", topics, papers) == 1
 
 
-def test_coverage_accepts_article_prefix_paper_as_legacy_alias() -> None:
+def test_coverage_via_second_paper_entity() -> None:
     from science_tool.big_picture.knowledge_gaps import _compute_coverage
 
     topics = _load_topics(FIXTURE)
     papers = _load_papers(FIXTURE)
-    # p02 has id: article:... which canonicalizes to paper:p02-legacy-article
-    # and lists topic:t04 as a relation.
-    assert _compute_coverage("topic:t04-legacy-covered", topics, papers) == 1
+    assert _compute_coverage("topic:t04-paper-covered", topics, papers) == 1
 
 
 def test_coverage_dedupes_bibkey_across_entity_and_source_refs(tmp_path: Path) -> None:
@@ -195,17 +192,20 @@ def test_compute_topic_gaps_excludes_zero_demand() -> None:
     # No gap entry for t03 (bibtex-covered, demand=coverage), t01, t04.
     assert all(g.topic_id != "topic:t01-covered" for g in gaps)
     assert all(g.topic_id != "topic:t03-bibtex-covered" for g in gaps)
-    assert all(g.topic_id != "topic:t04-legacy-covered" for g in gaps)
+    assert all(g.topic_id != "topic:t04-paper-covered" for g in gaps)
 
 
-def test_article_prefix_accepted_during_transition() -> None:
-    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+def test_article_prefix_is_not_treated_as_paper_alias(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    article_file = project / "entities" / "papers" / "article-prefixed.md"
+    article_file.write_text(
+        '---\nid: "article:not-a-paper-alias"\nkind: "article"\nrelated: []\n---\n'
+    )
 
-    # t04-legacy-covered has demand=1 and coverage=1 only via article:p02.
-    # Ensure NO gap is flagged (transition-window alias must count).
-    resolved = resolve_questions(FIXTURE)
-    gaps = compute_topic_gaps(FIXTURE, resolved, set(resolved))
-    assert all(g.topic_id != "topic:t04-legacy-covered" for g in gaps)
+    papers = _load_papers(project)
+    assert "article:not-a-paper-alias" not in papers
+    assert "paper:not-a-paper-alias" not in papers
 
 
 def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(

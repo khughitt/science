@@ -209,4 +209,4 @@ def test_reference_pattern_matches_topic_refs() -> None:
 def test_collect_project_ids_includes_topic_entities() -> None:
     ids = _collect_project_ids(FIXTURE)
     assert "topic:t01-covered" in ids
-    assert "topic:t04-legacy-covered" in ids
+    assert "topic:t04-paper-covered" in ids

@@ -45,11 +45,10 @@
 
 - Merged on `main`: Task 1 inventory, Task 2 v2-to-v3 entity layout, and Task 7
   aggregate manifest retirement.
-- Current inventory: 47 total findings across 3 remaining data surfaces:
-  `article_prefix_alias`=39, `retired_edges_yaml`=4, and
-  `legacy_marker_alias`=4. Aggregate manifest, `type:` frontmatter, scalar
-  `access:`, data-package, bare `profiles:`, and removed `science.yaml` field
-  hits are zero.
+- Current inventory: 8 total findings across 2 remaining data surfaces:
+  `retired_edges_yaml`=4 and `legacy_marker_alias`=4. Article prefix aliases,
+  aggregate manifest, `type:` frontmatter, scalar `access:`, data-package, bare
+  `profiles:`, and removed `science.yaml` field hits are zero.
 - Current coverage: 23 registered entries, 22 scanned projects, 1 shared
   repository (`~/d/science-commons`), 1 skipped stale registered path
   (`~/d/natural-systems/.worktrees/validation-strict-cleanup`), and no
@@ -57,7 +56,7 @@
 - Strict frontmatter cleanup is complete in
   `refactor/strict-frontmatter-cleanup`: remaining `type:` reader fallbacks and
   scalar `access:` coercion paths were removed from active toolkit code.
-- Next data-bearing slice: `article:<bibkey>` alias migration.
+- Next data-bearing slice: retired DAG `.edges.yaml` migration.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -270,45 +269,48 @@ Run frontmatter and health tests plus package suites.
 ## Task 5: `article:<bibkey>` Alias Surface
 
 **Files:**
-- Create: `article:<bibkey>`→`paper:<bibkey>` ref migrator + CLI command
-- Modify after gate: literature-prefix canonicalization and health checks
+- Created then removed after gate: `article:<bibkey>`→`paper:<bibkey>` ref
+  migrator + CLI command
+- Removed after gate: literature-prefix canonicalization and health checks
 - Do not remove: live `article` entity kind support
 - Test: `science/tests/` for the new migrator
 
 > No `article:`→`paper:` ref rewriter exists today (`add_article` is unrelated
 > entity creation) — build one before migrating refs.
 
-Status 2026-07-05: current inventory reports 39 `article:<bibkey>` alias hits
-across `~/d/3d-attention-bias`, `~/d/cancer/cancer-types/multiple-myeloma`,
-and `~/d/cancer/data-sources/cbioportal`.
+Status 2026-07-05: complete in `refactor/article-prefix-alias-retirement`.
+Migrated 39 `article:<bibkey>` alias hits across
+`~/d/3d-attention-bias`, `~/d/cancer/cancer-types/multiple-myeloma`, and
+`~/d/cancer/data-sources/cbioportal`; removed the toolkit canonicalization path,
+health sentinel, and short-lived migrator command/module after the zero-hit gate.
 
-- [ ] **Step 0: Build the ref migrator (TDD)**
+- [x] **Step 0: Build the ref migrator (TDD)**
 
 Write a rewriter that rewrites `article:<bibkey>` refs (in structured sources
 and markdown frontmatter) to `paper:<bibkey>`. It must target only the alias
 prefix and must not touch `kind: article` entities or `@article` BibTeX. Cover
 with tests before running.
 
-- [ ] **Step 1: Inventory alias refs**
+- [x] **Step 1: Inventory alias refs**
 
 Report only `article:<bibkey>` references that are acting as paper aliases.
 
-- [ ] **Step 2: Migrate refs**
+- [x] **Step 2: Migrate refs**
 
 Run the Step 0 migrator to rewrite those refs to `paper:<bibkey>` across
 registered projects.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when alias refs are zero, `kind: article` still passes tests,
 **and** each migrated project still builds under `science validate` /
 `graph materialize`.
 
-- [ ] **Step 4: Remove alias normalization**
+- [x] **Step 4: Remove alias normalization**
 
 Delete the `article:` to `paper:` alias path and related migration docs/tests.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run reference, graph audit, and entity kind tests.
 

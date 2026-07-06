@@ -1734,40 +1734,6 @@ def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, projec
         raise click.exceptions.Exit(10)
 
 
-@graph.command("migrate-article-refs")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Rewrite references in place.")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate_article_refs(output_format: str, apply_changes: bool, project_root: Path) -> None:
-    """Migrate external-literature reference prefixes from article: to paper:."""
-
-    from science_tool.graph.article_ref_migration import plan_article_ref_migration
-
-    report = plan_article_ref_migration(project_root.resolve(), apply=apply_changes)
-    payload = report.to_json()
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        rows = [{"path": path} for path in report.changed_files]
-        emit_query_rows(
-            output_format=output_format,
-            title="Article Reference Migration",
-            columns=[("path", "Path")],
-            rows=rows,
-        )
-        mode = "apply" if apply_changes else "dry-run"
-        click.echo(f"Mode: {mode}")
-        click.echo(f"Changed files: {report.changed_file_count}")
-        click.echo(f"Reference rewrites: {report.rewrite_count}")
-    if not apply_changes and report.changed_files:
-        raise click.exceptions.Exit(10)
-
-
 @graph.command("stats")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
@@ -4809,7 +4775,6 @@ def health_command(
         + len(report["lingering_tags_lines"])
         + len(report["identity_policy"])
         + len(entity_identity)
-        + len(report["legacy_structured_literature_prefixes"])
         + layered_claim_issue_count
         + coverage_gaps
         + len(report.get("dataset_anomalies") or [])
@@ -5033,19 +4998,6 @@ def health_command(
                 row.get("task") or "",
                 row.get("message", ""),
             )
-        console.print(table)
-
-    if report["legacy_structured_literature_prefixes"]:
-        table = Table(
-            title=(
-                "Legacy `article:` prefixes in structured sources "
-                f"({len(report['legacy_structured_literature_prefixes'])})"
-            )
-        )
-        table.add_column("File", style="bold")
-        table.add_column("Legacy Ref")
-        for row in report["legacy_structured_literature_prefixes"]:
-            table.add_row(row["source_file"], row["legacy_ref"])
         console.print(table)
 
     adoption_table = Table(title="Layered-Claim Adoption")
