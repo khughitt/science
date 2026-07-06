@@ -86,6 +86,12 @@ Add a **deterministic resolver** and **wire resolved refs into apply-time edges.
 Sibling to `project index` / `project topic-coverage` — resolving free-string refs to
 canonical ids is a generic project fact, not explore-ideas-specific.
 
+**Reusable core (shared with apply-time wiring).** A new module (e.g.
+`resolve_refs.py`) exposes `load_index_rows(project_root) -> list[dict]` (the
+question + hypothesis rows, via `list_entities`) and `build_ref_index(rows) -> RefIndex`,
+where `RefIndex.resolve(query) -> Resolution` is the deterministic matcher below. The CLI
+command and `apply_report` both build one `RefIndex` and call `.resolve(...)`.
+
 - **Input:** one or more query strings (`--query`, repeatable) — an approximate id, a
   slug, or a keyword/title fragment. `--project-root` (default `.`), `--format text|json`.
 - **Match set:** the same question + hypothesis entities `project index` exposes. The
@@ -106,23 +112,52 @@ canonical ids is a generic project fact, not explore-ideas-specific.
 
 #### 2. Apply-time validation + wiring
 
-- `build_create_plan` reads `related_existing`. Each entry must resolve to a **real
-  canonical id present in the index**: exact ids pass through; non-exact entries run
-  through the resolver — unambiguous → canonicalized; ambiguous/unresolved →
-  **fail-early** `ApplyValidationError` naming the bad ref and any candidates (explicit >
-  defensive; fail early, no silent drop). Dedup preserved order.
-- Resolved ids flow into `create_entity(related=...)` (already supported,
-  `entities.py:830`) → they land as `related:` frontmatter on the created entity and
-  become real graph edges.
+**Index threading (explicit signature changes).** `build_create_plan` currently takes
+`(candidate_id, data, model_id)` and has no access to the project index, so it cannot
+resolve or validate refs. The index is loaded **once** in `apply_report` and threaded
+through the existing preflight, preserving the current "all errors collected before any
+writes" (zero-writes-on-bad-input) guarantee:
+
+- Reuse the resolver's index builder (below) to construct a `RefIndex` from the same
+  question + hypothesis rows `apply_report` can load via `list_entities(project_root,
+  kind=...)`. New signatures:
+  - `apply_report(project_root, from_value, model_id, today)` — builds `ref_index =
+    build_ref_index(load_index_rows(project_root))` before parsing, passes it to
+    `plan_report`.
+  - `plan_report(blocks, model_id, ref_index)` — threads `ref_index` into each
+    `build_create_plan` call. All `ApplyValidationError`s raised there are still collected
+    into `errors` and raised **before** the `to_create` write loop runs, so a bad ref
+    causes zero writes.
+  - `build_create_plan(candidate_id, data, model_id, ref_index)` — resolves/validates
+    `related_existing`, returns the canonical ids on `CreatePlan.related`.
+- `apply_report`'s `create_entity(...)` call gains `related=create_plan.related`
+  (`entities.py:830` already supports it) → resolved ids land as `related:` frontmatter on
+  the created entity and become real graph edges.
+
+**`related_existing` validation contract (fail-early, typed).** In `build_create_plan`:
+
+- Absent / `None` → no related edges (fine).
+- Not a `list` → `ApplyValidationError(f"{candidate_id}: related_existing must be a list")`
+  (never iterate a scalar string character-by-character).
+- Any entry not a non-empty `str` → `ApplyValidationError` naming the candidate id and the
+  offending value.
+- Each string entry must resolve to a **real canonical id present in the index**: exact
+  ids pass through; non-exact entries run through the resolver — unambiguous →
+  canonicalized; ambiguous/unresolved → `ApplyValidationError` naming the bad ref and any
+  candidates (explicit > defensive; no silent drop). Dedup preserving first-seen order.
 - Only **kept** candidates are created, so only their `related_existing` becomes edges.
   `already-covered` candidates are dropped (not created); their `related_existing` stays a
   report-only annotation.
 
 #### 3. Command wiring (`commands/explore-ideas.md` Phase 3)
 
-Replace the manual "slug pre-pass" prose with a step that calls
-`science project resolve-refs` to canonicalize each `related_existing` before writing the
-report, and note that apply hard-validates the ids. Regenerate the codex mirror.
+Leave the existing "slug pre-pass" step intact — it is the deterministic
+duplicate/overlap detector over candidate **titles**, and replacing it would regress
+novelty detection. **Add** a new canonicalization step *after* novelty classification (once
+`related_existing` has been set for `sharpens-existing` / `already-covered` candidates)
+that calls `science project resolve-refs` to canonicalize each authored `related_existing`
+ref to its exact id, and note that apply hard-validates these ids. Regenerate the codex
+mirror.
 
 ---
 
@@ -132,10 +167,12 @@ report, and note that apply hard-validates the ids. Regenerate the codex mirror.
   resolves `question:0037-m6a-proliferation-axis` though its title lacks "m6a");
   title-slug; ambiguous → candidates + `resolved:null`; unresolved → null; deterministic
   ordering; CLI JSON shape; text-format shape.
-- **`test_explore_ideas.py`** (extend): `build_create_plan` canonicalizes a slightly-off
-  `related_existing` id; fails-early on unresolvable/ambiguous refs; `apply_report` writes
-  resolved ids into the created entity's `related:` frontmatter; report-path tests
-  repointed to `doc/explorations/` (new base + updated error string).
+- **`test_explore_ideas_apply.py`** (extend — this is where the apply/report-path tests
+  already live): `build_create_plan` canonicalizes a slightly-off `related_existing` id;
+  fails-early on non-list / non-string / unresolvable / ambiguous refs (with candidate id
+  context); `apply_report` writes resolved ids into the created entity's `related:`
+  frontmatter; the existing `resolve_report_path` / report-path tests repointed to
+  `doc/explorations/` (new base + updated error string).
 - **Regression:** `test_codex_skills.py` green after mirror regeneration.
 - **Smoke:** `resolve-refs` against MM30's real index for the m6A case; end-to-end
   `explore-ideas apply` on a fixture confirming `related:` edges land.
