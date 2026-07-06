@@ -393,12 +393,9 @@ Load -> Audit -> Emit -> Derive -> Write
 ```
 
 `science graph audit` stops after Load and Audit. It reports unresolved or
-ambiguous references without running the materialize-only project-root preflight,
-without deriving graph layers, and without writing `knowledge/graph.trig`.
-`science graph build` runs the full sequence and hard-gates on audit failures
-before emitting or writing the graph. The materialize-only preflight still blocks
-strict builds on legacy unmigrated data-package owners; it is intentionally
-outside the audit-only path.
+ambiguous references without deriving graph layers and without writing
+`knowledge/graph.trig`. `science graph build` runs the full sequence and
+hard-gates on audit failures before emitting or writing the graph.
 
 The public in-memory build helper consumes a `ProjectSources` object and returns
 an RDF dataset without touching the filesystem. That pure path is used by

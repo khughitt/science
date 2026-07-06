@@ -1,4 +1,4 @@
-"""Conformance check: orphan datapackage owners (design §B4).
+"""Conformance check: orphan datapackage owners.
 
 A datapackage is attached resource metadata, not an identity declaration. After
 the loader's orphan-aware synthesis (§B4), a datapackage that has a real owner of
@@ -6,11 +6,9 @@ the same id DEFERS to it and emits no owner declaration — so any datapackage
 owner declaration that remains in the compiled model is an ORPHAN (a
 datapackage-only dataset with no entity-file owner).
 
-Phase 2b cutover: promotion tooling now exists (`science data-package
-promote-orphans --apply`, design §B4), so an orphan is always actionable and is
-an ERROR regardless of layout_version. The loader still SYNTHESIZES a transitional
-owner so the project keeps loading and the promoter can read the orphan; only this
-conformance severity flips warn -> error.
+An orphan is always an ERROR regardless of layout_version. Create an explicit
+`entities/datasets/<id>.md` owner with a `datapackage:` pointer instead of relying
+on the datapackage descriptor to declare identity.
 """
 
 from __future__ import annotations
@@ -41,8 +39,8 @@ def check_orphan_datapackage_owner(ctx: ValidateContext) -> Iterator[Result]:
             path,
             None,
             f"{decl.canonical_id}: datapackage has no entity-file owner "
-            "(orphan datapackage); run `science data-package promote-orphans "
-            "--apply` to create an entities/datasets/<id>.md owner (design §B4)",
+            "(orphan datapackage); create an entities/datasets/<id>.md owner "
+            "with a datapackage pointer",
             "orphan-datapackage-owner",
             None,
         )

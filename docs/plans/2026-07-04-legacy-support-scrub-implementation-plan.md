@@ -61,8 +61,10 @@
   have been migrated/committed in 3d-attention-bias, natural-systems, and
   seq-feats; active toolkit alias normalization, marker migrator CLI, and
   command guidance have been removed.
-- Next slice after this branch merges: reconfirm Task 8 legacy data-package
-  surface and remove remaining support if the zero-hit gate still holds.
+- Complete in `refactor/data-package-retirement`: the registered-project
+  inventory reports zero legacy data-package entity findings, and active
+  materialize preflight, health sentinel, data-package CLI group, promotion
+  helper, and user-facing command guidance were removed.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -391,28 +393,28 @@ Run graph source, identity collision, aggregate, and validation tests.
 ## Task 8: Legacy Data-Package Surface
 
 **Files:**
-- Keep until after gate: data-package CLI and promote helpers
-- Remove after gate: materialize preflight, data-package CLI group, promote helpers, docs
+- Removed after gate: materialize preflight, data-package CLI group, promote
+  helper, and docs
 
-- [ ] **Step 1: Inventory data-package entities**
+- [x] **Step 1: Inventory data-package entities**
 
 Report active `doc/data-packages/*.md` entities.
 
-- [ ] **Step 2: Migrate data**
+- [x] **Step 2: Migrate data**
 
 Split each legacy data-package entity into derived datasets plus a
 research-package as appropriate.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when active data-package hits are zero **and** each migrated project
 still builds under `science validate` / `graph materialize`.
 
-- [ ] **Step 4: Remove legacy support**
+- [x] **Step 4: Remove legacy support**
 
-Delete the data-package CLI group and load/preflight support.
+Delete the data-package CLI group and preflight support.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run dataset, graph materialization, and CLI tests.
 

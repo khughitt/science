@@ -46,7 +46,6 @@ The current command family set is accurate but hard to learn:
 - `science data audit`: tracked-source vs payload boundary.
 - `science dataset ...`: local dataset entity lifecycle.
 - `science datasets ...`: external dataset discovery/download/datapackage QA.
-- `science data-package ...`: legacy migration.
 - `science commons dataset ...`: commons-born dataset package workflow.
 
 Each surface has a reason to exist. The issue is that the names do not expose the

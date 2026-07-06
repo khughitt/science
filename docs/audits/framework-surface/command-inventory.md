@@ -65,9 +65,7 @@ that make the lifecycle explicit.
 
 ### `data-package`
 
-`science data-package` is explicitly legacy. It is still top-level and therefore
-looks as important as canonical surfaces. Keep it if needed, but mark it
-migration-only in the command map and consider moving future docs away from it.
+The legacy `science data-package` command has been retired from the active CLI.
 
 ### `graph add`
 

@@ -66,7 +66,6 @@ knowledge, and generated-write commands for materialization or reports.
 | `data` | Canonical | Mixed | Audit tracked-source vs payload data boundary. |
 | `dataset` | Canonical | Source-write / Read-only | Local dataset entity lifecycle. |
 | `datasets` | Specialized | Mixed | External dataset discovery, download, datapackage validation, schema inference, and QA. |
-| `data-package` | Legacy | Source-write / Read-only | Migration support for legacy data-package entities. |
 | `commons` | Specialized | External-write / Read-only | Shared commons store, overlays, promotion, and commons-born dataset packages. |
 | `peers`, `sync` | Specialized | External-write / Read-only | Peer declarations and global cross-project registry sync. |
 | `project`, `research-package`, `labnote` | Specialized | Generated-write / Read-only | Project bundles, verification, managed artifacts, research packages, and public app exports. |
@@ -84,7 +83,6 @@ Dataset-related command names encode distinct layers:
 | `science data audit` | Check whether tracked source records and ignored payload data are separated correctly. |
 | `science dataset ...` | Manage local dataset entity records under the Science entity lifecycle. |
 | `science datasets ...` | Search external repositories, inspect/download files, validate datapackages, infer schema, run package-level QA, or hydrate worktree data. |
-| `science data-package ...` | Clean up legacy data-package entities. |
 | `science commons dataset ...` | Build and validate commons-born dataset packages in the shared commons store. |
 
 Use singular `dataset` when the subject is a Science dataset entity. Use plural
@@ -167,7 +165,6 @@ lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 Migration tools are useful when curating older projects, but they are not the
 normal path for new work. Examples include:
 
-- `science data-package ...`
 - `science graph migrate-addresses`
 - `science graph migrate-paper-datasets`
 - `science tasks fix-blockers`

@@ -3,7 +3,8 @@
 **Date:** 2026-07-01
 **Reviewed:** 2026-07-02
 
-**Status:** Draft for review
+**Status:** Historical design note; `science data-package ...` was retired on
+2026-07-06.
 
 ## Scope
 
@@ -17,7 +18,6 @@ In scope:
 - `science data audit`
 - `science dataset ...`
 - `science datasets ...`
-- `science data-package ...`
 - `science commons dataset ...`
 - `science commons data ...`
 - user-guide, convention, command, and skill guidance that references those
@@ -42,7 +42,6 @@ easy to confuse:
 | `science data audit` | Audits tracked-source vs ignored-payload data boundaries. |
 | `science dataset ...` | Manages local Science dataset entity records and their lifecycle. |
 | `science datasets ...` | Searches external repositories and operates on datapackage/runtime artifacts. |
-| `science data-package ...` | Supports migration from legacy data-package entities. |
 | `science commons dataset ...` | Builds and validates commons-born dataset packages. |
 | `science commons data ...` | Resolves commons bulk-data payload paths. |
 
@@ -205,16 +204,17 @@ Primary durable guidance:
 
 ### 7. Legacy Data-Package Cleanup
 
-Use `science data-package ...` only when cleaning up legacy data-package
-entities. New work should use `dataset:<slug>` entities, runtime datapackages,
-and research packages as appropriate.
+The former `science data-package ...` migration surface was retired after the
+registered-project inventory reported zero legacy data-package entity findings.
+New work should use `dataset:<slug>` entities, runtime datapackages, and
+research packages as appropriate.
 
 Primary durable guidance:
 
 - `docs/user-guide/cli-and-workflows.md`
 - `docs/user-guide/entities.md`
-- validation and graph-build diagnostics that point to
-  `science data-package promote-orphans`
+- validation diagnostics that require explicit dataset owners with
+  `datapackage:` pointers
 
 ## Guidance Surfaces To Curate
 
@@ -279,7 +279,8 @@ decision.
 - Tests guard that `commands/plan-pipeline.md` names
   `science dataset verify-access`, not stale `science dataset verify`, in the
   data-access gate.
-- Legacy `science data-package` remains labeled migration-only.
+- The legacy `science data-package` command is not part of the active command
+  surface.
 - The generated `codex-skills/science-catalog-datasets/SKILL.md`,
   `codex-skills/science-find-datasets/SKILL.md`, and
   `codex-skills/science-plan-pipeline/SKILL.md` reflect the same source
@@ -295,8 +296,6 @@ decision.
 - Should the runtime/package commands currently under `science datasets`
   (`validate`/`infer-schema`/`qa`/`download`/`hydrate-worktree`) eventually move
   under a clearer datapackage or runtime-data surface?
-- Should `science data-package` become less prominent in top-level help after
-  more downstream projects have migrated?
 - Should dataset entity lifecycle commands move from the root CLI into a
   focused `dataset_cli.py` module before or after any help-text cleanup? The
   existing `science_tool/data_cli.py` extraction is the closest local precedent.

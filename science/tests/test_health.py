@@ -1564,7 +1564,6 @@ def test_dataset_anomaly_codes_registered() -> None:
         "dataset_origin_block_mismatch",
         "dataset_verified_but_unstageable",
         "dataset_research_package_asymmetric",
-        "data_package_unmigrated",
     }
     assert expected.issubset(set(DATASET_ANOMALY_CODES))
 
@@ -1873,28 +1872,11 @@ def test_dataset_consumed_by_rp_missing_displays_flagged(tmp_path: Path) -> None
     assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
 
 
-# ---------------------------------------------------------------------------
-# Task 6.8: data_package_unmigrated (strict mode)
-# ---------------------------------------------------------------------------
-
-
-def test_data_package_without_superseded_status_flagged(tmp_path: Path) -> None:
+def test_doc_data_package_files_are_not_dataset_anomalies(tmp_path: Path) -> None:
     f = tmp_path / "doc" / "data-packages" / "old.md"
     f.parent.mkdir(parents=True)
     f.write_text(
         '---\nid: "data-package:old"\ntype: "data-package"\ntitle: "Legacy"\nstatus: "active"\n---\n',
-        encoding="utf-8",
-    )
-    issues = check_dataset_anomalies(tmp_path)
-    assert any(i["code"] == "data_package_unmigrated" for i in issues)
-
-
-def test_superseded_data_package_no_flag(tmp_path: Path) -> None:
-    f = tmp_path / "doc" / "data-packages" / "migrated.md"
-    f.parent.mkdir(parents=True)
-    f.write_text(
-        '---\nid: "data-package:migrated"\ntype: "data-package"\ntitle: "Migrated"\n'
-        'status: "superseded"\nsuperseded_by: "research-package:migrated"\n---\n',
         encoding="utf-8",
     )
     issues = check_dataset_anomalies(tmp_path)
