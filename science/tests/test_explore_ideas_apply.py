@@ -8,7 +8,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from _fixtures.entity_helpers import seed_project
+from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_tool.cli import main
 from science_tool.entities import EntityCommandError
 from science_tool.explore_ideas import (
@@ -24,6 +24,7 @@ from science_tool.explore_ideas import (
     resolve_report_path,
     write_back,
 )
+from science_tool.resolve_refs import build_ref_index
 
 _REPORT = """\
 ---
@@ -89,18 +90,16 @@ def test_resolve_report_path_direct_file(tmp_path: Path) -> None:
 def test_resolve_report_path_relative_file_anchored_to_project_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    d = tmp_path / "entities" / "meta" / "explorations"
+    d = tmp_path / "doc" / "explorations"
     d.mkdir(parents=True)
     report = d / "explore-2026-07-04.md"
     report.write_text("x", encoding="utf-8")
     monkeypatch.chdir(tmp_path.parent)
-    assert resolve_report_path(
-        tmp_path, "entities/meta/explorations/explore-2026-07-04.md"
-    ) == report
+    assert resolve_report_path(tmp_path, "doc/explorations/explore-2026-07-04.md") == report
 
 
 def test_resolve_report_path_by_id(tmp_path: Path) -> None:
-    d = tmp_path / "entities" / "meta" / "explorations"
+    d = tmp_path / "doc" / "explorations"
     d.mkdir(parents=True)
     report = d / "explore-2026-07-04.md"
     report.write_text("x", encoding="utf-8")
@@ -108,7 +107,7 @@ def test_resolve_report_path_by_id(tmp_path: Path) -> None:
 
 
 def test_resolve_report_path_no_reprepend(tmp_path: Path) -> None:
-    d = tmp_path / "entities" / "meta" / "explorations"
+    d = tmp_path / "doc" / "explorations"
     d.mkdir(parents=True)
     (d / "explore-2026-07-04.md").write_text("x", encoding="utf-8")
     with pytest.raises(ApplyValidationError):
@@ -131,6 +130,86 @@ def _keep_question(**over):
     }
     data.update(over)
     return data
+
+
+_REF_ROWS = [{"id": "question:0037-m6a-proliferation-axis", "title": "Proliferation axis"}]
+
+_RELATED_FIXTURE = """# Explore report
+
+```yaml
+candidate_id: cand-sharper
+title: Sharper m6A question
+proposed_kind: question
+novelty_bucket: sharpens-existing
+related_existing:
+  - m6a
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+"""
+
+
+def test_build_plan_canonicalizes_related_existing() -> None:
+    idx = build_ref_index(_REF_ROWS)
+    data = _keep_question(related_existing=["m6a"])
+    plan = build_create_plan("cand-q", data, "opus", ref_index=idx)
+    assert plan.related == ["question:0037-m6a-proliferation-axis"]
+
+
+def test_build_plan_related_existing_must_be_list() -> None:
+    idx = build_ref_index(_REF_ROWS)
+    data = _keep_question(related_existing="m6a")
+    with pytest.raises(ApplyValidationError, match="related_existing must be a list"):
+        build_create_plan("cand-q", data, "opus", ref_index=idx)
+
+
+def test_build_plan_related_existing_entries_must_be_strings() -> None:
+    idx = build_ref_index(_REF_ROWS)
+    data = _keep_question(related_existing=[123])
+    with pytest.raises(ApplyValidationError, match="non-empty strings"):
+        build_create_plan("cand-q", data, "opus", ref_index=idx)
+
+
+def test_build_plan_unresolved_related_existing_fails() -> None:
+    idx = build_ref_index(_REF_ROWS)
+    data = _keep_question(related_existing=["no-such-thing"])
+    with pytest.raises(ApplyValidationError, match="unresolved related_existing"):
+        build_create_plan("cand-q", data, "opus", ref_index=idx)
+
+
+def test_build_plan_related_existing_without_index_fails() -> None:
+    data = _keep_question(related_existing=["m6a"])
+    with pytest.raises(ApplyValidationError, match="without a project index"):
+        build_create_plan("cand-q", data, "opus")
+
+
+def test_apply_writes_related_edges(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/questions/0037-m6a-proliferation-axis.md",
+        {
+            "id": "question:0037-m6a-proliferation-axis",
+            "kind": "question",
+            "title": "Proliferation axis",
+            "status": "open",
+            "created": "2026-07-01",
+            "updated": "2026-07-01",
+        },
+        "Body.\n",
+    )
+    report = tmp_path / "doc" / "explorations" / "explore-2026-07-04.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(_RELATED_FIXTURE, encoding="utf-8")
+
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    created = next((tmp_path / "entities" / "questions").glob("0*-sharper*.md"))
+    fm = _frontmatter(created)
+    assert "question:0037-m6a-proliferation-axis" in fm["related"]
 
 
 def test_build_plan_reasoned_only() -> None:
@@ -606,7 +685,7 @@ origin_plan:
 
 
 def _write_fixture(root: Path) -> Path:
-    d = root / "entities" / "meta" / "explorations"
+    d = root / "doc" / "explorations"
     d.mkdir(parents=True)
     report = d / "explore-2026-07-04.md"
     report.write_text(_FIXTURE, encoding="utf-8")
@@ -735,7 +814,7 @@ origin_plan:
 
 
 def _write_two_keep(root: Path) -> Path:
-    d = root / "entities" / "meta" / "explorations"
+    d = root / "doc" / "explorations"
     d.mkdir(parents=True)
     report = d / "explore-2026-07-04.md"
     report.write_text(_TWO_KEEP, encoding="utf-8")
@@ -758,16 +837,14 @@ decision: keep
 
 
 def _write_keep_topic(root: Path) -> Path:
-    d = root / "entities" / "meta" / "explorations"
+    d = root / "doc" / "explorations"
     d.mkdir(parents=True)
     report = d / "explore-2026-07-04.md"
     report.write_text(_KEEP_TOPIC, encoding="utf-8")
     return report
 
 
-def test_apply_report_continues_past_create_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_apply_report_continues_past_create_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_project(tmp_path)
     report = _write_two_keep(tmp_path)
 
@@ -801,9 +878,7 @@ def test_apply_report_continues_past_create_failure(
     assert len(list((tmp_path / "entities" / "questions").glob("*.md"))) == 1
 
 
-def test_apply_report_fatal_writeback_names_entity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_apply_report_fatal_writeback_names_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_project(tmp_path)
     _write_fixture(tmp_path)
 
@@ -847,12 +922,8 @@ def test_cli_apply_round_trip_text() -> None:
         )
         assert result.exit_code == 0, result.output
         assert "2 created" in result.output
-        assert (
-            "created cand-mechanism-vagal-cytokine-loop ->" in result.output
-        )
-        assert (
-            "created cand-methodology-retest-drift-threshold ->" in result.output
-        )
+        assert "created cand-mechanism-vagal-cytokine-loop ->" in result.output
+        assert "created cand-methodology-retest-drift-threshold ->" in result.output
         assert "skipped drop/defer: cand-contrarian-null-effect" in result.output
         assert len(list((root / "entities" / "questions").glob("*.md"))) == 1
         assert len(list((root / "entities" / "hypotheses").glob("*.md"))) == 1
@@ -888,9 +959,7 @@ def test_cli_apply_missing_report_errors() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir="/tmp"):
         seed_project(Path.cwd())
-        result = runner.invoke(
-            main, ["explore-ideas", "apply", "--from", "nope", "--model-id", "m"]
-        )
+        result = runner.invoke(main, ["explore-ideas", "apply", "--from", "nope", "--model-id", "m"])
         assert result.exit_code != 0
         assert "not found" in result.output.lower()
 
@@ -915,9 +984,7 @@ def test_cli_apply_emits_warnings_in_text(monkeypatch: pytest.MonkeyPatch) -> No
         seed_project(root)
         _write_fixture(root)
         _patch_create_with_warning(monkeypatch, "heads up: derived id truncated")
-        result = runner.invoke(
-            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
-        )
+        result = runner.invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
         assert result.exit_code == 0, result.output
         assert "heads up: derived id truncated" in result.output
 
@@ -944,9 +1011,7 @@ def test_cli_apply_emits_manual_detail_in_text() -> None:
         root = Path.cwd()
         seed_project(root)
         _write_keep_topic(root)
-        result = runner.invoke(
-            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
-        )
+        result = runner.invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
         assert result.exit_code == 0, result.output
         assert "1 to apply manually" in result.output
         assert "apply manually (topic): cand-topic" in result.output
@@ -959,9 +1024,7 @@ def test_cli_apply_translates_writeback_error_to_click_error(
         raise ApplyWriteBackError("boom")
 
     monkeypatch.setattr("science_tool.cli.apply_report", _boom)
-    result = CliRunner().invoke(
-        main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
-    )
+    result = CliRunner().invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
     assert result.exit_code != 0
     assert "boom" in result.output
 
@@ -986,9 +1049,7 @@ def test_derive_lens_views_synthesizes_from_legacy_single_lens() -> None:
     data = {"lens": "mechanism", "rationale": "the framing"}
     origins = [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
     views = derive_lens_views(data, origins)
-    assert views == [
-        {"lens": "mechanism", "rationale": "the framing", "origin_ref": "explore-ideas-mechanism"}
-    ]
+    assert views == [{"lens": "mechanism", "rationale": "the framing", "origin_ref": "explore-ideas-mechanism"}]
 
 
 def test_derive_lens_views_rejects_dangling_origin_ref() -> None:
@@ -1007,9 +1068,7 @@ def test_build_create_plan_carries_lens_views() -> None:
         "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
     }
     plan = build_create_plan("cand-x", data, "model-1")
-    assert plan.lens_views == [
-        {"lens": "mechanism", "rationale": "framing", "origin_ref": "explore-ideas-mechanism"}
-    ]
+    assert plan.lens_views == [{"lens": "mechanism", "rationale": "framing", "origin_ref": "explore-ideas-mechanism"}]
 
 
 def test_build_create_plan_rejects_duplicate_lens() -> None:
@@ -1060,8 +1119,6 @@ def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
             return real_create_entity(*args, **kwargs)
 
         monkeypatch.setattr(mod, "create_entity", _patched_create_entity)
-        result = runner.invoke(
-            main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"]
-        )
+        result = runner.invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
         assert result.exit_code != 0
         assert "1 failed" in result.output or "FAILED" in result.output

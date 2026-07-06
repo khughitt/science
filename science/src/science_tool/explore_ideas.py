@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from science_tool.entities import (
     create_entity,
 )
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.resolve_refs import RefIndex, build_ref_index, load_index_rows
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
@@ -50,6 +51,7 @@ class CreatePlan:
     source_refs: list[str]
     lens_views: list[dict]
     added_by: str
+    related: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -93,14 +95,8 @@ class ApplyResult:
             ],
             "skipped_applied": list(self.skipped_applied),
             "skipped_other": list(self.skipped_other),
-            "manual": [
-                {"candidate_id": candidate_id, "proposed_kind": kind}
-                for candidate_id, kind in self.manual
-            ],
-            "failures": [
-                {"candidate_id": candidate_id, "error": error}
-                for candidate_id, error in self.failures
-            ],
+            "manual": [{"candidate_id": candidate_id, "proposed_kind": kind} for candidate_id, kind in self.manual],
+            "failures": [{"candidate_id": candidate_id, "error": error} for candidate_id, error in self.failures],
         }
 
 
@@ -114,13 +110,12 @@ def resolve_report_path(project_root: Path, from_value: str) -> Path:
         if anchored_direct.is_file():
             return anchored_direct
 
-    candidate = project_root / "entities" / "meta" / "explorations" / f"{from_value}.md"
+    candidate = project_root / "doc" / "explorations" / f"{from_value}.md"
     if candidate.is_file():
         return candidate
 
     raise ApplyValidationError(
-        f"report not found: {from_value!r} (looked for a file path and for "
-        f"entities/meta/explorations/{from_value}.md)"
+        f"report not found: {from_value!r} (looked for a file path and for doc/explorations/{from_value}.md)"
     )
 
 
@@ -145,9 +140,7 @@ def _normalize_origin(origin: object, candidate_id: str) -> dict:
     if isinstance(value, date):
         normalized["date"] = value.isoformat()
     try:
-        return OriginRecord.model_validate(normalized).model_dump(
-            mode="json", exclude_none=True, exclude_defaults=True
-        )
+        return OriginRecord.model_validate(normalized).model_dump(mode="json", exclude_none=True, exclude_defaults=True)
     except ValidationError as exc:
         raise ApplyValidationError(f"{candidate_id}: invalid origin {normalized!r}: {exc}") from exc
 
@@ -161,8 +154,7 @@ def _normalize_lens_view(view: object, candidate_id: str, planned_refs: set[str]
         raise ApplyValidationError(f"{candidate_id}: invalid lens_view {view!r}: {exc}") from exc
     if record.origin_ref is not None and record.origin_ref not in planned_refs:
         raise ApplyValidationError(
-            f"{candidate_id}: lens_view origin_ref {record.origin_ref!r} is not one of the "
-            "block's planned origin refs"
+            f"{candidate_id}: lens_view origin_ref {record.origin_ref!r} is not one of the block's planned origin refs"
         )
     return record.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
 
@@ -193,7 +185,34 @@ def derive_lens_views(data: dict, origins: list[dict], candidate_id: str = "?") 
     return []
 
 
-def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePlan:
+def _resolve_related(raw: object, candidate_id: str, ref_index: RefIndex | None) -> list[str]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ApplyValidationError(f"{candidate_id}: related_existing must be a list")
+    if raw and ref_index is None:
+        raise ApplyValidationError(f"{candidate_id}: cannot resolve related_existing without a project index")
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ApplyValidationError(
+                f"{candidate_id}: related_existing entries must be non-empty strings (got {entry!r})"
+            )
+        res = ref_index.resolve(entry)
+        if res.resolved is None:
+            if res.candidates:
+                raise ApplyValidationError(
+                    f"{candidate_id}: ambiguous related_existing {entry!r} (candidates: {', '.join(res.candidates)})"
+                )
+            raise ApplyValidationError(f"{candidate_id}: unresolved related_existing {entry!r} (no matching entity)")
+        if res.resolved not in seen:
+            seen.add(res.resolved)
+            resolved.append(res.resolved)
+    return resolved
+
+
+def build_create_plan(candidate_id: str, data: dict, model_id: str, *, ref_index: RefIndex | None = None) -> CreatePlan:
     kind = data.get("proposed_kind")
     if not isinstance(kind, str) or kind not in _ROUTABLE_KINDS:
         raise ApplyValidationError(f"{candidate_id}: keep block has invalid 'proposed_kind'")
@@ -213,9 +232,9 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     # Harden unconditionally: apply rejects duplicate non-null origin refs even absent lens_views (stricter than the model, which only checks this when lens_views are present) so a later lens_views addition can never collide.
     planned_refs = [o["ref"] for o in origins if o.get("ref")]
     if len(planned_refs) != len(set(planned_refs)):
-        raise ApplyValidationError(
-            f"{candidate_id}: duplicate non-null origin_plan.origins[].ref"
-        )
+        raise ApplyValidationError(f"{candidate_id}: duplicate non-null origin_plan.origins[].ref")
+
+    related = _resolve_related(data.get("related_existing"), candidate_id, ref_index)
 
     lens_views = derive_lens_views(data, origins, candidate_id)
 
@@ -223,8 +242,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     for view in lens_views:
         if view["lens"] in seen_lenses:
             raise ApplyValidationError(
-                f"{candidate_id}: duplicate lens_views[].lens {view['lens']!r} "
-                "(at most one view per lens)"
+                f"{candidate_id}: duplicate lens_views[].lens {view['lens']!r} (at most one view per lens)"
             )
         seen_lenses.add(view["lens"])
 
@@ -233,9 +251,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
     seen: set[str] = set()
     for anchor in anchors:
         if not isinstance(anchor, dict):
-            raise ApplyValidationError(
-                f"{candidate_id}: literature_anchors entry must be a mapping"
-            )
+            raise ApplyValidationError(f"{candidate_id}: literature_anchors entry must be a mapping")
         ref = anchor.get("ref")
         note = anchor.get("note")
         if note is not None and not isinstance(note, str):
@@ -258,10 +274,11 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str) -> CreatePla
         source_refs=source_refs,
         lens_views=lens_views,
         added_by=f"explore-ideas:{model_id}:{candidate_id}",
+        related=related,
     )
 
 
-def plan_report(blocks: list[CandidateBlock], model_id: str) -> ReportPlan:
+def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIndex | None = None) -> ReportPlan:
     seen_ids: set[str] = set()
     duplicates: set[str] = set()
     for block in blocks:
@@ -299,7 +316,7 @@ def plan_report(blocks: list[CandidateBlock], model_id: str) -> ReportPlan:
             continue
 
         try:
-            to_create.append(build_create_plan(block.candidate_id, block.data, model_id))
+            to_create.append(build_create_plan(block.candidate_id, block.data, model_id, ref_index=ref_index))
         except ApplyValidationError as exc:
             errors.append(str(exc))
 
@@ -371,9 +388,7 @@ def write_back(text: str, candidate_id: str, entity_id: str, applied_at: str) ->
                                     f"{indent}applied_at: {applied_at}{newline}",
                                 ]
                             return "".join(lines)
-                    raise ApplyWriteBackError(
-                        f"{candidate_id}: block has no 'decision:' line to mark applied"
-                    )
+                    raise ApplyWriteBackError(f"{candidate_id}: block has no 'decision:' line to mark applied")
             i = j + 1
             continue
         i += 1
@@ -385,7 +400,8 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
     report_path = resolve_report_path(project_root, from_value)
     text = report_path.read_text(encoding="utf-8")
     blocks = parse_report(text)
-    plan = plan_report(blocks, model_id)
+    ref_index = build_ref_index(load_index_rows(project_root))
+    plan = plan_report(blocks, model_id, ref_index=ref_index)
 
     created: list[CreatedEntity] = []
     failures: list[tuple[str, str]] = []
@@ -397,6 +413,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
                 kind=create_plan.kind,
                 title=create_plan.title,
                 source_refs=create_plan.source_refs,
+                related=create_plan.related,
                 today=today,
                 extra_frontmatter={
                     "origins": create_plan.origins,
@@ -470,9 +487,7 @@ def backfill_lens_views(project_root: Path, from_value: str, today: date) -> lis
     entities_root = project_root / "entities"
     touched: list[tuple[str, int]] = []
     for entity_id, block in by_applied_as.items():
-        target = next(
-            (p for p in iter_entity_markdown(entities_root) if _file_id(p) == entity_id), None
-        )
+        target = next((p for p in iter_entity_markdown(entities_root) if _file_id(p) == entity_id), None)
         if target is None:
             continue
         # Body-preserving parse (not science_model's parse_frontmatter, which
