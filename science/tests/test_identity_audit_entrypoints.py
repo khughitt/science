@@ -8,7 +8,7 @@ from science_tool.graph.materialize import materialization_audit
 
 def _seed(root: Path, name: str = "proj") -> None:
     (root / "science.yaml").write_text(
-        f"name: {name}\nprofile: research\nprofiles: {{local: local}}\n", encoding="utf-8"
+        f"name: {name}\nprofile: research\nknowledge_profiles: {{local: local}}\n", encoding="utf-8"
     )
 
 

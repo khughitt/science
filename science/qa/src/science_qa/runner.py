@@ -58,10 +58,6 @@ def _missing_required(spec: CheckSpec, inv: Invocation, table: pd.DataFrame) -> 
     return [c for c in inv.requires if c not in table.columns]
 
 
-def run_qa(config_path: Path, table_path: Path, report_dir: Path) -> RunResult:
-    return _run_with_config(QAConfig.from_file(config_path), table_path, report_dir)
-
-
 def run_qa_datapackage(datapackage_path: Path, resource_name: str, report_dir: Path,
                        runknobs_path: Path | None = None) -> RunResult:
     package, pkg_dir = load_package(Path(datapackage_path))

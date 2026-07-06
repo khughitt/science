@@ -6,7 +6,7 @@ from science_tool.graph.identity_table import ParticipationMode, build_identity_
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
+_MANIFEST = "name: demo\nprofile: research\nknowledge_profiles: {local: local}\nlayout_version: 3\n"
 
 
 def _write(root: Path, *, bib: str | None = None) -> None:

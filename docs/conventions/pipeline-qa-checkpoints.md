@@ -148,11 +148,10 @@ gate's failure never touches the report.
 ## Reference implementation
 
 The `science-qa` distribution (`science/qa/`, command `python -m science_qa run`) executes the
-structural/distribution severity split above. It accepts either a traditional `qa:` run-knobs file
-with `--config ... --table ...`, or a schema-driven datapackage resource with
+structural/distribution severity split above. It accepts a schema-driven datapackage resource with
 `--datapackage ... --resource ...`. Datapackage mode compiles the resource's typed Table Schema into
-the generic `tabular` program; optional run-knobs overlay operational choices such as soft ranges,
-polarity, project-local checks, aspect parameters, and program choice.
+the generic `tabular` program; optional `--config ...` run-knobs overlay operational choices such as
+soft ranges, polarity, project-local checks, aspect parameters, and program choice.
 
 The runner also formalizes the "analyst decides at model time" step for distribution flags: it
 emits `qa_report.json` (an immutable flag ledger) and scaffolds an analyst-owned

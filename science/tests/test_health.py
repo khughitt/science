@@ -79,7 +79,7 @@ def _cross_paper_ann_ref(citekey: str) -> str:
 
 def _write_identity_policy_project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text(
-        "name: test\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        "name: test\nprofile: research\nknowledge_profiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
     genes_dir = tmp_path / "entities" / "genes"

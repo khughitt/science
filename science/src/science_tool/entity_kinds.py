@@ -143,6 +143,8 @@ def _read_project_config(project_root: Path) -> dict:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(config, dict):
         return {}
+    if "profiles" in config and "knowledge_profiles" not in config:
+        raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
     return config
 
 
@@ -158,10 +160,6 @@ def _local_profile_name(project_root: Path) -> str:
     knowledge_profiles = config.get("knowledge_profiles") or {}
     if not isinstance(knowledge_profiles, dict):
         knowledge_profiles = {}
-    if not knowledge_profiles:
-        profiles = config.get("profiles") or {}
-        if isinstance(profiles, dict):
-            knowledge_profiles = profiles
     local_profile = knowledge_profiles.get("local")
     if local_profile:
         return str(local_profile)

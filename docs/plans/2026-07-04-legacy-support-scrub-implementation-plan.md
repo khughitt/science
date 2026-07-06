@@ -455,8 +455,9 @@ Run graph migration, materialize, and CLI tests.
 - `science/src/science_tool/project_config.py`
 - related docs and tests
 
-Status 2026-07-06: marker alias cleanup is complete in
-`refactor/marker-alias-retirement`; current inventory reports zero
+Status 2026-07-06: marker alias cleanup is complete; `science_qa` table mode
+and the bare `profiles:` config fallback were retired in
+`refactor/runtime-shim-retirement`; current inventory reports zero
 `legacy_marker_alias`, bare `profiles:`, and removed `science.yaml` field hits.
 
 - [x] **Step 1: Inventory small aliases**

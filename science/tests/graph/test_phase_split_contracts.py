@@ -30,7 +30,7 @@ def _write(path: Path, content: str) -> None:
     path.write_text(dedent(content).lstrip("\n"), encoding="utf-8")
 
 
-_SEED = "name: proj\nprofile: research\nprofiles: {local: local}\n"
+_SEED = "name: proj\nprofile: research\nknowledge_profiles: {local: local}\n"
 
 
 def _question(root: Path, filename: str, cid: str) -> None:

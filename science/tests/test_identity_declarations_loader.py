@@ -8,7 +8,7 @@ from science_tool.graph.sources import load_project_sources
 
 def _seed(root: Path, name: str = "proj") -> None:
     (root / "science.yaml").write_text(
-        f"name: {name}\nprofile: research\nprofiles: {{local: local}}\n",
+        f"name: {name}\nprofile: research\nknowledge_profiles: {{local: local}}\n",
         encoding="utf-8",
     )
 

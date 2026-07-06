@@ -1,4 +1,4 @@
 name: spec-y-kitchen-sink
 profile: research
-profiles:
+knowledge_profiles:
   local: local

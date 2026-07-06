@@ -19,7 +19,7 @@ from science_tool.graph.sources import load_project_sources
 # unknown kind and (b) is_external_reference recognizes the curie -> the same_as
 # edge materializes. A literal inline catalog does NOT work: _read_project_config
 # coerces `ontologies` entries to strings (sources.py), so only NAMED catalogs load.
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\nontologies:\n  - biology\n"
+_MANIFEST = "name: demo\nprofile: research\nknowledge_profiles: {local: local}\nlayout_version: 3\nontologies:\n  - biology\n"
 
 
 def _project(root: Path) -> None:

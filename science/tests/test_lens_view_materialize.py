@@ -120,7 +120,7 @@ Body.
 def test_lens_views_and_vocabulary_wired_into_materialize(tmp_path) -> None:
     # Integration: guards against the helpers existing but never being CALLED.
     (tmp_path / "science.yaml").write_text(
-        "name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8"
+        "name: proj\nprofile: research\nknowledge_profiles: {local: local}\n", encoding="utf-8"
     )
     q = tmp_path / "entities" / "questions" / "0001-lens-demo.md"
     q.parent.mkdir(parents=True, exist_ok=True)

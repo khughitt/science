@@ -65,7 +65,7 @@ def test_audit_identity_table_clean_when_no_collisions():
 
 def _seed(root: Path, name: str = "proj") -> None:
     (root / "science.yaml").write_text(
-        f"name: {name}\nprofile: research\nprofiles: {{local: local}}\n", encoding="utf-8"
+        f"name: {name}\nprofile: research\nknowledge_profiles: {{local: local}}\n", encoding="utf-8"
     )
 
 

@@ -27,7 +27,7 @@ from science_tool.graph.sources import load_project_sources
 
 def _seed(root: Path) -> None:
     (root / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\n",
+        "name: unified\nprofile: research\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
 
@@ -395,7 +395,7 @@ def test_load_project_sources_rejects_invalid_reasoning_enum(tmp_path: Path) -> 
 
 def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        "name: unified\nprofile: research\nknowledge_profiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
     (tmp_path / "entities" / "genes").mkdir(parents=True)
@@ -456,7 +456,7 @@ def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path)
 def test_load_project_sources_preserves_external_ref_taxon(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        "name: unified\nprofile: research\nknowledge_profiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
     local_sources = tmp_path / "knowledge" / "sources" / "local"
@@ -506,7 +506,7 @@ def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
 
 def test_load_project_sources_accepts_local_gene_entity_when_biology_declared(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        "name: unified\nprofile: research\nknowledge_profiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
     (tmp_path / "entities" / "genes").mkdir(parents=True)
@@ -561,7 +561,7 @@ def test_load_project_sources_raises_when_catalog_collides_with_profile_kind(
 ) -> None:
     _seed(tmp_path)
     (tmp_path / "science.yaml").write_text(
-        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        "name: unified\nprofile: research\nknowledge_profiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
     shared_profile = ProfileManifest(

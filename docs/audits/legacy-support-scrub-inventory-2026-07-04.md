@@ -1,6 +1,6 @@
 # Legacy Support Scrub Inventory
 
-Generated at: `2026-07-06T12:32:56Z`
+Generated at: `2026-07-06T13:03:42Z`
 Config path: `~/.config/science/config.yaml`
 
 ## Summary

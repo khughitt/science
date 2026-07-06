@@ -8,7 +8,7 @@ import yaml
 from science_tool.graph.identity_table import ParticipationMode, build_identity_table
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\nontologies:\n  - biology\n"
+_MANIFEST = "name: demo\nprofile: research\nknowledge_profiles: {local: local}\nlayout_version: 2\nontologies:\n  - biology\n"
 
 
 def _src(root: Path) -> Path:

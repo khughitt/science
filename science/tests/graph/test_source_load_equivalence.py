@@ -15,7 +15,7 @@ import yaml
 
 from science_tool.graph.sources import ProjectSources, load_project_sources
 
-_MANIFEST = "name: slice-a\nprofile: research\nprofiles: {local: local}\n"
+_MANIFEST = "name: slice-a\nprofile: research\nknowledge_profiles: {local: local}\n"
 
 
 def _write(root: Path, rel: str, text: str) -> None:

@@ -189,7 +189,10 @@ def test_model_and_parameter_source_loading_ignores_layered_claim_metadata_from_
     """
     project = tmp_path / "project"
     project.mkdir()
-    (project / "science.yaml").write_text("name: test\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8")
+    (project / "science.yaml").write_text(
+        "name: test\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
     local_src = project / "knowledge" / "sources" / "local"
     local_src.mkdir(parents=True)
 
