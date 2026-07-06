@@ -530,6 +530,7 @@ def test_export_graph_payload_includes_evidence_overlay_for_reified_claim_statem
     edge_evidence = cast(EvidenceOverlays, payload.overlays.evidence)["edges"][edge_id]
     claim = edge_evidence["claims"][0]
 
+    assert set(claim) == {"uri", "text", "confidence", "sources", "support_count", "dispute_count"}
     assert claim["uri"] == "http://example.org/project/proposition/drug_causes_recovery_evidence"
     assert claim["text"] == "proposition/drug_causes_recovery_evidence"
     assert claim["confidence"] == 0.85
