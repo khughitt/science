@@ -184,7 +184,7 @@ touching the file when input is invalid.
 | Empty prefix or local id | Error. |
 | Unsupported kind prefix | Error unless the prefix resolves to a registered entity kind through the entity registry. Do not treat external ontology prefixes as valid local ids; tell users to pass those through `--ontology-term`. |
 | Existing row with same `id` or `canonical_id` in target `terms.yaml` | Error. |
-| Existing source owner with the same canonical id anywhere in the project | Error by default. |
+| Existing source owner with the same canonical id in the loaded source set (core, commons, or the local profile) | Error by default. |
 | Existing markdown owner with the same id | Error with guidance to edit the markdown owner instead. |
 | Existing malformed `terms.yaml` | Error without rewriting the file. |
 | User supplies body/content/name/profile flags | Click rejects unknown options. |
@@ -193,6 +193,22 @@ The same-id check should use the project source-loading/identity machinery where
 possible, not a broad filesystem scan. The prior concept work proved that
 markdown-vs-terms collisions are deterministic, but the authoring command should
 avoid creating collisions within the loaded source set in the first place.
+
+Two contract details follow from routing the check through the loader:
+
+- **Load strictness.** Run the pre-write check with `strict_identity=False` so the
+  command can inspect the identity table rather than aborting on the first
+  pre-existing collision. Loading in strict mode would let an unrelated,
+  already-present collision raise before the new id is ever evaluated, turning a
+  pre-existing project problem into a confusing `terms add` failure. The command
+  distinguishes the two conditions in its error message: "the new id already
+  resolves to an existing owner" versus "the project already contains an
+  identity collision unrelated to this term; resolve it first."
+- **Check scope.** Load with `include_commons=True` (the default) so the same-id
+  check also rejects ids owned by core or commons sources. A local term must not
+  shadow a core/commons id. The "anywhere in the project" cases above are the
+  project-visible subset of this loaded set; the check itself spans core,
+  commons, and the local profile.
 
 ## Boundaries
 
@@ -246,7 +262,12 @@ The implementation plan should start with failing tests for:
 9. The created row reloads through `load_project_sources()` with the expected
    title.
 10. The command rejects `--body`, `--content`, `--name`, and `--profile`.
-11. Command docs and generated Codex mirrors use `science terms add` instead of
+11. An id owned by a core or commons source is rejected (the check loads with
+    commons included; a local term cannot shadow a core/commons id).
+12. A project that already contains an unrelated identity collision produces a
+    distinct pre-existing-collision error, not a crash and not a false "your id
+    already exists" message.
+13. Command docs and generated Codex mirrors use `science terms add` instead of
     hand-authoring YAML for routine lightweight term creation.
 
 ## Non-Goals
