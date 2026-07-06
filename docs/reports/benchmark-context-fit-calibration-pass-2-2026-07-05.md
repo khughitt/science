@@ -7,7 +7,9 @@ and are intentionally not committed.
 
 - `science benchmark gap-calibration --commons --format json`
 - `science benchmark gaps --commons --calibration-summary --format json`
+- `science benchmark gaps --commons --format json`
 - `science benchmark gaps --commons --context-fit direct-fit --format json`
+- `science benchmark gaps --commons --context-fit adjacent-fit --format json`
 - `science benchmark tests --commons --exclude-fallback --state concrete --format json`
 - `science benchmark test-triage --commons --format json`
 
@@ -30,6 +32,9 @@ All commands were run from the toolkit worktree with:
 - fallback candidate rows: `2274`
 - fallback candidate ratio: `0.927`
 - fallback concentration warning: `False`
+- unfiltered gap candidate rows counted from `benchmark gaps`: `2453`
+- generic-fallback rows counted from `benchmark gaps`: `1801`
+- generic-fallback gap share: `0.734`
 
 Top fallback benchmarks:
 
@@ -97,6 +102,24 @@ surface still deserves review: breast-cancer clinical-outcome benchmarks may be
 useful transfer baselines, but they should probably read as adjacent-fit unless
 an explicit cross-cancer validation rule justifies direct-fit.
 
+Post-classifier count check:
+
+| Project | rows | direct-fit | adjacent-fit | method-fit | blocked-fit | generic-fallback | out-of-context |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| multiple-myeloma | 105 | 105 | 0 | 0 | 0 | 0 | 0 |
+| post-acute-infection | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| natural-systems | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| cbioportal | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+
+## Adjacent-Fit Gap Filter Check
+
+| Project | rows | direct-fit | adjacent-fit | method-fit | blocked-fit | generic-fallback | out-of-context |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| multiple-myeloma | 11 | 0 | 11 | 0 | 0 | 0 | 0 |
+| post-acute-infection | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| natural-systems | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| cbioportal | 23 | 0 | 23 | 0 | 0 | 0 | 0 |
+
 ## Top Concrete Benchmarks
 
 | Project | top concrete non-fallback benchmarks |
@@ -123,6 +146,47 @@ from `post-acute-infection`: CTRPv2, SciPlex3, L1000, and DREAM perturbation row
 are `run-now` because their access/task state is runnable, even though
 `context_fit` says `out-of-context`.
 
+Post-classifier demotion checks:
+
+- direct-fit gap candidates with blocking warnings: `0`
+- direct/adjacent gap candidates with blocking warnings: `23`
+- demoted adjacent candidates: `22`
+- demoted candidates without blocking warning: `0`
+
+The one warned direct/adjacent row that is not a demotion is an already-adjacent
+`dataset:ctrpv2` cell-line-vs-primary row for
+`question:0010-treatment-response` in multiple myeloma. It is not a surviving
+direct-fit row.
+
+No direct-fit gap candidates carried blocking context warnings.
+
+Top demoted adjacent rows:
+
+| Project | benchmark | entity | warnings |
+| --- | --- | --- | --- |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `hypothesis:0002-cross-study-ranking-divergence-is-structured` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `hypothesis:0009-treatment-induced-signature-frequency-contamination` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `hypothesis:0010-joint-indel-sbs-improves-aetiology-discrimination` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `hypothesis:0011-sbs1-lrr-contamination-qc` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0004-mca-burden-in-esophageal-vs-other-study-tissues` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0005-gli1-normal-tissue-hotspot-inflation` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0007-cross-tissue-somatic-mutation-rate-variation-as-null-model` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0014-cfs-as-distinct-confounder-class` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0015-pan-cancer-aggregator-choice` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0018-can-mutational-signature-decomposition-be-added-downstream-of-the-cross` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0020-minimum-sample-size-and-caller-provenance-for` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0028-indel-call-availability-across-cbioportal-studies` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0029-assay-regime-divergence-attribution` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0031-residual-gene-length-signal-mechanism` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0033-neural-enrichment-cns-exclusion` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0035-label-free-neural-gene-definition` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0036-oncofetal-fetal-vs-adult-neural-expression` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0041-driver-complexity-vs-median-age-at-diagnosis` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0042-driver-normal-expression-tissue-cell-type-specificity` | cross-disease:gbm-vs-breast |
+| cbioportal | `dataset:cptac-gbm-2021-proteogenomics` | `question:0043-driver-cancer-type-breadth-distribution` | cross-disease:gbm-vs-breast |
+
+_Showing top 20 of 22 demoted rows._
+
 ## Blocked And Generic Fallback Concentration
 
 MMRF remains the dominant blocked-support fallback source:
@@ -143,14 +207,58 @@ Generic fallback remains broad but is now explicitly hidden from terminal detail
 | natural-systems | 318 | 0 | `ccle-proteomics-nusinow-2020`, `cptac-gbm-2021-proteogenomics`, `dream4-in-silico-network`, `cptac-proteogenomics` |
 | cbioportal | 90 | 22 | `dream4-in-silico-network`, `cptac-proteogenomics`, `ccle-proteomics-nusinow-2020` |
 
+Top generic-fallback gap candidates:
+
+| Project | benchmark | generic-fallback candidates |
+| --- | --- | ---: |
+| multiple-myeloma | `dataset:dream4-in-silico-network` | 235 |
+| multiple-myeloma | `dataset:ccle-proteomics-nusinow-2020` | 225 |
+| multiple-myeloma | `dataset:cptac-proteogenomics` | 225 |
+| multiple-myeloma | `dataset:cptac-gbm-2021-proteogenomics` | 215 |
+| natural-systems | `dataset:mmrf-commpass` | 159 |
+| post-acute-infection | `dataset:mmrf-commpass` | 93 |
+| natural-systems | `dataset:ccle-proteomics-nusinow-2020` | 85 |
+| natural-systems | `dataset:cptac-gbm-2021-proteogenomics` | 83 |
+| natural-systems | `dataset:dream4-in-silico-network` | 76 |
+| natural-systems | `dataset:cptac-proteogenomics` | 74 |
+| cbioportal | `dataset:mmrf-commpass` | 56 |
+| post-acute-infection | `dataset:dream4-in-silico-network` | 48 |
+| post-acute-infection | `dataset:ccle-proteomics-nusinow-2020` | 47 |
+| post-acute-infection | `dataset:cptac-proteogenomics` | 46 |
+| post-acute-infection | `dataset:cptac-gbm-2021-proteogenomics` | 44 |
+| cbioportal | `dataset:dream4-in-silico-network` | 34 |
+| cbioportal | `dataset:cptac-proteogenomics` | 33 |
+| cbioportal | `dataset:ccle-proteomics-nusinow-2020` | 23 |
+
+Top context warnings in gap candidates:
+
+| warning | count |
+| --- | ---: |
+| blocked-support-fallback | 308 |
+| cell-line-vs-primary | 230 |
+| cross-disease:gbm-vs-myeloma | 214 |
+| cross-disease:gbm-vs-breast | 22 |
+| domain-conflict | 13 |
+| simulated-vs-observed | 1 |
+| cross-disease:gbm-vs-melanoma | 1 |
+
+## Comparison To Pass 1
+
+| Metric | Pass 1 | Pass 2 | Direction |
+| --- | ---: | ---: | --- |
+| cBioPortal direct-fit gap candidates | 23 | 1 | down |
+| cBioPortal warned direct CPTAC-GBM rows | 23 | 0 | down |
+| direct/adjacent gap candidates with blocking warnings | 23 | 23 | redistributed |
+| generic-fallback triage rows | 1733 | 1493 | context-fit unchanged by classifier slice |
+
 ## Commons Notices
 
 No commons notices were reported.
 
 ## Recommendation
 
-Primary next slice before the belief-test design: **tighten actionability
-semantics for visible non-fallback rows**.
+Primary next slice before the belief-test design: **fallback/actionability
+tuning**, starting with visible non-fallback row semantics.
 
 Rationale:
 
