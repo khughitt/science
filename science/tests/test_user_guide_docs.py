@@ -194,7 +194,8 @@ def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
     assert "Unknown markers may remain in sketch" in normalized
     assert "non-sketch inquiries should resolve or justify them" in normalized
     assert "`science entity create concept" in normalized
-    assert "`science graph add concept` is not durable inquiry authoring" in normalized
+    assert "`science graph add concept` is retired" in normalized
+    assert "author the source owner and run `science graph build`" in normalized
 
 
 def test_epistemic_model_references_entity_owners_for_refs() -> None:
@@ -217,5 +218,5 @@ def test_entities_chapter_documents_source_authored_concepts() -> None:
     assert "`entities/concepts/<slug>.md`" in normalized
     assert "Use the most specific registered kind before creating a local concept" in normalized
     assert "For weak or temporary ideas, keep the mention in prose until it needs a graph identity." in normalized
-    assert "`science graph add concept` writes derived graph state" in normalized
-    assert "Do not use graph-added concepts as durable owners" in normalized
+    assert "`science graph add concept` is retired" in normalized
+    assert "Do not use retired graph-writer output as a durable owner" in normalized
