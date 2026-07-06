@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -154,6 +155,364 @@ def test_per_output_datapackage_paths_resolve_to_real_files(tmp_path: Path) -> N
     dp = yaml.safe_load(dp_path.read_text())
     resolved = (dp_path.parent / dp["basepath"] / dp["resources"][0]["path"]).resolve()
     assert resolved.exists()
+
+
+def test_register_run_propagates_support_min_over_resources(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": 5}},
+            },
+            {
+                "name": "gene_set",
+                "path": "gene_set.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:b",
+                "science": {"support": {"unit": "dataset", "observed": 4}},
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene", "gene_set"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3, "expected": 5},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene", "gene_set"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert dp["science"]["support"] == {"unit": "dataset", "observed": 4}
+
+
+def test_register_run_support_null_when_a_resource_unstamped(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": 5}},
+            },
+            {"name": "gene_set", "path": "gene_set.csv", "format": "csv", "bytes": 100, "hash": "sha256:b"},
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene", "gene_set"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene", "gene_set"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert dp["science"]["support"]["observed"] is None
+
+
+@pytest.mark.parametrize(
+    "resource_science",
+    [
+        pytest.param({}, id="missing-science"),
+        pytest.param({"science": {}}, id="empty-science"),
+        pytest.param({"science": None}, id="none-science"),
+        pytest.param({"science": {"support": None}}, id="none-support"),
+    ],
+)
+def test_register_run_support_null_for_unstamped_resource_variants(
+    tmp_path: Path, resource_science: dict
+) -> None:
+    resource = {
+        "name": "gene",
+        "path": "gene.csv",
+        "format": "csv",
+        "bytes": 100,
+        "hash": "sha256:a",
+        **resource_science,
+    }
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[resource],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert dp["science"]["support"]["observed"] is None
+
+
+def test_register_run_preserves_malformed_support_observed(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": "not-an-int"}},
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert dp["science"]["support"] == {"unit": "dataset", "observed": "not-an-int"}
+
+
+def test_register_run_writes_identity_context_and_support(tmp_path: Path) -> None:
+    identity = {
+        "taxon": 9606,
+        "assembly": {
+            "label": "UNKNOWN",
+            "registry": "dataset:assembly-registry",
+            "resolution_status": "declared_unresolved",
+        },
+    }
+    schema_profile = "science-entity-base/1.0+dataset/1.0+bio.cna/1.0+bio.identity_context/1.0"
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": 5}},
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "schema_profile": schema_profile,
+                "identity": identity,
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert dp["science"] == {
+        "identity_context": identity,
+        "support": {"unit": "dataset", "observed": 5},
+    }
+
+
+def test_register_run_fails_on_conflicting_resource_units(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": 5}},
+            },
+            {
+                "name": "gene_set",
+                "path": "gene_set.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:b",
+                "science": {"support": {"unit": "cohort", "observed": 4}},
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene", "gene_set"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene", "gene_set"])
+    res = _run_register(tmp_path)
+    assert res.exit_code != 0
+    assert "conflicting support units" in res.output
+
+
+def test_register_run_rejects_malformed_resource_science(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": "not-a-mapping",
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code != 0
+    assert "combined" in res.output
+    assert "gene" in res.output
+    assert "science must be a mapping" in res.output
+
+
+@pytest.mark.parametrize(
+    "science_value",
+    [
+        pytest.param([], id="empty-list"),
+        pytest.param("", id="empty-string"),
+        pytest.param(False, id="false"),
+        pytest.param(0, id="zero"),
+    ],
+)
+def test_register_run_rejects_falsy_malformed_resource_science(tmp_path: Path, science_value: object) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": science_value,
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code != 0
+    assert "combined" in res.output
+    assert "gene" in res.output
+    assert "science must be a mapping" in res.output
+
+
+def test_register_run_rejects_malformed_resource_science_support(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": "not-a-mapping"},
+            },
+        ],
+        workflow_outputs=[
+            {
+                "slug": "combined",
+                "title": "Combined",
+                "resource_names": ["gene"],
+                "ontology_terms": [],
+                "support": {"unit": "dataset", "min": 3},
+            },
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code != 0
+    assert "combined" in res.output
+    assert "gene" in res.output
+    assert "science.support must be a mapping" in res.output
+
+
+def test_register_run_no_support_block_writes_no_support(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {
+                "name": "gene",
+                "path": "gene.csv",
+                "format": "csv",
+                "bytes": 100,
+                "hash": "sha256:a",
+                "science": {"support": {"unit": "dataset", "observed": 5}},
+            },
+        ],
+        workflow_outputs=[
+            {"slug": "combined", "title": "Combined", "resource_names": ["gene"], "ontology_terms": []},
+        ],
+    )
+    _seed_resource_files(tmp_path, ["gene"])
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+    dp = yaml.safe_load(
+        (tmp_path / "results" / "wf" / "r1" / "combined" / "datapackage.yaml").read_text(encoding="utf-8")
+    )
+    assert "support" not in (dp.get("science") or {})
 
 
 def test_register_run_fails_when_resource_file_missing(tmp_path: Path) -> None:
