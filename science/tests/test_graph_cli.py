@@ -135,6 +135,7 @@ def test_retired_graph_writer_commands_report_forward_path(args: list[str], comm
     assert f"{command} is retired" in result.output
     assert forward_key in result.output
     assert "science graph build" in result.output
+    assert "run, then run" not in result.output
 
 
 def test_graph_init_creates_trig_with_named_graphs() -> None:

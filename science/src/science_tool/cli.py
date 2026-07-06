@@ -1656,7 +1656,7 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
 
     Dry-run by default; pass --apply to write.
     """
-    raise _retired_writer("graph migrate-addresses", "Address direction is canonical at build; run")
+    raise _retired_writer("graph migrate-addresses", "Address direction is canonical at build")
 
 
 @graph.command("migrate-paper-datasets")
@@ -1780,7 +1780,7 @@ def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
 def graph_stamp_revision(graph_path: Path) -> None:
     """Update graph revision metadata to reflect current project state."""
 
-    raise _retired_writer("graph stamp-revision", "The compiler stamps revisions; run")
+    raise _retired_writer("graph stamp-revision", "The compiler stamps revisions")
 
 
 @graph.command("predicates")
@@ -2288,7 +2288,7 @@ def graph_export_json(overlays: tuple[str, ...], graph_path: Path) -> None:
 def graph_import(snapshot_path: Path | None, graph_path: Path) -> None:
     """Import a Turtle snapshot into the knowledge graph."""
 
-    raise _retired_writer("graph import", "Raw-triple import is retired; author the source records and run")
+    raise _retired_writer("graph import", "Raw-triple import is retired; author the source records")
 
 
 @graph.command("scan-prose")
