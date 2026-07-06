@@ -24,9 +24,15 @@ from science_tool.graph.store import (
 
 
 @pytest.fixture
-def graph_path(tmp_path: Path) -> Path:
+def project_root(tmp_path: Path) -> Path:
+    """Fresh project root for testing."""
+    return tmp_path
+
+
+@pytest.fixture
+def graph_path(project_root: Path) -> Path:
     """Fresh graph file for testing."""
-    gp = tmp_path / "knowledge" / "graph.trig"
+    gp = project_root / "knowledge" / "graph.trig"
     gp.parent.mkdir(parents=True)
     gp.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
     return gp
@@ -263,10 +269,12 @@ class TestMaterializedInquiryQueries:
         # The rich `skos:related` list is the materialized inquiry's content.
         assert str(PROJECT_NS["hypothesis/h01"]) in result["related"]
 
-    def test_get_inquiry_materialized_does_not_leak_knowledge_edges(self, graph_path: Path) -> None:
+    def test_get_inquiry_materialized_does_not_leak_knowledge_edges(
+        self, graph_path: Path, project_root: Path
+    ) -> None:
         """Reading a materialized inquiry must not treat every triple in the
         shared knowledge graph as one of its edges."""
-        build_entity_graph(graph_path.parent.parent, [_entity("concept", "unrelated_concept", "Unrelated concept")])
+        build_entity_graph(project_root, [_entity("concept", "unrelated_concept", "Unrelated concept")])
         _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
         result = get_inquiry(graph_path, "h-3d-genome-substrate")
         assert result["edges"] == []

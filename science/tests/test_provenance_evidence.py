@@ -26,8 +26,8 @@ def _evidence_line(entity_id: str, title: str, **frontmatter: object) -> dict:
     return _entity("evidence-line", entity_id, title, **frontmatter)
 
 
-def test_add_evidence_with_independence(project_root: Path):
-    """Evidence edge with independence annotation stores the value."""
+def test_source_evidence_line_with_independence(project_root: Path):
+    """Source-authored evidence-line independence annotation stores the value."""
     graph_path = build_entity_graph(
         project_root,
         [
@@ -49,8 +49,8 @@ def test_add_evidence_with_independence(project_root: Path):
     assert (line_uri, SCI_NS.evidenceIndependence, Literal("circular")) in provenance
 
 
-def test_add_evidence_without_independence(project_root: Path):
-    """Evidence edge without independence flag works as before."""
+def test_source_evidence_line_without_independence(project_root: Path):
+    """Source-authored evidence-line without independence omits the predicate."""
     graph_path = build_entity_graph(
         project_root,
         [
@@ -71,9 +71,9 @@ def test_add_evidence_without_independence(project_root: Path):
     assert list(provenance.triples((line_uri, SCI_NS.evidenceIndependence, None))) == []
 
 
-def test_add_evidence_invalid_independence(project_root: Path):
+def test_source_evidence_line_invalid_independence(project_root: Path):
     """Invalid independence value is rejected by source materialization."""
-    with pytest.raises(ValueError, match="schema validation failed|Input should be"):
+    with pytest.raises(ValueError) as exc_info:
         build_entity_graph(
             project_root,
             [
@@ -88,3 +88,10 @@ def test_add_evidence_invalid_independence(project_root: Path):
                 ),
             ],
         )
+
+    message = str(exc_info.value)
+    assert "evidence-line" in message
+    assert "independence" in message
+    assert "independent" in message
+    assert "shared-source" in message
+    assert "circular" in message

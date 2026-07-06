@@ -1,4 +1,8 @@
-"""Tests that bridge_between_refs emits a BundleMembership role node via the chokepoint."""
+"""Tests that source-authored bridge membership emits role nodes and provenance.
+
+Proposition ``discusses`` frontmatter emits the BundleMembership role node; an
+authored provenance relation retains the ``sci:bridgeBetween`` triple.
+"""
 
 from pathlib import Path
 
