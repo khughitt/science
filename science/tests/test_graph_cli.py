@@ -448,27 +448,11 @@ def test_graph_add_story_warns_graph_only_not_durable() -> None:
         assert "source-authored story entity" in result.output
 
 
-def test_graph_add_paper_warns_legacy_composition_not_literature_note() -> None:
+def test_graph_add_paper_command_is_removed() -> None:
     runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "paper",
-                "A draft paper",
-                "--story",
-                "story:s1",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "legacy composition command" in result.output
-        assert "external literature note" in result.output
+    result = runner.invoke(main, ["graph", "add", "paper", "A title", "--story", "story:s01"])
+    assert result.exit_code == 2
+    assert "No such command 'paper'" in result.output
 
 
 def test_graph_validate_passes_on_fresh_graph() -> None:

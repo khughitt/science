@@ -70,7 +70,6 @@ from .inquiry import (
 from .mutations import (
     add_article,
     add_falsification,
-    add_paper_entity,
     add_story,
 )
 from .notebooks import _NOTEBOOKS_PYPROJECT, _copy_viz_notebook, _uv_lock
@@ -183,7 +182,6 @@ __all__ = [
     "VALID_INQUIRY_TYPES",
     "add_article",
     "add_falsification",
-    "add_paper_entity",
     "add_story",
     "build_graph_dot",
     "canonical_id_from_entity_uri",

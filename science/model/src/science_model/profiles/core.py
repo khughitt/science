@@ -742,14 +742,6 @@ CORE_PROFILE = ProfileManifest(
             description="A mechanism points to the propositions defining its claims.",
         ),
         RelationKind(
-            name="comprises",
-            predicate="sci:comprises",
-            source_kinds=["paper"],
-            target_kinds=["story"],
-            layer="layer/core",
-            description="Legacy graph-only paper composition relation.",
-        ),
-        RelationKind(
             name="grounds",
             predicate="sci:grounds",
             source_kinds=["workflow-run"],

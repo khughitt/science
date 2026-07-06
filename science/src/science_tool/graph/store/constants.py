@@ -371,7 +371,6 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Story organized by question or hypothesis",
         "layer": "graph/knowledge",
     },
-    {"predicate": "sci:comprises", "description": "Paper comprises stories", "layer": "graph/knowledge"},
     {"predicate": "sci:grounds", "description": "Workflow-run grounds observation", "layer": "graph/provenance"},
     {"predicate": "sci:dataSource", "description": "Observation data source reference", "layer": "graph/knowledge"},
     {

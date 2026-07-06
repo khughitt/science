@@ -59,7 +59,6 @@ from science_tool.graph.store import (
     GRAPH_LAYERS,
     add_article,
     add_falsification,
-    add_paper_entity,
     add_story,
     build_graph_dot,
     diff_graph_inputs,
@@ -2572,33 +2571,6 @@ def add_mechanism_cmd(
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
     raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
-
-
-@graph_add.command("paper")
-@click.argument("title")
-@click.option("--story", "stories", multiple=True, required=True, help="Story ref(s)")
-@click.option("--status", default="outline", type=click.Choice(["outline", "draft", "revision", "final"]))
-@click.option("--abstract", default=None, help="Paper abstract")
-@click.option("--id", "paper_id", default=None, help="Custom paper ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_paper_cmd(
-    title: str,
-    stories: tuple[str, ...],
-    status: str,
-    abstract: str | None,
-    paper_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a paper — a composition of stories for communication."""
-    uri = add_paper_entity(graph_path, title, list(stories), status, abstract, paper_id)
-    click.echo(f"Added paper: {uri}")
-    click.echo(
-        "WARNING: this legacy composition command writes directly to graph.trig and will be wiped "
-        "on the next `science graph build`. The current source-authored `paper:<bibkey>` kind is "
-        "an external literature note, not the project's own publication draft."
-    )
 
 
 @main.group("belief")
