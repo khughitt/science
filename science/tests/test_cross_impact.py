@@ -7,15 +7,14 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, Literal, Namespace, URIRef
-from rdflib.namespace import PROV, RDF
+from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.cli import main
 from science_tool.graph.cross_impact import query_cross_impact
-from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE, SCI_NS, save_graph_dataset
+from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE, SCHEMA_NS, SCI_NS, save_graph_dataset
 
 PROJECT_NS = Namespace("http://example.org/project/")
 CITO = Namespace("http://purl.org/spar/cito/")
-SCHEMA = Namespace("http://schema.org/")
 
 
 @pytest.fixture
@@ -30,11 +29,6 @@ def graph_path(tmp_path: Path) -> Path:
     return gp
 
 
-def _invoke(runner: CliRunner, graph_path: Path, args: list[str]) -> None:
-    result = runner.invoke(main, [*args, "--path", str(graph_path)])
-    assert result.exit_code == 0, result.output
-
-
 def _set_supports_scope(graph_path: Path, proposition_ref: str, scope: str) -> None:
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
@@ -43,210 +37,76 @@ def _set_supports_scope(graph_path: Path, proposition_ref: str, scope: str) -> N
     save_graph_dataset(dataset, graph_path)
 
 
-def _build_local_graph(runner: CliRunner, graph_path: Path) -> None:
-    _invoke(runner, graph_path, ["graph", "init"])
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "proposition",
-            "Root proposition",
-            "--source",
-            "paper:root",
-            "--id",
-            "root",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "proposition",
-            "Local dependent proposition",
-            "--source",
-            "paper:local",
-            "--id",
-            "local_dep",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "evidence",
-            "proposition/local_dep",
-            "proposition/root",
-            "--stance",
-            "supports",
-        ],
-    )
+def _seed_dataset() -> Dataset:
+    dataset = Dataset()
+    dataset.parse(data=INITIAL_GRAPH_TEMPLATE, format="trig")
+    return dataset
 
 
-def _build_cross_hypothesis_graph(runner: CliRunner, graph_path: Path) -> None:
-    _invoke(runner, graph_path, ["graph", "init"])
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "hypothesis",
-            "H1",
-            "--text",
-            "Hypothesis one",
-            "--source",
-            "paper:h1",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "hypothesis",
-            "H2",
-            "--text",
-            "Hypothesis two",
-            "--source",
-            "paper:h2",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "proposition",
-            "Root proposition",
-            "--source",
-            "paper:root",
-            "--id",
-            "root",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "proposition",
-            "Cross dependent proposition",
-            "--source",
-            "paper:cross",
-            "--id",
-            "cross_dep",
-            "--bridge-between",
-            "hypothesis:h1",
-            "--bridge-between",
-            "hypothesis:h2",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "evidence",
-            "proposition/cross_dep",
-            "proposition/root",
-            "--stance",
-            "supports",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "observation",
-            "Root signal",
-            "--data-source",
-            "dataset:obs-1",
-            "--id",
-            "obs_1",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "finding",
-            "Cross dependent finding",
-            "--confidence",
-            "high",
-            "--proposition",
-            "proposition/cross_dep",
-            "--observation",
-            "observation/obs_1",
-            "--source",
-            "paper:analysis-run-1",
-            "--id",
-            "finding_cross",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "interpretation",
-            "Cross dependent interpretation",
-            "--finding",
-            "finding/finding_cross",
-            "--context",
-            "bundle review",
-            "--id",
-            "interp_cross",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "discussion",
-            "Cross dependent discussion",
-            "--proposition",
-            "proposition/cross_dep",
-            "--context",
-            "bundle review",
-            "--id",
-            "disc_cross",
-        ],
-    )
-    _invoke(
-        runner,
-        graph_path,
-        [
-            "graph",
-            "add",
-            "question",
-            "cross_q",
-            "--text",
-            "Does the root proposition generalize?",
-            "--source",
-            "paper:q1",
-            "--related",
-            "hypothesis:h1",
-            "--related",
-            "hypothesis:h2",
-        ],
-    )
+def _write_hypothesis(knowledge, slug: str, text: str) -> URIRef:
+    uri = PROJECT_NS[f"hypothesis/{slug}"]
+    knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+    knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+    return uri
+
+
+def _write_proposition(knowledge, slug: str, text: str) -> URIRef:
+    uri = PROJECT_NS[f"proposition/{slug}"]
+    knowledge.add((uri, RDF.type, SCI_NS.Proposition))
+    knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+    return uri
+
+
+def _build_local_graph(graph_path: Path) -> None:
+    dataset = _seed_dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    root = _write_proposition(knowledge, "root", "Root proposition")
+    local_dep = _write_proposition(knowledge, "local_dep", "Local dependent proposition")
+    knowledge.add((local_dep, CITO.supports, root))
+
+    save_graph_dataset(dataset, graph_path)
+
+
+def _build_cross_hypothesis_graph(graph_path: Path) -> None:
+    dataset = _seed_dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    h1 = _write_hypothesis(knowledge, "h1", "Hypothesis one")
+    h2 = _write_hypothesis(knowledge, "h2", "Hypothesis two")
+    root = _write_proposition(knowledge, "root", "Root proposition")
+    cross_dep = _write_proposition(knowledge, "cross_dep", "Cross dependent proposition")
+    knowledge.add((cross_dep, CITO.supports, root))
+    knowledge.add((cross_dep, CITO.discusses, h1))
+    knowledge.add((cross_dep, CITO.discusses, h2))
+
+    obs = PROJECT_NS["observation/obs_1"]
+    knowledge.add((obs, RDF.type, SCI_NS.Observation))
+    knowledge.add((obs, SCHEMA_NS.description, Literal("Root signal")))
+
+    finding = PROJECT_NS["finding/finding_cross"]
+    knowledge.add((finding, RDF.type, SCI_NS.Finding))
+    knowledge.add((finding, SCHEMA_NS.description, Literal("Cross dependent finding")))
+    knowledge.add((finding, SCI_NS.contains, cross_dep))
+    knowledge.add((finding, SCI_NS.contains, obs))
+
+    interpretation = PROJECT_NS["interpretation/interp_cross"]
+    knowledge.add((interpretation, RDF.type, SCI_NS.Interpretation))
+    knowledge.add((interpretation, SCHEMA_NS.description, Literal("Cross dependent interpretation")))
+    knowledge.add((interpretation, SCI_NS.contains, finding))
+
+    discussion = PROJECT_NS["discussion/disc_cross"]
+    knowledge.add((discussion, RDF.type, SCI_NS.Discussion))
+    knowledge.add((discussion, SCHEMA_NS.description, Literal("Cross dependent discussion")))
+    knowledge.add((discussion, SCI_NS.contains, cross_dep))
+
+    question = PROJECT_NS["question/cross_q"]
+    knowledge.add((question, RDF.type, SCI_NS.Question))
+    knowledge.add((question, SCHEMA_NS.text, Literal("Does the root proposition generalize?")))
+    knowledge.add((question, SKOS.related, h1))
+    knowledge.add((question, SKOS.related, h2))
+
+    save_graph_dataset(dataset, graph_path)
     _set_supports_scope(graph_path, "proposition/root", "project_wide")
 
 
@@ -258,14 +118,14 @@ def _build_mm30_sized_fixture_graph(graph_path: Path) -> None:
 
     root = PROJECT_NS["proposition/root"]
     knowledge.add((root, RDF.type, SCI_NS.Proposition))
-    knowledge.add((root, SCHEMA.text, Literal("Root proposition")))
+    knowledge.add((root, SCHEMA_NS.text, Literal("Root proposition")))
 
     for index in range(800):
         prop = PROJECT_NS[f"proposition/dependent_{index:04d}"]
         hyp_a = PROJECT_NS["hypothesis/h1" if index % 2 == 0 else "hypothesis/h2"]
         hyp_b = PROJECT_NS["hypothesis/h2" if index % 2 == 0 else "hypothesis/h1"]
         knowledge.add((prop, RDF.type, SCI_NS.Proposition))
-        knowledge.add((prop, SCHEMA.text, Literal(f"Dependent proposition {index}")))
+        knowledge.add((prop, SCHEMA_NS.text, Literal(f"Dependent proposition {index}")))
         knowledge.add((prop, CITO.discusses, hyp_a))
         knowledge.add((prop, CITO.discusses, hyp_b))
         knowledge.add((prop, CITO.supports, root))
@@ -284,7 +144,7 @@ def mm30_sized_graph_path(tmp_path: Path) -> Path:
 
 
 def test_cross_impact_local_only_update_returns_local_scope(runner: CliRunner, graph_path: Path) -> None:
-    _build_local_graph(runner, graph_path)
+    _build_local_graph(graph_path)
 
     payload = query_cross_impact(graph_path=graph_path, target_ref="proposition/root", limit=10)
 
@@ -306,7 +166,7 @@ def test_cross_impact_local_only_update_returns_local_scope(runner: CliRunner, g
 
 
 def test_cross_impact_cross_hypothesis_propagates_beyond_bundle(runner: CliRunner, graph_path: Path) -> None:
-    _build_cross_hypothesis_graph(runner, graph_path)
+    _build_cross_hypothesis_graph(graph_path)
 
     payload = query_cross_impact(graph_path=graph_path, target_ref="proposition/root", limit=10)
 
@@ -328,7 +188,7 @@ def test_cross_impact_cross_hypothesis_propagates_beyond_bundle(runner: CliRunne
 
 
 def test_cross_impact_missing_node_fails(runner: CliRunner, graph_path: Path) -> None:
-    _build_local_graph(runner, graph_path)
+    _build_local_graph(graph_path)
 
     result = runner.invoke(main, ["graph", "cross-impact", "proposition/missing", "--path", str(graph_path)])
 
@@ -337,7 +197,7 @@ def test_cross_impact_missing_node_fails(runner: CliRunner, graph_path: Path) ->
 
 
 def test_cross_impact_json_output_is_deterministic(runner: CliRunner, graph_path: Path) -> None:
-    _build_cross_hypothesis_graph(runner, graph_path)
+    _build_cross_hypothesis_graph(graph_path)
 
     first = runner.invoke(
         main, ["graph", "cross-impact", "proposition/root", "--format", "json", "--path", str(graph_path)]

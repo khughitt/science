@@ -582,10 +582,9 @@ def test_graph_diff_hybrid_detects_hash_change_with_stable_mtime() -> None:
         doc_file.parent.mkdir(parents=True, exist_ok=True)
         doc_file.write_text("version 1", encoding="utf-8")
 
-        # Update graph so revision metadata captures current doc file hash/mtime.
-        from science_tool.graph.store import stamp_revision
-
-        stamp_revision(Path("knowledge/graph.trig"))
+        # Build graph so revision metadata captures current doc file hash/mtime.
+        build = runner.invoke(main, ["graph", "build", "--local-only"])
+        assert build.exit_code == 0, build.output
 
         baseline_mtime_ns = doc_file.stat().st_mtime_ns
         doc_file.write_text("version 2", encoding="utf-8")
