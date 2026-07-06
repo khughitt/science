@@ -320,7 +320,6 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
 
 def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
     # collision regression: identical flag_id in two resources -> separate subdir ledgers
-
     from science_qa.runner import run_qa_package
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-2.0, 1.0]}).to_parquet(tmp_path / "b.parquet")

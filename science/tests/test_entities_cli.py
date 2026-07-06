@@ -127,6 +127,30 @@ def test_entity_create_concept_loads_and_resolves_in_graph_build() -> None:
         assert trig_path.is_file()
 
 
+def test_entity_create_mechanism_writes_model_valid_scaffold() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "create", "mechanism", "Test Mechanism"])
+
+        assert result.exit_code == 0, result.output
+        assert "mechanism:0001-test-mechanism" in result.output
+        path = Path("entities/mechanisms/0001-test-mechanism.md")
+        assert path.is_file()
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["id"] == "mechanism:0001-test-mechanism"
+        assert frontmatter["kind"] == "mechanism"
+        assert frontmatter["title"] == "Test Mechanism"
+        assert frontmatter["summary"] == "Placeholder mechanism summary; replace before relying on this mechanism."
+        assert frontmatter["participants"] == [
+            "concept:placeholder-participant-a",
+            "concept:placeholder-participant-b",
+        ]
+        assert frontmatter["propositions"] == ["proposition:placeholder-proposition"]
+
+
 def test_entity_create_construct_still_uses_generic_slug_path() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -1156,14 +1180,9 @@ def test_interpretation_input_maps_to_source_refs() -> None:
         assert "results/run-1" in Path("entities/interpretations/0001-result.md").read_text(encoding="utf-8")
 
 
-def test_graph_add_question_mentions_entity_create() -> None:
+def test_graph_add_question_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1178,8 +1197,10 @@ def test_graph_add_question_mentions_entity_create() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "entity create question" in result.output
+        assert result.exit_code != 0
+        assert "graph add question is retired" in result.output
+        assert "science questions create" in result.output
+        assert "science graph build" in result.output
 
 
 def test_proposition_create_writes_source() -> None:
@@ -1302,14 +1323,9 @@ def test_evidence_lines_list_and_show_round_trip() -> None:
         assert "Observed support." in shown.output
 
 
-def test_graph_add_proposition_warns_about_ephemerality() -> None:
+def test_graph_add_proposition_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1324,19 +1340,15 @@ def test_graph_add_proposition_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
-        assert "propositions create" in result.output
+        assert result.exit_code != 0
+        assert "graph add proposition is retired" in result.output
+        assert "science propositions create" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_observation_warns_about_ephemerality() -> None:
+def test_graph_add_observation_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1349,18 +1361,15 @@ def test_graph_add_observation_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add observation is retired" in result.output
+        assert "science entity create observation" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_finding_warns_about_ephemerality() -> None:
+def test_graph_add_finding_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1379,18 +1388,15 @@ def test_graph_add_finding_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add finding is retired" in result.output
+        assert "science entity create finding" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_evidence_warns_about_ephemerality() -> None:
+def test_graph_add_evidence_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1404,8 +1410,10 @@ def test_graph_add_evidence_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add evidence is retired" in result.output
+        assert "science evidence-lines create" in result.output
+        assert "science graph build" in result.output
 
 
 def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
@@ -1558,6 +1566,25 @@ def test_entity_sections_lists_template_sections() -> None:
         assert "optional" in result.output
 
 
+def test_entity_sections_lists_retired_graph_authoring_templates() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        seed_project(Path.cwd())
+
+        expected = {
+            "concept": {"definition", "notes"},
+            "observation": {"observation", "source"},
+            "mechanism": {"notes"},
+        }
+
+        for kind, keys in expected.items():
+            result = runner.invoke(main, ["entity", "sections", kind, "--format", "json"])
+
+            assert result.exit_code == 0, result.output
+            payload = json.loads(result.output)
+            assert {row["key"] for row in payload["rows"]} == keys
+
+
 def test_entity_sections_non_renderable_kind_gives_actionable_error() -> None:
     """`entity sections topic` reports an actionable error, not a raw template-not-found.
 
@@ -1616,16 +1643,19 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
     with runner.isolated_filesystem():
         root = Path.cwd()
         seed_project(root)
-        result = runner.invoke(main, ["entity", "create", "observation", "An Observation"])
+        result = runner.invoke(main, ["entity", "create", "outcome", "An Outcome"])
         assert result.exit_code == 0, result.output
-        # observation is a slug identity kind (descriptive ids like
-        # observation:swan-stage-shift), so the generic scaffold names it by slug.
-        path = Path("entities/observations/an-observation.md")
+        # outcome is a non-migrated slug identity kind, so the generic scaffold
+        # names it by slug and renders the fixed Summary/Notes body.
+        path = Path("entities/outcomes/an-outcome.md")
         assert path.is_file()
-        fm = yaml.safe_load(path.read_text().split("---")[1])
-        assert fm["id"] == "observation:an-observation"
-        assert fm["kind"] == "observation"
+        text = path.read_text(encoding="utf-8")
+        fm = yaml.safe_load(text.split("---")[1])
+        assert fm["id"] == "outcome:an-outcome"
+        assert fm["kind"] == "outcome"
         assert {"title", "status", "created", "updated"} <= set(fm)
+        assert "## Summary" in text
+        assert "## Notes" in text
 
 
 def test_entities_dir_is_discovered_by_graph() -> None:

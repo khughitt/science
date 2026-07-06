@@ -80,7 +80,8 @@ Examples of the pattern:
 
 Migration-only commands should say what old state they migrate and what current
 surface replaces it. Exploratory commands should say why their writes are not
-the normal durable path.
+the normal durable path. Retired commands should fail early and point to the
+source-authoring surface that replaces them.
 
 Use these labels consistently in docs and help text:
 
@@ -89,11 +90,15 @@ Use these labels consistently in docs and help text:
 | Migration-only | For commands that move legacy project state into the current model. |
 | Legacy | For compatibility surfaces that should not be used for new workflows. |
 | Exploratory | For commands useful in experiments or manual diagnostics but not normal durable authoring. |
+| Retired | For commands that no longer execute because source authoring or build-from-source has replaced them. |
 
 For example, one-shot migration commands move old source shapes into current
-source files, while `science graph add ...` is exploratory graph surgery.
-Durable project knowledge should normally be authored through source files and
-then materialized with `science graph build`.
+source files, while `science data-package` is a legacy migration surface. The
+retired graph writers such as `science graph add concept`,
+`science graph import`, `science graph stamp-revision`, and
+`science graph migrate-addresses` should point to source authoring followed by
+`science graph build`. Durable project knowledge should normally be authored
+through source files and then materialized with `science graph build`.
 
 ## Error Handling
 

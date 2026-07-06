@@ -6,7 +6,8 @@ def _u(**kw):
                 independence_group="g", evidence_role="direct_test", evidence_type="empirical_data_evidence",
                 dispute_scope=None, proxy_directness=None, has_measurement_model=False,
                 source=None, observability_keys=())
-    base.update(kw); return EvidenceUnit(**base)
+    base.update(kw)
+    return EvidenceUnit(**base)
 
 def test_direct_test_qualifies():
     assert is_qualifying_direct_test(_u()) is True

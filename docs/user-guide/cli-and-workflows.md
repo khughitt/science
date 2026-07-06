@@ -19,6 +19,7 @@ This chapter is a command-family map, not an exhaustive reference. Use
 | Migration-only | Exists to move old project state into the current model. |
 | Exploratory | Useful for experiments or manual diagnostics; avoid as normal durable authoring. |
 | Legacy | Kept for compatibility or cleanup; avoid in new workflows. |
+| Retired | No longer executes; use the replacement source-authoring or build-from-source path. |
 
 ## Write Classes
 
@@ -50,8 +51,8 @@ knowledge, and generated-write commands for materialization or reports.
 |---|---|---|---|
 | `entity` | Canonical | Source-write / Read-only | Generic source-authored entity creation, editing, notes, listing, and inspection. |
 | `questions`, `hypotheses`, `propositions`, `evidence-lines`, `discussions`, `interpretations` | Canonical | Source-write / Read-only | Typed wrappers for common entity kinds. Prefer them when they expose kind-specific options. |
-| `graph` | Derived-state | Mixed | Build, validate, query, import, export, and inspect graph-derived state. |
-| `graph add` | Exploratory | Generated-write | Direct graph mutation. Avoid for durable project knowledge because graph builds can overwrite these writes. |
+| `graph` | Derived-state | Mixed | Build, validate, query, export, and inspect graph-derived state. Retired import/migration/stamp surfaces point back to source authoring and `science graph build`. |
+| `graph add` | Mixed / Retired | Mixed | Some deferred helpers still exist, but the old node/edge graph writers are retired. Use source-authoring commands and rebuild for durable project knowledge. |
 | `dag` | Derived-state | Mixed | Render, number, validate, and audit DAG views. This is an older family-local surface and uses `--project` for project roots. |
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
@@ -100,9 +101,14 @@ science entity create <kind> "..."
 science graph build
 ```
 
-Use `science graph add ...` only for exploratory graph surgery or a graph-level
-experiment. Several `graph add` commands write directly to `knowledge/graph.trig`
-and can be overwritten by the next `science graph build`.
+Use the few still-deferred `science graph add` helpers only for the specific
+transitional workflows they document. The old graph writers for
+concepts, propositions, observations, evidence, findings, interpretations,
+discussions, mechanisms, hypotheses, questions, and edges are retired. Use
+source authoring instead: `science entity create <kind>`, typed creators such
+as `science propositions create` and `science evidence-lines create`, direct
+edits to `entities/<kind>/*.md`, `relations.yaml`, inquiry `flow_edges`, and
+evidence-line entities, followed by `science graph build`.
 
 ## Generic Entity Commands vs Typed Wrappers
 
@@ -162,8 +168,16 @@ lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 
 ## Migration And Retired Surfaces
 
-Migration-only commands are temporary. Retired commands are removed after the
-registered project set no longer needs them; do not use command names from old
-plans or audit notes as durable workflow guidance. For current project data,
-prefer canonical authoring surfaces directly and run `science validate` plus
-`science graph build` to catch retired fields.
+Migration tools are useful when curating older projects, but they are not the
+normal path for new work. Examples include:
+
+- `science data-package ...`
+- `science markers migrate`
+- `science tasks fix-blockers`
+
+`science graph migrate-addresses` and `science graph migrate-paper-datasets`
+are retired. Address direction and paper dataset usage are canonical at build
+time. Rebuild from source with `science graph build`.
+
+When possible, run these commands in read-only or dry-run mode first, inspect the
+plan, then apply the change in a small commit.

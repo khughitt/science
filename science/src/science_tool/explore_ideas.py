@@ -192,6 +192,9 @@ def _resolve_related(raw: object, candidate_id: str, ref_index: RefIndex | None)
         raise ApplyValidationError(f"{candidate_id}: related_existing must be a list")
     if raw and ref_index is None:
         raise ApplyValidationError(f"{candidate_id}: cannot resolve related_existing without a project index")
+    if ref_index is None:
+        return []
+    resolver = ref_index
     resolved: list[str] = []
     seen: set[str] = set()
     for entry in raw:
@@ -199,7 +202,7 @@ def _resolve_related(raw: object, candidate_id: str, ref_index: RefIndex | None)
             raise ApplyValidationError(
                 f"{candidate_id}: related_existing entries must be non-empty strings (got {entry!r})"
             )
-        res = ref_index.resolve(entry)
+        res = resolver.resolve(entry)
         if res.resolved is None:
             if res.candidates:
                 raise ApplyValidationError(

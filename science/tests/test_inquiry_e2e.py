@@ -10,8 +10,37 @@ from pathlib import Path
 
 from click.testing import CliRunner
 from conftest import build_inquiry_graph
+from rdflib import Literal
+from rdflib.namespace import RDF, SKOS
 
 from science_tool.cli import main
+from science_tool.graph.store import PROJECT_NS, SCHEMA_NS, SCI_NS, _graph_uri, _load_dataset, _save_dataset, _slug
+
+
+def _edit_graph(graph_path: Path, update) -> None:
+    dataset = _load_dataset(graph_path)
+    update(dataset)
+    _save_dataset(dataset, graph_path)
+
+
+def _write_hypothesis(graph_path: Path, slug: str, text: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = PROJECT_NS[f"hypothesis/{slug}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_concept(graph_path: Path, label: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = PROJECT_NS[f"concept/{_slug(label)}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Concept))
+        knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+
+    _edit_graph(graph_path, update)
 
 
 def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
@@ -27,27 +56,11 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
     assert result.exit_code == 0, f"graph init failed: {result.output}"
 
     # 2. Add a hypothesis as target
-    result = runner.invoke(
-        main,
-        [
-            "graph",
-            "add",
-            "hypothesis",
-            "H01",
-            "--text",
-            "SP embeddings occupy distinct geometric regions",
-            "--source",
-            "paper:doi_test",
-            "--path",
-            graph_path,
-        ],
-    )
-    assert result.exit_code == 0, f"add hypothesis failed: {result.output}"
+    _write_hypothesis(graph_file, "h01", "SP embeddings occupy distinct geometric regions")
 
     # 3. Add concepts
     for concept in ["uniprot_sps", "esm2_model", "sp_embeddings", "distance_matrix", "t1_comparison"]:
-        result = runner.invoke(main, ["graph", "add", "concept", concept, "--path", graph_path])
-        assert result.exit_code == 0, f"add concept {concept} failed: {result.output}"
+        _write_concept(graph_file, concept)
 
     # 4. Compile the inquiry (boundaries + data flow edges) via the compile path.
     build_inquiry_graph(
@@ -106,13 +119,10 @@ def test_inquiry_validation_catches_unreachable(tmp_path: Path) -> None:
     graph_path = str(graph_file)
 
     runner.invoke(main, ["graph", "init", "--path", graph_path])
-    runner.invoke(
-        main,
-        ["graph", "add", "hypothesis", "H01", "--text", "Test", "--source", "paper:doi_test", "--path", graph_path],
-    )
+    _write_hypothesis(graph_file, "h01", "Test")
 
     for c in ["input_data", "output_a", "output_b"]:
-        runner.invoke(main, ["graph", "add", "concept", c, "--path", graph_path])
+        _write_concept(graph_file, c)
 
     # output_b has no incoming flow edge -> unreachable BoundaryOut.
     build_inquiry_graph(

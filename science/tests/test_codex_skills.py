@@ -490,8 +490,8 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
         "Convert recommendations into `science tasks add ...` only after user acceptance."
         in next_steps
     )
-    assert "Do not use `science graph add concept` as the durable authoring path." in sketch_model
-    assert "Direct graph mutation writes to `knowledge/graph.trig`" in sketch_model
+    assert "`science graph add concept` is retired" in sketch_model
+    assert "use source-authored concept owners or project-local patch prose" in sketch_model
     assert (
         "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
         in sketch_model
@@ -502,7 +502,7 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
     assert "Use the patch source for inquiry-local assumptions and transformations" in sketch_model
     assert "the inquiry compiler mints those local nodes from the authored patch" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
-    assert "Direct `science graph add concept` writes are exploratory and non-durable." in specify_model
+    assert "`science graph add concept` is retired." in specify_model
     assert (
         "For inquiry-patch projects, record durable variable refs in `entities/patches/<slug>.md`."
         in specify_model
@@ -528,7 +528,7 @@ def test_concept_ownership_committed_skills_reflect_command_boundaries() -> None
     assert "Keep weak ideas in prose when they do not need graph refs yet." in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "Make sure those refs resolve through source records or entity owners" in specify_model
-    assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
+    assert "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
     assert 'validated_by: "<existing-validation-ref>"' in plan_pipeline_raw
@@ -551,7 +551,7 @@ def test_generated_concept_ownership_skills_reflect_command_boundaries(
     assert "Keep weak ideas in prose when they do not need graph refs yet." in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "Make sure those refs resolve through source records or entity owners" in specify_model
-    assert "Do not treat graph-added concepts as owners for variables, treatment/outcome refs, or unknowns." in specify_model
+    assert "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns." in specify_model
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
     assert 'validated_by: "<existing-validation-ref>"' in plan_pipeline_raw

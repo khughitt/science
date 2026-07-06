@@ -1,4 +1,4 @@
-"""Durable-writer boundary guard (kernel closure, Phase 1).
+"""Durable-writer boundary guard (kernel closure, Phase 3a).
 
 Static AST ratchet: the ONLY production modules permitted to call the durable
 graph-write primitives (`save_graph_dataset` / `_save_dataset`) are the compiler
@@ -12,10 +12,9 @@ phase. The guard fails if:
   * a writer site appears that is NOT in the ledger (a new boundary violation), or
   * a ledger entry no longer exists in code (a stale ledger after a retirement).
 
-This guard was authored RED: the Tier 1 sites (orphaned inquiry / data-package
-mutators) were deliberately absent from the ledger, so the guard reported them as
-unexpected until Phase 1 Task 5 deleted them. With Tier 1 gone, `actual` now
-equals the ledger exactly and the guard is GREEN.
+Phase 3a intentionally starts RED: only the four Phase-3b-deferred writers
+remain in `EXPECTED_DEFERRED_WRITERS`, so the guard reports the 14 retiring
+functions as unexpected until those functions are deleted.
 
 Scope / limitation: the match is name-based on the call site — a bare
 `_save_dataset(...)` / `save_graph_dataset(...)` call resolved to its enclosing
@@ -42,29 +41,14 @@ _ALLOWLIST_MODULES = {
 }
 
 # Direct writers that are KNOWN and intentionally deferred to a later
-# kernel-closure phase. Every entry carries a retirement phase. Tier 1 sites are
-# deliberately ABSENT — their presence in code is what makes this guard RED until
-# Phase 1 Task 5 deletes them.
+# kernel-closure phase. Phase 3a retiring sites are deliberately ABSENT — their
+# presence in code is what makes this guard RED until they are deleted.
 EXPECTED_DEFERRED_WRITERS = {
-    # Tier 2 — live `graph add *` mutators; retire in Phase 3 via _retired_mutator.
-    "graph/store/mutations.py:add_concept",
+    # Tier 2 — deferred to Phase 3b (no clean source-authoring file path).
     "graph/store/mutations.py:add_article",
-    "graph/store/mutations.py:add_proposition",
-    "graph/store/mutations.py:add_observation",
-    "graph/store/mutations.py:add_evidence_edge",
-    "graph/store/mutations.py:add_finding",
-    "graph/store/mutations.py:add_interpretation",
-    "graph/store/mutations.py:add_discussion",
     "graph/store/mutations.py:add_falsification",
-    "graph/store/mutations.py:add_mechanism",
     "graph/store/mutations.py:add_story",
     "graph/store/mutations.py:add_paper_entity",
-    "graph/store/mutations.py:add_hypothesis",
-    "graph/store/mutations.py:add_question",
-    "graph/store/mutations.py:add_edge",
-    # Tier 3 — classify/retire in a later phase.
-    "graph/store/snapshot.py:import_snapshot",
-    "graph/store/snapshot.py:stamp_revision",
 }
 
 

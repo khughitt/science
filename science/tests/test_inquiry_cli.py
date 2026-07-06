@@ -15,10 +15,20 @@ import pytest
 from click.testing import CliRunner
 from conftest import build_inquiry_graph
 from rdflib import Literal, URIRef
-from rdflib.namespace import RDF, SKOS
+from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.cli import main
-from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset, _save_dataset
+from science_tool.graph.store import (
+    CITO_NS,
+    PROJECT_NS,
+    SCHEMA_NS,
+    SCI_NS,
+    _graph_uri,
+    _load_dataset,
+    _resolve_term,
+    _save_dataset,
+    _slug,
+)
 
 
 @pytest.fixture
@@ -34,22 +44,88 @@ def graph_path(tmp_path: Path) -> Path:
     r = CliRunner()
     result = r.invoke(main, ["graph", "init", "--path", str(gp)])
     assert result.exit_code == 0
-    r.invoke(
-        main,
-        [
-            "graph",
-            "add",
-            "hypothesis",
-            "H01",
-            "--text",
-            "Test hypothesis",
-            "--source",
-            "paper:doi_test",
-            "--path",
-            str(gp),
-        ],
-    )
+    _write_hypothesis(gp, "h01", "Test hypothesis")
     return gp
+
+
+def _edit_graph(graph_path: Path, update) -> None:
+    dataset = _load_dataset(graph_path)
+    update(dataset)
+    _save_dataset(dataset, graph_path)
+
+
+def _write_hypothesis(graph_path: Path, slug: str, text: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = PROJECT_NS[f"hypothesis/{slug}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_concept(graph_path: Path, label: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = PROJECT_NS[f"concept/{_slug(label)}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Concept))
+        knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_question(graph_path: Path, slug: str, text: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = PROJECT_NS[f"question/{slug}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Question))
+        knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_proposition(
+    graph_path: Path,
+    slug: str,
+    text: str,
+    *,
+    evidence_type: str | None = None,
+    subject: str | None = None,
+    predicate: str | None = None,
+    obj: str | None = None,
+) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        uri = PROJECT_NS[f"proposition/{slug}"]
+        knowledge.add((uri, RDF.type, SCI_NS.Proposition))
+        knowledge.add((uri, SCHEMA_NS.text, Literal(text)))
+        provenance.add((uri, PROV.wasDerivedFrom, _resolve_term("paper:doi_test")))
+        if evidence_type is not None:
+            provenance.add((uri, SCI_NS.evidenceType, Literal(evidence_type)))
+        if subject is not None and predicate is not None and obj is not None:
+            knowledge.add((uri, SCI_NS.propSubject, _resolve_term(subject)))
+            knowledge.add((uri, SCI_NS.propPredicate, _resolve_term(predicate)))
+            knowledge.add((uri, SCI_NS.propObject, _resolve_term(obj)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_evidence_edge(graph_path: Path, source: str, target: str, stance: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        predicate_uri = CITO_NS.supports if stance == "supports" else CITO_NS.disputes
+        knowledge.add((_resolve_term(source), predicate_uri, _resolve_term(target)))
+
+    _edit_graph(graph_path, update)
+
+
+def _write_edge(graph_path: Path, subject: str, predicate: str, obj: str) -> None:
+    def update(dataset) -> None:
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        knowledge.add((_resolve_term(subject), _resolve_term(predicate), _resolve_term(obj)))
+
+    _edit_graph(graph_path, update)
 
 
 class TestInquiryInit:
@@ -177,28 +253,15 @@ class TestInquiryAddEdge:
         self, runner: CliRunner, graph_path: Path
     ) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Concept A feeds into concept B",
-                "--subject",
-                "concept:a",
-                "--predicate",
-                "sci:feedsInto",
-                "--object",
-                "concept:b",
-                "--id",
-                "a_feeds_into_b",
-                "--source",
-                "paper:doi_test",
-                "--path",
-                p,
-            ],
+        _write_concept(graph_path, "a")
+        _write_concept(graph_path, "b")
+        _write_proposition(
+            graph_path,
+            "a_feeds_into_b",
+            "Concept A feeds into concept B",
+            subject="concept:a",
+            predicate="sci:feedsInto",
+            obj="concept:b",
         )
 
         build_inquiry_graph(
@@ -280,51 +343,25 @@ class TestInquiryShow:
 class TestInquirySummary:
     def test_inquiry_summary_reports_claim_backing_and_priority(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "c", "--path", p])
+        _write_concept(graph_path, "a")
+        _write_concept(graph_path, "b")
+        _write_concept(graph_path, "c")
 
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Concept A feeds into concept B",
-                "--subject",
-                "concept:a",
-                "--predicate",
-                "sci:feedsInto",
-                "--object",
-                "concept:b",
-                "--id",
-                "flow_a_b",
-                "--source",
-                "paper:doi_test",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "flow_a_b",
+            "Concept A feeds into concept B",
+            subject="concept:a",
+            predicate="sci:feedsInto",
+            obj="concept:b",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Concept B feeds into concept C",
-                "--subject",
-                "concept:b",
-                "--predicate",
-                "sci:feedsInto",
-                "--object",
-                "concept:c",
-                "--id",
-                "flow_b_c",
-                "--source",
-                "paper:doi_test",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "flow_b_c",
+            "Concept B feeds into concept C",
+            subject="concept:b",
+            predicate="sci:feedsInto",
+            obj="concept:c",
         )
 
         # Build the inquiry (with claim-backed flow edges) via the compile path,
@@ -355,100 +392,28 @@ class TestInquirySummary:
         )
         _save_dataset(dataset, graph_path)
 
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Empirical evidence for inquiry-backed claim",
-                "--source",
-                "paper:doi_test",
-                "--evidence-type",
-                "empirical_data_evidence",
-                "--id",
-                "flow_a_b_support",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "flow_a_b_support",
+            "Empirical evidence for inquiry-backed claim",
+            evidence_type="empirical_data_evidence",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/flow_a_b_support",
-                "proposition/flow_a_b",
-                "--stance",
-                "supports",
-                "--path",
-                p,
-            ],
-        )
+        _write_evidence_edge(graph_path, "proposition/flow_a_b_support", "proposition/flow_a_b", "supports")
 
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Literature support for contested inquiry-backed claim",
-                "--source",
-                "paper:doi_test",
-                "--evidence-type",
-                "literature_evidence",
-                "--id",
-                "flow_b_c_support",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "flow_b_c_support",
+            "Literature support for contested inquiry-backed claim",
+            evidence_type="literature_evidence",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/flow_b_c_support",
-                "proposition/flow_b_c",
-                "--stance",
-                "supports",
-                "--path",
-                p,
-            ],
+        _write_evidence_edge(graph_path, "proposition/flow_b_c_support", "proposition/flow_b_c", "supports")
+        _write_proposition(
+            graph_path,
+            "flow_b_c_dispute",
+            "Negative result disputing inquiry-backed claim",
+            evidence_type="negative_result",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Negative result disputing inquiry-backed claim",
-                "--source",
-                "paper:doi_test",
-                "--evidence-type",
-                "negative_result",
-                "--id",
-                "flow_b_c_dispute",
-                "--path",
-                p,
-            ],
-        )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/flow_b_c_dispute",
-                "proposition/flow_b_c",
-                "--stance",
-                "disputes",
-                "--path",
-                p,
-            ],
-        )
+        _write_evidence_edge(graph_path, "proposition/flow_b_c_dispute", "proposition/flow_b_c", "disputes")
 
         result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
         assert result.exit_code == 0
@@ -480,65 +445,21 @@ class TestInquirySummary:
             title="Hypothesis Target Inquiry",
             focal="hypothesis:h01",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Hypothesis-linked proposition without explicit inquiry backing",
-                "--source",
-                "paper:doi_test",
-                "--id",
-                "hypothesis_target_claim",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "hypothesis_target_claim",
+            "Hypothesis-linked proposition without explicit inquiry backing",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Literature support for hypothesis-linked claim",
-                "--source",
-                "paper:doi_test",
-                "--evidence-type",
-                "literature_evidence",
-                "--id",
-                "hypothesis_target_support",
-                "--path",
-                p,
-            ],
+        _write_proposition(
+            graph_path,
+            "hypothesis_target_support",
+            "Literature support for hypothesis-linked claim",
+            evidence_type="literature_evidence",
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/hypothesis_target_support",
-                "proposition/hypothesis_target_claim",
-                "--stance",
-                "supports",
-                "--path",
-                p,
-            ],
+        _write_evidence_edge(
+            graph_path, "proposition/hypothesis_target_support", "proposition/hypothesis_target_claim", "supports"
         )
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "proposition/hypothesis_target_claim",
-                "cito:discusses",
-                "hypothesis/h01",
-                "--path",
-                p,
-            ],
-        )
+        _write_edge(graph_path, "proposition/hypothesis_target_claim", "cito:discusses", "hypothesis/h01")
 
         result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
         assert result.exit_code == 0
@@ -554,95 +475,22 @@ class TestInquirySummary:
 
     def test_inquiry_summary_includes_claims_from_question_targets(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "question",
-                    "QTARGET",
-                    "--text",
-                    "Question targeted by the inquiry",
-                    "--source",
-                    "paper:doi_test",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
+        _write_question(graph_path, "qtarget", "Question targeted by the inquiry")
+        _write_proposition(
+            graph_path,
+            "question_target_claim",
+            "Question-targeted proposition without explicit inquiry backing",
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Question-targeted proposition without explicit inquiry backing",
-                    "--source",
-                    "paper:doi_test",
-                    "--id",
-                    "question_target_claim",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
+        _write_proposition(
+            graph_path,
+            "question_target_support",
+            "Empirical support for question-targeted claim",
+            evidence_type="empirical_data_evidence",
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support for question-targeted claim",
-                    "--source",
-                    "paper:doi_test",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
-                    "question_target_support",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
+        _write_evidence_edge(
+            graph_path, "proposition/question_target_support", "proposition/question_target_claim", "supports"
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/question_target_support",
-                    "proposition/question_target_claim",
-                    "--stance",
-                    "supports",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "question/qtarget",
-                    "sci:addresses",
-                    "proposition/question_target_claim",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
-        )
+        _write_edge(graph_path, "question/qtarget", "sci:addresses", "proposition/question_target_claim")
         build_inquiry_graph(
             graph_path,
             slug="question_target",
@@ -665,8 +513,8 @@ class TestInquirySummary:
 class TestInquiryValidate:
     def test_validate_valid(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["graph", "add", "concept", "din", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "dout", "--path", p])
+        _write_concept(graph_path, "din")
+        _write_concept(graph_path, "dout")
         build_inquiry_graph(
             graph_path,
             slug="test",

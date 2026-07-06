@@ -6,7 +6,8 @@ def _u(**kw):
                 independence_group=None, evidence_role="proxy_support", evidence_type="literature_evidence",
                 dispute_scope=None, proxy_directness=None, has_measurement_model=False,
                 source=None, observability_keys=())
-    base.update(kw); return EvidenceUnit(**base)
+    base.update(kw)
+    return EvidenceUnit(**base)
 
 def test_same_stance_shared_source_collapses_to_strongest():
     weak = _u(line_uri="a", independence="shared-source", independence_group="g1", strength="weak")

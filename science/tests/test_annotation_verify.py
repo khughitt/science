@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
+from science_tool.annotation.io import read_sidecar
+from science_tool.annotation.model import Status
 from science_tool.annotation.verify import (
     VerifyIssue,
+    apply_supersessions,
     iter_sidecars,
     verify_path,
 )
@@ -164,14 +169,6 @@ def _minimal_empty_sidecar() -> str:
         "@prefix anno: <#> .\n"
         "anno:annotations { }\n"
     )
-
-
-import shutil
-from datetime import datetime, timezone
-
-from science_tool.annotation.io import read_sidecar
-from science_tool.annotation.model import Status
-from science_tool.annotation.verify import apply_supersessions
 
 
 def test_apply_supersessions_marks_broken_annotations(tmp_path: Path) -> None:

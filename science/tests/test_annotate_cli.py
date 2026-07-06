@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -134,9 +135,6 @@ def test_verify_json_clean_project(tmp_path: Path) -> None:
     assert payload["summary"]["broken"] == 0
     assert payload["summary"]["sidecars"] == 0
     assert payload["issues"] == []
-
-
-import subprocess
 
 
 def _git_init(work: Path) -> None:

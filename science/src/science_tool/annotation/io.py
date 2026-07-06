@@ -330,7 +330,7 @@ def write_sidecar(path: Path, sidecar: Sidecar) -> None:
         lines.append("")
 
     # Ledgers sorted by ID.
-    for led in sorted(sidecar.ledgers, key=lambda l: l.id):
+    for led in sorted(sidecar.ledgers, key=lambda ledger: ledger.id):
         lines.extend(_emit_ledger(led))
         lines.append("")
 

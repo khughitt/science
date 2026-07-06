@@ -124,12 +124,21 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
     knowledge = layer_graph_by_id.get("graph/knowledge", dataset.graph(_graph_uri("graph/knowledge")))
     provenance = layer_graph_by_id.get("graph/provenance", dataset.graph(_graph_uri("graph/provenance")))
     layer_graphs = [(layer, layer_graph_by_id[layer]) for layer in export_layers]
+    inquiry_graphs = [
+        graph for graph in dataset.graphs() if str(graph.identifier).startswith(f"{PROJECT_NS}inquiry/")
+    ]
 
     statement_nodes: set[str] = set()
     node_layers: dict[str, set[str]] = {}
     edge_records: dict[str, GraphExportEdge] = {}
     layer_edge_ids: dict[str, set[str]] = {layer: set() for layer in export_layers}
     warnings: list[str] = []
+
+    def _claim_ids_for_exported_edge(layer_graph: Graph, subject: URIRef, predicate: URIRef, object_: URIRef) -> list[str]:
+        claim_uris = set(_edge_claims(layer_graph, subject, predicate, object_))
+        for inquiry_graph in inquiry_graphs:
+            claim_uris.update(_edge_claims(inquiry_graph, subject, predicate, object_))
+        return [str(claim_uri) for claim_uri in sorted(claim_uris, key=str)]
 
     for layer, layer_graph in layer_graphs:
         for subject, predicate, object_ in layer_graph:
@@ -154,7 +163,7 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
                 obj=str(object_),
                 graph_layer=layer,
             )
-            claim_ids = [str(claim_uri) for claim_uri in _edge_claims(layer_graph, subject, predicate, object_)]
+            claim_ids = _claim_ids_for_exported_edge(layer_graph, subject, predicate, object_)
             edge_records[edge_id] = GraphExportEdge(
                 id=edge_id,
                 subject=build_graph_export_node_id(str(subject)),

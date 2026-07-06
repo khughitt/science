@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Mapping, Sequence, cast
 
 import pytest
+from conftest import build_entity_graph, build_inquiry_graph
 from pydantic import ValidationError
 from rdflib import Dataset, Literal, Namespace
 from rdflib.namespace import PROV, RDF
 from science_model.entities import ProjectEntity
+from science_model.propositions import PropositionEntity
 from science_model.reasoning import (
     ClaimLayer,
     EvidenceRole,
@@ -24,12 +26,8 @@ from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.migrate import build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import (
-    INITIAL_GRAPH_TEMPLATE,
     SCI_NS,
     EvidenceClaimBundle,
-    add_concept,
-    add_edge,
-    add_proposition,
     export_graph_payload,
 )
 
@@ -170,12 +168,6 @@ def _write_project(root: Path, *, with_layered_metadata: bool) -> Path:
     )
     (prop_dir / "p01.md").write_text("\n".join(frontmatter_lines), encoding="utf-8")
     return root
-
-
-def _write_graph() -> Path:
-    graph_path = Path("/tmp/science-layered-claims-upstream-test.graph.trig")
-    graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
-    return graph_path
 
 
 def test_model_and_parameter_source_loading_ignores_layered_claim_metadata_from_typed_records(
@@ -335,48 +327,83 @@ def test_materialize_graph_emits_layered_claim_metadata_for_proposition_sources(
 
 
 def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_edge(tmp_path: Path) -> None:
-    graph_path = _write_graph()
-    add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None, source="paper:drug")
-    add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None, source="paper:recovery")
-    add_proposition(
-        graph_path,
-        text="Drug treatment improves recovery time",
-        source="paper:layered-claims",
-        proposition_id="drug_claim",
-        subject="concept/drug",
-        predicate="scic:causes",
-        obj="concept/recovery",
-        claim_layer=ClaimLayer.MECHANISTIC_NARRATIVE,
-        identification_strength=IdentificationStrength.INTERVENTIONAL,
-        proxy_directness=ProxyDirectness.INDIRECT,
-        supports_scope=SupportScope.CROSS_HYPOTHESIS,
-        independence_group="batch-2",
-        evidence_role=EvidenceRole.MODEL_CRITICISM,
-        measurement_model=MeasurementModel(
-            observed_entity="observation:obs-2",
-            latent_construct="latent:recovery-state",
-            measurement_relation="proxy for recovery-state",
-            rationale="capture the latent recovery phenotype",
-            known_failure_modes=["batch effect"],
-            substitutable_with=["observation:obs-3"],
-        ),
-        rival_model_packet=RivalModelPacket(
-            packet_id="packet:drug-vs-null",
-            target_hypothesis="hypothesis:h1",
-            current_working_model="model:drug",
-            alternative_models=["model:null"],
-            shared_observables=["obs:recovery"],
-            discriminating_predictions=["pred:drug-accelerates"],
-            adjudication_rule="prefer the model with fewer unsupported assumptions",
-        ),
+    graph_path = build_entity_graph(
+        tmp_path,
+        entities=[
+            {
+                "kind": "concept",
+                "id": "drug",
+                "frontmatter": {"title": "Drug", "status": "active"},
+                "body": "Drug.",
+            },
+            {
+                "kind": "concept",
+                "id": "recovery",
+                "frontmatter": {"title": "Recovery", "status": "active"},
+                "body": "Recovery.",
+            },
+            {
+                "kind": "proposition",
+                "id": "drug_claim",
+                "frontmatter": {
+                    "title": "Drug treatment improves recovery time",
+                    "status": "draft",
+                    "source_refs": [],
+                    "claim_layer": "mechanistic_narrative",
+                    "identification_strength": "interventional",
+                    "proxy_directness": "indirect",
+                    "supports_scope": "cross_hypothesis",
+                    "independence_group": "batch-2",
+                    "evidence_role": "model_criticism",
+                    "measurement_model": {
+                        "observed_entity": "observation:obs-2",
+                        "latent_construct": "latent:recovery-state",
+                        "measurement_relation": "proxy for recovery-state",
+                        "rationale": "capture the latent recovery phenotype",
+                        "known_failure_modes": ["batch effect"],
+                        "substitutable_with": ["observation:obs-3"],
+                    },
+                    "rival_model_packet": {
+                        "packet_id": "packet:drug-vs-null",
+                        "target_hypothesis": "hypothesis:h1",
+                        "current_working_model": "model:drug",
+                        "alternative_models": ["model:null"],
+                        "shared_observables": ["obs:recovery"],
+                        "discriminating_predictions": ["pred:drug-accelerates"],
+                        "adjudication_rule": "prefer the model with fewer unsupported assumptions",
+                    },
+                },
+                "body": "Drug treatment improves recovery time.",
+            },
+        ],
+        relations=[
+            {
+                "subject": "concept:drug",
+                "predicate": "scic:causes",
+                "object": "concept:recovery",
+                "graph_layer": "graph/causal",
+            }
+        ],
     )
-    add_edge(
+    build_inquiry_graph(
         graph_path,
-        "concept/drug",
-        "scic:causes",
-        "concept/recovery",
-        "graph/causal",
-        claim_refs=["proposition:drug_claim"],
+        slug="drug_recovery",
+        profile="causal",
+        focal="concept:recovery",
+        treatment="concept:drug",
+        outcome="concept:recovery",
+        boundary_roles=[
+            {"ref": "concept:drug", "role": "BoundaryIn"},
+            {"ref": "concept:recovery", "role": "BoundaryOut"},
+        ],
+        flow_edges=[
+            {
+                "subject": "concept:drug",
+                "predicate": "causes",
+                "object": "concept:recovery",
+                "claim_refs": ["proposition:drug_claim"],
+            }
+        ],
     )
 
     payload = export_graph_payload(graph_path, overlays=["evidence"])
@@ -396,8 +423,24 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     assert claim["supports_scope"] == "cross_hypothesis"
     assert claim["independence_group"] == "batch-2"
     assert claim["evidence_role"] == "model_criticism"
-    assert measurement_model["observed_entity"] == "observation:obs-2"
-    assert rival_model_packet["packet_id"] == "packet:drug-vs-null"
+    assert measurement_model == {
+        "observed_entity": "observation:obs-2",
+        "latent_construct": "latent:recovery-state",
+        "measurement_relation": "proxy for recovery-state",
+        "rationale": "capture the latent recovery phenotype",
+        "known_failure_modes": ["batch effect"],
+        "substitutable_with": ["observation:obs-3"],
+    }
+    assert rival_model_packet == {
+        "packet_id": "packet:drug-vs-null",
+        "target_hypothesis": "hypothesis:h1",
+        "target_inquiry": None,
+        "current_working_model": "model:drug",
+        "alternative_models": ["model:null"],
+        "shared_observables": ["obs:recovery"],
+        "discriminating_predictions": ["pred:drug-accelerates"],
+        "adjudication_rule": "prefer the model with fewer unsupported assumptions",
+    }
 
 
 @pytest.mark.parametrize(
@@ -407,30 +450,16 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
         ("rival_model_packet", {"current_working_model": "model:working"}),
     ],
 )
-def test_add_proposition_validates_raw_reasoning_metadata_dicts(
-    tmp_path: Path,
+def test_proposition_entity_validates_raw_reasoning_metadata_dicts(
     field_name: str,
     payload: dict[str, object],
 ) -> None:
-    graph_path = _write_graph()
-
     with pytest.raises(ValidationError):
-        if field_name == "measurement_model":
-            add_proposition(
-                graph_path,
-                text="Raw dict validation should reject incomplete metadata",
-                source="paper:layered-claims",
-                proposition_id="raw-dict-validation",
-                measurement_model=payload,
-            )
-        else:
-            add_proposition(
-                graph_path,
-                text="Raw dict validation should reject incomplete metadata",
-                source="paper:layered-claims",
-                proposition_id="raw-dict-validation",
-                rival_model_packet=payload,
-            )
+        PropositionEntity(
+            id="proposition:raw-dict-validation",
+            title="Raw dict validation should reject incomplete metadata",
+            **{field_name: payload},
+        )
 
 
 def test_materialize_graph_without_layered_claim_metadata_keeps_legacy_shape(tmp_path: Path) -> None:

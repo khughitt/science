@@ -6,7 +6,8 @@ def _d(**kw):
                 independence_group="g", evidence_role="direct_test", evidence_type="empirical_data_evidence",
                 dispute_scope="whole_claim", proxy_directness=None, has_measurement_model=False,
                 source=None, observability_keys=())
-    base.update(kw); return EvidenceUnit(**base)
+    base.update(kw)
+    return EvidenceUnit(**base)
 
 
 def test_whole_claim_direct_test_strong_is_decisive():

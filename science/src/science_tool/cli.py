@@ -11,7 +11,6 @@ import click
 import yaml
 from pydantic import ValidationError
 from rich.text import Text
-from science_model.reasoning import MembershipRole
 
 from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
@@ -58,28 +57,14 @@ from science_tool.graph.materialize import materialization_audit, materialize_gr
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
-    PropositionEvidenceLine,
-    PropositionInteractionTerm,
     add_article,
-    add_concept,
-    add_discussion,
-    add_edge,
-    add_evidence_edge,
     add_falsification,
-    add_finding,
-    add_hypothesis,
-    add_interpretation,
-    add_mechanism,
-    add_observation,
     add_paper_entity,
-    add_proposition,
-    add_question,
     add_story,
     build_graph_dot,
     diff_graph_inputs,
     export_graph_payload,
     get_inquiry,
-    import_snapshot,
     init_graph_file,
     list_inquiries,
     query_claims,
@@ -96,7 +81,6 @@ from science_tool.graph.store import (
     query_uncertainty,
     read_graph_stats,
     shorten_uri,
-    stamp_revision,
     validate_graph,
     validate_inquiry,
 )
@@ -255,83 +239,6 @@ def main(ctx: click.Context, color_policy: str | None) -> None:
 @main.result_callback()
 def _record_cli_success(_: object, **__: object) -> None:
     _record_telemetry_finish()
-
-
-def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
-    if not entries:
-        return None
-
-    dataset_effects: dict[str, float] = {}
-    for entry in entries:
-        if "=" not in entry:
-            raise click.ClickException(f"Dataset effect must be DATASET=VALUE, got '{entry}'")
-        dataset, value = entry.split("=", 1)
-        dataset_name = dataset.strip()
-        if not dataset_name:
-            raise click.ClickException(f"Dataset effect must include a dataset name, got '{entry}'")
-        try:
-            dataset_effects[dataset_name] = float(value.strip())
-        except ValueError as exc:
-            raise click.ClickException(f"Dataset effect value must be numeric, got '{entry}'") from exc
-    return dataset_effects
-
-
-def _parse_evidence_lines(entries: tuple[str, ...]) -> list[dict[str, object]] | None:
-    if not entries:
-        return None
-
-    evidence_lines: list[dict[str, object]] = []
-    for entry in entries:
-        try:
-            parsed = json.loads(entry)
-        except json.JSONDecodeError as exc:
-            raise click.ClickException(f"Evidence line must be valid JSON, got '{entry}'") from exc
-        if not isinstance(parsed, dict):
-            raise click.ClickException("Evidence line JSON must decode to an object")
-        if not isinstance(parsed.get("source"), str) or not parsed["source"].strip():
-            raise click.ClickException("Evidence line JSON must include a non-empty 'source' string")
-        if not isinstance(parsed.get("kind"), str) or not parsed["kind"].strip():
-            raise click.ClickException("Evidence line JSON must include a non-empty 'kind' string")
-        datasets = parsed.get("datasets", [])
-        if not isinstance(datasets, list) or any(not isinstance(item, str) for item in datasets):
-            raise click.ClickException("Evidence line JSON 'datasets' must be a list of strings")
-        evidence_lines.append(
-            {
-                "source": parsed["source"],
-                "kind": parsed["kind"],
-                "datasets": datasets,
-            }
-        )
-    return evidence_lines
-
-
-def _parse_interaction_terms(entries: tuple[str, ...]) -> list[PropositionInteractionTerm] | None:
-    if not entries:
-        return None
-
-    interaction_terms: list[PropositionInteractionTerm] = []
-    for entry in entries:
-        try:
-            parsed = json.loads(entry)
-        except json.JSONDecodeError as exc:
-            raise click.ClickException(f"Interaction term must be valid JSON, got '{entry}'") from exc
-        if not isinstance(parsed, dict):
-            raise click.ClickException("Interaction term JSON must decode to an object")
-        modifier = parsed.get("modifier")
-        effect = parsed.get("effect")
-        if not isinstance(modifier, str) or not modifier.strip():
-            raise click.ClickException("Interaction term JSON must include a non-empty 'modifier' string")
-        if not isinstance(effect, str) or not effect.strip():
-            raise click.ClickException("Interaction term JSON must include a non-empty 'effect' string")
-        interaction_term: PropositionInteractionTerm = {
-            "modifier": modifier,
-            "effect": effect,
-        }
-        note = parsed.get("note")
-        if isinstance(note, str) and note.strip():
-            interaction_term["note"] = note
-        interaction_terms.append(interaction_term)
-    return interaction_terms
 
 
 main.add_command(dag_group)
@@ -1494,12 +1401,6 @@ def _parse_entity_date(value: str) -> Any:
         raise click.ClickException(f"Invalid date: {value}") from exc
 
 
-def _normalize_legacy_graph_source(source: str) -> str:
-    if source.startswith("manual:"):
-        return "source/" + source.split(":", 1)[1]
-    return source
-
-
 @main.group()
 def graph() -> None:
     """Knowledge graph commands."""
@@ -1650,6 +1551,25 @@ def graph_audit(output_format: str, project_root: Path) -> None:
         raise click.exceptions.Exit(1)
 
 
+@graph.command("migrate-addresses")
+@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
+    """Flip anti-canonical sci:addresses edges to the canonical direction.
+
+    The CORE_PROFILE declares `addresses` with source=question, target=proposition,
+    so the canonical RDF triple is `?question sci:addresses ?proposition`. Earlier
+    workflows produced the reversed direction (`?proposition sci:addresses ?question`),
+    which made `question-summary` undercount. This command rewrites those triples
+    in place. Triples already in the canonical direction are left untouched.
+
+    Dry-run by default; pass --apply to write.
+    """
+    raise _retired_writer("graph migrate-addresses", "Address direction is canonical at build")
+
+
 @graph.command("stats")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
@@ -1720,8 +1640,7 @@ def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
 def graph_stamp_revision(graph_path: Path) -> None:
     """Update graph revision metadata to reflect current project state."""
 
-    revision_time = stamp_revision(graph_path)
-    click.echo(f"Stamped graph revision: {revision_time}")
+    raise _retired_writer("graph stamp-revision", "The compiler stamps revisions")
 
 
 @graph.command("predicates")
@@ -2222,15 +2141,14 @@ def graph_export_json(overlays: tuple[str, ...], graph_path: Path) -> None:
 
 
 @graph.command("import")
-@click.argument("snapshot_path", type=click.Path(exists=True, path_type=Path))
+@click.argument("snapshot_path", required=False, type=click.Path(path_type=Path))
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_import(snapshot_path: Path, graph_path: Path) -> None:
+def graph_import(snapshot_path: Path | None, graph_path: Path) -> None:
     """Import a Turtle snapshot into the knowledge graph."""
 
-    count = import_snapshot(graph_path=graph_path, snapshot_path=snapshot_path)
-    click.echo(f"Imported {count} triples from {snapshot_path.name}")
+    raise _retired_writer("graph import", "Raw-triple import is retired; author the source records")
 
 
 @graph.command("scan-prose")
@@ -2261,37 +2179,25 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
         rows=rows,
     )
 
-
-PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
-EVIDENCE_TYPES = (
-    "literature_evidence",
-    "empirical_data_evidence",
-    "simulation_evidence",
-    "benchmark_evidence",
-    "expert_judgment",
-    "negative_result",
-)
-
-
 @graph.group("add")
 def graph_add() -> None:
     """Add graph entities and edges."""
 
 
 @graph_add.command("concept")
-@click.argument("label")
+@click.argument("label", required=False)
 @click.option("--type", "concept_type", default=None)
 @click.option("--ontology-id", default=None)
 @click.option("--note", default=None, help="skos:note annotation")
 @click.option("--definition", default=None, help="skos:definition annotation")
 @click.option("--property", "properties", type=(str, str), multiple=True, help="KEY VALUE property pair (repeatable)")
-@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
+@click.option("--status", default=None, help="Project status")
 @click.option("--source", default=None, help="Provenance source reference (paper:doi_... or file path)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_add_concept(
-    label: str,
+    label: str | None,
     concept_type: str | None,
     ontology_id: str | None,
     note: str | None,
@@ -2303,18 +2209,10 @@ def graph_add_concept(
 ) -> None:
     """Add a concept node to the knowledge graph."""
 
-    concept_uri = add_concept(
-        graph_path=graph_path,
-        label=label,
-        concept_type=concept_type,
-        ontology_id=ontology_id,
-        note=note,
-        definition=definition,
-        properties=list(properties) if properties else None,
-        status=status,
-        source=source,
+    raise _retired_writer(
+        "graph add concept",
+        "Run `science entity create concept <title>` (or edit entities/concepts/<slug>.md)",
     )
-    click.echo(f"Added concept: {concept_uri}")
 
 
 @graph_add.command("article")
@@ -2329,19 +2227,15 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 
 
 @graph_add.command("proposition")
-@click.argument("text")
-@click.option("--source", required=True, help="Provenance reference")
+@click.argument("text", required=False)
+@click.option("--source", help="Provenance reference")
 @click.option("--confidence", type=float, default=None)
-@click.option("--evidence-type", default=None, type=click.Choice(EVIDENCE_TYPES))
+@click.option("--evidence-type", default=None)
 @click.option("--id", "proposition_id", default=None, help="Custom proposition ID slug")
 @click.option("--subject", default=None, help="Structured S-P-O: subject entity")
 @click.option("--predicate", default=None, help="Structured S-P-O: predicate")
 @click.option("--object", "obj", default=None, help="Structured S-P-O: object entity")
-@click.option(
-    "--compositional-status",
-    default=None,
-    type=click.Choice(["not_run", "clr_tested", "clr_robust", "clr_attenuated"]),
-)
+@click.option("--compositional-status", default=None)
 @click.option("--compositional-method", default=None, help="Normalization or per-cell method used")
 @click.option("--compositional-note", default=None, help="Brief note on compositional robustness outcome")
 @click.option("--platform-pattern", default=None, help="Summary label for platform heterogeneity")
@@ -2352,26 +2246,10 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     multiple=True,
     help='Evidence-line JSON, e.g. {"source":"t133","kind":"internal_correlation","datasets":["MMRF"]}',
 )
-@click.option(
-    "--statistical-support",
-    default=None,
-    type=click.Choice(["none", "single_dataset", "replicated", "heterogeneous"]),
-)
-@click.option(
-    "--mechanistic-support",
-    default=None,
-    type=click.Choice(["none", "inferred", "direct"]),
-)
-@click.option(
-    "--replication-scope",
-    default=None,
-    type=click.Choice(["none", "single_source", "multi_source", "cross_dataset"]),
-)
-@click.option(
-    "--claim-status",
-    default=None,
-    type=click.Choice(["active", "null", "weakened", "retired", "falsified"]),
-)
+@click.option("--statistical-support", default=None)
+@click.option("--mechanistic-support", default=None)
+@click.option("--replication-scope", default=None)
+@click.option("--claim-status", default=None)
 @click.option("--pre-registration", "pre_registration_refs", multiple=True, help="Linked pre-registration ref")
 @click.option(
     "--interaction-term",
@@ -2383,7 +2261,6 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 @click.option(
     "--bridge-role",
     "bridge_role",
-    type=click.Choice(["core", "rival", "background"]),
     default="core",
     show_default=True,
     help="Membership role for --bridge-between frames",
@@ -2392,8 +2269,8 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_proposition_cmd(
-    text: str,
-    source: str,
+    text: str | None,
+    source: str | None,
     confidence: float | None,
     evidence_type: str | None,
     proposition_id: str | None,
@@ -2417,45 +2294,12 @@ def add_proposition_cmd(
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
-    dataset_effects = _parse_dataset_effects(dataset_effect_entries)
-    evidence_lines = _parse_evidence_lines(evidence_line_entries)
-    interaction_terms = _parse_interaction_terms(interaction_term_entries)
-    uri = add_proposition(
-        graph_path,
-        text,
-        source,
-        confidence,
-        evidence_type,
-        proposition_id,
-        subject,
-        predicate,
-        obj,
-        compositional_status=compositional_status,
-        compositional_method=compositional_method,
-        compositional_note=compositional_note,
-        platform_pattern=platform_pattern,
-        dataset_effects=dataset_effects,
-        evidence_lines=cast(list[PropositionEvidenceLine] | None, evidence_lines),
-        statistical_support=statistical_support,
-        mechanistic_support=mechanistic_support,
-        replication_scope=replication_scope,
-        claim_status=claim_status,
-        pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
-        interaction_terms=interaction_terms,
-        bridge_between_refs=list(bridge_between_refs) if bridge_between_refs else None,
-        bridge_role=MembershipRole(bridge_role),
-    )
-    click.echo(f"Added proposition: {uri}")
-    click.echo(
-        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources."
-    )
-    click.echo("Tip: use `science propositions create <title>` for durable source-authored project work.")
+    raise _retired_writer("graph add proposition", "Run `science propositions create <title>`")
 
 
 @graph_add.command("observation")
-@click.argument("description")
-@click.option("--data-source", required=True, help="Reference to data-package or dataset")
+@click.argument("description", required=False)
+@click.option("--data-source", help="Reference to data-package or dataset")
 @click.option("--metric", default=None)
 @click.option("--value", default=None)
 @click.option("--uncertainty", default=None)
@@ -2465,8 +2309,8 @@ def add_proposition_cmd(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_observation_cmd(
-    description: str,
-    data_source: str,
+    description: str | None,
+    data_source: str | None,
     metric: str | None,
     value: str | None,
     uncertainty: str | None,
@@ -2475,35 +2319,28 @@ def add_observation_cmd(
     graph_path: Path,
 ) -> None:
     """Add an observation — a concrete empirical fact anchored to data."""
-    uri = add_observation(graph_path, description, data_source, metric, value, uncertainty, conditions, observation_id)
-    click.echo(f"Added observation: {uri}")
-    click.echo(
-        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources. "
-        "Anchor observations inside an interpretation, finding, or proposition source file to make them durable."
-    )
+    raise _retired_writer("graph add observation", "Run `science entity create observation <title>`")
 
 
 @graph_add.command("evidence")
-@click.argument("source_entity")
-@click.argument("target_entity")
-@click.option("--stance", required=True, type=click.Choice(["supports", "disputes"]))
-@click.option("--strength", default=None, type=click.Choice(["strong", "moderate", "weak"]))
+@click.argument("source_entity", required=False)
+@click.argument("target_entity", required=False)
+@click.option("--stance")
+@click.option("--strength", default=None)
 @click.option("--caveats", default=None)
 @click.option("--method", "evidence_method", default=None)
 @click.option(
     "--independence",
     default=None,
-    type=click.Choice(["independent", "shared-source", "circular"]),
     help="Independence of evidence source from validation target",
 )
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_evidence_cmd(
-    source_entity: str,
-    target_entity: str,
-    stance: str,
+    source_entity: str | None,
+    target_entity: str | None,
+    stance: str | None,
     strength: str | None,
     caveats: str | None,
     evidence_method: str | None,
@@ -2511,55 +2348,42 @@ def add_evidence_cmd(
     graph_path: Path,
 ) -> None:
     """Add an evidence edge (supports/disputes) between entities."""
-    add_evidence_edge(
-        graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method, independence
-    )
-    click.echo(f"Added {stance} edge: {source_entity} \u2192 {target_entity}")
-    click.echo(
-        "WARNING: this edge is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources. "
-        "Author evidence relations inside the source file (proposition, finding, or interpretation) to make them durable."
+    raise _retired_writer(
+        "graph add evidence",
+        "Run `science evidence-lines create --target <ref> --stance <supports|disputes>`",
     )
 
 
 @graph_add.command("hypothesis")
-@click.argument("hypothesis_id")
-@click.option("--text", required=True)
-@click.option("--source", required=True)
-@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
+@click.argument("hypothesis_id", required=False)
+@click.option("--text")
+@click.option("--source")
+@click.option("--status", default=None, help="Project status")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str | None, graph_path: Path) -> None:
+def graph_add_hypothesis(
+    hypothesis_id: str | None, text: str | None, source: str | None, status: str | None, graph_path: Path
+) -> None:
     """Add a hypothesis with provenance."""
 
-    hypothesis_uri = add_hypothesis(
-        graph_path=graph_path,
-        hypothesis_id=hypothesis_id,
-        text=text,
-        source=_normalize_legacy_graph_source(source),
-        status=status,
-    )
-    click.echo(f"Added hypothesis: {hypothesis_uri}")
-    click.echo("Tip: use `science entity create hypothesis <title>` for durable source-authored project work.")
+    raise _retired_writer("graph add hypothesis", "Run `science hypotheses create <title>`")
 
 
 @graph_add.command("question")
-@click.argument("question_id")
-@click.option("--text", required=True)
-@click.option("--source", required=True)
-@click.option(
-    "--maturity", default="open", show_default=True, type=click.Choice(("open", "partially-resolved", "resolved"))
-)
-@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
+@click.argument("question_id", required=False)
+@click.option("--text")
+@click.option("--source")
+@click.option("--maturity", default="open", show_default=True)
+@click.option("--status", default=None, help="Project status")
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_add_question(
-    question_id: str,
-    text: str,
-    source: str,
+    question_id: str | None,
+    text: str | None,
+    source: str | None,
     maturity: str,
     status: str | None,
     related_refs: tuple[str, ...],
@@ -2567,64 +2391,50 @@ def graph_add_question(
 ) -> None:
     """Add an open question with provenance."""
 
-    question_uri = add_question(
-        graph_path=graph_path,
-        question_id=question_id,
-        text=text,
-        source=_normalize_legacy_graph_source(source),
-        maturity=maturity,
-        status=status,
-        related=list(related_refs) if related_refs else None,
-    )
-    click.echo(f"Added question: {question_uri}")
-    click.echo("Tip: use `science entity create question <title>` for durable source-authored project work.")
+    raise _retired_writer("graph add question", "Run `science questions create <title>`")
 
 
 @graph_add.command("edge")
-@click.argument("subject")
-@click.argument("predicate")
-@click.argument("object")
-@click.option("--graph", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
+@click.argument("subject", required=False)
+@click.argument("predicate", required=False)
+@click.argument("object", required=False)
+@click.option("--graph", "graph_layer", default="graph/knowledge", show_default=True)
 @click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_add_edge(
-    subject: str,
-    predicate: str,
-    object: str,
+    subject: str | None,
+    predicate: str | None,
+    object: str | None,
     graph_layer: str,
     claim_refs: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
-    s_uri, p_uri, o_uri = add_edge(
-        graph_path=graph_path,
-        subject=subject,
-        predicate=predicate,
-        obj=object,
-        graph_layer=graph_layer,
-        claim_refs=list(claim_refs) if claim_refs else None,
-    )
-    click.echo(
-        f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}"
+    raise _retired_writer(
+        "graph add edge",
+        (
+            "Author the relation in `relations.yaml` (or `relations:` frontmatter) with the target graph_layer; "
+            "claim-cited edges use inquiry flow_edges"
+        ),
     )
 
 
 @graph_add.command("finding")
-@click.argument("summary")
-@click.option("--confidence", required=True, type=click.Choice(["high", "moderate", "low", "speculative"]))
-@click.option("--proposition", "propositions", multiple=True, required=True, help="Proposition ref(s)")
-@click.option("--observation", "observations", multiple=True, required=True, help="Observation ref(s)")
-@click.option("--source", required=True, help="data-package or workflow-run that produced the observations")
+@click.argument("summary", required=False)
+@click.option("--confidence")
+@click.option("--proposition", "propositions", multiple=True, help="Proposition ref(s)")
+@click.option("--observation", "observations", multiple=True, help="Observation ref(s)")
+@click.option("--source", help="data-package or workflow-run that produced the observations")
 @click.option("--id", "finding_id", default=None, help="Custom finding ID slug")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_finding_cmd(
-    summary: str,
-    confidence: str,
+    summary: str | None,
+    confidence: str | None,
     propositions: tuple[str, ...],
     observations: tuple[str, ...],
     source: str,
@@ -2632,18 +2442,12 @@ def add_finding_cmd(
     graph_path: Path,
 ) -> None:
     """Add a finding — propositions grounded by observations."""
-    uri = add_finding(graph_path, summary, confidence, list(propositions), list(observations), source, finding_id)
-    click.echo(f"Added finding: {uri}")
-    click.echo(
-        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources. "
-        "Anchor findings inside an interpretation source file to make them durable."
-    )
+    raise _retired_writer("graph add finding", "Run `science entity create finding <title>`")
 
 
 @graph_add.command("interpretation")
-@click.argument("summary")
-@click.option("--finding", "findings", multiple=True, required=True, help="Finding ref(s)")
+@click.argument("summary", required=False)
+@click.option("--finding", "findings", multiple=True, help="Finding ref(s)")
 @click.option("--context", "interp_context", default=None, help="What prompted this analysis")
 @click.option("--prior", default=None, help="Previous interpretation ref (provenance chain)")
 @click.option("--id", "interpretation_id", default=None, help="Custom interpretation ID slug")
@@ -2651,7 +2455,7 @@ def add_finding_cmd(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_interpretation_cmd(
-    summary: str,
+    summary: str | None,
     findings: tuple[str, ...],
     interp_context: str | None,
     prior: str | None,
@@ -2659,14 +2463,12 @@ def add_interpretation_cmd(
     graph_path: Path,
 ) -> None:
     """Add an interpretation — one analysis session's narrative and findings."""
-    uri = add_interpretation(graph_path, summary, list(findings), interp_context, prior, interpretation_id)
-    click.echo(f"Added interpretation: {uri}")
-    click.echo("Tip: use `science entity create interpretation <title>` for durable source-authored project work.")
+    raise _retired_writer("graph add interpretation", "Run `science interpretations create <title>`")
 
 
 @graph_add.command("discussion")
-@click.argument("summary")
-@click.option("--proposition", "propositions", multiple=True, required=True, help="Proposition ref(s)")
+@click.argument("summary", required=False)
+@click.option("--proposition", "propositions", multiple=True, help="Proposition ref(s)")
 @click.option("--context", "disc_context", default=None, help="What prompted this discussion")
 @click.option("--prior", default=None, help="Previous discussion ref (provenance chain)")
 @click.option("--id", "discussion_id", default=None, help="Custom discussion ID slug")
@@ -2674,7 +2476,7 @@ def add_interpretation_cmd(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_discussion_cmd(
-    summary: str,
+    summary: str | None,
     propositions: tuple[str, ...],
     disc_context: str | None,
     prior: str | None,
@@ -2682,9 +2484,7 @@ def add_discussion_cmd(
     graph_path: Path,
 ) -> None:
     """Add a discussion — theoretical reasoning producing propositions."""
-    uri = add_discussion(graph_path, summary, list(propositions), disc_context, prior, discussion_id)
-    click.echo(f"Added discussion: {uri}")
-    click.echo("Tip: use `science entity create discussion <title>` for durable source-authored project work.")
+    raise _retired_writer("graph add discussion", "Run `science discussions create <title>`")
 
 
 @graph_add.command("falsification")
@@ -2752,18 +2552,18 @@ def add_story_cmd(
 
 
 @graph_add.command("mechanism")
-@click.argument("title")
-@click.option("--summary", required=True, help="Brief explanatory summary")
-@click.option("--participant", "participants", multiple=True, required=True, help="Participant ref(s)")
-@click.option("--proposition", "propositions", multiple=True, required=True, help="Mechanism proposition ref(s)")
+@click.argument("title", required=False)
+@click.option("--summary", help="Brief explanatory summary")
+@click.option("--participant", "participants", multiple=True, help="Participant ref(s)")
+@click.option("--proposition", "propositions", multiple=True, help="Mechanism proposition ref(s)")
 @click.option("--status", default="draft", help="Mechanism status")
 @click.option("--id", "mechanism_id", default=None, help="Custom mechanism ID slug")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_mechanism_cmd(
-    title: str,
-    summary: str,
+    title: str | None,
+    summary: str | None,
     participants: tuple[str, ...],
     propositions: tuple[str, ...],
     status: str,
@@ -2771,8 +2571,7 @@ def add_mechanism_cmd(
     graph_path: Path,
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
-    uri = add_mechanism(graph_path, title, summary, list(participants), list(propositions), status, mechanism_id)
-    click.echo(f"Added mechanism: {uri}")
+    raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
 
 
 @graph_add.command("paper")
@@ -2930,6 +2729,10 @@ def _retired_mutator(slug: str) -> click.ClickException:
     return click.ClickException(
         f"Inquiry graph mutation is retired. Edit entities/patches/{slug}.md and run `science graph build`."
     )
+
+
+def _retired_writer(command: str, forward_path: str) -> click.ClickException:
+    return click.ClickException(f"{command} is retired. {forward_path}, then run `science graph build`.")
 
 
 def _ref_from_uri(value: str) -> str:
@@ -5753,7 +5556,7 @@ def _format_count_map(counts: Mapping[str, int]) -> str:
     return _format_count_rows(rows, key="key") if rows else "-"
 
 
-def _format_share_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+def _format_share_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
     values = [f"{row[key]}:{row['count']} ({row['share']})" for row in rows]
     return ", ".join(values) if values else "-"
 
@@ -6327,7 +6130,7 @@ def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
     return "-" if count is None else str(count)
 
 
-def _hint_candidate_table_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+def _hint_candidate_table_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [row for row in rows if row["category"] == "domain-candidate"]
 
 

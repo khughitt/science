@@ -85,7 +85,7 @@ Use them when they add kind-specific ergonomics:
 | `science hypotheses create` | Supports `--phase candidate` to include promotion criteria. |
 | `science discussions create` | `--focus <ref>` is stored as a related reference. |
 | `science interpretations create` | `--input <ref-or-path>` is stored as a source reference. |
-| `science propositions create` | Durable proposition sources; prefer this over throwaway `graph add proposition` for project work. |
+| `science propositions create` | Durable proposition sources; use this instead of retired `graph add proposition` for project work. |
 | `science evidence-lines create` | Durable support/dispute evidence line sources. |
 
 ### CLI Path And Identity Policy
@@ -116,12 +116,13 @@ when they identify exactly one loaded source record.
 
 ### Source Write Boundary
 
-`science graph add ...` remains available for graph-level experiments and
-legacy workflows, but it is not the durable source-authoring surface. For
-project knowledge that should survive `science graph build`, create or edit the
-source entity file. The graph build step materializes those source records into
-`knowledge/graph.trig`; direct graph mutations are overwritten by the next
-materialization.
+The old graph writers for concepts, propositions, observations, evidence,
+findings, interpretations, discussions, mechanisms, hypotheses, questions, and
+edges are retired. For project knowledge that should survive
+`science graph build`, create or edit the source entity file, author structural
+relations in `relations.yaml` or inquiry `flow_edges`, and represent support or
+dispute with evidence-line source entities. The graph build step materializes
+those source records into `knowledge/graph.trig`.
 
 ## Entity Consolidation And Archive
 
@@ -503,10 +504,9 @@ That command writes `entities/concepts/<slug>.md` and uses the normal entity
 lifecycle: slug identity, `active` / `deprecated` status validation, source
 refs, related refs, aliases, same-as links, notes, and graph materialization.
 
-`science graph add concept` writes derived graph state in `knowledge/graph.trig`,
-and `science graph build` regenerates that file from source records. Do not use
-graph-added concepts as durable owners for variables, treatment/outcome refs,
-unknowns, or boundary refs.
+`science graph add concept` is retired. Do not use retired graph-writer output
+as a durable owner for variables, treatment/outcome refs, unknowns, or boundary
+refs; author `entities/concepts/<slug>.md` and rebuild instead.
 
 ### Legacy Topic Triage
 
@@ -608,12 +608,17 @@ For proposition bundle membership, prefer `discusses:` on proposition sources or
 is valid only for proposition-to-live-hypothesis/mechanism membership edges. See
 [Bundle Membership Roles](epistemic-model.md#bundle-membership-roles).
 
-The old graph-only composition commands (`science graph add finding`,
-`science graph add story`, and `science graph add paper`) are exploratory
-helpers that write directly to `knowledge/graph.trig`. Those graph edits are
-overwritten by `science graph build`. The current loadable `paper` kind is an
-external literature note; do not use `paper:<id>` for the project's own
-publication draft.
+Author mechanisms as `entities/mechanisms/<slug>.md` with at least two
+participants and proposition refs for the mechanism steps, then run
+`science graph build`. `science graph add mechanism` is retired.
+
+The old graph-only composition commands `science graph add finding` and
+`science graph add mechanism` are retired; use source-authored entity files.
+Deferred `science graph add story` and `science graph add paper` still exist as
+transitional helpers, but durable story and paper knowledge should still be
+owned by source files. The current loadable `paper` kind is an external
+literature note; do not use `paper:<id>` for the project's own publication
+draft.
 
 ## Paper Dataset Usage
 

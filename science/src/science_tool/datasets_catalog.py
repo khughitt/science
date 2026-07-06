@@ -10,6 +10,7 @@ import os
 import re
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -161,7 +162,7 @@ def add_dataset(
 _VERIFY_LOG_HEADING = "## Access verification log"
 
 
-def _load_local_dataset(project_root: Path, ref: str) -> tuple[str, Path, dict, str]:
+def _load_local_dataset(project_root: Path, ref: str) -> tuple[str, Path, dict[str, Any], str]:
     """Resolve `slug`/`dataset:slug` to (slug, dest, fm, body) for a LOCAL dataset.
 
     verify-access edits a file in place, so commons-backed datasets (not editable
@@ -398,7 +399,12 @@ def verify_access(
             "'unknown' sentinel if it genuinely can't be determined)."
         )
 
-    access = dict(fm.get("access")) if isinstance(fm.get("access"), dict) else {}
+    raw_access = fm.get("access")
+    access: dict[str, Any] = (
+        {str(key): value for key, value in raw_access.items()}
+        if isinstance(raw_access, dict)
+        else {}
+    )
     access["level"] = level or access.get("level") or "public"
     access["availability"] = "available"
     if source_url is not None:

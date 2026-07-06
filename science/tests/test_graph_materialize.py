@@ -16,7 +16,7 @@ from rdflib.namespace import RDF, SKOS, XSD
 from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
-from science_tool.graph.store import add_hypothesis, diff_graph_inputs
+from science_tool.graph.store import diff_graph_inputs
 
 PROJECT_NS = Namespace("http://example.org/project/")
 SCI = Namespace("http://example.org/science/vocab/")
@@ -1535,39 +1535,8 @@ def test_known_kinds_includes_shared() -> None:
     assert "hypothesis" in kinds  # core kinds still present
 
 
-def test_source_authored_hypothesis_and_graph_added_hypothesis_do_not_double_count(tmp_path: Path) -> None:
-    (tmp_path / "science.yaml").write_text(
-        "name: materialize-entities\nknowledge_profiles: {local: local}\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
-    (tmp_path / "entities" / "hypotheses" / "h01-source.md").write_text(
-        "---\n"
-        'id: "hypothesis:h01-source"\n'
-        'kind: "hypothesis"\n'
-        'title: "Source hypothesis"\n'
-        'status: "active"\n'
-        "---\n"
-        "# Hypothesis: Source hypothesis\n",
-        encoding="utf-8",
-    )
-
-    graph_path = materialize_graph(tmp_path)
-    add_hypothesis(
-        graph_path=graph_path,
-        text="Graph hypothesis",
-        hypothesis_id="h02-graph",
-        source="source/manual",
-    )
-    graph_path = materialize_graph(tmp_path)
-
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    source_uri = PROJECT_NS["hypothesis/h01-source"]
-    source_type_triples = list(knowledge.triples((source_uri, RDF.type, None)))
-
-    assert len(source_type_triples) == 1
+# The retired graph-add hypothesis/direct-writer path no longer has a live
+# source + writer double-count scenario to exercise.
 
 
 def test_annotation_uri_minter():

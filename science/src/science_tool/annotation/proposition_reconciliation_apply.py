@@ -251,7 +251,7 @@ def scan_inbound_backlinks(
         sidecar_rows: list[InboundBacklink] = []
         for annotation in sidecar.annotations:
             promoted_to = annotation.promoted_to
-            if promoted_to not in duplicate_to_canonical:
+            if promoted_to is None or promoted_to not in duplicate_to_canonical:
                 continue
             annotation_ref = _annotation_ref(sidecar_path, project_root, annotation.id)
             sidecar_rows.append(

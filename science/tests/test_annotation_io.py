@@ -13,7 +13,7 @@ from science_tool.annotation import (
     TextQuoteSelector,
     TextualBody,
 )
-from science_tool.annotation.io import read_sidecar
+from science_tool.annotation.io import read_sidecar, write_sidecar
 
 FIXTURE = Path(__file__).parent / "_fixtures/annotation/citation-audit-pilot.anno.trig"
 
@@ -109,9 +109,6 @@ def test_malformed_sidecar_missing_required_field_raises() -> None:
     # produce annotation_type="None" or "".
     with pytest.raises(ValueError, match="missing required"):
         read_sidecar(FIXTURE.parent / "malformed-missing-type.anno.trig")
-
-
-from science_tool.annotation.io import write_sidecar
 
 
 def test_write_sidecar_creates_file(tmp_path: Path) -> None:

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import click
 import pytest
+from conftest import build_entity_graph
 
 from science_tool.graph.sources import is_metadata_reference
 
@@ -147,75 +147,83 @@ class TestMetaRefsInMaterialize:
                 assert "meta" not in str(o), f"meta ref leaked into KG: {s} {p} {o}"
 
 
-class TestMetaRefsInAddEdge:
-    def test_add_edge_rejects_meta_subject(self, tmp_path: Path) -> None:
-        from science_tool.graph.store import add_edge, init_graph_file
-
-        graph_path = tmp_path / "graph.trig"
-        init_graph_file(graph_path)
-
-        with pytest.raises(click.ClickException) as exc:
-            add_edge(
-                graph_path=graph_path,
-                subject="meta:phase3b",
-                predicate="skos:related",
-                obj="hypothesis/h01",
-                graph_layer="graph/knowledge",
+class TestMetaRefsInSourceRelations:
+    def test_source_relation_rejects_meta_subject(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="meta:phase3b"):
+            build_entity_graph(
+                tmp_path,
+                entities=[
+                    {
+                        "kind": "hypothesis",
+                        "id": "h01",
+                        "frontmatter": {"title": "H1", "status": "proposed", "source_refs": []},
+                        "body": "H1.",
+                    }
+                ],
+                relations=[
+                    {
+                        "subject": "meta:phase3b",
+                        "predicate": "skos:related",
+                        "object": "hypothesis:h01",
+                        "graph_layer": "graph/knowledge",
+                    }
+                ],
             )
-        assert "meta" in str(exc.value).lower()
 
-    def test_add_edge_rejects_meta_object(self, tmp_path: Path) -> None:
-        from science_tool.graph.store import add_edge, init_graph_file
-
-        graph_path = tmp_path / "graph.trig"
-        init_graph_file(graph_path)
-
-        with pytest.raises(click.ClickException) as exc:
-            add_edge(
-                graph_path=graph_path,
-                subject="hypothesis/h01",
-                predicate="skos:related",
-                obj="meta:phase3b",
-                graph_layer="graph/knowledge",
+    def test_source_relation_rejects_meta_object(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="meta:phase3b"):
+            build_entity_graph(
+                tmp_path,
+                entities=[
+                    {
+                        "kind": "hypothesis",
+                        "id": "h01",
+                        "frontmatter": {"title": "H1", "status": "proposed", "source_refs": []},
+                        "body": "H1.",
+                    }
+                ],
+                relations=[
+                    {
+                        "subject": "hypothesis:h01",
+                        "predicate": "skos:related",
+                        "object": "meta:phase3b",
+                        "graph_layer": "graph/knowledge",
+                    }
+                ],
             )
-        assert "meta" in str(exc.value).lower()
 
 
-class TestMetaRefsInAddQuestion:
-    def test_add_question_skips_meta_in_related(self, tmp_path: Path) -> None:
+class TestMetaRefsInQuestionSource:
+    def test_question_source_skips_meta_in_related(self, tmp_path: Path) -> None:
         from rdflib import Dataset
         from rdflib.namespace import SKOS
 
-        from science_tool.graph.store import (
-            PROJECT_NS,
-            add_hypothesis,
-            add_question,
-            init_graph_file,
-        )
-
-        graph_path = tmp_path / "graph.trig"
-        init_graph_file(graph_path)
-        # Add a hypothesis so the non-meta ref resolves
-        add_hypothesis(
-            graph_path=graph_path,
-            hypothesis_id="H1",
-            text="Test",
-            source="paper:doi_10_1111_a",
-        )
-
-        add_question(
-            graph_path=graph_path,
-            question_id="Q1",
-            text="Q",
-            source="paper:doi_10_2222_b",
-            related=["hypothesis/h1", "meta:phase3b"],
+        graph_path = build_entity_graph(
+            tmp_path,
+            entities=[
+                {
+                    "kind": "hypothesis",
+                    "id": "h1",
+                    "frontmatter": {"title": "H1", "status": "proposed", "source_refs": []},
+                    "body": "H1.",
+                },
+                {
+                    "kind": "question",
+                    "id": "q1",
+                    "frontmatter": {
+                        "title": "Q",
+                        "status": "open",
+                        "related": ["hypothesis:h1", "meta:phase3b"],
+                        "source_refs": [],
+                    },
+                    "body": "Q.",
+                },
+            ],
         )
 
         dataset = Dataset()
         dataset.parse(source=str(graph_path), format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        q_uri = PROJECT_NS["question/q1"]
-        related_objs = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
+        related_objs = [str(o) for graph in dataset.graphs() for o in graph.objects(None, SKOS.related)]
         assert any("hypothesis/h1" in r for r in related_objs)
         assert not any("meta" in r for r in related_objs)
 

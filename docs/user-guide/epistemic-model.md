@@ -104,9 +104,8 @@ justify them.
 
 Use `concept:*` only when that ref already resolves through a source owner. Use
 `science entity create concept "<title>"` when the project-local concept needs a
-Markdown owner under `entities/concepts/`. `science graph add concept` is not
-durable inquiry authoring. Direct graph mutation writes generated graph state
-that `science graph build` overwrites from source files.
+Markdown owner under `entities/concepts/`. `science graph add concept` is
+retired; author the source owner and run `science graph build`.
 
 ### Causal Inquiry Profiles
 
@@ -456,10 +455,9 @@ or mechanism. Other `cito:discusses` links, such as `paper -> question`,
 `paper -> hypothesis`, or `proposition -> topic`, remain plain structural links
 and do not create membership roles.
 
-For graph-level experiments, `science graph add proposition --bridge-between`
-accepts `--bridge-role core|rival|background`. Direct graph additions are still
-ephemeral; use proposition source files or `relations.yaml` for durable project
-knowledge.
+`science graph add proposition --bridge-between` is retired. Use proposition
+source files or `relations.yaml` for durable bundle membership, then run
+`science graph build`.
 
 ## Optional Layered-Claim Metadata
 

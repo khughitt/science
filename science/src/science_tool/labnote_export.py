@@ -1161,7 +1161,7 @@ def _prose_bundle(
             known_semantic_refs=known_semantic_refs,
             semantic_namespaces=_semantic_namespaces_for_records(exported_records | source_records),
         )
-        sections = _sections_from_markdown(markdown)
+        sections: list[dict[str, Any]] = _sections_from_markdown(markdown)
         for section in sections:
             refs, details = _semantic_refs_for_section(
                 section.get("markdown") or section.get("text") or "",

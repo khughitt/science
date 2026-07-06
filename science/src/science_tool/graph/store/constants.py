@@ -4,8 +4,6 @@ from pathlib import Path
 
 from rdflib import Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
-from science_model.profiles import CORE_PROFILE
-from science_model.profiles.schema import RelationKind
 
 from science_tool.graph.io import (
     BIOLINK_NS,
@@ -148,34 +146,6 @@ PROJECT_ENTITY_PREFIX_KINDS: dict[str, str] = {
     **{prefix: prefix for prefix in PROJECT_ENTITY_PREFIXES},
     "chain": "structural-chain",
 }
-
-# Lookup of `predicate URI -> relation kind`,
-# derived once from CORE_PROFILE so add_edge can warn on direction mistakes
-# without scanning the profile on every call.
-_RELATION_KIND_BY_PREDICATE: dict[URIRef, RelationKind] = {
-    URIRef(SCI_NS[rk.predicate.split(":", 1)[1]] if rk.predicate.startswith("sci:") else rk.predicate): rk
-    for rk in CORE_PROFILE.relation_kinds
-    if rk.predicate.startswith("sci:")
-}
-
-STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
-    {
-        SCI_NS.relatedTo,
-        SCIC_NS.causes,
-        SCIC_NS.confounds,
-        CITO_NS.supports,
-        CITO_NS.disputes,
-        CITO_NS.discusses,
-    }
-)
-
-# Predicates that require explicit epistemic tracking via add_evidence_edge
-EVIDENCE_STANCE_PREDICATES: frozenset[URIRef] = frozenset(
-    {
-        CITO_NS.supports,
-        CITO_NS.disputes,
-    }
-)
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
