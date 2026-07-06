@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 import pytest
+from conftest import build_inquiry_graph
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -29,39 +30,14 @@ HAS_PGMPY = importlib.util.find_spec("pgmpy") is not None
 
 
 def _build_compiled_inquiry_graph(graph_path: Path, slug: str, **inquiry: object) -> None:
-    from rdflib import Dataset
-    from science_model.patch_definition import PatchDefinitionEntity
+    """Compile one inquiry into ``graph_path`` from source.
 
-    from science_tool.graph.inquiry_compile import emit_inquiry_views
-    from science_tool.graph.store import _load_dataset, _save_dataset, _slug
-
-    # Match the retired add_inquiry mutator's slug normalization so hyphenated
-    # slugs land at the same inquiry URI the readers (_slug-normalized) resolve.
-    safe_slug = _slug(slug)
-    ent = PatchDefinitionEntity(
-        id=f"patch-definition:{safe_slug}",
-        title="I",
-        focal="hypothesis:h01",
-        scope_set=[{"scope": "local"}],
-        neighborhood_policy={},
-        patch_type="inquiry",
-        project="",
-        ontology_terms=[],
-        related=[],
-        source_refs=[],
-        content_preview="",
-        file_path=f"entities/patches/{safe_slug}.md",
-        inquiry=inquiry,
-    )
-    compiled = Dataset()
-    emit_inquiry_views(compiled, [ent])
-
-    graph_path.parent.mkdir(parents=True, exist_ok=True)
-    dataset = _load_dataset(graph_path) if graph_path.exists() else Dataset()
-    for quad in compiled.quads((None, None, None, None)):
-        s, p, o, ctx = quad
-        dataset.graph(ctx.identifier if hasattr(ctx, "identifier") else ctx).add((s, p, o))
-    _save_dataset(dataset, graph_path)
+    Thin wrapper over the shared ``build_inquiry_graph`` conftest helper with
+    ``normalize_slug=True`` — the causal tests use hyphenated slugs and rely on the
+    retired ``add_inquiry`` mutator's ``_slug`` normalization so the readers
+    (``get_inquiry`` / ``validate_inquiry``) resolve the same inquiry URI.
+    """
+    build_inquiry_graph(graph_path, slug=slug, normalize_slug=True, **inquiry)  # type: ignore[arg-type]
 
 
 @pytest.fixture

@@ -33,7 +33,14 @@ def isolate_science_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / ".science-config"))
 
 
-def build_inquiry_graph(graph_path: Path, slug: str = "i01", *, profile: str = "investigation", **inquiry: object):
+def build_inquiry_graph(
+    graph_path: Path,
+    slug: str = "i01",
+    *,
+    profile: str = "investigation",
+    normalize_slug: bool = False,
+    **inquiry: object,
+):
     """Merge one compiled inquiry into the trig at ``graph_path`` and return the path.
 
     The inquiry graph is produced by the pure compiler
@@ -47,15 +54,20 @@ def build_inquiry_graph(graph_path: Path, slug: str = "i01", *, profile: str = "
     ``flow_edges=[{"subject": ..., "predicate": "feedsInto", "object": ...,
     "claim_refs": [...]}]``, ``treatment=...``, ``outcome=...``,
     ``assumptions=[...]``, ``status=...``.
+
+    ``normalize_slug=True`` reproduces the retired ``add_inquiry`` mutator's
+    ``_slug`` normalization (hyphens -> underscores), so hyphenated slugs land at
+    the same inquiry URI the ``_slug``-normalizing readers resolve.
     """
     from rdflib import Dataset
     from science_model.patch_definition import PatchDefinitionEntity
 
     from science_tool.graph.inquiry_compile import emit_inquiry_views
-    from science_tool.graph.store import _load_dataset, _save_dataset
+    from science_tool.graph.store import _load_dataset, _save_dataset, _slug
 
+    safe_slug = _slug(slug) if normalize_slug else slug
     ent = PatchDefinitionEntity(
-        id=f"patch-definition:{slug}",
+        id=f"patch-definition:{safe_slug}",
         title=inquiry.pop("title", "I"),
         focal=inquiry.pop("focal", "hypothesis:h01"),
         scope_set=[{"scope": "local"}],
@@ -66,7 +78,7 @@ def build_inquiry_graph(graph_path: Path, slug: str = "i01", *, profile: str = "
         related=[],
         source_refs=[],
         content_preview="",
-        file_path=f"entities/patches/{slug}.md",
+        file_path=f"entities/patches/{safe_slug}.md",
         inquiry={"profile": profile, "status": inquiry.pop("status", "specified"), **inquiry},
     )
 

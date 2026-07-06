@@ -310,21 +310,6 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
         note = str(next(inquiry_graph.objects(s, SCI_NS.paramNote), ""))
         param_rows += f"| {name} | {value} | {source} | {refs} | {note} |\n"
 
-    # Also check knowledge graph for params
-    for s_uri_str in list(set([*info["boundary_in"], *info["boundary_out"], *[str(n) for n in interior_nodes]])):
-        s_ref = URIRef(s_uri_str)
-        val = next(knowledge.objects(s_ref, SCI_NS.paramValue), None)
-        if val is not None and s_ref not in set(inquiry_graph.subjects(SCI_NS.paramValue, None)):
-            name = _label_for(s_uri_str)
-            value = str(val)
-            source = str(next(knowledge.objects(s_ref, SCI_NS.paramSource), ""))
-            refs_list = []
-            for r in knowledge.objects(s_ref, SCI_NS.paramRef):
-                refs_list.append(str(r))
-            refs = ", ".join(refs_list)
-            note = str(next(knowledge.objects(s_ref, SCI_NS.paramNote), ""))
-            param_rows += f"| {name} | {value} | {source} | {refs} | {note} |\n"
-
     # Build unknown rows — check both inquiry graph and knowledge graph
     unknown_rows = ""
     unknown_seen: set[str] = set()
