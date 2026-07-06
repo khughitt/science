@@ -3,17 +3,13 @@ from pathlib import Path
 import pytest
 from rdflib.namespace import RDF
 
+from conftest import build_entity_graph
 from science_tool.graph.store import (
     PROJECT_NS,
     SCI_NS,
     _graph_uri,
     _load_dataset,
-    add_finding,
-    add_hypothesis,
-    add_interpretation,
-    add_observation,
     add_paper_entity,
-    add_proposition,
     add_story,
     init_graph_file,
 )
@@ -26,58 +22,62 @@ def tmp_graph(tmp_path: Path) -> Path:
     return graph_path
 
 
-def test_add_finding(tmp_graph: Path) -> None:
-    add_proposition(tmp_graph, text="X correlates with Y", source="paper:a", proposition_id="p1")
-    add_observation(tmp_graph, description="r=0.73", data_source="data-package:results", observation_id="obs1")
-    finding_uri = add_finding(
-        tmp_graph,
-        summary="Analysis shows X-Y correlation",
-        confidence="moderate",
-        propositions=["proposition:p1"],
-        observations=["observation:obs1"],
-        source="data-package:results",
-        finding_id="f01",
+def _source_entity(kind: str, entity_id: str, title: str, *, status: str = "active") -> dict:
+    return {
+        "kind": kind,
+        "id": entity_id,
+        "frontmatter": {
+            "title": title,
+            "status": status,
+            "related": [],
+            "source_refs": [],
+        },
+        "body": f"{title}\n",
+    }
+
+
+# Retired finding/interpretation writer assertions for sci:contains and sci:groundedBy
+# are intentionally pruned. Source-emitted mechanism composition coverage lives in
+# test_graph_materialize::test_materialize_graph_emits_mechanism_participants_and_propositions.
+
+
+def test_source_authored_finding_materializes(tmp_path: Path) -> None:
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            _source_entity("proposition", "p1", "X correlates with Y", status="active"),
+            _source_entity("observation", "obs1", "r=0.73"),
+            _source_entity("finding", "f01", "Analysis shows X-Y correlation"),
+        ],
     )
-    dataset = _load_dataset(tmp_graph)
+    dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    finding_uri = PROJECT_NS["finding/f01"]
     assert (finding_uri, RDF.type, SCI_NS.Finding) in knowledge
-    assert (finding_uri, SCI_NS.contains, PROJECT_NS["proposition/p1"]) in knowledge
-    assert (finding_uri, SCI_NS.contains, PROJECT_NS["observation/obs1"]) in knowledge
-    assert (finding_uri, SCI_NS.groundedBy, PROJECT_NS["data-package/results"]) in knowledge
 
 
-def test_add_finding_invalid_confidence(tmp_graph: Path) -> None:
-    with pytest.raises(Exception):
-        add_finding(tmp_graph, "summary", "invalid", ["p:1"], ["o:1"], "dp:1")
-
-
-def test_add_interpretation(tmp_graph: Path) -> None:
-    add_proposition(tmp_graph, text="X causes Y", source="paper:a", proposition_id="p1")
-    add_observation(tmp_graph, description="r=0.73", data_source="data-package:x", observation_id="obs1")
-    add_finding(
-        tmp_graph,
-        "Correlation found",
-        "moderate",
-        ["proposition:p1"],
-        ["observation:obs1"],
-        "data-package:x",
-        "f01",
+def test_source_authored_interpretation_materializes(tmp_path: Path) -> None:
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            _source_entity("proposition", "p1", "X causes Y", status="active"),
+            _source_entity("observation", "obs1", "r=0.73"),
+            _source_entity("finding", "f01", "Correlation found"),
+            _source_entity("interpretation", "interp-01", "Initial expression analysis suggests X-Y link"),
+        ],
     )
-    interp_uri = add_interpretation(
-        tmp_graph,
-        summary="Initial expression analysis suggests X-Y link",
-        findings=["finding:f01"],
-        context="Exploratory analysis of dataset X",
-        interpretation_id="interp-01",
-    )
-    dataset = _load_dataset(tmp_graph)
+    dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    interp_uri = PROJECT_NS["interpretation/interp-01"]
     assert (interp_uri, RDF.type, SCI_NS.Interpretation) in knowledge
-    assert (interp_uri, SCI_NS.contains, PROJECT_NS["finding/f01"]) in knowledge
 
 
 def test_add_story(tmp_graph: Path) -> None:
-    add_hypothesis(tmp_graph, "h01", "X regulates Y", "paper:smith-2024")
+    graph_path = build_entity_graph(
+        tmp_graph.parent.parent,
+        [_source_entity("hypothesis", "h01", "X regulates Y", status="proposed")],
+    )
+    assert graph_path == tmp_graph
     story_uri = add_story(
         tmp_graph,
         title="X regulates Y through pathway Z",
@@ -120,41 +120,21 @@ def test_add_paper_entity_invalid_status(tmp_graph: Path) -> None:
 
 def test_full_composition_chain(tmp_graph: Path) -> None:
     """Test: observation -> proposition -> finding -> interpretation -> story -> paper."""
-    # Atoms
-    add_hypothesis(tmp_graph, "h01", "X regulates Y", "paper:smith-2024")
-    obs_uri1 = add_observation(tmp_graph, "r=0.73, p<0.001", "data-package:expr", observation_id="obs1")
-    add_observation(tmp_graph, "fold-change=2.1", "data-package:expr", observation_id="obs2")
-    prop_uri1 = add_proposition(tmp_graph, "X correlates with Y", "paper:smith-2024", proposition_id="p1")
-    add_proposition(tmp_graph, "X upregulates Y expression", "data-package:expr", proposition_id="p2")
-
-    # Findings
-    finding_uri1 = add_finding(
-        tmp_graph,
-        "Correlation analysis",
-        "moderate",
-        ["proposition:p1"],
-        ["observation:obs1"],
-        "data-package:expr",
-        "f01",
+    graph_path = build_entity_graph(
+        tmp_graph.parent.parent,
+        [
+            _source_entity("hypothesis", "h01", "X regulates Y", status="proposed"),
+            _source_entity("observation", "obs1", "r=0.73, p<0.001"),
+            _source_entity("observation", "obs2", "fold-change=2.1"),
+            _source_entity("proposition", "p1", "X correlates with Y", status="active"),
+            _source_entity("proposition", "p2", "X upregulates Y expression", status="active"),
+            _source_entity("finding", "f01", "Correlation analysis"),
+            _source_entity("finding", "f02", "Differential expression"),
+            _source_entity("interpretation", "interp01", "Expression analysis suggests X-Y regulation"),
+        ],
     )
-    add_finding(
-        tmp_graph,
-        "Differential expression",
-        "high",
-        ["proposition:p2"],
-        ["observation:obs2"],
-        "data-package:expr",
-        "f02",
-    )
-
-    # Interpretation
-    interp_uri = add_interpretation(
-        tmp_graph,
-        "Expression analysis suggests X-Y regulation",
-        ["finding:f01", "finding:f02"],
-        context="Initial exploratory analysis",
-        interpretation_id="interp01",
-    )
+    assert graph_path == tmp_graph
+    interp_uri = PROJECT_NS["interpretation/interp01"]
 
     # Story
     story_uri = add_story(
@@ -183,7 +163,6 @@ def test_full_composition_chain(tmp_graph: Path) -> None:
     assert (paper_uri, SCI_NS.comprises, story_uri) in knowledge
     assert (story_uri, SCI_NS.synthesizes, interp_uri) in knowledge
     assert (story_uri, SCI_NS.organizedBy, PROJECT_NS["hypothesis/h01"]) in knowledge
-    assert (interp_uri, SCI_NS.contains, finding_uri1) in knowledge
-    assert (finding_uri1, SCI_NS.contains, prop_uri1) in knowledge
-    assert (finding_uri1, SCI_NS.contains, obs_uri1) in knowledge
-    assert (finding_uri1, SCI_NS.groundedBy, PROJECT_NS["data-package/expr"]) in knowledge
+    assert (PROJECT_NS["finding/f01"], RDF.type, SCI_NS.Finding) in knowledge
+    assert (PROJECT_NS["proposition/p1"], RDF.type, SCI_NS.Proposition) in knowledge
+    assert (PROJECT_NS["observation/obs1"], RDF.type, SCI_NS.Observation) in knowledge
