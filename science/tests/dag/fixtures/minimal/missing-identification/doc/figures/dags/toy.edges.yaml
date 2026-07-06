@@ -1,9 +1,0 @@
-dag: toy
-source_dot: toy.dot
-edges:
-  - id: 1
-    source: a
-    target: b
-    edge_status: structural
-    # identification deliberately omitted
-    description: missing ident

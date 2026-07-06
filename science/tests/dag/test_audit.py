@@ -114,7 +114,7 @@ def _build_project_without_propositions(tmp_path: Path) -> DagPaths:
 
 
 def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
-    """Audit must not mutate tasks/ or create retired edge YAML without fix=True."""
+    """Audit must not mutate tasks/ or create retired edge YAML."""
     paths = _build_project(tmp_path, with_drift=True)
     active_before = (tmp_path / "tasks/active.md").read_text()
 
@@ -128,7 +128,7 @@ def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
 
 
 def test_audit_fix_is_noop_when_validation_passes(tmp_path: Path) -> None:
-    """Phase 5f keeps --fix accepted, but retired YAML drift mutation is gone."""
+    """--fix remains validation-gated but has no retired-YAML mutation path."""
     paths = _build_project(tmp_path, with_drift=True)
     active_before = (tmp_path / "tasks/active.md").read_text()
 
@@ -206,7 +206,7 @@ def test_audit_renders_from_propositions_and_composes_no_staleness(
 
 
 def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
-    """fb-2026-05-01-001: software-profile project with no dag: block and no edges.yaml."""
+    """fb-2026-05-01-001: software-profile project with no dag: block."""
     from click.testing import CliRunner
 
     from science_tool.dag.cli import audit_cmd

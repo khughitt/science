@@ -1,9 +1,8 @@
-"""Task 4b: channel-driven edge styling + legacy edge_status render adapter.
+"""Task 4b: channel-driven edge styling.
 
 Tests verify:
-1. The legacy adapter maps derived belief fields → 5-value edge_status via
-   derived_edge_status at the render/style boundary (not by calling
-   derived_edge_status directly in the assertion).
+1. Proposition channel fields map to a 5-value derived edge status via
+   derived_edge_status at the render/style boundary.
 2. Axis-specific styling is driven by orthogonal channels INDEPENDENTLY of
    edge_status: two edges with the SAME derived edge_status but DIFFERENT polarity
    produce DIFFERENT hues, proving styling is channel-driven.
@@ -63,12 +62,11 @@ def _channel_edge(
 
 
 # ===========================================================================
-# 1. Legacy adapter: derived_edge_status is called at the style boundary
-#    (not authored edge_status) when channel fields are present.
+# 1. derived_edge_status is called at the style boundary.
 # ===========================================================================
 
 
-class TestLegacyAdapterStatus:
+class TestDerivedStatus:
     """edge_status is derived via derived_edge_status from channel fields."""
 
     def test_refuted_yields_eliminated(self) -> None:
@@ -266,40 +264,10 @@ class TestContestedOverlay:
 
 
 # ===========================================================================
-# 6. Legacy fallback: edges WITHOUT channel fields still render (no regression)
+# 6. Channel fields are required.
 # ===========================================================================
 
 
-class TestLegacyFallback:
-    """Edges without new channel fields still render using authored edge_status."""
-
-    def test_legacy_supported_edge_renders(self) -> None:
-        edge = {
-            "source": "a",
-            "target": "b",
-            "edge_status": "supported",
-            "identification": "observational",
-        }
-        attrs = style_for_edge(edge)
-        assert '"#2e7d32"' in attrs["color"]
-
-    def test_legacy_eliminated_edge_renders(self) -> None:
-        edge = {
-            "source": "a",
-            "target": "b",
-            "edge_status": "eliminated",
-            "identification": "observational",
-        }
-        attrs = style_for_edge(edge)
-        assert '"#9e9e9e"' in attrs["color"]
-        assert "[✗]" in attrs["label"]
-
-    def test_legacy_unknown_edge_renders(self) -> None:
-        edge = {
-            "source": "a",
-            "target": "b",
-            "edge_status": "unknown",
-            "identification": "observational",
-        }
-        attrs = style_for_edge(edge)
-        assert '"#c62828"' in attrs["color"]
+def test_edge_without_channels_is_rejected() -> None:
+    with pytest.raises(ValueError, match="missing channel field"):
+        style_for_edge({"source": "a", "target": "b", "edge_status": "supported"})

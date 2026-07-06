@@ -1,6 +1,6 @@
 {
   "config_path": "~/.config/science/config.yaml",
-  "generated_at_utc": "2026-07-06T00:40:43Z",
+  "generated_at_utc": "2026-07-06T02:53:06Z",
   "projects": [
     {
       "counts": {
@@ -26,16 +26,8 @@
       "project_root": "~/d/cancer/cancer-types/head-and-neck"
     },
     {
-      "counts": {
-        "retired_edges_yaml": 1
-      },
-      "findings": [
-        {
-          "detail": "retired DAG edge file",
-          "path": "tests/migration/fixtures/mini_patch.edges.yaml",
-          "surface": "retired_edges_yaml"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/cancer/cancer-types/multiple-myeloma"
     },
     {
@@ -54,21 +46,8 @@
       "project_root": "~/d/cancer/conditions/pre-cancer"
     },
     {
-      "counts": {
-        "retired_edges_yaml": 2
-      },
-      "findings": [
-        {
-          "detail": "retired DAG edge file",
-          "path": "doc/figures/dags/h02-cross-study-ranking-divergence.edges.yaml",
-          "surface": "retired_edges_yaml"
-        },
-        {
-          "detail": "retired DAG edge file",
-          "path": "doc/figures/dags/h08-agnostic-covariate-association.edges.yaml",
-          "surface": "retired_edges_yaml"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/cancer/data-sources/cbioportal"
     },
     {
@@ -135,16 +114,8 @@
       "project_root": "~/d/natural-systems"
     },
     {
-      "counts": {
-        "retired_edges_yaml": 1
-      },
-      "findings": [
-        {
-          "detail": "retired DAG edge file",
-          "path": "archive/dag-retired-edges/h01-multi-manifold-protein-universe.edges.yaml",
-          "surface": "retired_edges_yaml"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/protein-landscape"
     },
     {
@@ -184,13 +155,12 @@
     "scanned_projects": 22,
     "shared_repository_entries": 1,
     "skipped_registered_projects": 1,
-    "total_findings": 8,
+    "total_findings": 4,
     "unique_registered_paths": 23,
     "unregistered_science_yaml": 0
   },
   "surface_totals": {
-    "legacy_marker_alias": 4,
-    "retired_edges_yaml": 4
+    "legacy_marker_alias": 4
   },
   "unregistered_science_yaml": []
 }

@@ -37,28 +37,8 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
     ),
-    "dag retired-edges": (
-        "older DAG filesystem-root flag for explicit retired YAML migration inspection",
-        "project root",
-    ),
-    "dag retired-edge-migration-plan": (
-        "older DAG filesystem-root flag for explicit retired YAML migration planning",
-        "project root",
-    ),
-    "dag scaffold-retired-edge-workbench": (
-        "DAG scaffold write surface; retains --project-root alongside --project",
-        "project root",
-    ),
     "dag apply-workbench": (
         "DAG reviewed workbench apply surface; retains --project-root alongside --project",
-        "project root",
-    ),
-    "dag archive-retired-edges": (
-        "DAG retired edge archive write surface; retains --project-root alongside --project",
-        "project root",
-    ),
-    "dag staleness": (
-        "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
     ),
     "dag validate": (
@@ -102,12 +82,7 @@ _PROJECT_ROOT_ALIAS_COMMANDS: set[str] = {
     "dag init",
     "dag number",
     "dag render",
-    "dag retired-edges",
-    "dag retired-edge-migration-plan",
-    "dag scaffold-retired-edge-workbench",
     "dag apply-workbench",
-    "dag archive-retired-edges",
-    "dag staleness",
     "dag validate",
     "data audit",
     "entities audit-identifiers",

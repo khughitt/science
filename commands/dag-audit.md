@@ -87,12 +87,13 @@ Present the proposal summary, then ask:
 > "Apply all proposed changes, apply selectively, or stop here?"
 
 On approval:
-- For YAML edits: edit the `<dag>.edges.yaml` file directly with the proposed
-  changes. Run `science dag render --project <project>` afterwards to
-  refresh the `-auto.dot` / `-auto.png` artifacts.
+- For DAG semantic edits: edit the backing `proposition:` and `evidence-line:`
+  entities. Run `science dag validate --project <project>` and
+  `science dag render --project <project>` afterwards to refresh the
+  `-auto.dot` / `-auto.png` artifacts.
 - For new review tasks: call `science tasks add` (or
   `science dag audit --fix` which routes through the same API).
-- For ref fixes: edit the `<dag>.edges.yaml` directly.
+- For ref fixes: edit the proposition/evidence-line entity that owns the ref.
 
 ### 5. Commit
 

@@ -150,7 +150,7 @@ def test_belief_forbidden() -> None:
 
 
 def test_posterior_as_row_field_forbidden() -> None:
-    """posterior at row level is forbidden (it lives on edges.yaml, not workbench rows)."""
+    """posterior at row level is forbidden; workbench rows only author claim channels."""
     with pytest.raises(ValidationError, match="posterior"):
         WorkbenchRow.model_validate(
             {

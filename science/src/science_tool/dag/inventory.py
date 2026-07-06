@@ -18,10 +18,9 @@ class DagInventoryRecords:
 
 
 def load_dag_inventory_records(project_root: Path) -> DagInventoryRecords:
-    """Return no graph addresses from retired DAG edge YAML.
+    """Return no standalone DAG graph-address records.
 
     DAG semantic edges are compiled propositions and are already represented in
-    entity inventory. Retired ``*.edges.yaml`` files are visible only through
-    ``science dag retired-edges``.
+    entity inventory.
     """
     return DagInventoryRecords()

@@ -1,12 +1,7 @@
 """Audit orchestrator: validate and re-render proposition-backed DAGs.
 
-By default the audit is **read-only**: it returns a structured report and the
-mutations that *would* be performed, but does not mutate ``tasks/active.md``,
-``edges.yaml``, or any other input file.
-
-In Phase 5f, ``fix=True`` is a no-op after validation succeeds. It remains a
-validation-gated entry point so callers fail early before assuming automated
-retired-YAML drift mutation still exists.
+By default the audit is **read-only**: it returns a structured report and does
+not mutate source files. ``fix=True`` is a no-op after validation succeeds.
 """
 
 from __future__ import annotations
@@ -79,7 +74,7 @@ def run_audit(
 
     With ``fix=False`` (default), audit is read-only aside from derived DAG
     render outputs. With ``fix=True``, validation must pass first; failure
-    raises RuntimeError, and no retired-YAML drift mutations are performed.
+    raises RuntimeError.
 
     Parameters
     ----------

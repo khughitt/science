@@ -111,9 +111,8 @@ Merged to `main`:
 
 Current refreshed inventory:
 
-- `retired_edges_yaml`: 4 findings.
 - `legacy_marker_alias`: 4 findings.
-- Zero findings for article prefix aliases, aggregate manifests,
+- Zero findings for retired DAG `.edges.yaml`, article prefix aliases, aggregate manifests,
   entity-layout roots, `type:` frontmatter, scalar `access:`, active legacy
   data-package entities, bare `profiles:`, and removed `science.yaml` fields.
 
@@ -135,6 +134,13 @@ Completed in `refactor/article-prefix-alias-retirement`:
   sentinel, and the short-lived migration command/module after the zero-hit
   inventory gate.
 
+Completed in `refactor/retired-edges-yaml-retirement`:
+
+- Migrated/committed all registered/shared `*.edges.yaml` project data found by
+  the inventory gate.
+- Removed active retired-edge reader, migration, archive/schema, CLI, and
+  command-guidance support after the zero-hit inventory gate.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -143,7 +149,7 @@ Completed in `refactor/article-prefix-alias-retirement`:
 | `type:` frontmatter | Entity frontmatter with `type:` instead of `kind:`; templates and commands that still author `type:` | Complete; no new migrator needed because inventory was already zero | Complete; active `kind`/`type` dual reads removed from commons translation, workbench apply, and curation inventory | Current inventory reports zero `type:` frontmatter findings. |
 | Flat scalar `access:` | Frontmatter with `access: public` or another scalar value | Complete; no new migrator needed because inventory was already zero | Complete; scalar coercion removed from frontmatter parsing and graph health | Current inventory reports zero scalar `access:` findings. |
 | `article:<bibkey>` prefix alias | Structured/project refs containing `article:<bibkey>` where the intended target is a literature record | Complete; short-lived scoped rewriter committed in history and removed after migration | Complete; literature-prefix alias checks, canonicalization paths, health sentinel, and migrator removed | Live `article` entity kind and BibTeX `@article` support remain. |
-| Retired DAG `.edges.yaml` | Any `*.edges.yaml` file in project DAG areas | `science dag retired-edge-migration-plan`, `science dag scaffold-retired-edge-workbench`, and related retired-edge tools | `science/src/science_tool/dag/` retired-edge readers, schemas, CLI commands, warnings, and validation adapters | Keep migration commands until every registered project has zero edge YAML files. |
+| Retired DAG `.edges.yaml` | Complete; current inventory reports zero `retired_edges_yaml` findings | Complete; migration commits exist in affected project repos | Complete; retired-edge readers, schemas, CLI commands, warnings, validation adapters, and command guidance removed | cBioPortal build passes; protein-landscape and multiple-myeloma still have unrelated pre-existing project validation/build blockers recorded during the slice. |
 | Aggregate manifests | `knowledge/sources/<local>/entities.yaml`, `terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` aggregate owners | Complete; migration commits exist in affected project repos | Complete; aggregate readers, migrators, command paths, validators, and tests removed | Merged 2026-07-05; current inventory reports zero aggregate-manifest findings. |
 | Legacy data-package entities | `doc/data-packages/*.md` with active `type: data-package` | `data-package` CLI group and dataset/research-package promotion helpers | `science/src/science_tool/graph/materialize.py:_preflight_migration`, `science/src/science_tool/cli.py` `data-package` group, promote helpers, docs | Precheck must look at project data, not only toolkit code. |
 | Other one-shot graph migrations | Inputs still requiring `graph migrate-addresses`, `graph migrate-paper-datasets`, `graph/migrate.py`, or materialize migration flags | Existing one-shot commands and flags | One-shot commands and flags after data is clean | Treat each one-shot as a separate surface if its precheck is nonzero. |
@@ -185,7 +191,7 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 4. Complete: remove scalar `access:` coercion now that scalar data hits are
    zero.
 5. Complete: migrate and gate `article:<bibkey>` aliases.
-6. Migrate and gate retired DAG `.edges.yaml`.
+6. Complete in current worktree: migrate and gate retired DAG `.edges.yaml`.
 7. Complete: migrate and gate aggregate manifests.
 8. Reconfirm and, if needed, migrate legacy data-package entities.
 9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.

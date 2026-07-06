@@ -1,4 +1,4 @@
-"""DAG rendering with precedence matrix and eliminated-edge support.
+"""DAG rendering with channel-driven proposition edge styling.
 
 Lifted from mm30's ``doc/figures/dags/_render_styled.py`` (t186).
 Single-source-of-truth rendering:
@@ -12,7 +12,7 @@ Two rendering modes are selected automatically per edge record:
 
 **Channel-driven mode** (design §6) — used when the orthogonal channel fields
 ``polarity``, ``belief_magnitude``, ``claim_layer``, ``refuted``, and
-``has_grounding_evidence`` are present.  Styling derives from the independent
+``has_grounding_evidence``. Styling derives from the independent
 channels:
 
   - ``polarity``              → hue  (positive/negative/unsigned/not_applicable
@@ -21,20 +21,8 @@ channels:
   - ``belief_magnitude``      → penwidth base intensity
   - ``contested``             → dashed-style overlay + ``[?]`` label marker
   - ``derived_edge_status``   → computed via ``derived_edge_status(...)`` and
-                                  surfaced in the returned attrs dict for legacy
-                                  consumers; NOT used as a styling source.
-
-**Legacy mode** — used when channel fields are absent; reads the authored
-``edge_status`` field and maps it to the historic STATUS_STYLES table exactly
-as before (full backward compatibility for existing edges.yaml records).
-
-| edge_status | color     | penwidth | style  |
-|-------------|-----------|----------|--------|
-| supported   | #2e7d32   | 2.5      | solid  |
-| tentative   | #1565c0   | 1.6      | solid  |
-| structural  | #757575   | 1.0      | solid  |
-| unknown     | #c62828   | 1.2      | dashed |
-| eliminated  | #9e9e9e   | 1.0      | dotted |
+                                  surfaced in the returned attrs dict; NOT used
+                                  as a styling source.
 
 ``eliminated`` is for edges whose hypothesized mechanism has been retracted or
 ruled out by subsequent evidence.  The edge stays in the DAG as a provenance
@@ -47,9 +35,8 @@ Overrides (both modes):
       observational/structural/none → normal, interventional → diamond,
       longitudinal → odot.
   - Posterior auto-label suffix: "β=±0.XX" and "HR=X.X" when available.
-  - ``edge_status: eliminated`` / ``refuted: true`` wins over posterior-based
-    sizing (the mechanism has been retracted; visual should not imply live
-    support).
+  - ``refuted: true`` wins over posterior-based sizing (the mechanism has been
+    retracted; visual should not imply live support).
 
 Every DOT edge must have a compiled proposition edge with the same
 ``source``/``target`` pair. Render fails before writing derived artifacts when
@@ -70,20 +57,13 @@ from science_tool.graph.derived_status import derived_edge_status
 
 log = logging.getLogger(__name__)
 
-STATUS_STYLES = {
-    "supported": {"color": "#2e7d32", "penwidth": 2.5, "style": "solid"},
-    "tentative": {"color": "#1565c0", "penwidth": 1.6, "style": "solid"},
-    "structural": {"color": "#757575", "penwidth": 1.0, "style": "solid"},
-    "unknown": {"color": "#c62828", "penwidth": 1.2, "style": "dashed"},
-    "eliminated": {"color": "#9e9e9e", "penwidth": 1.0, "style": "dotted"},
-}
+ELIMINATED_STYLE = {"color": "#9e9e9e", "penwidth": 1.0, "style": "dotted"}
 
 # ---------------------------------------------------------------------------
 # Channel-driven styling constants (design §6)
 # ---------------------------------------------------------------------------
 
-# polarity → hue.  Deliberately distinct from STATUS_STYLES so that a reader
-# can see that colour signals direction-of-effect, not epistemic status.
+# polarity → hue. Colour signals direction-of-effect, not epistemic status.
 POLARITY_HUES = {
     "positive": "#2e7d32",    # green  — promotes / increases
     "negative": "#b71c1c",    # dark-red — suppresses / decreases
@@ -206,9 +186,9 @@ def _style_base_from_channels(edge: dict) -> tuple[dict, str]:  # type: ignore[t
 
     # eliminated keeps its muted grey regardless of polarity (mechanism retracted).
     if des.status == "eliminated":
-        color = STATUS_STYLES["eliminated"]["color"]
-        penwidth = STATUS_STYLES["eliminated"]["penwidth"]
-        style = STATUS_STYLES["eliminated"]["style"]
+        color = ELIMINATED_STYLE["color"]
+        penwidth = ELIMINATED_STYLE["penwidth"]
+        style = ELIMINATED_STYLE["style"]
     elif des.status == "unknown":
         style = "dashed"
 
@@ -216,39 +196,15 @@ def _style_base_from_channels(edge: dict) -> tuple[dict, str]:  # type: ignore[t
 
 
 def style_for_edge(edge: dict) -> dict:  # type: ignore[type-arg]
-    """Compute graphviz style attributes from an edge's YAML record.
-
-    Selects channel-driven mode when orthogonal channel fields are present,
-    otherwise falls back to the legacy authored ``edge_status`` path.
-
-    The returned dict always contains a ``derived_edge_status`` key (channel
-    mode: computed via ``derived_edge_status(...)``; legacy mode: the authored
-    ``edge_status`` value or ``"tentative"`` when absent) for use by legacy
-    ``science dag`` consumers.
-    """
+    """Compute graphviz style attributes from a proposition-backed edge."""
     ident = edge.get("identification") or "observational"
 
-    # --- Select rendering mode ---
-    use_channels = bool(_CHANNEL_FIELDS & set(edge.keys()))
+    missing_channels = sorted(_CHANNEL_FIELDS - set(edge.keys()))
+    if missing_channels:
+        raise ValueError(f"proposition edge missing channel field(s): {', '.join(missing_channels)}")
 
-    if use_channels:
-        base, derived_status = _style_base_from_channels(edge)
-        status = derived_status  # used for eliminated-guard below
-    else:
-        # Legacy mode: authored edge_status drives colour / penwidth / style.
-        # Task 5f: edges.yaml is RETIRED as the epistemic source-of-truth — the
-        # primary path sources channel-mode edges from compiled propositions
-        # (proposition_edges.edges_from_propositions). This branch survives ONLY
-        # behind the deprecated edges.yaml legacy-import adapter (render falls
-        # back to it, loudly via DeprecationWarning, when no propositions are
-        # compiled), so authored edge_status is never a status SoT for the
-        # proposition-sourced view. It is retained — not deleted — because many
-        # not-yet-migrated edges.yaml fixtures still carry authored edge_status
-        # with no channel fields; deleting it would break their backward-compatible
-        # rendering. It can be removed once every input carries channel fields.
-        status = edge.get("edge_status") or "tentative"
-        base = STATUS_STYLES.get(status, STATUS_STYLES["tentative"]).copy()
-        derived_status = status
+    base, derived_status = _style_base_from_channels(edge)
+    status = derived_status
 
     # Posterior adjustments (both modes — eliminated always wins).
     post = edge.get("posterior") or {}
@@ -385,7 +341,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
     # inline glyphs so Graphviz does not allocate a separate mini-graph.
     legend = [
         "",
-        "  // --- Auto-footer legend (two-axis: edge_status + identification) ---",
+        "  // --- Auto-footer legend (polarity, belief, and identification) ---",
         "  subgraph cluster_auto_footer_legend {",
         "    rank=sink;",
         '    label="";',
@@ -394,11 +350,11 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
         '    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#bdbdbd">',
         (
             '      <tr><td bgcolor="#f5f5f5"><b>Auto legend</b></td>'
-            '<td bgcolor="#f5f5f5"><b>edge_status</b>: color / width / style</td>'
+            '<td bgcolor="#f5f5f5"><b>polarity/belief</b>: color / width / style</td>'
             '<td bgcolor="#f5f5f5"><b>identification</b>: arrowhead</td></tr>'
         ),
         (
-            '      <tr><td align="left">status</td>'
+            '      <tr><td align="left">belief</td>'
             '<td align="left"><font color="#2e7d32">&#9473;&#9473;&#9654;</font> supported &nbsp; '
             '<font color="#1565c0">&#9472;&#9472;&#9654;</font> tentative &nbsp; '
             '<font color="#757575">&#8943;&#9654;</font> structural</td>'
@@ -485,9 +441,9 @@ def render_one(
     """Render one slug to <slug>-auto.{dot,png}.
 
     Topology comes from ``<slug>.dot``. Edge SEMANTICS come from
-    ``proposition_edges`` — the compiled relational propositions are the
-    epistemic source-of-truth (Task 5f), styled in channel mode with a DERIVED
-    ``edge_status``.
+    ``proposition_edges`` - the compiled relational propositions are the
+    epistemic source of truth, styled in channel mode with a DERIVED
+    ``derived_edge_status``.
     """
     dot_path = dag_dir / f"{slug}.dot"
     out_dot = dag_dir / f"{slug}-auto.dot"

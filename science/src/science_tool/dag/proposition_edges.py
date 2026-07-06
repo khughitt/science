@@ -1,4 +1,4 @@
-"""Source DAG edges from compiled relational propositions (Task 5f).
+"""Source DAG edges from compiled relational propositions.
 
 The DAG is a VIEW over compiled ``PropositionEntity`` records: each proposition
 is one edge ``(subject -> object)`` carrying the orthogonal *authored* channel
@@ -8,9 +8,8 @@ fields the channel-driven renderer (``style_for_edge``, design §6) consumes:
   - ``claim_layer``              → feeds ``derived_edge_status`` (structural band)
   - ``identification``           → line-style + arrowhead channel
 
-This is the epistemic source-of-truth replacement for ``*.edges.yaml``
-(retired, see ``schema.load_legacy_edges_yaml``).  ``edge_status`` is **never**
-carried here — it is DERIVED at render time via ``derived_edge_status``.
+This is the epistemic source of truth for DAG rendering. ``edge_status`` is
+never carried here; it is derived at render time via ``derived_edge_status``.
 
 Belief-derived channel fields (``belief_magnitude``, ``refuted``,
 ``has_grounding_evidence``) are NOT authored on a proposition; they are produced

@@ -413,7 +413,7 @@ def render_entity_text(
     frontmatter["id"] = entity.id
     frontmatter["kind"] = kind
     frontmatter.setdefault("status", default_status(kind))
-    for derived in ("canonical_id", "content_preview", "content", "file_path"):
+    for derived in ("canonical_id", "content_preview", "content", "file_path", "type"):
         frontmatter.pop(derived, None)
     frontmatter["created"] = created
     frontmatter["updated"] = updated

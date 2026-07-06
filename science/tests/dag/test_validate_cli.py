@@ -1,4 +1,4 @@
-"""Click-runner tests for `science dag validate` + `dag schema`."""
+"""Click-runner tests for `science dag validate`."""
 
 from __future__ import annotations
 
@@ -48,28 +48,6 @@ def _copy_fixture_with_propositions(source: Path, target: Path) -> Path:
         for index, (source_node, target_node) in enumerate(sorted(dot_edges), start=1):
             _write_proposition(target, f"{dot_path.stem}-{index}", source_node, target_node)
     return target
-
-
-def test_schema_stdout_is_valid_json() -> None:
-    runner = CliRunner()
-    result = runner.invoke(dag_group, ["schema"])
-    assert result.exit_code == 0
-    assert "RETIRED" in result.stderr
-    assert "edges.yaml" in result.stderr
-    data = json.loads(result.stdout)
-    assert data.get("title") == "EdgesYamlFile"
-
-
-def test_schema_write_to_file(tmp_path: Path) -> None:
-    runner = CliRunner()
-    out = tmp_path / "s.json"
-    result = runner.invoke(dag_group, ["schema", "--output", str(out)])
-    assert result.exit_code == 0
-    assert "RETIRED" in result.stderr
-    assert "edges.yaml" in result.stderr
-    assert out.exists()
-    data = json.loads(out.read_text(encoding="utf-8"))
-    assert data.get("title") == "EdgesYamlFile"
 
 
 def test_validate_clean_exits_zero(tmp_path: Path) -> None:

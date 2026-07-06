@@ -586,7 +586,7 @@ coordinated responses replicate while gene-level signatures are largely
 line-specific. Joint with the t190 CRISPR null, the picture sharpens: PRC2
 perturbation reactivates IFN broadly but doesn't engage the cell-cycle inhibitor
 circuit consistently. See `interpretation:2026-04-14-t197-gse155135-ezh2i-replication`
-for the full breakdown and `doc/figures/dags/h1-prognosis.edges.yaml` edges 5/6 for
+for the full breakdown and the proposition-backed H1 prognosis DAG edges 5/6 for
 the data_support updates.
 
 Scripts: scripts/hypotheses/h1/_t197_derive_ren_gene_sets.py;
@@ -694,7 +694,7 @@ Per discussion:2026-04-19-dag-iteration-and-refinement Q4. Min viable: attractor
 - group: dag-refresh
 - created: 2026-04-20
 
-Per discussion:2026-04-19-dag-iteration-and-refinement Q4. Literature anchors: Diamond 2021 (98.2% non-neutral MM), Persi 2025 (dN/dS stable MGUS->MM, post-treatment shift toward neutrality), Cooperrider 2025 (LEN->TP53 selection), Misund 2022 (pathway convergence on proliferation), Henry 2025 (adaptive oncogenesis). Depends on t216 creating specs/hypotheses/h6-positive-selection-mm-progression.md. Scope: build doc/figures/dags/h6-positive-selection.{dot,edges.yaml} exposing the 4 sub-claims as branches.
+Per discussion:2026-04-19-dag-iteration-and-refinement Q4. Literature anchors: Diamond 2021 (98.2% non-neutral MM), Persi 2025 (dN/dS stable MGUS->MM, post-treatment shift toward neutrality), Cooperrider 2025 (LEN->TP53 selection), Misund 2022 (pathway convergence on proliferation), Henry 2025 (adaptive oncogenesis). Depends on t216 creating specs/hypotheses/h6-positive-selection-mm-progression.md. Scope: build the proposition-backed `doc/figures/dags/h6-positive-selection.dot` DAG exposing the 4 sub-claims as branches.
 
 ## [t252] Split h2-subtype-architecture DAG into upstream + downstream sub-figures; expose lineage-conditioned branches per proposition p13
 - priority: P2
@@ -704,7 +704,7 @@ Per discussion:2026-04-19-dag-iteration-and-refinement Q4. Literature anchors: D
 - group: dag-refresh
 - created: 2026-04-20
 
-Per discussion:2026-04-19-dag-iteration-and-refinement Q2/Q3. 43 edges in a single rankdir=TB graph is too dense. Share node identifiers across the split. Make the three lineage-conditioned branches first-class (gain(1q) PHF19/IFN-silencing + HD CTA/chrXp + t(11;14) APOBEC3B/BCL2) per the p13 reframing. Candidate: keep h2-subtype-architecture.{dot,edges.yaml} as upstream half; add h2-subtype-outcomes.{dot,edges.yaml} for downstream half.
+Per discussion:2026-04-19-dag-iteration-and-refinement Q2/Q3. 43 edges in a single rankdir=TB graph is too dense. Share node identifiers across the split. Make the three lineage-conditioned branches first-class (gain(1q) PHF19/IFN-silencing + HD CTA/chrXp + t(11;14) APOBEC3B/BCL2) per the p13 reframing. Candidate: keep `h2-subtype-architecture.dot` as upstream half; add `h2-subtype-outcomes.dot` for downstream half.
 
 ## [t253] Promote h1-h2-bridge DAG to a real doc/inquiries/h1-h2-bridge.md inquiry file; link to propositions p07-p11
 - priority: P2
