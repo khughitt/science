@@ -9,7 +9,7 @@ from science_tool.graph.io import DCAT_NS, DCTERMS_NS
 from science_tool.graph.materialize import PROJECT_NS, SCI_NS, _build_dataset_from_sources, _entity_uri
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
+_MANIFEST = "name: demo\nprofile: research\nknowledge_profiles: {local: local}\nlayout_version: 3\n"
 
 
 def _write(root: Path, bib: str) -> None:

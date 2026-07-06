@@ -22,7 +22,10 @@ def test_doc_data_package_files_do_not_trigger_strict_preflight(tmp_path: Path) 
 
 
 def _seed(root: Path) -> None:
-    (root / "science.yaml").write_text("name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8")
+    (root / "science.yaml").write_text(
+        "name: proj\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
 
 
 def _question_md(root: Path, filename: str, cid: str) -> None:

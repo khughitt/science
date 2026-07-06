@@ -48,7 +48,7 @@ def test_workflow_run_adapter_loads_results_datapackage_json(tmp_path, monkeypat
 
 def test_load_project_sources_loads_workflow_run_manifest(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
-        "name: project\nprofiles: {local: local}\n",
+        "name: project\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
     manifest = tmp_path / "results" / "run-a" / "datapackage.json"

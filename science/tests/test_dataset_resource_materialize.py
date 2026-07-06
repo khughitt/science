@@ -15,7 +15,10 @@ _GOOD_HASH = "sha256:" + "a" * 64
 
 
 def _seed(root: Path) -> None:
-    (root / "science.yaml").write_text("name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8")
+    (root / "science.yaml").write_text(
+        "name: proj\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
 
 
 def _datapackage(root: Path, slug: str, ident: str, *, with_url: bool) -> None:

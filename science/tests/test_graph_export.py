@@ -505,7 +505,7 @@ def test_dcat_downloadurl_is_metadata_not_an_edge(tmp_path: Path) -> None:
     # dcat:distribution is a real dataset->resource edge; dcat:downloadURL is metadata
     # about the distribution and must NOT become a spurious exported edge to the URL.
     (tmp_path / "science.yaml").write_text(
-        "name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8"
+        "name: proj\nprofile: research\nknowledge_profiles: {local: local}\n", encoding="utf-8"
     )
     pkg = tmp_path / "data" / "ds1"
     pkg.mkdir(parents=True)

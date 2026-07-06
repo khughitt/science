@@ -445,7 +445,12 @@ def _is_legacy_entity_root(project_root: Path, rel_path: str, fm: dict[str, Any]
         return False
     from science_tool.entities import is_markdown_entity_kind
 
-    return is_markdown_entity_kind(kind, project_root=project_root)
+    try:
+        return is_markdown_entity_kind(kind, project_root=project_root)
+    except ValueError as exc:
+        if "removed top-level profiles" not in str(exc):
+            raise
+        return is_markdown_entity_kind(kind)
 
 
 def _is_live_entities_path(rel_path: str) -> bool:

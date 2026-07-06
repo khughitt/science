@@ -55,9 +55,10 @@ def test_resolve_local_profile_name_knowledge_profiles(tmp_path: Path) -> None:
     assert resolve_local_profile_name(tmp_path) == "mm30-local"
 
 
-def test_resolve_local_profile_name_legacy_profiles(tmp_path: Path) -> None:
+def test_resolve_local_profile_name_rejects_removed_profiles_key(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nprofiles:\n  local: legacy-local\n")
-    assert resolve_local_profile_name(tmp_path) == "legacy-local"
+    with pytest.raises(ValueError, match="knowledge_profiles"):
+        resolve_local_profile_name(tmp_path)
 
 
 def test_resolve_local_profile_name_defaults_to_local(tmp_path: Path) -> None:

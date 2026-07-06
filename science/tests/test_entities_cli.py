@@ -768,7 +768,7 @@ def test_entities_register_kind_makes_markdown_kind_loadable(tmp_path) -> None:
     assert sources.registry.kind_class("critique") == EntityClass.EPISTEMIC
 
 
-def test_entities_register_kind_uses_legacy_profiles_local_fallback(tmp_path) -> None:
+def test_entities_register_kind_rejects_removed_profiles_config(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "entities" / "critiques").mkdir(parents=True)
     (project / "science.yaml").write_text(
@@ -786,11 +786,9 @@ def test_entities_register_kind_uses_legacy_profiles_local_fallback(tmp_path) ->
         ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
     )
 
-    assert result.exit_code == 0, result.output
-    assert (project / "knowledge" / "sources" / "lab" / "manifest.yaml").is_file()
-    assert not (project / "knowledge" / "sources" / "local" / "manifest.yaml").exists()
-    sources = load_project_sources(project)
-    assert [entity.id for entity in sources.entities] == ["critique:c001"]
+    assert result.exit_code != 0
+    assert "knowledge_profiles" in result.output
+    assert not (project / "knowledge" / "sources" / "lab" / "manifest.yaml").exists()
 
 
 def test_entities_register_kind_rejects_invalid_class_without_writing(tmp_path) -> None:

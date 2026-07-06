@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from science_qa.runner import run_qa
+from science_qa.runner import run_qa_datapackage
 
 
 def _cfg(tmp_path, body="qa:\n  program: scrna-qc-table\n") -> Path:
@@ -14,10 +14,15 @@ def _cfg(tmp_path, body="qa:\n  program: scrna-qc-table\n") -> Path:
     return p
 
 
-def _table(tmp_path, df) -> Path:
-    p = tmp_path / "t.parquet"
-    df.to_parquet(p)
-    return p
+def _run_datapackage_qa(config_path: Path, df: pd.DataFrame, report_dir: Path):
+    table_path = report_dir / "t.parquet"
+    df.to_parquet(table_path)
+    fields = [{"name": str(column)} for column in df.columns]
+    (report_dir / "datapackage.json").write_text(
+        json.dumps({"name": "p", "resources": [{"name": "t", "path": "t.parquet", "schema": {"fields": fields}}]}),
+        encoding="utf-8",
+    )
+    return run_qa_datapackage(report_dir / "datapackage.json", "t", report_dir, runknobs_path=config_path)
 
 
 def _good_scrna():
@@ -28,8 +33,14 @@ def _good_scrna():
     })
 
 
+def test_table_config_runner_api_is_retired() -> None:
+    import science_qa.runner as runner
+
+    assert not hasattr(runner, "run_qa")
+
+
 def test_clean_table_reports_coverage_no_structural_fail(tmp_path):
-    res = run_qa(_cfg(tmp_path), _table(tmp_path, _good_scrna()), tmp_path)
+    res = _run_datapackage_qa(_cfg(tmp_path), _good_scrna(), tmp_path)
     assert res.structural_failed is False
     cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
     assert cov["executable_denominator"] >= 5
@@ -40,7 +51,7 @@ def test_clean_table_reports_coverage_no_structural_fail(tmp_path):
 
 def test_missing_required_column_blocks_and_structural_fails(tmp_path):
     df = _good_scrna().drop(columns=["pct_counts_mt"])
-    res = run_qa(_cfg(tmp_path), _table(tmp_path, df), tmp_path)
+    res = _run_datapackage_qa(_cfg(tmp_path), df, tmp_path)
     assert res.structural_failed is True
     cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
     statuses = {e["check_id"]: e["status"] for e in cov["entries"]}
@@ -50,7 +61,7 @@ def test_missing_required_column_blocks_and_structural_fails(tmp_path):
 def test_b1_parity_mito_gate_fires_with_same_severity(tmp_path):
     df = _good_scrna()
     df.loc[0, "pct_counts_mt"] = 30.0  # exceeds default max_mito_pct 20
-    run_qa(_cfg(tmp_path), _table(tmp_path, df), tmp_path)
+    _run_datapackage_qa(_cfg(tmp_path), df, tmp_path)
     flags = json.loads((tmp_path / "qa_report.json").read_text())["flags"]
     mito = [f for f in flags if f["flag_id"] == "scrna-qc-table/threshold/pct_counts_mt/max"]
     assert mito and mito[0]["severity"] == "distribution"
@@ -63,7 +74,7 @@ def test_b1_parity_rehomed_flag_ids(tmp_path):
     df.loc[1, "total_counts"] = 0           # all-zero cell -> degenerate_cell (structural)
     df.loc[1, "n_genes_by_counts"] = 0
     cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  polarity: [total_counts]\n")
-    res = run_qa(cfg, _table(tmp_path, df), tmp_path)
+    res = _run_datapackage_qa(cfg, df, tmp_path)
     ids = {f["flag_id"]: f["severity"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
     assert ids.get("numeric-column/polarity/total_counts/-") == "structural"
     assert ids.get("gene-expression-qc-table/degenerate_cell/total_counts+n_genes_by_counts/-") == "structural"
@@ -76,7 +87,7 @@ def test_unconfigured_family_recorded_not_errored(tmp_path):
 
 
 def _run_and_read(tmp_path) -> str:
-    run_qa(_cfg(tmp_path), _table(tmp_path, _good_scrna()), tmp_path)
+    _run_datapackage_qa(_cfg(tmp_path), _good_scrna(), tmp_path)
     return (tmp_path / "qa_report.json").read_text()
 
 
@@ -91,7 +102,7 @@ def test_project_local_check_runs(tmp_path, monkeypatch):
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  project_local: ['ext_runs:marker']\n")
-    run_qa(cfg, _table(tmp_path, _good_scrna()), tmp_path)
+    _run_datapackage_qa(cfg, _good_scrna(), tmp_path)
     ids = [f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]]
     assert "project-local/marker/table/-" in ids
 
@@ -106,25 +117,22 @@ def test_project_local_wrong_context_rejected(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(tmp_path))
     cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  project_local: ['ext_bad_ctx:marker']\n")
     with pytest.raises(RunnerError):
-        run_qa(cfg, _table(tmp_path, _good_scrna()), tmp_path)
+        _run_datapackage_qa(cfg, _good_scrna(), tmp_path)
 
 
 def test_required_check_coverage_records_no_column_selection(tmp_path):
     # a fixed-column required check operates on specific columns, not a selection ->
     # its coverage entry records no resolved column selection (not the whole table)
-    run_qa(_cfg(tmp_path), _table(tmp_path, _good_scrna()), tmp_path)
+    _run_datapackage_qa(_cfg(tmp_path), _good_scrna(), tmp_path)
     cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
     entry = next(e for e in cov["entries"] if e["check_id"] == "gene-expression-qc-table/library_size_positive")
     assert entry["columns"] == []
 
 
-import json as _json
-
-
 def _dp(tmp_path, resource: dict, df) -> Path:
     df.to_parquet(tmp_path / resource["path"])
     pkg = {"name": "p", "resources": [resource]}
-    (tmp_path / "datapackage.json").write_text(_json.dumps(pkg))
+    (tmp_path / "datapackage.json").write_text(json.dumps(pkg))
     return tmp_path / "datapackage.json"
 
 
@@ -185,13 +193,11 @@ def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
 
 
 def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
-    import json as _json
-
     from science_qa.runner import run_qa_datapackage
     res = {"name": "obs", "path": "obs.parquet",
            "schema": {"fields": [{"name": "id", "type": "integer"}]}}
     pd.DataFrame({"id": [1, 2, 3, 4]}).to_parquet(tmp_path / "obs.parquet")
-    (tmp_path / "datapackage.json").write_text(_json.dumps({"name": "p", "resources": [res]}))
+    (tmp_path / "datapackage.json").write_text(json.dumps({"name": "p", "resources": [res]}))
     result = run_qa_datapackage(tmp_path / "datapackage.json", "obs", tmp_path)
     assert result.rows_checked == 4
 
@@ -291,8 +297,6 @@ def test_package_report_dir_none_writes_nothing(tmp_path):
 
 
 def test_package_report_writes_subdirs_and_rollup(tmp_path):
-    import json as _json
-
     from science_qa.runner import run_qa_package
     pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
@@ -307,7 +311,7 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
     assert (out / "a" / "qa_report.json").exists()
     assert (out / "b" / "qa_report.json").exists()
     # package rollup
-    rollup = _json.loads((out / "qa_report.json").read_text())
+    rollup = json.loads((out / "qa_report.json").read_text())
     assert rollup["package"] == "p" and rollup["package_structural_failed"] is True
     sections = {s["resource"]: s for s in rollup["resources"]}
     assert sections["b"]["status"] == "fail" and sections["b"]["flags"]
@@ -316,7 +320,6 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
 
 def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
     # collision regression: identical flag_id in two resources -> separate subdir ledgers
-    import json as _json
 
     from science_qa.runner import run_qa_package
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
@@ -329,8 +332,8 @@ def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
         f"  - name: b\n    path: b.parquet\n    schema:\n      fields:\n{field}")
     out = tmp_path / "out"
     run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
-    a_ids = {f["flag_id"] for f in _json.loads((out / "a" / "qa_report.json").read_text())["flags"]}
-    b_ids = {f["flag_id"] for f in _json.loads((out / "b" / "qa_report.json").read_text())["flags"]}
+    a_ids = {f["flag_id"] for f in json.loads((out / "a" / "qa_report.json").read_text())["flags"]}
+    b_ids = {f["flag_id"] for f in json.loads((out / "b" / "qa_report.json").read_text())["flags"]}
     # same flag_id present in BOTH, each in its own resource-scoped report (not merged)
     assert "numeric-column/bounds/p/minimum" in a_ids
     assert "numeric-column/bounds/p/minimum" in b_ids

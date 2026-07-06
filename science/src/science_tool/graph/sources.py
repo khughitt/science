@@ -1143,16 +1143,12 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if yaml_path.is_file():
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
 
+    if "profiles" in data and "knowledge_profiles" not in data:
+        raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
+
     knowledge_profiles = data.get("knowledge_profiles") or {}
     if not isinstance(knowledge_profiles, dict):
         knowledge_profiles = {}
-
-    # Legacy science.yaml uses `profiles: {local: local}` instead of `knowledge_profiles`.
-    # Prefer knowledge_profiles; fall back to profiles if present.
-    if not knowledge_profiles:
-        fallback = data.get("profiles") or {}
-        if isinstance(fallback, dict):
-            knowledge_profiles = fallback
 
     raw_ontologies = data.get("ontologies") or []
     if not isinstance(raw_ontologies, list):
@@ -1194,9 +1190,8 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
 def resolve_local_profile_name(project_root: Path) -> str:
     """Return the active local knowledge-profile name for the project at *project_root*.
 
-    Prefers the value at ``knowledge_profiles.local`` in the project config;
-    falls back to the legacy ``profiles.local`` key if the newer key is absent;
-    defaults to ``"local"`` when neither key is present.
+    Uses ``knowledge_profiles.local`` in the project config and defaults to
+    ``"local"`` when it is absent.
     """
     config = _read_project_config(project_root)
     knowledge_profiles = config.get("knowledge_profiles")
