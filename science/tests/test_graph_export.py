@@ -46,6 +46,23 @@ class CausalOverlays(TypedDict):
     inquiries: dict[str, CausalInquiryOverlay]
 
 
+class EvidenceClaimOverlay(TypedDict):
+    uri: str
+    text: str
+    confidence: float | None
+    sources: list[str]
+    support_count: int
+    dispute_count: int
+
+
+class EvidenceEdgeOverlay(TypedDict):
+    claims: list[EvidenceClaimOverlay]
+
+
+class EvidenceOverlays(TypedDict):
+    edges: dict[str, EvidenceEdgeOverlay]
+
+
 def _entity(kind: str, entity_id: str, title: str, **frontmatter: object) -> dict:
     return {
         "kind": kind,
@@ -146,6 +163,27 @@ def _build_fixture_inquiries(graph_path: Path) -> None:
         boundary_roles=[
             {"ref": "concept:unexported_boundary", "role": "BoundaryOut"},
         ],
+    )
+
+
+def _attach_causal_edge_claim(graph_path: Path, claim_uri: URIRef, *, statement_slug: str) -> str:
+    dataset = _load_dataset(graph_path)
+    causal_graph = dataset.graph(_graph_uri("graph/causal"))
+    edge_subject = URIRef("http://example.org/project/concept/drug")
+    edge_predicate = URIRef("http://example.org/science/vocab/causal/causes")
+    edge_object = URIRef("http://example.org/project/concept/recovery")
+    statement_uri = URIRef(f"http://example.org/project/statement/{statement_slug}")
+    causal_graph.add((statement_uri, RDF.type, RDF.Statement))
+    causal_graph.add((statement_uri, RDF.subject, edge_subject))
+    causal_graph.add((statement_uri, RDF.predicate, edge_predicate))
+    causal_graph.add((statement_uri, RDF.object, edge_object))
+    causal_graph.add((statement_uri, SCI_NS.backedByClaim, claim_uri))
+    _save_dataset(dataset, graph_path)
+    return build_graph_export_edge_id(
+        subject=str(edge_subject),
+        predicate=str(edge_predicate),
+        obj=str(edge_object),
+        graph_layer="graph/causal",
     )
 
 
@@ -481,21 +519,33 @@ def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overla
 # claim payload shapes with no authored-source form.
 
 
-def test_export_graph_payload_skips_missing_claim_refs_with_warning(graph_path: Path) -> None:
-    dataset = _load_dataset(graph_path)
-    causal_graph = dataset.graph(_graph_uri("graph/causal"))
-    edge_subject = URIRef("http://example.org/project/concept/drug")
-    edge_predicate = URIRef("http://example.org/science/vocab/causal/causes")
-    edge_object = URIRef("http://example.org/project/concept/recovery")
-    statement_uri = URIRef("http://example.org/project/statement/missing-claim-test")
-    causal_graph.add((statement_uri, RDF.type, RDF.Statement))
-    causal_graph.add((statement_uri, RDF.subject, edge_subject))
-    causal_graph.add((statement_uri, RDF.predicate, edge_predicate))
-    causal_graph.add((statement_uri, RDF.object, edge_object))
-    causal_graph.add(
-        (statement_uri, SCI_NS.backedByClaim, URIRef("http://example.org/project/proposition/missing_claim"))
+def test_export_graph_payload_includes_evidence_overlay_for_reified_claim_statement(graph_path: Path) -> None:
+    edge_id = _attach_causal_edge_claim(
+        graph_path,
+        URIRef("http://example.org/project/proposition/drug_causes_recovery_evidence"),
+        statement_slug="evidence-claim-test",
     )
-    _save_dataset(dataset, graph_path)
+
+    payload = export_graph_payload(graph_path, overlays=["evidence"])
+    edge_evidence = cast(EvidenceOverlays, payload.overlays.evidence)["edges"][edge_id]
+    claim = edge_evidence["claims"][0]
+
+    assert claim["uri"] == "http://example.org/project/proposition/drug_causes_recovery_evidence"
+    assert claim["text"] == "proposition/drug_causes_recovery_evidence"
+    assert claim["confidence"] == 0.85
+    assert claim["sources"] == [
+        "http://example.org/project/source/entities_propositions_drug_causes_recovery_evidence.md"
+    ]
+    assert claim["support_count"] == 0
+    assert claim["dispute_count"] == 0
+
+
+def test_export_graph_payload_skips_missing_claim_refs_with_warning(graph_path: Path) -> None:
+    _attach_causal_edge_claim(
+        graph_path,
+        URIRef("http://example.org/project/proposition/missing_claim"),
+        statement_slug="missing-claim-test",
+    )
 
     payload = export_graph_payload(graph_path, overlays=["evidence"])
 
