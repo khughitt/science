@@ -13,6 +13,7 @@ from science_model.entities import (
     EntityType,
     EpistemicReviewState,
     EvidenceLineEntity,
+    FalsificationEntity,
     MechanismEntity,
     WorkflowEntity,
     core_entity_type_for_kind,
@@ -420,6 +421,16 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             participants=list(fm.get("participants") or []),
             propositions=list(fm.get("propositions") or []),
             summary=str(fm.get("summary") or ""),
+        )
+    if kind == EntityType.FALSIFICATION.value:
+        return FalsificationEntity(
+            **entity_kwargs,
+            falsifies=cast(str, fm.get("falsifies")),  # required; pydantic raises if missing
+            predicted=str(fm.get("predicted") or ""),
+            observed=str(fm.get("observed") or ""),
+            decision=str(fm.get("decision") or ""),
+            source_of_prediction=str(fm.get("source_of_prediction") or ""),
+            supersedes_claim=fm.get("supersedes_claim"),
         )
     if kind == EntityType.EVIDENCE_LINE.value:
         return EvidenceLineEntity(

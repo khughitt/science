@@ -409,6 +409,38 @@ def test_parse_entity_file_evidence_line_full(tmp_path: Path) -> None:
     assert entity.shared_cohort == "cohort-Z"
 
 
+def test_parse_entity_file_round_trips_falsification(tmp_path: Path) -> None:
+    from science_model.entities import FalsificationEntity
+    from science_model.frontmatter import parse_entity_file
+
+    path = tmp_path / "f01.md"
+    path.write_text(
+        "---\n"
+        'id: "falsification:f01"\n'
+        'kind: "falsification"\n'
+        'title: "Drug does not improve recovery"\n'
+        'status: "active"\n'
+        'falsifies: "proposition:drug_causes_recovery"\n'
+        'predicted: "Drug improves recovery time"\n'
+        'observed: "No improvement in randomized follow-up"\n'
+        'decision: "Reject mechanistic interpretation"\n'
+        'source_of_prediction: "topic:drug-mechanism"\n'
+        "related: []\n"
+        "source_refs: []\n"
+        "---\n\n# Falsification\n",
+        encoding="utf-8",
+    )
+
+    entity = parse_entity_file(path, project_slug="demo")
+
+    assert isinstance(entity, FalsificationEntity)
+    assert entity.falsifies == "proposition:drug_causes_recovery"
+    assert entity.predicted == "Drug improves recovery time"
+    assert entity.decision == "Reject mechanistic interpretation"
+    assert entity.source_of_prediction == "topic:drug-mechanism"
+    assert entity.supersedes_claim is None
+
+
 def test_parse_entity_file_evidence_line_missing_stance_raises(tmp_path: Path) -> None:
     """Missing stance must raise ValidationError — no silent default allowed."""
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")

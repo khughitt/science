@@ -130,6 +130,7 @@ class EntityType(StrEnum):
     CANONICAL_PARAMETER = "canonical_parameter"
     CODE_FILE = "code-file"
     EVIDENCE_LINE = "evidence-line"
+    FALSIFICATION = "falsification"
     UNKNOWN = "unknown"
 
 
@@ -993,6 +994,25 @@ class EvidenceLineEntity(ProjectEntity):
         if isinstance(value, str):
             return canonical_evidence_type_token(value)
         return value
+
+
+class FalsificationEntity(ProjectEntity):
+    """A structured record that a proposition-backed prediction was falsified.
+
+    Parallel to EvidenceLineEntity: a first-class entity *about* a proposition.
+    ``falsifies`` is the required target proposition ref (validated at
+    materialization to resolve to a sci:Proposition). The four descriptive
+    fields are free-text, emitted as RDF literals. ``supersedes_claim`` is an
+    optional claim ref emitted as a resolved URI. Every triple lands in the
+    graph/knowledge named graph (belief provenance is deliberately not involved).
+    """
+
+    falsifies: str
+    predicted: str = ""
+    observed: str = ""
+    decision: str = ""
+    source_of_prediction: str = ""
+    supersedes_claim: str | None = None
 
 
 class InquiryEntity(ProjectEntity):
