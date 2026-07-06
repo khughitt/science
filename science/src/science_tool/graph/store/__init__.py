@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from .constants import (
-    _RELATION_KIND_BY_PREDICATE,
     BIOLINK_NS,
     CITO_NS,
     CURIE_PREFIXES,
     DCTERMS_NS,
     DEFAULT_GRAPH_PATH,
-    EVIDENCE_STANCE_PREDICATES,
     GRAPH_EXPORT_EDGE_METADATA_PREDICATES,
     GRAPH_EXPORT_SCHEMA_VERSION,
     GRAPH_EXPORT_VISIBLE_LAYERS,
@@ -21,7 +19,6 @@ from .constants import (
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
-    STRUCTURED_PROPOSITION_PREDICATES,
     VALID_INQUIRY_TYPES,
 )
 from .dataset import _load_dataset, _save_dataset, init_graph_file, read_graph_stats, save_graph_dataset
@@ -115,7 +112,6 @@ from .validation import (
 
 __all__ = [
     "_NOTEBOOKS_PYPROJECT",
-    "_RELATION_KIND_BY_PREDICATE",
     "_about_tokens",
     "_apply_evidence_semantics_to_bundle",
     "_apply_phase1_metadata_to_bundle",
@@ -154,7 +150,6 @@ __all__ = [
     "ClaimSummaryData",
     "DCTERMS_NS",
     "DEFAULT_GRAPH_PATH",
-    "EVIDENCE_STANCE_PREDICATES",
     "EvidenceClaimBundle",
     "EvidenceEdgeOverlay",
     "EvidenceOverlayData",
@@ -183,7 +178,6 @@ __all__ = [
     "SCHEMA_NS",
     "SCIC_NS",
     "SCI_NS",
-    "STRUCTURED_PROPOSITION_PREDICATES",
     "VALID_INQUIRY_TYPES",
     "add_article",
     "add_falsification",
