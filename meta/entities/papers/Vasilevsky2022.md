@@ -8,7 +8,6 @@ id: paper:Vasilevsky2022
 ontology_terms:
 - MONDO
 - disease ontology
-datasets: []
 source_refs:
 - cite:Vasilevsky2022
 related:
