@@ -178,5 +178,11 @@ normal path for new work. Examples include:
 are retired. Address direction and paper dataset usage are canonical at build
 time. Rebuild from source with `science graph build`.
 
+Kernel closure is complete: durable project graph writes now come only from
+source declarations compiled by `science graph build`. `knowledge/graph.trig`
+is compiler-owned generated output, not an authoring surface. The retired
+`science graph add` writer surfaces fail with forward-path guidance to source
+entities, relation sources, or graph rebuilds.
+
 When possible, run these commands in read-only or dry-run mode first, inspect the
 plan, then apply the change in a small commit.

@@ -109,6 +109,14 @@ def test_cli_workflow_map_mentions_every_top_level_command() -> None:
     assert not missing, "Top-level commands missing from CLI workflow map: " + ", ".join(missing)
 
 
+def test_cli_workflow_documents_kernel_closure_release_note() -> None:
+    normalized = _norm(_read(GUIDE_ROOT / "cli-and-workflows.md"))
+
+    assert "Kernel closure is complete" in normalized
+    assert "`knowledge/graph.trig` is compiler-owned generated output" in normalized
+    assert "The retired `science graph add` writer surfaces fail with forward-path guidance" in normalized
+
+
 def test_deleted_user_docs_are_not_reintroduced() -> None:
     deleted = (
         ROOT / "docs" / ("user-guide" + ".md"),
