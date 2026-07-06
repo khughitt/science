@@ -19,7 +19,7 @@ from science_tool.graph.export_types import (
 from science_tool.graph.io import DCAT_NS
 from science_tool.graph.materialize import _build_dataset_from_sources
 from science_tool.graph.sources import load_project_sources
-from conftest import build_inquiry_graph
+from conftest import build_entity_graph, build_inquiry_graph
 
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
@@ -27,11 +27,6 @@ from science_tool.graph.store import (
     _graph_uri,
     _load_dataset,
     _save_dataset,
-    add_concept,
-    add_edge,
-    add_hypothesis,
-    add_mechanism,
-    add_proposition,
     export_graph_payload,
 )
 
@@ -51,85 +46,73 @@ class CausalOverlays(TypedDict):
     inquiries: dict[str, CausalInquiryOverlay]
 
 
-class EvidenceClaimOverlay(TypedDict):
-    bridge_between: list[str]
-    statistical_support: str
-    pre_registrations: list[str]
+def _entity(kind: str, entity_id: str, title: str, **frontmatter: object) -> dict:
+    return {
+        "kind": kind,
+        "id": entity_id,
+        "frontmatter": {"title": title, "status": "active", **frontmatter},
+        "body": f"# {title}\n",
+    }
 
 
-class EvidenceEdgeOverlay(TypedDict):
-    claims: list[EvidenceClaimOverlay]
+def _concept(entity_id: str, title: str | None = None) -> dict:
+    return _entity("concept", entity_id, title or entity_id.replace("-", " ").title())
 
 
-class EvidenceOverlays(TypedDict):
-    edges: dict[str, EvidenceEdgeOverlay]
+def _hypothesis(entity_id: str, title: str) -> dict:
+    return _entity("hypothesis", entity_id, title, source_refs=[])
 
 
-@pytest.fixture
-def graph_path(tmp_path: Path) -> Path:
-    """Fresh graph file for testing."""
-    gp = tmp_path / "knowledge" / "graph.trig"
-    gp.parent.mkdir(parents=True)
-    gp.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
+def _proposition(entity_id: str, title: str, **frontmatter: object) -> dict:
+    return _entity("proposition", entity_id, title, source_refs=[], **frontmatter)
 
-    add_concept(gp, "Drug", None, None, source="http://example.org/project/source/drug")
-    add_concept(gp, "Recovery", None, None, source="http://example.org/project/source/recovery")
-    add_hypothesis(gp, "h1", "Hypothesis 1", source="paper:h1")
-    add_hypothesis(gp, "h2", "Hypothesis 2", source="paper:h2")
-    add_edge(
-        gp,
-        "concept/drug",
-        "scic:causes",
-        "concept/recovery",
-        "graph/causal",
-    )
-    add_proposition(
-        gp,
-        text="Drug treatment improves recovery time",
-        source="paper:doi_10.1234/drug_recovery",
-        confidence=0.85,
-        subject="concept/drug",
-        predicate="scic:causes",
-        obj="concept/recovery",
-        proposition_id="drug_causes_recovery_evidence",
-        compositional_status="clr_attenuated",
-        compositional_method="CLR",
-        compositional_note="beta attenuates after CLR normalization",
-        platform_pattern="MMRF-dominant",
-        dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
-        evidence_lines=[
-            {"source": "Johnson 2024 ChIP", "kind": "external_biochem", "datasets": []},
-            {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
+
+def _causal_relation(subject: str, predicate: str, obj: str) -> dict:
+    return {
+        "subject": subject,
+        "predicate": predicate,
+        "object": obj,
+        "graph_layer": "graph/causal",
+    }
+
+
+def _build_base_graph(
+    project_root: Path,
+    *,
+    entities: list[dict] | None = None,
+    relations: list[dict] | None = None,
+) -> Path:
+    graph_path = build_entity_graph(
+        project_root,
+        entities=[
+            _concept("drug", "Drug"),
+            _concept("recovery", "Recovery"),
+            _concept("kras", "KRAS"),
+            _hypothesis("h1", "Hypothesis 1"),
+            _hypothesis("h2", "Hypothesis 2"),
+            _proposition(
+                "drug_causes_recovery_evidence",
+                "Drug treatment improves recovery time",
+                confidence=0.85,
+            ),
+            *(entities or []),
         ],
-        statistical_support="replicated",
-        mechanistic_support="direct",
-        replication_scope="cross_dataset",
-        claim_status="active",
-        pre_registration_refs=["pre-registration:edge-ribosome-e2f1"],
-        interaction_terms=[
-            {
-                "modifier": "concept/kras",
-                "effect": "amplifies",
-                "note": "stronger slope in KRAS-mutant cases",
-            }
+        relations=[
+            _causal_relation("concept:drug", "scic:causes", "concept:recovery"),
+            *(relations or []),
         ],
-        bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
     )
-    add_concept(gp, "KRAS", None, None, source="http://example.org/project/source/kras")
-    add_edge(
-        gp,
-        "concept/drug",
-        "scic:causes",
-        "concept/recovery",
-        "graph/causal",
-        claim_refs=["proposition:drug_causes_recovery_evidence"],
-    )
+    _build_fixture_inquiries(graph_path)
+    return graph_path
+
+
+def _build_fixture_inquiries(graph_path: Path) -> None:
     # test_dag: source-built causal inquiry. `concept:modifier` is an interior
     # node (flow-edge endpoint) so the confounds test can associate a graph/causal
     # confounds edge with the inquiry once it authors the concept — the
     # source-model equivalent of the retired `add_inquiry_node`.
     build_inquiry_graph(
-        gp,
+        graph_path,
         slug="test_dag",
         title="Test DAG",
         profile="causal",
@@ -141,13 +124,19 @@ def graph_path(tmp_path: Path) -> Path:
             {"ref": "concept:recovery", "role": "BoundaryOut"},
         ],
         flow_edges=[
+            {
+                "subject": "concept:drug",
+                "predicate": "causes",
+                "object": "concept:recovery",
+                "claim_refs": ["proposition:drug_causes_recovery_evidence"],
+            },
             {"subject": "concept:modifier", "predicate": "feedsInto", "object": "concept:recovery"},
         ],
     )
     # dangling_dag: outcome + boundary reference concepts that are never exported,
     # exercising the export overlay's missing-referent handling.
     build_inquiry_graph(
-        gp,
+        graph_path,
         slug="dangling_dag",
         title="Dangling DAG",
         profile="causal",
@@ -159,7 +148,11 @@ def graph_path(tmp_path: Path) -> Path:
         ],
     )
 
-    return gp
+
+@pytest.fixture
+def graph_path(tmp_path: Path) -> Path:
+    """Fresh graph file for testing."""
+    return _build_base_graph(tmp_path)
 
 
 def test_graph_export_fixture_builds_seeded_graph(graph_path: Path) -> None:
@@ -247,7 +240,11 @@ def test_export_graph_payload_includes_base_nodes_edges_layers(graph_path: Path)
     payload = export_graph_payload(graph_path)
 
     drug = next(node for node in payload.nodes if node.id == "http://example.org/project/concept/drug")
-    edge = next(edge for edge in payload.edges if edge.predicate == "http://example.org/science/vocab/causal/causes")
+    edge = next(
+        edge
+        for edge in payload.edges
+        if edge.predicate == "http://example.org/science/vocab/causal/causes" and edge.graph_layer == "graph/causal"
+    )
     causal_layer = next(layer for layer in payload.layers if layer.id == "graph/causal")
     project_scope = next(scope for scope in payload.scopes if scope.kind == "project")
     inquiry_scope = next(scope for scope in payload.scopes if scope.kind == "inquiry")
@@ -262,17 +259,23 @@ def test_export_graph_payload_includes_base_nodes_edges_layers(graph_path: Path)
 
 
 def test_export_graph_payload_includes_mechanism_nodes(graph_path: Path) -> None:
-    add_mechanism(
-        graph_path,
-        "PHF19 / PRC2 / IFN",
-        "PHF19-PRC2 dampens IFN signaling.",
-        ["concept:drug", "concept:recovery"],
-        ["proposition:drug_causes_recovery_evidence"],
-        mechanism_id="phf19-prc2-ifn",
+    build_entity_graph(
+        graph_path.parent.parent,
+        entities=[
+            _entity(
+                "mechanism",
+                "phf19-prc2-ifn",
+                "PHF19 / PRC2 / IFN",
+                status="draft",
+                summary="PHF19-PRC2 dampens IFN signaling.",
+                participants=["concept:drug", "concept:recovery"],
+                propositions=["proposition:drug_causes_recovery_evidence"],
+            )
+        ],
     )
 
     payload = export_graph_payload(graph_path)
-    mechanism_node = next(node for node in payload.nodes if node.id.endswith("/mechanism/phf19_prc2_ifn"))
+    mechanism_node = next(node for node in payload.nodes if node.id.endswith("/mechanism/phf19-prc2-ifn"))
 
     assert mechanism_node.label == "PHF19 / PRC2 / IFN"
     assert mechanism_node.type is not None
@@ -438,13 +441,10 @@ def test_export_graph_payload_includes_confounds_edges_in_causal_overlay(graph_p
     # `concept:modifier` is already an interior node of test_dag (fixture flow
     # edge); authoring the concept makes it an exported member so the confounds
     # edge below is associated with the inquiry in the causal overlay.
-    add_concept(graph_path, "Modifier", None, None, source="http://example.org/project/source/modifier")
-    add_edge(
-        graph_path,
-        "concept/modifier",
-        "scic:confounds",
-        "concept/recovery",
-        "graph/causal",
+    _build_base_graph(
+        graph_path.parent.parent,
+        entities=[_concept("modifier", "Modifier")],
+        relations=[_causal_relation("concept:modifier", "scic:confounds", "concept:recovery")],
     )
 
     payload = export_graph_payload(graph_path, overlays=["causal"])
@@ -476,21 +476,22 @@ def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overla
     assert "http://example.org/project/concept/unexported_boundary" not in inquiry["boundary_roles"]
 
 
-def test_export_graph_payload_includes_evidence_overlay_for_claim_backed_edge(graph_path: Path) -> None:
-    payload = export_graph_payload(graph_path, overlays=["evidence"])
-    edge_id = next(edge.id for edge in payload.edges if edge.predicate.endswith("/causes"))
-    edge_evidence = cast(EvidenceOverlays, payload.overlays.evidence)["edges"][edge_id]
-
-    assert edge_evidence["claims"][0]["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
-    assert edge_evidence["claims"][0]["statistical_support"] == "replicated"
-    assert edge_evidence["claims"][0]["pre_registrations"] == ["pre-registration/edge-ribosome-e2f1"]
+# Removed in kernel-closure Phase 3a: evidence overlay fields such as
+# bridge_between, statistical_support, and pre_registrations were mutator-only
+# claim payload shapes with no authored-source form.
 
 
 def test_export_graph_payload_skips_missing_claim_refs_with_warning(graph_path: Path) -> None:
     dataset = _load_dataset(graph_path)
     causal_graph = dataset.graph(_graph_uri("graph/causal"))
     edge_subject = URIRef("http://example.org/project/concept/drug")
-    statement_uri = next(causal_graph.subjects(RDF.subject, edge_subject))
+    edge_predicate = URIRef("http://example.org/science/vocab/causal/causes")
+    edge_object = URIRef("http://example.org/project/concept/recovery")
+    statement_uri = URIRef("http://example.org/project/statement/missing-claim-test")
+    causal_graph.add((statement_uri, RDF.type, RDF.Statement))
+    causal_graph.add((statement_uri, RDF.subject, edge_subject))
+    causal_graph.add((statement_uri, RDF.predicate, edge_predicate))
+    causal_graph.add((statement_uri, RDF.object, edge_object))
     causal_graph.add(
         (statement_uri, SCI_NS.backedByClaim, URIRef("http://example.org/project/proposition/missing_claim"))
     )
