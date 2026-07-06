@@ -70,6 +70,10 @@
   longer teach retired entity-root, `type:` frontmatter, `article:` prefix,
   `.edges.yaml`, data-package entity-ref, aggregate-manifest, or layout-v2
   scaffold patterns.
+- Complete in `refactor/removed-science-yaml-fields-cleanup`: removed
+  `science.yaml` fields remain explicitly rejected. This is a fail-early guard,
+  not reader or fallback support; deleting it would silently accept `parent:`
+  and `children:` as unknown extra fields.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -451,7 +455,7 @@ confirmation that each migrated project still builds under `science validate` /
 
 Run graph migration, materialize, and CLI tests.
 
-## Task 10: Small Aliases and Enforcement Shims
+## Task 10: Small Aliases and Removed-Field Guards
 
 **Files:**
 - `science/qa/src/science_qa/cli.py`
@@ -462,8 +466,10 @@ Run graph migration, materialize, and CLI tests.
 
 Status 2026-07-06: marker alias cleanup is complete; `science_qa` table mode
 and the bare `profiles:` config fallback were retired in
-`refactor/runtime-shim-retirement`; current inventory reports zero
-`legacy_marker_alias`, bare `profiles:`, and removed `science.yaml` field hits.
+`refactor/runtime-shim-retirement`; removed `science.yaml` fields remain
+explicitly rejected in `ProjectConfig` because top-level extras are otherwise
+allowed. Current inventory reports zero `legacy_marker_alias`, bare
+`profiles:`, and removed `science.yaml` field hits.
 
 - [x] **Step 1: Inventory small aliases**
 
@@ -480,9 +486,11 @@ Proceed only when each small surface has zero downstream hits **and** any projec
 touched by that surface's migration still builds under `science validate` /
 `graph materialize`.
 
-- [x] **Step 4: Remove support**
+- [x] **Step 4: Remove support and keep removed-field rejection**
 
-Delete the compatibility branch or enforcement shim for each zero-hit surface.
+Delete compatibility branches for zero-hit surfaces. Keep explicit rejection
+for already-removed config fields when the schema otherwise allows extra keys;
+that guard prevents silent acceptance rather than supporting a retired shape.
 
 - [x] **Step 5: Verify**
 

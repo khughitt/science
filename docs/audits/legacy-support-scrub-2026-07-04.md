@@ -172,7 +172,7 @@ Completed in `refactor/command-guidance-legacy-cleanup`:
 | `science_qa` table mode | Complete; targeted downstream/code scan reports no active table-mode usage outside the retired tests/docs | No project migration was needed because inventory was already zero | Complete; `science_qa run --table`, the CLI legacy branch, and public `run_qa(config, table)` mode removed | This was a single confirmed item, not a cluster. |
 | Annotation marker alias | Complete; current inventory reports zero `legacy_marker_alias` findings | Complete; direct downstream edits committed in affected project repos | Complete; marker alias normalization, marker migrator CLI, and marker docs removed | `[MISSING_CITATION]` remains canonical. |
 | Bare `profiles:` config fallback | Complete; current inventory reports zero bare `profiles:` science.yaml findings | Complete; no project migration was needed because inventory was already zero | Complete; graph source loading and local kind registration now reject bare top-level `profiles:` instead of falling back to it | Do not flag current model/profile concepts or entity/datapackage frontmatter `profiles`. |
-| Removed science.yaml fields | `parent:` or `children:` in project config | Direct config edit if found | `science/src/science_tool/project_config.py:_reject_legacy_fields` | Enforcement-only shim. Remove near the end after confirming zero downstream hits. |
+| Removed science.yaml fields | Complete; current inventory reports zero `parent:` / `children:` science.yaml findings | Direct config edit if found | `science/src/science_tool/project_config.py:_reject_removed_fields` remains | Fail-early guard, not reader or fallback support. Keep it because `ProjectConfig` otherwise allows unknown top-level keys. |
 | Command and skill guidance | Complete; active commands, generated Codex skills, templates, and user-guide references no longer teach retired surfaces | Complete after the relevant data migrators/readers were removed | `commands/*.md`, `codex-skills/**/*.md`, `references/*.md`, `templates/*.md`, mirrored `science_model/templates/*` | Historical plans/audits still record retired surfaces as history; current guidance points at the single current representation. |
 
 ## Precheck Sentinels
@@ -213,7 +213,7 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.
 10. Complete: migrate and gate marker aliases, `science_qa` table mode, and bare `profiles:` config fallback.
 11. Complete: remove command, skill, template, and active user-guide guidance for retired surfaces.
-12. Remove enforcement-only shims after zero-hit confirmation.
+12. Complete: keep removed `science.yaml` field rejection after zero-hit confirmation; it is not fallback support because it makes `parent:` / `children:` fail early.
 13. Run final toolkit and downstream verification.
 
 Each surface should end with a checked-in precheck report showing zero project
