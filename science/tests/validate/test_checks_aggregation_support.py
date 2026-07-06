@@ -270,16 +270,28 @@ def _seed_mm30_shape(root: Path, observed) -> None:
 @contextmanager
 def _only_aggregation_support_check():
     import science_tool.validate.checks as checks
+    from science_tool.validate.checks import CheckEntry
+    from science_tool.validate.checks.aggregation_support import check_aggregation_support
 
     original_checks = list(checks.CANONICAL_CHECKS)
-    aggregation_checks = [
-        entry
-        for entry in checks.CANONICAL_CHECKS
-        if entry.fn.__module__.endswith("aggregation_support")
+    checks.CANONICAL_CHECKS[:] = [
+        CheckEntry(section="aggregation support", order=34, fn=check_aggregation_support)
     ]
-    checks.CANONICAL_CHECKS[:] = aggregation_checks
     try:
         yield
+    finally:
+        checks.CANONICAL_CHECKS[:] = original_checks
+
+
+def test_only_aggregation_support_check_does_not_depend_on_current_registry() -> None:
+    import science_tool.validate.checks as checks
+
+    original_checks = list(checks.CANONICAL_CHECKS)
+    try:
+        checks.CANONICAL_CHECKS[:] = []
+        with _only_aggregation_support_check():
+            assert len(checks.CANONICAL_CHECKS) == 1
+            assert checks.CANONICAL_CHECKS[0].fn.__module__.endswith("aggregation_support")
     finally:
         checks.CANONICAL_CHECKS[:] = original_checks
 
