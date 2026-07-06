@@ -242,14 +242,21 @@ already has.
    resolves. Apply hard-validates these ids and fails on any that are
    ambiguous or unresolved, so fix them here. (The slug pre-pass above is a
    separate step — it stays as the title-level duplicate detector.)
-3. **Anchor resolution.** For each candidate's `literature_anchors[]`
-   entry, try to resolve it to a real project reference and record the
-   result as `ref`:
+3. **Anchor resolution.** Before finalizing `origin_plan`, run the resolver
+   from the project root:
+
+   ```bash
+   uv run science explore-ideas resolve-anchors --from <report-path-or-id>
+   ```
+
+   Use `--format json` when you need machine-readable rows. For each
+   candidate's `literature_anchors[]` entry, copy unambiguous resolver results
+   into the anchor's `ref` field:
    - `paper:<slug>` if the DOI/title matches an entity in
      `entities/papers/`.
    - `cite:<key>` if the DOI/key is present in `papers/references.bib`.
-   - otherwise leave `ref` null — the anchor stays a raw citation and
-     contributes no literature origin.
+   - otherwise leave `ref` null — ambiguous and unresolved anchors stay raw
+     citations and contribute no literature origin.
    Preserve the anchor's `date` (full `YYYY-MM-DD`) if it carries one; a
    `predates:` anchor's date flows into its independent literature origin.
    Finalize each candidate's `origin_plan` from the resolution per the

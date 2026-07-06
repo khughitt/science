@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 
 from science_model.entities import LensView, OriginRecord
 from science_model.frontmatter import parse_frontmatter
+from science_tool.bibliography import BibEntry, load_bib_entries
 from science_model.lenses import LENS_BY_SLUG
 from science_tool.entities import (
     EntityCommandError,
@@ -125,6 +127,61 @@ class ApplyCheckResult:
         }
 
 
+@dataclass(frozen=True)
+class PaperReference:
+    ref: str
+    title: str | None = None
+    doi: str | None = None
+    key: str | None = None
+    year: int | None = None
+
+
+@dataclass(frozen=True)
+class AnchorResolution:
+    candidate_id: str
+    anchor_index: int
+    status: str
+    resolved: str | None
+    match_kind: str
+    query: str
+    candidates: tuple[str, ...]
+    anchor: dict
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "candidate_id": self.candidate_id,
+            "anchor_index": self.anchor_index,
+            "status": self.status,
+            "resolved": self.resolved,
+            "match_kind": self.match_kind,
+            "query": self.query,
+            "candidates": list(self.candidates),
+            "anchor": dict(self.anchor),
+        }
+
+
+@dataclass(frozen=True)
+class AnchorResolveResult:
+    report: Path
+    anchors: list[AnchorResolution]
+
+    @property
+    def counts(self) -> dict[str, int]:
+        counts = {"resolved": 0, "already_resolved": 0, "ambiguous": 0, "unresolved": 0}
+        for anchor in self.anchors:
+            key = "already_resolved" if anchor.status == "already-resolved" else anchor.status
+            if key in counts:
+                counts[key] += 1
+        return counts
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "report": str(self.report),
+            "counts": self.counts,
+            "anchors": [anchor.to_dict() for anchor in self.anchors],
+        }
+
+
 def resolve_report_path(project_root: Path, from_value: str) -> Path:
     direct = Path(from_value)
     if direct.is_absolute():
@@ -155,6 +212,206 @@ def parse_report(text: str) -> list[CandidateBlock]:
         if isinstance(data, dict) and "candidate_id" in data:
             blocks.append(CandidateBlock(candidate_id=str(data["candidate_id"]), data=data))
     return blocks
+
+
+def _normalize_doi(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    doi = value.strip().lower()
+    if not doi:
+        return None
+    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:"):
+        if doi.startswith(prefix):
+            doi = doi[len(prefix) :].strip()
+            break
+    doi = doi.strip().rstrip(".,;")
+    return doi or None
+
+
+def _normalize_title(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    title = re.sub(r"[{}]", "", value).lower()
+    title = re.sub(r"[^a-z0-9]+", " ", title).strip()
+    return title or None
+
+
+def _int_year(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _anchor_key(anchor: dict) -> str | None:
+    for key_field in ("key", "citekey", "bibkey"):
+        value = anchor.get(key_field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _paper_references(project_root: Path) -> list[PaperReference]:
+    refs: list[PaperReference] = []
+    papers_root = project_root / "entities" / "papers"
+    if papers_root.is_dir():
+        for path in sorted(papers_root.glob("*.md")):
+            parsed = parse_frontmatter(path)
+            if parsed is None:
+                continue
+            fm, _body = parsed
+            ref = fm.get("id")
+            if not isinstance(ref, str) or not ref.startswith("paper:"):
+                continue
+            refs.append(
+                PaperReference(
+                    ref=ref,
+                    title=fm.get("title") if isinstance(fm.get("title"), str) else None,
+                    doi=fm.get("doi") if isinstance(fm.get("doi"), str) else None,
+                    key=fm.get("bibkey") if isinstance(fm.get("bibkey"), str) else None,
+                    year=_int_year(fm.get("year")),
+                )
+            )
+
+    for entry in load_bib_entries(project_root).values():
+        refs.append(_bib_reference(entry))
+    return refs
+
+
+def _bib_reference(entry: BibEntry) -> PaperReference:
+    return PaperReference(ref=f"cite:{entry.key}", title=entry.title, doi=entry.doi, key=entry.key, year=entry.year)
+
+
+def _resolve_anchor(anchor: dict, candidate_id: str, anchor_index: int, refs: list[PaperReference]) -> AnchorResolution:
+    existing_ref = anchor.get("ref")
+    if isinstance(existing_ref, str) and existing_ref.strip():
+        ref = existing_ref.strip()
+        return AnchorResolution(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            status="already-resolved",
+            resolved=ref,
+            match_kind="existing-ref",
+            query=ref,
+            candidates=(ref,),
+            anchor=anchor,
+        )
+
+    doi = _normalize_doi(anchor.get("doi"))
+    if doi is not None:
+        return _resolution_from_hits(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            anchor=anchor,
+            match_kind="doi",
+            query=doi,
+            hits=_ordered_refs(ref for ref in refs if _normalize_doi(ref.doi) == doi),
+        )
+
+    key = _anchor_key(anchor)
+    if key is not None:
+        return _resolution_from_hits(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            anchor=anchor,
+            match_kind="key",
+            query=key,
+            hits=_ordered_refs(ref for ref in refs if ref.key == key),
+        )
+
+    title = _normalize_title(anchor.get("title"))
+    if title is not None:
+        return _resolution_from_hits(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            anchor=anchor,
+            match_kind="title",
+            query=str(anchor.get("title")),
+            hits=_ordered_refs(ref for ref in refs if _normalize_title(ref.title) == title),
+        )
+
+    query = str(anchor.get("title") or anchor.get("doi") or anchor.get("openalex_id") or "")
+    return AnchorResolution(
+        candidate_id=candidate_id,
+        anchor_index=anchor_index,
+        status="unresolved",
+        resolved=None,
+        match_kind="unresolved",
+        query=query,
+        candidates=(),
+        anchor=anchor,
+    )
+
+
+def _ordered_refs(refs: Iterable[PaperReference]) -> tuple[str, ...]:
+    values = {ref.ref for ref in refs}
+    paper_refs = {ref for ref in values if ref.startswith("paper:")}
+    preferred = paper_refs or values
+    return tuple(sorted(preferred, key=lambda ref: (0 if ref.startswith("paper:") else 1, ref)))
+
+
+def _resolution_from_hits(
+    *,
+    candidate_id: str,
+    anchor_index: int,
+    anchor: dict,
+    match_kind: str,
+    query: str,
+    hits: tuple[str, ...],
+) -> AnchorResolution:
+    if len(hits) == 1:
+        return AnchorResolution(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            status="resolved",
+            resolved=hits[0],
+            match_kind=match_kind,
+            query=query,
+            candidates=hits,
+            anchor=anchor,
+        )
+    if hits:
+        return AnchorResolution(
+            candidate_id=candidate_id,
+            anchor_index=anchor_index,
+            status="ambiguous",
+            resolved=None,
+            match_kind=match_kind,
+            query=query,
+            candidates=hits,
+            anchor=anchor,
+        )
+    return AnchorResolution(
+        candidate_id=candidate_id,
+        anchor_index=anchor_index,
+        status="unresolved",
+        resolved=None,
+        match_kind=match_kind,
+        query=query,
+        candidates=(),
+        anchor=anchor,
+    )
+
+
+def resolve_anchors_report(project_root: Path, from_value: str) -> AnchorResolveResult:
+    report_path = resolve_report_path(project_root, from_value)
+    blocks = parse_report(report_path.read_text(encoding="utf-8"))
+    refs = _paper_references(project_root)
+
+    rows: list[AnchorResolution] = []
+    for block in blocks:
+        anchors = block.data.get("literature_anchors")
+        if anchors is None:
+            continue
+        if not isinstance(anchors, list):
+            raise ApplyValidationError(f"{block.candidate_id}: literature_anchors must be a list")
+        for index, anchor in enumerate(anchors):
+            if not isinstance(anchor, dict):
+                raise ApplyValidationError(f"{block.candidate_id}: literature_anchors entry must be a mapping")
+            rows.append(_resolve_anchor(dict(anchor), block.candidate_id, index, refs))
+
+    return AnchorResolveResult(report=report_path, anchors=rows)
 
 
 def _normalize_origin(origin: object, candidate_id: str) -> dict:
