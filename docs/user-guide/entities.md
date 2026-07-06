@@ -841,6 +841,65 @@ it is the authority that `science dataset register-run` reads; an optional
 output `identity_context.yaml` sidecar is assertion-only and must agree with the
 contract.
 
+#### Output Support Cardinality
+
+For aggregate outputs, `outputs[].support` declares the minimum number of
+distinct contributors required before a derived datapackage is trustworthy. The
+field is opt-in: `science validate` evaluates support cardinality only for
+workflow outputs that declare `support`, independent of strict mode and without
+nudging undeclared outputs.
+
+```yaml
+outputs:
+  - slug: os-summary
+    title: "Overall survival summary"
+    resource_names: ["os_summary"]
+    support:
+      unit: dataset
+      min: 3
+      expected: 5
+```
+
+`support.unit` is one of `dataset`, `cohort`, `sample`, or `source`. `min` is
+the hard floor and must be at least 1. `expected` is optional, must be at least
+`min`, and records the soft target for a well-supported aggregate.
+
+Support moves through a two-hop handoff:
+
+1. The workflow producer stamps each run-aggregate resource with
+   `science.support: {unit, observed}` in the runtime datapackage. `observed`
+   is the number of distinct contributing units wired into that aggregation,
+   not `max(num_present)` or another row-level completeness statistic.
+2. `science dataset register-run` reduces all resources in an opted-in output
+   to per-output datapackage `science.support` by taking the minimum observed
+   value across the listed resources.
+
+Every resource listed in an opted-in output must stamp support. This is a
+fail-closed rule for multi-resource outputs: if any listed resource is unstamped,
+registration records the per-output support as `observed: null`, and validation
+reports the missing stamp. Put ancillary non-aggregating resources in a separate
+non-opted-in output when they cannot meaningfully stamp support.
+
+Malformed producer-stamped `observed` values are preserved for diagnosis rather
+than silently repaired; validation reports them as malformed support stamps.
+
+Support gate results are:
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `aggregation-support.stamp-missing` | ERROR | An opted-in output includes at least one resource without `science.support`; validation exits 1. |
+| `aggregation-support.malformed-stamp` | ERROR | A producer-stamped `observed` value is malformed; validation exits 1. |
+| `aggregation-support.unit-mismatch` | ERROR | The declared support unit differs from a stamped resource unit; validation exits 1. |
+| `aggregation-support.below-floor` | ERROR | Observed support is below `min`; validation exits 1. |
+| `aggregation-support.below-expected` | WARN | Observed support is at or above `min` but below `expected`. |
+
+For example, an overall-survival output with `support: {unit: dataset, min: 3,
+expected: 5}` that stamps a run aggregate with `observed: 1` fails validation
+with `aggregation-support.below-floor` at ERROR severity. This catches the MM30
+style `k=1` collapse: a summary produced from one contributing dataset cannot
+pass a floor that requires at least three datasets, even if its rows contain
+many present values.
+
 A completed workflow run lives under `entities/workflow-runs/` and lists its
 upstream dataset inputs. After the run writes its aggregate runtime
 datapackage, register the derived outputs with:
