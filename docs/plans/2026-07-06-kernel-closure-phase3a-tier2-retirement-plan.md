@@ -19,26 +19,31 @@
 - The 4 **deferred** mutators — `add_article`, `add_falsification`, `add_story`, `add_paper_entity` — and their CLI commands stay untouched this phase; leave every test that uses them intact.
 - Commit after each task. Do not push (local main is ahead of origin and this is a Dropbox-synced repo).
 
+### Forward paths (already working — no new templates this phase)
+
+Every retired `graph add X` points at a forward path that **already functions today**; Phase 3a does not add or change any entity template.
+- `concept` / `observation`: `science entity create concept|observation <title>` already succeeds via the generic scaffold (verified: it writes a valid `entities/<home>/<slug>.md`). The generic `## Summary`/`## Notes` sections are semantically plain but valid.
+- `mechanism`: `MechanismEntity` enforces a ≥2-participant domain invariant, so *no* create-from-bare-title path can succeed (schema validation rejects an empty mechanism — correct fail-early behavior). Its forward path is authoring `entities/mechanisms/<slug>.md` with ≥2 `participants:` and its `propositions:`. **Any test that authors a mechanism (Tasks 7, 8) must include ≥2 participants in frontmatter or `materialize_graph` will raise.**
+
+**Deferred follow-up (NOT this phase) — template completeness.** The ideal long-term shape is a separate workstream: give every authored-core kind a semantically-correct template with `template_ready=True`, and teach `entity create` to accept relational fields (e.g. repeatable `--participant`) so relational kinds like `mechanism` gain a working create path, shrinking the generic scaffold to a rare fallback. Phase 3a deliberately does not partially implement this (a concept+observation-only pass would leave a lopsided 2-of-3 state and still couldn't create a mechanism).
+
 ---
 
 ## File Structure
 
 **Production code**
 - `science/tests/graph/test_durable_write_boundary.py` — the guard; edit `EXPECTED_DEFERRED_WRITERS` (Task 1).
-- `science/model/src/science_model/templates/{concept,observation,mechanism}.md` — new packaged templates (Task 2).
-- `science/templates/{concept,observation,mechanism}.md` — byte-identical repo-root mirror (Task 2).
-- `science/model/src/science_model/profiles/core.py` — mark 3 kinds `template_ready=True` (Task 2).
-- `science/src/science_tool/cli.py` — add `_retired_writer` (Task 3); convert 14 command bodies + relax Click validation (Task 6); prune imports (Task 12).
-- `science/src/science_tool/graph/store/mutations.py` — delete 11 functions + `_attach_edge_claims` + `_warn_on_relation_direction_mismatch` (Task 12).
-- `science/src/science_tool/graph/store/snapshot.py` — delete `import_snapshot`, `stamp_revision` (Task 12).
-- `science/src/science_tool/graph/__init__.py`, `science/src/science_tool/graph/store/__init__.py` — prune re-exports (Task 12).
+- `science/src/science_tool/cli.py` — add `_retired_writer` (Task 2); convert 14 command bodies + relax Click validation (Task 5); prune imports (Task 11).
+- `science/src/science_tool/graph/store/mutations.py` — delete 11 functions + `_attach_edge_claims` + `_warn_on_relation_direction_mismatch` (Task 11).
+- `science/src/science_tool/graph/store/snapshot.py` — delete `import_snapshot`, `stamp_revision` (Task 11).
+- `science/src/science_tool/graph/__init__.py`, `science/src/science_tool/graph/store/__init__.py` — prune re-exports (Task 11).
 
 **Tests**
-- `science/tests/conftest.py` — add `build_entity_graph` helper (Task 4).
-- CLI-invocation: `test_graph_cli.py` (Tasks 5, 6), `test_entities_cli.py`, `test_distill.py`, `test_membership_bridge.py` (Task 6).
-- Direct-import: `test_causal.py` (Task 7), `test_graph_export.py` (Task 8), `test_paper_model.py` + `test_graph_materialize.py` (Task 9), `test_provenance_evidence.py` + `test_membership_bridge.py` + `test_inquiry.py` (Task 10), `test_meta_reference.py` + `test_layered_claim_migration.py` (Task 11).
+- `science/tests/conftest.py` — add `build_entity_graph` helper (Task 3).
+- CLI-invocation: `test_graph_cli.py` (Tasks 4, 5), `test_entities_cli.py`, `test_distill.py`, `test_membership_bridge.py` (Task 5).
+- Direct-import: `test_causal.py` (Task 6), `test_graph_export.py` (Task 7), `test_paper_model.py` + `test_graph_materialize.py` (Task 8), `test_provenance_evidence.py` + `test_membership_bridge.py` + `test_inquiry.py` (Task 9), `test_meta_reference.py` + `test_layered_claim_migration.py` (Task 10).
 
-**Docs/skills** (Task 13): `commands/{interpret-results,sketch-model,specify-model,plan-pipeline}.md`, `codex-skills/science-{interpret-results,sketch-model,specify-model,plan-pipeline}/SKILL.md`, `docs/conventions/cli-behavior.md`, `docs/user-guide/{cli-and-workflows,entities,epistemic-model,graph-and-derived-state}.md`.
+**Docs/skills** (Task 12): `commands/{interpret-results,sketch-model,specify-model,plan-pipeline}.md`, `codex-skills/science-{interpret-results,sketch-model,specify-model,plan-pipeline}/SKILL.md`, `docs/conventions/cli-behavior.md`, `docs/user-guide/{cli-and-workflows,entities,epistemic-model,graph-and-derived-state}.md`.
 
 ---
 
@@ -64,7 +69,7 @@ EXPECTED_DEFERRED_WRITERS = {
 }
 ```
 
-Also update the module docstring's "Phase 1 … 18 deferred writers" framing to note the ledger now lists only the 4 Phase-3b-deferred writers and that Phase 3a is RED until Task 12 deletes the 14 retiring functions.
+Also update the module docstring's "Phase 1 … 18 deferred writers" framing to note the ledger now lists only the 4 Phase-3b-deferred writers and that Phase 3a is RED until Task 11 deletes the 14 retiring functions.
 
 - [ ] **Step 2: Run the guard — expect RED with exactly 14 unexpected sites**
 
@@ -81,209 +86,14 @@ git commit -m "test(kernel-closure): guard RED — shrink deferred-writer ledger
 
 ---
 
-## Task 2: Forward-path templates + descriptor gate
-
-Each retired `graph add X` must point to a real authoring path. `concept`, `observation`, `mechanism` are compiler-loadable but template-less; add packaged templates (what `Renderer._read_template` reads via `importlib.resources` when no `template_root` is given) + the byte-identical repo-root mirror, and mark the kinds `template_ready` so `MIGRATED_KINDS` (derived from `template_ready`) includes them.
-
-**Files:**
-- Create: `science/model/src/science_model/templates/concept.md`, `.../observation.md`, `.../mechanism.md`
-- Create: `science/templates/concept.md`, `science/templates/observation.md`, `science/templates/mechanism.md` (byte-identical mirror)
-- Modify: `science/model/src/science_model/profiles/core.py` (concept ~L312, observation ~L100, mechanism ~L206)
-- Test: `science/tests/test_entities_cli.py` (add create tests), `science/tests/test_kind_map_equivalence.py` (gate already asserts `set(MIGRATED_KINDS) == FROZEN` — update its frozen set)
-
-**Interfaces:**
-- Produces: working `science entity create concept|observation|mechanism`, which Task 6's retirement messages point to.
-
-- [ ] **Step 1: Write the failing create test**
-
-In `science/tests/test_entities_cli.py`, add (mirroring the existing `test_entity_create_concept_writes_source` style):
-
-```python
-def test_entity_create_observation_and_mechanism_scaffold_from_packaged_template(tmp_path: Path) -> None:
-    seed_project(tmp_path)
-    runner = CliRunner()
-    for kind in ("concept", "observation", "mechanism"):
-        result = runner.invoke(main, ["entity", "create", kind, f"Demo {kind}"], obj={"project_root": tmp_path})
-        assert result.exit_code == 0, result.output
-        assert f"{kind}:" in result.output
-```
-
-- [ ] **Step 2: Run it — expect FAIL (packaged template not found)**
-
-Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_entities_cli.py::test_entity_create_observation_and_mechanism_scaffold_from_packaged_template -q`
-Expected: FAIL — `EntityTemplateError: Packaged template not found: science_model/templates/observation.md` (concept/observation/mechanism all currently template-less).
-
-- [ ] **Step 3: Author the three packaged templates**
-
-`science/model/src/science_model/templates/concept.md` (slug strategy — model on `proposition.md`; reference kind, statuses `active`/`deprecated`):
-
-```markdown
----
-id: "concept:{{slug}}"
-kind: "concept"
-title: "{{title}}"
-status: "{{status}}"
-related: []
-source_refs: []
-created: "{{created}}"
-updated: "{{updated}}"
-_template:
-  frontmatter:
-    id: { from: entity_id }
-    kind: { default: "concept" }
-    title: { from: title }
-    status: { from: status }
-    related: { from: related }
-    source_refs: { from: source_refs }
-    created: { from: created }
-    updated: { from: updated }
-  sections:
-    - { key: definition, name: "Definition", required: true }
-    - { key: notes, name: "Notes", required: false }
----
-
-# {{title}}
-
-## Definition
-
-<!-- One or two sentences naming this concept as the project uses it. -->
-
-## Notes
-
-<!-- Optional: scope, synonyms, ontology cross-references (author ontology CURIEs via `ontology_terms:` for a sci:about bridge edge). -->
-```
-
-`science/model/src/science_model/templates/observation.md` (slug strategy; epistemic; statuses `active`/`superseded`/`retired`/`archived`):
-
-```markdown
----
-id: "observation:{{slug}}"
-kind: "observation"
-title: "{{title}}"
-status: "{{status}}"
-related: []
-source_refs: []
-created: "{{created}}"
-updated: "{{updated}}"
-_template:
-  frontmatter:
-    id: { from: entity_id }
-    kind: { default: "observation" }
-    title: { from: title }
-    status: { from: status }
-    related: { from: related }
-    source_refs: { from: source_refs }
-    created: { from: created }
-    updated: { from: updated }
-  sections:
-    - { key: observation, name: "Observation", required: true }
-    - { key: source, name: "Source", required: true }
----
-
-# {{title}}
-
-## Observation
-
-<!-- The concrete empirical fact: metric, value, and conditions in prose. -->
-
-## Source
-
-<!-- Data from: data-package:<id> or dataset:<id> (authored via source_refs). -->
-```
-
-`science/model/src/science_model/templates/mechanism.md` (numeric strategy — model on `finding.md`; participants/propositions frontmatter are read by the compiler for `sci:hasParticipant`/`sci:hasProposition`):
-
-```markdown
----
-id: "mechanism:{{nn}}-{{slug}}"
-kind: "mechanism"
-title: "{{title}}"
-status: "{{status}}"
-participants: []
-propositions: []
-related: []
-source_refs: []
-created: "{{created}}"
-updated: "{{updated}}"
-_template:
-  frontmatter:
-    id: { from: entity_id }
-    kind: { default: "mechanism" }
-    title: { from: title }
-    status: { from: status }
-    participants: { default: [] }
-    propositions: { default: [] }
-    related: { from: related }
-    source_refs: { from: source_refs }
-    created: { from: created }
-    updated: { from: updated }
-  sections:
-    - { key: summary, name: "Summary", required: true }
-    - { key: participants, name: "Participants", required: true }
-    - { key: propositions, name: "Propositions", required: true }
----
-
-# {{title}}
-
-## Summary
-
-<!-- The explanatory structure this mechanism names. -->
-
-## Participants
-
-<!-- List the typed entities (concepts, variables) this mechanism links, e.g.:
-- concept:<id>
--->
-
-## Propositions
-
-<!-- List the proposition refs this mechanism explains, e.g.:
-- proposition:<id>
--->
-```
-
-- [ ] **Step 4: Mirror to repo-root `templates/` byte-identically**
-
-```bash
-cd science
-cp model/src/science_model/templates/concept.md templates/concept.md
-cp model/src/science_model/templates/observation.md templates/observation.md
-cp model/src/science_model/templates/mechanism.md templates/mechanism.md
-# verify identical
-for k in concept observation mechanism; do diff model/src/science_model/templates/$k.md templates/$k.md && echo "$k OK"; done
-```
-
-- [ ] **Step 5: Mark the three kinds `template_ready` in CORE_PROFILE**
-
-In `science/model/src/science_model/profiles/core.py`, add `template_ready=True,` to the `EntityKind(name="concept", …)`, `EntityKind(name="observation", …)`, and `EntityKind(name="mechanism", …)` descriptors (place the line alongside `category=KindCategory.AUTHORED_CORE,`, matching how `finding`/`interpretation`/`theme` set it).
-
-- [ ] **Step 6: Update the MIGRATED_KINDS equivalence gate**
-
-`MIGRATED_KINDS` is derived from `template_ready`, so `tests/test_kind_map_equivalence.py`'s frozen expectation now needs the 3 new members. Add `"concept"`, `"observation"`, `"mechanism"` to that test's `FROZEN_MIGRATED_KINDS` set (the test asserts `set(MIGRATED_KINDS) == FROZEN_…`).
-
-- [ ] **Step 7: Run the create test + gate + model suite — expect PASS**
-
-Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_entities_cli.py::test_entity_create_observation_and_mechanism_scaffold_from_packaged_template tests/test_kind_map_equivalence.py -q`
-Then: `cd science/model && uv run --frozen pytest -q`
-Expected: PASS (templates render; reconciliation/equivalence gate green).
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add science/model/src/science_model/templates science/templates science/model/src/science_model/profiles/core.py science/tests/test_entities_cli.py science/tests/test_kind_map_equivalence.py
-git commit -m "feat(entities): add concept/observation/mechanism create templates (Phase 3a forward paths)"
-```
-
----
-
-## Task 3: Generic `_retired_writer` helper
+## Task 2: Generic `_retired_writer` helper
 
 **Files:**
 - Modify: `science/src/science_tool/cli.py` (near the existing `_retired_mutator`, ~L3013)
 - Test: `science/tests/test_graph_cli.py`
 
 **Interfaces:**
-- Produces: `_retired_writer(command: str, forward_path: str) -> click.ClickException` — used by every retired command body in Task 6.
+- Produces: `_retired_writer(command: str, forward_path: str) -> click.ClickException` — used by every retired command body in Task 5.
 
 - [ ] **Step 1: Write the failing helper test**
 
@@ -330,23 +140,22 @@ git commit -m "feat(cli): add generic _retired_writer error helper (Phase 3a)"
 
 ---
 
-## Task 4: Shared `build_entity_graph` test helper
+## Task 3: Shared `build_entity_graph` test helper
 
 **Files:**
 - Modify: `science/tests/conftest.py` (add after `build_inquiry_graph`, ~L95)
+- Test: `science/tests/test_conftest_helpers.py` (create)
 
 **Interfaces:**
-- Consumes: `tests/_fixtures/entity_helpers.write_markdown_entity`, `science_tool.graph.materialize.materialize_graph`.
-- Produces: `build_entity_graph(project_root: Path, entities: list[dict], relations: list[dict] | None = None) -> Path` returning the compiled `knowledge/graph.trig` path. Each `entities` item is `{"kind": str, "id": str, "frontmatter": dict, "body": str}`; each `relations` item is a `SourceRelation`-shaped dict written to `knowledge/sources/<local>/relations.yaml`.
+- Consumes: `tests/_fixtures/entity_helpers.{seed_project,write_markdown_entity}`, `science_tool.graph.materialize.materialize_graph`, `science_tool.graph.sources.{resolve_local_profile_name,local_profile_sources_dir}`.
+- Produces: `build_entity_graph(project_root: Path, entities: list[dict], relations: list[dict] | None = None) -> Path` returning the compiled `knowledge/graph.trig` path. Each `entities` item is `{"kind": str, "id": str, "frontmatter": dict, "body": str}`; each `relations` item is a `SourceRelation`-shaped dict written to the configured local profile's `relations.yaml`.
 
-- [ ] **Step 1: Write the failing helper test**
+- [ ] **Step 1: Write the failing helper tests**
 
-Add to `science/tests/conftest.py`-adjacent `tests/test_conftest_helpers.py` (create it):
+Create `science/tests/test_conftest_helpers.py`. Assert **both** an authored node **and** an authored relation triple (the relation assertion is what catches a mis-targeted `relations.yaml`):
 
 ```python
 from pathlib import Path
-
-from rdflib import Dataset, URIRef
 
 from conftest import build_entity_graph
 from science_tool.graph.store import _load_dataset
@@ -360,6 +169,20 @@ def test_build_entity_graph_emits_authored_concept(tmp_path: Path) -> None:
     ds = _load_dataset(graph_path)
     subjects = {str(s) for s in ds.subjects()}
     assert any(s.endswith("concept/drug") for s in subjects)
+
+
+def test_build_entity_graph_emits_authored_relation(tmp_path: Path) -> None:
+    graph_path = build_entity_graph(
+        tmp_path,
+        entities=[
+            {"kind": "concept", "id": "brca1", "frontmatter": {"title": "BRCA1"}},
+            {"kind": "concept", "id": "tp53", "frontmatter": {"title": "TP53"}},
+        ],
+        relations=[{"subject": "concept:brca1", "predicate": "skos:broader", "object": "concept:tp53", "graph_layer": "graph/knowledge"}],
+    )
+    ds = _load_dataset(graph_path)
+    preds = {str(p) for _, p, _ in ds.triples((None, None, None))}
+    assert any(p.endswith("broader") for p in preds), "authored relation was not emitted — check relations.yaml path"
 ```
 
 - [ ] **Step 2: Run it — expect FAIL (import error)**
@@ -368,6 +191,8 @@ Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_c
 Expected: FAIL — `ImportError: cannot import name 'build_entity_graph'`.
 
 - [ ] **Step 3: Implement `build_entity_graph` in `tests/conftest.py`**
+
+The `relations.yaml` MUST land in the configured local-profile source dir — the loader reads `local_profile_sources_dir(project_root, local_profile=…) / "relations.yaml"` (`graph/sources.py:1049`, `:1332`), which resolves to `knowledge/sources/<local_profile>/relations.yaml`, NOT `knowledge/sources/relations/`. Use the resolver so a relations file is never silently ignored:
 
 ```python
 def build_entity_graph(
@@ -382,13 +207,18 @@ def build_entity_graph(
     runs the compiler, returning the compiled ``knowledge/graph.trig`` path.
     Each ``entities`` item: {kind, id, frontmatter(dict, sans id/kind), body}.
     Each ``relations`` item: a SourceRelation-shaped dict
-    {subject, predicate, object, graph_layer?}.
+    {subject, predicate, object, graph_layer?}. Mechanism entities MUST carry
+    >=2 ``participants`` (schema invariant) or ``materialize_graph`` will raise.
     """
     import yaml
 
     from _fixtures.entity_helpers import seed_project, write_markdown_entity
     from science_model.profiles.core import CORE_PROFILE
     from science_tool.graph.materialize import materialize_graph
+    from science_tool.graph.sources import (
+        local_profile_sources_dir,
+        resolve_local_profile_name,
+    )
 
     if not (project_root / "science.yaml").exists():
         seed_project(project_root)
@@ -399,7 +229,8 @@ def build_entity_graph(
         fm = {"id": f"{kind}:{ent['id']}", "kind": kind, **ent.get("frontmatter", {})}
         write_markdown_entity(project_root, f"{home}/{ent['id']}.md", fm, ent.get("body", ""))
     if relations:
-        rel_dir = project_root / "knowledge" / "sources" / "relations"
+        local_profile = resolve_local_profile_name(project_root)
+        rel_dir = local_profile_sources_dir(project_root, local_profile=local_profile)
         rel_dir.mkdir(parents=True, exist_ok=True)
         (rel_dir / "relations.yaml").write_text(yaml.safe_dump({"relations": relations}), encoding="utf-8")
     return materialize_graph(project_root)
@@ -407,7 +238,7 @@ def build_entity_graph(
 
 (If `write_markdown_entity`/`seed_project` signatures differ from `(root, rel_path, frontmatter, body)` / `(root)`, adapt to the actual signatures in `tests/_fixtures/entity_helpers.py` — do not change the fixture.)
 
-- [ ] **Step 4: Run it — expect PASS**
+- [ ] **Step 4: Run it — expect PASS (both node and relation assertions)**
 
 Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_conftest_helpers.py -q`
 Expected: PASS.
@@ -421,15 +252,15 @@ git commit -m "test(conftest): add build_entity_graph source-authoring helper (P
 
 ---
 
-## Task 5: Migrate `test_graph_cli.py` "setup-only" tests to authored source
+## Task 4: Migrate `test_graph_cli.py` "setup-only" tests to authored source
 
-The ~30 `test_graph_cli` tests that use `graph add *` **only to seed state** for query/summary/validate/coverage/gaps/uncertainty/dashboard/neighborhood/question-summary surfaces (which STAY). Migrate their setup to authored source **before** the bodies are retired (Task 6), so they no longer invoke `graph add *`. Do this while `graph add *` still works, so each converted test stays green.
+The ~30 `test_graph_cli` tests that use `graph add *` **only to seed state** for query/summary/validate/coverage/gaps/uncertainty/dashboard/neighborhood/question-summary surfaces (which STAY). Migrate their setup to authored source **before** the bodies are retired (Task 5), so they no longer invoke `graph add *`. Do this while `graph add *` still works, so each converted test stays green.
 
 **Files:**
 - Modify: `science/tests/test_graph_cli.py` (setup-only tests + helpers `_setup_evidence_graph`, `_setup_claim_backed_hypothesis_evidence_graph`)
 
 **Interfaces:**
-- Consumes: `build_entity_graph` (Task 4), `build_inquiry_graph` (existing), `entity create` CLI.
+- Consumes: `build_entity_graph` (Task 3), `build_inquiry_graph` (existing), `entity create` CLI.
 
 - [ ] **Step 1: Enumerate and convert setup per the audit**
 
@@ -475,7 +306,7 @@ Keep the bridge *membership* (`cito:discusses`) coverage where it is source-emit
 - [ ] **Step 3: Run the migrated file — expect PASS (bodies still live)**
 
 Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_graph_cli.py -q`
-Expected: PASS. (The `graph add *` unit-under-test tests are still present and green here — they are handled in Task 6.)
+Expected: PASS. (The `graph add *` unit-under-test tests are still present and green here — they are handled in Task 5.)
 
 - [ ] **Step 4: Commit**
 
@@ -486,7 +317,7 @@ git commit -m "test(graph-cli): migrate setup-only tests to authored source (Pha
 
 ---
 
-## Task 6: Retire the 14 CLI bodies + dispose CLI-invocation tests
+## Task 5: Retire the 14 CLI bodies + dispose CLI-invocation tests
 
 Convert every retired command body to `raise _retired_writer(...)`, relax obsolete Click validation so the message always surfaces, and update the remaining CLI-invocation tests. The Python functions still exist (guard stays RED) — this task retires the **surface**.
 
@@ -495,11 +326,11 @@ Convert every retired command body to `raise _retired_writer(...)`, relax obsole
 - Modify: `science/tests/test_graph_cli.py`, `science/tests/test_entities_cli.py`, `science/tests/test_distill.py`, `science/tests/test_membership_bridge.py`
 
 **Interfaces:**
-- Consumes: `_retired_writer` (Task 3).
+- Consumes: `_retired_writer` (Task 2).
 
 - [ ] **Step 1: Convert the 11 retiring `graph add` bodies**
 
-For each retiring subcommand, replace the body with a single `raise`. Keep the `@graph_add.command(...)` decorator and function signature, but **strip obsolete validation** so the raise is always reached: drop `required=True`, `type=click.Choice(...)`, and any `@click.argument` requiredness that would preempt the body (make arguments `required=False`). Forward paths:
+For each retiring subcommand, replace the body with a single `raise`. Keep the `@graph_add.command(...)` decorator and function signature, but **strip obsolete validation** so the raise is always reached: drop `required=True`, `type=click.Choice(...)`, and any `@click.argument` requiredness that would preempt the body (make arguments `required=False`). Forward paths (all point at paths that work today — see Global Constraints "Forward paths"):
 
 | command | `_retired_writer(command, forward_path)` |
 |---|---|
@@ -510,7 +341,7 @@ For each retiring subcommand, replace the body with a single `raise`. Keep the `
 | `graph add finding` | `"graph add finding"`, `"Run \`science entity create finding <title>\`"` |
 | `graph add interpretation` | `"graph add interpretation"`, `"Run \`science interpretations create <title>\`"` |
 | `graph add discussion` | `"graph add discussion"`, `"Run \`science discussions create <title>\`"` |
-| `graph add mechanism` | `"graph add mechanism"`, `"Run \`science entity create mechanism <title>\`"` |
+| `graph add mechanism` | `"graph add mechanism"`, `"Author entities/mechanisms/<slug>.md with >=2 participants (concepts/variables) and its propositions"` |
 | `graph add hypothesis` | `"graph add hypothesis"`, `"Run \`science hypotheses create <title>\`"` |
 | `graph add question` | `"graph add question"`, `"Run \`science questions create <title>\`"` |
 | `graph add edge` | `"graph add edge"`, `"Author the relation in \`relations.yaml\` (or \`relations:\` frontmatter) with the target graph_layer; claim-cited edges use inquiry flow_edges"` |
@@ -535,7 +366,42 @@ def graph_add_concept(  # signature unchanged; options may lose Choice/required
 - `graph_stamp_revision` (`cli.py:1800`): body → `raise _retired_writer("graph stamp-revision", "The compiler stamps revisions; run")`.
 - `graph_migrate_addresses` (`cli.py:1658`): body → `raise _retired_writer("graph migrate-addresses", "Address direction is canonical at build; run")`.
 
-- [ ] **Step 3: Update CLI-invocation tests**
+- [ ] **Step 3: Add a parametrized retirement test over ALL 14 commands**
+
+Rather than one-per-family, guard every retired command's surface directly. Add to `science/tests/test_graph_cli.py`:
+
+```python
+import pytest
+
+
+@pytest.mark.parametrize(
+    "argv, needle",
+    [
+        (["graph", "add", "concept", "X"], "graph add concept is retired"),
+        (["graph", "add", "proposition", "X"], "graph add proposition is retired"),
+        (["graph", "add", "observation", "X"], "graph add observation is retired"),
+        (["graph", "add", "evidence", "hypothesis:h1", "--stance", "supports"], "graph add evidence is retired"),
+        (["graph", "add", "finding", "X"], "graph add finding is retired"),
+        (["graph", "add", "interpretation", "X"], "graph add interpretation is retired"),
+        (["graph", "add", "discussion", "X"], "graph add discussion is retired"),
+        (["graph", "add", "mechanism", "X"], "graph add mechanism is retired"),
+        (["graph", "add", "hypothesis", "X"], "graph add hypothesis is retired"),
+        (["graph", "add", "question", "q01", "--text", "x"], "graph add question is retired"),
+        (["graph", "add", "edge", "concept/a", "skos:broader", "concept/b"], "graph add edge is retired"),
+        (["graph", "import", "does-not-exist.ttl"], "graph import is retired"),
+        (["graph", "stamp-revision"], "graph stamp-revision is retired"),
+        (["graph", "migrate-addresses"], "graph migrate-addresses is retired"),
+    ],
+)
+def test_retired_writer_commands_all_report_retirement(tmp_path: Path, argv: list[str], needle: str) -> None:
+    result = CliRunner().invoke(main, argv, obj={"project_root": tmp_path})
+    assert result.exit_code != 0, result.output
+    assert needle in result.output  # not a Click validation/path-exists error
+```
+
+The `graph import` row doubles as the "message wins over the old `exists=True` path check" assertion (the path does not exist, yet the retirement message — not a Click path error — surfaces). Adjust each row's minimal argv if a command's required positional differs; the point is that the retirement message surfaces for every one.
+
+- [ ] **Step 4: Delete the mutator-only unit-under-test tests + convert the ephemerality tests**
 
 - `test_entities_cli.py` — the 5 ephemerality/tip tests (`test_graph_add_question_mentions_entity_create`, `…_proposition/observation/finding/evidence_warns_about_ephemerality`): assert the retirement message + non-zero exit instead of the old warning text, e.g.:
 
@@ -555,35 +421,21 @@ def test_graph_add_question_is_retired(tmp_path: Path) -> None:
 # `graph migrate-addresses` writers. Source-authored equivalents (node shape,
 # causal edges, evidence lines, cito:discusses bridges) are covered by
 # test_graph_materialize / test_causal / test_graph_export. Mutator-only shapes
-# (design §5.1) have no source form and are intentionally gone.
-```
-
-Keep exactly one retirement-message assertion per retired command family (concept/edge/proposition/mechanism/import/stamp-revision/migrate-addresses) so the retired surface stays guarded, e.g.:
-
-```python
-def test_graph_add_edge_is_retired(tmp_path: Path) -> None:
-    result = CliRunner().invoke(main, ["graph", "add", "edge", "concept/a", "skos:broader", "concept/b"], obj={"project_root": tmp_path})
-    assert result.exit_code != 0
-    assert "graph add edge is retired" in result.output
-
-
-def test_graph_import_is_retired_regardless_of_missing_path(tmp_path: Path) -> None:
-    result = CliRunner().invoke(main, ["graph", "import", "does-not-exist.ttl"], obj={"project_root": tmp_path})
-    assert result.exit_code != 0
-    assert "graph import is retired" in result.output  # not a Click path-exists error
+# (design §5.1) have no source form and are intentionally gone. Retired command
+# surfaces stay guarded by test_retired_writer_commands_all_report_retirement.
 ```
 
 Leave the 3 DEFERRED tests (`test_graph_add_paper_claim_hypothesis_records_provenance` [uses `graph add article`], `test_graph_add_story_warns_…`, `test_graph_add_paper_warns_…`) untouched.
 
 - `test_distill.py` — the 3 `test_graph_import_*` tests become one `test_graph_import_is_retired` message assertion (distill has no live dependency on `import_snapshot`; the distill unit/CLI tests are untouched).
-- `test_membership_bridge.py::TestBridgeRoleCli::test_bridge_role_background_via_cli` — reseed via `entity create` / authored proposition (`bridge_between` + `bridge_role: background`) + `graph build`, then assert the `BundleMembership` role; or delete it with a pointer to the migrated `TestBridgeBetweenMembership` (Task 10).
+- `test_membership_bridge.py::TestBridgeRoleCli::test_bridge_role_background_via_cli` — reseed via `entity create` / authored proposition (`bridge_between` + `bridge_role: background`) + `graph build`, then assert the `BundleMembership` role; or delete it with a pointer to the migrated `TestBridgeBetweenMembership` (Task 9).
 
-- [ ] **Step 4: Run the CLI suites — expect PASS**
+- [ ] **Step 5: Run the CLI suites — expect PASS**
 
 Run: `cd science && PYTHONPATH=src:model/src uv run --frozen pytest tests/test_graph_cli.py tests/test_entities_cli.py tests/test_distill.py tests/test_membership_bridge.py -q`
-Expected: PASS. Guard still RED (functions not yet deleted) — do not run it as a gate here.
+Expected: PASS (including all 14 rows of the parametrized retirement test). Guard still RED (functions not yet deleted) — do not run it as a gate here.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add science/src/science_tool/cli.py science/tests/test_graph_cli.py science/tests/test_entities_cli.py science/tests/test_distill.py science/tests/test_membership_bridge.py
@@ -592,7 +444,7 @@ git commit -m "feat(cli): retire 14 graph-writer command surfaces via _retired_w
 
 ---
 
-## Task 7: Migrate `test_causal.py`
+## Task 6: Migrate `test_causal.py`
 
 Biggest direct-import migration. Concepts → authored `concepts/*.md`; `scic:causes`/`confounds` edges → `relations.yaml` (`graph/causal`); claim-cited edges (`TestEdgeProvenance`, export-provenance) → inquiry `flow_edges` with `claim_refs` referencing authored propositions.
 
@@ -671,18 +523,18 @@ git commit -m "test(causal): migrate to authored source; drop mutator-only claim
 
 ---
 
-## Task 8: Migrate `test_graph_export.py`
+## Task 7: Migrate `test_graph_export.py`
 
 **Files:**
 - Modify: `science/tests/test_graph_export.py`
 
 - [ ] **Step 1: Rebuild the shared `graph_path` fixture from source**
 
-Replace the fixture's `add_concept`/`add_hypothesis`/`add_edge`/`add_proposition` seeding with: authored `concepts/{drug,recovery,kras}.md` + `hypothesis/{h1,h2}.md` + `proposition/drug_causes_recovery_evidence.md`; the `scic:causes` causal edge via `relations.yaml` (`graph/causal`); and the claim-backed causal edge via an inquiry `flow_edge` with `claim_refs`. Keep the two `build_inquiry_graph` calls (test_dag, dangling_dag) as-is.
+Replace the fixture's `add_concept`/`add_hypothesis`/`add_edge`/`add_proposition` seeding with: authored `concepts/{drug,recovery,kras}.md` + `hypothesis/{h1,h2}.md` + `proposition/drug_causes_recovery_evidence.md`; the `scic:causes` causal edge via `relations.yaml` (`graph/causal`); and the claim-backed causal edge via an inquiry `flow_edge` with `claim_refs`. Keep the two `build_inquiry_graph` calls (test_dag, dangling_dag) as-is. Any authored mechanism MUST include ≥2 `participants` (schema invariant) — see Step 2.
 
 - [ ] **Step 2: Keep source-emitted assertions; delete payload-overlay ones**
 
-Keep: base nodes/edges/layers, `edge.graph_layer == "graph/causal"`, causal-overlay `kind == "causes"`/`confounds`, mechanism-node test (`add_mechanism` → author `mechanisms/*.md`), missing-referent warnings. Delete-with-pointer the evidence-overlay tests reading the mutator-only payload (`test_export_graph_payload_includes_evidence_overlay_for_claim_backed_edge` asserting `bridge_between`/`statistical_support`/`pre_registrations`). Tests that build via raw TrIG / `_load_dataset` / `_build_dataset_from_sources` are already source-path — leave them.
+Keep: base nodes/edges/layers, `edge.graph_layer == "graph/causal"`, causal-overlay `kind == "causes"`/`confounds`, mechanism-node test (`add_mechanism` → author `mechanisms/*.md` with ≥2 `participants` + `propositions`), missing-referent warnings. Delete-with-pointer the evidence-overlay tests reading the mutator-only payload (`test_export_graph_payload_includes_evidence_overlay_for_claim_backed_edge` asserting `bridge_between`/`statistical_support`/`pre_registrations`). Tests that build via raw TrIG / `_load_dataset` / `_build_dataset_from_sources` are already source-path — leave them.
 
 - [ ] **Step 3: Run + commit**
 
@@ -694,7 +546,7 @@ git commit -m "test(graph-export): rebuild fixture from source; drop payload ove
 
 ---
 
-## Task 9: Migrate `test_paper_model.py` + `test_graph_materialize.py`
+## Task 8: Migrate `test_paper_model.py` + `test_graph_materialize.py`
 
 **Files:**
 - Modify: `science/tests/test_paper_model.py`, `science/tests/test_graph_materialize.py`
@@ -725,7 +577,7 @@ git commit -m "test(paper-model,materialize): migrate/prune retired-mutator test
 
 ---
 
-## Task 10: Migrate `test_provenance_evidence.py` + `test_membership_bridge.py` + `test_inquiry.py`
+## Task 9: Migrate `test_provenance_evidence.py` + `test_membership_bridge.py` + `test_inquiry.py`
 
 **Files:**
 - Modify: `science/tests/test_provenance_evidence.py`, `science/tests/test_membership_bridge.py`, `science/tests/test_inquiry.py`
@@ -752,7 +604,7 @@ git commit -m "test(evidence,bridge,inquiry): migrate to authored source (Phase 
 
 ---
 
-## Task 11: Migrate `test_meta_reference.py` + `test_layered_claim_migration.py`
+## Task 10: Migrate `test_meta_reference.py` + `test_layered_claim_migration.py`
 
 **Files:**
 - Modify: `science/tests/test_meta_reference.py`, `science/tests/test_layered_claim_migration.py`
@@ -776,7 +628,7 @@ git commit -m "test(meta-ref,layered-claim): migrate to authored source; retarge
 
 ---
 
-## Task 12: Delete the writers + prune re-exports → guard GREEN
+## Task 11: Delete the writers + prune re-exports → guard GREEN
 
 Now that no test imports the retiring functions, delete them and prune every export. This is the change that turns the guard GREEN.
 
@@ -818,7 +670,7 @@ git commit -m "refactor(kernel-closure): delete 14 retired graph writers + prune
 
 ---
 
-## Task 13: Docs / skills sweep + final gate
+## Task 12: Docs / skills sweep + final gate
 
 `test_command_docs` / `test_codex_skills` enforce doc guidance; repoint the live surfaces that still instruct `graph add *` / `graph import` / `graph stamp-revision` / `graph migrate-addresses` to source authoring, and run the full gate.
 
@@ -828,7 +680,7 @@ git commit -m "refactor(kernel-closure): delete 14 retired graph writers + prune
 
 - [ ] **Step 1: Repoint each live surface**
 
-Replace `science graph add <kind> …` instructions with the durable path (`science entity create <kind>` / `science <kind>s create` / edit `entities/<kind>/*.md` / `relations:` + `science graph build`). Replace `science graph import` / `graph stamp-revision` / `graph migrate-addresses` mentions with the build-from-source guidance. Regenerate committed codex skills if they are generated (`generate_codex_skills`) so committed == generated.
+Replace `science graph add <kind> …` instructions with the durable path (`science entity create <kind>` / `science <kind>s create` / edit `entities/<kind>/*.md` / `relations:` + `science graph build`); for `mechanism`, point at authoring `entities/mechanisms/<slug>.md` with ≥2 participants. Replace `science graph import` / `graph stamp-revision` / `graph migrate-addresses` mentions with the build-from-source guidance. Regenerate committed codex skills if they are generated (`generate_codex_skills`) so committed == generated.
 
 - [ ] **Step 2: Run doc guards + full gate**
 
@@ -853,12 +705,14 @@ git commit -m "docs(kernel-closure): repoint graph-writer guidance to source aut
 
 ## Self-Review Notes (coverage against the design)
 
-- Guard RED→GREEN: Task 1 (RED) → Task 12 (GREEN). ✓ (§10)
-- Generic `_retired_writer` + relaxed Click validation: Tasks 3, 6. ✓ (§6.1, §6.2)
-- Forward-path templates (packaged + mirror + reconciliation gate): Task 2. ✓ (§7)
-- Function deletion + dead helpers + re-export prune: Task 12. ✓ (§6.3, §6.4)
-- Test disposition = migrate source-emitted / delete mutator-only-with-pointer: Tasks 5-11 apply the §5.1 table. ✓ (§8)
-- Deferred mutators (article/falsification/story/paper) untouched: Global Constraints + Tasks 6, 7, 9. ✓ (§3)
-- Docs/skills sweep: Task 13. ✓ (§9)
-- No "byte-identical" claim; success = no source-built consumer regression: reflected in Task 12 gate + this plan's Architecture. ✓ (§2, §11)
-- External-importer preflight (§6.5): the product surface is the `science` CLI, not the package; Task 12 Step 3 (ruff) plus the full suite catch any internal consumer. If a `~/d/science-commons` / `meta/` grep for the 14 names is desired before Task 12, run it as a pre-check — expected clean.
+- Guard RED→GREEN: Task 1 (RED) → Task 11 (GREEN). ✓ (§10)
+- Generic `_retired_writer` + relaxed Click validation: Tasks 2, 5. ✓ (§6.1, §6.2)
+- Forward paths point at already-working authoring commands; NO new templates this phase (concept/observation `entity create` already works; mechanism authored with ≥2 participants). Template completeness + participant-aware create captured as a deferred follow-up (Global Constraints). ✓ (supersedes §7 — see note below)
+- All 14 retired command surfaces guarded by one parametrized test (Task 5 Step 3) — covers `hypothesis`/`interpretation`/`discussion` that per-family coverage would have missed. ✓
+- Function deletion + dead helpers + re-export prune: Task 11. ✓ (§6.3, §6.4)
+- Test disposition = migrate source-emitted / delete mutator-only-with-pointer: Tasks 4-10 apply the §5.1 table. ✓ (§8)
+- Deferred mutators (article/falsification/story/paper) untouched: Global Constraints + Tasks 5, 6, 8. ✓ (§3)
+- Docs/skills sweep: Task 12. ✓ (§9)
+- No "byte-identical" claim; success = no source-built consumer regression: reflected in Task 11 gate + this plan's Architecture. ✓ (§2, §11)
+- **Divergence from design §7:** the design proposed adding concept/observation/mechanism forward-path templates. Implementation review found the forward paths already function without them (generic scaffold) and that `entity create mechanism <title>` cannot succeed under the ≥2-participant invariant, so a partial template pass would be lopsided. Phase 3a therefore ships zero template changes and records the ideal (full template coverage + participant-aware `entity create`) as a separate follow-up. Update design §7 to match, or track the divergence in the follow-up.
+- External-importer preflight (§6.5): the product surface is the `science` CLI, not the package; Task 11 Step 3 (ruff) plus the full suite catch any internal consumer. If a `~/d/science-commons` / `meta/` grep for the 14 names is desired before Task 11, run it as a pre-check — expected clean.
