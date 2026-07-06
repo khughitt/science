@@ -1026,7 +1026,7 @@ def test_graph_neighborhood_query_supports_json_format() -> None:
 # graph-add propositions; authored proposition sources emit labels instead.
 
 
-def _setup_evidence_graph(runner: CliRunner) -> None:
+def _setup_evidence_graph() -> None:
     """Helper: author hypothesis H3 with supporting and disputing evidence lines."""
     build_entity_graph(
         Path.cwd(),
@@ -1050,7 +1050,7 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
     )
 
 
-def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
+def _setup_claim_backed_hypothesis_evidence_graph() -> None:
     build_entity_graph(
         Path.cwd(),
         [
@@ -1087,7 +1087,7 @@ def test_graph_evidence_groups_by_supports_refutes() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        _setup_evidence_graph(runner)
+        _setup_evidence_graph()
 
         result = runner.invoke(main, ["graph", "evidence", "hypothesis/h3", "--format", "json"])
         assert result.exit_code == 0
@@ -1104,7 +1104,7 @@ def test_graph_evidence_returns_empty_for_unknown_hypothesis() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        _setup_evidence_graph(runner)
+        _setup_evidence_graph()
 
         result = runner.invoke(main, ["graph", "evidence", "hypothesis/h999", "--format", "json"])
         assert result.exit_code == 0
@@ -1116,7 +1116,7 @@ def test_graph_evidence_returns_support_and_dispute_for_claim() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        _setup_claim_backed_hypothesis_evidence_graph(runner)
+        _setup_claim_backed_hypothesis_evidence_graph()
 
         result = runner.invoke(main, ["graph", "evidence", "proposition/main", "--format", "json"])
         assert result.exit_code == 0
@@ -1135,7 +1135,7 @@ def test_graph_evidence_hypothesis_aggregates_linked_claim_evidence() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        _setup_claim_backed_hypothesis_evidence_graph(runner)
+        _setup_claim_backed_hypothesis_evidence_graph()
 
         result = runner.invoke(main, ["graph", "evidence", "hypothesis/h3", "--format", "json"])
         assert result.exit_code == 0
@@ -1690,169 +1690,90 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
     # from bare cito edges authored by `graph add evidence`. So the contested cluster's
     # contestedness must be authored as real evidence-line markdown, and cross-cluster
     # adjacency must be authored as source relations, then materialized via `graph build`.
-    def _write(rel: str, body: str) -> None:
-        path = Path(rel)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
-
-    def _proposition(pid: str, title: str) -> str:
-        return (
-            "---\n"
-            f"id: proposition:{pid}\n"
-            "kind: proposition\n"
-            f'title: "{title}"\n'
-            "project: test\n"
-            "ontology_terms: []\n"
-            "related: []\n"
-            "source_refs: []\n"
-            "created: 2026-05-01\n"
-            "updated: 2026-05-01\n"
-            "---\n"
-        )
-
-    def _evidence_line(eid: str, title: str, *, stance: str, target: str, extra: str) -> str:
-        return (
-            "---\n"
-            f"id: evidence-line:{eid}\n"
-            "kind: evidence-line\n"
-            f'title: "{title}"\n'
-            "project: test\n"
-            "ontology_terms: []\n"
-            "related: []\n"
-            "source_refs: []\n"
-            "created: 2026-05-01\n"
-            "updated: 2026-05-01\n"
-            f"stance: {stance}\n"
-            f"target: proposition:{target}\n"
-            f"{extra}"
-            "---\n"
-        )
-
     with runner.isolated_filesystem():
-        _write("science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
-
-        _write(
-            "entities/hypotheses/hcluster.md",
-            "---\n"
-            "id: hypothesis:hcluster\n"
-            "kind: hypothesis\n"
-            'title: "Local cluster of uncertain claims"\n'
-            "project: test\n"
-            "ontology_terms: []\n"
-            "related: []\n"
-            "source_refs: []\n"
-            "created: 2026-05-01\n"
-            "updated: 2026-05-01\n"
-            "---\n",
-        )
-
-        # CONTESTED cluster: one clean independent direct-test support PLUS one diagnostic
-        # dispute (model_criticism + scoped). A diagnostic/scoped dispute sets contested
-        # WITHOUT capping or eliminating belief -> "fragile (contested)". This is the
-        # cleanest "contested but not refuted" shape (mirrors test_belief_store_integration).
-        _write("entities/propositions/cluster_a.md", _proposition("cluster_a", "Contested local claim A"))
-        _write(
-            "entities/evidence-lines/cluster-a-support.md",
-            _evidence_line(
-                "cluster-a-support",
-                "Literature support for contested local claim A",
-                stance="supports",
-                target="cluster_a",
-                extra=(
-                    "evidence_role: direct_test\n"
-                    "strength: strong\n"
-                    "independence: independent\n"
-                    "independence_group: g-cluster-a-support\n"
-                    "evidence_type: literature_evidence\n"
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("hypothesis", "hcluster", "Local cluster of uncertain claims"),
+                # CONTESTED cluster: one clean independent direct-test support PLUS one diagnostic
+                # dispute (model_criticism + scoped). A diagnostic/scoped dispute sets contested
+                # WITHOUT capping or eliminating belief -> "fragile (contested)".
+                _entity("proposition", "cluster_a", "Contested local claim A"),
+                _evidence_line(
+                    "cluster-a-support",
+                    "Literature support for contested local claim A",
+                    stance="supports",
+                    target="proposition:cluster_a",
+                    evidence_role="direct_test",
+                    strength="strong",
+                    independence="independent",
+                    independence_group="g-cluster-a-support",
+                    evidence_type="literature_evidence",
                 ),
-            ),
-        )
-        _write(
-            "entities/evidence-lines/cluster-a-dispute.md",
-            _evidence_line(
-                "cluster-a-dispute",
-                "Negative result for contested local claim A",
-                stance="disputes",
-                target="cluster_a",
-                extra=(
-                    "evidence_role: model_criticism\ndispute_scope: generalization\nevidence_type: negative_result\n"
+                _evidence_line(
+                    "cluster-a-dispute",
+                    "Negative result for contested local claim A",
+                    stance="disputes",
+                    target="proposition:cluster_a",
+                    evidence_role="model_criticism",
+                    dispute_scope="generalization",
+                    evidence_type="negative_result",
                 ),
-            ),
-        )
-
-        # FRAGILE (NOT contested) contrast cluster: a single supporting evidence-line, no
-        # dispute. Shares hypothesis:hcluster with cluster_a so the contested claim's
-        # neighborhood is "connected" rather than isolated.
-        _write("entities/propositions/cluster_b.md", _proposition("cluster_b", "Fragile local claim B"))
-        _write(
-            "entities/evidence-lines/cluster-b-support.md",
-            _evidence_line(
-                "cluster-b-support",
-                "Single-source support for fragile local claim B",
-                stance="supports",
-                target="cluster_b",
-                extra=(
-                    "evidence_role: proxy_support\n"
-                    "strength: moderate\n"
-                    "independence: independent\n"
-                    "independence_group: g-cluster-b-support\n"
-                    "evidence_type: literature_evidence\n"
+                # FRAGILE (NOT contested) contrast cluster: a single supporting
+                # evidence-line, no dispute. Shares hypothesis:hcluster with cluster_a.
+                _entity("proposition", "cluster_b", "Fragile local claim B"),
+                _evidence_line(
+                    "cluster-b-support",
+                    "Single-source support for fragile local claim B",
+                    stance="supports",
+                    target="proposition:cluster_b",
+                    evidence_role="proxy_support",
+                    strength="moderate",
+                    independence="independent",
+                    independence_group="g-cluster-b-support",
+                    evidence_type="literature_evidence",
                 ),
-            ),
-        )
-
-        # ISOLATED, well-supported, non-contested claim: two independent empirical
-        # direct-test supports, no hypothesis link -> isolated neighborhood, risk 0.
-        _write("entities/propositions/isolated_good.md", _proposition("isolated_good", "Isolated well-supported claim"))
-        _write(
-            "entities/evidence-lines/isolated-support-1.md",
-            _evidence_line(
-                "isolated-support-1",
-                "Empirical support one for isolated claim",
-                stance="supports",
-                target="isolated_good",
-                extra=(
-                    "evidence_role: direct_test\n"
-                    "strength: strong\n"
-                    "independence: independent\n"
-                    "independence_group: g-isolated-1\n"
-                    "evidence_type: empirical_data_evidence\n"
+                # ISOLATED, well-supported, non-contested claim: two independent empirical
+                # direct-test supports, no hypothesis link -> isolated neighborhood, risk 0.
+                _entity("proposition", "isolated_good", "Isolated well-supported claim"),
+                _evidence_line(
+                    "isolated-support-1",
+                    "Empirical support one for isolated claim",
+                    stance="supports",
+                    target="proposition:isolated_good",
+                    evidence_role="direct_test",
+                    strength="strong",
+                    independence="independent",
+                    independence_group="g-isolated-1",
+                    evidence_type="empirical_data_evidence",
                 ),
-            ),
-        )
-        _write(
-            "entities/evidence-lines/isolated-support-2.md",
-            _evidence_line(
-                "isolated-support-2",
-                "Empirical support two for isolated claim",
-                stance="supports",
-                target="isolated_good",
-                extra=(
-                    "evidence_role: direct_test\n"
-                    "strength: strong\n"
-                    "independence: independent\n"
-                    "independence_group: g-isolated-2\n"
-                    "evidence_type: empirical_data_evidence\n"
+                _evidence_line(
+                    "isolated-support-2",
+                    "Empirical support two for isolated claim",
+                    stance="supports",
+                    target="proposition:isolated_good",
+                    evidence_role="direct_test",
+                    strength="strong",
+                    independence="independent",
+                    independence_group="g-isolated-2",
+                    evidence_type="empirical_data_evidence",
                 ),
-            ),
+            ],
+            relations=[
+                {
+                    "subject": "proposition:cluster_a",
+                    "predicate": "cito:discusses",
+                    "object": "hypothesis:hcluster",
+                    "graph_layer": "graph/knowledge",
+                },
+                {
+                    "subject": "proposition:cluster_b",
+                    "predicate": "cito:discusses",
+                    "object": "hypothesis:hcluster",
+                    "graph_layer": "graph/knowledge",
+                },
+            ],
         )
-
-        _write(
-            "knowledge/sources/local/relations.yaml",
-            "relations:\n"
-            "  - subject: proposition:cluster_a\n"
-            "    predicate: cito:discusses\n"
-            "    object: hypothesis:hcluster\n"
-            "    graph_layer: graph/knowledge\n"
-            "  - subject: proposition:cluster_b\n"
-            "    predicate: cito:discusses\n"
-            "    object: hypothesis:hcluster\n"
-            "    graph_layer: graph/knowledge\n",
-        )
-
-        # Materialize the evidence-line entities and authored relations into
-        # knowledge/graph.trig so summary aggregation can see them.
-        assert runner.invoke(main, ["graph", "build"]).exit_code == 0
 
         result = runner.invoke(main, ["graph", "neighborhood-summary", "--format", "json"])
         assert result.exit_code == 0
