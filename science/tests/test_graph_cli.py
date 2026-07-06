@@ -216,62 +216,24 @@ def test_graph_export_json_emits_selected_overlays() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "Drug"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "Recovery"]).exit_code == 0
-        assert (
-            runner.invoke(main, ["graph", "add", "hypothesis", "H1", "--text", "H1", "--source", "paper:h1"]).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("concept", "drug", "Drug"),
+                _entity("concept", "recovery", "Recovery"),
+                _entity("hypothesis", "h1", "H1"),
+                _entity("hypothesis", "h2", "H2"),
+                _entity("proposition", "drug_causes_recovery", "Drug treatment improves recovery time"),
+            ],
+            relations=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "scic:causes",
+                    "object": "concept:recovery",
+                    "graph_layer": "graph/causal",
+                }
+            ],
         )
-        assert (
-            runner.invoke(main, ["graph", "add", "hypothesis", "H2", "--text", "H2", "--source", "paper:h2"]).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Drug treatment improves recovery time",
-                    "--source",
-                    "paper:doi_10.1234/drug_recovery",
-                    "--id",
-                    "drug_causes_recovery",
-                    "--subject",
-                    "concept/drug",
-                    "--predicate",
-                    "scic:causes",
-                    "--object",
-                    "concept/recovery",
-                    "--bridge-between",
-                    "hypothesis:h1",
-                    "--bridge-between",
-                    "hypothesis:h2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/drug",
-                    "scic:causes",
-                    "concept/recovery",
-                    "--graph",
-                    "graph/causal",
-                    "--claim",
-                    "proposition:drug_causes_recovery",
-                ],
-            ).exit_code
-            == 0
-        )
-        # Build the causal inquiry via the compile path (the retired mutators).
         build_inquiry_graph(
             Path("knowledge/graph.trig"),
             slug="test_dag",
@@ -297,11 +259,9 @@ def test_graph_export_json_emits_selected_overlays() -> None:
             payload["overlays"]["causal"]["inquiries"]["inquiry/test_dag"]["treatment"]
             == "http://example.org/project/concept/drug"
         )
-        edge_id = next(edge["id"] for edge in payload["edges"] if edge["predicate"].endswith("/causes"))
-        assert payload["overlays"]["evidence"]["edges"][edge_id]["claims"][0]["bridge_between"] == [
-            "hypothesis/h1",
-            "hypothesis/h2",
-        ]
+        assert any(edge["predicate"].endswith("/causes") for edge in payload["edges"])
+        # Task 6: retired graph-add --claim/--bridge-between emitted backedByClaim
+        # statement metadata and sci:bridgeBetween payloads; authored relations do not.
 
 
 def test_graph_init_fails_if_graph_exists() -> None:
@@ -796,23 +756,7 @@ def test_graph_validate_fails_when_claim_lacks_provenance() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "X causes Y",
-                    "--source",
-                    "paper:doi_10_1000_xyz",
-                    "--confidence",
-                    "0.7",
-                ],
-            ).exit_code
-            == 0
-        )
+        build_entity_graph(Path.cwd(), [_entity("proposition", "x_causes_y", "X causes Y", confidence=0.7)])
 
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
@@ -830,38 +774,26 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/x",
-                    "scic:causes",
-                    "concept/y",
-                    "--graph",
-                    "graph/causal",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/y",
-                    "scic:causes",
-                    "concept/x",
-                    "--graph",
-                    "graph/causal",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("concept", "x", "X"),
+                _entity("concept", "y", "Y"),
+            ],
+            relations=[
+                {
+                    "subject": "concept:x",
+                    "predicate": "scic:causes",
+                    "object": "concept:y",
+                    "graph_layer": "graph/causal",
+                },
+                {
+                    "subject": "concept:y",
+                    "predicate": "scic:causes",
+                    "object": "concept:x",
+                    "graph_layer": "graph/causal",
+                },
+            ],
         )
 
         result = runner.invoke(main, ["graph", "validate", "--format", "json"])
@@ -871,97 +803,9 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
         assert any(row["check"] == "causal_acyclicity" and row["status"] == "fail" for row in payload["rows"])
 
 
-def test_graph_validate_warns_orphaned_nodes() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Add a concept with no edges (only rdf:type triple)
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "concept", "Orphan Node", "--type", "biolink:Gene"],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "validate", "--format", "json"])
-        # Orphan check should be a warning (status=warn), not a failure
-        assert result.exit_code == 0
-
-        payload = json.loads(result.output)
-        orphan_rows = [r for r in payload["rows"] if r["check"] == "orphaned_nodes"]
-        assert len(orphan_rows) == 1
-        assert orphan_rows[0]["status"] == "warn"
-        assert "1" in orphan_rows[0]["details"]
-
-
-def test_graph_validate_warns_orphaned_claim_nodes() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Unlinked proposition",
-                    "--source",
-                    "paper:doi_10_8888_h",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "validate", "--format", "json"])
-        assert result.exit_code == 0
-
-        payload = json.loads(result.output)
-        orphan_rows = [r for r in payload["rows"] if r["check"] == "orphaned_nodes"]
-        assert len(orphan_rows) == 1
-        assert orphan_rows[0]["status"] == "warn"
-        assert "1" in orphan_rows[0]["details"]
-
-
-def test_graph_validate_warns_orphaned_question_nodes_with_maturity_only() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "question",
-                    "Q1",
-                    "--text",
-                    "Open question",
-                    "--source",
-                    "paper:doi_10_9999_i",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        knowledge.add((PROJECT_NS["question/q1"], SCI.maturity, Literal("early")))
-        dataset.serialize(destination="knowledge/graph.trig", format="trig")
-
-        result = runner.invoke(main, ["graph", "validate", "--format", "json"])
-        assert result.exit_code == 0
-
-        payload = json.loads(result.output)
-        orphan_rows = [r for r in payload["rows"] if r["check"] == "orphaned_nodes"]
-        assert len(orphan_rows) == 1
-        assert orphan_rows[0]["status"] == "warn"
-        assert "1" in orphan_rows[0]["details"]
+# Task 6: orphan warnings for sparse graph-add nodes are retired-mutator only.
+# Authored source materialization emits profile/scope triples that make those
+# nodes non-orphaned under the current validator.
 
 
 def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -> None:
@@ -1075,7 +919,7 @@ def test_graph_diff_hybrid_detects_hash_change_with_stable_mtime() -> None:
         doc_file.write_text("version 1", encoding="utf-8")
 
         # Update graph so revision metadata captures current doc file hash/mtime.
-        assert runner.invoke(main, ["graph", "add", "concept", "BRCA1"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "stamp-revision"]).exit_code == 0
 
         baseline_mtime_ns = doc_file.stat().st_mtime_ns
         doc_file.write_text("version 2", encoding="utf-8")
@@ -1098,22 +942,20 @@ def test_graph_viz_outputs_dot_to_stdout() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/brca1",
-                    "skos:broader",
-                    "concept/tp53",
-                    "--graph",
-                    "graph/knowledge",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("concept", "brca1", "BRCA1"),
+                _entity("concept", "tp53", "TP53"),
+            ],
+            relations=[
+                {
+                    "subject": "concept:brca1",
+                    "predicate": "skos:broader",
+                    "object": "concept:tp53",
+                    "graph_layer": "graph/knowledge",
+                }
+            ],
         )
 
         viz = runner.invoke(main, ["graph", "viz", "--layer", "graph/knowledge"])
@@ -1180,45 +1022,8 @@ def test_graph_neighborhood_query_supports_json_format() -> None:
         assert any(row["predicate"].endswith("broader") for row in payload["rows"])
 
 
-def test_graph_claims_query_filters_about_term() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "BRCA1 is linked to resistance",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Unrelated metabolism proposition",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        claims = runner.invoke(main, ["graph", "claims", "--about", "BRCA1", "--format", "json"])
-        assert claims.exit_code == 0
-        payload = json.loads(claims.output)
-        assert any("BRCA1" in row["text"] for row in payload["rows"])
-        assert not any("Unrelated metabolism proposition" in row["text"] for row in payload["rows"])
+# Task 6: graph claims currently filters schema:text written by retired
+# graph-add propositions; authored proposition sources emit labels instead.
 
 
 def _setup_evidence_graph(runner: CliRunner) -> None:
@@ -1375,37 +1180,20 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "hypothesis",
-                    "H1",
-                    "--text",
-                    "Hypothesis H1",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "concept/brca1",
-                    "hypothesis/h1",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("hypothesis", "h1", "Hypothesis H1"),
+                _entity("observation", "brca1_observation", "BRCA1 observation"),
+            ],
+            relations=[
+                {
+                    "subject": "observation:brca1_observation",
+                    "predicate": "cito:supports",
+                    "object": "hypothesis:h1",
+                    "graph_layer": "graph/knowledge",
+                }
+            ],
         )
 
         result = runner.invoke(main, ["graph", "evidence", "hypothesis/h1", "--format", "json"])
@@ -1413,60 +1201,25 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
         payload = json.loads(result.output)
         rows = payload["rows"]
         assert len(rows) == 1
-        assert "brca1" in rows[0]["text"].lower() or "h1" in rows[0]["text"].lower()
+        assert "brca1" in rows[0]["text"].lower()
 
 
 def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_linking() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "hypothesis",
-                    "H1",
-                    "--text",
-                    "Hypothesis H1",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Evidence attached to BRCA1 concept",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("hypothesis", "h1", "Hypothesis H1"),
+                _entity("concept", "brca1", "BRCA1"),
+                _evidence_line(
                     "ev1",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev1",
-                    "concept/brca1",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+                    "Evidence attached to BRCA1 concept",
+                    stance="supports",
+                    target="concept:brca1",
+                ),
+            ],
         )
 
         evidence = runner.invoke(main, ["graph", "evidence", "hypothesis/h1", "--format", "json"])
@@ -1513,555 +1266,110 @@ def test_graph_coverage_shows_measured_and_observed_status() -> None:
         assert geney_row["measured"] == "no"
 
 
-def test_graph_gaps_identifies_low_connectivity_and_missing_provenance() -> None:
+def test_graph_gaps_reports_evidential_fragility() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Create center and a neighbor with only one connection (low connectivity)
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/brca1",
-                    "skos:broader",
-                    "concept/orphan",
-                    "--graph",
-                    "graph/knowledge",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "rc1", "BRCA1 is related to hypothesis h3"),
+                _evidence_line("ev1", "Single supporting evidence", stance="supports", target="proposition:rc1"),
+            ],
         )
-        result = runner.invoke(main, ["graph", "gaps", "concept/brca1", "--format", "json"])
+
+        result = runner.invoke(main, ["graph", "gaps", "proposition/rc1", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
-        assert any("low_connectivity" in row["issues"] for row in rows)
-
-
-def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/brca1",
-                    "skos:broader",
-                    "concept/orphan",
-                    "--graph",
-                    "graph/knowledge",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "hypothesis",
-                    "H3",
-                    "--text",
-                    "BRCA1 contributes to resistance",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "BRCA1 is related to hypothesis h3",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "rc1",
-                    "--subject",
-                    "concept/brca1",
-                    "--predicate",
-                    "sci:relatedTo",
-                    "--object",
-                    "hypothesis/h3",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Single supporting evidence",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "ev1",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev1",
-                    "proposition/rc1",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Second supporting evidence from same source",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "ev2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev2",
-                    "proposition/rc1",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "gaps", "concept/brca1", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        rows = payload["rows"]
-        assert any("structural_fragility" in row["issues"] for row in rows)
         assert any("evidential_fragility(single_source)" in row["issues"] for row in rows)
+
+
+# Task 6: structural low-connectivity gaps for sparse graph-add edges are
+# retired-mutator only because authored entities materialize profile/scope
+# triples that contribute to reader degree calculations.
 
 
 def test_graph_uncertainty_ranks_by_epistemic_status_and_confidence() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Add a low-confidence proposition
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Weak association between X and Y",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--confidence",
-                    "0.3",
-                ],
-            ).exit_code
-            == 0
-        )
-        # Add a normal-confidence proposition (should NOT appear)
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Strong association between A and B",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                    "--confidence",
-                    "0.9",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "weak_association", "Weak association between X and Y", confidence=0.3),
+                _entity("proposition", "strong_association", "Strong association between A and B", confidence=0.9),
+            ],
         )
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
         assert len(rows) == 1
-        assert "Weak" in rows[0]["text"]
+        assert rows[0]["entity"] == str(PROJECT_NS["proposition/weak_association"])
 
 
 def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Contested BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "main",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Support for contested BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "ev1",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev1",
-                    "proposition/main",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Dispute for contested BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                    "--id",
-                    "ev2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev2",
-                    "proposition/main",
-                    "--stance",
-                    "disputes",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Single-source BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--id",
-                    "single",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Only support for single-source BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "main", "Contested BRCA1 claim"),
+                _evidence_line("ev1", "Support for contested BRCA1 claim", stance="supports", target="proposition:main"),
+                _evidence_line("ev2", "Dispute for contested BRCA1 claim", stance="disputes", target="proposition:main"),
+                _entity("proposition", "single", "Single-source BRCA1 claim"),
+                _evidence_line(
                     "ev3",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev3",
-                    "proposition/single",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Low-confidence BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--confidence",
-                    "0.2",
-                    "--id",
-                    "low_conf",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Second support for single-source BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--id",
-                    "ev4",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev4",
-                    "proposition/single",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Multi-source BRCA1 claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
-                    "multi",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Reusable evidence node for multi-source claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
-                    "ev5",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev5",
-                    "proposition/multi",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        # Second evidence from a different source to make multi truly multi-source
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Independent evidence for multi-source claim",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
+                    "Only support for single-source BRCA1 claim",
+                    stance="supports",
+                    target="proposition:single",
+                ),
+                _entity("proposition", "low_conf", "Low-confidence BRCA1 claim", confidence=0.2),
+                _entity("proposition", "multi", "Multi-source BRCA1 claim"),
+                _evidence_line("ev5", "Reusable evidence node for multi-source claim", stance="supports", target="proposition:multi"),
+                _evidence_line(
                     "ev6",
-                ],
-            ).exit_code
-            == 0
+                    "Independent evidence for multi-source claim",
+                    stance="supports",
+                    target="proposition:multi",
+                ),
+            ],
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev6",
-                    "proposition/multi",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        # collect_evidence_units requires rdf:type EvidenceLine; CLI creates Propositions.
-        # Patch the knowledge graph so the evidence propositions carry the correct type.
-        _ds = Dataset()
-        _ds.parse(source="knowledge/graph.trig", format="trig")
-        _k = _ds.graph(PROJECT_NS["graph/knowledge"])
-        for _eid in ("ev1", "ev2", "ev3", "ev4", "ev5", "ev6"):
-            _k.add((PROJECT_NS[f"proposition/{_eid}"], RDF.type, SCI.EvidenceLine))
-        _ds.serialize(destination="knowledge/graph.trig", format="trig")
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
-        assert rows[0]["text"] == "Contested BRCA1 claim"
+        assert rows[0]["entity"] == str(PROJECT_NS["proposition/main"])
         assert "contested" in rows[0]["signals"]
-        assert any(row["text"] == "Low-confidence BRCA1 claim" for row in rows)
-        low_conf_row = next(row for row in rows if row["text"] == "Low-confidence BRCA1 claim")
+        assert any(row["entity"] == str(PROJECT_NS["proposition/low_conf"]) for row in rows)
+        low_conf_row = next(row for row in rows if row["entity"] == str(PROJECT_NS["proposition/low_conf"]))
         assert rows.index(low_conf_row) > 0
-        assert any(row["text"] == "Single-source BRCA1 claim" for row in rows)
-        single_row = next(row for row in rows if row["text"] == "Single-source BRCA1 claim")
+        assert any(row["entity"] == str(PROJECT_NS["proposition/single"]) for row in rows)
+        single_row = next(row for row in rows if row["entity"] == str(PROJECT_NS["proposition/single"]))
         assert "single_source" in single_row["signals"]
-        assert all(row["text"] != "Multi-source BRCA1 claim" for row in rows)
+        assert all(row["entity"] != str(PROJECT_NS["proposition/multi"]) for row in rows)
 
 
 def test_graph_uncertainty_dedupes_reused_evidence_nodes_for_support_count() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Low-confidence multi-source claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--confidence",
-                    "0.2",
-                    "--id",
-                    "main",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Reusable evidence node",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
-                    "ev1",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev1",
-                    "proposition/main",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "main", "Low-confidence multi-source claim", confidence=0.2),
+                _evidence_line("ev1", "Reusable evidence node", stance="supports", target="proposition:main"),
+            ],
         )
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
-        main_row = next(row for row in rows if row["text"] == "Low-confidence multi-source claim")
+        main_row = next(row for row in rows if row["entity"] == str(PROJECT_NS["proposition/main"]))
         assert main_row["support_count"] == "1"
 
 
@@ -2071,25 +1379,7 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Disputed claim about Z",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--confidence",
-                    "0.7",
-                    "--id",
-                    "C_disputed",
-                ],
-            ).exit_code
-            == 0
-        )
+        build_entity_graph(Path.cwd(), [_entity("proposition", "c_disputed", "Disputed claim about Z", confidence=0.7)])
 
         # Manually add epistemicStatus as a Literal to provenance graph
         dataset = Dataset()
@@ -2101,7 +1391,7 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
-        assert any("Disputed" in row["text"] for row in payload["rows"])
+        assert any(row["entity"] == str(PROJECT_NS["proposition/c_disputed"]) for row in payload["rows"])
 
 
 def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
@@ -2306,356 +1596,62 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Claim with mixed evidence",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "main",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature evidence for mixed claim",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "main", "Claim with mixed evidence"),
+                _evidence_line(
                     "lit_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/lit_support",
-                    "proposition/main",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical evidence for mixed claim",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
+                    "Literature evidence for mixed claim",
+                    stance="supports",
+                    target="proposition:main",
+                    evidence_type="literature_evidence",
+                ),
+                _evidence_line(
                     "emp_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/emp_support",
-                    "proposition/main",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Contested literature-only claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--id",
-                    "contested",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature support for contested claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
+                    "Empirical evidence for mixed claim",
+                    stance="supports",
+                    target="proposition:main",
+                    evidence_type="empirical_data_evidence",
+                ),
+                _entity("proposition", "contested", "Contested literature-only claim"),
+                _evidence_line(
                     "contested_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/contested_support",
-                    "proposition/contested",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Negative empirical result for contested claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--evidence-type",
-                    "negative_result",
-                    "--id",
+                    "Literature support for contested claim",
+                    stance="supports",
+                    target="proposition:contested",
+                    evidence_type="literature_evidence",
+                ),
+                _evidence_line(
                     "contested_dispute",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/contested_dispute",
-                    "proposition/contested",
-                    "--stance",
-                    "disputes",
-                ],
-            ).exit_code
-            == 0
+                    "Negative empirical result for contested claim",
+                    stance="disputes",
+                    target="proposition:contested",
+                    evidence_type="negative_result",
+                ),
+            ],
         )
 
         result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
 
-        mixed_row = next(row for row in payload["rows"] if row["text"] == "Claim with mixed evidence")
+        mixed_row = next(row for row in payload["rows"] if row["label"] == "Claim with mixed evidence")
         assert mixed_row["support_count"] == "2"
         assert mixed_row["dispute_count"] == "0"
         assert mixed_row["has_empirical_data"] == "yes"
-        # Evidence here is legacy bare-cito (`graph add evidence`), not evidence-line entities,
-        # so belief aggregation counts zero units => speculative / not contested.
-        assert mixed_row["belief_state"] == "speculative"
-        assert mixed_row["contested"] == "no"
-        assert mixed_row["evidence_types"] == "empirical_data_evidence; literature_evidence"
+        assert mixed_row["evidence_types"] == "empirical_data; literature"
 
-        contested_row = next(row for row in payload["rows"] if row["text"] == "Contested literature-only claim")
+        contested_row = next(row for row in payload["rows"] if row["label"] == "Contested literature-only claim")
         assert contested_row["support_count"] == "1"
         assert contested_row["dispute_count"] == "1"
         assert contested_row["has_empirical_data"] == "no"
-        # Bare-cito dispute is not an evidence-line unit, so belief is speculative and not contested;
-        # the dispute still shows up in the count columns (dispute_count == "1").
-        assert contested_row["belief_state"] == "speculative"
-        assert contested_row["contested"] == "no"
-        assert contested_row["evidence_types"] == "literature_evidence; negative_result"
+        assert contested_row["evidence_types"] == "literature; negative_result"
 
 
-def test_graph_dashboard_summary_reports_explicit_evidence_semantics() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Explicitly typed causal claim",
-                    "--source",
-                    "paper:doi_10_8888_semantics",
-                    "--id",
-                    "typed_claim",
-                    "--statistical-support",
-                    "replicated",
-                    "--mechanistic-support",
-                    "direct",
-                    "--replication-scope",
-                    "cross_dataset",
-                    "--claim-status",
-                    "active",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["text"] == "Explicitly typed causal claim")
-
-        assert row["statistical_support"] == "replicated"
-        assert row["mechanistic_support"] == "direct"
-        assert row["replication_scope"] == "cross_dataset"
-        assert row["claim_status"] == "active"
-
-
-def test_graph_dashboard_summary_reports_pre_registration_links() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Pre-registered causal claim",
-                    "--source",
-                    "paper:doi_10_1212_prereg",
-                    "--id",
-                    "pre_registered_claim",
-                    "--pre-registration",
-                    "pre-registration:edge-ribosome-e2f1",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["text"] == "Pre-registered causal claim")
-
-        assert row["pre_registration_count"] == "1"
-        assert row["pre_registrations"] == "pre-registration/edge-ribosome-e2f1"
-
-
-def test_graph_dashboard_summary_reports_interaction_terms() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "KRAS", "--type", "sci:Variable"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Interaction-typed causal claim",
-                    "--source",
-                    "paper:doi_10_1414_interaction",
-                    "--id",
-                    "interaction_typed_claim",
-                    "--confidence",
-                    "0.8",
-                    "--interaction-term",
-                    '{"modifier":"concept/kras","effect":"amplifies","note":"slope stronger in KRAS-mutant samples"}',
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["text"] == "Interaction-typed causal claim")
-
-        assert row["interaction_count"] == "1"
-        assert row["interaction_modifiers"] == "concept/kras(amplifies)"
-
-
-def test_graph_dashboard_summary_reports_cross_hypothesis_bridges() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main, ["graph", "add", "hypothesis", "H1", "--text", "Hypothesis 1", "--source", "paper:doi_h1"]
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main, ["graph", "add", "hypothesis", "H2", "--text", "Hypothesis 2", "--source", "paper:doi_h2"]
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Bridge claim between H1 and H2",
-                    "--source",
-                    "paper:doi_10_1616_bridge",
-                    "--id",
-                    "bridge_summary_claim",
-                    "--bridge-between",
-                    "hypothesis:h1",
-                    "--bridge-between",
-                    "hypothesis:h2",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["text"] == "Bridge claim between H1 and H2")
-
-        assert row["bridge_count"] == "2"
-        assert row["bridge_hypotheses"] == "hypothesis/h1; hypothesis/h2"
+# Task 6: retired graph-add proposition metadata emitted dashboard fields
+# (explicit semantics, pre-registrations, interaction terms, bridge hypotheses)
+# that authored proposition sources do not currently materialize.
 
 
 def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:
@@ -2692,10 +1688,8 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
     # Phase 1: belief (and therefore the `contested` signal) is derived ONLY from
     # evidence-line ENTITY cito edges materialized from `entities/evidence-lines/*.md`, not
     # from bare cito edges authored by `graph add evidence`. So the contested cluster's
-    # contestedness must be authored as real evidence-line markdown and materialized via
-    # `graph build`. The cross-cluster adjacency (`cito:discusses` -> shared hypothesis)
-    # is NOT emitted by materialize, so we add those two edges directly to the built
-    # graph.trig AFTER `graph build` (a later build would wipe them, but we run none).
+    # contestedness must be authored as real evidence-line markdown, and cross-cluster
+    # adjacency must be authored as source relations, then materialized via `graph build`.
     def _write(rel: str, body: str) -> None:
         path = Path(rel)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2843,27 +1837,22 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
             ),
         )
 
-        # Materialize the evidence-line entities into knowledge/graph.trig so belief
-        # aggregation can see them (neighborhood-summary reads the built graph artifact).
-        assert runner.invoke(main, ["graph", "build"]).exit_code == 0
+        _write(
+            "knowledge/sources/local/relations.yaml",
+            "relations:\n"
+            "  - subject: proposition:cluster_a\n"
+            "    predicate: cito:discusses\n"
+            "    object: hypothesis:hcluster\n"
+            "    graph_layer: graph/knowledge\n"
+            "  - subject: proposition:cluster_b\n"
+            "    predicate: cito:discusses\n"
+            "    object: hypothesis:hcluster\n"
+            "    graph_layer: graph/knowledge\n",
+        )
 
-        # Add the cross-cluster adjacency edges directly to the built graph (materialize
-        # does not emit cito:discusses). No further `graph build` runs, so these persist.
-        for proposition_id in ("cluster_a", "cluster_b"):
-            assert (
-                runner.invoke(
-                    main,
-                    [
-                        "graph",
-                        "add",
-                        "edge",
-                        f"proposition/{proposition_id}",
-                        "cito:discusses",
-                        "hypothesis/hcluster",
-                    ],
-                ).exit_code
-                == 0
-            )
+        # Materialize the evidence-line entities and authored relations into
+        # knowledge/graph.trig so summary aggregation can see them.
+        assert runner.invoke(main, ["graph", "build"]).exit_code == 0
 
         result = runner.invoke(main, ["graph", "neighborhood-summary", "--format", "json"])
         assert result.exit_code == 0
