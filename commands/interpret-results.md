@@ -220,17 +220,30 @@ For each found pre-reg, read its `committed:` clause and classify each commitmen
 - **Pre-canonical pre-regs (hypothesis-in-body-only).** Some older pre-regs reference hypotheses inline in their body prose (e.g., "H1 (primary, confirmatory)") but do not carry the corresponding `hypothesis:` ref in `related:`. The auto-derivation rule produces no `bears_on` edge for body-only hypotheses. When interpreting:
 
   1. Read the pre-reg's body for inline hypothesis labels and identify the corresponding `hypothesis:` entity if it exists.
-  2. If the entity exists, emit the proposition with the pre-registration backlink, then add the evidence edge explicitly:
+  2. If the entity exists, author a durable proposition and evidence line, then rebuild:
 
      ```bash
-     science graph add proposition "<observed result proposition>" \
-       --source <data-package-or-workflow-run-ref> \
-       --pre-registration pre-registration:<slug> \
-       --id <proposition-id>
+     science propositions create "<observed result proposition>" \
+       --source-ref <data-package-or-workflow-run-ref> \
+       --related pre-registration:<slug> \
+       --id proposition:<slug>
 
-     science graph add evidence proposition:<proposition-id> hypothesis:<target-id> \
-       --stance supports  # or disputes
+     science evidence-lines create "<short evidence title>" \
+       --target proposition:<slug> \
+       --stance supports \
+       --source <data-package-or-workflow-run-ref> \
+       --evidence-type empirical_data \
+       --strength strong \
+       --related hypothesis:<target-id> \
+       --related pre-registration:<slug>
+
+     science graph build
      ```
+
+     Use `--stance disputes` when the result contradicts the target. If the
+     project needs an explicit `sci:preRegisteredIn` triple rather than a
+     navigational `related:` link, author that relation in
+     `knowledge/sources/local/relations.yaml` and rebuild.
 
   3. If no formal `hypothesis:` entity exists yet, flag this in the interpretation document and recommend the project promote it to a formal entity. Project-side cleanup is the resolution path; the recast cannot fully derive `bears_on` for body-only hypotheses.
 
@@ -248,7 +261,12 @@ When graph updates are warranted, frame them as proposition updates:
   existing `swan-stage-age`) makes the aggregator count two same-cohort lines as independent and
   **over-promotes** the proposition. Setting `--independence shared-source` alone does **not** prevent
   the over-count; the grouping is what does.
-- when the proposition is grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science graph add proposition`. This writes a `sci:preRegisteredIn` triple into the materialized graph so downstream weighted attention sampling can boost pre-registered evidence.
+- when the proposition is grounded in a pre-registered analysis, record the
+  pre-registration in source metadata (`related:` / `source_refs:` on the
+  proposition or evidence line). If downstream graph consumers require
+  `sci:preRegisteredIn`, author that relation in
+  `knowledge/sources/local/relations.yaml` and rebuild with
+  `science graph build`.
 
 Do not use hypothesis status changes as the primary output.
 Hypothesis-level summaries can be updated later as a secondary reflection of underlying proposition changes.
@@ -273,18 +291,12 @@ rather than the threshold.
 
 After analyzing results, create structured entities in addition to the prose document.
 
-**First, check whether the project has a materialized graph.** `science graph build` rematerializes
-`knowledge/graph.trig` deterministically from markdown sources; it never reads the existing
-`graph.trig` back. Two consequences shape this section:
-
-- **Partially-migrated project (no `knowledge/graph.trig`).** Every `science graph …` command below
-  will error. Do not try them per-command and accept the failures — instead route the structured
-  output to **source-authored files** (the durable path below), and keep the interpretation itself in
-  `entities/interpretations/` via `science interpretations create`. Note this in the output mode line.
-- **`graph add` is non-durable even when the graph exists.** `science graph add
-  observation/proposition/evidence/finding` writes *directly into* `graph.trig` and is **wiped on the
-  next `science graph build`** (the CLI prints this warning). Use `graph add` only for throwaway
-  inspection. For anything that must survive a rebuild, author it in a source the build reads:
+**First, route structured output through source-authored files.** `science graph
+build` rematerializes `knowledge/graph.trig` deterministically from markdown
+sources; it never reads the existing `graph.trig` back. The old graph writer
+surfaces for observation/proposition/evidence/finding/interpretation are
+retired. For anything that must survive a rebuild, author it in a source the
+build reads:
 
   - **Proposition** → `science propositions create "<title>"` (durable source-authored entity).
     For a **proxy-mediated** proposition, set these in the frontmatter so it validates on the
@@ -294,34 +306,35 @@ After analyzing results, create structured entities in addition to the prose doc
     - `measurement_model:` — a mapping with `observed_entity` (required) plus optional
       `latent_construct`, `measurement_relation`, `rationale`, `known_failure_modes` (list),
       and `substitutable_with` (list).
-  - **Observation** → it has no standalone source entity; **anchor it inside** a proposition,
-    finding, or interpretation source file rather than as a free-standing `graph add observation`.
+  - **Observation** → author `entities/observations/<slug>.md` with
+    `science entity create observation "<title>"` when a standalone empirical
+    datum needs an owner; otherwise anchor it inside a proposition, finding, or
+    interpretation source file.
   - **Evidence with stance / strength / independence** → author an **evidence-line** entity under
     `entities/evidence-lines/*.md` (kind `evidence-line`), which the build reads and materializes; or
-    express the relation inside the proposition/finding/interpretation source file. (Do not rely on a
-    bare `graph add evidence` edge — it does not survive the build.)
+    express the relation inside the proposition/finding/interpretation source file.
   - **Interpretation / finding** → `science interpretations create` (step 5 below) produces a durable
-    source document; prefer it over `graph add interpretation`.
+    source document. Use `science entity create finding "<title>"` or edit
+    `entities/findings/<slug>.md` for durable finding owners.
 
-The `graph add …` recipes below are the *throwaway-inspection* form; mirror each into the
-source-authored form above when the entity must persist.
+Use the source-authoring recipes below, then run `science graph build`.
 
 1. For each concrete empirical fact:
-   `science graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
+   `science entity create observation "<description>" --id observation:<slug>`
 
 2. For each interpretive proposition:
-   `science graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
+   `science propositions create "<text>" --source-ref <data-package-ref>`
 
 3. For each observation that bears on a proposition:
-   `science graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
+   `science evidence-lines create "<short evidence title>" --target <proposition-ref> --stance supports|disputes --source <data-package-ref> --evidence-type empirical_data --strength strong|moderate|weak`
 
 4. Bundle into a finding:
-   `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
+   `science entity create finding "<summary>" --related <proposition-ref> --source-ref <data-package-ref>`
 
 5. Create the interpretation as a source-authored entity:
    `science interpretations create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
 
-   This places the file under `entities/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
+   This places the file under `entities/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation.
 
 ### 6. Surface New Questions
 

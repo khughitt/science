@@ -470,8 +470,10 @@ Update `inquiry.status` to `planned` in `entities/patches/<slug>.md`, then rebui
 
 ```bash
 science graph build
-science graph stamp-revision
 ```
+
+No separate revision-stamping command is needed. `science graph build` writes
+the compiled graph and revision metadata from authored sources.
 
 ### Step 6: Suggest next steps
 

@@ -167,19 +167,20 @@ Each distillation updates `data/snapshots/manifest.ttl` with the source URL,
 version string, generation time, node/triple count, and SHA-256 of the Turtle
 file. Treat the manifest as the reproducibility record for generated snapshots.
 
-## Snapshot Import
+## Distilled Snapshots
 
-`science graph import` merges a Turtle snapshot into the project's
-`graph/knowledge` layer and records import provenance in `graph/provenance`:
+`science graph import` is retired. Distilled Turtle snapshots remain generated
+reference artifacts under `data/snapshots/`; they are not a durable project
+authoring surface. When snapshot content should become project knowledge,
+curate source entities, external references, or `relations.yaml` rows from the
+snapshot, then run:
 
 ```bash
-science graph import data/snapshots/openalex-science-map.ttl
-science graph import data/snapshots/primekg-core.ttl
+science graph build
 ```
 
-Import is additive derived state. If the imported context is wrong or stale,
-regenerate the snapshot or rebuild the graph rather than editing
-`knowledge/graph.trig` directly.
+If snapshot context is wrong or stale, regenerate the snapshot and rebuild from
+authored sources rather than editing `knowledge/graph.trig` directly.
 
 ## Belief Snapshots
 

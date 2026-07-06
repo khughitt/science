@@ -136,7 +136,7 @@ project represents its model graph — otherwise `science inquiry show` errors (
 3. **Route accordingly:**
    - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.
    - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
-     `graph add concept` steps (they don't map onto the file pair). Instead author/validate the
+     retired graph-writer steps (they don't map onto the file pair). Instead author/validate the
      `.dot` + `.edges.yaml` pair the project's tooling consumes, and still do Step 3 (durable
      `proposition` entities) and Step 4 (evidence-line entities) — those are tool-supported and
      durable regardless of DAG representation. Validate with the project's DAG check (e.g.
@@ -193,14 +193,11 @@ specific registered source kind when one exists; use
 `science entity create concept "<title>"` only for reusable project-local
 concepts that need a Markdown owner.
 
-Direct `science graph add concept` writes are exploratory and non-durable. They
-write to `knowledge/graph.trig`, which is regenerated from source files. Use
-them only for temporary graph inspection. Do not treat graph-added concepts as
-owners for variables, treatment/outcome refs, or unknowns.
-
-```bash
-science graph add concept "<name>" --type <CURIE> --definition "<definition>"
-```
+`science graph add concept` is retired. Author durable concepts with
+`science entity create concept "<title>"` or by editing
+`entities/concepts/<slug>.md`, then run `science graph build`. Do not treat
+retired graph-writer output as an owner for variables, treatment/outcome refs,
+or unknowns.
 
 ### Step 3: Convert Scientific Edges Into Explicit Propositions
 
@@ -307,11 +304,8 @@ Update the inquiry status to `specified` only when:
 - the main evidence links are recorded
 - major unknowns are either resolved or intentionally documented
 
-Then:
-
-```bash
-science graph stamp-revision
-```
+No separate revision-stamping command is needed; `science graph build` writes
+the compiled graph and its revision metadata from the authored sources.
 
 ### Step 7: Suggest Next Steps
 
