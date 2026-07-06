@@ -1022,6 +1022,94 @@ def test_export_labnote_package_writes_public_package_contract(tmp_path: Path) -
     assert views["views"][1]["entity_types"] == ["synthesis"]
 
 
+def test_export_labnote_package_uses_declared_kind_for_root_and_irregular_entity_types(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "research-question.md",
+        """
+        ---
+        id: research-question:post-acute-infection-syndromes
+        kind: research-question
+        title: Why do some people fail to recover after acute infection?
+        sensitivity: public
+        ---
+        Research question body.
+        """,
+    )
+    write_text(
+        project_root / "entities" / "patches" / "immune-state-shift-causal-landscape.md",
+        """
+        ---
+        id: patch-definition:immune-state-shift-causal-landscape
+        kind: patch-definition
+        title: Immune-state-displacement causal landscape
+        sensitivity: public
+        ---
+        Patch body.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    entities = read_json(out / "entities" / "index.json")["entities"]
+    views = read_json(out / "views.json")["views"]
+    by_id = {entity["id"]: entity for entity in entities}
+    view_by_id = {view["id"]: view for view in views}
+
+    assert by_id["research-question:post-acute-infection-syndromes"]["type"] == "research_question"
+    assert by_id["patch-definition:immune-state-shift-causal-landscape"]["type"] == "patch_definition"
+    assert "entitie" not in view_by_id
+    assert "patche" not in view_by_id
+    assert view_by_id["research_question"]["route"] == "/explore/research-question"
+    assert view_by_id["patch_definition"]["route"] == "/explore/patch-definition"
+
+
+def test_export_labnote_package_requires_kind_for_root_entity_files(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "research-question.md",
+        """
+        ---
+        id: research-question:post-acute-infection-syndromes
+        title: Missing kind should fail
+        sensitivity: public
+        ---
+        Body.
+        """,
+    )
+
+    with pytest.raises(ValueError, match=r"root entity file requires frontmatter kind"):
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+
+def test_export_labnote_package_requires_kind_for_non_public_root_entity_files(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "internal-question.md",
+        """
+        ---
+        id: research-question:internal
+        title: Missing kind should fail before public filtering
+        sensitivity: internal
+        ---
+        Body.
+        """,
+    )
+
+    with pytest.raises(ValueError, match=r"root entity file requires frontmatter kind"):
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+
 def test_export_strips_html_comments_from_prose_bundle(tmp_path: Path) -> None:
     project_root = tmp_path / "pais"
     out = tmp_path / "out"

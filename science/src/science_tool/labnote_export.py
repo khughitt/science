@@ -140,6 +140,7 @@ TYPE_DIR_MAP = {
     "workflows": "workflow",
     "workflow-runs": "workflow_run",
     "papers": "paper",
+    "patches": "patch_definition",
 }
 PUBLIC_ACCESS_LEVELS = {"public", "open", "open-access", "unrestricted"}
 BACKLINK_ROLES = {
@@ -594,6 +595,8 @@ def _entity_type_for_path(path: Path, frontmatter: dict[str, Any]) -> str:
     if isinstance(declared, str) and declared.strip():
         return declared.strip().replace("-", "_")
     parent = path.parent.name
+    if parent == "entities":
+        raise ValueError(f"root entity file requires frontmatter kind: {path}")
     return TYPE_DIR_MAP.get(parent, parent.rstrip("s").replace("-", "_"))
 
 
@@ -793,11 +796,11 @@ def _discover_entities(
         if entity_id in seen:
             raise ValueError(f"duplicate exported entity id: {entity_id}")
         seen.add(entity_id)
+        entity_type = _entity_type_for_path(path, frontmatter)
         if not _is_public_frontmatter(frontmatter):
             restricted_present = True
             restricted_ids.add(entity_id)
             continue
-        entity_type = _entity_type_for_path(path, frontmatter)
         source_path = path.relative_to(project_root).as_posix()
         _validate_source_refs(frontmatter, known_citekeys, source_path)
         metadata = {
