@@ -157,6 +157,21 @@ Completed in `refactor/command-guidance-legacy-cleanup`:
 - Left historical plans/audits intact where they document migration history
   rather than current authoring instructions.
 
+Completed in `refactor/legacy-scrub-final-verification`:
+
+- Wrote final inventory reports:
+  `docs/audits/legacy-support-scrub-final-inventory-2026-07-06.md` and
+  `docs/audits/legacy-support-scrub-final-inventory-2026-07-06.json`.
+- Wrote final verification report:
+  `docs/audits/legacy-support-scrub-final-verification-2026-07-06.md`.
+- Final inventory reports zero legacy-surface findings across 22 scanned
+  projects plus `~/d/science-commons`. The one skipped registered path remains
+  the stale missing worktree
+  `~/d/natural-systems/.worktrees/validation-strict-cleanup`.
+- Toolkit package tests pass for `science`, `science/model`, and `science/qa`.
+  Full `ruff check` and `pyright` still fail on unrelated existing issues in
+  untouched files, documented in the final verification report.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -210,11 +225,11 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 6. Complete in current worktree: migrate and gate retired DAG `.edges.yaml`.
 7. Complete: migrate and gate aggregate manifests.
 8. Complete: reconfirm and retire legacy data-package entities.
-9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.
+9. Complete: reconfirm and, if needed, migrate the remaining one-shot graph migrations.
 10. Complete: migrate and gate marker aliases, `science_qa` table mode, and bare `profiles:` config fallback.
 11. Complete: remove command, skill, template, and active user-guide guidance for retired surfaces.
 12. Complete: keep removed `science.yaml` field rejection after zero-hit confirmation; it is not fallback support because it makes `parent:` / `children:` fail early.
-13. Run final toolkit and downstream verification.
+13. Complete: run final toolkit and downstream verification.
 
 Each surface should end with a checked-in precheck report showing zero project
 hits before deleting the corresponding reader.

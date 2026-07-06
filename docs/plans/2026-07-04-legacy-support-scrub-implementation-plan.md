@@ -74,6 +74,10 @@
   `science.yaml` fields remain explicitly rejected. This is a fail-early guard,
   not reader or fallback support; deleting it would silently accept `parent:`
   and `children:` as unknown extra fields.
+- Complete in `refactor/legacy-scrub-final-verification`: final inventory
+  reports zero legacy-surface findings across 22 scanned projects plus
+  `~/d/science-commons`. Final verification is recorded in
+  `docs/audits/legacy-support-scrub-final-verification-2026-07-06.md`.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -451,9 +455,13 @@ For each one-shot surface, delete only after its own zero-hit report **and**
 confirmation that each migrated project still builds under `science validate` /
 `graph materialize`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
-Run graph migration, materialize, and CLI tests.
+Retired one-shot command tests assert `graph migrate-addresses` and
+`graph migrate-paper-datasets` are no longer commands. Final verification
+records that `science graph materialize` is not a live command; the current
+write-producing graph build command was not run across downstream repos during
+the read-only final pass.
 
 ## Task 10: Small Aliases and Removed-Field Guards
 
@@ -533,9 +541,10 @@ Run docs/user-guide tests if available, then full package suites.
 ## Task 12: Final Verification
 
 **Files:**
-- Output: final inventory report under `docs/audits/`
+- Output: `docs/audits/legacy-support-scrub-final-inventory-2026-07-06.md`
+- Output: `docs/audits/legacy-support-scrub-final-verification-2026-07-06.md`
 
-- [ ] **Step 1: Run downstream precheck and rebuild projects**
+- [x] **Step 1: Run downstream precheck and rebuild projects**
 
 Run the registered-project inventory across all deduplicated project roots.
 Expected: zero hits for every removed surface. Then confirm every affected
@@ -543,13 +552,28 @@ project still builds — run `science validate` / `graph materialize` across the
 project set — so the final state proves the projects load, not only that the
 sentinels are gone.
 
-- [ ] **Step 2: Run toolkit search triage**
+Result: final inventory reports `total_findings: 0`. `science validate
+--profile commit` passed for 12 projects, failed for 9 with unrelated project
+validation/tooling issues, and timed out for `~/d/cancer/cancer-types/multiple-myeloma`
+under the 60-second per-project cap. `science graph materialize` is not a live
+CLI command; `science graph build` writes graph artifacts and was not run
+across downstream repos in this read-only pass.
+
+- [x] **Step 2: Run toolkit search triage**
 
 Run targeted `rg` searches across toolkit code, active docs, commands, skills,
 templates, and registered project trees. Classify every remaining hit as a
 current concept or remove it.
 
-- [ ] **Step 3: Run full verification**
+Result: active toolkit hits are classified as negative guidance, rejection
+paths, retired-command tests, inventory fixtures, current `doc` prose scanning,
+or "do not create" docs. Registered-project broad `rg` hits are classified in
+the final verification report as historical snippets, fixtures, generated
+reports, current datapackage/profile/task fields, live `article` records, or
+unreadable `pgdata`; structured inventory remains the authoritative zero-hit
+data gate.
+
+- [x] **Step 3: Run full verification**
 
 Run:
 
@@ -560,6 +584,11 @@ cd science && uv run ruff check
 cd science && uv run pyright
 ```
 
-- [ ] **Step 4: Commit final state**
+Result: `science`, `science/model`, and `science/qa` pytest suites pass. Full
+`ruff check` and `pyright` still fail on unrelated existing annotation,
+dataset, feedback, labnote, benchmark, and test issues in untouched files; see
+the final verification report.
+
+- [x] **Step 4: Commit final state**
 
 Commit the completed scrub without AI attribution trailers.

@@ -1,0 +1,135 @@
+{
+  "config_path": "~/.config/science/config.yaml",
+  "generated_at_utc": "2026-07-06T14:35:36Z",
+  "projects": [
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/3d-attention-bias"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/breast"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/head-and-neck"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/multiple-myeloma"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/ovarian"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/cancer-types/prostate"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/conditions/pre-cancer"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/data-sources/cbioportal"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/mechanisms/evolution"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cancer/therapeutics"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/cats"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/comparisons/pan-disease"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/cycles"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/immunity"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/health/processes/post-acute-infection"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/natural-systems"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/protein-landscape"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/science/meta"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/science-commons"
+    },
+    {
+      "counts": {},
+      "findings": [],
+      "project_root": "~/d/seq-feats"
+    }
+  ],
+  "schema_version": "legacy-surfaces-v1",
+  "skipped_registered_projects": [
+    {
+      "path": "~/d/natural-systems/.worktrees/validation-strict-cleanup",
+      "reason": "missing directory"
+    }
+  ],
+  "summary": {
+    "duplicate_registered_entries": 0,
+    "registered_entries": 23,
+    "scanned_projects": 22,
+    "shared_repository_entries": 1,
+    "skipped_registered_projects": 1,
+    "total_findings": 0,
+    "unique_registered_paths": 23,
+    "unregistered_science_yaml": 0
+  },
+  "surface_totals": {},
+  "unregistered_science_yaml": []
+}
