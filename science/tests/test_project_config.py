@@ -151,7 +151,7 @@ peers:
     assert cfg.peers[0].id == "future-peer"
 
 
-def test_project_config_rejects_legacy_parent(tmp_path: Path) -> None:
+def test_project_config_rejects_removed_parent_field(tmp_path: Path) -> None:
     """parent: is removed; loading a config with it must fail clearly."""
     project_root = tmp_path / "host"
     project_root.mkdir()
@@ -166,7 +166,8 @@ parent: ../meta
         encoding="utf-8",
     )
     with pytest.raises(
-        ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."
+        ValidationError,
+        match=r"Use `peers:` instead; `parent:` and `children:` are removed project-config fields\.",
     ):
         load_project_config(project_root)
 
@@ -291,7 +292,7 @@ def test_refs_config_rejects_unknown_source(tmp_path):
     raise AssertionError("Expected ValidationError for unknown source")
 
 
-def test_project_config_rejects_legacy_children(tmp_path: Path) -> None:
+def test_project_config_rejects_removed_children_field(tmp_path: Path) -> None:
     """children: is removed; loading a config with it must fail clearly."""
     project_root = tmp_path / "meta"
     project_root.mkdir()
@@ -309,6 +310,7 @@ children:
         encoding="utf-8",
     )
     with pytest.raises(
-        ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."
+        ValidationError,
+        match=r"Use `peers:` instead; `parent:` and `children:` are removed project-config fields\.",
     ):
         load_project_config(project_root)

@@ -209,13 +209,13 @@ class ProjectConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _reject_legacy_fields(cls, raw: Any) -> Any:
+    def _reject_removed_fields(cls, raw: Any) -> Any:
         if isinstance(raw, dict):
             illegal = [k for k in ("parent", "children") if k in raw]
             if illegal:
                 raise ValueError(
                     f"science.yaml uses removed field(s) {illegal!r}. "
-                    "Use `peers:` instead; the legacy parent/children fields are no longer supported."
+                    "Use `peers:` instead; `parent:` and `children:` are removed project-config fields."
                 )
         return raw
 

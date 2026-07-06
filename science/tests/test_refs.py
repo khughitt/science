@@ -901,7 +901,10 @@ def test_refs_check_surfaces_removed_children_config() -> None:
             encoding="utf-8",
         )
 
-        with pytest.raises(ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."):
+        with pytest.raises(
+            ValidationError,
+            match=r"Use `peers:` instead; `parent:` and `children:` are removed project-config fields\.",
+        ):
             check_refs(root)
 
 
