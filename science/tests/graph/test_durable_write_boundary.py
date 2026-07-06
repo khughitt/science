@@ -12,10 +12,19 @@ phase. The guard fails if:
   * a writer site appears that is NOT in the ledger (a new boundary violation), or
   * a ledger entry no longer exists in code (a stale ledger after a retirement).
 
-This guard is authored RED: the Tier 1 sites (orphaned inquiry / data-package
-mutators) are deliberately absent from the ledger, so the guard reports them as
-unexpected until Phase 1 Task 5 deletes them. After deletion, `actual` equals the
-ledger exactly and the guard is GREEN.
+This guard was authored RED: the Tier 1 sites (orphaned inquiry / data-package
+mutators) were deliberately absent from the ledger, so the guard reported them as
+unexpected until Phase 1 Task 5 deleted them. With Tier 1 gone, `actual` now
+equals the ledger exactly and the guard is GREEN.
+
+Scope / limitation: the match is name-based on the call site — a bare
+`_save_dataset(...)` / `save_graph_dataset(...)` call resolved to its enclosing
+function. It is a ratchet against *accidental* regrowth of a direct writer, not a
+runtime sandbox: an aliased re-import (`from .dataset import _save_dataset as p`)
+or an indirect call through a variable would evade the static check. Closing those
+holes would require import-alias resolution; the source-declaration boundary is
+enforced for real at build time by the compiler, and this test guards against the
+common case of a new module simply calling the primitive by name.
 """
 
 from __future__ import annotations
