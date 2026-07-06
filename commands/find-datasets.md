@@ -6,8 +6,7 @@ description: Discover and document candidate datasets for research or tool demos
 
 Find candidate external datasets for `$ARGUMENTS`.
 If no argument is provided, derive candidate search terms from active questions,
-hypotheses, inquiry variables, and legacy specs only when those files exist;
-then ask the user to confirm the focus.
+hypotheses, and inquiry variables; then ask the user to confirm the focus.
 
 ## Setup
 
@@ -20,8 +19,6 @@ Additionally:
    - `entities/questions/`
    - `entities/hypotheses/`
    - `entities/datasets/` to avoid duplicating known dataset records
-   - legacy specs/research-question.md only if it exists
-   - legacy specs/scope-boundaries.md only if it exists
 4. If an inquiry exists, check inquiry variables to understand what data the project needs:
    ```bash
    science inquiry list --format json
@@ -175,12 +172,12 @@ If multiple dataset records need ranking after discovery, run:
 science dataset prioritize --format json
 ```
 
-Direct template authoring is a fallback, reserved for unsupported fields or
-deliberate legacy backfills. When using that fallback, record why CLI lifecycle
-commands cannot represent the needed change. Read `.ai/templates/dataset.md`
-first; if it is not present, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`.
-Fill unknown fields as `[UNVERIFIED]`, then immediately run
-`science dataset verify-access <slug>` or record why verification is blocked.
+If a needed field is not yet exposed by the CLI, author the entity file directly
+from the current dataset template and record why the lifecycle commands could
+not represent the change. Read `.ai/templates/dataset.md` first; if it is not
+present, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`. Fill unknown fields
+as `[UNVERIFIED]`, then immediately run `science dataset verify-access <slug>`
+or record why verification is blocked.
 
 When mapping an adapter result's `access` tier to the entity `access.level`,
 apply: `public -> public`, `restricted -> controlled`, and
@@ -233,8 +230,7 @@ explicit template fallback:
 - Populate `access.level`, `access.source_url`, and `access.credentials_required`
   from discovery evidence. When uncertain, use the most restrictive known level
   — the verification step corrects it.
-- The `accessions:` field carries external accession IDs (renamed from `datasets:`;
-  legacy entries continue to read).
+- The `accessions:` field carries external accession IDs.
 - Do NOT emit `origin: derived` entities — those are produced by `science
   dataset register-run` after a workflow run.
 

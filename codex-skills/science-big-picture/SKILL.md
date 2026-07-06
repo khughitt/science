@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -139,7 +138,7 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
 - `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions **AND** whose resolved aspects intersect `research_filter`. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
 - `interpretations`: glob `entities/interpretations/*.md`; parse frontmatter; include entries that either (a) directly reference this hypothesis in `related:`, (b) reference a question whose **primary** hypothesis (per resolver output) is this hypothesis, or (c) appear by `interpretation:...` ID in this hypothesis spec's own `related:` frontmatter. Do NOT include interpretations that only reach this hypothesis via transitive-only questions (questions whose primary_hypothesis is a different hypothesis). This tightens transitive pull-in and prevents early work that is really "central to H<other>" from flooding this hypothesis's bundle. Rule (c) is the escape hatch for `weakened`/`proposed`/`candidate` hypotheses that have no resolved questions and that the hypothesis author has explicitly bound to specific interpretations — without it, weakened hypotheses can end up with bundles too sparse to synthesize against. For each included interpretation, parse its frontmatter `id:` field and pass both `path` and canonical `id:` in the bundle entry, so sub-agents can cite by canonical ID without falling back to filename inference. Apply the same `research_filter` aspect check.
-- `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID. While assembling, build a set of interpretation IDs cited at the edge level (any `evidence:` or `anchor:` interpretation references inside each edge's metadata). Pass this set to the sub-agent as `edge_cited_interpretation_ids`: when an interpretation in the bundle is also covered by an `.edges.yaml` edge, the sub-agent should cite it through the edge (preserving the structural provenance) and treat its omission from the prose-level interpretation list as expected — not as a "bundle-unused" gap.
+- `graph_propositions`: include proposition entities linked to this hypothesis, or whose `legacy_patch` / DAG membership metadata binds them to the hypothesis's DAG. While assembling, build a set of interpretation IDs cited through related evidence-line entities. Pass this set to the sub-agent as `edge_cited_interpretation_ids`: when an interpretation in the bundle is also covered by proposition/evidence-line structure, the sub-agent should cite it through that structure and treat its omission from the prose-level interpretation list as expected — not as a "bundle-unused" gap.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
 - `gaps_slice`: run `uv run science graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
 - `topic_gaps`: see below.
@@ -159,7 +158,7 @@ The stable topic-coverage gap contract is documented in
 `docs/user-guide/big-picture-synthesis.md`.
 
 Compute `provenance_coverage` per hypothesis:
-- `high` if >=1 `.edges.yaml` is present OR >=1 graph proposition surface exists AND >=60% of
+- `high` if >=1 graph proposition surface exists AND >=60% of
   related interpretations participate in materialized `sci:amends` /
   `sci:supersedes` conclusion chains.
 - `partial` if neither of those but >=30% of related interpretations participate

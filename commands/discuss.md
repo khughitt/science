@@ -51,15 +51,7 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Create the discussion with `science discussions create`. The tool builds the canonical ID, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), runs prospective validation, and places the file in the discussion home `entities/discussions/`.
-
-> ⚠️ **Fallback if the CLI errors or writes a non-canonical path.** The `discussions create`
-> CLI may be mid-refactor on some toolchains (e.g. emitting a numeric `discussion:0001-<slug>`
-> ID under `entities/discussions/` while the project convention is date-slug under
-> `entities/discussions/`). If the produced ID or path disagrees with the project's existing
-> discussions, delete the stray file and author the source file directly under the project's
-> established discussion home, using the same `discussion:<today>-<slug>` ID scheme its
-> neighbours use. This mirrors the partially-migrated fallback in `/science:interpret-results`.
+Create the discussion with `science discussions create`. The tool builds the canonical ID, writes canonical frontmatter (`id`, `kind`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), runs prospective validation, and places the file in the discussion home `entities/discussions/`.
 
 ```bash
 uv run science discussions create "<short title>" \
@@ -67,7 +59,7 @@ uv run science discussions create "<short title>" \
   --source-ref <paper-or-package-ref>
 ```
 
-`--focus` is repeatable and maps to `related`. `--source-ref` is repeatable. The command prints the chosen ID (e.g. `discussion:2026-04-28-<slug>`) and the file path. After creation, open the file and fill in the body sections below; preserve the frontmatter the tool produced.
+`--focus` is repeatable and maps to `related`. `--source-ref` is repeatable. The command prints the chosen ID and the file path. After creation, open the file and fill in the body sections below; preserve the frontmatter the tool produced.
 
 The default `status` is `active`. Switch to `complete` once the discussion is wrapped up via `science entity edit <ref> --status complete` (or `science entity edit`); use `superseded` if a later discussion replaces this one. Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
 

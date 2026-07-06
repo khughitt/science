@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -148,6 +147,7 @@ project/
 ├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
+├── entities/
 ├── doc/
 ├── tasks/
 ├── specs/
@@ -182,6 +182,7 @@ project/
 ├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
+├── entities/
 ├── doc/
 ├── tasks/
 ├── specs/
@@ -212,7 +213,7 @@ last_modified: "<today YYYY-MM-DD>"
 summary: "<from conversation>"
 status: "active"
 profile: "<research-or-software>"
-layout_version: 2
+layout_version: 3
 tags: []
 data_sources: []
 ontologies: []
@@ -305,18 +306,19 @@ science project artifacts install validate.sh --adopt --project-root <project-pa
 
 `--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).
 
-### `doc/`
+### `entities/` And `doc/`
 
-Collapse active Science-managed documentation into:
+Move typed entity owners into `entities/<kind>/`. Keep `doc/` for prose,
+reports, background, discussions, figures, and other documents that are not
+entity owners.
+
+Collapse active Science-managed prose into:
 
 ```text
 doc/
 ├── background/
 │   ├── topics/
 │   └── papers/
-├── questions/
-├── methods/
-├── datasets/
 ├── searches/
 ├── discussions/
 ├── interpretations/

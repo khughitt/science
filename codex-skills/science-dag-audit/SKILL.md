@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -162,12 +161,13 @@ Present the proposal summary, then ask:
 > "Apply all proposed changes, apply selectively, or stop here?"
 
 On approval:
-- For YAML edits: edit the `<dag>.edges.yaml` file directly with the proposed
-  changes. Run `science dag render --project <project>` afterwards to
-  refresh the `-auto.dot` / `-auto.png` artifacts.
+- For DAG semantic edits: edit the backing `proposition:` and `evidence-line:`
+  entities. Run `science dag validate --project <project>` and
+  `science dag render --project <project>` afterwards to refresh the
+  `-auto.dot` / `-auto.png` artifacts.
 - For new review tasks: call `science tasks add` (or
   `science dag audit --fix` which routes through the same API).
-- For ref fixes: edit the `<dag>.edges.yaml` directly.
+- For ref fixes: edit the proposition/evidence-line entity that owns the ref.
 
 ### 5. Commit
 

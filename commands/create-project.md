@@ -64,13 +64,16 @@ Always create:
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── validate.sh
+├── entities/
+│   ├── datasets/
+│   ├── hypotheses/
+│   ├── papers/
+│   ├── questions/
+│   └── topics/
 ├── doc/
 │   ├── background/
 │   │   ├── topics/
 │   │   └── papers/
-│   ├── questions/
-│   ├── methods/
-│   ├── datasets/
 │   ├── searches/
 │   ├── discussions/
 │   ├── interpretations/
@@ -144,7 +147,7 @@ last_modified: "<YYYY-MM-DD>"
 summary: "<2-3 sentence summary from conversation>"
 status: "active"
 profile: "<research-or-software>"
-layout_version: 2
+layout_version: 3
 tags:
   - "<tag1>"
   - "<tag2>"
@@ -323,11 +326,16 @@ For `research` projects:
 
 - write `specs/research-question.md`
 - write `specs/scope-boundaries.md`
-- create `entities/hypotheses/`
 
 For `software` projects:
 
 - create `specs/` only as needed for project requirements or product/research planning
+
+### `entities/`
+
+Create typed owner directories for the project-owned entities that are known at
+scaffold time. New durable entities belong under `entities/<kind>/`; do not
+place typed entity owners under `doc/` or `specs/`.
 
 ### `doc/`
 

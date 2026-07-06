@@ -38,9 +38,9 @@ route it there instead of silently re-planning around it.
 ## Setup
 
 1. Read `science.yaml`.
-2. Read `specs/research-question.md` if present.
+2. Read relevant questions in `entities/questions/` when present.
 3. Read relevant hypotheses, inquiries, tasks, prior pre-registrations, and existing plans named by the user.
-4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/` first, then in legacy project doc locations such as `doc/meta/` and `docs/meta/`, and finally in legacy `specs/` locations only if they exist; do not assume absence just because `entities/pre-registrations/` is empty.
+4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/`; do not assume absence just because no task mentions one.
 5. If an inquiry slug is provided, read the inquiry/model state and reuse captured estimand, variables, independent unit, and model/test fields.
 6. If the task is literature synthesis or theory without a data-analysis component, route to `/science:research-topic` or `/science:research-papers` unless the user explicitly wants an analysis plan.
 7. Before drafting the plan, run a data-availability / metric-feasibility pre-check:

@@ -224,7 +224,7 @@ For each found pre-reg, read its `committed:` clause and classify each commitmen
 
      ```bash
      science graph add proposition "<observed result proposition>" \
-       --source <data-package-or-workflow-run-ref> \
+       --source <dataset-or-workflow-run-ref> \
        --pre-registration pre-registration:<slug> \
        --id <proposition-id>
 
@@ -277,8 +277,7 @@ After analyzing results, create structured entities in addition to the prose doc
 `knowledge/graph.trig` deterministically from markdown sources; it never reads the existing
 `graph.trig` back. Two consequences shape this section:
 
-- **Partially-migrated project (no `knowledge/graph.trig`).** Every `science graph …` command below
-  will error. Do not try them per-command and accept the failures — instead route the structured
+- **No materialized graph yet.** Every `science graph …` command below will error. Route the structured
   output to **source-authored files** (the durable path below), and keep the interpretation itself in
   `entities/interpretations/` via `science interpretations create`. Note this in the output mode line.
 - **`graph add` is non-durable even when the graph exists.** `science graph add
@@ -307,21 +306,21 @@ The `graph add …` recipes below are the *throwaway-inspection* form; mirror ea
 source-authored form above when the entity must persist.
 
 1. For each concrete empirical fact:
-   `science graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
+   `science graph add observation "<description>" --data-source <dataset-or-workflow-run-ref> --metric <what> --value <value>`
 
 2. For each interpretive proposition:
-   `science graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
+   `science graph add proposition "<text>" --source <dataset-or-workflow-run-ref> --confidence <0-1>`
 
 3. For each observation that bears on a proposition:
    `science graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
 
 4. Bundle into a finding:
-   `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
+   `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <dataset-or-workflow-run-ref>`
 
 5. Create the interpretation as a source-authored entity:
-   `science interpretations create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
+   `science interpretations create "<summary>" --input <dataset-or-workflow-run-ref> --related <finding-or-proposition-ref>`
 
-   This places the file under `entities/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
+   This places the file under `entities/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Use this durable source document instead of direct graph mutation.
 
 ### 6. Surface New Questions
 
@@ -380,11 +379,11 @@ Create the interpretation file with `science interpretations create`:
 
 ```bash
 uv run science interpretations create "<short title>" \
-  --input <data-package-or-run-ref> \
+  --input <dataset-or-workflow-run-ref> \
   --related <hypothesis:hNN-...|question:qNN-...>
 ```
 
-The tool builds the canonical `interpretation:<today>-<slug>` ID, places the file under `entities/interpretations/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation. `--input` maps to `source_refs`; `--related` is repeatable. After creation, open the file and fill the body using the template — preserve the frontmatter the tool produced. Add custom fields (e.g. `input` if the project schema requires it) by editing the frontmatter directly.
+The tool builds the canonical `interpretation:<today>-<slug>` ID, places the file under `entities/interpretations/`, writes canonical frontmatter (`id`, `kind`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation. `--input` maps to `source_refs`; `--related` is repeatable. After creation, open the file and fill the body using the template — preserve the frontmatter the tool produced. Add custom fields (e.g. `input` if the project schema requires it) by editing the frontmatter directly.
 
 ## After Writing
 

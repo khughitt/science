@@ -535,12 +535,10 @@ The canonical bibkey is the full substring after the first `:`. Comparisons are
 case-sensitive and byte-for-byte: `paper:Smith2024` and `cite:Smith2024` share
 the bibkey `Smith2024`, but `paper:smith2024` is a different key.
 
-Legacy `article:<bibkey>` references are accepted only as a transition-window
-alias for `paper:<bibkey>` at load and comparison boundaries. New authored
-files should use `paper:<bibkey>`. Health checks still surface legacy
-structured `article:` references so projects can remove them from source before
-the alias is retired. See [Refs Check](../conventions/refs-check.md) for the
-reference-checking and alias-retirement policy.
+`article` remains a live entity kind for article records, but
+`article:<bibkey>` is not the external-literature ref prefix. Use
+`paper:<bibkey>` for literature notes and `cite:<bibkey>` for bibliography
+references.
 
 `papers/references.bib` is an external-reference authority, not an entity owner
 store. It can synthesize lightweight paper or book records so `paper:` and
@@ -569,13 +567,13 @@ Rows in this file are external references. They provide a durable authority for
 ontology or catalog identifiers and can materialize exact-match links, but they
 do not replace a project owner file when the project has one.
 
-## Aggregate Manifests
+## Entity Owner Files
 
-Aggregate entity manifests such as `knowledge/sources/<profile>/entities.yaml`,
-`terms.yaml`, and `doc/<plural>/<plural>.{json,yaml}` are retired. Current
-projects should author durable entities as owner files under `entities/`, keep
-external authority rows in `external_refs.yaml`, and keep generated graph output
-out of source ownership.
+Author durable entities as owner files under `entities/`, keep external
+authority rows in `external_refs.yaml`, and keep generated graph output out of
+source ownership. Do not create aggregate entity manifests such as
+`knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, or
+`doc/<plural>/<plural>.{json,yaml}`.
 
 Decision owners are authoritative after promotion. Render the derived decision
 log view with:
@@ -689,7 +687,7 @@ The split is intentional:
 
 | Surface | Owns |
 |---|---|
-| Dataset entity | `id`, `type`, `title`, `status`, `origin`, `dataset_class`, `tier`, `license`, `update_cadence`, `ontology_terms`, `access`, `derivation`, lineage, `qa_report`, `consumed_by`, and human prose. |
+| Dataset entity | `id`, `kind`, `title`, `status`, `origin`, `dataset_class`, `tier`, `license`, `update_cadence`, `ontology_terms`, `access`, `derivation`, lineage, `qa_report`, `consumed_by`, and human prose. |
 | Runtime datapackage | Resource names, paths, hashes, byte counts, formats, schemas, and other file-level package details. |
 
 Dataset entities use `profiles: ["science-pkg-entity-1.0"]`. Do not put

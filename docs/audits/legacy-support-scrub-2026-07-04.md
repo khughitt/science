@@ -148,6 +148,15 @@ Completed in `refactor/marker-alias-retirement`:
 - Removed active marker alias normalization, the marker migrator CLI, and
   command/skill guidance after the zero-hit inventory gate.
 
+Completed in `refactor/command-guidance-legacy-cleanup`:
+
+- Removed active command, generated Codex skill, template, schema-reference, and
+  user-guide guidance that still taught retired entity roots, `type:`
+  frontmatter, `article:` literature aliases, `.edges.yaml`, layout-v2
+  scaffolds, data-package entity refs, and aggregate manifests.
+- Left historical plans/audits intact where they document migration history
+  rather than current authoring instructions.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -164,7 +173,7 @@ Completed in `refactor/marker-alias-retirement`:
 | Annotation marker alias | Complete; current inventory reports zero `legacy_marker_alias` findings | Complete; direct downstream edits committed in affected project repos | Complete; marker alias normalization, marker migrator CLI, and marker docs removed | `[MISSING_CITATION]` remains canonical. |
 | Bare `profiles:` config fallback | Complete; current inventory reports zero bare `profiles:` science.yaml findings | Complete; no project migration was needed because inventory was already zero | Complete; graph source loading and local kind registration now reject bare top-level `profiles:` instead of falling back to it | Do not flag current model/profile concepts or entity/datapackage frontmatter `profiles`. |
 | Removed science.yaml fields | `parent:` or `children:` in project config | Direct config edit if found | `science/src/science_tool/project_config.py:_reject_legacy_fields` | Enforcement-only shim. Remove near the end after confirming zero downstream hits. |
-| Command and skill guidance | Commands/skills instruct agents to read or author legacy paths or template fallbacks | Documentation edits after the relevant data migrator exists | `commands/*.md`, `skills/**/*.md`, `templates/*.md`, mirrored `science_model/templates/*` | Update early enough to stop new legacy data, but avoid deleting migration instructions before migrations run. |
+| Command and skill guidance | Complete; active commands, generated Codex skills, templates, and user-guide references no longer teach retired surfaces | Complete after the relevant data migrators/readers were removed | `commands/*.md`, `codex-skills/**/*.md`, `references/*.md`, `templates/*.md`, mirrored `science_model/templates/*` | Historical plans/audits still record retired surfaces as history; current guidance points at the single current representation. |
 
 ## Precheck Sentinels
 
@@ -203,8 +212,9 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 8. Complete: reconfirm and retire legacy data-package entities.
 9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.
 10. Complete: migrate and gate marker aliases, `science_qa` table mode, and bare `profiles:` config fallback.
-11. Remove enforcement-only shims after zero-hit confirmation.
-12. Run final toolkit and downstream verification.
+11. Complete: remove command, skill, template, and active user-guide guidance for retired surfaces.
+12. Remove enforcement-only shims after zero-hit confirmation.
+13. Run final toolkit and downstream verification.
 
 Each surface should end with a checked-in precheck report showing zero project
 hits before deleting the corresponding reader.

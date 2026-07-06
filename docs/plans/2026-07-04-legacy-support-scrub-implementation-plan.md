@@ -65,6 +65,11 @@
   inventory reports zero legacy data-package entity findings, and active
   materialize preflight, health sentinel, data-package CLI group, promotion
   helper, and user-facing command guidance were removed.
+- Complete in `refactor/command-guidance-legacy-cleanup`: current command,
+  generated Codex skill, template, schema-reference, and user-guide surfaces no
+  longer teach retired entity-root, `type:` frontmatter, `article:` prefix,
+  `.edges.yaml`, data-package entity-ref, aggregate-manifest, or layout-v2
+  scaffold patterns.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -493,21 +498,27 @@ Run targeted tests plus package suites.
 - `docs/user-guide/*.md`
 - `docs/conventions/*.md`
 
-- [ ] **Step 1: Remove legacy authoring instructions**
+Status 2026-07-06: complete in `refactor/command-guidance-legacy-cleanup`.
+Current commands, generated Codex skills, templates, active user-guide docs,
+and schema references point at current roots/fields and no longer teach retired
+`article:` aliases, `.edges.yaml`, data-package entity refs, aggregate
+manifests, or layout-v2 scaffolds.
+
+- [x] **Step 1: Remove legacy authoring instructions**
 
 Update instructions to point only at current paths and current fields.
 
-- [ ] **Step 2: Keep migration history only where useful**
+- [x] **Step 2: Keep migration history only where useful**
 
 Historical plans can remain historical, but active user guidance should not
 tell agents to read or author legacy surfaces.
 
-- [ ] **Step 3: Gate docs and templates**
+- [x] **Step 3: Gate docs and templates**
 
 Run final `rg` triage over active docs/templates/commands/skills and classify
 intentional survivors.
 
-- [ ] **Step 4: Verify docs**
+- [x] **Step 4: Verify docs**
 
 Run docs/user-guide tests if available, then full package suites.
 

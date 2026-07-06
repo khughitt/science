@@ -6,9 +6,8 @@ links, DOIs, PMIDs, typed entity refs in frontmatter, and (with
 
 ## Default behavior
 
-Scans `paths.doc_dir` (default `doc/`), `paths.specs_dir` (default `specs/`),
-`paths.entities_dir` (default `entities/`), and root `README.md`. The
-body-prose typed-ref scan
+Scans `paths.doc_dir` (default `doc/`), `paths.entities_dir` (default
+`entities/`), and root `README.md`. The body-prose typed-ref scan
 (opt-in via `--include-body`) validates against the frontmatter `id:`
 sweep — a walk over every markdown file's `id:` field, collecting
 `<kind>:<slug>` strings whose kind is in the canonical local-entity-kinds
@@ -51,8 +50,8 @@ falls back to the frontmatter sweep — the check still runs.
 ### `scan_roots`
 
 Each entry is a directory under the project root. The default scan
-(`doc/`, `specs/`) covers the most common authoring locations, but
-projects often keep additional prose in `tasks/`, `papers/`, root-level
+(`doc/`, `entities/`) covers the common Science-managed authoring locations,
+but projects often keep additional prose in `tasks/`, `papers/`, root-level
 `README.md`/`CLAUDE.md`/`AGENTS.md`, or project-specific dirs like `core/`.
 
 The special value `"."` means "include root-level `.md` files (non-recursive)"
@@ -81,10 +80,9 @@ case-sensitive and byte-for-byte. There is no lowercasing, whitespace trimming,
 or suffix folding. `paper:Smith2024` and `cite:Smith2024` share the bibkey
 `Smith2024`; `paper:smith2024` does not.
 
-The one-shot `science refs migrate-paper` command is no longer part of the live
-CLI. To clean up an old project, edit any structured `article:` references to
-`paper:`, run `science refs check --include-body`, and inspect
-`science graph health` for `legacy_structured_literature_prefixes`.
+Use `paper:<bibkey>` for external literature references. `article:<bibkey>` is
+not a literature-reference prefix; `article` remains reserved for article
+entities only.
 
 Inline Markdown citations for app export use the narrow v1 citation grammar
 documented in [Citations And Reference Bundles](citations-and-references.md).
@@ -92,14 +90,6 @@ That export-time check is complementary to `science refs check`: `refs check`
 answers whether project references resolve, while the app exporter answers
 whether public Markdown can be rendered as numeric citations from
 `references/index.json`.
-
-The legacy alias can be retired only after:
-
-- tracked projects no longer report structured `article:` findings;
-- intentional legacy-alias tests or fixtures are either removed or clearly
-  scoped to migration-history coverage; and
-- every consumer that calls `canonical_paper_id` has a direct `paper:`-only
-  path or no longer needs external-literature aliasing.
 
 ## Related
 

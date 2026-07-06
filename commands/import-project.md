@@ -73,6 +73,7 @@ project/
 ├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
+├── entities/
 ├── doc/
 ├── tasks/
 ├── specs/
@@ -107,6 +108,7 @@ project/
 ├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
+├── entities/
 ├── doc/
 ├── tasks/
 ├── specs/
@@ -137,7 +139,7 @@ last_modified: "<today YYYY-MM-DD>"
 summary: "<from conversation>"
 status: "active"
 profile: "<research-or-software>"
-layout_version: 2
+layout_version: 3
 tags: []
 data_sources: []
 ontologies: []
@@ -230,18 +232,19 @@ science project artifacts install validate.sh --adopt --project-root <project-pa
 
 `--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).
 
-### `doc/`
+### `entities/` And `doc/`
 
-Collapse active Science-managed documentation into:
+Move typed entity owners into `entities/<kind>/`. Keep `doc/` for prose,
+reports, background, discussions, figures, and other documents that are not
+entity owners.
+
+Collapse active Science-managed prose into:
 
 ```text
 doc/
 ├── background/
 │   ├── topics/
 │   └── papers/
-├── questions/
-├── methods/
-├── datasets/
 ├── searches/
 ├── discussions/
 ├── interpretations/

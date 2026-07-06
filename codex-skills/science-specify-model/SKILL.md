@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -128,18 +127,16 @@ project represents its model graph — otherwise `science inquiry show` errors (
 
 2. **Detect the DAG representation.** Some projects author the inquiry graph through the
    source-first inquiry patch path (`entities/patches/<slug>.md` with `patch_type: inquiry`). Others author
-   per-hypothesis DAGs as a **file pair** — e.g. `doc/figures/dags/<id>.dot` + `<id>.edges.yaml` —
-   consumed by `science big-picture` provenance-coverage rather than by `science graph add`. Check the
-   project for such a convention (look under `doc/figures/dags/`, `*.edges.yaml`, or the project's
-   `*.edges.yaml`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
+   per-hypothesis DAG topology in `doc/figures/dags/<id>.dot`, with semantics supplied by durable
+   `proposition:` and `evidence-line:` entities. Check the project for such a convention (look under
+   `doc/figures/dags/`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
 
 3. **Route accordingly:**
    - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.
    - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
-     `graph add concept` steps (they don't map onto the file pair). Instead author/validate the
-     `.dot` + `.edges.yaml` pair the project's tooling consumes, and still do Step 3 (durable
-     `proposition` entities) and Step 4 (evidence-line entities) — those are tool-supported and
-     durable regardless of DAG representation. Validate with the project's DAG check (e.g.
+     `graph add concept` steps. Instead author/validate the `.dot` topology and the durable
+     `proposition` entities that back each DOT edge, then add Step 4 evidence-line entities.
+     Validate with the project's DAG check (e.g. `science dag validate` / `science dag render` /
      `science big-picture`) rather than `inquiry validate`.
    - **Hypothesis / epistemic entity with no DAG yet** → decompose the hypothesis into durable `proposition:` entities.
      For each proposition, link each proposition back to the hypothesis with `related: ["hypothesis:<id>"]`.
@@ -153,7 +150,7 @@ structural-graph steps (1, 2, the inquiry source edit in 3, and 6's `inquiry val
 ### Step 1: Load And Assess The Target
 
 *(Inquiry + RDF-graph path — see Step 0. For a hypothesis in a file-based DAG project, read the
-hypothesis file and its `.dot`/`.edges.yaml` pair instead. For a hypothesis with no DAG yet, read the
+hypothesis file, `.dot` topology, and backing proposition/evidence-line entities instead. For a hypothesis with no DAG yet, read the
 hypothesis file and prepare the proposition bundle before adding any structural graph.)*
 
 If the user input contains an inquiry slug:

@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -139,13 +138,16 @@ Always create:
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── validate.sh
+├── entities/
+│   ├── datasets/
+│   ├── hypotheses/
+│   ├── papers/
+│   ├── questions/
+│   └── topics/
 ├── doc/
 │   ├── background/
 │   │   ├── topics/
 │   │   └── papers/
-│   ├── questions/
-│   ├── methods/
-│   ├── datasets/
 │   ├── searches/
 │   ├── discussions/
 │   ├── interpretations/
@@ -219,7 +221,7 @@ last_modified: "<YYYY-MM-DD>"
 summary: "<2-3 sentence summary from conversation>"
 status: "active"
 profile: "<research-or-software>"
-layout_version: 2
+layout_version: 3
 tags:
   - "<tag1>"
   - "<tag2>"
@@ -398,11 +400,16 @@ For `research` projects:
 
 - write `specs/research-question.md`
 - write `specs/scope-boundaries.md`
-- create `entities/hypotheses/`
 
 For `software` projects:
 
 - create `specs/` only as needed for project requirements or product/research planning
+
+### `entities/`
+
+Create typed owner directories for the project-owned entities that are known at
+scaffold time. New durable entities belong under `entities/<kind>/`; do not
+place typed entity owners under `doc/` or `specs/`.
 
 ### `doc/`
 

@@ -55,7 +55,7 @@ project represents its model graph — otherwise `science inquiry show` errors (
    source-first inquiry patch path (`entities/patches/<slug>.md` with `patch_type: inquiry`). Others author
    per-hypothesis DAG topology in `doc/figures/dags/<id>.dot`, with semantics supplied by durable
    `proposition:` and `evidence-line:` entities. Check the project for such a convention (look under
-   `doc/figures/dags/`, `*.edges.yaml`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
+   `doc/figures/dags/`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
 
 3. **Route accordingly:**
    - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.

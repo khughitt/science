@@ -57,7 +57,6 @@ _template:
 ## Source
 
 <!--
-Data from: data-package:<source-id>
+Data from: dataset:<source-id>
 Analysis: workflow-run:<run-id> (if applicable)
 -->
-
