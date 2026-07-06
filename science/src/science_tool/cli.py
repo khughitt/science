@@ -57,9 +57,6 @@ from science_tool.graph.materialize import materialization_audit, materialize_gr
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
-    add_article,
-    add_falsification,
-    add_story,
     build_graph_dot,
     diff_graph_inputs,
     export_graph_payload,
@@ -2221,8 +2218,10 @@ def graph_add_concept(
 )
 def add_article_cmd(doi: str, graph_path: Path) -> None:
     """Add an external literature reference by DOI."""
-    uri = add_article(graph_path, doi)
-    click.echo(f"Added paper: {uri}")
+    raise _retired_writer(
+        "graph add article",
+        "Run `science entity create paper <title>` (or edit entities/papers/<citekey>.md with a doi: field)",
+    )
 
 
 @graph_add.command("proposition")
@@ -2508,17 +2507,10 @@ def add_falsification_cmd(
     graph_path: Path,
 ) -> None:
     """Add a falsification record linked to a proposition."""
-    uri = add_falsification(
-        graph_path=graph_path,
-        predicted=predicted,
-        source_of_prediction=source_of_prediction,
-        observed=observed,
-        decision=decision,
-        proposition_ref=proposition_ref,
-        falsification_id=falsification_id,
-        supersedes_claim=supersedes_claim,
+    raise _retired_writer(
+        "graph add falsification",
+        "Run `science entity create falsification <title>` (set falsifies: to the proposition ref)",
     )
-    click.echo(f"Added falsification: {uri}")
 
 
 @graph_add.command("story")
@@ -2541,12 +2533,9 @@ def add_story_cmd(
     graph_path: Path,
 ) -> None:
     """Add a story — a narrative arc around a question or hypothesis."""
-    uri = add_story(graph_path, title, summary, about, list(interpretations), status, story_id)
-    click.echo(f"Added story: {uri}")
-    click.echo(
-        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources. "
-        "Use a source-authored story entity for durable project work."
+    raise _retired_writer(
+        "graph add story",
+        "Run `science entity create story <title>` (author synthesizes/organizedBy edges in relations.yaml)",
     )
 
 
