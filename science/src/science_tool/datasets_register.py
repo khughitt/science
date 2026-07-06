@@ -64,6 +64,58 @@ def _read_run_aggregate_datapackage(project_root: Path, workflow_slug: str, run_
     return rt, yaml.safe_load(rt.read_text(encoding="utf-8"))
 
 
+def _reduce_output_support(out: dict, resources: list[dict]) -> dict | None:
+    """Reduce producer-authored per-resource ``science.support`` to one per-output stamp.
+
+    Returns None when the output declares no ``support`` floor (not opted in).
+    For an opted-in output every resource must carry ``science.support``; the
+    observation is the min of their ``observed``. If any resource is unstamped,
+    ``observed`` is None (stamp-missing). A malformed ``observed`` is passed
+    through verbatim so the validate check, not register-run, judges it. If the
+    stamped resources disagree on ``unit``, raise (a single reduced unit cannot
+    represent two, and keeping the first would hide the second's mismatch).
+    """
+    if out.get("support") is None:
+        return None
+    slug = out.get("slug")
+    stamps: list[dict] = []
+    unstamped = False
+    for r in resources:
+        resource_name = r.get("name")
+        if "science" not in r:
+            unstamped = True
+            continue
+        science = r.get("science")
+        if science is None or science == {}:
+            unstamped = True
+            continue
+        if not isinstance(science, dict):
+            raise ValueError(f"output {slug!r} resource {resource_name!r}: science must be a mapping")
+        support = science.get("support")
+        if support is None:
+            unstamped = True
+            continue
+        if not isinstance(support, dict):
+            raise ValueError(f"output {slug!r} resource {resource_name!r}: science.support must be a mapping")
+        stamps.append(support)
+    if unstamped:
+        return {"observed": None}
+    units = {s.get("unit") for s in stamps}
+    if len(units) > 1:
+        raise ValueError(
+            f"output {out.get('slug')!r}: resources declare conflicting support units "
+            f"{sorted(map(str, units))}"
+        )
+    unit = stamps[0].get("unit")
+    valid_observeds: list[int] = []
+    for s in stamps:
+        observed = s.get("observed")
+        if not (isinstance(observed, int) and not isinstance(observed, bool) and observed >= 0):
+            return {"unit": unit, "observed": observed}
+        valid_observeds.append(observed)
+    return {"unit": unit, "observed": min(valid_observeds)}
+
+
 def _run_dir_slug(workflow_slug: str, run_entity_slug: str) -> str:
     """Return the run directory name by stripping the workflow slug prefix.
 
@@ -126,9 +178,15 @@ def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> l
         }
         if out.get("ontology_terms"):
             out_dp["ontology_terms"] = list(out["ontology_terms"])
+        science_block: dict = {}
         resolved_identity = resolutions.get(str(out["slug"]))
         if resolved_identity is not None and resolved_identity.identity_context:
-            out_dp["science"] = {"identity_context": derive_stamp(resolved_identity.identity_context)}
+            science_block["identity_context"] = derive_stamp(resolved_identity.identity_context)
+        support_stamp = _reduce_output_support(out, out_resources)
+        if support_stamp is not None:
+            science_block["support"] = support_stamp
+        if science_block:
+            out_dp["science"] = science_block
         out_dp_path.write_text(yaml.safe_dump(out_dp, sort_keys=False), encoding="utf-8")
         written.append(out_dp_path)
     return written

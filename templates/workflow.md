@@ -18,6 +18,10 @@ outputs: []
 #       assembly: inherit
 #       molecular_ids:
 #         gene: inherit
+#     support:
+#       unit: dataset
+#       min: 3
+#       expected: 5
 # Identity declarations can use:
 #   - bare pass-through inheritance: taxon/assembly/tier: inherit
 #   - explicit source inheritance:
@@ -53,6 +57,12 @@ outputs: []
 #           sources:
 #             - dataset: "dataset:<source-a>"
 #               assembly: inherit
+# Support declarations are opt-in. Use them for run-aggregate resources that
+# must be backed by at least `min` distinct datasets, cohorts, samples, or sources.
+# `expected` is optional and records a soft target at or above `min`.
+# Producers stamp each aggregate resource with science.support: {unit, observed}.
+# `science dataset register-run` reduces support across resources by taking
+# the minimum observed value. `science validate` ERRORs below `min`.
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"
 ---
