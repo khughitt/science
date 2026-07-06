@@ -65,7 +65,6 @@ from .inquiry import (
     list_inquiries,
     list_inquiries_dataset,
     render_inquiry_doc,
-    set_treatment_outcome,
     validate_inquiry,
     validate_inquiry_dataset,
 )
@@ -73,18 +72,13 @@ from .mutations import (
     _attach_edge_claims,
     _warn_on_relation_direction_mismatch,
     add_article,
-    add_assumption,
     add_concept,
-    add_data_package,
     add_discussion,
     add_edge,
     add_evidence_edge,
     add_falsification,
     add_finding,
     add_hypothesis,
-    add_inquiry,
-    add_inquiry_edge,
-    add_inquiry_node,
     add_interpretation,
     add_mechanism,
     add_observation,
@@ -92,10 +86,7 @@ from .mutations import (
     add_proposition,
     add_question,
     add_story,
-    add_transformation,
     migrate_addresses_direction,
-    set_boundary_role,
-    set_param_metadata,
 )
 from .notebooks import _NOTEBOOKS_PYPROJECT, _copy_viz_notebook, _uv_lock
 from .queries import query_claims, query_evidence, query_neighborhood

@@ -9,9 +9,9 @@ from rdflib import Dataset, Graph, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
 from .constants import DCTERMS_NS, PROJECT_NS, SCI_NS, SCIC_NS
-from .dataset import _load_dataset, _save_dataset
+from .dataset import _load_dataset
 from .graphutil import _has_cycle
-from .identity import _edge_claims, _graph_uri, _resolve_term, _slug, shorten_uri
+from .identity import _edge_claims, _graph_uri, _slug, shorten_uri
 from .types import InquiryEdge, InquiryInfo
 
 
@@ -172,39 +172,6 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "boundary_out": boundary_out,
         "edges": edges,
     }
-
-
-def set_treatment_outcome(
-    graph_path: Path,
-    inquiry_slug: str,
-    treatment: str,
-    outcome: str,
-) -> None:
-    """Set treatment and outcome variables for a causal inquiry."""
-    safe_slug = _slug(inquiry_slug)
-    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
-
-    dataset = _load_dataset(graph_path)
-    inquiry_graph = dataset.graph(inquiry_uri)
-
-    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
-        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
-
-    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
-    if inquiry_type != "causal":
-        raise ValueError(f"Treatment/outcome only supported for causal inquiries (got '{inquiry_type}')")
-
-    treatment_uri = _resolve_term(treatment)
-    outcome_uri = _resolve_term(outcome)
-
-    # Remove any existing treatment/outcome
-    inquiry_graph.remove((inquiry_uri, SCI_NS.treatment, None))
-    inquiry_graph.remove((inquiry_uri, SCI_NS.outcome, None))
-
-    inquiry_graph.add((inquiry_uri, SCI_NS.treatment, treatment_uri))
-    inquiry_graph.add((inquiry_uri, SCI_NS.outcome, outcome_uri))
-
-    _save_dataset(dataset, graph_path)
 
 
 def render_inquiry_doc(graph_path: Path, slug: str) -> str:
