@@ -1,7 +1,17 @@
 # science/tests/test_text_source_adapter.py
 from datetime import datetime, timezone
+from pathlib import Path
 
-from science_tool.annotation.text_source_adapter import LocatorRegime
+import pytest
+
+from science_tool.annotation.text_source_adapter import (
+    LocatorRegime,
+    PaperSourceAdapter,
+    TEXT_SOURCE_ADAPTERS,
+    TextSourceAdapter,
+    TextSourceAdapterError,
+    resolve_adapter,
+)
 
 
 def test_locator_regime_values():
@@ -10,14 +20,6 @@ def test_locator_regime_values():
         "regenerable",
         "none",
     }
-
-
-# append to science/tests/test_text_source_adapter.py
-from pathlib import Path
-
-import pytest
-
-from science_tool.annotation.text_source_adapter import TextSourceAdapter
 
 
 class _DummyAdapter(TextSourceAdapter):
@@ -58,10 +60,6 @@ def test_base_extract_raises_not_implemented():
         )
 
 
-# append to science/tests/test_text_source_adapter.py
-from science_tool.annotation.text_source_adapter import PaperSourceAdapter
-
-
 def test_paper_adapter_capabilities():
     a = PaperSourceAdapter()
     assert a.name == "paper"
@@ -87,14 +85,6 @@ def test_paper_adapter_source_ref_rejects_non_source_md():
     a = PaperSourceAdapter()
     with pytest.raises(ValueError, match=r"expects a \.source\.md path"):
         a.source_ref(Path("/x/plain.md"))
-
-
-# append to science/tests/test_text_source_adapter.py
-from science_tool.annotation.text_source_adapter import (
-    TEXT_SOURCE_ADAPTERS,
-    TextSourceAdapterError,
-    resolve_adapter,
-)
 
 
 def test_registry_contains_paper_adapter():

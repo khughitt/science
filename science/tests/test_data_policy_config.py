@@ -6,7 +6,6 @@ import yaml
 
 from science_tool.data_policy import DEFAULT_DATA_POLICY
 from science_tool.project_config import (
-    ProjectConfig,
     load_project_config,
     resolve_data_policy,
 )

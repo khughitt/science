@@ -8,6 +8,8 @@ from science_tool.markers import (
     LEGACY_ALIASES,
     TOKENS,
     MarkerHit,
+    scan_markers,
+    scan_text,
     severity_for,
 )
 
@@ -59,9 +61,6 @@ def test_marker_hit_is_frozen_dataclass() -> None:
     )
     with pytest.raises(Exception):
         hit.line = 11  # type: ignore[misc]
-
-
-from science_tool.markers import scan_text
 
 
 def test_scan_text_finds_bare_unverified() -> None:
@@ -145,9 +144,6 @@ def test_scan_text_skips_hash_headings() -> None:
     # because headings can carry warning intent. Keep heading scanning ON.
     hits = scan_text(Path("x.md"), "## [UNVERIFIED] heading\n", strict=False)
     assert len(hits) == 1
-
-
-from science_tool.markers import scan_markers
 
 
 def _write(path: Path, text: str) -> None:

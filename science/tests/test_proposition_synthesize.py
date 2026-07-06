@@ -1,5 +1,13 @@
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
+import pytest
+from click.testing import CliRunner
+from science_model.propositions import PropositionEntity
+
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.model import (
     Annotation,
     Motivation,
@@ -9,7 +17,21 @@ from science_tool.annotation.model import (
     TextQuoteSelector,
     TextualBody,
 )
-from science_tool.annotation.synthesize import in_scope_propositions, statement_context
+from science_tool.annotation.synthesize import (
+    SynthesisApplyError,
+    SynthesisCandidate,
+    SynthesisOverrideError,
+    SynthesisReadError,
+    apply_synthesis,
+    build_scaffold,
+    in_scope_propositions,
+    parse_candidates_doc,
+    plan_writes,
+    relation_hints,
+    statement_context,
+    validate_candidate,
+)
+from science_tool.entities import _parse_markdown_file, write_entity_file
 
 
 def _ann(frag, atype, exact, *, body, promoted_to=None, status=Status.OPEN):
@@ -51,9 +73,6 @@ def test_statement_context_extracts_body_fields():
         "exact": "X drives Y", "section": "results", "stance": "asserted",
         "subject": "X", "object": "Y",
     }
-
-
-from science_tool.annotation.synthesize import build_scaffold, relation_hints
 
 
 def _rel(frag, exact, *, predicate, subj, obj):
@@ -104,14 +123,6 @@ def test_build_scaffold_shape():
     assert entry["statements"][0]["annotation"] == "annotation:papers/p.source#s1"
     assert entry["relation_hints"] == []
 
-
-import pytest
-
-from science_tool.annotation.synthesize import (
-    SynthesisCandidate,
-    SynthesisReadError,
-    parse_candidates_doc,
-)
 
 # in-scope set + per-proposition supporting-statement refs the parser validates against
 SCOPE = {"proposition:p": {"annotation:papers/p.source#s1"}}
@@ -198,14 +209,6 @@ def test_override_rejects_reasoning_source():
         }]), SCOPE)
 
 
-from science_tool.annotation.synthesize import (
-    SynthesisApplyError,
-    SynthesisOverrideError,
-    plan_writes,
-    validate_candidate,
-)
-
-
 def _cand(fields, override=frozenset(), prop="proposition:p",
           ann="annotation:papers/p.source#s1"):
     return SynthesisCandidate(proposition=prop, annotation=ann, fields=fields, override=override)
@@ -268,14 +271,6 @@ def test_validate_ok_returns_plan():
     plan = validate_candidate(current, cand)
     assert plan.writes == {"predicate": "regulates", "polarity": "negative",
                            "claim_layer": "causal_effect"}
-
-
-from pathlib import Path
-
-from science_model.propositions import PropositionEntity
-
-from science_tool.annotation.synthesize import apply_synthesis
-from science_tool.entities import _parse_markdown_file, write_entity_file
 
 
 def _project(tmp_path: Path) -> Path:
@@ -386,17 +381,6 @@ def test_apply_is_atomic_on_interlock_error(tmp_path):
     assert "claim_layer" not in fm
 
 
-import json as _json
-
-from click.testing import CliRunner
-
-from science_tool.annotation import io as anno_io
-from science_tool.annotation.cli import annotate_group
-from science_tool.annotation.model import (
-    Status,
-)
-
-
 def _scaffold_project(tmp_path: Path):
     root = _project(tmp_path)
     _write_prop(root, "brca1", title="BRCA1 affects instability", subject="BRCA1")
@@ -425,7 +409,7 @@ def test_cli_scaffold_lists_in_scope_proposition(tmp_path):
     r = CliRunner().invoke(annotate_group,
                            ["synthesize", str(md), "--root", str(root), "--format", "json"])
     assert r.exit_code == 0, r.output
-    payload = _json.loads(r.output)
+    payload = json.loads(r.output)
     assert payload["source"] == "llm-synth:<MODEL>:proposition-synthesize-v1"
     [entry] = payload["propositions"]
     assert entry["proposition"] == "proposition:brca1"
@@ -444,7 +428,7 @@ def test_cli_apply_writes_reasoning_fields(tmp_path):
         }],
     }
     cpath = root / "cand.json"
-    cpath.write_text(_json.dumps(cand), encoding="utf-8")
+    cpath.write_text(json.dumps(cand), encoding="utf-8")
     r = CliRunner().invoke(annotate_group, ["synthesize", str(md), "--root", str(root),
                                             "--apply", "--input", str(cpath)])
     assert r.exit_code == 0, r.output
@@ -456,4 +440,4 @@ def test_cli_apply_writes_reasoning_fields(tmp_path):
     r2 = CliRunner().invoke(annotate_group, ["synthesize", str(md), "--root", str(root),
                                              "--apply", "--input", str(cpath), "--format", "json"])
     assert r2.exit_code == 0, r2.output
-    assert _json.loads(r2.output)["updated"] == 0
+    assert json.loads(r2.output)["updated"] == 0

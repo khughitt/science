@@ -118,13 +118,10 @@ def test_required_check_coverage_records_no_column_selection(tmp_path):
     assert entry["columns"] == []
 
 
-import json as _json
-
-
 def _dp(tmp_path, resource: dict, df) -> Path:
     df.to_parquet(tmp_path / resource["path"])
     pkg = {"name": "p", "resources": [resource]}
-    (tmp_path / "datapackage.json").write_text(_json.dumps(pkg))
+    (tmp_path / "datapackage.json").write_text(json.dumps(pkg))
     return tmp_path / "datapackage.json"
 
 
@@ -185,13 +182,11 @@ def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
 
 
 def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
-    import json as _json
-
     from science_qa.runner import run_qa_datapackage
     res = {"name": "obs", "path": "obs.parquet",
            "schema": {"fields": [{"name": "id", "type": "integer"}]}}
     pd.DataFrame({"id": [1, 2, 3, 4]}).to_parquet(tmp_path / "obs.parquet")
-    (tmp_path / "datapackage.json").write_text(_json.dumps({"name": "p", "resources": [res]}))
+    (tmp_path / "datapackage.json").write_text(json.dumps({"name": "p", "resources": [res]}))
     result = run_qa_datapackage(tmp_path / "datapackage.json", "obs", tmp_path)
     assert result.rows_checked == 4
 
@@ -291,8 +286,6 @@ def test_package_report_dir_none_writes_nothing(tmp_path):
 
 
 def test_package_report_writes_subdirs_and_rollup(tmp_path):
-    import json as _json
-
     from science_qa.runner import run_qa_package
     pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
@@ -307,7 +300,7 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
     assert (out / "a" / "qa_report.json").exists()
     assert (out / "b" / "qa_report.json").exists()
     # package rollup
-    rollup = _json.loads((out / "qa_report.json").read_text())
+    rollup = json.loads((out / "qa_report.json").read_text())
     assert rollup["package"] == "p" and rollup["package_structural_failed"] is True
     sections = {s["resource"]: s for s in rollup["resources"]}
     assert sections["b"]["status"] == "fail" and sections["b"]["flags"]
@@ -316,8 +309,6 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
 
 def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
     # collision regression: identical flag_id in two resources -> separate subdir ledgers
-    import json as _json
-
     from science_qa.runner import run_qa_package
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-2.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
@@ -329,8 +320,8 @@ def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
         f"  - name: b\n    path: b.parquet\n    schema:\n      fields:\n{field}")
     out = tmp_path / "out"
     run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
-    a_ids = {f["flag_id"] for f in _json.loads((out / "a" / "qa_report.json").read_text())["flags"]}
-    b_ids = {f["flag_id"] for f in _json.loads((out / "b" / "qa_report.json").read_text())["flags"]}
+    a_ids = {f["flag_id"] for f in json.loads((out / "a" / "qa_report.json").read_text())["flags"]}
+    b_ids = {f["flag_id"] for f in json.loads((out / "b" / "qa_report.json").read_text())["flags"]}
     # same flag_id present in BOTH, each in its own resource-scoped report (not merged)
     assert "numeric-column/bounds/p/minimum" in a_ids
     assert "numeric-column/bounds/p/minimum" in b_ids

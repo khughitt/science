@@ -2,12 +2,43 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from science_tool.annotation.io import read_sidecar, write_sidecar
 from science_tool.annotation.ledger import ledger_set_source_text_hash
 from science_tool.annotation.model import (
+    Annotation,
     HASH_REQUIRED_SOURCE_PREFIXES,
     AuditLedger,
+    IriBody,
+    Motivation,
     Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+)
+from science_tool.annotation.pubtator_seed import PersistedPassage
+from science_tool.annotation.source_text import Passage, SourcePassages, write_source_md
+from science_tool.annotation.statement_extract import (
+    MAX_CANDIDATES,
+    MAX_FIELD_CHARS,
+    CANONICAL_SECTIONS,
+    _SECTION_NORMALIZE,
+    CandidateError,
+    ExtractReport,
+    FigurativeCandidate,
+    StatementCandidate,
+    _containing_passage,
+    active_entity_iris,
+    check_source_changed,
+    extract_candidates,
+    figurative_body_json,
+    find_qualified_spans,
+    normalize_section,
+    parse_candidates,
+    plan_figurative,
+    plan_statement,
+    statement_body_json,
 )
 
 _NOW = datetime(2026, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -57,15 +88,6 @@ def test_legacy_ledger_without_predicate_reads_none(tmp_path: Path):
     assert read_sidecar(path).ledgers[0].source_text_hash is None
 
 
-from science_tool.annotation.pubtator_seed import PersistedPassage
-from science_tool.annotation.statement_extract import (
-    _SECTION_NORMALIZE,
-    CANONICAL_SECTIONS,
-    _containing_passage,
-    normalize_section,
-)
-
-
 def test_normalize_known_sections():
     assert normalize_section("title") == "title"
     assert normalize_section("abstract") == "abstract"
@@ -107,18 +129,6 @@ def test_containing_passage_finds_enclosing():
     assert _containing_passage(passages, 248, 5) is None
     # span outside every passage (e.g. a heading) -> None
     assert _containing_passage(passages, 130, 5) is None
-
-
-import pytest
-
-from science_tool.annotation.statement_extract import (
-    MAX_CANDIDATES,
-    MAX_FIELD_CHARS,
-    CandidateError,
-    FigurativeCandidate,
-    StatementCandidate,
-    parse_candidates,
-)
 
 
 def _one(**over):
@@ -286,9 +296,6 @@ def test_parse_figurative_over_length_field():
         parse_candidates(_fig(source_domain="z" * (MAX_FIELD_CHARS + 1)))
 
 
-from science_tool.annotation.statement_extract import statement_body_json
-
-
 def test_body_minimal_sorted_compact():
     body = statement_body_json(
         section="results", stance="asserted",
@@ -324,9 +331,6 @@ def test_body_gate_is_none_based_not_falsy():
         subject_concept=None, object_concept=None,
     )
     assert body == '{"section":"results","stance":"asserted","subject":""}'
-
-
-from science_tool.annotation.statement_extract import find_qualified_spans
 
 
 def test_anchor_unique_no_context():
@@ -367,19 +371,6 @@ def test_anchor_requires_adjacent_prefix():
 def test_anchor_empty_exact_returns_empty():
     assert find_qualified_spans("anything", "", "", "") == []
 
-
-from science_tool.annotation.model import (
-    Annotation,
-    IriBody,
-    Motivation,
-    SpecificResource,
-    Status,
-    TextQuoteSelector,
-)
-from science_tool.annotation.statement_extract import (
-    active_entity_iris,
-    plan_statement,
-)
 
 _MODEL = "claude-sonnet-4-6"
 _GENE = "https://identifiers.org/ncbigene:672"
@@ -522,14 +513,6 @@ def test_plan_statement_match_text_distinguishes_repeated_identical():
     assert p1.match_text != p2.match_text  # different file_idx => distinct dedup keys
 
 
-from science_tool.annotation.source_text import Passage, SourcePassages, write_source_md
-from science_tool.annotation.statement_extract import (
-    ExtractReport,
-    check_source_changed,
-    extract_candidates,
-)
-
-
 def _make_source_md(tmp_path: Path) -> Path:
     abstract = SourcePassages(
         passages=(
@@ -567,8 +550,11 @@ def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
     # sidecar persisted with the statement + the ledger hash
     sidecar = read_sidecar(src.with_name("Brca2024.source.anno.trig"))
     assert any(a.annotation_type == "proposition" for a in sidecar.annotations)
-    led = next(l for l in sidecar.ledgers
-               if l.source == "llm-annot:claude-sonnet-4-6:paper-annotate-v1")
+    led = next(
+        ledger
+        for ledger in sidecar.ledgers
+        if ledger.source == "llm-annot:claude-sonnet-4-6:paper-annotate-v1"
+    )
     assert led.source_text_hash is not None
     # and now --check reports unchanged
     assert check_source_changed(source_md=src, model=_MODEL) is False
@@ -651,9 +637,6 @@ def test_extract_reports_grounding_dropped(tmp_path: Path):
     assert report.written == 1 and report.grounding_dropped == 1
 
 
-from science_tool.annotation.statement_extract import figurative_body_json
-
-
 def test_figurative_body_minimal_sorted_compact():
     body = figurative_body_json(
         section="discussion", source_domain="warfare",
@@ -685,8 +668,6 @@ def test_figurative_body_omits_absent_optionals():
     )
     assert '"mapping"' not in body and '"cue":"like"' in body
 
-
-from science_tool.annotation.statement_extract import plan_figurative
 
 _FIG_TEXT = "We describe how the immune system mounts an attack on invading pathogens."
 _FIG_PASSAGES = [PersistedPassage(section="DISCUSS", file_char_base=0, length=len(_FIG_TEXT))]

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_model.templates import MIGRATED_KINDS
+
 from science_tool.entities import (
     _BUILTIN_MARKDOWN_POLICIES,
     _DEFAULT_STATUS,
@@ -18,6 +20,7 @@ from science_tool.entities import (
     _STATUS_VALUES,
     EntityPathPolicy,
 )
+from science_tool.graph.entity_registry import EntityRegistry
 
 # --- Frozen copies of the original literals (do not edit to match drift) ---
 
@@ -154,10 +157,6 @@ def test_status_values_equal_prior_literal() -> None:
 
 
 # --- Task 6: MIGRATED_KINDS + registry entity_class equivalence ---
-
-from science_model.templates import MIGRATED_KINDS
-
-from science_tool.graph.entity_registry import EntityRegistry
 
 FROZEN_MIGRATED_KINDS = frozenset(
     {
