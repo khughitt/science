@@ -18,7 +18,7 @@
 - **No "legacy"/"compatibility" layers; no `Unified` prefix.** Composition over inheritance; explicit over defensive; fail early — no silent fallbacks.
 - **Docs/code filepaths use `~/d/`**, not `/home/keith/` or `/mnt/ssd/Dropbox/`.
 - **Falsification metadata + relations route to `graph/knowledge`, NEVER the `provenance` graph.** This is the one place falsification must *not* copy evidence-line: the reader `_load_proposition_falsifications` reads from `knowledge`.
-- **Byte-parity for falsification:** `sourceOfPrediction` a literal; `supersedesClaim` a resolved URI; only `falsifies` is proposition-validated; the four metadata fields are unvalidated literals.
+- **Byte-parity for falsification:** `sourceOfPrediction` a literal; `supersedesClaim` a URI resolved via `_resolve_term` (URLs/CURIEs/case-preserved project refs — NOT `_entity_uri`, which lowercases/mangles); only `falsifies` is proposition-validated; the four metadata fields are unvalidated literals, and a blank field emits no triple.
 - **Templates are mirrored:** every template edit applies to BOTH the packaged copy `science/model/src/science_model/templates/<kind>.md` and the repo-root mirror `templates/<kind>.md`.
 - **`story` keeps its existing lifecycle** `draft/developing/mature` — do NOT adopt evidence-line's `active/retired/archived`.
 
@@ -451,10 +451,11 @@ Emit the falsification shape from the compiler into the `knowledge` graph, match
 
 - [ ] **Step 1: Write the failing materialization parity test**
 
-Add to `science/tests/test_graph_materialize.py`:
+Add to `science/tests/test_graph_materialize.py`. The test covers two things the emitters must get right: (1) every falsification triple lands in `graph/knowledge` and nothing leaks to `provenance`; (2) `supersedesClaim` uses `_resolve_term` semantics — a full-URL claim ref must resolve to that exact URI (with `_entity_uri` it would be mangled into a lowercased project URI, so this case fails loud on the wrong resolver).
 
 ```python
 def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) -> None:
+    from rdflib import URIRef
     from rdflib.namespace import RDF
 
     from conftest import build_entity_graph
@@ -474,7 +475,8 @@ def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) ->
                              "observed": "No improvement in randomized follow-up",
                              "decision": "Reject mechanistic interpretation",
                              "source_of_prediction": "topic:drug-mechanism",
-                             "supersedes_claim": "proposition:drug_recovery",
+                             # full URL — exercises _resolve_term (NOT _entity_uri) parity
+                             "supersedes_claim": "https://example.org/claims/legacy-x",
                              "related": [], "source_refs": []},
              "body": "Refuted\n"},
         ],
@@ -490,24 +492,59 @@ def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) ->
     assert (fu, SCI_NS.observed, None) in knowledge
     assert (fu, SCI_NS.decision, None) in knowledge
     assert (fu, SCI_NS.sourceOfPrediction, None) in knowledge
-    assert (fu, SCI_NS.supersedesClaim, pu) in knowledge
+    # _resolve_term parity: the full URL resolves verbatim, not to a project URI.
+    assert (fu, SCI_NS.supersedesClaim, URIRef("https://example.org/claims/legacy-x")) in knowledge
     # Nothing falsification-specific leaked into the provenance graph.
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
     assert (fu, SCI_NS.predicted, None) not in provenance
+
+
+def test_materialize_falsification_omits_blank_metadata_fields(tmp_path: Path) -> None:
+    """Intentional source-form contract: a blank scaffold field emits NO triple.
+
+    The retired writer took required non-empty CLI options, so all four literals
+    always existed. In source form the template defaults them to "" — emitting an
+    empty Literal would be noise. Blank fields are omitted; the reader
+    `_load_proposition_falsifications` already defaults a missing predicate to "".
+    """
+    from conftest import build_entity_graph
+    from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset
+
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            {"kind": "proposition", "id": "p1",
+             "frontmatter": {"title": "P", "status": "active", "source_refs": []},
+             "body": "P\n"},
+            {"kind": "falsification", "id": "f-blank",
+             "frontmatter": {"title": "Scaffold", "status": "draft",
+                             "falsifies": "proposition:p1",
+                             "predicted": "", "observed": "", "decision": "",
+                             "source_of_prediction": "", "related": [], "source_refs": []},
+             "body": "Scaffold\n"},
+        ],
+    )
+    knowledge = _load_dataset(graph_path).graph(_graph_uri("graph/knowledge"))
+    fu = PROJECT_NS["falsification/f-blank"]
+    assert (fu, SCI_NS.falsifies, PROJECT_NS["proposition/p1"]) in knowledge
+    assert (fu, SCI_NS.predicted, None) not in knowledge
+    assert (fu, SCI_NS.decision, None) not in knowledge
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run both to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py::test_materialize_emits_falsification_into_knowledge_graph -v`
-Expected: FAIL — only `rdf:type sci:Falsification` is present (from generic `_add_entity`); the metadata predicates and `falsifies` edge are missing.
+Run: `cd science && uv run --frozen pytest "tests/test_graph_materialize.py::test_materialize_emits_falsification_into_knowledge_graph" "tests/test_graph_materialize.py::test_materialize_falsification_omits_blank_metadata_fields" -v`
+Expected: FAIL — only `rdf:type sci:Falsification` is present (from generic `_add_entity`); the metadata predicates, `falsifies` edge, and `supersedesClaim` are missing.
 
-- [ ] **Step 3: Import `FalsificationEntity` in the materializer**
+- [ ] **Step 3: Import `FalsificationEntity` and `_resolve_term` in the materializer**
 
-In `materialize.py` line 16, extend the import:
+In `materialize.py` line 16, extend the entities import:
 
 ```python
 from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity
 ```
+
+`supersedes_claim` must resolve with the SAME semantics as the retired writer, which used `_resolve_term` (`graph/store/identity.py`) — it accepts full URLs, known CURIE prefixes, and project prefixes, and it **preserves** the project-ref suffix case. `_entity_uri`/`entity_uri_for_ref` does not (it lowercases and mangles any `prefix:suffix` into a project URI). `_resolve_term` is already re-exported from `graph.store` (which `materialize.py` imports at line 90 — no import cycle). Add `_resolve_term` to that existing `from science_tool.graph.store import (...)` block.
 
 - [ ] **Step 4: Add the metadata emitter and dispatch it from `_add_entity`**
 
@@ -521,6 +558,10 @@ def _add_falsification_metadata(*, uri: URIRef, knowledge, entity: Falsification
     add_falsification writer and the reader `_load_proposition_falsifications`,
     which reads these predicates from graph/knowledge. The `falsifies` and
     `supersedesClaim` edges are emitted by _add_falsification_relations.
+
+    Blank fields emit NO triple (source-form contract): the template scaffolds
+    these to "", and an empty Literal would be noise — the reader defaults a
+    missing predicate to "".
     """
     literal_predicates: dict[str, object] = {
         "predicted": SCI_NS.predicted,
@@ -572,8 +613,11 @@ def _add_falsification_relations(
         )
     knowledge.add((uri, SCI_NS.falsifies, _entity_uri(target.canonical_id)))
 
+    # supersedes_claim uses _resolve_term (not _entity_uri) for byte-parity with the
+    # retired writer: full URLs, CURIEs, and case-preserved project refs all resolve
+    # identically to the pre-retirement graph.
     if entity.supersedes_claim:
-        knowledge.add((uri, SCI_NS.supersedesClaim, _entity_uri(entity.supersedes_claim)))
+        knowledge.add((uri, SCI_NS.supersedesClaim, _resolve_term(entity.supersedes_claim)))
 ```
 
 In `_add_relations`, right after the `EvidenceLineEntity` relations dispatch (lines 708-717), add:
@@ -591,9 +635,9 @@ In `_add_relations`, right after the `EvidenceLineEntity` relations dispatch (li
 
 (Note: `_add_relations` binds `entity_uri = _entity_uri(entity.canonical_id)` at line 688 and has `resolver`, `entity_index`, `knowledge` in scope.)
 
-- [ ] **Step 6: Run the parity test to verify it passes**
+- [ ] **Step 6: Run both parity tests to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py::test_materialize_emits_falsification_into_knowledge_graph -v`
+Run: `cd science && uv run --frozen pytest "tests/test_graph_materialize.py::test_materialize_emits_falsification_into_knowledge_graph" "tests/test_graph_materialize.py::test_materialize_falsification_omits_blank_metadata_fields" -v`
 Expected: PASS.
 
 - [ ] **Step 7: Run the full graph-materialize + store test modules**
@@ -840,20 +884,37 @@ Then run `science graph build`.
 cp science/model/src/science_model/templates/story.md templates/story.md
 ```
 
-- [ ] **Step 6: Run the create test to verify it passes**
+- [ ] **Step 6: Classify story's new lifecycle statuses (status-visibility guard)**
+
+Adding `statuses=["draft", "developing", "mature"]` to the story descriptor introduces two status tokens — `developing` and `mature` — that no core kind previously declared. The status-visibility guard `test_status_visibility.py::test_every_declared_status_is_classified_live_or_hidden` fails loud on any declared status that is in neither `_LIVE_STATUSES` nor `_HIDDEN_STATUSES` (`src/science_tool/entities.py`). Both are live work-in-progress states (a developing/mature story is active), so add them to `_LIVE_STATUSES`.
+
+In `science/src/science_tool/entities.py`, in the `_LIVE_STATUSES` frozenset (after `"abandoned",`, ~line 224):
+
+```python
+        # Story lifecycle (Phase 3b: story kind wired for entity create).
+        "developing",
+        "mature",
+```
+
+Run: `cd science && uv run --frozen pytest tests/test_status_visibility.py -v`
+Expected: PASS (previously RED on `developing`/`mature` once the descriptor landed).
+
+- [ ] **Step 7: Run the create test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_entities_cli.py::test_entity_create_and_sections_story -v`
 Expected: PASS.
 
-- [ ] **Step 7: Run the model suite (catches any template/snapshot guard)**
+- [ ] **Step 8: Run the model suite (catches any template/snapshot guard)**
 
 Run: `cd science/model && uv run --frozen pytest`
 Expected: PASS. If a template-mirror or snapshot test flags the converted `story.md`, update the snapshot to the new content (the conversion is intended).
 
-- [ ] **Step 8: Commit**
+> Note: `test_kind_map_equivalence.py` (frozen markdown-policy / status / migrated-kind literals) is now RED for `story` — expected. Those frozen literals are reconciled together in Task 7. Do not run that module's assertions as a green gate here.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add science/model/src/science_model/profiles/core.py science/model/src/science_model/templates/story.md templates/story.md science/tests/test_entities_cli.py
+git add science/src/science_tool/entities.py science/model/src/science_model/profiles/core.py science/model/src/science_model/templates/story.md templates/story.md science/tests/test_entities_cli.py
 git commit -m "feat(story): wire story kind for entity create + Renderer template"
 ```
 
@@ -861,34 +922,57 @@ git commit -m "feat(story): wire story kind for entity create + Renderer templat
 
 ## Task 7: Update reconciliation-gate literals
 
-Both `story` and `falsification` now have `template_ready=True` (so both enter `MIGRATED_KINDS`), and `falsification` is a new core kind. Update the frozen gate copies to match.
+Adding `template_ready`/`home`/`strategy`/`default_status`/`statuses` to the `story` and `falsification` descriptors changes SIX field-presence-derived maps, all frozen in `test_kind_map_equivalence.py`: `MIGRATED_KINDS` (template_ready), the registry class map (new kind), `_BUILTIN_MARKDOWN_POLICIES` (home+strategy), `_DEFAULT_STATUS` (default_status), `_STATUS_VALUES` (statuses), plus `known_kinds()` (INTENDED_ADDITIONS). Reconcile every frozen copy.
 
 **Files:**
-- Modify: `science/tests/test_kind_map_equivalence.py` (`FROZEN_MIGRATED_KINDS` line 161, `FROZEN_KIND_CLASSES` line 185)
+- Modify: `science/tests/test_kind_map_equivalence.py` (`FROZEN_MARKDOWN_POLICIES` line 27, `FROZEN_DEFAULT_STATUS` line 63, `FROZEN_STATUS_VALUES` line 97, `FROZEN_MIGRATED_KINDS` line 161, `FROZEN_KIND_CLASSES` line 185)
 - Modify: `science/tests/test_kind_reconciliation_registry.py` (`INTENDED_ADDITIONS` line 37)
 
 **Interfaces:**
-- Consumes: the live `MIGRATED_KINDS`, registry class map, and `known_kinds()` — now including `story` (migrated) and `falsification` (new core kind).
+- Consumes: the live `_BUILTIN_MARKDOWN_POLICIES`, `_DEFAULT_STATUS`, `_STATUS_VALUES`, `MIGRATED_KINDS`, registry class map, and `known_kinds()` — now all including `story` (newly given home/strategy/statuses + template_ready) and `falsification` (new core kind).
 
-- [ ] **Step 1: Run the gate tests to see them RED**
+- [ ] **Step 1: Run the gate tests to see the full RED set**
 
 Run: `cd science && uv run --frozen pytest tests/test_kind_map_equivalence.py tests/test_kind_reconciliation_registry.py -v`
-Expected: FAIL — `test_migrated_kinds_equal_prior_literal` (story + falsification now migrated), `test_registry_entity_class_equals_prior_literal` (falsification new), `test_core_kind_recognition_delta_is_exactly_the_intended_additions` (falsification new).
+Expected: FAIL on `test_markdown_policies_equal_prior_literal` (story+falsification now have home/strategy), `test_default_status_equals_prior_literal` (both now have default_status), `test_status_values_equal_prior_literal` (both now declare statuses), `test_migrated_kinds_equal_prior_literal` (both template_ready), `test_registry_entity_class_equals_prior_literal` (falsification new), and `test_core_kind_recognition_delta_is_exactly_the_intended_additions` (falsification new).
 
-- [ ] **Step 2: Add `story` and `falsification` to `FROZEN_MIGRATED_KINDS`**
+- [ ] **Step 2: Add both kinds to `FROZEN_MARKDOWN_POLICIES`**
 
-In `test_kind_map_equivalence.py`, add both entries to the frozenset (line 161-181):
+In `test_kind_map_equivalence.py`, add to the `FROZEN_MARKDOWN_POLICIES` dict (near the other `entities/...`/`slug` entries, ~line 38):
 
 ```python
-        "observation",
-        "mechanism",
-        "story",
-        "falsification",
-    }
-)
+    "story": EntityPathPolicy(Path("entities/stories"), "slug"),
+    "falsification": EntityPathPolicy(Path("entities/falsifications"), "slug"),
 ```
 
-- [ ] **Step 3: Add `falsification` to `FROZEN_KIND_CLASSES`**
+- [ ] **Step 3: Add both kinds to `FROZEN_DEFAULT_STATUS`**
+
+In the `FROZEN_DEFAULT_STATUS` dict (~line 63), add:
+
+```python
+    "story": "draft",
+    "falsification": "draft",
+```
+
+- [ ] **Step 4: Add both kinds to `FROZEN_STATUS_VALUES`**
+
+In the `FROZEN_STATUS_VALUES` dict (~line 97), add — note story's set is `draft/developing/mature`, falsification's mirrors evidence-line:
+
+```python
+    "story": frozenset({"draft", "developing", "mature"}),
+    "falsification": frozenset({"draft", "active", "retired", "archived"}),
+```
+
+- [ ] **Step 5: Add `story` and `falsification` to `FROZEN_MIGRATED_KINDS`**
+
+Add both entries to the frozenset (after `"mechanism",`, ~line 180):
+
+```python
+        "story",
+        "falsification",
+```
+
+- [ ] **Step 6: Add `falsification` to `FROZEN_KIND_CLASSES`**
 
 In the same file, add to the dict (alphabetical, after `"experiment": "operational",`):
 
@@ -898,7 +982,7 @@ In the same file, add to the dict (alphabetical, after `"experiment": "operation
 
 (`"story": "epistemic"` is already present at line 221 — leave it.)
 
-- [ ] **Step 4: Add `falsification` to `INTENDED_ADDITIONS`**
+- [ ] **Step 7: Add `falsification` to `INTENDED_ADDITIONS`**
 
 In `test_kind_reconciliation_registry.py`, add to the frozenset (line 37):
 
@@ -908,16 +992,16 @@ In `test_kind_reconciliation_registry.py`, add to the frozenset (line 37):
 
 (`story` is already in `PRE_EXPANSION_CORE_KINDS` — do not touch it.)
 
-- [ ] **Step 5: Run the gate tests to verify GREEN**
+- [ ] **Step 8: Run the gate tests to verify GREEN**
 
 Run: `cd science && uv run --frozen pytest tests/test_kind_map_equivalence.py tests/test_kind_reconciliation_registry.py -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add science/tests/test_kind_map_equivalence.py science/tests/test_kind_reconciliation_registry.py
-git commit -m "test(gates): reconcile story + falsification into frozen kind literals"
+git commit -m "test(gates): reconcile story + falsification into frozen kind/policy/status literals"
 ```
 
 ---
