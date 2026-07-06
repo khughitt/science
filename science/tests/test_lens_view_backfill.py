@@ -92,8 +92,8 @@ origin_plan:
 def test_backfill_adds_views_for_lens_origins(tmp_path) -> None:
     root = tmp_path
     seed_project(root)
-    (root / "entities" / "meta" / "explorations").mkdir(parents=True, exist_ok=True)
-    (root / "entities" / "meta" / "explorations" / "explore-demo.md").write_text(
+    (root / "doc" / "explorations").mkdir(parents=True, exist_ok=True)
+    (root / "doc" / "explorations" / "explore-demo.md").write_text(
         _APPLIED_REPORT, encoding="utf-8"
     )
     _write_entity(
@@ -129,8 +129,8 @@ def test_cli_backfill_lens_views(tmp_path, monkeypatch) -> None:
     exercises the actual CLI path (uses Path.cwd() and date.today())."""
     root = tmp_path
     seed_project(root)
-    (root / "entities" / "meta" / "explorations").mkdir(parents=True, exist_ok=True)
-    (root / "entities" / "meta" / "explorations" / "explore-demo.md").write_text(
+    (root / "doc" / "explorations").mkdir(parents=True, exist_ok=True)
+    (root / "doc" / "explorations" / "explore-demo.md").write_text(
         _APPLIED_REPORT, encoding="utf-8"
     )
     _write_entity(
