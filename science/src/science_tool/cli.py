@@ -2220,7 +2220,8 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     """Add an external literature reference by DOI."""
     raise _retired_writer(
         "graph add article",
-        "Run `science entity create paper <title>` (or edit entities/papers/<citekey>.md with a doi: field)",
+        "Run `science entity create paper <title> --id <citekey>` "
+        "(or edit entities/papers/<citekey>.md with a doi: field)",
     )
 
 

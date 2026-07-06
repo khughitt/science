@@ -123,8 +123,8 @@ knowledge that should survive `science graph build`, create or edit the source
 entity file, author structural relations in `relations.yaml` or inquiry
 `flow_edges`, and represent support or dispute with evidence-line source
 entities. Use `science entity create story <title>` for stories,
-`science entity create paper <title>` or `entities/papers/<citekey>.md` with
-`doi:` for external literature notes, and
+`science entity create paper <title> --id <citekey>` or
+`entities/papers/<citekey>.md` with `doi:` for external literature notes, and
 `science entity create falsification <title>` with `falsifies:` for
 falsification records. The graph build step materializes those source records
 into `knowledge/graph.trig`.
@@ -622,7 +622,7 @@ are retired; use source-authored entity files. Author story synthesis with
 `science entity create story <title>` plus relations such as `sci:synthesizes`
 and `sci:organizedBy` in `relations.yaml`. The current loadable `paper` kind is
 an external literature note; create DOI-backed notes with
-`science entity create paper <title>` or by editing
+`science entity create paper <title> --id <citekey>` or by editing
 `entities/papers/<citekey>.md` with a `doi:` field; do not use `paper:<id>` for
 the project's own publication draft.
 

@@ -1434,6 +1434,20 @@ class TestBodyTypedRefScan:
         assert "doc/report.md" in body_issues[0].file
         assert body_issues[0].line == 4
 
+    def test_flags_unknown_falsification_ref_in_body(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee falsification:drug-recovery-null for the counterexample.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body_issues) == 1
+        assert body_issues[0].ref_value == "falsification:drug-recovery-null"
+        assert "doc/report.md" in body_issues[0].file
+        assert body_issues[0].line == 4
+
     def test_no_flag_for_resolved_typed_ref(self, tmp_path):
         from science_tool.refs import check_refs
 

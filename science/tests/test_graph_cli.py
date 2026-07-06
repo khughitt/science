@@ -107,7 +107,7 @@ def _evidence_line(
         (
             ["graph", "add", "article", "10.1038/s41586-023-06957-x"],
             "graph add article",
-            "science entity create paper",
+            "science entity create paper <title> --id <citekey>",
         ),
         (
             [
