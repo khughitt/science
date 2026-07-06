@@ -2,9 +2,9 @@
 
 These pass against the current code and must remain green through the phase
 split and audit/materialize unification. They lock the public contracts the
-refactor must preserve: the materialize-only project-root preflight, the audit
-hard-gate on the materialize path, the non-raising audit-only path, and the
-load/audit-free `build_dataset_from_sources`.
+refactor must preserve: the audit hard-gate on the materialize path, the
+non-raising audit-only path, and the load/audit-free
+`build_dataset_from_sources`.
 """
 
 from __future__ import annotations
@@ -47,8 +47,8 @@ def _build_dup_project(root: Path) -> None:
     _question(root, "q1-dup.md", "question:q1")
 
 
-def _build_unmigrated_dp_project(root: Path) -> None:
-    """Valid manifest + one active (unmigrated) data-package → preflight target."""
+def _build_doc_data_package_project(root: Path) -> None:
+    """Valid manifest plus a retired doc/data-packages file."""
     _write(root / "science.yaml", _SEED)
     _question(root, "q1.md", "question:q1")
     _write(
@@ -94,14 +94,9 @@ def test_audit_only_path_does_not_raise_or_write(tmp_path: Path) -> None:
     assert not (tmp_path / "knowledge" / "graph.trig").exists()
 
 
-def test_preflight_is_materialize_only(tmp_path: Path) -> None:
-    _build_unmigrated_dp_project(tmp_path)
-    # materialize path runs the preflight and raises RuntimeError
-    with pytest.raises(RuntimeError) as exc:
-        materialize_graph(tmp_path, strict=True)
-    assert "data-package:u" in str(exc.value)
-    assert "no longer supported" in str(exc.value)
-    # audit path skips the preflight: it must not raise RuntimeError
+def test_doc_data_package_files_are_not_materialize_preflight(tmp_path: Path) -> None:
+    _build_doc_data_package_project(tmp_path)
+    assert materialize_graph(tmp_path, strict=True) == tmp_path / "knowledge" / "graph.trig"
     rows, _ = materialization_audit(tmp_path)
     assert isinstance(rows, list)
 

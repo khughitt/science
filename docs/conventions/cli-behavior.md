@@ -90,10 +90,10 @@ Use these labels consistently in docs and help text:
 | Legacy | For compatibility surfaces that should not be used for new workflows. |
 | Exploratory | For commands useful in experiments or manual diagnostics but not normal durable authoring. |
 
-For example, `science data-package` is a legacy migration surface, while
-`science graph add ...` is exploratory graph surgery. Durable project knowledge
-should normally be authored through source files and then materialized with
-`science graph build`.
+For example, one-shot migration commands move old source shapes into current
+source files, while `science graph add ...` is exploratory graph surgery.
+Durable project knowledge should normally be authored through source files and
+then materialized with `science graph build`.
 
 ## Error Handling
 

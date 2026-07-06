@@ -670,8 +670,7 @@ creating records, verifying access, linking datasets to questions or
 hypotheses, prioritizing candidates, and registering derived outputs. Use
 plural `science datasets ...` for external discovery and runtime datapackage
 work such as search, metadata inspection, downloads, schema inference,
-validation, QA, and worktree hydration. Use `science data-package ...` only for
-legacy data-package migration.
+validation, QA, and worktree hydration.
 ```
 
 Do not edit `docs/user-guide/entities.md` or `docs/user-guide/cross-project-work.md` unless the search output shows a concrete stale or ambiguous sentence.

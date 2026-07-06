@@ -52,7 +52,6 @@ DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_origin_block_mismatch",
     "dataset_verified_but_unstageable",
     "dataset_research_package_asymmetric",
-    "data_package_unmigrated",
 )
 
 _T = TypeVar("_T")
@@ -1702,27 +1701,6 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                         "entity_id": rp_id,
                         "file_path": "",
                         "message": f"{rp_id} displays {ds_id} but the dataset's consumed_by doesn't include the research-package",
-                    }
-                )
-
-    # Task 6.8: data_package_unmigrated
-    dp_dir = project_root / "doc" / "data-packages"
-    if dp_dir.exists():
-        for md in dp_dir.rglob("*.md"):
-            result = parse_frontmatter(md)
-            if not result:
-                continue
-            fm, _ = result
-            if fm.get("type") != "data-package":
-                continue
-            if fm.get("status") != "superseded":
-                issues.append(
-                    {
-                        "code": "data_package_unmigrated",
-                        "severity": "error",
-                        "entity_id": str(fm.get("id", "")),
-                        "file_path": str(md),
-                        "message": "unmigrated data-package; the legacy data-package layout is no longer supported — split into derived dataset(s) + research-package by hand",
                     }
                 )
 

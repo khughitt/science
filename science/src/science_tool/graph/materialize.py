@@ -516,32 +516,6 @@ def _build_dataset_from_sources(
     return emit.dataset
 
 
-def _preflight_migration(project_root: Path) -> None:
-    """Project-root preflight, materialize-only: block on unmigrated data-packages.
-
-    Scans `doc/data-packages/` for active (non-superseded) legacy data-package
-    entities and raises RuntimeError if any remain. Not a phase and outside
-    `stop_after`: the audit path never runs this.
-    """
-    from science_model.frontmatter import parse_frontmatter
-
-    unmigrated: list[str] = []
-    dp_dir = project_root / "doc" / "data-packages"
-    if dp_dir.exists():
-        for md in dp_dir.rglob("*.md"):
-            result = parse_frontmatter(md)
-            fm = result[0] if result else {}
-            if fm.get("type") == "data-package" and fm.get("status") != "superseded":
-                unmigrated.append(str(fm.get("id", md.stem)))
-    if unmigrated:
-        slugs = ", ".join(sorted(unmigrated))
-        raise RuntimeError(
-            f"unmigrated data-package entities: {slugs}. "
-            f"Legacy data-package entities are no longer supported; split each into "
-            f"derived dataset(s) + a research-package by hand."
-        )
-
-
 def _audit_phase(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
     """Audit phase: the single `audit_project_sources` call site."""
     return audit_project_sources(sources)
@@ -564,15 +538,9 @@ def _compile(
 
     `stop_after="audit"` returns after the audit phase without gating, emitting,
     or writing (the `materialization_audit` projection). A full run hard-gates on
-    audit failures (the `materialize_graph` projection). The project-root preflight
-    is materialize-only and lives outside `stop_after`; `strict` is threaded to it
-    and `strict=False` suppresses it (matching the old `materialize_graph(strict=...)`).
+    audit failures (the `materialize_graph` projection).
     """
     project_root = project_root.resolve()
-
-    # Project-root preflight, materialize-only: only when producing output.
-    if stop_after is None and strict:
-        _preflight_migration(project_root)
 
     sources = load_project_sources(project_root, strict_identity=False)
     audit_rows, has_failures = _audit_phase(sources)
@@ -617,12 +585,7 @@ def _compile(
 
 
 def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources.
-
-    When `strict=True` (the default), the project-root preflight raises
-    RuntimeError if any legacy (unmigrated) data-package entities remain;
-    the v2 data-package layout is no longer supported.
-    """
+    """Build `knowledge/graph.trig` deterministically from project sources."""
     result = _compile(project_root, strict=strict)
     assert result.trig_path is not None  # a full compile always writes
     return result.trig_path
