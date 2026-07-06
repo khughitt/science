@@ -58,7 +58,6 @@ from science_tool.graph.paper_dataset_migration import plan_paper_dataset_migrat
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
-    PropositionInteractionTerm,
     add_article,
     add_falsification,
     add_paper_entity,
@@ -241,83 +240,6 @@ def main(ctx: click.Context, color_policy: str | None) -> None:
 @main.result_callback()
 def _record_cli_success(_: object, **__: object) -> None:
     _record_telemetry_finish()
-
-
-def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
-    if not entries:
-        return None
-
-    dataset_effects: dict[str, float] = {}
-    for entry in entries:
-        if "=" not in entry:
-            raise click.ClickException(f"Dataset effect must be DATASET=VALUE, got '{entry}'")
-        dataset, value = entry.split("=", 1)
-        dataset_name = dataset.strip()
-        if not dataset_name:
-            raise click.ClickException(f"Dataset effect must include a dataset name, got '{entry}'")
-        try:
-            dataset_effects[dataset_name] = float(value.strip())
-        except ValueError as exc:
-            raise click.ClickException(f"Dataset effect value must be numeric, got '{entry}'") from exc
-    return dataset_effects
-
-
-def _parse_evidence_lines(entries: tuple[str, ...]) -> list[dict[str, object]] | None:
-    if not entries:
-        return None
-
-    evidence_lines: list[dict[str, object]] = []
-    for entry in entries:
-        try:
-            parsed = json.loads(entry)
-        except json.JSONDecodeError as exc:
-            raise click.ClickException(f"Evidence line must be valid JSON, got '{entry}'") from exc
-        if not isinstance(parsed, dict):
-            raise click.ClickException("Evidence line JSON must decode to an object")
-        if not isinstance(parsed.get("source"), str) or not parsed["source"].strip():
-            raise click.ClickException("Evidence line JSON must include a non-empty 'source' string")
-        if not isinstance(parsed.get("kind"), str) or not parsed["kind"].strip():
-            raise click.ClickException("Evidence line JSON must include a non-empty 'kind' string")
-        datasets = parsed.get("datasets", [])
-        if not isinstance(datasets, list) or any(not isinstance(item, str) for item in datasets):
-            raise click.ClickException("Evidence line JSON 'datasets' must be a list of strings")
-        evidence_lines.append(
-            {
-                "source": parsed["source"],
-                "kind": parsed["kind"],
-                "datasets": datasets,
-            }
-        )
-    return evidence_lines
-
-
-def _parse_interaction_terms(entries: tuple[str, ...]) -> list[PropositionInteractionTerm] | None:
-    if not entries:
-        return None
-
-    interaction_terms: list[PropositionInteractionTerm] = []
-    for entry in entries:
-        try:
-            parsed = json.loads(entry)
-        except json.JSONDecodeError as exc:
-            raise click.ClickException(f"Interaction term must be valid JSON, got '{entry}'") from exc
-        if not isinstance(parsed, dict):
-            raise click.ClickException("Interaction term JSON must decode to an object")
-        modifier = parsed.get("modifier")
-        effect = parsed.get("effect")
-        if not isinstance(modifier, str) or not modifier.strip():
-            raise click.ClickException("Interaction term JSON must include a non-empty 'modifier' string")
-        if not isinstance(effect, str) or not effect.strip():
-            raise click.ClickException("Interaction term JSON must include a non-empty 'effect' string")
-        interaction_term: PropositionInteractionTerm = {
-            "modifier": modifier,
-            "effect": effect,
-        }
-        note = parsed.get("note")
-        if isinstance(note, str) and note.strip():
-            interaction_term["note"] = note
-        interaction_terms.append(interaction_term)
-    return interaction_terms
 
 
 main.add_command(dag_group)
@@ -1484,12 +1406,6 @@ def _parse_entity_date(value: str) -> Any:
         raise click.ClickException(f"Invalid date: {value}") from exc
 
 
-def _normalize_legacy_graph_source(source: str) -> str:
-    if source.startswith("manual:"):
-        return "source/" + source.split(":", 1)[1]
-    return source
-
-
 @main.group()
 def graph() -> None:
     """Knowledge graph commands."""
@@ -2318,10 +2234,6 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
         ],
         rows=rows,
     )
-
-
-PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
-
 
 @graph.group("add")
 def graph_add() -> None:
