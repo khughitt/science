@@ -63,16 +63,36 @@ If `--apply` is present in `$ARGUMENTS`: **Apply mode** — skip straight to
 Assemble a **blind domain brief**. Read **only** the following, in order,
 skipping any that are absent:
 
-1. `science.yaml` (project domain, aspects, scope signals)
+1. `science.yaml` — used **fully**: fold `summary`, `tags`, `aspects`,
+   `data_sources`, and `ontologies` into the brief as scope terms (not just the
+   project domain). These are self-declared scope, not claims.
 2. `specs/research-question.md`
 3. `specs/scope-boundaries.md`
-4. `entities/topics/`
+4. `entities/topics/` — use **all topic titles for breadth** (the subject areas
+   the project cares about, even where the body is an uncurated stub) plus the
+   bodies of **substantive** topics for depth. Do not let a few fleshed-out
+   topics become the whole brief.
 
-Do **not** read `entities/hypotheses/`, `entities/questions/`, or
-`entities/papers/` in this phase — they are deliberately excluded. The
-project's existing epistemic framing and paper set must not leak into the
-brief the lens agents receive; that framing is exactly what this pass is
-trying to get outside of.
+Read **only** the two named `specs/` files above — never glob `specs/*.md`, and
+do **not** read `entities/hypotheses/`, `entities/questions/`, or
+`entities/papers/` in this phase. They are deliberately excluded: the project's
+existing epistemic framing and paper set must not leak into the brief the lens
+agents receive; that framing is exactly what this pass is trying to get outside
+of. (Broadening the brief means adding *scope/method* signals, never claims.)
+
+**Measure seed representativeness.** Run:
+
+```bash
+uv run science project topic-coverage --format json
+```
+
+This is a non-blind diagnostic computed by you (the orchestrator); it is **for
+the report only and is never passed to the Phase-2 agents**. When
+`stub_dominated` is true, the `topics/` seed is thin/skewed — lean harder on the
+blindness-safe breadth sources (all topic titles, `science.yaml`
+tags/`data_sources`) so the brief still reflects the project's real scope rather
+than collapsing onto the handful of curated topics. Carry the returned
+`n_topics`/`n_substantive`/`stub_ratio`/`stub_dominated` into Phase 4.
 
 If `--center <topic-id>` or `--topic <name>` was given, resolve it against
 `entities/topics/` and fold that topic's subject terms into the brief so
@@ -164,6 +184,19 @@ already has.
 Write `entities/meta/explorations/explore-<YYYY-MM-DD>.md` with `kind: meta`
 frontmatter. If a report for today already exists, suffix with `-<HHMM>`
 rather than overwrite it.
+
+**Report header — seed coverage.** Near the top of the report (after the intro,
+before the candidates), emit the seed-representativeness diagnostic from Phase 1
+so every reader sees how representative the brief was. When `stub_dominated` is
+true, add a one-line caveat that novelty judgments were made against a thin seed.
+
+```yaml
+seed_coverage:
+  n_topics: 37
+  n_substantive: 3
+  stub_ratio: 0.92
+  stub_dominated: true   # brief was stub-dominated; treat novelty calls as made against a thin seed
+```
 
 Present candidates **neutrally** — never rank or group in a way that
 privileges one source or lens over another:
