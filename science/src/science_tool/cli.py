@@ -1289,9 +1289,7 @@ def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> N
             f"{len(result.failures)} failed"
         )
         for created in result.created:
-            click.echo(
-                f"  created {created.candidate_id} -> {created.entity_id} ({created.kind})"
-            )
+            click.echo(f"  created {created.candidate_id} -> {created.entity_id} ({created.kind})")
         for candidate_id in result.skipped_applied:
             click.echo(f"  already applied: {candidate_id}")
         for candidate_id in result.skipped_other:
@@ -1320,9 +1318,7 @@ def explore_ideas_backfill_lens_views(from_value: str) -> None:
     click.echo(f"backfilled {sum(n for _, n in touched)} view(s) across {len(touched)} entit(ies)")
 
 
-def _build_origin_frontmatter(
-    origins: tuple[str, ...], added_by: str | None
-) -> dict[str, object]:
+def _build_origin_frontmatter(origins: tuple[str, ...], added_by: str | None) -> dict[str, object]:
     """Parse `--origin`/`--added-by` CLI inputs into an `extra_frontmatter` dict.
 
     Raises `click.BadParameter` (nonzero exit, no file written) on a
@@ -4484,6 +4480,48 @@ def project_topic_coverage(project_root: Path, output_format: str) -> None:
         for r in cov.topics:
             if not r.substantive:
                 click.echo(f"  stub: {r.id}")
+
+
+@project.command("resolve-refs")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    envvar="SCIENCE_PROJECT_ROOT",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root whose question/hypothesis index refs resolve against.",
+)
+@click.option(
+    "--query",
+    "queries",
+    multiple=True,
+    required=True,
+    help="Ref to resolve (repeatable): an id, slug, or keyword/title fragment.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def project_resolve_refs(project_root: Path, queries: tuple[str, ...], output_format: str) -> None:
+    """Resolve free-string refs to canonical entity ids (id-slug + title matching)."""
+    from science_tool.resolve_refs import build_ref_index, load_index_rows
+
+    index = build_ref_index(load_index_rows(project_root))
+    results = [index.resolve(q) for q in queries]
+
+    if output_format == "json":
+        click.echo(json.dumps([r.to_dict() for r in results], indent=2))
+        return
+    for r in results:
+        if r.resolved is not None:
+            click.echo(f"{r.query} -> {r.resolved} ({r.match_kind})")
+        elif r.candidates:
+            click.echo(f"{r.query} -> {r.match_kind}: {', '.join(r.candidates)}")
+        else:
+            click.echo(f"{r.query} -> unresolved")
 
 
 @project.command("serialize")

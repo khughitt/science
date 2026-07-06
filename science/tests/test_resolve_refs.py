@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+from click.testing import CliRunner
+
 from science_tool.resolve_refs import build_ref_index
 
 _ROWS = [
@@ -67,3 +72,64 @@ def test_to_dict_shape() -> None:
         "match_kind": "unresolved",
         "candidates": [],
     }
+
+
+def _seed(tmp_path: Path) -> None:
+    from _fixtures.entity_helpers import seed_project, write_markdown_entity
+
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/questions/0037-m6a-proliferation-axis.md",
+        {
+            "id": "question:0037-m6a-proliferation-axis",
+            "kind": "question",
+            "title": "Proliferation axis",  # note: 'm6a' only in the id-slug
+            "status": "open",
+            "created": "2026-07-01",
+            "updated": "2026-07-01",
+        },
+        "Body.\n",
+    )
+
+
+def test_cli_json_resolves_id_slug(tmp_path: Path) -> None:
+    from science_tool.cli import main
+
+    _seed(tmp_path)
+    res = CliRunner().invoke(
+        main,
+        [
+            "project",
+            "resolve-refs",
+            "--project-root",
+            str(tmp_path),
+            "--query",
+            "m6a",
+            "--format",
+            "json",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload == [
+        {
+            "query": "m6a",
+            "resolved": "question:0037-m6a-proliferation-axis",
+            "match_kind": "id-slug",
+            "candidates": ["question:0037-m6a-proliferation-axis"],
+        }
+    ]
+
+
+def test_cli_text_reports_unresolved(tmp_path: Path) -> None:
+    from science_tool.cli import main
+
+    _seed(tmp_path)
+    res = CliRunner().invoke(
+        main,
+        ["project", "resolve-refs", "--project-root", str(tmp_path), "--query", "nope-xyz"],
+    )
+    assert res.exit_code == 0, res.output
+    assert "nope-xyz" in res.output
+    assert "unresolved" in res.output
