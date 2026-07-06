@@ -26,7 +26,6 @@ def _paper() -> PaperEntity:
         source_refs=[],
         content_preview="",
         file_path="entities/papers/Adams2025.md",
-        datasets=["dataset:gtex-v8", "dataset:encode-v4"],
         dataset_usage=[DatasetUsage(ref="dataset:gtex-v8", role="cited")],
     )
 
@@ -56,18 +55,17 @@ def test_entity_usage_records_are_universal_for_authored_dataset_usage() -> None
     ]
 
 
-def test_paper_legacy_datasets_union_without_duplicate() -> None:
+def test_paper_dataset_usage_records_only_authored_usage() -> None:
     from science_tool.graph.dataset_usage import usage_records_for_entity
 
     records = usage_records_for_entity(_paper())
 
     assert [(r.dataset_ref, r.role, r.overlap, r.source) for r in records] == [
         ("dataset:gtex-v8", "cited", "unknown", "authored"),
-        ("dataset:encode-v4", "analyzed", "unknown", "paper.datasets"),
     ]
 
 
-def test_paper_legacy_datasets_duplicate_refs_emit_once() -> None:
+def test_paper_datasets_no_longer_materialize() -> None:
     from science_tool.graph.dataset_usage import usage_records_for_entity
 
     paper = PaperEntity(
@@ -86,11 +84,8 @@ def test_paper_legacy_datasets_duplicate_refs_emit_once() -> None:
         dataset_usage=[],
     )
 
-    records = usage_records_for_entity(paper)
-
-    assert [(r.dataset_ref, r.role, r.overlap, r.source) for r in records] == [
-        ("dataset:encode-v4", "analyzed", "unknown", "paper.datasets")
-    ]
+    with pytest.raises(ValueError, match="paper.datasets is retired"):
+        usage_records_for_entity(paper)
 
 
 def test_derived_dataset_inputs_project_to_upstream_unknown() -> None:
@@ -596,7 +591,6 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
             "dataset_usage:\n  - ref: dataset:gtex-v88\n    role: analyzed\n    overlap: full\n",
             "dataset_usage",
         ),
-        ('datasets: ["dataset:gtex-v88"]\n', "datasets"),
     ],
 )
 def test_materialize_graph_rejects_unresolved_paper_usage_refs(tmp_path, frontmatter, field_name):
@@ -681,7 +675,6 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
         "  - ref: dataset:gtex\n"
         "    role: analyzed\n"
         "    overlap: full\n"
-        'datasets: ["dataset:gtex-v8"]\n'
         "---\n",
         encoding="utf-8",
     )
@@ -697,7 +690,7 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
     assert (paper_nodes[0], SCI_NS.usageSource, Literal("authored")) in graph
 
 
-def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
+def test_materialize_graph_rejects_retired_paper_datasets_field(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
@@ -726,7 +719,7 @@ def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
 
     message = str(excinfo.value)
     assert "paper:Adams2025" in message
-    assert "paper.datasets entry 'gtex' is not a dataset reference" in message
+    assert "paper.datasets is retired" in message
 
 
 def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):
@@ -799,7 +792,6 @@ def test_materialize_graph_rejects_dataset_self_reference_through_alias(tmp_path
             "dataset_usage:\n  - ref: dataset:smith\n    role: analyzed\n    overlap: full\n",
             "dataset_usage",
         ),
-        ('datasets: ["dataset:smith"]\n', "datasets"),
     ],
 )
 def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, frontmatter, field_name):

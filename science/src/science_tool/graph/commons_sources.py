@@ -188,9 +188,6 @@ def collect_referenced_commons_ids(
         _maybe_add(found, getattr(entity, "audits", None))
         for usage in getattr(entity, "dataset_usage", None) or []:
             _maybe_add(found, getattr(usage, "ref", None))
-        if getattr(entity, "kind", None) == "paper":
-            for raw in getattr(entity, "datasets", None) or []:
-                _maybe_add(found, raw)
         derivation = getattr(entity, "derivation", None)
         for raw in getattr(derivation, "inputs", None) or []:
             _maybe_add(found, raw)

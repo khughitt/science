@@ -111,7 +111,7 @@ def test_collect_referenced_commons_ids_collects_b1_entity_usage_refs() -> None:
     )
     derived = SimpleNamespace(kind="dataset", derivation=SimpleNamespace(inputs=["dataset:upstream"]))
 
-    assert _collect(entities=[paper, derived]) == {"dataset:authored", "dataset:legacy", "dataset:upstream"}
+    assert _collect(entities=[paper, derived]) == {"dataset:authored", "dataset:upstream"}
 
 
 @pytest.mark.parametrize(

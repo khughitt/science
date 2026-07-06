@@ -766,47 +766,6 @@ def add_edge(
     return s_uri, p_uri, o_uri
 
 
-def migrate_addresses_direction(graph_path: Path, *, apply: bool) -> dict[str, int]:
-    """Flip anti-canonical `?prop sci:addresses ?question` triples to the canonical
-    `?question sci:addresses ?prop` direction declared by the CORE_PROFILE
-    (source=question, target=proposition).
-
-    Only triples where the subject is typed sci:Proposition AND the object is typed
-    sci:Question are migrated; everything else is left alone (including triples
-    that already match the canonical direction).
-
-    With apply=False, returns counts without writing.
-    """
-    dataset = _load_dataset(graph_path)
-    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-
-    flipped: list[tuple[URIRef, URIRef]] = []
-    already_canonical = 0
-    for s, _, o in knowledge.triples((None, SCI_NS.addresses, None)):
-        if not (isinstance(s, URIRef) and isinstance(o, URIRef)):
-            continue
-        s_is_question = (s, RDF.type, SCI_NS.Question) in knowledge
-        s_is_proposition = (s, RDF.type, SCI_NS.Proposition) in knowledge
-        o_is_question = (o, RDF.type, SCI_NS.Question) in knowledge
-        o_is_proposition = (o, RDF.type, SCI_NS.Proposition) in knowledge
-        if s_is_question and o_is_proposition:
-            already_canonical += 1
-            continue
-        if s_is_proposition and o_is_question:
-            flipped.append((s, o))
-
-    if apply and flipped:
-        for prop_uri, question_uri in flipped:
-            knowledge.remove((prop_uri, SCI_NS.addresses, question_uri))
-            knowledge.add((question_uri, SCI_NS.addresses, prop_uri))
-        _save_dataset(dataset, graph_path)
-
-    return {
-        "flipped": len(flipped),
-        "already_canonical": already_canonical,
-    }
-
-
 def _attach_edge_claims(
     context_graph,
     knowledge,

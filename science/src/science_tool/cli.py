@@ -55,7 +55,6 @@ from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.materialize import materialization_audit, materialize_graph
-from science_tool.graph.paper_dataset_migration import plan_paper_dataset_migration
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
@@ -1649,85 +1648,6 @@ def graph_audit(output_format: str, project_root: Path) -> None:
     )
     if has_failures:
         raise click.exceptions.Exit(1)
-
-
-@graph.command("migrate-addresses")
-@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
-    """Flip anti-canonical sci:addresses edges to the canonical direction.
-
-    The CORE_PROFILE declares `addresses` with source=question, target=proposition,
-    so the canonical RDF triple is `?question sci:addresses ?proposition`. Earlier
-    workflows produced the reversed direction (`?proposition sci:addresses ?question`),
-    which made `question-summary` undercount. This command rewrites those triples
-    in place. Triples already in the canonical direction are left untouched.
-
-    Dry-run by default; pass --apply to write.
-    """
-    from science_tool.graph.store import migrate_addresses_direction
-
-    stats = migrate_addresses_direction(graph_path, apply=apply)
-    if stats["flipped"] == 0:
-        click.echo(f"No anti-canonical sci:addresses triples found ({stats['already_canonical']} already canonical).")
-        return
-    verb = "Flipped" if apply else "Would flip"
-    click.echo(f"{verb} {stats['flipped']} sci:addresses triple(s) ({stats['already_canonical']} already canonical).")
-    if not apply:
-        click.echo("Re-run with --apply to write changes.")
-
-
-@graph.command("migrate-paper-datasets")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Rewrite paper frontmatter in place.")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, project_root: Path) -> None:
-    """Migrate legacy paper.datasets fields to canonical dataset_usage."""
-
-    report = plan_paper_dataset_migration(project_root.resolve(), apply=apply_changes)
-    payload = report.to_json()
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        rows: list[dict[str, str]] = [
-            {"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files
-        ]
-        rows.extend(
-            {
-                "kind": "conflict",
-                "path": conflict.path,
-                "reason": conflict.reason,
-                "detail": conflict.detail,
-            }
-            for conflict in report.conflicts
-        )
-        emit_query_rows(
-            output_format=output_format,
-            title="Paper Dataset Migration",
-            columns=[
-                ("kind", "Kind"),
-                ("path", "Path"),
-                ("reason", "Reason"),
-                ("detail", "Detail"),
-            ],
-            rows=rows,
-        )
-        mode = "apply" if apply_changes else "dry-run"
-        click.echo(f"Mode: {mode}")
-        click.echo(f"Changed files: {report.changed_file_count}")
-        click.echo(f"Conflicts: {report.conflict_count}")
-
-    if report.conflicts:
-        raise click.exceptions.Exit(20)
-    if not apply_changes and report.changed_files:
-        raise click.exceptions.Exit(10)
 
 
 @graph.command("stats")

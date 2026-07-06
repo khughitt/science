@@ -160,14 +160,10 @@ lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
 - Migration-only and exploratory commands should be labeled in docs and help
   text so agents do not select them for new durable workflows.
 
-## Migration And Legacy Surfaces
+## Migration And Retired Surfaces
 
-Migration tools are useful when curating older projects, but they are not the
-normal path for new work. Examples include:
-
-- `science graph migrate-addresses`
-- `science graph migrate-paper-datasets`
-- `science tasks fix-blockers`
-
-When possible, run these commands in read-only or dry-run mode first, inspect the
-plan, then apply the change in a small commit.
+Migration-only commands are temporary. Retired commands are removed after the
+registered project set no longer needs them; do not use command names from old
+plans or audit notes as durable workflow guidance. For current project data,
+prefer canonical authoring surfaces directly and run `science validate` plus
+`science graph build` to catch retired fields.

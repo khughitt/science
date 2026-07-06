@@ -31,7 +31,6 @@ ALLOWLIST: set[str] = {
     "graph/health.py",                      # health/datasets/runs roots
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots
-    "graph/paper_dataset_migration.py",     # research/packages/doc paper roots (entities branch routed)
     "validate/checks/id_prefixes.py",       # entities routed through iter_entity_markdown
     "validate/_helpers.py",
     "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
@@ -53,7 +52,6 @@ ENTITY_SCANNERS: set[str] = {
     "validate/checks/entity_conformance.py",
     "validate/checks/hypotheses.py",
     "big_picture/validator.py",
-    "graph/paper_dataset_migration.py",
     "entities.py",
     "explore_ideas.py",
 }

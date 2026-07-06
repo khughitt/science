@@ -91,7 +91,6 @@ EXPECTED_DEFERRED_WRITERS = {
     "graph/store/mutations.py:add_question",
     "graph/store/mutations.py:add_edge",
     # Tier 3 — classify/retire in Phase 3.
-    "graph/store/mutations.py:migrate_addresses_direction",
     "graph/store/snapshot.py:import_snapshot",
     "graph/store/snapshot.py:stamp_revision",
 }

@@ -13,10 +13,6 @@
     "journal": {"type": "string"},
     "doi": {"type": "string"},
     "url": {"type": "string"},
-    "datasets": {
-      "type": "array",
-      "items": {"type": "string", "pattern": "^dataset:"}
-    },
     "key_findings": {"type": "array", "items": {"type": "string"}},
     "methods_summary": {"type": "string"},
     "limitations": {"type": "array", "items": {"type": "string"}},

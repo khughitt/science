@@ -681,6 +681,14 @@ def scan_legacy_surfaces(project_root: Path) -> LegacySurfaceScan:
                     "frontmatter access is scalar",
                 )
             )
+        if fm.get("kind") == "paper" and "datasets" in fm:
+            findings.append(
+                LegacySurfaceFinding(
+                    "legacy_paper_datasets",
+                    rel_path,
+                    "paper frontmatter has retired datasets:",
+                )
+            )
         if _frontmatter_has_article_alias(fm):
             findings.append(
                 LegacySurfaceFinding(

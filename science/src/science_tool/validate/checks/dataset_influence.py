@@ -13,7 +13,6 @@ from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.graph.dataset_independence import DEPENDENCE_ROLES
-from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -140,45 +139,13 @@ def evaluate_dataset_influence(
                     refs_to_check.append((ref, ident, str(path or "")))
 
         if kind == "paper":
-            raw_datasets = fm.get("datasets")
-            if raw_datasets is None:
-                raw_datasets = []
-            if not isinstance(raw_datasets, list):
+            if "datasets" in fm:
                 yield _result(
                     Severity.ERROR,
                     path,
-                    f"{ident}: datasets must be a list of dataset: refs",
-                    "dataset-influence.paper-datasets-invalid",
+                    f"{ident}: paper.datasets is retired; use dataset_usage entries instead",
+                    "dataset-influence.paper-datasets-retired",
                 )
-                continue
-            explicit_by_ref = {canonicalize_dataset_ref(str(entry["ref"])): entry for entry in usage_entries}
-            for raw_ref in raw_datasets:
-                if not isinstance(raw_ref, str) or not raw_ref.startswith("dataset:"):
-                    yield _result(
-                        Severity.ERROR,
-                        path,
-                        f"{ident}: paper.datasets entry {raw_ref!r} is not a dataset: ref",
-                        "dataset-influence.paper-datasets-invalid",
-                    )
-                    continue
-                ref = canonicalize_dataset_ref(raw_ref)
-                if ref in explicit_by_ref:
-                    entry = explicit_by_ref[ref]
-                    if is_paper_dataset_role_conflict(entry):
-                        yield _result(
-                            Severity.WARN,
-                            path,
-                            f"{ident}: paper.datasets {ref!r} conflicts with explicit dataset_usage; explicit entry materializes",
-                            "dataset-influence.paper-datasets-conflict",
-                        )
-                    continue
-                yield _result(
-                    Severity.WARN,
-                    path,
-                    f"{ident}: legacy paper.datasets {ref!r} should migrate to dataset_usage",
-                    "dataset-influence.paper-datasets-legacy",
-                )
-                refs_to_check.append((ref, ident, str(path or "")))
 
     refs_to_check.extend(row_usage_refs)
     for ref, consumer, path in refs_to_check:

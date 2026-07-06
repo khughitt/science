@@ -3404,20 +3404,9 @@ def test_graph_migrate_addresses_flips_anti_canonical_triples() -> None:
         knowledge.add((prop_uri, SCI_NS.addresses, question_uri))
         _save_dataset(dataset, DEFAULT_GRAPH_PATH)
 
-        # Dry-run reports the flip but does not write.
-        dry = runner.invoke(main, ["graph", "migrate-addresses"])
-        assert dry.exit_code == 0
-        assert "Would flip 1" in dry.output
-
-        # Apply actually rewrites.
-        applied = runner.invoke(main, ["graph", "migrate-addresses", "--apply"])
-        assert applied.exit_code == 0
-        assert "Flipped 1" in applied.output
-
-        # Re-running on already-canonical data is a no-op.
-        again = runner.invoke(main, ["graph", "migrate-addresses"])
-        assert again.exit_code == 0
-        assert "No anti-canonical" in again.output
+        result = runner.invoke(main, ["graph", "migrate-addresses"])
+        assert result.exit_code != 0
+        assert "No such command" in result.output
 
 
 def test_graph_add_edge_warns_on_reversed_addresses_direction() -> None:

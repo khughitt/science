@@ -7,8 +7,6 @@ status: "active"
 paper_kind: ""
 ontology_terms: []
 dataset_usage: []
-# Transition input only; prefer dataset_usage above.
-datasets: []
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"
@@ -22,7 +20,6 @@ _template:
     paper_kind: { default: "" }
     ontology_terms: { default: [] }
     dataset_usage: { default: [] }
-    datasets: { default: [] }
     source_refs: { from: source_refs }
     related: { from: related }
     created: { from: created }

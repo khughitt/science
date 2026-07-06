@@ -120,7 +120,6 @@ migrated.
 
 | writer | location | disposition |
 |---|---|---|
-| `migrate_addresses_direction` (`graph migrate-addresses --apply`) | `mutations.py:772` | completed one-shot migration; retire or quarantine as a named build tool |
 | `import_snapshot` (`graph import`) | `graph/store/snapshot.py` | writes raw knowledge triples with **no backing source**; reclassify as an explicit import-provenance path or retire |
 | `stamp_revision` (`graph stamp-revision`) | `graph/store/snapshot.py` | low-risk metadata-only writer; classify as named build tool or retire |
 
@@ -205,9 +204,8 @@ source→build pipeline.
    surface; queues per-project migrations individually.
 3. **Tier 2 `graph add` retirement + Tier 3 decisions.** Retire the 15 mutators
    via the `_retired_mutator` pattern (after confirming each kind has a
-   source-authoring path; `add_edge` gets its explicit scratch-or-retire call),
-   and resolve `migrate_addresses_direction`, `import_snapshot`, and
-   `stamp_revision` per Tier 3. Each retirement extends the guard allowlist's
+  source-authoring path; `add_edge` gets its explicit scratch-or-retire call),
+  and resolve `import_snapshot` and `stamp_revision` per Tier 3. Each retirement extends the guard allowlist's
    disallowed set.
 4. **`sci:Inquiry` consumer repoint.** Its own phase. Repoint the six-plus live
    readers to `PatchDefinitionEntity.inquiry` profiles, then drop
@@ -239,9 +237,8 @@ value of this work is the guard, not the enumeration.
   files build state through the source→`graph build` fixture.
 - The 15 `graph add` mutators are retired (or, for `add_edge`, explicitly
   scratch-classified); no removed name remains in any `__all__`.
-- `migrate_addresses_direction`, `import_snapshot`, and `stamp_revision` each
-  carry an explicit classification (named build tool, import-provenance path, or
-  retired).
+- `import_snapshot` and `stamp_revision` each carry an explicit classification
+  (named build tool, import-provenance path, or retired).
 - Every managed project's `*.edges.yaml` debt is either closed-and-archived or
   queued with a per-project migration.
 - The compiled `graph.trig` and `composite.trig` are byte-identical before and
