@@ -10,6 +10,10 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+
+if "conftest" in sys.modules and not hasattr(sys.modules["conftest"], "build_entity_graph"):
+    del sys.modules["conftest"]
+from conftest import build_entity_graph
 from rdflib import Dataset, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
 
@@ -237,7 +241,6 @@ def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) ->
     from rdflib import Literal, URIRef
     from rdflib.namespace import RDF
 
-    from conftest import build_entity_graph
     from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset
 
     graph_path = build_entity_graph(
@@ -294,7 +297,6 @@ def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) ->
 
 def test_materialize_falsification_omits_blank_metadata_fields(tmp_path: Path) -> None:
     """Intentional source-form contract: a blank scaffold field emits NO triple."""
-    from conftest import build_entity_graph
     from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset
 
     graph_path = build_entity_graph(
@@ -334,8 +336,6 @@ def test_materialize_falsification_omits_blank_metadata_fields(tmp_path: Path) -
 
 
 def test_materialize_falsification_rejects_wrong_kind_qualified_target(tmp_path: Path) -> None:
-    from conftest import build_entity_graph
-
     with pytest.raises(ValueError, match=r"falsification:wrong-kind.*question:p1"):
         build_entity_graph(
             tmp_path,
