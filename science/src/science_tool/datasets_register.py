@@ -107,11 +107,13 @@ def _reduce_output_support(out: dict, resources: list[dict]) -> dict | None:
             f"{sorted(map(str, units))}"
         )
     unit = stamps[0].get("unit")
-    observeds = [s.get("observed") for s in stamps]
-    if all(isinstance(o, int) and not isinstance(o, bool) and o >= 0 for o in observeds):
-        return {"unit": unit, "observed": min(observeds)}
-    bad = next(o for o in observeds if not (isinstance(o, int) and not isinstance(o, bool) and o >= 0))
-    return {"unit": unit, "observed": bad}
+    valid_observeds: list[int] = []
+    for s in stamps:
+        observed = s.get("observed")
+        if not (isinstance(observed, int) and not isinstance(observed, bool) and observed >= 0):
+            return {"unit": unit, "observed": observed}
+        valid_observeds.append(observed)
+    return {"unit": unit, "observed": min(valid_observeds)}
 
 
 def _run_dir_slug(workflow_slug: str, run_entity_slug: str) -> str:
