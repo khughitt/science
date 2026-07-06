@@ -233,7 +233,14 @@ already has.
    - `out-of-scope` — falls outside `specs/scope-boundaries.md`.
    When title-level information from the index is insufficient to tell,
    **read the referenced source files** before deciding. Set
-   `related_existing` for `sharpens-existing` and `already-covered`.
+   `related_existing` for `sharpens-existing` and `already-covered`, then
+   canonicalize every ref to its exact entity id with
+   `uv run science project resolve-refs --query <ref> [--query <ref> ...]`
+   — it matches both id-slugs and titles, so a keyword that lives only in an
+   id-slug (e.g. `m6a` in `question:0037-m6a-proliferation-axis`) still
+   resolves. Apply hard-validates these ids and fails on any that are
+   ambiguous or unresolved, so fix them here. (The slug pre-pass above is a
+   separate step — it stays as the title-level duplicate detector.)
 3. **Anchor resolution.** For each candidate's `literature_anchors[]`
    entry, try to resolve it to a real project reference and record the
    result as `ref`:
@@ -256,9 +263,10 @@ already has.
 
 ## Generate — Phase 4: Report
 
-Write `entities/meta/explorations/explore-<YYYY-MM-DD>.md` with `kind: meta`
-frontmatter. If a report for today already exists, suffix with `-<HHMM>`
-rather than overwrite it.
+Write `doc/explorations/explore-<YYYY-MM-DD>.md`. If a report for today
+already exists, suffix with `-<HHMM>` rather than overwrite it. The report is
+a process artifact, not a graph entity — give it a plain human header, no
+`kind:`/entity frontmatter.
 
 **Report header — seed coverage.** Near the top of the report (after the intro,
 before the candidates), emit the seed-representativeness diagnostic from Phase 1
