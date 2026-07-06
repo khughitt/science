@@ -92,3 +92,42 @@ def build_inquiry_graph(
         dataset.graph(ctx.identifier if hasattr(ctx, "identifier") else ctx).add((s, p, o))
     _save_dataset(dataset, graph_path)
     return graph_path
+
+
+def build_entity_graph(project_root: Path, entities: list[dict], relations: list[dict] | None = None) -> Path:
+    """Author core entity markdown, optional relations, and materialize the graph."""
+    import yaml
+    from science_model.profiles import CORE_PROFILE
+
+    from _fixtures.entity_helpers import seed_project, write_markdown_entity
+    from science_tool.graph.materialize import materialize_graph
+    from science_tool.graph.sources import local_profile_sources_dir, resolve_local_profile_name
+
+    if not (project_root / "science.yaml").exists():
+        seed_project(project_root)
+
+    core_homes = {kind.name: kind.home for kind in CORE_PROFILE.entity_kinds}
+    for entity in entities:
+        kind = entity["kind"]
+        entity_id = entity["id"]
+        home = core_homes.get(kind)
+        if home is None:
+            raise ValueError(f"core kind {kind!r} has no markdown home")
+
+        home_path = Path(home)
+        rel_path = home_path if home_path.suffix == ".md" else home_path / f"{entity_id}.md"
+        frontmatter = dict(entity["frontmatter"])
+        frontmatter["id"] = f"{kind}:{entity_id}"
+        frontmatter["kind"] = kind
+        write_markdown_entity(project_root, rel_path.as_posix(), frontmatter, str(entity["body"]))
+
+    if relations is not None:
+        local_profile = resolve_local_profile_name(project_root)
+        sources_dir = local_profile_sources_dir(project_root, local_profile=local_profile)
+        sources_dir.mkdir(parents=True, exist_ok=True)
+        (sources_dir / "relations.yaml").write_text(
+            yaml.safe_dump({"relations": relations}, sort_keys=False),
+            encoding="utf-8",
+        )
+
+    return materialize_graph(project_root)
