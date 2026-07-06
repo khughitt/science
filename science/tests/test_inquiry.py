@@ -6,7 +6,7 @@ import pytest
 from rdflib import RDF, Literal, URIRef
 from rdflib.namespace import SKOS
 
-from conftest import build_inquiry_graph
+from conftest import build_entity_graph, build_inquiry_graph
 
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
@@ -16,7 +16,6 @@ from science_tool.graph.store import (
     _graph_uri,
     _load_dataset,
     _save_dataset,
-    add_concept,
     get_inquiry,
     list_inquiries,
     render_inquiry_doc,
@@ -220,6 +219,15 @@ def _add_materialized_inquiry(
     return uri
 
 
+def _entity(kind: str, entity_id: str, title: str, **frontmatter: object) -> dict:
+    return {
+        "kind": kind,
+        "id": entity_id,
+        "frontmatter": {"title": title, **frontmatter},
+        "body": f"{title}\n",
+    }
+
+
 class TestMaterializedInquiryQueries:
     """Inquiries built by `materialize_graph` live as entities in the shared
     ``graph/knowledge`` layer, not per-inquiry named graphs. The read commands
@@ -258,7 +266,7 @@ class TestMaterializedInquiryQueries:
     def test_get_inquiry_materialized_does_not_leak_knowledge_edges(self, graph_path: Path) -> None:
         """Reading a materialized inquiry must not treat every triple in the
         shared knowledge graph as one of its edges."""
-        add_concept(graph_path, "unrelated_concept", concept_type=None, ontology_id=None)
+        build_entity_graph(graph_path.parent.parent, [_entity("concept", "unrelated_concept", "Unrelated concept")])
         _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
         result = get_inquiry(graph_path, "h-3d-genome-substrate")
         assert result["edges"] == []
