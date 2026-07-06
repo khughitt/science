@@ -37,6 +37,23 @@ project's `AGENTS.md` body, edit that project's file directly.
 bash validate.sh --verbose
 ```
 
+## Worktrees
+
+This project consumes the `science` toolkit through a **relative editable** uv
+source in `pyproject.toml` (`science = { path = "../.../science/science" }`),
+resolved relative to the checkout's location on disk. A git worktree created
+**inside** the repo (the default `.worktrees/<name>/`) sits deeper than the main
+checkout, so that relative path no longer resolves and every `uv run` — the
+pre-commit hook, `validate.sh`, and tests — fails with `Distribution not found`.
+
+- **Isolated editing / docs-only commits:** a nested `.worktrees/` worktree is
+  fine. The hook failure is expected and unrelated to your change — commit with
+  `--no-verify`, or commit from the main checkout.
+- **When you need `uv` / tests / `validate.sh` to run inside the worktree:**
+  create it at the **same filesystem depth** as the main checkout (a sibling
+  directory), not nested — e.g. `git worktree add ../<project>--<branch> <branch>`
+  — so the relative `science` source still resolves.
+
 ## Conventions
 
 - <bullets — operational rules an agent will need every turn>

@@ -52,6 +52,22 @@ uv run ruff check
 uv run pyright
 ```
 
+## Worktrees
+
+Worktrees of *this* repo are safe: the `science-model` / `science-qa` uv sources
+are **in-repo** (`model/`, `qa/`), so a linked worktree carries its own copies
+and `uv run` resolves normally wherever the worktree lives.
+
+Science-managed **consumer** projects are not. They reference this toolkit via a
+*relative* editable source (e.g. `science = { path = "../../../science/science" }`),
+which does not resolve from the default nested `.worktrees/<name>/` worktree — the
+worktree sits two directory levels deeper than the project's main checkout, so
+the relative path under-resolves and every `uv run` (the pre-commit hook,
+`validate.sh`, tests) fails with `Distribution not found`. The constraint and its
+two work-arounds are shipped to adopters in
+[`templates/agents-md.md`](templates/agents-md.md) — mirror any change to the
+phrasing there.
+
 ## Conventions
 
 Follow the project-wide rules: composition over inheritance; explicit over
