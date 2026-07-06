@@ -39,6 +39,9 @@ def _source_entity(kind: str, entity_id: str, title: str, *, status: str = "acti
 # Retired finding/interpretation writer assertions for sci:contains and sci:groundedBy
 # are intentionally pruned. Source-emitted mechanism composition coverage lives in
 # test_graph_materialize::test_materialize_graph_emits_mechanism_participants_and_propositions.
+# The retired add_finding invalid-confidence mutator-validation test is also
+# pruned: source-authored finding entities do not have an equivalent schema
+# validator for the old string confidence ladder.
 
 
 def test_source_authored_finding_materializes(tmp_path: Path) -> None:
