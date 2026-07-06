@@ -127,6 +127,30 @@ def test_entity_create_concept_loads_and_resolves_in_graph_build() -> None:
         assert trig_path.is_file()
 
 
+def test_entity_create_mechanism_writes_model_valid_scaffold() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "create", "mechanism", "Test Mechanism"])
+
+        assert result.exit_code == 0, result.output
+        assert "mechanism:0001-test-mechanism" in result.output
+        path = Path("entities/mechanisms/0001-test-mechanism.md")
+        assert path.is_file()
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["id"] == "mechanism:0001-test-mechanism"
+        assert frontmatter["kind"] == "mechanism"
+        assert frontmatter["title"] == "Test Mechanism"
+        assert frontmatter["summary"] == "Placeholder mechanism summary; replace before relying on this mechanism."
+        assert frontmatter["participants"] == [
+            "concept:placeholder-participant-a",
+            "concept:placeholder-participant-b",
+        ]
+        assert frontmatter["propositions"] == ["proposition:placeholder-proposition"]
+
+
 def test_entity_create_construct_still_uses_generic_slug_path() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

@@ -3,9 +3,12 @@ id: "mechanism:{{nn}}-{{slug}}"
 kind: "mechanism"
 title: "{{title}}"
 status: "{{status}}"
-summary: ""
-participants: []
-propositions: []
+summary: "Placeholder mechanism summary; replace before relying on this mechanism."
+participants:
+  - "concept:placeholder-participant-a"
+  - "concept:placeholder-participant-b"
+propositions:
+  - "proposition:placeholder-proposition"
 related: []
 source_refs: []
 created: "{{created}}"
@@ -16,9 +19,9 @@ _template:
     kind: { default: "mechanism" }
     title: { from: title }
     status: { from: status }
-    summary: { default: "" }
-    participants: { default: [] }
-    propositions: { default: [] }
+    summary: { default: "Placeholder mechanism summary; replace before relying on this mechanism." }
+    participants: { default: ["concept:placeholder-participant-a", "concept:placeholder-participant-b"] }
+    propositions: { default: ["proposition:placeholder-proposition"] }
     related: { from: related }
     source_refs: { from: source_refs }
     created: { from: created }
@@ -31,4 +34,4 @@ _template:
 
 ## Supplementary Notes
 
-<!-- Author parsed mechanism fields in frontmatter: `summary`, `participants`, and `propositions`. Use this section only for explanatory notes that do not need typed parsing. -->
+<!-- Replace the placeholder `summary`, `participants`, and `propositions` frontmatter before relying on this mechanism. Use this section only for explanatory notes that do not need typed parsing. -->
