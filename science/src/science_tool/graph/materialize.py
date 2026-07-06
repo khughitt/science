@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
-from science_model.entities import Entity, EvidenceLineEntity
+from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity
 from science_model.identity import EntityClass, EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.patch_definition import PatchDefinitionEntity
@@ -96,6 +96,7 @@ from science_tool.graph.store import (
     SCHEMA_NS,
     SCI_NS,
     canonical_id_from_entity_uri,
+    _resolve_term,
     save_graph_dataset,
 )
 
@@ -659,6 +660,8 @@ def _add_entity(
     _add_reasoning_metadata(uri=uri, provenance=provenance, entity=entity)
     if isinstance(entity, EvidenceLineEntity):
         _add_evidence_line_metadata(uri=uri, provenance=provenance, entity=entity)
+    if isinstance(entity, FalsificationEntity):
+        _add_falsification_metadata(uri=uri, knowledge=knowledge, entity=entity)
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.file_path)))
     if overlay_paths is not None and entity.canonical_id in overlay_paths:
@@ -714,6 +717,15 @@ def _add_relations(
             knowledge=knowledge,
             provenance=provenance,
             ext_prefixes=ext_prefixes,
+        )
+
+    if isinstance(entity, FalsificationEntity):
+        _add_falsification_relations(
+            uri=entity_uri,
+            knowledge=knowledge,
+            entity=entity,
+            entity_index=entity_index,
+            resolver=resolver,
         )
 
     for raw_target in sorted(getattr(entity, "participants", []) or []):
@@ -1084,6 +1096,47 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
         if quant.hdi is not None and len(quant.hdi) == 2:
             provenance.add((uri, SCI_NS.quantHdiLow, Literal(quant.hdi[0])))
             provenance.add((uri, SCI_NS.quantHdiHigh, Literal(quant.hdi[1])))
+
+
+def _add_falsification_metadata(*, uri: URIRef, knowledge, entity: FalsificationEntity) -> None:
+    """Emit falsification descriptive literals into the knowledge graph."""
+    literal_predicates: dict[str, object] = {
+        "predicted": SCI_NS.predicted,
+        "observed": SCI_NS.observed,
+        "decision": SCI_NS.decision,
+        "source_of_prediction": SCI_NS.sourceOfPrediction,
+    }
+    for field, predicate in literal_predicates.items():
+        value = getattr(entity, field, None)
+        if value:
+            knowledge.add((uri, predicate, Literal(str(value))))
+
+
+def _add_falsification_relations(
+    *,
+    uri: URIRef,
+    knowledge,
+    entity: FalsificationEntity,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+) -> None:
+    """Emit falsification target and optional superseded claim into knowledge."""
+    resolution = resolver.resolve(entity.falsifies)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise ValueError(
+            f"{entity.canonical_id} falsifies {entity.falsifies!r}, which does not resolve "
+            "to a known entity; a falsification target must resolve to a proposition."
+        )
+    target = entity_index.get(resolution.canonical_id)
+    if target is None or target.kind != "proposition":
+        raise ValueError(
+            f"{entity.canonical_id} falsifies {resolution.canonical_id!r}, which is not a "
+            "proposition; falsification targets must be propositions."
+        )
+    knowledge.add((uri, SCI_NS.falsifies, _entity_uri(target.canonical_id)))
+
+    if entity.supersedes_claim:
+        knowledge.add((uri, SCI_NS.supersedesClaim, _resolve_term(entity.supersedes_claim)))
 
 
 def _pre_registration_commitment_targets(
