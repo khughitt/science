@@ -48,13 +48,13 @@ _RENDERER_DERIVED_FRONTMATTER_KEYS: frozenset[str] = frozenset(
         "content_preview",
         "content",
         "file_path",
+        "type",
     )
 )
 _PROPOSITION_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
     (
         "id",
         "kind",
-        "type",
         "subject",
         "object",
         "predicate",
@@ -73,7 +73,6 @@ _EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
     (
         "id",
         "kind",
-        "type",
         "stance",
         "target",
         "source",

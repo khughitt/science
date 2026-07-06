@@ -36,11 +36,6 @@ def test_number_one_does_not_create_edges_yaml_for_new_dot(tmp_path: Path) -> No
     assert not (dag_dir / "new.edges.yaml").exists()
 
 
-def test_number_one_force_stubs_is_retired(number_workspace: Path) -> None:
-    with pytest.raises(ValueError, match="retired"):
-        number_one(number_workspace, "h1-progression", force_stubs=True, proposition_edges=[])
-
-
 def test_number_one_is_idempotent(number_workspace: Path) -> None:
     """Running number_one twice should produce identical output both times."""
     number_one(number_workspace, "h1-progression")

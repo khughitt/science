@@ -53,18 +53,16 @@ project represents its model graph — otherwise `science inquiry show` errors (
 
 2. **Detect the DAG representation.** Some projects author the inquiry graph through the
    source-first inquiry patch path (`entities/patches/<slug>.md` with `patch_type: inquiry`). Others author
-   per-hypothesis DAGs as a **file pair** — e.g. `doc/figures/dags/<id>.dot` + `<id>.edges.yaml` —
-   consumed by `science big-picture` provenance-coverage rather than by `science graph add`. Check the
-   project for such a convention (look under `doc/figures/dags/`, `*.edges.yaml`, or the project's
-   `RESEARCH_PLAN`/conventions) before assuming the inquiry patch path.
+   per-hypothesis DAG topology in `doc/figures/dags/<id>.dot`, with semantics supplied by durable
+   `proposition:` and `evidence-line:` entities. Check the project for such a convention (look under
+   `doc/figures/dags/` and the project's `RESEARCH_PLAN`/conventions) before assuming the inquiry patch path.
 
 3. **Route accordingly:**
    - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.
    - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
-     `graph add concept` steps (they don't map onto the file pair). Instead author/validate the
-     `.dot` + `.edges.yaml` pair the project's tooling consumes, and still do Step 3 (durable
-     `proposition` entities) and Step 4 (evidence-line entities) — those are tool-supported and
-     durable regardless of DAG representation. Validate with the project's DAG check (e.g.
+     `graph add concept` steps. Instead author/validate the `.dot` topology and the durable
+     `proposition` entities that back each DOT edge, then add Step 4 evidence-line entities.
+     Validate with the project's DAG check (e.g. `science dag validate` / `science dag render` /
      `science big-picture`) rather than `inquiry validate`.
    - **Hypothesis / epistemic entity with no DAG yet** → decompose the hypothesis into durable `proposition:` entities.
      For each proposition, link each proposition back to the hypothesis with `related: ["hypothesis:<id>"]`.
@@ -78,7 +76,7 @@ structural-graph steps (1, 2, the inquiry source edit in 3, and 6's `inquiry val
 ### Step 1: Load And Assess The Target
 
 *(Inquiry + RDF-graph path — see Step 0. For a hypothesis in a file-based DAG project, read the
-hypothesis file and its `.dot`/`.edges.yaml` pair instead. For a hypothesis with no DAG yet, read the
+hypothesis file, `.dot` topology, and backing proposition/evidence-line entities instead. For a hypothesis with no DAG yet, read the
 hypothesis file and prepare the proposition bundle before adding any structural graph.)*
 
 If `$ARGUMENTS` contains an inquiry slug:

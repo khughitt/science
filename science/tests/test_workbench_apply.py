@@ -68,6 +68,9 @@ def test_render_entity_text_matches_write_entity_file_output(tmp_path: Path) -> 
         updated="2026-07-04",
     )
     assert written == rendered
+    frontmatter = _frontmatter(path)
+    assert frontmatter["kind"] == "proposition"
+    assert "type" not in frontmatter
 
 
 def test_parse_markdown_entity_file_preserving_body_keeps_body_bytes(tmp_path: Path) -> None:
@@ -275,6 +278,7 @@ def test_apply_workbench_preserves_curated_proposition_frontmatter_on_semantic_u
     frontmatter["content_preview"] = "renderer-derived preview"
     frontmatter["content"] = "renderer-derived body"
     frontmatter["file_path"] = "entities/propositions/a-affects-b.md"
+    frontmatter["type"] = "proposition"
     prop_path.write_text(
         "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
         encoding="utf-8",
@@ -301,6 +305,7 @@ def test_apply_workbench_preserves_curated_proposition_frontmatter_on_semantic_u
     assert "content_preview" not in fm
     assert "content" not in fm
     assert "file_path" not in fm
+    assert "type" not in fm
     assert fm["created"] == "2026-07-04"
     assert fm["updated"] == "2026-07-10"
 

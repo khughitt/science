@@ -123,11 +123,6 @@ For claim and evidence structure, use the highest-priority source with content:
 4. Summary surfaces such as uncertainty, gaps, attention samples, and dashboard
    summaries as complementary context.
 
-For migration work, `science dag retired-edge-migration-plan` can read the
-explicit retired-edge inspection surface and print a reviewable plan or draft
-workbench YAML. It is read-only: it does not write workbenches, compile
-propositions, or make retired `*.edges.yaml` authoritative again.
-
 The synthesis should not merge conflicting structured claim sources
 field-by-field. If graph claim surfaces exist for a hypothesis, treat them as
 the claim-structure authority for that hypothesis. Summary surfaces remain

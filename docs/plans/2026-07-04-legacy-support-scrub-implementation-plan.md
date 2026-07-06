@@ -45,8 +45,8 @@
 
 - Merged on `main`: Task 1 inventory, Task 2 v2-to-v3 entity layout, and Task 7
   aggregate manifest retirement.
-- Current inventory: 8 total findings across 2 remaining data surfaces:
-  `retired_edges_yaml`=4 and `legacy_marker_alias`=4. Article prefix aliases,
+- Current inventory: 4 total findings across 1 remaining data surface:
+  `legacy_marker_alias`=4. Retired DAG `.edges.yaml`, article prefix aliases,
   aggregate manifest, `type:` frontmatter, scalar `access:`, data-package, bare
   `profiles:`, and removed `science.yaml` field hits are zero.
 - Current coverage: 23 registered entries, 22 scanned projects, 1 shared
@@ -56,7 +56,12 @@
 - Strict frontmatter cleanup is complete in
   `refactor/strict-frontmatter-cleanup`: remaining `type:` reader fallbacks and
   scalar `access:` coercion paths were removed from active toolkit code.
-- Next data-bearing slice: retired DAG `.edges.yaml` migration.
+- In progress in `refactor/retired-edges-yaml-retirement`: retired DAG
+  `.edges.yaml` project data has been migrated/committed in cBioPortal,
+  protein-landscape, and multiple-myeloma; active toolkit readers, migrators,
+  schemas, CLI commands, and command guidance have been removed.
+- Next data-bearing slice after this branch merges: marker alias cleanup
+  (`[NEEDS CITATION]` → `[MISSING_CITATION]`).
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -320,30 +325,32 @@ Run reference, graph audit, and entity kind tests.
 - Keep until after gate: retired-edge migration commands and modules
 - Remove after gate: retired-edge readers, schemas, CLI commands, warnings, and tests
 
-Status 2026-07-05: current inventory reports 4 `*.edges.yaml` hits across
-`~/d/cancer/cancer-types/multiple-myeloma`,
-`~/d/cancer/data-sources/cbioportal`, and `~/d/protein-landscape`.
+Status 2026-07-05: complete in `refactor/retired-edges-yaml-retirement`.
+Project data was migrated/committed in cBioPortal, protein-landscape, and
+multiple-myeloma; the registered-project inventory now reports zero
+`retired_edges_yaml` findings. Active toolkit reader, migrator, archive/schema,
+and CLI support was removed after the zero-hit gate.
 
-- [ ] **Step 1: Inventory edge YAML files**
+- [x] **Step 1: Inventory edge YAML files**
 
 Report every registered project containing `*.edges.yaml`.
 
-- [ ] **Step 2: Migrate DAG rows**
+- [x] **Step 2: Migrate DAG rows**
 
 Use retired-edge migration planning and workbench scaffold commands to migrate
 each project.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when edge YAML hits are zero **and** each migrated project still
 builds under `science validate` / `graph materialize`.
 
-- [ ] **Step 4: Remove retired-edge support**
+- [x] **Step 4: Remove retired-edge support**
 
 Delete retired-edge inspection/migration modules, schema command, and
 compatibility warnings.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run DAG and graph tests plus package suites.
 

@@ -3,8 +3,8 @@
 Lifted from mm30's ``doc/figures/dags/_number_edges.py``.
 
 Reads each source ``.dot`` file, assigns sequential edge IDs in order of
-appearance, writes a ``<slug>-numbered.dot`` variant with ``[N]`` prefixed on
-every edge label. Retired ``*.edges.yaml`` files are not created or reset.
+appearance, and writes a ``<slug>-numbered.dot`` variant with ``[N]`` prefixed
+on every edge label.
 """
 
 from __future__ import annotations
@@ -136,15 +136,9 @@ def number_one(
     dag_dir: Path,
     slug: str,
     *,
-    force_stubs: bool = False,
     proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
 ) -> None:
-    """Number edges in one DAG's .dot without writing retired edges.yaml."""
-    if force_stubs:
-        raise ValueError(
-            "`science dag number --force-stubs` is retired: *.edges.yaml is no longer "
-            "a DAG authoring surface. Author relational propositions through workbench rows."
-        )
+    """Number edges in one DAG's .dot."""
     dot_path = dag_dir / f"{slug}.dot"
     parsed = _parse_dag(dot_path)
     _emit_numbered_dot(dot_path, parsed, dag_dir / f"{slug}-numbered.dot")
@@ -153,7 +147,6 @@ def number_one(
 def number_all(
     paths: DagPaths,
     *,
-    force_stubs: bool = False,
     proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
 ) -> None:
     """Number edges across every discovered DAG.
@@ -162,6 +155,4 @@ def number_all(
     """
     slugs = list(paths.dags) if paths.dags else _discover_slugs(paths.dag_dir)
     for slug in slugs:
-        number_one(
-            paths.dag_dir, slug, force_stubs=force_stubs, proposition_edges=proposition_edges
-        )
+        number_one(paths.dag_dir, slug, proposition_edges=proposition_edges)

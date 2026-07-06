@@ -1,7 +1,7 @@
-"""Per-entry ref validation for DAG edges.yaml records.
+"""Per-entry ref validation for DAG reference records.
 
 Complements science_tool.refs.check_refs (which is project-wide) by offering
-per-entry validation for use inside the DAG schema layer.
+per-entry validation for DAG-specific reference lists.
 """
 
 from __future__ import annotations
