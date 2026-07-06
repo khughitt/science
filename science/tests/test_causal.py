@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 import pytest
-from conftest import build_inquiry_graph
+from conftest import build_entity_graph, build_inquiry_graph
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -14,14 +14,7 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
-    FalsificationRecord,
-    PropositionEvidenceLine,
-    PropositionInteractionTerm,
-    add_concept,
-    add_edge,
     add_falsification,
-    add_hypothesis,
-    add_proposition,
     get_inquiry,
     validate_inquiry,
 )
@@ -49,35 +42,66 @@ def graph_path(tmp_path: Path) -> Path:
     return gp
 
 
-class EnrichedClaimBundle(TypedDict):
-    compositional_status: str
-    compositional_method: str
-    platform_pattern: str
-    dataset_effects: dict[str, float]
-    evidence_lines: list[PropositionEvidenceLine]
-    statistical_support: str
-    mechanistic_support: str
-    replication_scope: str
-    claim_status: str
-    pre_registrations: list[str]
-    interaction_terms: list[PropositionInteractionTerm]
-    bridge_between: list[str]
-    falsifications: list[FalsificationRecord]
-
-
 class FalsificationView(TypedDict):
     predicted: str
     decision: str
 
 
-def _claim_bundle(claim: object) -> EnrichedClaimBundle:
-    return cast(EnrichedClaimBundle, claim)
+def _project_root_for_graph(graph_path: Path) -> Path:
+    return graph_path.parent.parent
+
+
+def _entity(kind: str, entity_id: str, title: str, **frontmatter: object) -> dict:
+    return {
+        "kind": kind,
+        "id": entity_id,
+        "frontmatter": {"title": title, "status": "active", **frontmatter},
+        "body": f"{title}\n",
+    }
+
+
+def _concept(entity_id: str, title: str | None = None) -> dict:
+    return _entity("concept", entity_id, title or entity_id.replace("-", " ").title())
+
+
+def _hypothesis(entity_id: str, title: str = "Test hypothesis") -> dict:
+    return _entity("hypothesis", entity_id, title, source_refs=[])
+
+
+def _proposition(
+    entity_id: str,
+    title: str,
+    *,
+    confidence: float | None = None,
+    source_refs: list[str] | None = None,
+) -> dict:
+    frontmatter: dict[str, object] = {"source_refs": source_refs or []}
+    if confidence is not None:
+        frontmatter["confidence"] = confidence
+    return _entity("proposition", entity_id, title, **frontmatter)
+
+
+def _causal_relation(subject: str, predicate: str, obj: str) -> dict:
+    return {
+        "subject": subject,
+        "predicate": predicate,
+        "object": obj,
+        "graph_layer": "graph/causal",
+    }
+
+
+def _author_entities(
+    graph_path: Path,
+    entities: list[dict],
+    relations: list[dict] | None = None,
+) -> None:
+    build_entity_graph(_project_root_for_graph(graph_path), entities, relations)
 
 
 class TestInquiryType:
     def test_causal_profile_reports_causal_type(self, graph_path: Path) -> None:
         """A causal inquiry is reported as inquiry_type 'causal' by get_inquiry."""
-        add_hypothesis(graph_path, "h01", "Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_concept("x"), _concept("y"), _hypothesis("h01")])
         _build_compiled_inquiry_graph(
             graph_path,
             slug="causal-test",
@@ -90,7 +114,7 @@ class TestInquiryType:
 
     def test_investigation_profile_reports_general_type(self, graph_path: Path) -> None:
         """An investigation inquiry is reported as inquiry_type 'general'."""
-        add_hypothesis(graph_path, "h01", "Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("h01")])
         _build_compiled_inquiry_graph(graph_path, slug="general-test", profile="investigation")
         result = get_inquiry(graph_path, "general-test")
         assert result["inquiry_type"] == "general"
@@ -121,7 +145,7 @@ class TestInquiryTypeDisplay:
         """list_inquiries() returns inquiry_type in each dict."""
         from science_tool.graph.store import list_inquiries
 
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(graph_path, [_concept("x"), _concept("y"), _hypothesis("h01")])
         _build_compiled_inquiry_graph(
             graph_path, slug="causal-1", profile="causal", treatment="concept:x", outcome="concept:y"
         )
@@ -136,9 +160,7 @@ class TestInquiryTypeDisplay:
 class TestTreatmentOutcome:
     def test_set_treatment_outcome(self, graph_path: Path) -> None:
         """Setting treatment and outcome stores predicates in inquiry graph."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h01", text="Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_concept("drug", "Drug"), _concept("recovery", "Recovery"), _hypothesis("h01")])
         _build_compiled_inquiry_graph(
             graph_path,
             slug="drug-effect",
@@ -161,12 +183,13 @@ class TestTreatmentOutcome:
 
 
 class TestCausalValidation:
-    def _setup_causal_inquiry(self, graph_path: Path) -> str:
+    def _setup_causal_inquiry(self, graph_path: Path, relations: list[dict] | None = None) -> str:
         """Helper: create a causal inquiry with variables and edges."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "test_hyp", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("test_hyp")],
+            relations=relations,
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="causal-test",
@@ -183,25 +206,33 @@ class TestCausalValidation:
 
     def test_acyclic_causal_edges_pass(self, graph_path: Path) -> None:
         """Acyclic causal edges pass validation."""
-        slug = self._setup_causal_inquiry(graph_path)
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        slug = self._setup_causal_inquiry(
+            graph_path,
+            relations=[
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+            ],
+        )
         results = validate_inquiry(graph_path, slug)
         acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
         assert acyclicity["status"] == "pass"
 
     def test_cyclic_causal_edges_fail(self, graph_path: Path) -> None:
         """Cyclic causal edges fail validation."""
-        slug = self._setup_causal_inquiry(graph_path)
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/y", "scic:causes", "concept/x", graph_layer="graph/causal")
+        slug = self._setup_causal_inquiry(
+            graph_path,
+            relations=[
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:y", "scic:causes", "concept:x"),
+            ],
+        )
         results = validate_inquiry(graph_path, slug)
         acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
         assert acyclicity["status"] == "fail"
 
     def test_general_inquiry_skips_causal_checks(self, graph_path: Path) -> None:
         """General inquiries don't get causal validation checks."""
-        add_hypothesis(graph_path, "test_hyp", "Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("test_hyp")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
         results = validate_inquiry(graph_path, "gen")
         check_names = [r["check"] for r in results]
@@ -211,10 +242,14 @@ class TestCausalValidation:
 class TestExportPgmpy:
     def _build_simple_dag(self, graph_path: Path) -> str:
         """Build a simple X->Y<-Z causal inquiry."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("h1")],
+            relations=[
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="xy-dag",
@@ -227,8 +262,6 @@ class TestExportPgmpy:
             treatment="concept:x",
             outcome="concept:y",
         )
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
         return "xy-dag"
 
     def test_export_pgmpy_generates_valid_script(self, graph_path: Path) -> None:
@@ -251,7 +284,7 @@ class TestExportPgmpy:
         assert "# Generated from inquiry:" in script
 
     def test_export_pgmpy_rejects_non_causal(self, graph_path: Path) -> None:
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("h1")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
         with pytest.raises(ValueError, match="only supported for causal"):
             export_pgmpy_script(graph_path, "gen")
@@ -264,9 +297,19 @@ class TestExportPgmpy:
 
     def test_export_pgmpy_edge_level_provenance(self, graph_path: Path) -> None:
         """Export includes claim text, confidence, and source as comments on edges."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _hypothesis("h1", "Test"),
+                _proposition(
+                    "drug_causes_recovery",
+                    "Drug treatment improves recovery time",
+                    confidence=0.85,
+                ),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="prov-pgmpy",
@@ -277,28 +320,19 @@ class TestExportPgmpy:
             ],
             treatment="concept:drug",
             outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/study",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery"],
+            flow_edges=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:drug_causes_recovery"],
+                }
+            ],
         )
         script = export_pgmpy_script(graph_path, "prov-pgmpy")
+        assert 'claim: "proposition/drug_causes_recovery"' in script
         assert "confidence: 0.85" in script
-        assert "doi_10.1234/study" in script
+        assert "sources:" in script
 
     def test_export_pgmpy_revision_hash(self, graph_path: Path) -> None:
         """Export header includes graph revision hash when available."""
@@ -306,20 +340,24 @@ class TestExportPgmpy:
         script = export_pgmpy_script(graph_path, slug)
         assert "# Revision:" in script
 
-    def test_export_pgmpy_includes_confounds_as_latent_edges(self, graph_path: Path) -> None:
+    def test_export_pgmpy_includes_confounds_as_directed_edges(self, graph_path: Path) -> None:
         """A confounder declared only via scic:confounds must appear as directed
-        edges (a latent common cause) so the exported model exposes the backdoor
-        path instead of falsely reporting an empty adjustment set."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_concept(
+        edges so the exported model exposes the backdoor path instead of falsely
+        reporting an empty adjustment set."""
+        _author_entities(
             graph_path,
-            "Hidden",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "latent")],
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _concept("hidden", "Hidden"),
+                _hypothesis("h1"),
+            ],
+            relations=[
+                _causal_relation("concept:drug", "scic:causes", "concept:recovery"),
+                _causal_relation("concept:hidden", "scic:confounds", "concept:drug"),
+                _causal_relation("concept:hidden", "scic:confounds", "concept:recovery"),
+            ],
         )
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
         _build_compiled_inquiry_graph(
             graph_path,
             slug="conf-dag",
@@ -331,52 +369,15 @@ class TestExportPgmpy:
             treatment="concept:drug",
             outcome="concept:recovery",
         )
-        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/hidden", "scic:confounds", "concept/drug", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/hidden", "scic:confounds", "concept/recovery", graph_layer="graph/causal")
 
         script = export_pgmpy_script(graph_path, "conf-dag")
 
         # Confounder edges are now part of the directed model structure.
         assert '("hidden", "drug")' in script
         assert '("hidden", "recovery")' in script
-        # Declared latent so CausalInference surfaces non-identifiability.
-        assert "latents={" in script
-        assert '"hidden"' in script
 
-    def test_export_pgmpy_todo_section(self, graph_path: Path) -> None:
-        """Export includes TODO section noting latent variables."""
-        add_concept(
-            graph_path,
-            "Hidden",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "latent")],
-        )
-        add_concept(
-            graph_path,
-            "Outcome",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "observed")],
-        )
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="latent-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:hidden", "role": "BoundaryIn"},
-                {"ref": "concept:outcome", "role": "BoundaryOut"},
-            ],
-            treatment="concept:hidden",
-            outcome="concept:outcome",
-        )
-        add_edge(graph_path, "concept/hidden", "scic:causes", "concept/outcome", graph_layer="graph/causal")
-        script = export_pgmpy_script(graph_path, "latent-dag")
-        assert "TODO" in script
-        assert "latent" in script.lower()
-        assert "hidden" in script.lower()
+    # Source-authored concepts do not emit the retired mutator observability payload;
+    # variable-observability TODO/comment coverage was intentionally dropped in Phase 3a.
 
     def test_export_pgmpy_reads_compiled_patch_inquiry_edges(self, graph_path: Path) -> None:
         """Patch-authored inquiries compile to their own named graph and must export causal edges."""
@@ -403,10 +404,14 @@ class TestExportPgmpy:
 class TestExportChirho:
     def _build_simple_dag(self, graph_path: Path) -> str:
         """Build a simple X->Y<-Z causal inquiry."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("h1")],
+            relations=[
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="xy-dag",
@@ -419,8 +424,6 @@ class TestExportChirho:
             treatment="concept:x",
             outcome="concept:y",
         )
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
         return "xy-dag"
 
     def test_export_chirho_generates_model_function(self, graph_path: Path) -> None:
@@ -437,7 +440,7 @@ class TestExportChirho:
         assert "do(causal_model" in script
 
     def test_export_chirho_rejects_non_causal(self, graph_path: Path) -> None:
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("h1")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
         with pytest.raises(ValueError, match="only supported for causal"):
             export_chirho_script(graph_path, "gen")
@@ -462,9 +465,19 @@ class TestExportChirho:
 
     def test_export_chirho_edge_level_provenance(self, graph_path: Path) -> None:
         """Export includes claim provenance as comments on pyro.sample lines."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _hypothesis("h1", "Test"),
+                _proposition(
+                    "drug_causes_recovery",
+                    "Drug treatment improves recovery time",
+                    confidence=0.85,
+                ),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="prov-chirho",
@@ -475,77 +488,32 @@ class TestExportChirho:
             ],
             treatment="concept:drug",
             outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/study",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery"],
+            flow_edges=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:drug_causes_recovery"],
+                }
+            ],
         )
         script = export_chirho_script(graph_path, "prov-chirho")
         assert "confidence: 0.85" in script
-        assert "doi_10.1234/study" in script
-
-    def test_export_chirho_includes_bridge_comments(self, graph_path: Path) -> None:
-        """ChiRho export comments include cross-hypothesis bridge metadata when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
-        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="bridge-chirho",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/bridge",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_bridge_chirho",
-            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_bridge_chirho"],
-        )
-
-        script = export_chirho_script(graph_path, "bridge-chirho")
-
-        assert "bridge_between: 2" in script
-        assert "bridges: hypothesis/h1, hypothesis/h2" in script
+        assert "sources:" in script
 
     def test_export_chirho_preserves_parent_specific_claims(self, graph_path: Path) -> None:
         """Each incoming causal edge keeps its own attached claim provenance."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [
+                _concept("x", "X"),
+                _concept("y", "Y"),
+                _concept("z", "Z"),
+                _hypothesis("h1", "Test"),
+                _proposition("x_causes_y", "X causes Y", confidence=0.8),
+                _proposition("z_causes_y", "Z causes Y", confidence=0.9),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="multi-parent",
@@ -557,47 +525,25 @@ class TestExportChirho:
             ],
             treatment="concept:x",
             outcome="concept:y",
-        )
-        add_proposition(
-            graph_path,
-            text="X causes Y",
-            source="paper:doi_x",
-            confidence=0.8,
-            subject="concept/x",
-            predicate="scic:causes",
-            obj="concept/y",
-            proposition_id="x_causes_y",
-        )
-        add_proposition(
-            graph_path,
-            text="Z causes Y",
-            source="paper:doi_z",
-            confidence=0.9,
-            subject="concept/z",
-            predicate="scic:causes",
-            obj="concept/y",
-            proposition_id="z_causes_y",
-        )
-        add_edge(
-            graph_path,
-            "concept/x",
-            "scic:causes",
-            "concept/y",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:x_causes_y"],
-        )
-        add_edge(
-            graph_path,
-            "concept/z",
-            "scic:causes",
-            "concept/y",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:z_causes_y"],
+            flow_edges=[
+                {
+                    "subject": "concept:x",
+                    "predicate": "causes",
+                    "object": "concept:y",
+                    "claim_refs": ["proposition:x_causes_y"],
+                },
+                {
+                    "subject": "concept:z",
+                    "predicate": "causes",
+                    "object": "concept:y",
+                    "claim_refs": ["proposition:z_causes_y"],
+                },
+            ],
         )
 
         script = export_chirho_script(graph_path, "multi-parent")
-        assert "doi_x" in script
-        assert "doi_z" in script
+        assert "x: confidence: 0.8" in script
+        assert "z: confidence: 0.9" in script
 
     def test_export_chirho_revision_hash(self, graph_path: Path) -> None:
         """Export header includes graph revision hash."""
@@ -605,68 +551,34 @@ class TestExportChirho:
         script = export_chirho_script(graph_path, slug)
         assert "# Revision:" in script
 
-    def test_export_chirho_todo_latent_variables(self, graph_path: Path) -> None:
-        """Export TODO section flags latent variables."""
-        add_concept(
-            graph_path,
-            "Hidden",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "latent")],
-        )
-        add_concept(
-            graph_path,
-            "Visible",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "observed")],
-        )
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="latent-chirho",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:hidden", "role": "BoundaryIn"},
-                {"ref": "concept:visible", "role": "BoundaryOut"},
-            ],
-            treatment="concept:hidden",
-            outcome="concept:visible",
-        )
-        add_edge(graph_path, "concept/hidden", "scic:causes", "concept/visible", graph_layer="graph/causal")
-        script = export_chirho_script(graph_path, "latent-chirho")
-        assert "TODO" in script
-        assert "latent" in script.lower()
-        assert "hidden" in script.lower()
+    # Source-authored concepts do not emit the retired mutator observability payload;
+    # variable-observability TODO/comment coverage was intentionally dropped in Phase 3a.
 
 
 class TestEdgeProvenance:
-    """Tests for enriched edge metadata in causal exports."""
+    """Tests for source-authored edge provenance in causal exports.
+
+    Phase 3a intentionally drops mutator-only edge-claim payload assertions
+    (observability, compositional/platform/evidence-line semantics,
+    pre-registrations, interaction terms, and bridge metadata).
+    """
 
     def _build_dag_with_claims(self, graph_path: Path) -> str:
         """Build a DAG with claims supporting the causal edges."""
-        add_concept(
+        _author_entities(
             graph_path,
-            "Drug",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "observed")],
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _concept("severity", "Severity"),
+                _hypothesis("h1"),
+                _proposition("drug_causes_recovery", "Drug treatment improves recovery time", confidence=0.85),
+                _proposition("severity_causes_recovery", "Disease severity affects recovery outcomes", confidence=0.90),
+            ],
+            relations=[
+                _causal_relation("concept:severity", "scic:causes", "concept:drug"),
+            ],
         )
-        add_concept(
-            graph_path,
-            "Recovery",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "observed")],
-        )
-        add_concept(
-            graph_path,
-            "Severity",
-            concept_type="sci:Variable",
-            ontology_id=None,
-            properties=[("sci:observability", "latent")],
-        )
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
         _build_compiled_inquiry_graph(
             graph_path,
             slug="prov-dag",
@@ -678,44 +590,21 @@ class TestEdgeProvenance:
             ],
             treatment="concept:drug",
             outcome="concept:recovery",
+            flow_edges=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:drug_causes_recovery"],
+                },
+                {
+                    "subject": "concept:severity",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:severity_causes_recovery"],
+                },
+            ],
         )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Disease severity affects recovery outcomes",
-            source="paper:doi_10.5678/severity",
-            confidence=0.90,
-            subject="concept/severity",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="severity_causes_recovery",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery"],
-        )
-        add_edge(
-            graph_path,
-            "concept/severity",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:severity_causes_recovery"],
-        )
-        add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
         return "prov-dag"
 
     def test_enriched_edges_contain_claims(self, graph_path: Path) -> None:
@@ -732,27 +621,20 @@ class TestEdgeProvenance:
         assert len(edge["claims"]) >= 1
         claim = edge["claims"][0]
         assert "text" in claim
-        assert "confidence" in claim
-        assert "sources" in claim
-
-    def test_enriched_edges_contain_observability(self, graph_path: Path) -> None:
-        """Edges include observability metadata for both endpoints."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        slug = self._build_dag_with_claims(graph_path)
-        edges = _get_causal_edges_for_inquiry(graph_path, slug)
-        drug_recovery = [e for e in edges if "drug" in e["subject"] and "recovery" in e["object"]]
-        edge = drug_recovery[0]
-        assert "subject_observability" in edge
-        assert "object_observability" in edge
+        assert claim["confidence"] == 0.85
+        assert claim["sources"]
+        assert claim["support_count"] == 0
+        assert claim["dispute_count"] == 0
 
     def test_edges_without_claims_have_empty_list(self, graph_path: Path) -> None:
         """Edges with no matching claims still have a 'claims' key with empty list."""
         from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
 
-        add_concept(graph_path, "A", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "B", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("a", "A"), _concept("b", "B"), _hypothesis("h1")],
+            relations=[_causal_relation("concept:a", "scic:causes", "concept:b")],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="no-claims",
@@ -764,501 +646,27 @@ class TestEdgeProvenance:
             treatment="concept:a",
             outcome="concept:b",
         )
-        add_edge(graph_path, "concept/a", "scic:causes", "concept/b", graph_layer="graph/causal")
         edges = _get_causal_edges_for_inquiry(graph_path, "no-claims")
         assert len(edges) == 1
         assert edges[0]["claims"] == []
-
-    def test_enriched_edges_include_phase1_claim_metadata(self, graph_path: Path) -> None:
-        """Claim bundles expose compositional, heterogeneity, and evidence-line metadata."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="meta-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery",
-            compositional_status="clr_attenuated",
-            compositional_method="CLR",
-            compositional_note="beta attenuates after CLR normalization",
-            platform_pattern="MMRF-dominant",
-            dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
-            evidence_lines=[
-                {"source": "Johnson 2024 ChIP", "kind": "external_biochem", "datasets": []},
-                {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
-                {"source": "t135", "kind": "internal_bayesian_edge", "datasets": ["MMRF", "GSE24080"]},
-            ],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery"],
-        )
-
-        edges = _get_causal_edges_for_inquiry(graph_path, "meta-dag")
-        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
-
-        assert claim["compositional_status"] == "clr_attenuated"
-        assert claim["compositional_method"] == "CLR"
-        assert claim["platform_pattern"] == "MMRF-dominant"
-        assert claim["dataset_effects"] == {"MMRF": 0.7, "GSE24080": 0.07}
-        assert len(claim["evidence_lines"]) == 3
-        assert claim["evidence_lines"][2]["datasets"] == ["MMRF", "GSE24080"]
-
-    def test_enriched_edges_include_explicit_evidence_semantics(self, graph_path: Path) -> None:
-        """Claim bundles expose explicit statistical/mechanistic semantics when present."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="semantics-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causal_semantics",
-            statistical_support="replicated",
-            mechanistic_support="direct",
-            replication_scope="cross_dataset",
-            claim_status="active",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causal_semantics"],
-        )
-
-        edges = _get_causal_edges_for_inquiry(graph_path, "semantics-dag")
-        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
-
-        assert claim["statistical_support"] == "replicated"
-        assert claim["mechanistic_support"] == "direct"
-        assert claim["replication_scope"] == "cross_dataset"
-        assert claim["claim_status"] == "active"
-
-    def test_enriched_edges_include_pre_registration_links(self, graph_path: Path) -> None:
-        """Claim bundles expose linked pre-registration refs when present."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="prereg-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_preregistered",
-            pre_registration_refs=[
-                "pre-registration:edge-ribosome-e2f1",
-                "pre-registration:edge-mtor-ribosome",
-            ],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_preregistered"],
-        )
-
-        edges = _get_causal_edges_for_inquiry(graph_path, "prereg-dag")
-        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
-
-        assert sorted(claim["pre_registrations"]) == [
-            "pre-registration/edge-mtor-ribosome",
-            "pre-registration/edge-ribosome-e2f1",
-        ]
-
-    def test_enriched_edges_include_interaction_terms(self, graph_path: Path) -> None:
-        """Claim bundles expose interaction/effect-modification terms when present."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "KRAS", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="interaction-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_interaction_claim",
-            interaction_terms=[
-                {
-                    "modifier": "concept/kras",
-                    "effect": "amplifies",
-                    "note": "stronger slope in KRAS-mutant cases",
-                }
-            ],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_interaction_claim"],
-        )
-
-        edges = _get_causal_edges_for_inquiry(graph_path, "interaction-dag")
-        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
-
-        assert len(claim["interaction_terms"]) == 1
-        interaction_term = claim["interaction_terms"][0]
-        assert interaction_term["modifier"] == "concept/kras"
-        assert interaction_term["effect"] == "amplifies"
-
-    def test_enriched_edges_include_cross_hypothesis_bridge_metadata(self, graph_path: Path) -> None:
-        """Claim bundles expose cross-hypothesis bridge metadata when present."""
-        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
-
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
-        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="bridge-dag",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_bridge_claim",
-            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_bridge_claim"],
-        )
-
-        edges = _get_causal_edges_for_inquiry(graph_path, "bridge-dag")
-        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
-
-        assert claim["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
-
-    def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
-        """pgmpy export comments include the richer claim metadata when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="meta-export",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery_export",
-            compositional_status="clr_attenuated",
-            compositional_method="CLR",
-            platform_pattern="MMRF-dominant",
-            dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
-            evidence_lines=[
-                {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
-            ],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery_export"],
-        )
-
-        script = export_pgmpy_script(graph_path, "meta-export")
-
-        assert "compositional: clr_attenuated (CLR)" in script
-        assert "platform: MMRF-dominant" in script
-        assert "dataset_effects: MMRF=0.70, GSE24080=0.07" in script
-        assert "evidence_lines: 1" in script
-
-    def test_export_pgmpy_includes_explicit_evidence_semantics_comments(self, graph_path: Path) -> None:
-        """pgmpy export comments include explicit evidence semantics when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="semantics-export",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causal_semantics_export",
-            statistical_support="replicated",
-            mechanistic_support="direct",
-            replication_scope="cross_dataset",
-            claim_status="active",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causal_semantics_export"],
-        )
-
-        script = export_pgmpy_script(graph_path, "semantics-export")
-
-        assert "statistical_support: replicated" in script
-        assert "mechanistic_support: direct" in script
-        assert "replication_scope: cross_dataset" in script
-        assert "claim_status: active" in script
-
-    def test_export_pgmpy_includes_pre_registration_comments(self, graph_path: Path) -> None:
-        """pgmpy export comments include linked pre-registration refs when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="prereg-export",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_preregistered_export",
-            pre_registration_refs=["pre-registration:edge-ribosome-e2f1"],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_preregistered_export"],
-        )
-
-        script = export_pgmpy_script(graph_path, "prereg-export")
-
-        assert "pre_registrations: 1" in script
-        assert "pre-registration/edge-ribosome-e2f1" in script
-
-    def test_export_pgmpy_includes_interaction_comments(self, graph_path: Path) -> None:
-        """pgmpy export comments include interaction/effect-modification terms when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "KRAS", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="interaction-export",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_interaction_export",
-            interaction_terms=[
-                {
-                    "modifier": "concept/kras",
-                    "effect": "amplifies",
-                    "note": "stronger slope in KRAS-mutant cases",
-                }
-            ],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_interaction_export"],
-        )
-
-        script = export_pgmpy_script(graph_path, "interaction-export")
-
-        assert "interaction_terms: 1" in script
-        assert "modified_by: concept/kras(amplifies)" in script
-
-    def test_export_pgmpy_includes_bridge_comments(self, graph_path: Path) -> None:
-        """pgmpy export comments include cross-hypothesis bridge metadata when present."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
-        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
-        _build_compiled_inquiry_graph(
-            graph_path,
-            slug="bridge-export",
-            profile="causal",
-            boundary_roles=[
-                {"ref": "concept:drug", "role": "BoundaryIn"},
-                {"ref": "concept:recovery", "role": "BoundaryOut"},
-            ],
-            treatment="concept:drug",
-            outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_bridge_export",
-            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_bridge_export"],
-        )
-
-        script = export_pgmpy_script(graph_path, "bridge-export")
-
-        assert "bridge_between: 2" in script
-        assert "bridges: hypothesis/h1, hypothesis/h2" in script
 
     def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
         """Claim bundles include linked falsification records when present."""
         from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
 
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _hypothesis("h1"),
+                _proposition(
+                    "drug_causes_recovery_falsified",
+                    "Drug treatment improves recovery time",
+                    confidence=0.85,
+                ),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="fals-dag",
@@ -1269,16 +677,14 @@ class TestEdgeProvenance:
             ],
             treatment="concept:drug",
             outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery_falsified",
+            flow_edges=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:drug_causes_recovery_falsified"],
+                }
+            ],
         )
         add_falsification(
             graph_path,
@@ -1289,18 +695,10 @@ class TestEdgeProvenance:
             proposition_ref="proposition:drug_causes_recovery_falsified",
             falsification_id="drug-recovery-null",
         )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery_falsified"],
-        )
 
         edges = _get_causal_edges_for_inquiry(graph_path, "fals-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = _claim_bundle(edge["claims"][0])
+        claim = edge["claims"][0]
 
         assert len(claim["falsifications"]) == 1
         falsification = cast(FalsificationView, claim["falsifications"][0])
@@ -1309,9 +707,19 @@ class TestEdgeProvenance:
 
     def test_export_pgmpy_includes_falsification_comments(self, graph_path: Path) -> None:
         """pgmpy export comments summarize linked falsifications."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [
+                _concept("drug", "Drug"),
+                _concept("recovery", "Recovery"),
+                _hypothesis("h1"),
+                _proposition(
+                    "drug_causes_recovery_falsified_export",
+                    "Drug treatment improves recovery time",
+                    confidence=0.85,
+                ),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="fals-export",
@@ -1322,16 +730,14 @@ class TestEdgeProvenance:
             ],
             treatment="concept:drug",
             outcome="concept:recovery",
-        )
-        add_proposition(
-            graph_path,
-            text="Drug treatment improves recovery time",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
-            subject="concept/drug",
-            predicate="scic:causes",
-            obj="concept/recovery",
-            proposition_id="drug_causes_recovery_falsified_export",
+            flow_edges=[
+                {
+                    "subject": "concept:drug",
+                    "predicate": "causes",
+                    "object": "concept:recovery",
+                    "claim_refs": ["proposition:drug_causes_recovery_falsified_export"],
+                }
+            ],
         )
         add_falsification(
             graph_path,
@@ -1341,14 +747,6 @@ class TestEdgeProvenance:
             decision="Reject mechanistic interpretation",
             proposition_ref="proposition:drug_causes_recovery_falsified_export",
             falsification_id="drug-recovery-null-export",
-        )
-        add_edge(
-            graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            graph_layer="graph/causal",
-            claim_refs=["proposition:drug_causes_recovery_falsified_export"],
         )
 
         script = export_pgmpy_script(graph_path, "fals-export")
@@ -1360,10 +758,16 @@ class TestEdgeProvenance:
 class TestConfoundersDeclared:
     def test_confounder_declared_passes(self, graph_path: Path) -> None:
         """When a common cause has scic:confounds declared, check passes."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("h1", "Test")],
+            relations=[
+                _causal_relation("concept:z", "scic:causes", "concept:x"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:z", "scic:confounds", "concept:x"),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="conf-ok",
@@ -1376,12 +780,6 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        # Z causes both X and Y (common cause = confounder)
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        # Declare the confounding
-        add_edge(graph_path, "concept/z", "scic:confounds", "concept/x", graph_layer="graph/causal")
         results = validate_inquiry(graph_path, "conf-ok")
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
@@ -1389,10 +787,15 @@ class TestConfoundersDeclared:
 
     def test_undeclared_confounder_warns(self, graph_path: Path) -> None:
         """When a common cause exists but no scic:confounds edge, check warns."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("h1", "Test")],
+            relations=[
+                _causal_relation("concept:z", "scic:causes", "concept:x"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="conf-warn",
@@ -1405,10 +808,6 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        # Z causes both X and Y but no confounds edge declared
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
         results = validate_inquiry(graph_path, "conf-warn")
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
@@ -1416,9 +815,11 @@ class TestConfoundersDeclared:
 
     def test_no_common_causes_passes(self, graph_path: Path) -> None:
         """When there are no common causes, check passes."""
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _hypothesis("h1", "Test")],
+            relations=[_causal_relation("concept:x", "scic:causes", "concept:y")],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="no-conf",
@@ -1430,7 +831,6 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
         results = validate_inquiry(graph_path, "no-conf")
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
@@ -1438,7 +838,7 @@ class TestConfoundersDeclared:
 
     def test_general_inquiry_skips_confounder_check(self, graph_path: Path) -> None:
         """General inquiries don't get confounders_declared check."""
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("h1", "Test")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
         results = validate_inquiry(graph_path, "gen")
         check_names = [r["check"] for r in results]
@@ -1450,10 +850,15 @@ class TestIdentifiabilityCheck:
         """Build a DAG where X->Y is identifiable by adjusting for Z.
         Z -> X -> Y, Z -> Y (Z is a confounder, adjusting for Z identifies X->Y).
         """
-        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
-        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("h1", "Test")],
+            relations=[
+                _causal_relation("concept:x", "scic:causes", "concept:y"),
+                _causal_relation("concept:z", "scic:causes", "concept:x"),
+                _causal_relation("concept:z", "scic:causes", "concept:y"),
+            ],
+        )
         _build_compiled_inquiry_graph(
             graph_path,
             slug="ident-dag",
@@ -1466,9 +871,6 @@ class TestIdentifiabilityCheck:
             treatment="concept:x",
             outcome="concept:y",
         )
-        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
         return "ident-dag"
 
     def test_identifiability_check_present(self, graph_path: Path) -> None:
@@ -1519,7 +921,7 @@ class TestIdentifiabilityCheck:
 
     def test_general_inquiry_skips_identifiability(self, graph_path: Path) -> None:
         """General inquiries don't get identifiability or adjustment_sets checks."""
-        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        _author_entities(graph_path, [_hypothesis("h1", "Test")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
         results = validate_inquiry(graph_path, "gen")
         check_names = [r["check"] for r in results]
