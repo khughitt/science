@@ -30,14 +30,14 @@ _template:
     created: { from: created }
     updated: { from: updated }
   sections:
-    - { key: prediction, name: "Prediction", required: true }
+    - { key: prediction, name: "What was predicted", required: true }
     - { key: observation, name: "Observation", required: true }
     - { key: decision, name: "Decision", required: true }
 ---
 
 # Falsification: {{title}}
 
-## Prediction
+## What was predicted
 
 <!--
 State the prediction that followed from the target proposition.
