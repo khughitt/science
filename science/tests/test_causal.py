@@ -303,10 +303,12 @@ class TestExportPgmpy:
                 _concept("drug", "Drug"),
                 _concept("recovery", "Recovery"),
                 _hypothesis("h1", "Test"),
+                _entity("paper", "drug-recovery-study", "Drug recovery study"),
                 _proposition(
                     "drug_causes_recovery",
                     "Drug treatment improves recovery time",
                     confidence=0.85,
+                    source_refs=["paper:drug-recovery-study"],
                 ),
             ],
         )
@@ -333,6 +335,7 @@ class TestExportPgmpy:
         assert 'claim: "proposition/drug_causes_recovery"' in script
         assert "confidence: 0.85" in script
         assert "sources:" in script
+        assert "paper/drug-recovery-study" in script
 
     def test_export_pgmpy_revision_hash(self, graph_path: Path) -> None:
         """Export header includes graph revision hash when available."""
@@ -471,10 +474,12 @@ class TestExportChirho:
                 _concept("drug", "Drug"),
                 _concept("recovery", "Recovery"),
                 _hypothesis("h1", "Test"),
+                _entity("paper", "drug-recovery-study", "Drug recovery study"),
                 _proposition(
                     "drug_causes_recovery",
                     "Drug treatment improves recovery time",
                     confidence=0.85,
+                    source_refs=["paper:drug-recovery-study"],
                 ),
             ],
         )
@@ -500,6 +505,7 @@ class TestExportChirho:
         script = export_chirho_script(graph_path, "prov-chirho")
         assert "confidence: 0.85" in script
         assert "sources:" in script
+        assert "paper/drug-recovery-study" in script
 
     def test_export_chirho_preserves_parent_specific_claims(self, graph_path: Path) -> None:
         """Each incoming causal edge keeps its own attached claim provenance."""
