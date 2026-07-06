@@ -420,8 +420,24 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     assert claim["supports_scope"] == "cross_hypothesis"
     assert claim["independence_group"] == "batch-2"
     assert claim["evidence_role"] == "model_criticism"
-    assert measurement_model["observed_entity"] == "observation:obs-2"
-    assert rival_model_packet["packet_id"] == "packet:drug-vs-null"
+    assert measurement_model == {
+        "observed_entity": "observation:obs-2",
+        "latent_construct": "latent:recovery-state",
+        "measurement_relation": "proxy for recovery-state",
+        "rationale": "capture the latent recovery phenotype",
+        "known_failure_modes": ["batch effect"],
+        "substitutable_with": ["observation:obs-3"],
+    }
+    assert rival_model_packet == {
+        "packet_id": "packet:drug-vs-null",
+        "target_hypothesis": "hypothesis:h1",
+        "target_inquiry": None,
+        "current_working_model": "model:drug",
+        "alternative_models": ["model:null"],
+        "shared_observables": ["obs:recovery"],
+        "discriminating_predictions": ["pred:drug-accelerates"],
+        "adjudication_rule": "prefer the model with fewer unsupported assumptions",
+    }
 
 
 @pytest.mark.parametrize(
