@@ -90,7 +90,7 @@ class TestBoundaryRoleModel:
         from science_model.patch_definition import BoundaryRole
 
         with pytest.raises(ValidationError):
-            BoundaryRole(ref="concept:node", role="Interior")
+            BoundaryRole(ref="concept:node", role="Interior")  # type: ignore[arg-type]
 
 
 class TestTransformations:
@@ -144,9 +144,9 @@ class TestTransformations:
 
 
 # Concept-level AnnotatedParam metadata (the retired set_param_metadata mutator)
-# had no source-authoring path and no live reader — the only consumer,
-# render_inquiry_doc's knowledge-graph param branch, is itself test-only. Its
-# tests are removed with the writer rather than migrated. Transformation-node
+# had no source-authoring path and no live reader; its tests were removed with the
+# writer rather than migrated, and render_inquiry_doc's dead knowledge-graph param
+# branch (the sole would-be consumer) has since been deleted too. Transformation-node
 # params (which the compiler DOES support from source) are covered by
 # TestTransformations above.
 
