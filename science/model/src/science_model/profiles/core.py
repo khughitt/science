@@ -144,6 +144,11 @@ CORE_PROFILE = ProfileManifest(
             description="Coherent narrative arc synthesizing interpretations around a question or hypothesis.",
             entity_class=EntityClass.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            template_ready=True,
+            home="entities/stories",
+            strategy="slug",
+            default_status="draft",
+            statuses=["draft", "developing", "mature"],
         ),
         EntityKind(
             name="synthesis",
