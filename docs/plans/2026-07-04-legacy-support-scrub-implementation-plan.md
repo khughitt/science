@@ -41,14 +41,15 @@
   such as datasets and paper summaries, so any affected commons files must be
   migrated before a reader is deleted.
 
-## Status 2026-07-05
+## Status 2026-07-06
 
 - Merged on `main`: Task 1 inventory, Task 2 v2-to-v3 entity layout, and Task 7
-  aggregate manifest retirement.
-- Current inventory: 4 total findings across 1 remaining data surface:
-  `legacy_marker_alias`=4. Retired DAG `.edges.yaml`, article prefix aliases,
-  aggregate manifest, `type:` frontmatter, scalar `access:`, data-package, bare
-  `profiles:`, and removed `science.yaml` field hits are zero.
+  aggregate manifest retirement, retired DAG `.edges.yaml` retirement, and
+  marker alias cleanup.
+- Current inventory: 0 total findings. Retired DAG `.edges.yaml`, article prefix
+  aliases, aggregate manifest, marker alias, `type:` frontmatter, scalar
+  `access:`, data-package, bare `profiles:`, and removed `science.yaml` field
+  hits are zero.
 - Current coverage: 23 registered entries, 22 scanned projects, 1 shared
   repository (`~/d/science-commons`), 1 skipped stale registered path
   (`~/d/natural-systems/.worktrees/validation-strict-cleanup`), and no
@@ -56,12 +57,12 @@
 - Strict frontmatter cleanup is complete in
   `refactor/strict-frontmatter-cleanup`: remaining `type:` reader fallbacks and
   scalar `access:` coercion paths were removed from active toolkit code.
-- In progress in `refactor/retired-edges-yaml-retirement`: retired DAG
-  `.edges.yaml` project data has been migrated/committed in cBioPortal,
-  protein-landscape, and multiple-myeloma; active toolkit readers, migrators,
-  schemas, CLI commands, and command guidance have been removed.
-- Next data-bearing slice after this branch merges: marker alias cleanup
-  (`[NEEDS CITATION]` → `[MISSING_CITATION]`).
+- Complete in `refactor/marker-alias-retirement`: downstream marker aliases
+  have been migrated/committed in 3d-attention-bias, natural-systems, and
+  seq-feats; active toolkit alias normalization, marker migrator CLI, and
+  command guidance have been removed.
+- Next slice after this branch merges: reconfirm Task 8 legacy data-package
+  surface and remove remaining support if the zero-hit gate still holds.
 
 ## Task 1: Multi-Project Legacy Inventory
 
@@ -450,29 +451,30 @@ Run graph migration, materialize, and CLI tests.
 - `science/src/science_tool/project_config.py`
 - related docs and tests
 
-Status 2026-07-05: current inventory reports 4 `[NEEDS CITATION]` hits and
-zero bare `profiles:` / removed `science.yaml` field hits.
+Status 2026-07-06: marker alias cleanup is complete in
+`refactor/marker-alias-retirement`; current inventory reports zero
+`legacy_marker_alias`, bare `profiles:`, and removed `science.yaml` field hits.
 
-- [ ] **Step 1: Inventory small aliases**
+- [x] **Step 1: Inventory small aliases**
 
 Check registered projects for QA table-mode usage, `[NEEDS CITATION]`, bare
 `profiles:` config fallback, and removed `parent:`/`children:` fields.
 
-- [ ] **Step 2: Migrate data/usages**
+- [x] **Step 2: Migrate data/usages**
 
 Migrate each small surface independently.
 
-- [ ] **Step 3: Gate**
+- [x] **Step 3: Gate**
 
 Proceed only when each small surface has zero downstream hits **and** any project
 touched by that surface's migration still builds under `science validate` /
 `graph materialize`.
 
-- [ ] **Step 4: Remove support**
+- [x] **Step 4: Remove support**
 
 Delete the compatibility branch or enforcement shim for each zero-hit surface.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run targeted tests plus package suites.
 

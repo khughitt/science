@@ -5,9 +5,10 @@ import pytest
 
 from science_tool.markers import (
     DEFAULT_SEVERITY,
-    LEGACY_ALIASES,
     TOKENS,
     MarkerHit,
+    scan_markers,
+    scan_text,
     severity_for,
 )
 
@@ -23,10 +24,6 @@ def test_default_severity_table() -> None:
         "SPECULATION": "info",
         "INACCESSIBLE": "info",
     }
-
-
-def test_legacy_alias_maps_needs_citation_to_missing_citation() -> None:
-    assert LEGACY_ALIASES == {"NEEDS CITATION": "MISSING_CITATION"}
 
 
 def test_severity_for_warn_token_default() -> None:
@@ -55,13 +52,9 @@ def test_marker_hit_is_frozen_dataclass() -> None:
         token="UNVERIFIED",
         severity="warn",
         in_documentation=False,
-        legacy=False,
     )
     with pytest.raises(Exception):
         hit.line = 11  # type: ignore[misc]
-
-
-from science_tool.markers import scan_text
 
 
 def test_scan_text_finds_bare_unverified() -> None:
@@ -71,7 +64,6 @@ def test_scan_text_finds_bare_unverified() -> None:
     assert h.token == "UNVERIFIED"
     assert h.severity == "warn"
     assert h.in_documentation is False
-    assert h.legacy is False
     assert h.line == 1
 
 
@@ -107,11 +99,9 @@ def test_scan_text_recognizes_all_four_tokens() -> None:
     assert tokens == ["INACCESSIBLE", "MISSING_CITATION", "SPECULATION", "UNVERIFIED"]
 
 
-def test_scan_text_legacy_needs_citation_recognized() -> None:
+def test_scan_text_ignores_retired_needs_citation_alias() -> None:
     hits = scan_text(Path("x.md"), "Old style [NEEDS CITATION] here\n", strict=False)
-    assert len(hits) == 1
-    assert hits[0].token == "MISSING_CITATION"
-    assert hits[0].legacy is True
+    assert hits == []
 
 
 def test_scan_text_strict_promotes_info_tokens() -> None:
@@ -145,9 +135,6 @@ def test_scan_text_skips_hash_headings() -> None:
     # because headings can carry warning intent. Keep heading scanning ON.
     hits = scan_text(Path("x.md"), "## [UNVERIFIED] heading\n", strict=False)
     assert len(hits) == 1
-
-
-from science_tool.markers import scan_markers
 
 
 def _write(path: Path, text: str) -> None:

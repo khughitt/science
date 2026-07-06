@@ -24,11 +24,6 @@ DEFAULT_SEVERITY: dict[str, str] = {
     "INACCESSIBLE": "info",
 }
 
-# Legacy spellings recognized during the deprecation window. Maps the *literal
-# inner text* (without brackets) to the canonical token name.
-LEGACY_ALIASES: dict[str, str] = {"NEEDS CITATION": "MISSING_CITATION"}
-
-
 @dataclass(frozen=True)
 class MarkerHit:
     """One marker occurrence found by the scanner."""
@@ -38,7 +33,6 @@ class MarkerHit:
     token: str  # one of TOKENS
     severity: str  # "warn" | "info"
     in_documentation: bool  # True if backticked or inside a fenced code block
-    legacy: bool  # True if the source spelling was a legacy alias
 
 
 def severity_for(token: str, *, strict: bool) -> str:
@@ -49,12 +43,9 @@ def severity_for(token: str, *, strict: bool) -> str:
     return base
 
 
-# Pattern matches every literal `[NAME]` or `[NAME WITH SPACE]` we know about.
-# The set of recognized inner names is the union of canonical tokens and
-# legacy aliases. Anything else inside brackets is left alone.
-_RECOGNIZED_INNER = "|".join(
-    sorted({*TOKENS, *LEGACY_ALIASES.keys()}, key=len, reverse=True)
-)
+# Pattern matches every literal canonical marker token. Anything else inside
+# brackets is left alone.
+_RECOGNIZED_INNER = "|".join(sorted(TOKENS, key=len, reverse=True))
 _TOKEN_RE = re.compile(rf"\[(?P<inner>{_RECOGNIZED_INNER})\]")
 
 
@@ -70,13 +61,6 @@ def _frontmatter_end_line(lines: list[str]) -> int:
         if line.strip() == "---":
             return index
     return 0
-
-
-def _classify_inner(inner: str) -> tuple[str, bool]:
-    """Map an inner bracket name to (canonical_token, legacy_flag)."""
-    if inner in LEGACY_ALIASES:
-        return LEGACY_ALIASES[inner], True
-    return inner, False
 
 
 def _backtick_spans(line: str) -> list[tuple[int, int]]:
@@ -128,7 +112,7 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
         backticks = [] if (in_fenced or is_fence) else _backtick_spans(raw_line)
 
         for m in _TOKEN_RE.finditer(raw_line):
-            token, legacy = _classify_inner(m.group("inner"))
+            token = m.group("inner")
             in_doc = in_fenced or is_fence or _position_inside_any(m.start(), backticks)
             hits.append(
                 MarkerHit(
@@ -137,7 +121,6 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
                     token=token,
                     severity=severity_for(token, strict=strict),
                     in_documentation=in_doc,
-                    legacy=legacy,
                 )
             )
 

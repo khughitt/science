@@ -80,13 +80,8 @@ case-sensitive and byte-for-byte. There is no lowercasing, whitespace trimming,
 or suffix folding. `paper:Smith2024` and `cite:Smith2024` share the bibkey
 `Smith2024`; `paper:smith2024` does not.
 
-`article:<bibkey>` is a legacy spelling for external literature. Current graph
-and big-picture consumers canonicalize it to `paper:<bibkey>` at load or
-comparison boundaries so old project files can still be read. Treat this as a
-temporary reader compatibility path, not an authoring convention.
-
 The one-shot `science refs migrate-paper` command is no longer part of the live
-CLI. To clean up a project, edit remaining structured `article:` references to
+CLI. To clean up an old project, edit any structured `article:` references to
 `paper:`, run `science refs check --include-body`, and inspect
 `science graph health` for `legacy_structured_literature_prefixes`.
 

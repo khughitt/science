@@ -170,7 +170,6 @@ normal path for new work. Examples include:
 - `science data-package ...`
 - `science graph migrate-addresses`
 - `science graph migrate-paper-datasets`
-- `science markers migrate`
 - `science tasks fix-blockers`
 
 When possible, run these commands in read-only or dry-run mode first, inspect the

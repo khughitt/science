@@ -1,18 +1,10 @@
 {
   "config_path": "~/.config/science/config.yaml",
-  "generated_at_utc": "2026-07-06T02:53:06Z",
+  "generated_at_utc": "2026-07-06T10:00:26Z",
   "projects": [
     {
-      "counts": {
-        "legacy_marker_alias": 1
-      },
-      "findings": [
-        {
-          "detail": "[NEEDS CITATION]",
-          "path": "AGENTS.md",
-          "surface": "legacy_marker_alias"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/3d-attention-bias"
     },
     {
@@ -96,21 +88,8 @@
       "project_root": "~/d/health/processes/post-acute-infection"
     },
     {
-      "counts": {
-        "legacy_marker_alias": 2
-      },
-      "findings": [
-        {
-          "detail": "[NEEDS CITATION]",
-          "path": "AGENTS.md",
-          "surface": "legacy_marker_alias"
-        },
-        {
-          "detail": "[NEEDS CITATION]",
-          "path": "tasks/done/2026-05.md",
-          "surface": "legacy_marker_alias"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/natural-systems"
     },
     {
@@ -129,16 +108,8 @@
       "project_root": "~/d/science-commons"
     },
     {
-      "counts": {
-        "legacy_marker_alias": 1
-      },
-      "findings": [
-        {
-          "detail": "[NEEDS CITATION]",
-          "path": "AGENTS.md",
-          "surface": "legacy_marker_alias"
-        }
-      ],
+      "counts": {},
+      "findings": [],
       "project_root": "~/d/seq-feats"
     }
   ],
@@ -155,12 +126,10 @@
     "scanned_projects": 22,
     "shared_repository_entries": 1,
     "skipped_registered_projects": 1,
-    "total_findings": 4,
+    "total_findings": 0,
     "unique_registered_paths": 23,
     "unregistered_science_yaml": 0
   },
-  "surface_totals": {
-    "legacy_marker_alias": 4
-  },
+  "surface_totals": {},
   "unregistered_science_yaml": []
 }

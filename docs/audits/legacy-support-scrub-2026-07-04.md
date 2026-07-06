@@ -111,8 +111,8 @@ Merged to `main`:
 
 Current refreshed inventory:
 
-- `legacy_marker_alias`: 4 findings.
 - Zero findings for retired DAG `.edges.yaml`, article prefix aliases, aggregate manifests,
+  annotation marker aliases,
   entity-layout roots, `type:` frontmatter, scalar `access:`, active legacy
   data-package entities, bare `profiles:`, and removed `science.yaml` fields.
 
@@ -141,6 +141,13 @@ Completed in `refactor/retired-edges-yaml-retirement`:
 - Removed active retired-edge reader, migration, archive/schema, CLI, and
   command-guidance support after the zero-hit inventory gate.
 
+Completed in `refactor/marker-alias-retirement`:
+
+- Migrated/committed all registered `[NEEDS CITATION]` markers to
+  `[MISSING_CITATION]`.
+- Removed active marker alias normalization, the marker migrator CLI, and
+  command/skill guidance after the zero-hit inventory gate.
+
 ## Findings Table
 
 | Surface | Project precheck signal | Current migration tool | Reader / authoring support to remove after green precheck | Notes |
@@ -154,7 +161,7 @@ Completed in `refactor/retired-edges-yaml-retirement`:
 | Legacy data-package entities | `doc/data-packages/*.md` with active `type: data-package` | `data-package` CLI group and dataset/research-package promotion helpers | `science/src/science_tool/graph/materialize.py:_preflight_migration`, `science/src/science_tool/cli.py` `data-package` group, promote helpers, docs | Precheck must look at project data, not only toolkit code. |
 | Other one-shot graph migrations | Inputs still requiring `graph migrate-addresses`, `graph migrate-paper-datasets`, `graph/migrate.py`, or materialize migration flags | Existing one-shot commands and flags | One-shot commands and flags after data is clean | Treat each one-shot as a separate surface if its precheck is nonzero. |
 | `science_qa` table mode | QA invocation using `--config qa.yaml --table T` | Add or document datapackage-mode migration if any downstream usage remains | `science/qa/src/science_qa/cli.py` legacy branch and `run_qa` mode if unused | This is a single confirmed item, not a cluster. |
-| Annotation marker alias | `[NEEDS CITATION]` markers | `science markers migrate --write` | `science/src/science_tool/markers.py` `LEGACY_ALIASES` and marker docs | Keep `[MISSING_CITATION]` canonical. |
+| Annotation marker alias | Complete; current inventory reports zero `legacy_marker_alias` findings | Complete; direct downstream edits committed in affected project repos | Complete; marker alias normalization, marker migrator CLI, and marker docs removed | `[MISSING_CITATION]` remains canonical. |
 | Bare `profiles:` config fallback | `science.yaml` has top-level `profiles:` without `knowledge_profiles:` | Config-key migration to `knowledge_profiles:` | `science/src/science_tool/graph/sources.py` fallback from `profiles` to `knowledge_profiles` | Do not flag current model/profile concepts. |
 | Removed science.yaml fields | `parent:` or `children:` in project config | Direct config edit if found | `science/src/science_tool/project_config.py:_reject_legacy_fields` | Enforcement-only shim. Remove near the end after confirming zero downstream hits. |
 | Command and skill guidance | Commands/skills instruct agents to read or author legacy paths or template fallbacks | Documentation edits after the relevant data migrator exists | `commands/*.md`, `skills/**/*.md`, `templates/*.md`, mirrored `science_model/templates/*` | Update early enough to stop new legacy data, but avoid deleting migration instructions before migrations run. |
@@ -195,7 +202,7 @@ claim `superseded`, benchmark fallback concepts, and live `article` entities.
 7. Complete: migrate and gate aggregate manifests.
 8. Reconfirm and, if needed, migrate legacy data-package entities.
 9. Reconfirm and, if needed, migrate the remaining one-shot graph migrations.
-10. Migrate and gate small aliases and CLI compatibility modes.
+10. Complete in current worktree for marker aliases; remaining small aliases and CLI compatibility modes need reconfirmation.
 11. Remove enforcement-only shims after zero-hit confirmation.
 12. Run final toolkit and downstream verification.
 

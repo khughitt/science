@@ -327,7 +327,7 @@ def test_bracketed_math_not_flagged_as_link() -> None:
         assert link_issues == []
 
 
-def test_unverified_and_legacy_needs_citation_tracked() -> None:
+def test_unverified_tracked_and_retired_needs_citation_ignored() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "doc").mkdir()
@@ -336,11 +336,9 @@ def test_unverified_and_legacy_needs_citation_tracked() -> None:
         )
         issues = check_refs(root)
         marker_issues = [i for i in issues if i.ref_type == "marker"]
-        assert len(marker_issues) == 2
+        assert len(marker_issues) == 1
         markers = {i.ref_value for i in marker_issues}
-        # Legacy [NEEDS CITATION] is normalized to canonical [MISSING_CITATION].
-        assert markers == {"[UNVERIFIED]", "[MISSING_CITATION]"}
-        # Both default to warn severity.
+        assert markers == {"[UNVERIFIED]"}
         assert {i.severity for i in marker_issues} == {"warn"}
 
 
@@ -1292,14 +1290,15 @@ def test_unknown_pmid_in_prose_is_flagged() -> None:
         assert pmid_issues[0].ref_value == "PMID:99999999"
 
 
-def test_legacy_needs_citation_recognized_in_cli_output() -> None:
+def test_retired_needs_citation_not_recognized_in_cli_output() -> None:
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "doc").mkdir()
         (root / "doc" / "test.md").write_text("Old [NEEDS CITATION] in prose.\n")
         result = runner.invoke(refs_group, ["check", "--root", str(root)])
-        assert "[MISSING_CITATION]" in result.output
+        assert "[MISSING_CITATION]" not in result.output
+        assert "[NEEDS CITATION]" not in result.output
 
 
 def test_check_cli_strict_promotes_speculation_to_blocking() -> None:

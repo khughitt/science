@@ -792,14 +792,13 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     for hit in scan_markers(root, strict=False):
         rel = str(hit.file.relative_to(root))
         token_label = f"[{hit.token}]"
-        prefix = "Legacy " if hit.legacy else ""
         issues.append(
             RefIssue(
                 file=rel,
                 line=hit.line,
                 ref_type="marker",
                 ref_value=token_label,
-                message=f"{prefix}Unresolved {token_label} marker",
+                message=f"Unresolved {token_label} marker",
                 severity=hit.severity,
             )
         )

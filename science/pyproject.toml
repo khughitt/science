@@ -49,11 +49,6 @@ venv = ".venv"
 [tool.hatch.build.targets.wheel]
 packages = ["src/science_tool"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"src/science_tool/dag/edges.schema.json" = "science_tool/dag/edges.schema.json"
-"src/science_tool/project_artifacts/registry.yaml" = "science_tool/project_artifacts/registry.yaml"
-"src/science_tool/project_artifacts/data" = "science_tool/project_artifacts/data"
-
 [tool.uv.sources]
 science-model = { path = "model", editable = true }
 science-qa = { path = "qa", editable = true }

@@ -4,7 +4,7 @@ type: "convention"
 title: "Annotation tokens"
 status: "active"
 created: "2026-05-09"
-updated: "2026-06-15"
+updated: "2026-07-06"
 ---
 
 # Annotation tokens
@@ -42,14 +42,9 @@ Is the claim verifiable from a source you can reach?
 └── No  → because the source is paywalled / private / image-only → [INACCESSIBLE]
 ```
 
-## Legacy alias
-
-`[NEEDS CITATION]` is recognized as a synonym for `[MISSING_CITATION]` during the deprecation window. The scanner reports occurrences as canonical `[MISSING_CITATION]` but tags the underlying hit as `legacy: true` in JSON output. Run `science markers migrate --write` to rewrite legacy spellings in place. Backticked legacy spellings (in this doc, for example) are preserved.
-
 ## Tooling
 
 - `science markers scan [--root .] [--format json|table] [--strict] [--include-documentation]` — scan project markdown for tokens.
-- `science markers migrate [--root .] [--write]` — rewrite legacy `[NEEDS CITATION]` spellings to canonical `[MISSING_CITATION]`.
 - `science refs check` and `validate.sh` both delegate marker counting to the same scanner.
 
 ## Rich annotation system

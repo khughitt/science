@@ -25,17 +25,17 @@ def test_scan_emits_json_with_per_token_counts() -> None:
         assert len(payload["hits"]) == 3
 
 
-def test_scan_json_includes_legacy_flag() -> None:
+def test_scan_json_does_not_include_legacy_field() -> None:
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        _write(root / "doc" / "a.md", "Old [NEEDS CITATION] here.\n")
+        _write(root / "doc" / "a.md", "Missing [MISSING_CITATION] here.\n")
         result = runner.invoke(markers_group, ["scan", "--root", str(root), "--format", "json"])
         payload = json.loads(result.output)
         assert payload["counts"] == {"MISSING_CITATION": 1}
         hit = payload["hits"][0]
         assert hit["token"] == "MISSING_CITATION"
-        assert hit["legacy"] is True
+        assert "legacy" not in hit
 
 
 def test_scan_text_format_lists_per_token_counts() -> None:
@@ -69,51 +69,12 @@ def test_scan_zero_hits_emits_empty_payload() -> None:
         assert payload["hits"] == []
 
 
-def test_migrate_dry_run_lists_files_with_legacy_tokens() -> None:
+def test_migrate_command_is_removed() -> None:
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         _write(root / "doc" / "a.md", "Old [NEEDS CITATION] here\n")
-        _write(root / "doc" / "b.md", "Already [MISSING_CITATION]\n")
         result = runner.invoke(markers_group, ["migrate", "--root", str(root)])
-        assert result.exit_code == 0
-        assert "doc/a.md" in result.output
-        assert "doc/b.md" not in result.output
-        # File is unchanged in dry-run.
+        assert result.exit_code != 0
+        assert "No such command" in result.output
         assert "[NEEDS CITATION]" in (root / "doc" / "a.md").read_text()
-
-
-def test_migrate_write_rewrites_legacy_to_canonical() -> None:
-    runner = CliRunner()
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        _write(root / "doc" / "a.md", "Old [NEEDS CITATION] here\nand again [NEEDS CITATION].\n")
-        result = runner.invoke(markers_group, ["migrate", "--root", str(root), "--write"])
-        assert result.exit_code == 0
-        new_text = (root / "doc" / "a.md").read_text()
-        assert "[NEEDS CITATION]" not in new_text
-        assert new_text.count("[MISSING_CITATION]") == 2
-
-
-def test_migrate_preserves_backticked_legacy_tokens() -> None:
-    """Documentation references to the legacy spelling must NOT be rewritten."""
-    runner = CliRunner()
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        _write(root / "doc" / "a.md", "Bare [NEEDS CITATION] and `[NEEDS CITATION]` doc-ref.\n")
-        runner.invoke(markers_group, ["migrate", "--root", str(root), "--write"])
-        text = (root / "doc" / "a.md").read_text()
-        # Bare occurrence rewritten:
-        assert "Bare [MISSING_CITATION]" in text
-        # Backticked doc-reference preserved:
-        assert "`[NEEDS CITATION]`" in text
-
-
-def test_migrate_zero_legacy_tokens_is_noop() -> None:
-    runner = CliRunner()
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        _write(root / "doc" / "a.md", "Modern [MISSING_CITATION] only.\n")
-        result = runner.invoke(markers_group, ["migrate", "--root", str(root), "--write"])
-        assert result.exit_code == 0
-        assert "no legacy tokens" in result.output.lower()

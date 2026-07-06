@@ -1,6 +1,6 @@
 # Legacy Support Scrub Inventory
 
-Generated at: `2026-07-06T02:53:06Z`
+Generated at: `2026-07-06T10:00:26Z`
 Config path: `~/.config/science/config.yaml`
 
 ## Summary
@@ -14,19 +14,17 @@ Config path: `~/.config/science/config.yaml`
 | `scanned_projects` | 22 |
 | `skipped_registered_projects` | 1 |
 | `unregistered_science_yaml` | 0 |
-| `total_findings` | 4 |
+| `total_findings` | 0 |
 
 ## Surface Totals
 
-| surface | findings |
-| --- | ---: |
-| `legacy_marker_alias` | 4 |
+_No legacy surface findings._
 
 ## Projects
 
 | project | findings | surfaces |
 | --- | ---: | --- |
-| `~/d/3d-attention-bias` | 1 | `legacy_marker_alias`=1 |
+| `~/d/3d-attention-bias` | 0 |  |
 | `~/d/cancer/cancer-types/breast` | 0 |  |
 | `~/d/cancer/cancer-types/head-and-neck` | 0 |  |
 | `~/d/cancer/cancer-types/multiple-myeloma` | 0 |  |
@@ -43,20 +41,15 @@ Config path: `~/.config/science/config.yaml`
 | `~/d/health/processes/cycles` | 0 |  |
 | `~/d/health/processes/immunity` | 0 |  |
 | `~/d/health/processes/post-acute-infection` | 0 |  |
-| `~/d/natural-systems` | 2 | `legacy_marker_alias`=2 |
+| `~/d/natural-systems` | 0 |  |
 | `~/d/protein-landscape` | 0 |  |
 | `~/d/science-commons` | 0 |  |
 | `~/d/science/meta` | 0 |  |
-| `~/d/seq-feats` | 1 | `legacy_marker_alias`=1 |
+| `~/d/seq-feats` | 0 |  |
 
 ## Findings
 
-| project | surface | path | detail |
-| --- | --- | --- | --- |
-| `~/d/3d-attention-bias` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
-| `~/d/natural-systems` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
-| `~/d/natural-systems` | `legacy_marker_alias` | `tasks/done/2026-05.md` | [NEEDS CITATION] |
-| `~/d/seq-feats` | `legacy_marker_alias` | `AGENTS.md` | [NEEDS CITATION] |
+_No per-project findings._
 
 ## Skipped Registered Projects
 
