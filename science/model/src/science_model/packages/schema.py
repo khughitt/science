@@ -456,6 +456,26 @@ class WorkflowOutputIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class WorkflowOutputSupport(BaseModel):
+    """Declared support-cardinality floor on a workflow ``outputs[]`` entry.
+
+    The floor an aggregating output must not fall below. Distinct from the produced
+    stamp: this is the declaration; the observation is written onto the per-output
+    datapackage under ``science.support`` by ``register-run``.
+    """
+
+    unit: Literal["dataset", "cohort", "sample", "source"]
+    min: int = Field(strict=True, ge=1)
+    expected: int | None = Field(default=None, strict=True, ge=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _expected_ge_min(self) -> "WorkflowOutputSupport":
+        if self.expected is not None and self.expected < self.min:
+            raise ValueError("support.expected must be >= support.min")
+        return self
+
+
 class WorkflowOutput(BaseModel):
     """Logical output declared by a workflow entity."""
 
@@ -465,7 +485,14 @@ class WorkflowOutput(BaseModel):
     ontology_terms: list[str] = Field(default_factory=list)
     schema_profile: str | None = Field(default=None, min_length=1)
     identity: WorkflowOutputIdentity | None = None
+    support: WorkflowOutputSupport | None = None
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _support_requires_resources(self) -> "WorkflowOutput":
+        if self.support is not None and not self.resource_names:
+            raise ValueError("outputs[].support requires a non-empty resource_names")
+        return self
 
 
 class DatasetUsage(BaseModel):
