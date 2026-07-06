@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from rdflib import Dataset, Namespace
 from rdflib.namespace import RDF, SKOS
 
@@ -63,3 +64,26 @@ def test_build_entity_graph_materializes_structured_relations(tmp_path: Path) ->
     knowledge = _knowledge_graph(trig_path)
 
     assert (PROJECT_NS["concept/child"], SKOS.broader, PROJECT_NS["concept/parent"]) in knowledge
+
+
+def test_build_entity_graph_rejects_malformed_relation_data(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"relations\[0\]\.object must be a non-empty string"):
+        build_entity_graph(
+            tmp_path,
+            [
+                {
+                    "kind": "concept",
+                    "id": "child",
+                    "frontmatter": {"title": "Child", "status": "active"},
+                    "body": "Child concept.",
+                }
+            ],
+            relations=[
+                {
+                    "subject": "concept:child",
+                    "predicate": "skos:broader",
+                    "target": "concept:parent",
+                    "graph_layer": "graph/knowledge",
+                }
+            ],
+        )

@@ -122,6 +122,19 @@ def build_entity_graph(project_root: Path, entities: list[dict], relations: list
         write_markdown_entity(project_root, rel_path.as_posix(), frontmatter, str(entity["body"]))
 
     if relations is not None:
+        if not isinstance(relations, list):
+            raise ValueError("relations must be a list of dicts")
+        for index, relation in enumerate(relations):
+            if not isinstance(relation, dict):
+                raise ValueError(f"relations[{index}] must be a dict")
+            for field in ("subject", "predicate", "object"):
+                value = relation.get(field)
+                if not isinstance(value, str) or not value:
+                    raise ValueError(f"relations[{index}].{field} must be a non-empty string")
+            graph_layer = relation.get("graph_layer")
+            if graph_layer is not None and (not isinstance(graph_layer, str) or not graph_layer):
+                raise ValueError(f"relations[{index}].graph_layer must be a non-empty string when present")
+
         local_profile = resolve_local_profile_name(project_root)
         sources_dir = local_profile_sources_dir(project_root, local_profile=local_profile)
         sources_dir.mkdir(parents=True, exist_ok=True)
