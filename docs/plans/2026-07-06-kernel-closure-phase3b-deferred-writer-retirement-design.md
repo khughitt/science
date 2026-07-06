@@ -41,13 +41,28 @@ A blind-code audit (2026-07-06) resolved the four into three difficulty tiers: t
 
 Therefore Phase 3b retires **only the `add_article` writer** and leaves the `article` kind untouched. Consequence: `add_article` touches **no** reconciliation gate. After retirement, ad-hoc `sci:Article` graph nodes simply stop being minted (nothing read them); the kind persists for citation classification, which never emitted a graph node from source anyway.
 
-### 3.2 `add_story` — retire the writer, wire the kind
+### 3.2 `add_story` — retire the writer, wire the kind (edges via `relations.yaml`)
 
-Authored `entities/stories/<id>.md` (`kind: story`) + `synthesizes`/`organizedBy` entries in `knowledge/sources/<local>/relations.yaml` already compile to the identical `sci:Story` node and edges (proven end-to-end by `tests/test_graph_freshness_integration.py`). `story` is already `EPISTEMIC` + `AUTHORED_CORE` and already in `PRE_EXPANSION_CORE_KINDS` / `FROZEN_KIND_CLASSES` (`"story": "epistemic"`), so the class/delta gates do **not** move.
+`story` is already `EPISTEMIC` + `AUTHORED_CORE` and already in `PRE_EXPANSION_CORE_KINDS` / `FROZEN_KIND_CLASSES` (`"story": "epistemic"`), so the class/delta gates do **not** move.
 
-**Wiring gap to close:** the `story` descriptor lacks `home`/`template_ready`/`strategy`/`default_status`/`statuses`, so `science entity create story` cannot yet scaffold the forward-path file. Add them, mirroring an existing epistemic authored kind (`interpretation` for `home`, `evidence-line` for `strategy="slug"` + statuses). A packaged `story.md` template already exists.
+**Exact parity picture (not "identical" — corrected):** an authored `entities/stories/<id>.md` (`kind: story`) yields, via the generic `_add_entity` path (`materialize.py:611`), the `sci:Story` node with `rdf:type` + `skos:prefLabel` + `sci:projectStatus`. It does **not** reproduce the old writer's edges or description automatically:
+- `sci:synthesizes` (→ interpretations) and `sci:organizedBy` (→ the about-target) are **not** emitted from frontmatter — generic parsing ignores the template's `about:`/`interpretations:` keys. These edges must be authored in `knowledge/sources/<local>/relations.yaml`; the `synthesizes`/`organized_by` RelationKinds already exist (`core.py:695-709`). `tests/test_graph_freshness_integration.py` proves this `relations.yaml` path end-to-end.
+- `schema:description` (which the old writer emitted from its `summary` argument, `mutations.py:93`) is **not** reproduced: generic `_add_entity` emits description only from a `summary` *attribute* (`materialize.py:623`), and the story frontmatter carries no `summary:` field (the summary lives in the `## Summary` body section). **Description parity is intentionally not preserved** — no story-specific consumer reads `schema:description`, so this is an accepted, documented drop, not a regression.
 
-**Forward-path parity risk (must be handled):** `entity create story` scaffolds only the entity *file*. Its edges — `sci:synthesizes` → interpretations, `sci:organizedBy` → the about-target — are authored in `relations.yaml`, which a template cannot produce. To avoid silently losing those edges relative to the old writer, the story **template body and the retirement message must direct authors to add the `synthesizes`/`organizedBy` relations in `relations.yaml`** (the `synthesizes`/`organized_by` RelationKinds already exist, `core.py:695-709`).
+**Wiring to add:** the `story` descriptor lacks `home`/`template_ready`/`strategy`/`default_status`/`statuses`, so `science entity create story` cannot yet scaffold the forward-path file. Add:
+- `home="entities/stories"`, `template_ready=True`, `strategy="slug"`;
+- **`default_status="draft"`, `statuses=["draft", "developing", "mature"]`** — preserving the retired writer's and current template's existing lifecycle (`mutations.py:77`, `templates/story.md:6`). Do **not** adopt evidence-line's `active/retired/archived` set (that would make authored `developing`/`mature` stories invalid).
+
+**Correct the template to match reality:** the packaged `templates/story.md` currently shows `about:` and `interpretations:` frontmatter cues that produce no edges under generic materialization — **remove those misleading keys** so the scaffold doesn't imply an edge path that doesn't exist. Instead, the template body and the retirement message must point authors at a concrete `relations.yaml` snippet, e.g.:
+
+```yaml
+# knowledge/sources/<local>/relations.yaml
+relations:
+  - { subject: "story:<id>", predicate: "sci:organizedBy", object: "hypothesis:<h-id>" }
+  - { subject: "story:<id>", predicate: "sci:synthesizes", object: "interpretation:<interp-id>" }
+```
+
+(A future `StoryEntity` + compiler handling could restore frontmatter-native `about`/`interpretations`/`summary` emission, but that is feature work beyond this retirement and is out of scope.)
 
 Only gate touched: `FROZEN_MIGRATED_KINDS += "story"`.
 
@@ -82,16 +97,24 @@ This shape is **load-bearing**: `_load_proposition_falsifications` (`evidence_si
 - `supersedes_claim: str | None` — optional; emitted as a **resolved URI**.
 - standard entity fields (`id`, `kind`, `title`/label, `status`, `related`, `source_refs`, `created`, `updated`).
 
-**Descriptor** (`profiles/core.py`, mirror evidence-line): `EPISTEMIC`, `AUTHORED_CORE`, `template_ready=True`, `home="entities/falsifications"`, `canonical_prefix="falsification"`, `strategy="slug"`, `default_status` + `statuses` mirroring evidence-line.
+**Typed-model registration (must be complete or the materializer branch never fires).** There is **no** central kind→model registry; `parse_entity_file` dispatches inline. Registering `FalsificationEntity` therefore means touching every one of:
+- `entities.py` — `class FalsificationEntity(ProjectEntity)` with fields `falsifies`, `predicted`, `observed`, `decision`, `source_of_prediction`, `supersedes_claim` (mirror `EvidenceLineEntity`, `entities.py:950`);
+- `entities.py` — `EntityType.FALSIFICATION = "falsification"` enum member;
+- `frontmatter.py` — import `FalsificationEntity` and add an inline `if kind == EntityType.FALSIFICATION.value: return FalsificationEntity(**entity_kwargs, falsifies=…, predicted=…, …)` branch in `parse_entity_file` (`frontmatter.py:334`, alongside the `EVIDENCE_LINE` branch at `:424`);
+- `science_model/__init__.py` — export `FalsificationEntity`;
+- `materialize.py` — import `FalsificationEntity` for the `isinstance` dispatch;
+- model tests — a `parse_entity_file` round-trip test for the new kind.
+
+**Descriptor** (`profiles/core.py`, mirror evidence-line): `EPISTEMIC`, `AUTHORED_CORE`, `template_ready=True`, `home="entities/falsifications"`, `canonical_prefix="falsification"`, `strategy="slug"`, `default_status` + `statuses` mirroring evidence-line (falsification is a *new* kind, so it adopts evidence-line's lifecycle freely — this is unlike `story`, which must keep its existing `draft/developing/mature`).
 
 **Template** `science_model/templates/falsification.md` (+ repo-root mirror) with sections cueing predicted/observed/decision and a `falsifies:` frontmatter field.
 
-**Compiler emission** (`materialize.py`, mirror the evidence-line emitters):
-- `_add_falsification_metadata(uri, provenance, entity)` — a field→predicate map (`predicted→sci:predicted`, `observed→sci:observed`, `decision→sci:decision`, `source_of_prediction→sci:sourceOfPrediction` as **literals**; `supersedes_claim→sci:supersedesClaim` as a **resolved URI** when present), modeled on `_add_evidence_line_metadata` (`materialize.py:1050`).
-- `_add_falsification_relations(...)` — emits `(uri, sci:falsifies, <resolved proposition uri>)`, modeled on `_add_evidence_line_relations` (`materialize.py:1010`); validates the target resolves to a proposition (fail-loud, mirroring the writer's guard).
-- dispatch both from `_add_entity` (`materialize.py:611`), guarded by `isinstance(entity, FalsificationEntity)`, alongside the existing `EvidenceLineEntity` branch.
+**Compiler emission — routed to `graph/knowledge`, NOT the provenance graph.** This is the one place falsification must *not* copy evidence-line: `_add_evidence_line_metadata` writes to the `provenance` graph (it is belief provenance), but the retired `add_falsification` writer put every triple in `graph/knowledge` (`mutations.py:53-61`) and the read helper `_load_proposition_falsifications` reads from `knowledge` (`evidence_signals.py:158`). Emitting metadata to `provenance` would strand it — consumers would find the `sci:falsifies` edge but read empty predicted/observed/decision. Therefore:
+- `_add_falsification_metadata(*, uri, knowledge, entity)` — emits into **`knowledge`** a field→predicate map (`predicted→sci:predicted`, `observed→sci:observed`, `decision→sci:decision`, `source_of_prediction→sci:sourceOfPrediction` as **literals**; `supersedes_claim→sci:supersedesClaim` as a **resolved URI** when present). Structurally like `_add_evidence_line_metadata` (`materialize.py:1050`) but with the `knowledge` graph, not `provenance`.
+- `_add_falsification_relations(*, uri, knowledge, resolver, entity)` — emits `(uri, sci:falsifies, <resolved proposition uri>)` into **`knowledge`**; validates the target resolves to a proposition (fail-loud, mirroring the writer's guard).
+- dispatch both from `_add_entity` (`materialize.py:611`) — which already holds `knowledge` — guarded by `isinstance(entity, FalsificationEntity)`, alongside the existing `EvidenceLineEntity` branch. Pass `knowledge` (the generic node triples `rdf:type`/label/status already land in `knowledge` via `_add_entity`, so the whole falsification shape is co-located).
 
-**Byte-parity requirement (explicit):** the emitted triples must match the old writer term-for-term — `sourceOfPrediction` a literal, `supersedesClaim` a resolved URI, node URI `falsification/<slug>` (source id `falsification:<slug>` → same URI form). Only `falsifies` is proposition-validated; the four metadata fields are unvalidated literals. The read helper is unchanged, so consumers see identical data.
+**Byte-parity requirement (explicit):** the emitted triples must match the old writer term-for-term **and live in the same named graph (`graph/knowledge`)** — `sourceOfPrediction` a literal, `supersedesClaim` a resolved URI, node URI `falsification/<slug>` (source id `falsification:<slug>` → same URI form). Only `falsifies` is proposition-validated; the four metadata fields are unvalidated literals. The read helper is unchanged, so consumers see identical data.
 
 Reconciliation gates touched: `INTENDED_ADDITIONS += "falsification"`, `FROZEN_KIND_CLASSES += "falsification": "epistemic"`, `FROZEN_MIGRATED_KINDS += "falsification"`. (`test_assertion4_authored_core_equals_registry_core` stays balanced automatically — both registry-core and authored-core gain the kind.)
 
@@ -113,7 +136,8 @@ Also update any doc generated from `CORE_PROFILE` (kind listings in `docs/user-g
 ## 6. Test disposition
 
 - **`test_causal.py`** — migrate `test_enriched_edges_include_linked_falsifications` and `test_export_pgmpy_includes_falsification_comments` from `add_falsification(...)` to an authored `entities/falsifications/<id>.md` fixture built through the compiler (reuse the `build_entity_graph` helper from 3a). Assertions on the read-side overlay/export are preserved.
-- **New materialization parity test** (`test_graph_materialize.py` or a focused test): author one falsification and assert the compiler emits `rdf:type sci:Falsification`, all four metadata predicates (`predicted`/`observed`/`decision`/`sourceOfPrediction`), `sci:falsifies` → the proposition, and `sci:supersedesClaim` when present.
+- **New materialization parity test** (`test_graph_materialize.py` or a focused test): author one falsification and assert the compiler emits, **into the `graph/knowledge` named graph** (assert on that graph object, not the default union), `rdf:type sci:Falsification`, all four metadata predicates (`predicted`/`observed`/`decision`/`sourceOfPrediction`), `sci:falsifies` → the proposition, and `sci:supersedesClaim` (resolved URI) when present. A companion model test asserts `parse_entity_file` round-trips a `kind: falsification` file to a `FalsificationEntity`.
+- **Story tests** — any authored-story fixtures/status assertions must use `draft/developing/mature` (not evidence-line statuses); the template-correction (removing `about:`/`interpretations:` keys) should be reflected in whatever test renders/validates the story template.
 - **`test_paper_model.py`** — delete `test_add_paper_entity`, `test_add_paper_entity_invalid_status`, and drop the `add_story`/`add_paper_entity` composition tail of `test_full_composition_chain` (delete-with-pointer; no authored `sci:comprises` equivalent). `test_add_story*` → delete-with-pointer to `test_graph_freshness_integration` (source coverage) or convert to authored source.
 - **`test_graph_cli.py`** — delete `test_graph_add_article_records_reference`; convert `test_graph_add_story_warns_graph_only_not_durable` to a message-only retirement assertion; add a `graph add paper` "no such command" assertion (delete-outright shape). Add the retired `graph add article/story/falsification` to the parametrized retirement-surface test (extend 3a's `test_retired_writer_commands_all_report_retirement`).
 - **Gate tests** — update `FROZEN_MIGRATED_KINDS`, `FROZEN_KIND_CLASSES`, `INTENDED_ADDITIONS` per §4.
@@ -122,7 +146,7 @@ Also update any doc generated from `CORE_PROFILE` (kind listings in `docs/user-g
 ## 7. Sequencing (same ratchet shape as 3a)
 
 1. **Guard RED** — set `EXPECTED_DEFERRED_WRITERS = set()`; expect exactly 4 unexpected sites.
-2. **Build forward paths** — `FalsificationEntity` schema + descriptor + template + compiler emitters (with the parity test); wire the `story` kind (home/template_ready/strategy/statuses + template body pointing at `relations.yaml`); update the reconciliation-gate literals.
+2. **Build forward paths** — `FalsificationEntity` schema + **full typed-model registration** (EntityType member, `parse_entity_file` inline branch, `__init__` export, `materialize` import — §3.4) + descriptor + template + **`knowledge`-routed** compiler emitters (with the named-graph parity test); wire the `story` kind (home/template_ready/strategy + **`draft/developing/mature` statuses** + corrected template body pointing at `relations.yaml`); update the reconciliation-gate literals.
 3. **Migrate/dispose tests** — `test_causal` falsification migration; `test_paper_model` deletions; `test_graph_cli` conversions; parametrized retirement-surface extension.
 4. **Retire CLI surfaces** — message-only for `graph add article/story/falsification`; delete `graph add paper`.
 5. **Delete + prune** — delete the 4 writer functions + the `comprises` RelationKind + its manifest entry; prune re-exports/imports in `graph/store/__init__.py`, `graph/__init__.py`, `cli.py`; ruff to catch stragglers → **guard GREEN**.
