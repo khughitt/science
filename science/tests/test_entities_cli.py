@@ -1560,6 +1560,25 @@ def test_entity_sections_lists_template_sections() -> None:
         assert "optional" in result.output
 
 
+def test_entity_sections_lists_retired_graph_authoring_templates() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        seed_project(Path.cwd())
+
+        expected = {
+            "concept": {"definition", "notes"},
+            "observation": {"observation", "source"},
+            "mechanism": {"summary", "participants", "propositions"},
+        }
+
+        for kind, keys in expected.items():
+            result = runner.invoke(main, ["entity", "sections", kind, "--format", "json"])
+
+            assert result.exit_code == 0, result.output
+            payload = json.loads(result.output)
+            assert {row["key"] for row in payload["rows"]} == keys
+
+
 def test_entity_sections_non_renderable_kind_gives_actionable_error() -> None:
     """`entity sections topic` reports an actionable error, not a raw template-not-found.
 

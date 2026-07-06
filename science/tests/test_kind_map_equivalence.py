@@ -175,6 +175,9 @@ FROZEN_MIGRATED_KINDS = frozenset(
         "book",
         "pre-registration",
         "synthesis",
+        "concept",
+        "observation",
+        "mechanism",
     }
 )
 
