@@ -43,7 +43,8 @@ durable graph identity. Keep weak ideas in prose until they need an owner.
 
 Build the graph from these upstream sources:
 
-- Typed markdown entities in `specs/` and `doc/` with YAML frontmatter (`id`, `type`, `title`, `related`, `source_refs`, etc.)
+- Typed markdown entities under `entities/` with YAML frontmatter (`id`,
+  `kind`, `title`, `related`, `source_refs`, etc.)
 - Task files in `tasks/active.md` and `tasks/done/*.md`
 - Structured local extensions in:
   - `knowledge/sources/<local-profile>/external_refs.yaml`
@@ -71,10 +72,11 @@ knowledge_profiles:
 
 For each project entity:
 
-1. Put first-class research objects in typed markdown docs:
+1. Put first-class research objects in typed markdown entity owners:
    - hypotheses in `entities/hypotheses/`
    - questions in `entities/questions/`
-   - interpretations, discussions, pre-registrations, bias audits, methods, datasets, and similar entities in their typed `doc/` locations
+   - interpretations, discussions, pre-registrations, bias audits, methods,
+     datasets, and similar entities in their typed `entities/<kind>/` locations
 2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
    - `external_refs.yaml` for external authority rows
@@ -106,8 +108,9 @@ science graph audit --project-root . --format json
 Fix every unresolved reference in the canonical sources before building:
 
 - add missing frontmatter to existing docs
-- convert legacy short IDs to canonical IDs
-- add explicit aliases in `mappings.yaml` when a temporary migration bridge is still needed
+- convert incorrect short IDs to canonical IDs
+- add explicit aliases in `mappings.yaml` only for current, intentional
+  project-local equivalences
 - add missing local-profile entities for legitimate project-local concepts
 - add `theme` markdown entities under `entities/themes/` when the missing node is a durable cross-cutting organizing frame that links multiple questions, hypotheses, tasks, reports, methods, concepts, child projects, or guardrails.
 

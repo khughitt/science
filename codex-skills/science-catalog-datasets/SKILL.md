@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -91,12 +90,10 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 Additionally:
 1. Read `skills/data/SKILL.md` for data management conventions.
 2. Read `.ai/templates/dataset.md` first; if not found, read `templates/dataset.md`.
-3. Read project context, preferring layout-v3 entity roots:
+3. Read project context from current entity roots:
    - `entities/questions/` (all question files, if present)
    - `entities/hypotheses/` (all hypothesis files)
    - `entities/propositions/` (durable proposition entities, if present)
-   - Read legacy specs/research-question.md only if it exists.
-   - Read legacy specs/scope-boundaries.md only if it exists.
    - Existing `entities/datasets/` (to know what is already catalogued)
 4. Resolve the project root (the directory containing `science.yaml`) — the CLI commands below require it or discover it automatically from the working directory.
 
@@ -232,7 +229,14 @@ A verification-log line is appended in all Branch B cases.
 
 Wire datasets to the questions and hypotheses they inform.
 
-**Legacy metadata backfill.** When connecting or backfilling legacy dataset entities, do not add `origin: external` by itself; set `license:` at the same time (`unknown` is acceptable when the license genuinely cannot be determined), preferably by running `science dataset verify-access` so `origin` / `license` / `access` move together. If the row has `source_class: derived` and `origin: external`, also add `dataset_usage` provenance with `role: "upstream"` or `role: "training"` for the input dataset(s); otherwise validation will warn that independence cannot be derived.
+**Metadata completion.** When connecting dataset entities, do not add `origin:
+external` by itself; set `license:` at the same time (`unknown` is acceptable
+when the license genuinely cannot be determined), preferably by running
+`science dataset verify-access` so `origin` / `license` / `access` move
+together. If the row has `source_class: derived` and `origin: external`, also
+add `dataset_usage` provenance with `role: "upstream"` or `role: "training"`
+for the input dataset(s); otherwise validation will warn that independence
+cannot be derived.
 
 **Prefer Q/H `datasets:` for direct dataset needs.** In each question or hypothesis entity, add the dataset IDs it needs or is informed by:
 

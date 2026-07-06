@@ -46,17 +46,19 @@ def test_catalog_datasets_setup_is_layout_v3_aware() -> None:
 
     assert "entities/questions/" in text
     assert "entities/hypotheses/" in text
-    assert "legacy specs/research-question.md only if it exists" in text
-    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "Read project context from current entity roots" in text
+    assert "legacy specs/research-question.md only if it exists" not in text
+    assert "legacy specs/scope-boundaries.md only if it exists" not in text
     assert "- `specs/research-question.md`" not in text
     assert "- `specs/scope-boundaries.md`" not in text
 
 
-def test_catalog_datasets_connect_warns_about_legacy_metadata_backfill() -> None:
+def test_catalog_datasets_connect_warns_about_metadata_completion() -> None:
     text = _read("commands/catalog-datasets.md")
 
-    assert "When connecting or backfilling legacy dataset entities" in text
-    assert "do not add `origin: external` by itself" in text
+    assert "Metadata completion" in text
+    assert "When connecting or backfilling legacy dataset entities" not in text
+    assert "do not add `origin:" in text
     assert "set `license:` at the same time" in text
     assert "`unknown` is acceptable" in text
     assert "source_class: derived" in text
@@ -100,8 +102,8 @@ def test_find_datasets_setup_is_layout_v3_aware() -> None:
     assert "entities/questions/" in text
     assert "entities/hypotheses/" in text
     assert "entities/datasets/" in text
-    assert "legacy specs/research-question.md only if it exists" in text
-    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "legacy specs/research-question.md only if it exists" not in text
+    assert "legacy specs/scope-boundaries.md only if it exists" not in text
     assert "- `specs/research-question.md`" not in text
     assert "- `specs/scope-boundaries.md`" not in text
 
@@ -125,7 +127,8 @@ def test_find_datasets_routes_durable_records_through_dataset_lifecycle() -> Non
     assert '--source-url "<landing-page-or-download-url>"' in text
     assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
     assert "science dataset prioritize" in text
-    assert "Direct template authoring is a fallback" in text
+    assert "If a needed field is not yet exposed by the CLI" in text
+    assert "Direct template authoring is a fallback" not in text
     assert "For each `Use now` or `Evaluate next` dataset, create a dataset note" not in text
     assert "Update `science.yaml` data_sources section with new entries" not in text
     assert "--level <public|controlled|mixed>" not in text
@@ -191,10 +194,10 @@ def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() ->
 
     assert "Pre-registration discovery" in text
     assert "entities/pre-registrations/" in text
-    assert "doc/meta/" in text
-    assert "docs/meta/" in text
-    assert "legacy `specs/` locations only if they exist" in text
-    assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
+    assert "doc/meta/" not in text
+    assert "docs/meta/" not in text
+    assert "legacy `specs/` locations only if they exist" not in text
+    assert "do not assume absence just because no task mentions one" in text
 
 
 def test_plan_analysis_requires_per_input_data_profile() -> None:
@@ -585,6 +588,53 @@ def test_command_docs_do_not_reference_retired_user_docs() -> None:
         if any(token in text for token in retired):
             offenders.append(path.relative_to(ROOT).as_posix())
 
+    assert not offenders
+
+
+def test_active_guidance_does_not_teach_retired_legacy_surfaces() -> None:
+    checked_paths = (
+        "commands/add-hypothesis.md",
+        "commands/catalog-datasets.md",
+        "commands/create-graph.md",
+        "commands/create-project.md",
+        "commands/discuss.md",
+        "commands/find-datasets.md",
+        "commands/import-project.md",
+        "commands/interpret-results.md",
+        "commands/plan-analysis.md",
+        "commands/specify-model.md",
+        "commands/update-graph.md",
+        "docs/conventions/refs-check.md",
+        "docs/user-guide/big-picture-synthesis.md",
+        "docs/user-guide/entities.md",
+        "docs/user-guide/project-layout.md",
+        "references/command-preamble.md",
+        "references/science-yaml-schema.md",
+        "templates/finding.md",
+        "science/model/src/science_model/templates/finding.md",
+    )
+    retired_phrases = (
+        "legacy specs/research-question.md only if it exists",
+        "legacy specs/scope-boundaries.md only if it exists",
+        "legacy `specs/` locations only if they exist",
+        "When connecting or backfilling legacy dataset entities",
+        "Direct template authoring is a fallback",
+        "Partially-migrated project",
+        "legacy_structured_literature_prefixes",
+        "*.edges.yaml",
+        "data-package:<",
+        "data-package-ref",
+        "data-package-or",
+        "layout_version: 2",
+        "`id`, `type`",
+    )
+
+    offenders: list[str] = []
+    for path in checked_paths:
+        text = _read(path)
+        for phrase in retired_phrases:
+            if phrase in text:
+                offenders.append(f"{path}: {phrase}")
     assert not offenders
 
 

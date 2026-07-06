@@ -30,9 +30,8 @@ entities/synthesis/
 ```
 
 The exact filenames follow the `synthesis` entity path policy, but the roles are
-identified by frontmatter, not by filename. Legacy projects may still contain
-older `doc/reports/synthesis*` paths until migrated; new canonical artifacts
-belong under `entities/synthesis/`.
+identified by frontmatter, not by filename. Canonical artifacts belong under
+`entities/synthesis/`.
 
 All canonical synthesis artifacts are regenerated from current project sources.
 Do not treat generated synthesis prose as the authority for questions,
@@ -202,10 +201,9 @@ Topics with zero demand are omitted. Topics where coverage is greater than or
 equal to demand are omitted. Output is ordered by gap score descending, then
 topic ID ascending.
 
-External literature IDs canonicalize to `paper:<bibkey>`. During the transition
-window, `article:<bibkey>` still counts as the same external paper for coverage
-deduplication. The canonical bibkey and legacy-alias policy are documented in
-[Refs Check](../conventions/refs-check.md).
+External literature IDs use `paper:<bibkey>`. Coverage deduplication compares
+the canonical paper bibkey exactly; `article:<bibkey>` is not a literature ref
+prefix.
 
 Inspect the computed list directly with:
 

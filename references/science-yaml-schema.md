@@ -12,7 +12,7 @@ last_modified: "YYYY-MM-DD" # Date of last significant update
 summary: "string"           # 2-3 sentence project description
 status: "string"            # One of: active, paused, completed, archived
 profile: "string"           # One of: research, software
-layout_version: 2           # Current layout version
+layout_version: 3           # Current layout version
 
 # Required (may be empty initially)
 tags:                        # Keywords for categorization
@@ -59,7 +59,7 @@ summary: >
   and iterated function systems.
 status: "active"
 profile: "research"
-layout_version: 2
+layout_version: 3
 tags:
   - fractal-geometry
   - generative-models
@@ -93,7 +93,7 @@ summary: >
   conventional packaged Python application layout.
 status: "active"
 profile: "software"
-layout_version: 2
+layout_version: 3
 tags:
   - cli
   - tooling

@@ -40,7 +40,7 @@ Review the output. If no files are stale, report "Graph is up to date" and stop.
 
 Typical categories:
 
-- typed markdown docs in `specs/` or `doc/`
+- typed markdown entity owners in `entities/`
 - task files in `tasks/`
 - local extension files in `knowledge/sources/<local-profile>/`
 - removed source files that may require entity retirement or migration
@@ -55,10 +55,10 @@ For each stale source:
 4. Use `theme:<slug>` for durable cross-cutting organizing frames. Do not use `topic:<slug>` for new semantic authoring; use `concept` for atomic vocabulary and `theme` for the project-level lens that organizes other entities.
 5. If a file was removed, decide whether the represented entity should also be removed or replaced by another canonical source. Do not silently orphan it.
 
-Use a fix-on-touch policy for legacy entity IDs encountered during the update:
-when a stale source already requires editing, apply the safe rename/xref addition
-needed to move it toward canonical identity instead of leaving known legacy
-references behind.
+Use a fix-on-touch policy for non-canonical entity IDs encountered during the
+update: when a stale source already requires editing, apply the safe
+rename/xref addition needed to move it toward canonical identity instead of
+leaving known bad references behind.
 
 ### Step 4: Audit before rebuild
 
@@ -70,8 +70,8 @@ science graph audit --project-root . --format json
 
 `graph audit` is read-only: it reports unresolved canonical source references before
 materialization without mutating the project. Resolve anything it flags in the upstream
-sources first (apply the fix-on-touch policy above to any legacy IDs it surfaces). Do not
-build until the audit is clean.
+sources first (apply the fix-on-touch policy above to any non-canonical IDs it
+surfaces). Do not build until the audit is clean.
 
 ### Step 5: Re-materialize and validate
 
@@ -85,7 +85,7 @@ science graph stats --format json
 
 ### Step 6: Keep project-local source files current when needed
 
-If the update involved legacy ID cleanup or new project-local semantics, keep the
+If the update involved ID cleanup or new project-local semantics, keep the
 project-local source files current:
 
 - `knowledge/sources/<local-profile>/mappings.yaml`

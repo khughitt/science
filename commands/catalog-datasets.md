@@ -16,12 +16,10 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally:
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md` for data management conventions.
 2. Read `.ai/templates/dataset.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`.
-3. Read project context, preferring layout-v3 entity roots:
+3. Read project context from current entity roots:
    - `entities/questions/` (all question files, if present)
    - `entities/hypotheses/` (all hypothesis files)
    - `entities/propositions/` (durable proposition entities, if present)
-   - Read legacy specs/research-question.md only if it exists.
-   - Read legacy specs/scope-boundaries.md only if it exists.
    - Existing `entities/datasets/` (to know what is already catalogued)
 4. Resolve the project root (the directory containing `science.yaml`) — the CLI commands below require it or discover it automatically from the working directory.
 
@@ -157,7 +155,14 @@ A verification-log line is appended in all Branch B cases.
 
 Wire datasets to the questions and hypotheses they inform.
 
-**Legacy metadata backfill.** When connecting or backfilling legacy dataset entities, do not add `origin: external` by itself; set `license:` at the same time (`unknown` is acceptable when the license genuinely cannot be determined), preferably by running `science dataset verify-access` so `origin` / `license` / `access` move together. If the row has `source_class: derived` and `origin: external`, also add `dataset_usage` provenance with `role: "upstream"` or `role: "training"` for the input dataset(s); otherwise validation will warn that independence cannot be derived.
+**Metadata completion.** When connecting dataset entities, do not add `origin:
+external` by itself; set `license:` at the same time (`unknown` is acceptable
+when the license genuinely cannot be determined), preferably by running
+`science dataset verify-access` so `origin` / `license` / `access` move
+together. If the row has `source_class: derived` and `origin: external`, also
+add `dataset_usage` provenance with `role: "upstream"` or `role: "training"`
+for the input dataset(s); otherwise validation will warn that independence
+cannot be derived.
 
 **Prefer Q/H `datasets:` for direct dataset needs.** In each question or hypothesis entity, add the dataset IDs it needs or is informed by:
 

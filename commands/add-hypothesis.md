@@ -68,7 +68,7 @@ Create first, then draft. After the conversation, create the hypothesis with
 `science hypotheses create`. `science hypotheses create` owns ID sequencing,
 frontmatter, file placement, and prospective validation. The tool assigns the
 next sequential `hNN` ID, places the file under `entities/hypotheses/`, and
-writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`,
+writes canonical frontmatter (`id`, `kind`, `title`, `status`, `related`,
 `source_refs`, `created`, `updated`). It also runs prospective validation
 against the project's audit rules — unresolved references emit warnings,
 structural problems block.

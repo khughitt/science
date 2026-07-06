@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -143,7 +142,7 @@ Create first, then draft. After the conversation, create the hypothesis with
 `science hypotheses create`. `science hypotheses create` owns ID sequencing,
 frontmatter, file placement, and prospective validation. The tool assigns the
 next sequential `hNN` ID, places the file under `entities/hypotheses/`, and
-writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`,
+writes canonical frontmatter (`id`, `kind`, `title`, `status`, `related`,
 `source_refs`, `created`, `updated`). It also runs prospective validation
 against the project's audit rules — unresolved references emit warnings,
 structural problems block.

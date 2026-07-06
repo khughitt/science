@@ -15,7 +15,7 @@ agents and humans to find.
 | `entities/` | Typed entity **owners**, one subdirectory per kind (`entities/datasets/`, `entities/papers/`, `entities/topics/`, `entities/hypotheses/`, `entities/questions/`, `entities/workflows/`, …). The single structural home for everything the project *owns*. |
 | `overlays/` | Project-local **overlays** — files carrying `overlay_of:` that borrow and extend a commons-canonical entity. One subdirectory per type (`overlays/datasets/`, `overlays/papers/`, `overlays/topics/`, `overlays/themes/`). |
 | `doc/` | Prose **only**: research notes, background, interpretations, reports, discussions, figures. No typed entity owners live here. |
-| `specs/` | Hypotheses, propositions, plans, and structured project specifications when a legacy project keeps them there. |
+| `specs/` | Structured project specifications such as research questions, scope boundaries, requirements, and product/research planning notes. Not an entity owner root. |
 | `tasks/` | Active, blocked, deferred, retired, and completed work. |
 | `knowledge/` | Generated graph files, summaries, snapshots, and other derived knowledge artifacts. |
 | `papers/references.bib` | Bibliography entries for cited literature. |
@@ -35,22 +35,17 @@ a reader can locate anything by *what it is*:
 - **`doc/`** — prose. Background, interpretations, reports, discussions, figures —
   no typed entity owners.
 
-This replaces the older v2 arrangement where dataset, paper, topic, and theme
-files were scattered under `doc/<type>/`. See
-`docs/user-guide/entities.md` for the entity model and source entity CLI
+See `docs/user-guide/entities.md` for the entity model and source entity CLI
 contract.
 
 The v2-to-v3 migration command has been retired. Projects are expected to keep
 typed entity owners in `entities/<kind>/`; `doc/` is prose-only and `specs/` is
 not an entity owner root.
 
-Project-local markdown kinds declared in the active local profile participate in
-this migration. By default a local kind lives at `entities/<kind>/`, uses numeric
-filenames, defaults to `status: active`, and accepts an open status vocabulary.
-The profile may declare `home`, `strategy`, `default_status`, and `statuses` to
-override those defaults. Malformed local-kind declarations are skipped with
-warnings during migration and conformance checks, rather than aborting unrelated
-core-kind migration work.
+Project-local markdown kinds declared in the active local profile also live at
+`entities/<kind>/` by default, use numeric filenames, default to `status:
+active`, and accept an open status vocabulary. The profile may declare `home`,
+`strategy`, `default_status`, and `statuses` to override those defaults.
 
 ## `science.yaml` And `pyproject.toml`
 

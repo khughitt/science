@@ -17,10 +17,9 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
 3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
-4. Read project context from layout-v3 entity roots first:
+4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
-   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `aspects/<name>/<name>.md` — canonical Science aspects
@@ -113,9 +112,9 @@ route it there instead of silently re-planning around it.
 ## Setup
 
 1. Read `science.yaml`.
-2. Read `specs/research-question.md` if present.
+2. Read relevant questions in `entities/questions/` when present.
 3. Read relevant hypotheses, inquiries, tasks, prior pre-registrations, and existing plans named by the user.
-4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/` first, then in legacy project doc locations such as `doc/meta/` and `docs/meta/`, and finally in legacy `specs/` locations only if they exist; do not assume absence just because `entities/pre-registrations/` is empty.
+4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/`; do not assume absence just because no task mentions one.
 5. If an inquiry slug is provided, read the inquiry/model state and reuse captured estimand, variables, independent unit, and model/test fields.
 6. If the task is literature synthesis or theory without a data-analysis component, route to `science-research-topic` or `science-research-papers` unless the user explicitly wants an analysis plan.
 7. Before drafting the plan, run a data-availability / metric-feasibility pre-check:

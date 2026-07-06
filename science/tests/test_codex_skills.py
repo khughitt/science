@@ -165,20 +165,23 @@ def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> 
 
     assert "entities/questions/" in text
     assert "entities/hypotheses/" in text
-    assert "legacy specs/research-question.md only if it exists" in text
-    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "Read project context from current entity roots" in text
+    assert "legacy specs/research-question.md only if it exists" not in text
+    assert "legacy specs/scope-boundaries.md only if it exists" not in text
     assert "Read `specs/research-question.md` for project context" not in text
     assert "- `specs/research-question.md`" not in text
     assert "- `specs/scope-boundaries.md`" not in text
 
 
-def test_catalog_datasets_generated_skill_warns_about_legacy_metadata_backfill(tmp_path: Path) -> None:
+def test_catalog_datasets_generated_skill_warns_about_metadata_completion(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+    normalized = _norm(text)
 
-    assert "When connecting or backfilling legacy dataset entities" in text
-    assert "do not add `origin: external` by itself" in text
-    assert "set `license:` at the same time" in text
+    assert "Metadata completion" in text
+    assert "When connecting or backfilling legacy dataset entities" not in text
+    assert "do not add `origin: external` by itself" in normalized
+    assert "set `license:` at the same time" in normalized
     assert "`unknown` is acceptable" in text
     assert "source_class: derived" in text
     assert "dataset_usage" in text
@@ -201,7 +204,7 @@ def test_committed_find_datasets_skill_routes_durable_records_through_dataset_li
 
     assert "entities/questions/" in text
     assert "entities/hypotheses/" in text
-    assert "legacy specs/research-question.md only if it exists" in text
+    assert "legacy specs/research-question.md only if it exists" not in text
     assert "science datasets search" in text
     assert "science dataset add <slug>" in text
     assert "--level <public|registration|controlled|commercial|mixed>" in text
@@ -215,7 +218,8 @@ def test_committed_find_datasets_skill_routes_durable_records_through_dataset_li
     assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
     assert "--source-url \"<landing-page-or-download-url>\"" in text
     assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
-    assert "Direct template authoring is a fallback" in text
+    assert "If a needed field is not yet exposed by the CLI" in text
+    assert "Direct template authoring is a fallback" not in text
     assert "For each `Use now` or `Evaluate next` dataset, create a dataset note" not in text
     assert "--level <public|controlled|mixed>" not in text
     assert "--method <landing-confirmed|downloaded|manual-review>" not in text
@@ -276,10 +280,10 @@ def test_generated_plan_analysis_skill_discovers_legacy_doc_meta_pre_registratio
 
     assert "Pre-registration discovery" in text
     assert "entities/pre-registrations/" in text
-    assert "doc/meta/" in text
-    assert "docs/meta/" in text
-    assert "legacy `specs/` locations only if they exist" in text
-    assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
+    assert "doc/meta/" not in text
+    assert "docs/meta/" not in text
+    assert "legacy `specs/` locations only if they exist" not in text
+    assert "do not assume absence just because no task mentions one" in text
 
 
 def test_generated_plan_analysis_skill_requires_per_input_data_profile(
@@ -449,11 +453,12 @@ def test_create_graph_points_to_cookbook_for_new_entities() -> None:
     assert 'science entity create concept "<title>"' in text
 
 
-def test_update_graph_mentions_fix_on_touch_for_legacy_entities() -> None:
+def test_update_graph_mentions_fix_on_touch_for_non_canonical_entities() -> None:
     text = _read_skill("science-update-graph")
 
     assert "fix-on-touch" in text
-    assert "safe rename/xref addition" in text
+    assert "non-canonical entity IDs" in text
+    assert "rename/xref addition needed to move it toward canonical identity" in text
 
 
 def test_sync_mentions_scope_and_collision_warnings() -> None:

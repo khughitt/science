@@ -166,9 +166,9 @@ def test_entities_documents_project_local_concept_owner_files() -> None:
     assert "Project-local concepts use the same owner-file model as other durable entities." in normalized
     assert 'Use `science entity create concept "<title>"` when a `concept:*` ref needs to resolve in the graph' in normalized
     assert "For weak or temporary ideas, keep the mention in prose until it needs a graph identity." in normalized
-    assert "Aggregate entity manifests" in normalized
+    assert "Entity Owner Files" in normalized
+    assert "Do not create aggregate entity manifests" in normalized
     assert "`terms.yaml`" in normalized
-    assert "are retired" in normalized
 
 
 def test_epistemic_model_documents_inquiry_ref_ownership_contract() -> None:
