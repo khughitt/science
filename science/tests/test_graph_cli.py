@@ -23,6 +23,16 @@ BIOLINK = Namespace("https://w3id.org/biolink/vocab/")
 CITO = Namespace("http://purl.org/spar/cito/")
 
 
+def test_retired_writer_message_names_command_and_forward_path() -> None:
+    from science_tool.cli import _retired_writer
+
+    exc = _retired_writer("graph add concept", "Run `science entity create concept <title>`")
+    msg = str(exc)
+    assert "graph add concept is retired" in msg
+    assert "science entity create concept" in msg
+    assert "science graph build" in msg
+
+
 def test_graph_init_creates_trig_with_named_graphs() -> None:
     runner = CliRunner()
 

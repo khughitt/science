@@ -3016,6 +3016,10 @@ def _retired_mutator(slug: str) -> click.ClickException:
     )
 
 
+def _retired_writer(command: str, forward_path: str) -> click.ClickException:
+    return click.ClickException(f"{command} is retired. {forward_path}, then run `science graph build`.")
+
+
 def _ref_from_uri(value: str) -> str:
     """Best-effort reverse of entity_uri_for_ref for the import bridge."""
     from science_tool.graph.io import PROJECT_NS
