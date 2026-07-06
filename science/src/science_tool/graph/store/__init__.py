@@ -67,11 +67,6 @@ from .inquiry import (
     validate_inquiry,
     validate_inquiry_dataset,
 )
-from .mutations import (
-    add_article,
-    add_falsification,
-    add_story,
-)
 from .notebooks import _NOTEBOOKS_PYPROJECT, _copy_viz_notebook, _uv_lock
 from .queries import query_claims, query_evidence, query_neighborhood
 from .summary import (
@@ -180,9 +175,6 @@ __all__ = [
     "SCIC_NS",
     "SCI_NS",
     "VALID_INQUIRY_TYPES",
-    "add_article",
-    "add_falsification",
-    "add_story",
     "build_graph_dot",
     "canonical_id_from_entity_uri",
     "diff_graph_inputs",
