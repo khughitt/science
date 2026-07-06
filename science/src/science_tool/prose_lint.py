@@ -175,6 +175,14 @@ _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
 _CANONICAL_ID_SPAN_RE = re.compile(r"\b[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*\b")
 _CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
 _KNOWN_CELL_LINE_SHORT_FORMS: frozenset[str] = frozenset({"H929", "H1112", "H1634"})
+_BIOMED_TIMEPOINT_CONTEXT_RE = re.compile(
+    r"\b(sample|samples|timepoint|timepoints|day|days|collected|collection|baseline|post[-\s]?treatment)\b",
+    re.IGNORECASE,
+)
+_BIOMED_REAGENT_CONTEXT_RE = re.compile(
+    r"\b(histone|reagent|stain|stained|staining|blockade|inhibitor|perturbation|mark|methylation)\b",
+    re.IGNORECASE,
+)
 
 
 def _mask_wikilinks(line: str) -> str:
@@ -213,6 +221,19 @@ def _is_local_discussion_label(line: str, match: re.Match[str]) -> bool:
         return True
     preceding = line[max(0, match.start() - 16) : match.start()]
     return bool(re.search(r"(?:\b(?:task|tasks|domain|domains|section|appendix)\s|§)\s*$", preceding, re.IGNORECASE))
+
+
+def _is_biomedical_short_form_context(line: str, match: re.Match[str]) -> bool:
+    prefix = match.group(1)
+    number = match.group(2)
+    window = line[max(0, match.start() - 48) : min(len(line), match.end() + 48)]
+    if prefix == "D" and len(number) <= 2:
+        return bool(_BIOMED_TIMEPOINT_CONTEXT_RE.search(window))
+    if prefix == "H" and number in {"1", "2", "3", "4"}:
+        return bool(_BIOMED_REAGENT_CONTEXT_RE.search(window))
+    if prefix == "T" and len(number) <= 2:
+        return bool(_BIOMED_TIMEPOINT_CONTEXT_RE.search(window) or re.search(r"\bMRI\b", window))
+    return False
 
 
 def _utf8_byte_col(line: str, char_index: int) -> int:
@@ -337,6 +358,8 @@ def detect_short_form_ids(
             if _is_non_reference_h1_context(line, match):
                 continue
             if _is_local_discussion_label(line, match):
+                continue
+            if _is_biomedical_short_form_context(line, match):
                 continue
             if resolver and (short in resolver or short.lower() in resolver):
                 continue

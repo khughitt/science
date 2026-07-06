@@ -100,6 +100,31 @@ class ApplyResult:
         }
 
 
+@dataclass(frozen=True)
+class ApplyCheckResult:
+    report: Path
+    to_create: list[CreatePlan]
+    skipped_applied: list[str]
+    skipped_other: list[str]
+    manual: list[tuple[str, str]]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "report": str(self.report),
+            "to_create": [
+                {
+                    "candidate_id": plan.candidate_id,
+                    "kind": plan.kind,
+                    "title": plan.title,
+                }
+                for plan in self.to_create
+            ],
+            "skipped_applied": list(self.skipped_applied),
+            "skipped_other": list(self.skipped_other),
+            "manual": [{"candidate_id": candidate_id, "proposed_kind": kind} for candidate_id, kind in self.manual],
+        }
+
+
 def resolve_report_path(project_root: Path, from_value: str) -> Path:
     direct = Path(from_value)
     if direct.is_absolute():
@@ -455,6 +480,20 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
         skipped_other=plan.skipped_other,
         manual=plan.manual,
         failures=failures,
+    )
+
+
+def check_report(project_root: Path, from_value: str, model_id: str) -> ApplyCheckResult:
+    report_path = resolve_report_path(project_root, from_value)
+    blocks = parse_report(report_path.read_text(encoding="utf-8"))
+    ref_index = build_ref_index(load_index_rows(project_root))
+    plan = plan_report(blocks, model_id, ref_index=ref_index)
+    return ApplyCheckResult(
+        report=report_path,
+        to_create=plan.to_create,
+        skipped_applied=plan.skipped_applied,
+        skipped_other=plan.skipped_other,
+        manual=plan.manual,
     )
 
 

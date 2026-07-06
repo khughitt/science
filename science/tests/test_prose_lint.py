@@ -223,6 +223,18 @@ class TestShortFormIds:
         path = _write(tmp_path, "Task D1/D2 covers the first pass; see §D6 for the local section.\n")
         assert detect_short_form_ids(path) == []
 
+    def test_no_flag_biomedical_timepoint_and_reagent_tokens(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "D1 and D7 samples were collected after H3K27me3 reagent staining; H3 blockade was the perturbation.\n",
+        )
+        assert detect_short_form_ids(path) == []
+
+    def test_biomedical_exemptions_do_not_mask_graph_refs(self, tmp_path):
+        path = _write(tmp_path, "Per Q1 and h05, implement t088.\n")
+        issues = detect_short_form_ids(path)
+        assert [i.match for i in issues] == ["Q1", "h05", "t088"]
+
     def test_no_flag_embedded_short_form_inside_canonical_id(self, tmp_path):
         path = _write(tmp_path, "See report:0017-q93-h01-synthesis for the generated artifact.\n")
         assert detect_short_form_ids(path) == []
@@ -558,7 +570,7 @@ class TestScanRoot:
 
 class TestShortFormIdsDeny:
     def test_deny_list_suppresses_matching_token(self, tmp_path):
-        path = _write(tmp_path, "Cyclin D1 is upregulated. Histone H3 marks chromatin.\n")
+        path = _write(tmp_path, "Cyclin D1 is upregulated. See H3 for the project hypothesis.\n")
         # Without deny: both D1 and H3 are flagged
         issues_default = detect_short_form_ids(path)
         flagged = {i.message.split("'")[1] for i in issues_default}

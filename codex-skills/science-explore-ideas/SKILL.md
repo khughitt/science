@@ -116,6 +116,8 @@ generation pass this command exists to keep blind.
 
 - `--apply` — promote candidates marked `decision: keep` in a report to real
   entities.
+- `--check` — with `--apply`, validate and summarize the apply plan without
+  creating entities or writing back `decision: applied`.
 - `--from <report-path-or-id>` — **required** with `--apply`. If `--apply`
   is present without `--from`, STOP immediately with a clear error: this
   command never guesses "the latest report."
@@ -402,6 +404,16 @@ Run, from the project root:
 ```bash
 uv run science explore-ideas apply --from <report-path-or-id> --model-id <your-model-id>
 ```
+
+To validate through the same parser and apply validator before writing anything,
+run:
+
+```bash
+uv run science explore-ideas apply --from <report-path-or-id> --model-id <your-model-id> --check
+```
+
+Use `--format json` with `--check` when you need machine-readable planned
+creates, skipped blocks, and manual `topic`/`theme` blocks.
 
 - `<report-path-or-id>` is the `--from` value: a path to the report file, or the
   report id — its basename stem, e.g. `explore-2026-07-04` (the `explore-` prefix

@@ -18,6 +18,7 @@ from science_tool.explore_ideas import (
     CandidateBlock,
     apply_report,
     build_create_plan,
+    check_report,
     derive_lens_views,
     parse_report,
     plan_report,
@@ -783,6 +784,52 @@ def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
     }
 
 
+def test_check_report_validates_without_writing(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+    before = report.read_text(encoding="utf-8")
+
+    result = check_report(tmp_path, "explore-2026-07-04", "test-model")
+
+    assert result.report == report
+    assert [p.candidate_id for p in result.to_create] == [
+        "cand-mechanism-vagal-cytokine-loop",
+        "cand-methodology-retest-drift-threshold",
+    ]
+    assert result.skipped_other == ["cand-contrarian-null-effect"]
+    assert result.skipped_applied == []
+    assert result.manual == []
+    assert report.read_text(encoding="utf-8") == before
+    assert not list((tmp_path / "entities" / "questions").glob("*.md"))
+    assert not list((tmp_path / "entities" / "hypotheses").glob("*.md"))
+
+
+def test_check_report_to_dict_shape(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+
+    payload = check_report(tmp_path, "explore-2026-07-04", "test-model").to_dict()
+
+    assert payload == {
+        "report": str(report),
+        "to_create": [
+            {
+                "candidate_id": "cand-mechanism-vagal-cytokine-loop",
+                "kind": "question",
+                "title": "Vagal tone as a cytokine feedback regulator",
+            },
+            {
+                "candidate_id": "cand-methodology-retest-drift-threshold",
+                "kind": "hypothesis",
+                "title": "Retest interval drives apparent measurement drift",
+            },
+        ],
+        "skipped_applied": [],
+        "skipped_other": ["cand-contrarian-null-effect"],
+        "manual": [],
+    }
+
+
 _TWO_KEEP = """\
 ---
 kind: meta
@@ -952,6 +999,55 @@ def test_cli_apply_json_format() -> None:
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
         assert len(payload["created"]) == 2
+        assert payload["skipped_other"] == ["cand-contrarian-null-effect"]
+
+
+def test_cli_apply_check_text_does_not_write() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        report = _write_fixture(root)
+        before = report.read_text(encoding="utf-8")
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "test-model", "--check"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "2 would create" in result.output
+        assert "would create cand-mechanism-vagal-cytokine-loop (question)" in result.output
+        assert "1 deferred/dropped" in result.output
+        assert report.read_text(encoding="utf-8") == before
+        assert not list((root / "entities" / "questions").glob("*.md"))
+        assert not list((root / "entities" / "hypotheses").glob("*.md"))
+
+
+def test_cli_apply_check_json_format() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        result = runner.invoke(
+            main,
+            [
+                "explore-ideas",
+                "apply",
+                "--from",
+                "explore-2026-07-04",
+                "--model-id",
+                "m",
+                "--check",
+                "--format",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert [row["candidate_id"] for row in payload["to_create"]] == [
+            "cand-mechanism-vagal-cytokine-loop",
+            "cand-methodology-retest-drift-threshold",
+        ]
         assert payload["skipped_other"] == ["cand-contrarian-null-effect"]
 
 

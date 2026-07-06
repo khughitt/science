@@ -49,6 +49,7 @@ from science_tool.explore_ideas import (
     ApplyWriteBackError,
     apply_report,
     backfill_lens_views,
+    check_report,
 )
 from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
@@ -1170,6 +1171,7 @@ def explore_ideas_group() -> None:
 @explore_ideas_group.command("apply")
 @click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
 @click.option("--model-id", "model_id", required=True, help="Model id for the --added-by provenance stamp.")
+@click.option("--check", "check_only", is_flag=True, help="Validate and summarize the apply plan without writing.")
 @click.option(
     "--format",
     "output_format",
@@ -1177,9 +1179,29 @@ def explore_ideas_group() -> None:
     default="text",
     show_default=True,
 )
-def explore_ideas_apply(from_value: str, model_id: str, output_format: str) -> None:
+def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output_format: str) -> None:
     """Apply kept candidates from an exploration report to real entities."""
     try:
+        if check_only:
+            check_result = check_report(Path.cwd(), from_value, model_id)
+            if output_format == "json":
+                click.echo(json.dumps(check_result.to_dict(), indent=2))
+            else:
+                click.echo(
+                    f"{len(check_result.to_create)} would create, "
+                    f"{len(check_result.skipped_applied)} already applied, "
+                    f"{len(check_result.skipped_other)} deferred/dropped, "
+                    f"{len(check_result.manual)} to apply manually"
+                )
+                for plan in check_result.to_create:
+                    click.echo(f"  would create {plan.candidate_id} ({plan.kind})")
+                for candidate_id in check_result.skipped_applied:
+                    click.echo(f"  already applied: {candidate_id}")
+                for candidate_id in check_result.skipped_other:
+                    click.echo(f"  skipped drop/defer: {candidate_id}")
+                for candidate_id, kind in check_result.manual:
+                    click.echo(f"  apply manually ({kind}): {candidate_id}")
+            return
         result = apply_report(Path.cwd(), from_value, model_id, date.today())
     except (ApplyValidationError, ApplyWriteBackError) as exc:
         raise click.ClickException(str(exc)) from exc

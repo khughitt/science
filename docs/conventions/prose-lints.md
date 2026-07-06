@@ -27,6 +27,7 @@ All four lints respect the same scope rules as `science markers scan`:
 - Treats comma-grouped numerics as one claim token (for example, `5,424`, not `424`).
 - Skips numeric fragments embedded in DOI/accession-style identifiers (for example, `10.1038/s41586-021-03836-1`, `PMID:24390350`, or `t070`).
 - Skips common cell-line tokens that collide with uppercase short-form IDs (for example, `H929`).
+- Skips biomedical timepoint/reagent shorthand in local context (for example, `D1`/`D7` samples or histone/reagent `H3` language).
 - Skips task-list headers of the shape `## [t088] Title` for the short-form-ids check.
 
 ## Project config
