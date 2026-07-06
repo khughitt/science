@@ -106,19 +106,36 @@ After 3a, `EXPECTED_DEFERRED_WRITERS` = exactly these 4.
 
 ## 6. Retirement mechanics
 
-1. **CLI subcommands stay, bodies raise.** Each live `graph add <kind>` (and the
-   three Tier-3 commands) becomes `raise _retired_mutator(...)` with a
-   kind-specific forward-path hint. Users get an actionable error, not an unknown
-   command.
-2. **Delete the 14 functions** from `mutations.py` / `snapshot.py`, plus helpers
+1. **Generic retirement-error helper.** The existing `_retired_mutator(slug)`
+   (`cli.py`) is inquiry-specific — it hard-codes
+   `Edit entities/patches/{slug}.md`. Add a generic helper, e.g.
+   `_retired_writer(command: str, forward_path: str) -> click.ClickException`,
+   that emits `"<command> is retired. <forward_path>, then run `science graph
+   build`."`. Each retired command raises it with its own forward-path hint
+   (`entity create concept`, `relations:` authoring, etc.). The inquiry-specific
+   `_retired_mutator` stays for Phase 1's inquiry commands (or is refactored to
+   delegate to `_retired_writer`).
+2. **CLI subcommands stay, bodies raise — and obsolete arg validation is
+   relaxed.** Each live `graph add <kind>` and the three Tier-3 commands keep
+   their names but their bodies `raise _retired_writer(...)`. Click validates
+   arguments/options **before** the body runs, so any now-obsolete validation
+   would preempt the retirement message: e.g. `graph import` declares
+   `click.argument("snapshot_path", type=click.Path(exists=True))`
+   (`cli.py:2309`), so `graph import missing.ttl` fails Click path-validation
+   instead of showing the guidance. For every retired command, strip obsolete
+   validation and requirements — drop `exists=True`, make formerly-required
+   arguments optional (`required=False` / `nargs=-1`), and remove now-defunct
+   `type=click.Choice(...)` / mutually-required options — so the body is always
+   reached and the retirement guidance always surfaces regardless of arguments.
+3. **Delete the 14 functions** from `mutations.py` / `snapshot.py`, plus helpers
    that become dead: `_attach_edge_claims` (add_edge-only), and
    `_warn_on_relation_direction_mismatch` **iff** verified unused by
    authored-relation compilation (`graph/sources.py` / `materialize.py`).
-3. **Same-commit re-export prune.** Remove every retired name from
+4. **Same-commit re-export prune.** Remove every retired name from
    `graph/__init__.py` `__all__` + import block, `graph/store/__init__.py` import
    block, and the `cli.py` top-level imports. The exported surface never lists a
    missing symbol.
-4. **External-importer preflight** (parent §6): grep `~/d/science-commons`,
+5. **External-importer preflight** (parent §6): grep `~/d/science-commons`,
    `meta/`, and any `import science_tool` consumer for the 14 names before
    deletion. Product surface is the `science` CLI, not the package; expect a
    clean internal-API removal.
@@ -128,11 +145,21 @@ After 3a, `EXPECTED_DEFERRED_WRITERS` = exactly these 4.
 Retirement must point to a real authoring path. `proposition`, `finding`,
 `interpretation`, `discussion`, `hypothesis`, `question`, and `evidence-line` are
 already `entity create`-scaffoldable (`template_ready`). `concept`,
-`observation`, and `mechanism` are compiler-loadable but template-less. Add three
-minimal templates (`templates/concept.md`, `templates/observation.md`,
-`templates/mechanism.md`) and mark the kinds `template_ready` so every retired
-`graph add X` has a symmetric `entity create X`. `add_edge` points to `relations:`
-authoring (no scaffold — relations are not an entity kind).
+`observation`, and `mechanism` are compiler-loadable but template-less.
+
+Add three minimal templates so every retired `graph add X` has a symmetric
+`entity create X`. **Location matters:** `Renderer._read_template`
+(`science_model/templates.py`) loads the **packaged** resource
+`science_model/templates/<kind>.md` when no `template_root` override is given —
+i.e. `science entity create <kind>` reads the *packaged* copy, not the repo-root
+`templates/`. So the authoritative files are
+`science/model/src/science_model/templates/{concept,observation,mechanism}.md`;
+mirror them into repo-root `templates/` per the existing root↔packaged template
+mirror convention, and the plan must assert both copies stay byte-identical.
+Mark the three kinds `template_ready` in `CORE_PROFILE` and add them to
+`MIGRATED_KINDS`, satisfying the descriptor reconciliation gate in the same
+change. `add_edge` points to `relations:` authoring (no scaffold — relations are
+not an entity kind).
 
 ## 8. Test-migration strategy
 
@@ -152,16 +179,19 @@ against the honestly-compiled graph — the same path users take.
 
 Migrate off the deleted functions: `test_causal.py` (heavy `add_edge` /
 `add_concept`, incl. `scic:causes` into `graph/causal` → `relations:` with
-`graph_layer: graph/causal`), `test_graph_export.py`,
-`test_layered_claim_migration.py`, `test_provenance_evidence.py`,
-`test_membership_bridge.py`, `test_meta_reference.py`, `test_inquiry.py`,
-`test_graph_materialize.py`.
+`graph_layer: graph/causal`), `test_paper_model.py` (`add_finding`,
+`add_hypothesis`, `add_interpretation`, `add_observation`, `add_proposition`),
+`test_graph_export.py`, `test_layered_claim_migration.py`,
+`test_provenance_evidence.py`, `test_membership_bridge.py`,
+`test_meta_reference.py`, `test_inquiry.py`, `test_graph_materialize.py`.
 
-**Mixed clean+deferred files:** where a file also uses a *deferred* mutator
-(e.g. `test_causal` imports `add_falsification`; `test_paper_model` uses
-`add_story`/`add_paper_entity`), 3a migrates only the clean-mutator usage and
-leaves the deferred imports intact — those functions still exist and stay in the
-ledger until 3b. `test_paper_model` uses only deferred kinds → untouched in 3a.
+**Mixed clean+deferred files:** several files import both retiring-clean and
+deferred mutators — `test_causal` (also `add_falsification`) and
+`test_paper_model` (also `add_paper_entity`, `add_story`). 3a migrates only the
+clean-mutator usage in these files and leaves the deferred imports intact — those
+functions still exist and stay in the ledger until 3b. There is **no**
+deferred-only test file that 3a can skip entirely; every file importing a
+retiring-clean mutator is in scope.
 
 ### CLI-invocation tests (`CliRunner`)
 
@@ -201,9 +231,14 @@ Mirror Phase 1's proof discipline:
   add_falsification, add_story, add_paper_entity}`.
 - The 14 functions are deleted; no removed name remains in any `__all__` / import
   block / `cli.py` import.
-- Every retired `graph add X` (and the 3 Tier-3 commands) raises
-  `_retired_mutator` with a working forward path; `concept`/`observation`/
-  `mechanism` have `entity create` templates.
+- Every retired `graph add X` (and the 3 Tier-3 commands) raises the generic
+  `_retired_writer` with a working forward path, and surfaces that guidance
+  **regardless of arguments** (obsolete Click validation relaxed — e.g.
+  `graph import missing.ttl` shows the message, not a path error).
+- `science entity create concept|observation|mechanism` succeeds from the
+  **packaged** `science_model/templates/<kind>.md`; the packaged and repo-root
+  `templates/` copies are byte-identical, and the descriptor reconciliation gate
+  passes with the three kinds `template_ready` / in `MIGRATED_KINDS`.
 - The migrated test files build state through `build_entity_graph` / authored
   relations, with assertions preserved (or deleted-with-pointer).
 - Compiled `graph.trig` byte-identical across the phase for equivalent source.
