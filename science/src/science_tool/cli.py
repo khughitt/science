@@ -2321,14 +2321,6 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
 
 
 PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
-EVIDENCE_TYPES = (
-    "literature_evidence",
-    "empirical_data_evidence",
-    "simulation_evidence",
-    "benchmark_evidence",
-    "expert_judgment",
-    "negative_result",
-)
 
 
 @graph.group("add")
