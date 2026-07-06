@@ -52,6 +52,7 @@ CANONICAL_CHECK_MODULES = (
     "dataset_acquisition",
     "dataset_metadata",
     "dataset_capabilities",
+    "aggregation_support",
     "benchmark_metadata",
     "dataset_lineage",
     "dataset_promotion_contract",
