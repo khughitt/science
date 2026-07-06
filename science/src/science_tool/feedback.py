@@ -297,14 +297,19 @@ def cluster_for_triage(
         cluster.tokens |= tokens
 
     rows = [_cluster_row(cluster) for cluster in clusters]
-    rows.sort(
-        key=lambda row: (
-            -int(row["total_recurrence"]),
-            -int(row["count"]),
+    def sort_key(row: dict[str, object]) -> tuple[int, int, str, str]:
+        total_recurrence = row["total_recurrence"]
+        count = row["count"]
+        if not isinstance(total_recurrence, int) or not isinstance(count, int):
+            raise TypeError("feedback cluster row count fields must be integers")
+        return (
+            -total_recurrence,
+            -count,
             str(row["target"]),
             str(row["summary_key"]),
         )
-    )
+
+    rows.sort(key=sort_key)
     return rows
 
 

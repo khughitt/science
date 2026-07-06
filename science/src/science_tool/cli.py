@@ -5570,7 +5570,7 @@ def _format_count_map(counts: Mapping[str, int]) -> str:
     return _format_count_rows(rows, key="key") if rows else "-"
 
 
-def _format_share_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+def _format_share_rows(rows: Sequence[Mapping[str, Any]], *, key: str) -> str:
     values = [f"{row[key]}:{row['count']} ({row['share']})" for row in rows]
     return ", ".join(values) if values else "-"
 
@@ -6144,7 +6144,7 @@ def _format_hint_candidate_count(row: Mapping[str, Any]) -> str:
     return "-" if count is None else str(count)
 
 
-def _hint_candidate_table_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+def _hint_candidate_table_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [row for row in rows if row["category"] == "domain-candidate"]
 
 

@@ -142,11 +142,12 @@ def _identity_status(identity_context: dict[str, Any]) -> str:
         statuses.append(assembly["resolution_status"])
     molecular_ids = identity_context.get("molecular_ids")
     if isinstance(molecular_ids, dict):
-        statuses.extend(
-            decl.get("resolution_status")
-            for decl in molecular_ids.values()
-            if isinstance(decl, dict) and isinstance(decl.get("resolution_status"), str)
-        )
+        for decl in molecular_ids.values():
+            if not isinstance(decl, dict):
+                continue
+            resolution_status = decl.get("resolution_status")
+            if isinstance(resolution_status, str):
+                statuses.append(resolution_status)
     if "declared_unresolved" in statuses:
         return "declared_unresolved"
     if statuses and all(status == "resolved" for status in statuses):
