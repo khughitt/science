@@ -44,24 +44,7 @@ def _warnings(results: Iterable[Result]) -> list[str]:
     return [r.message for r in results if r.severity is Severity.WARN]
 
 
-def test_free_text_paper_dataset_warns(tmp_path: Path) -> None:
-    """A free-text paper datasets entry must warn that it blocks commons promotion.
-
-    Regression for fb-2026-05-29-006: free-text 'datasets:' values only failed at
-    'commons promote --apply' (after summaries were written); the canonical paper
-    schema requires 'dataset:'-prefixed refs. validate now flags it earlier.
-    """
-    from science_tool.validate.checks.papers import check_papers
-
-    _write_paper(tmp_path, "Smith2025", ["GSE12345 (RNA-seq cohort)"])
-
-    warnings = _warnings(check_papers(_ctx(tmp_path)))
-    assert len(warnings) == 1
-    assert "Smith2025" in warnings[0]
-    assert "GSE12345 (RNA-seq cohort)" in warnings[0]
-
-
-def test_dataset_ref_paper_does_not_warn(tmp_path: Path) -> None:
+def test_paper_datasets_are_not_checked_by_paper_summary_check(tmp_path: Path) -> None:
     from science_tool.validate.checks.papers import check_papers
 
     _write_paper(tmp_path, "Jones2025", ["dataset:geo-gse12345"])

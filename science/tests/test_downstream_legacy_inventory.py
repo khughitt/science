@@ -77,6 +77,19 @@ def test_legacy_scan_reports_precise_project_surfaces(tmp_path: Path) -> None:
         This is not a paper alias.
         """,
     )
+    _write(
+        project / "entities" / "papers" / "paper.md",
+        """
+        ---
+        kind: paper
+        id: paper:legacy-datasets
+        title: Paper with retired datasets field
+        datasets:
+          - dataset:example
+        ---
+        This should be reported as a retired paper surface.
+        """,
+    )
     _write(project / "tasks" / "active.md", "- status: retired\n")
     _write(project / "workflow" / "graph.edges.yaml", "edges: []\n")
     _write(project / "knowledge" / "sources" / "local" / "entities.yaml", "[]\n")
@@ -89,6 +102,7 @@ def test_legacy_scan_reports_precise_project_surfaces(tmp_path: Path) -> None:
         "bare_profiles_config": 1,
         "legacy_entity_roots": 1,
         "legacy_marker_alias": 1,
+        "legacy_paper_datasets": 1,
         "parent_children_config": 1,
         "retired_edges_yaml": 1,
         "scalar_access": 1,
@@ -97,6 +111,7 @@ def test_legacy_scan_reports_precise_project_surfaces(tmp_path: Path) -> None:
     }
     assert result.paths_for("article_prefix_alias") == ["doc/findings/f001.md"]
     assert result.paths_for("legacy_entity_roots") == ["doc/findings/f001.md"]
+    assert result.paths_for("legacy_paper_datasets") == ["entities/papers/paper.md"]
     assert "entities/articles/article.md" not in result.paths_for("article_prefix_alias")
 
 

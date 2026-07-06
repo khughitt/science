@@ -4,8 +4,6 @@ import importlib
 from pathlib import Path
 
 import pytest
-
-from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
@@ -112,113 +110,18 @@ def test_malformed_dataset_usage_errors() -> None:
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
 
 
-def test_paper_datasets_invalid_entry_errors() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [_fm(datasets=["paper:Other"])],
-            dataset_ref_status={},
-            row_usage_refs=[],
-        )
-    )
-
-    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
-
-
-def test_paper_datasets_bare_alias_errors_even_when_canonicalizer_resolves() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [_fm(datasets=["gtex"])],
-            dataset_ref_status={"dataset:gtex-v8": "resolved"},
-            row_usage_refs=[],
-            canonicalize_dataset_ref=lambda ref: "dataset:gtex-v8" if ref == "gtex" else ref,
-        )
-    )
-
-    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
-
-
-def test_paper_datasets_empty_mapping_errors() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [_fm(datasets={})],
-            dataset_ref_status={},
-            row_usage_refs=[],
-        )
-    )
-
-    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
-
-
-def test_paper_datasets_empty_string_errors() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [_fm(datasets="")],
-            dataset_ref_status={},
-            row_usage_refs=[],
-        )
-    )
-
-    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
-
-
-def test_legacy_paper_datasets_warns_when_not_equivalent() -> None:
+def test_paper_datasets_field_errors() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
     results = list(
         evaluate_dataset_influence(
             [_fm(datasets=["dataset:gtex-v8"])],
-            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            dataset_ref_status={},
             row_usage_refs=[],
         )
     )
 
-    assert _rules(results) == [(Severity.WARN, "dataset-influence.paper-datasets-legacy")]
-
-
-def test_paper_datasets_conflict_warns_and_explicit_wins() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [
-                _fm(
-                    datasets=["dataset:gtex-v8"],
-                    dataset_usage=[{"ref": "dataset:gtex-v8", "role": "cited"}],
-                )
-            ],
-            dataset_ref_status={"dataset:gtex-v8": "resolved"},
-            row_usage_refs=[],
-        )
-    )
-
-    assert _rules(results) == [(Severity.WARN, "dataset-influence.paper-datasets-conflict")]
-
-
-def test_paper_datasets_analyzed_full_is_refinement_not_conflict() -> None:
-    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
-
-    results = list(
-        evaluate_dataset_influence(
-            [
-                _fm(
-                    datasets=["dataset:gtex-v8"],
-                    dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}],
-                )
-            ],
-            dataset_ref_status={"dataset:gtex-v8": "resolved"},
-            row_usage_refs=[],
-        )
-    )
-
-    assert results == []
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-retired")]
 
 
 def test_dataset_usage_reference_role_is_valid_non_dependence() -> None:
@@ -382,7 +285,7 @@ def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
 
 
-def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
+def test_check_dataset_influence_paper_datasets_field_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
@@ -402,7 +305,7 @@ def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
-    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-retired")]
 
 
 def test_check_dataset_influence_uses_manual_aliases_for_dataset_usage_refs(
@@ -454,7 +357,7 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.ref-not-dataset")]
 
 
-def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
+def test_check_dataset_influence_paper_datasets_does_not_resolve_aliases(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
@@ -476,10 +379,7 @@ def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
-    assert _rules(results) == [
-        (Severity.WARN, "dataset-influence.paper-datasets-legacy"),
-        (Severity.ERROR, "dataset-influence.ref-not-dataset"),
-    ]
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-retired")]
 
 
 def test_check_dataset_influence_derivation_input_alias_to_non_dataset_errors(
@@ -816,12 +716,3 @@ def test_non_dependence_role_with_omitted_overlap_does_not_warn(role: str) -> No
     rule_pairs = _rules(results)
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
 
-
-def test_role_conflict_true_when_not_analyzed():
-    assert is_paper_dataset_role_conflict({"role": "compared"}) is True
-    assert is_paper_dataset_role_conflict({}) is True
-
-
-def test_role_conflict_false_when_analyzed():
-    assert is_paper_dataset_role_conflict({"role": "analyzed"}) is False
-    assert is_paper_dataset_role_conflict({"role": "analyzed", "overlap": "full"}) is False

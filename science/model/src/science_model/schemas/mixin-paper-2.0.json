@@ -24,11 +24,6 @@
     "pmcid": {"type": "string"},
     "arxiv": {"type": "string"},
     "url": {"type": "string"},
-    "datasets": {
-      "type": "array",
-      "items": {"type": "string", "pattern": "^dataset:"},
-      "science:merge": "append"
-    },
     "key_findings": {"type": "array", "items": {"type": "string"}},
     "methods_summary": {"type": "string"},
     "limitations": {"type": "array", "items": {"type": "string"}},

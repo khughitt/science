@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: F401
+
 from .constants import (
     _RELATION_KIND_BY_PREDICATE,
     BIOLINK_NS,
@@ -86,7 +88,6 @@ from .mutations import (
     add_proposition,
     add_question,
     add_story,
-    migrate_addresses_direction,
 )
 from .notebooks import _NOTEBOOKS_PYPROJECT, _copy_viz_notebook, _uv_lock
 from .queries import query_claims, query_evidence, query_neighborhood

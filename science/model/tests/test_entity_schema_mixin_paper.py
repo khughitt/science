@@ -38,7 +38,7 @@ def test_paper_with_rich_fields_validates(base_entity: dict) -> None:
         "journal": "Nature Methods",
         "doi": "10.1038/x.y.z",
         "url": "https://example.org/Adams2025",
-        "datasets": ["dataset:cath-domains"],
+        "dataset_usage": [{"ref": "dataset:cath-domains", "role": "analyzed"}],
         "key_findings": ["finding 1", "finding 2"],
         "methods_summary": "They used method X.",
         "limitations": ["small sample"],
@@ -80,18 +80,13 @@ def test_paper_year_rejects_non_integer(base_entity: dict) -> None:
         EntityValidator().validate(entity)
 
 
-def test_paper_datasets_must_be_dataset_refs(base_entity: dict) -> None:
-    entity = base_entity | {"datasets": ["paper:OtherThing"]}
-    with pytest.raises(EntityValidationError):
-        EntityValidator().validate(entity)
-
-
 def test_mixin_paper_2_0_schema_loads():
     raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
     schema = json.loads(raw)
     assert schema["$id"].endswith("mixin-paper-2.0.json")
     assert "venue" in schema["properties"]
     assert "journal" not in schema["properties"]
+    assert "datasets" not in schema["properties"]
 
 
 def test_mixin_paper_2_0_bibkey_regex_permits_hyphens():
@@ -139,5 +134,4 @@ def test_mixin_paper_2_0_merge_policy_overrides_base_for_created_updated_status(
     assert policy["title"] == MergePolicy.REPLACE
     assert policy["authors"] == MergePolicy.REPLACE
     assert policy["year"] == MergePolicy.REPLACE
-    # datasets is paper's own override → append:
-    assert policy["datasets"] == MergePolicy.APPEND
+    assert "datasets" not in policy

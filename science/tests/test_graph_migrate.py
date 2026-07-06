@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
@@ -193,55 +192,6 @@ Body.
     assert "science commons promote dataset --slug does-not-exist --from <project>" in bad["details"]
 
 
-def test_audit_paper_datasets_bare_freetext_is_descriptive(tmp_path: Path) -> None:
-    """A paper's `datasets:` field is descriptive provenance: bare free-text names
-    (e.g. "UniRef50") are NOT structural dataset references and must not produce
-    audit failures. An explicit `dataset:<slug>` ref in the same field still resolves
-    (and still fails when the dataset entity is absent)."""
-    project = tmp_path / "project"
-    project.mkdir()
-    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
-    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
-    manifest_path.parent.mkdir(parents=True)
-    manifest_path.write_text("", encoding="utf-8")
-    paper_path = project / "entities" / "papers" / "Adams2025.md"
-    paper_path.parent.mkdir(parents=True)
-    paper_path.write_text(
-        """---
-id: "paper:Adams2025"
-kind: "paper"
-title: "A paper that uses several datasets"
-status: "active"
-datasets:
-  - UniRef50
-  - Swiss-Prot
-  - TAPE (secondary structure)
-  - "dataset:does-not-exist"
-source_refs: []
-created: "2026-04-23"
-updated: "2026-04-23"
----
-
-Body.
-""",
-        encoding="utf-8",
-    )
-
-    sources = load_project_sources(project)
-    rows, _ = audit_project_sources(sources)
-
-    dataset_field_fails = [
-        row for row in rows if row.get("field") == "datasets" and row.get("status") == "fail"
-    ]
-    bad_targets = {row["target"] for row in dataset_field_fails}
-    # Bare free-text names are descriptive, not references → no failure rows.
-    assert "UniRef50" not in bad_targets
-    assert "Swiss-Prot" not in bad_targets
-    assert "TAPE (secondary structure)" not in bad_targets
-    # An explicit dataset: ref still audits and fails when absent.
-    assert "dataset:does-not-exist" in bad_targets
-
-
 def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
@@ -287,66 +237,14 @@ def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
     return paper
 
 
-def test_graph_migrate_paper_datasets_dry_run_json_exit_10_for_pending(tmp_path: Path) -> None:
+def test_graph_migrate_paper_datasets_command_is_retired(tmp_path: Path) -> None:
     root = tmp_path / "project"
-    paper = _write_paper_dataset_project(root)
+    _write_paper_dataset_project(root)
 
     result = CliRunner().invoke(
         main,
         ["graph", "migrate-paper-datasets", "--project-root", str(root), "--format", "json"],
     )
 
-    assert result.exit_code == 10
-    payload = json.loads(result.output)
-    assert payload["apply"] is False
-    assert payload["changed_files"] == [str(paper)]
-    assert payload["conflict_count"] == 0
-    assert "datasets:" in paper.read_text(encoding="utf-8")
-
-
-def test_graph_migrate_paper_datasets_apply_rewrites_and_exits_zero(tmp_path: Path) -> None:
-    root = tmp_path / "project"
-    paper = _write_paper_dataset_project(root)
-
-    result = CliRunner().invoke(
-        main,
-        ["graph", "migrate-paper-datasets", "--project-root", str(root), "--format", "json", "--apply"],
-    )
-
-    assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["apply"] is True
-    assert payload["changed_files"] == [str(paper)]
-    text = paper.read_text(encoding="utf-8")
-    assert "datasets:" not in text
-    assert "dataset_usage:" in text
-
-
-def test_graph_migrate_paper_datasets_conflict_exits_20_and_leaves_file(tmp_path: Path) -> None:
-    root = tmp_path / "project"
-    paper = _write_paper_dataset_project(root, conflict=True)
-    original = paper.read_text(encoding="utf-8")
-
-    result = CliRunner().invoke(
-        main,
-        ["graph", "migrate-paper-datasets", "--project-root", str(root), "--format", "json", "--apply"],
-    )
-
-    assert result.exit_code == 20
-    payload = json.loads(result.output)
-    assert payload["conflicts"][0]["reason"] == "role-conflict"
-    assert paper.read_text(encoding="utf-8") == original
-
-
-def test_graph_migrate_paper_datasets_table_mentions_mode_and_conflicts(tmp_path: Path) -> None:
-    root = tmp_path / "project"
-    _write_paper_dataset_project(root, conflict=True)
-
-    result = CliRunner().invoke(
-        main,
-        ["graph", "migrate-paper-datasets", "--project-root", str(root), "--format", "table"],
-    )
-
-    assert result.exit_code == 20
-    assert "Paper Dataset Migration" in result.output
-    assert "role-conflict" in result.output
+    assert result.exit_code != 0
+    assert "No such command" in result.output

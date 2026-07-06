@@ -421,20 +421,22 @@ Run dataset, graph materialization, and CLI tests.
 ## Task 9: Remaining One-Shot Migration Surfaces
 
 **Files:**
-- `science/src/science_tool/graph/migrate.py`
-- `science/src/science_tool/graph/paper_dataset_migration.py`
-- related CLI commands and materialize migration flags
+- `science/src/science_tool/graph/paper_dataset_migration.py` (deleted)
+- `science/src/science_tool/graph/store/mutations.py:migrate_addresses_direction` (deleted)
+- related CLI commands (`graph migrate-addresses`, `graph migrate-paper-datasets`)
 
-- [ ] **Step 1: Inventory one-shot inputs**
+- [x] **Step 1: Inventory one-shot inputs**
 
 Use the downstream scanner to identify project data that still requires each
-one-shot migration.
+one-shot migration. Active one-shot inputs were retired paper `datasets` fields
+and anti-canonical `sci:addresses` triples. `graph/migrate.py` was reviewed and
+kept as an audit helper.
 
-- [ ] **Step 2: Run each migration**
+- [x] **Step 2: Run each migration**
 
 Run the one-shot migrator for every project with hits.
 
-- [ ] **Step 3: Gate and remove**
+- [x] **Step 3: Gate and remove**
 
 For each one-shot surface, delete only after its own zero-hit report **and**
 confirmation that each migrated project still builds under `science validate` /

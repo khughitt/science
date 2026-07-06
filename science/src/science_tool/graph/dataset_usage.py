@@ -18,7 +18,6 @@ from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 UsageSource = Literal[
     "authored",
-    "paper.datasets",
     "derivation.inputs",
     "derivation.transformations",
     "geneset.members_resource",
@@ -78,27 +77,10 @@ def usage_records_for_entity(
             )
         )
 
-    if entity.kind == "paper":
-        for raw_ref in getattr(entity, "datasets", []) or []:
-            raw_ref = str(raw_ref)
-            if not raw_ref.startswith("dataset:"):
-                raise DatasetUsageMaterializationError(
-                    f"{entity.canonical_id}: paper.datasets entry {raw_ref!r} is not a dataset reference"
-                )
-            dataset_ref = _canonical_dataset_ref(raw_ref, resolve_dataset_ref)
-            if dataset_ref in materialized_refs:
-                continue
-            materialized_refs.add(dataset_ref)
-            records.append(
-                DatasetUsageRecord(
-                    consumer_id=entity.canonical_id,
-                    dataset_ref=dataset_ref,
-                    role="analyzed",
-                    overlap="unknown",
-                    source="paper.datasets",
-                    source_path=source_path,
-                )
-            )
+    if entity.kind == "paper" and getattr(entity, "datasets", None):
+        raise DatasetUsageMaterializationError(
+            f"{entity.canonical_id}: paper.datasets is retired; use dataset_usage entries instead"
+        )
 
     derivation = getattr(entity, "derivation", None)
     if entity.kind == "dataset" and isinstance(derivation, DerivationBlock):

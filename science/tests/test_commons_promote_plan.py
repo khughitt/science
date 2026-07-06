@@ -192,11 +192,13 @@ def test_merge_canonical_fields_emits_conflict_on_differing_values() -> None:
 
 
 def test_merge_canonical_fields_append_unions_deterministically() -> None:
-    a = _merge_cand("A", {"ontology_terms": ["foo", "bar"], "datasets": ["dataset:d1"]})
-    b = _merge_cand("B", {"ontology_terms": ["bar", "baz"], "datasets": ["dataset:d2", "dataset:d1"]})
+    usage_a = {"ref": "dataset:d1", "role": "primary"}
+    usage_b = {"ref": "dataset:d2", "role": "validation"}
+    a = _merge_cand("A", {"ontology_terms": ["foo", "bar"], "dataset_usage": [usage_a]})
+    b = _merge_cand("B", {"ontology_terms": ["bar", "baz"], "dataset_usage": [usage_b, usage_a]})
     merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
     assert merged["ontology_terms"] == ["bar", "baz", "foo"]
-    assert merged["datasets"] == ["dataset:d1", "dataset:d2"]
+    assert merged["dataset_usage"] == [usage_a, usage_b]
     assert conflicts == []
 
 
