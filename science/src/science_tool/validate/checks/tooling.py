@@ -49,7 +49,16 @@ def check_tooling(ctx: ValidateContext) -> Iterator[Result]:
         )
         return
 
-    env_lines = ctx.read_text_cached(env_path).splitlines()
+    try:
+        env_lines = ctx.read_text_cached(env_path).splitlines()
+    except OSError as exc:
+        yield _result(
+            Severity.WARN,
+            ".env",
+            f".env exists but could not be inspected; skipping secret file contents: {exc}",
+        )
+        return
+
     if not any(line.startswith("SCIENCE_TOOL_PATH=") for line in env_lines):
         yield _result(
             Severity.WARN,

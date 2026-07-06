@@ -127,6 +127,30 @@ def test_tooling_warns_when_env_lacks_science_tool_path(tmp_path: Path) -> None:
     ) in [(result.severity, result.message) for result in results]
 
 
+def test_tooling_warns_when_env_cannot_be_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.validate.checks.tooling import check_tooling
+
+    ctx = _ctx(tmp_path)
+    tmp_path.joinpath(".env").write_text("SCIENCE_TOOL_PATH=/tmp/science\n", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def fake_read_text(self: Path, *args, **kwargs):
+        if self.name == ".env":
+            raise PermissionError("simulated denied .env")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+    results = list(check_tooling(ctx))
+
+    assert (
+        Severity.WARN,
+        ".env exists but could not be inspected; skipping secret file contents: simulated denied .env",
+    ) in [(result.severity, result.message) for result in results]
+    assert not any(result.rule == "validate.check-error" for result in results)
+
+
 def test_manifest_reports_missing_required_fields_and_bad_knowledge_profiles(tmp_path: Path) -> None:
     from science_tool.validate.checks.manifest import check_manifest
 
