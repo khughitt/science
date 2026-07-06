@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from conftest import build_inquiry_graph
+from conftest import build_entity_graph, build_inquiry_graph
 from rdflib import Dataset, Literal
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
@@ -21,6 +21,33 @@ SCI = Namespace("http://example.org/science/vocab/")
 SCHEMA = Namespace("https://schema.org/")
 BIOLINK = Namespace("https://w3id.org/biolink/vocab/")
 CITO = Namespace("http://purl.org/spar/cito/")
+
+
+def _entity(kind: str, entity_id: str, title: str, **frontmatter: object) -> dict:
+    return {
+        "kind": kind,
+        "id": entity_id,
+        "frontmatter": {"title": title, **frontmatter},
+        "body": f"{title}\n",
+    }
+
+
+def _evidence_line(
+    entity_id: str,
+    title: str,
+    *,
+    stance: str,
+    target: str,
+    **frontmatter: object,
+) -> dict:
+    return _entity(
+        "evidence-line",
+        entity_id,
+        title,
+        stance=stance,
+        target=target,
+        **frontmatter,
+    )
 
 
 def test_retired_writer_message_names_command_and_forward_path() -> None:
@@ -1131,22 +1158,20 @@ def test_graph_neighborhood_query_supports_json_format() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/brca1",
-                    "skos:broader",
-                    "concept/tp53",
-                    "--graph",
-                    "graph/knowledge",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("concept", "brca1", "BRCA1"),
+                _entity("concept", "tp53", "TP53"),
+            ],
+            relations=[
+                {
+                    "subject": "concept:brca1",
+                    "predicate": "skos:broader",
+                    "object": "concept:tp53",
+                    "graph_layer": "graph/knowledge",
+                }
+            ],
         )
 
         neighborhood = runner.invoke(main, ["graph", "neighborhood", "BRCA1", "--format", "json"])
@@ -1197,215 +1222,59 @@ def test_graph_claims_query_filters_about_term() -> None:
 
 
 def _setup_evidence_graph(runner: CliRunner) -> None:
-    """Helper: init graph, add hypothesis H3, add supporting and disputing propositions."""
-    assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "hypothesis",
-                "H3",
-                "--text",
-                "BRCA1 drives resistance",
-                "--source",
-                "paper:doi_10_1111_a",
-            ],
-        ).exit_code
-        == 0
-    )
-    # Add proposition entities and link them with evidence edges
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Literature supports BRCA1 role",
-                "--source",
-                "paper:doi_10_1111_a",
-                "--id",
+    """Helper: author hypothesis H3 with supporting and disputing evidence lines."""
+    build_entity_graph(
+        Path.cwd(),
+        [
+            _entity("hypothesis", "h3", "BRCA1 drives resistance"),
+            _evidence_line(
                 "ev1",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/ev1",
-                "hypothesis/h3",
-                "--stance",
-                "supports",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Counter-evidence against BRCA1",
-                "--source",
-                "paper:doi_10_2222_b",
-                "--id",
+                "Literature supports BRCA1 role",
+                stance="supports",
+                target="hypothesis:h3",
+                source="paper:doi_10_1111_a",
+            ),
+            _evidence_line(
                 "ev2",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/ev2",
-                "hypothesis/h3",
-                "--stance",
-                "disputes",
-            ],
-        ).exit_code
-        == 0
+                "Counter-evidence against BRCA1",
+                stance="disputes",
+                target="hypothesis:h3",
+                source="paper:doi_10_2222_b",
+            ),
+        ],
     )
 
 
 def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
-    assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "hypothesis",
-                "H3",
-                "--text",
-                "BRCA1 drives resistance",
-                "--source",
-                "paper:doi_10_1111_a",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Context-setting BRCA1 discussion",
-                "--source",
-                "paper:doi_10_3333_c",
-                "--id",
-                "ev3",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Primary BRCA1 resistance claim",
-                "--source",
-                "paper:doi_10_1111_a",
-                "--id",
-                "main",
-            ],
-        ).exit_code
-        == 0
-    )
-    # Link proposition/main to hypothesis/h3 via cito:discusses
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "proposition/main",
-                "cito:discusses",
-                "hypothesis/h3",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Literature supports BRCA1 role",
-                "--source",
-                "paper:doi_10_1111_a",
-                "--id",
+    build_entity_graph(
+        Path.cwd(),
+        [
+            _entity("hypothesis", "h3", "BRCA1 drives resistance"),
+            _entity("proposition", "ev3", "Context-setting BRCA1 discussion"),
+            _entity("proposition", "main", "Primary BRCA1 resistance claim"),
+            _evidence_line(
                 "ev1",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/ev1",
-                "proposition/main",
-                "--stance",
-                "supports",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Counter-evidence against BRCA1",
-                "--source",
-                "paper:doi_10_2222_b",
-                "--id",
+                "Literature supports BRCA1 role",
+                stance="supports",
+                target="proposition:main",
+                source="paper:doi_10_1111_a",
+            ),
+            _evidence_line(
                 "ev2",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "evidence",
-                "proposition/ev2",
-                "proposition/main",
-                "--stance",
-                "disputes",
-            ],
-        ).exit_code
-        == 0
+                "Counter-evidence against BRCA1",
+                stance="disputes",
+                target="proposition:main",
+                source="paper:doi_10_2222_b",
+            ),
+        ],
+        relations=[
+            {
+                "subject": "proposition:main",
+                "predicate": "cito:discusses",
+                "object": "hypothesis:h3",
+                "graph_layer": "graph/knowledge",
+            }
+        ],
     )
 
 
@@ -1480,53 +1349,18 @@ def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Multi-source main claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
-                    "main",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Reusable support evidence",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "main", "Multi-source main claim"),
+                _evidence_line(
                     "ev1",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/ev1",
-                    "proposition/main",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+                    "Reusable support evidence",
+                    stance="supports",
+                    target="proposition:main",
+                    source="paper:doi_10_5555_e",
+                ),
+            ],
         )
 
         result = runner.invoke(main, ["graph", "evidence", "proposition/main", "--format", "json"])
@@ -1650,25 +1484,21 @@ def test_graph_coverage_shows_measured_and_observed_status() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "GeneX"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "GeneY"]).exit_code == 0
-        # Link GeneX to a dataset
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/genex",
-                    "sci:measuredBy",
-                    "dataset/rnaseq",
-                    "--graph",
-                    "graph/datasets",
-                ],
-            ).exit_code
-            == 0
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("concept", "genex", "GeneX"),
+                _entity("concept", "geney", "GeneY"),
+                _entity("dataset", "rnaseq", "RNA-seq"),
+            ],
+            relations=[
+                {
+                    "subject": "concept:genex",
+                    "predicate": "sci:measuredBy",
+                    "object": "dataset:rnaseq",
+                    "graph_layer": "graph/datasets",
+                }
+            ],
         )
 
         result = runner.invoke(main, ["graph", "coverage", "--format", "json"])
@@ -2832,65 +2662,28 @@ def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Benchmark-backed claim",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
-                    "benchmark_target",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Benchmark evidence for claim",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--evidence-type",
-                    "benchmark_evidence",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("proposition", "benchmark_target", "Benchmark-backed claim"),
+                _evidence_line(
                     "benchmark_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/benchmark_support",
-                    "proposition/benchmark_target",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+                    "Benchmark evidence for claim",
+                    stance="supports",
+                    target="proposition:benchmark_target",
+                    source="paper:doi_10_6666_f",
+                    evidence_type="benchmark_evidence",
+                ),
+            ],
         )
 
         result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
 
-        benchmark_row = next(row for row in payload["rows"] if row["text"] == "Benchmark-backed claim")
+        benchmark_row = next(row for row in payload["rows"] if row["label"] == "Benchmark-backed claim")
         assert benchmark_row["has_empirical_data"] == "yes"
-        assert benchmark_row["evidence_types"] == "benchmark_evidence"
+        assert benchmark_row["evidence_types"] == "benchmark"
 
 
 def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> None:
@@ -3104,243 +2897,64 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "question",
-                    "Q1",
-                    "--text",
-                    "Which claims matter most for the contested question?",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "question",
-                    "Q2",
-                    "--text",
-                    "Lower-priority comparison question",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Contested literature-only question claim",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "question_contested",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature support for contested question claim",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("question", "q1", "Which claims matter most for the contested question?"),
+                _entity("question", "q2", "Lower-priority comparison question"),
+                _entity("proposition", "question_contested", "Contested literature-only question claim"),
+                _evidence_line(
                     "question_contested_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/question_contested_support",
-                    "proposition/question_contested",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Negative result disputing contested question claim",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--evidence-type",
-                    "negative_result",
-                    "--id",
-                    "question_contested_dispute",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/question_contested_dispute",
-                    "proposition/question_contested",
-                    "--stance",
-                    "disputes",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirically supported question claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--id",
-                    "question_empirical",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support for question claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
+                    "Literature support for contested question claim",
+                    stance="supports",
+                    target="proposition:question_contested",
+                    evidence_type="literature_evidence",
+                ),
+                _entity("proposition", "question_empirical", "Empirically supported question claim"),
+                _evidence_line(
                     "question_empirical_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/question_empirical_support",
-                    "proposition/question_empirical",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Low-priority comparison question claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--id",
-                    "question_low_priority",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support for low-priority claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
+                    "Empirical support for question claim",
+                    stance="supports",
+                    target="proposition:question_empirical",
+                    evidence_type="empirical_data_evidence",
+                ),
+                _evidence_line(
+                    "question_empirical_support_2",
+                    "Independent empirical support for question claim",
+                    stance="supports",
+                    target="proposition:question_empirical",
+                    evidence_type="empirical_data_evidence",
+                ),
+                _entity("proposition", "question_low_priority", "Low-priority comparison question claim"),
+                _evidence_line(
                     "question_low_priority_support",
-                ],
-            ).exit_code
-            == 0
+                    "Empirical support for low-priority claim",
+                    stance="supports",
+                    target="proposition:question_low_priority",
+                    evidence_type="empirical_data_evidence",
+                ),
+            ],
+            relations=[
+                {
+                    "subject": "question:q1",
+                    "predicate": "sci:addresses",
+                    "object": "proposition:question_contested",
+                    "graph_layer": "graph/knowledge",
+                },
+                {
+                    "subject": "question:q1",
+                    "predicate": "sci:addresses",
+                    "object": "proposition:question_empirical",
+                    "graph_layer": "graph/knowledge",
+                },
+                {
+                    "subject": "question:q2",
+                    "predicate": "sci:addresses",
+                    "object": "proposition:question_low_priority",
+                    "graph_layer": "graph/knowledge",
+                },
+            ],
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/question_low_priority_support",
-                    "proposition/question_low_priority",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        for prop_ref, question_ref in (
-            ("proposition/question_contested", "question/q1"),
-            ("proposition/question_empirical", "question/q1"),
-            ("proposition/question_low_priority", "question/q2"),
-        ):
-            assert (
-                runner.invoke(
-                    main,
-                    [
-                        "graph",
-                        "add",
-                        "edge",
-                        question_ref,
-                        "sci:addresses",
-                        prop_ref,
-                    ],
-                ).exit_code
-                == 0
-            )
 
         result = runner.invoke(main, ["graph", "question-summary", "--format", "json", "--top", "1"])
         assert result.exit_code == 0
@@ -3351,8 +2965,6 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
         assert row["question"] == "http://example.org/project/question/q1"
         assert row["claim_count"] == "2"
         assert row["neighborhood_count"] == "2"
-        # Legacy bare-cito evidence is not an evidence-line entity, so the contested signal
-        # (now driven by belief aggregation) no longer fires; the dispute remains in count columns.
         assert row["contested_claim_count"] == "0"
         assert row["single_source_claim_count"] == "1"
         assert row["no_empirical_claim_count"] == "1"
@@ -3494,123 +3106,46 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        Path("science.yaml").write_text("name: demo\nprofile: research\n", encoding="utf-8")
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "question",
-                    "QPROJ",
-                    "--text",
-                    "Which research path should we prioritize?",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                ],
-            ).exit_code
-            == 0
+        Path("science.yaml").write_text(
+            "name: demo\nprofile: research\nknowledge_profiles:\n  local: local\n",
+            encoding="utf-8",
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Contested project claim",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                    "--id",
-                    "project_contested",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature support for project claim",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("question", "qproj", "Which research path should we prioritize?"),
+                _entity("proposition", "project_contested", "Contested project claim"),
+                _evidence_line(
                     "project_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Negative result for project claim",
-                    "--source",
-                    "paper:doi_10_8888_h",
-                    "--evidence-type",
-                    "negative_result",
-                    "--id",
-                    "project_dispute",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirically supported project claim",
-                    "--source",
-                    "paper:doi_10_9999_i",
-                    "--id",
-                    "project_empirical",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support for project claim",
-                    "--source",
-                    "paper:doi_10_9999_i",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
+                    "Literature support for project claim",
+                    stance="supports",
+                    target="proposition:project_contested",
+                    evidence_type="literature_evidence",
+                ),
+                _entity("proposition", "project_empirical", "Empirically supported project claim"),
+                _evidence_line(
                     "project_empirical_support",
-                ],
-            ).exit_code
-            == 0
+                    "Empirical support for project claim",
+                    stance="supports",
+                    target="proposition:project_empirical",
+                    evidence_type="empirical_data_evidence",
+                ),
+            ],
+            relations=[
+                {
+                    "subject": "question:qproj",
+                    "predicate": "sci:addresses",
+                    "object": "proposition:project_contested",
+                    "graph_layer": "graph/knowledge",
+                },
+                {
+                    "subject": "question:qproj",
+                    "predicate": "sci:addresses",
+                    "object": "proposition:project_empirical",
+                    "graph_layer": "graph/knowledge",
+                },
+            ],
         )
-
-        for subject, target, stance in (
-            ("proposition/project_support", "proposition/project_contested", "supports"),
-            ("proposition/project_dispute", "proposition/project_contested", "disputes"),
-            ("proposition/project_empirical_support", "proposition/project_empirical", "supports"),
-        ):
-            assert runner.invoke(main, ["graph", "add", "evidence", subject, target, "--stance", stance]).exit_code == 0
-
-        for prop_ref in ("proposition/project_contested", "proposition/project_empirical"):
-            assert (
-                runner.invoke(main, ["graph", "add", "edge", "question/qproj", "sci:addresses", prop_ref]).exit_code
-                == 0
-            )
 
         build_inquiry_graph(
             Path("knowledge/graph.trig"),
@@ -3650,104 +3185,33 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "hypothesis",
-                    "HREL",
-                    "--text",
-                    "Hypothesis related to the question",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
+        build_entity_graph(
+            Path.cwd(),
+            [
+                _entity("hypothesis", "hrel", "Hypothesis related to the question"),
+                _entity(
                     "question",
-                    "QREL",
-                    "--text",
+                    "qrel",
                     "Question linked to a related hypothesis",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--related",
-                    "hypothesis:hrel",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Claim linked to related hypothesis only",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
-                    "related_hypothesis_claim",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature support for related hypothesis claim",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
+                    related=["hypothesis:hrel"],
+                ),
+                _entity("proposition", "related_hypothesis_claim", "Claim linked to related hypothesis only"),
+                _evidence_line(
                     "related_hypothesis_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/related_hypothesis_support",
-                    "proposition/related_hypothesis_claim",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        # Link proposition to hypothesis so it's found via _linked_claims_for_hypothesis
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "proposition/related_hypothesis_claim",
-                    "cito:discusses",
-                    "hypothesis/hrel",
-                ],
-            ).exit_code
-            == 0
+                    "Literature support for related hypothesis claim",
+                    stance="supports",
+                    target="proposition:related_hypothesis_claim",
+                    evidence_type="literature_evidence",
+                ),
+            ],
+            relations=[
+                {
+                    "subject": "proposition:related_hypothesis_claim",
+                    "predicate": "cito:discusses",
+                    "object": "hypothesis:hrel",
+                    "graph_layer": "graph/knowledge",
+                }
+            ],
         )
 
         result = runner.invoke(main, ["graph", "question-summary", "--format", "json"])
@@ -4228,56 +3692,26 @@ def test_graph_question_summary_returns_all_rows_by_default() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        for i in range(30):
-            question_ref = f"question/q{i:02d}"
-            proposition_ref = f"proposition/q{i:02d}"
-            assert (
-                runner.invoke(
-                    main,
-                    [
-                        "graph",
-                        "add",
-                        "question",
-                        f"Q{i:02d}",
-                        "--text",
-                        f"Question {i}",
-                        "--source",
-                        "paper:doi_10_5555_all",
-                    ],
-                ).exit_code
-                == 0
-            )
-            assert (
-                runner.invoke(
-                    main,
-                    [
-                        "graph",
-                        "add",
-                        "proposition",
-                        f"Claim {i}",
-                        "--source",
-                        "paper:doi_10_5555_all",
-                        "--id",
-                        f"q{i:02d}",
-                    ],
-                ).exit_code
-                == 0
-            )
-            assert (
-                runner.invoke(
-                    main,
-                    [
-                        "graph",
-                        "add",
-                        "edge",
-                        question_ref,
-                        "sci:addresses",
-                        proposition_ref,
-                    ],
-                ).exit_code
-                == 0
-            )
+        build_entity_graph(
+            Path.cwd(),
+            [
+                item
+                for i in range(30)
+                for item in (
+                    _entity("question", f"q{i:02d}", f"Question {i}"),
+                    _entity("proposition", f"q{i:02d}", f"Claim {i}"),
+                )
+            ],
+            relations=[
+                {
+                    "subject": f"question:q{i:02d}",
+                    "predicate": "sci:addresses",
+                    "object": f"proposition:q{i:02d}",
+                    "graph_layer": "graph/knowledge",
+                }
+                for i in range(30)
+            ],
+        )
 
         result = runner.invoke(main, ["graph", "question-summary", "--format", "json"])
         assert result.exit_code == 0
