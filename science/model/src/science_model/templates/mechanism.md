@@ -3,6 +3,7 @@ id: "mechanism:{{nn}}-{{slug}}"
 kind: "mechanism"
 title: "{{title}}"
 status: "{{status}}"
+summary: ""
 participants: []
 propositions: []
 related: []
@@ -15,6 +16,7 @@ _template:
     kind: { default: "mechanism" }
     title: { from: title }
     status: { from: status }
+    summary: { default: "" }
     participants: { default: [] }
     propositions: { default: [] }
     related: { from: related }
@@ -22,25 +24,11 @@ _template:
     created: { from: created }
     updated: { from: updated }
   sections:
-    - { key: summary, name: "Summary", required: true }
-    - { key: participants, name: "Participants", required: true }
-    - { key: propositions, name: "Propositions", required: true }
+    - { key: notes, name: "Supplementary Notes", required: false }
 ---
 
 # {{title}}
 
-## Summary
+## Supplementary Notes
 
-<!-- The explanatory structure this mechanism names. -->
-
-## Participants
-
-<!-- List the typed entities (concepts, variables) this mechanism links, e.g.:
-- concept:<id>
--->
-
-## Propositions
-
-<!-- List the proposition refs this mechanism explains, e.g.:
-- proposition:<id>
--->
+<!-- Author parsed mechanism fields in frontmatter: `summary`, `participants`, and `propositions`. Use this section only for explanatory notes that do not need typed parsing. -->

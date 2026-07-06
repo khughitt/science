@@ -1568,7 +1568,7 @@ def test_entity_sections_lists_retired_graph_authoring_templates() -> None:
         expected = {
             "concept": {"definition", "notes"},
             "observation": {"observation", "source"},
-            "mechanism": {"summary", "participants", "propositions"},
+            "mechanism": {"notes"},
         }
 
         for kind, keys in expected.items():
@@ -1637,16 +1637,19 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
     with runner.isolated_filesystem():
         root = Path.cwd()
         seed_project(root)
-        result = runner.invoke(main, ["entity", "create", "observation", "An Observation"])
+        result = runner.invoke(main, ["entity", "create", "outcome", "An Outcome"])
         assert result.exit_code == 0, result.output
-        # observation is a slug identity kind (descriptive ids like
-        # observation:swan-stage-shift), so the generic scaffold names it by slug.
-        path = Path("entities/observations/an-observation.md")
+        # outcome is a non-migrated slug identity kind, so the generic scaffold
+        # names it by slug and renders the fixed Summary/Notes body.
+        path = Path("entities/outcomes/an-outcome.md")
         assert path.is_file()
-        fm = yaml.safe_load(path.read_text().split("---")[1])
-        assert fm["id"] == "observation:an-observation"
-        assert fm["kind"] == "observation"
+        text = path.read_text(encoding="utf-8")
+        fm = yaml.safe_load(text.split("---")[1])
+        assert fm["id"] == "outcome:an-outcome"
+        assert fm["kind"] == "outcome"
         assert {"title", "status", "created", "updated"} <= set(fm)
+        assert "## Summary" in text
+        assert "## Notes" in text
 
 
 def test_entities_dir_is_discovered_by_graph() -> None:
