@@ -10,6 +10,10 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+
+if "conftest" in sys.modules and not hasattr(sys.modules["conftest"], "build_entity_graph"):
+    del sys.modules["conftest"]
+from conftest import build_entity_graph
 from rdflib import Dataset, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
 
@@ -231,6 +235,131 @@ def test_materialize_emits_inquiry_target_from_frontmatter(tmp_path: Path) -> No
     inquiry_uri = PROJECT_NS["inquiry/demo-inquiry"]
     question_uri = PROJECT_NS["question/q01-demo"]
     assert (inquiry_uri, SCI.target, question_uri) in knowledge
+
+
+def test_materialize_emits_falsification_into_knowledge_graph(tmp_path: Path) -> None:
+    from rdflib import Literal, URIRef
+    from rdflib.namespace import RDF
+
+    from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset
+
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            {
+                "kind": "proposition",
+                "id": "drug_recovery",
+                "frontmatter": {
+                    "title": "Drug improves recovery",
+                    "status": "active",
+                    "confidence": 0.85,
+                    "source_refs": [],
+                },
+                "body": "Drug improves recovery\n",
+            },
+            {
+                "kind": "falsification",
+                "id": "drug-recovery-null",
+                "frontmatter": {
+                    "title": "Refuted",
+                    "status": "active",
+                    "falsifies": "proposition:drug_recovery",
+                    "predicted": "Drug improves recovery time",
+                    "observed": "No improvement in randomized follow-up",
+                    "decision": "Reject mechanistic interpretation",
+                    "source_of_prediction": "topic:drug-mechanism",
+                    "supersedes_claim": "https://example.org/claims/legacy-x",
+                    "related": [],
+                    "source_refs": [],
+                },
+                "body": "Refuted\n",
+            },
+        ],
+    )
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    fu = PROJECT_NS["falsification/drug-recovery-null"]
+    pu = PROJECT_NS["proposition/drug_recovery"]
+
+    assert (fu, RDF.type, SCI_NS.Falsification) in knowledge
+    assert (fu, SCI_NS.falsifies, pu) in knowledge
+    assert (fu, SCI_NS.predicted, Literal("Drug improves recovery time")) in knowledge
+    assert (fu, SCI_NS.observed, Literal("No improvement in randomized follow-up")) in knowledge
+    assert (fu, SCI_NS.decision, Literal("Reject mechanistic interpretation")) in knowledge
+    assert (fu, SCI_NS.sourceOfPrediction, Literal("topic:drug-mechanism")) in knowledge
+    assert (fu, SCI_NS.supersedesClaim, URIRef("https://example.org/claims/legacy-x")) in knowledge
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    assert (fu, SCI_NS.predicted, None) not in provenance
+    assert (fu, SCI_NS.observed, None) not in provenance
+    assert (fu, SCI_NS.decision, None) not in provenance
+    assert (fu, SCI_NS.sourceOfPrediction, None) not in provenance
+
+
+def test_materialize_falsification_omits_blank_metadata_fields(tmp_path: Path) -> None:
+    """Intentional source-form contract: a blank scaffold field emits NO triple."""
+    from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset
+
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            {
+                "kind": "proposition",
+                "id": "p1",
+                "frontmatter": {"title": "P", "status": "active", "source_refs": []},
+                "body": "P\n",
+            },
+            {
+                "kind": "falsification",
+                "id": "f-blank",
+                "frontmatter": {
+                    "title": "Scaffold",
+                    "status": "draft",
+                    "falsifies": "proposition:p1",
+                    "predicted": "",
+                    "observed": "",
+                    "decision": "",
+                    "source_of_prediction": "",
+                    "related": [],
+                    "source_refs": [],
+                },
+                "body": "Scaffold\n",
+            },
+        ],
+    )
+    knowledge = _load_dataset(graph_path).graph(_graph_uri("graph/knowledge"))
+    fu = PROJECT_NS["falsification/f-blank"]
+    assert (fu, SCI_NS.falsifies, PROJECT_NS["proposition/p1"]) in knowledge
+    assert (fu, SCI_NS.predicted, None) not in knowledge
+    assert (fu, SCI_NS.observed, None) not in knowledge
+    assert (fu, SCI_NS.decision, None) not in knowledge
+    assert (fu, SCI_NS.sourceOfPrediction, None) not in knowledge
+
+
+def test_materialize_falsification_rejects_wrong_kind_qualified_target(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"falsification:wrong-kind.*question:p1"):
+        build_entity_graph(
+            tmp_path,
+            [
+                {
+                    "kind": "proposition",
+                    "id": "p1",
+                    "frontmatter": {"title": "P", "status": "active", "source_refs": []},
+                    "body": "P\n",
+                },
+                {
+                    "kind": "falsification",
+                    "id": "wrong-kind",
+                    "frontmatter": {
+                        "title": "Wrong kind",
+                        "status": "active",
+                        "falsifies": "question:p1",
+                        "related": [],
+                        "source_refs": [],
+                    },
+                    "body": "Wrong kind\n",
+                },
+            ],
+        )
 
 
 def test_materialize_emits_scope_triple_for_project_entity(tmp_path: Path) -> None:

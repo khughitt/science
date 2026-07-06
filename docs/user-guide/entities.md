@@ -117,12 +117,17 @@ when they identify exactly one loaded source record.
 ### Source Write Boundary
 
 The old graph writers for concepts, propositions, observations, evidence,
-findings, interpretations, discussions, mechanisms, hypotheses, questions, and
-edges are retired. For project knowledge that should survive
-`science graph build`, create or edit the source entity file, author structural
-relations in `relations.yaml` or inquiry `flow_edges`, and represent support or
-dispute with evidence-line source entities. The graph build step materializes
-those source records into `knowledge/graph.trig`.
+findings, interpretations, discussions, mechanisms, hypotheses, questions,
+stories, papers, falsifications, articles, and edges are retired. For project
+knowledge that should survive `science graph build`, create or edit the source
+entity file, author structural relations in `relations.yaml` or inquiry
+`flow_edges`, and represent support or dispute with evidence-line source
+entities. Use `science entity create story <title>` for stories,
+`science entity create paper <title> --id <citekey>` or
+`entities/papers/<citekey>.md` with `doi:` for external literature notes, and
+`science entity create falsification <title>` with `falsifies:` for
+falsification records. The graph build step materializes those source records
+into `knowledge/graph.trig`.
 
 ## Entity Consolidation And Archive
 
@@ -596,11 +601,11 @@ level records assemble those entities into narratives:
 | `story` | A coherent narrative arc synthesizing interpretations around a question or hypothesis. |
 | `synthesis` / `report` | Durable rollups and written reports over project knowledge. |
 
-Prefer source-authored Markdown owners for durable project knowledge. `finding`
-and `interpretation` have packaged templates; `story` can be authored as an
-entity when a project uses that narrative layer. Use `related:`,
-`source_refs:`, and structured relation fields to connect the chain rather than
-hand-editing generated graph state.
+Prefer source-authored Markdown owners for durable project knowledge. `finding`,
+`interpretation`, and `story` have packaged templates; create story scaffolds
+with `science entity create story <title>` when a project uses that narrative
+layer. Use `related:`, `source_refs:`, and structured relation fields to
+connect the chain rather than hand-editing generated graph state.
 
 For proposition bundle membership, prefer `discusses:` on proposition sources or
 `knowledge/sources/local/relations.yaml` entries with
@@ -612,13 +617,14 @@ Author mechanisms as `entities/mechanisms/<slug>.md` with at least two
 participants and proposition refs for the mechanism steps, then run
 `science graph build`. `science graph add mechanism` is retired.
 
-The old graph-only composition commands `science graph add finding` and
-`science graph add mechanism` are retired; use source-authored entity files.
-Deferred `science graph add story` and `science graph add paper` still exist as
-transitional helpers, but durable story and paper knowledge should still be
-owned by source files. The current loadable `paper` kind is an external
-literature note; do not use `paper:<id>` for the project's own publication
-draft.
+The old graph-only composition writers for finding, mechanism, story, and paper
+are retired; use source-authored entity files. Author story synthesis with
+`science entity create story <title>` plus relations such as `sci:synthesizes`
+and `sci:organizedBy` in `relations.yaml`. The current loadable `paper` kind is
+an external literature note; create DOI-backed notes with
+`science entity create paper <title> --id <citekey>` or by editing
+`entities/papers/<citekey>.md` with a `doi:` field; do not use `paper:<id>` for
+the project's own publication draft.
 
 ## Paper Dataset Usage
 
@@ -1122,6 +1128,7 @@ Epistemic entities carry, organize, or evaluate uncertain knowledge.
 - `chain-audit` - Verdict over a structural-chain. Carries verdict+bayes_factor_evidence with enforced consistency.
 - `discussion` - Structured critical discussion of a hypothesis, question, or topic.
 - `evidence-line` - A single, independence-tagged line of evidence that supports or disputes a proposition.
+- `falsification` - A structured record that a proposition-backed prediction was falsified.
 - `finding` - Unit of learned knowledge: propositions grounded by observations from an analysis.
 - `hypothesis` - Testable project hypothesis; see bundle belief and membership roles in `epistemic-model.md`.
 - `inquiry` - A scoped research inquiry (boundary + estimand over the knowledge graph).

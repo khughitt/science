@@ -14,7 +14,6 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
-    add_falsification,
     get_inquiry,
     validate_inquiry,
 )
@@ -43,6 +42,7 @@ def graph_path(tmp_path: Path) -> Path:
 
 
 class FalsificationView(TypedDict):
+    uri: str
     predicted: str
     decision: str
 
@@ -88,6 +88,27 @@ def _causal_relation(subject: str, predicate: str, obj: str) -> dict:
         "object": obj,
         "graph_layer": "graph/causal",
     }
+
+
+def _falsification(
+    entity_id: str,
+    proposition_ref: str,
+    *,
+    predicted: str,
+    observed: str,
+    decision: str,
+    source_of_prediction: str,
+) -> dict:
+    return _entity(
+        "falsification",
+        entity_id,
+        decision,
+        falsifies=proposition_ref,
+        predicted=predicted,
+        observed=observed,
+        decision=decision,
+        source_of_prediction=source_of_prediction,
+    )
 
 
 def _author_entities(
@@ -671,6 +692,14 @@ class TestEdgeProvenance:
                     "Drug treatment improves recovery time",
                     confidence=0.85,
                 ),
+                _falsification(
+                    "drug_recovery_null",
+                    "proposition:drug_causes_recovery_falsified",
+                    predicted="Drug treatment improves recovery time",
+                    observed="Randomized follow-up showed no improvement",
+                    decision="Reject mechanistic interpretation",
+                    source_of_prediction="topic:drug-mechanism",
+                ),
             ],
         )
         _build_compiled_inquiry_graph(
@@ -692,22 +721,13 @@ class TestEdgeProvenance:
                 }
             ],
         )
-        add_falsification(
-            graph_path,
-            predicted="Drug treatment improves recovery time",
-            source_of_prediction="topic:drug-mechanism",
-            observed="Randomized follow-up showed no improvement",
-            decision="Reject mechanistic interpretation",
-            proposition_ref="proposition:drug_causes_recovery_falsified",
-            falsification_id="drug-recovery-null",
-        )
-
         edges = _get_causal_edges_for_inquiry(graph_path, "fals-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
         claim = edge["claims"][0]
 
         assert len(claim["falsifications"]) == 1
         falsification = cast(FalsificationView, claim["falsifications"][0])
+        assert falsification["uri"] == str(PROJECT_NS["falsification/drug_recovery_null"])
         assert falsification["predicted"] == "Drug treatment improves recovery time"
         assert falsification["decision"] == "Reject mechanistic interpretation"
 
@@ -723,6 +743,14 @@ class TestEdgeProvenance:
                     "drug_causes_recovery_falsified_export",
                     "Drug treatment improves recovery time",
                     confidence=0.85,
+                ),
+                _falsification(
+                    "drug_recovery_null_export",
+                    "proposition:drug_causes_recovery_falsified_export",
+                    predicted="Drug treatment improves recovery time",
+                    observed="Randomized follow-up showed no improvement",
+                    decision="Reject mechanistic interpretation",
+                    source_of_prediction="topic:drug-mechanism",
                 ),
             ],
         )
@@ -745,16 +773,6 @@ class TestEdgeProvenance:
                 }
             ],
         )
-        add_falsification(
-            graph_path,
-            predicted="Drug treatment improves recovery time",
-            source_of_prediction="topic:drug-mechanism",
-            observed="Randomized follow-up showed no improvement",
-            decision="Reject mechanistic interpretation",
-            proposition_ref="proposition:drug_causes_recovery_falsified_export",
-            falsification_id="drug-recovery-null-export",
-        )
-
         script = export_pgmpy_script(graph_path, "fals-export")
 
         assert "falsifications: 1" in script

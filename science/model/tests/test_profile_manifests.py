@@ -279,14 +279,6 @@ def test_organized_by_relation() -> None:
     assert rel.predicate == "sci:organizedBy"
 
 
-def test_comprises_relation() -> None:
-    rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "comprises")
-    assert rel.source_kinds == ["paper"]
-    assert rel.target_kinds == ["story"]
-    assert rel.predicate == "sci:comprises"
-    assert "Legacy graph-only" in rel.description
-
-
 def test_grounds_relation() -> None:
     rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "grounds")
     assert rel.source_kinds == ["workflow-run"]

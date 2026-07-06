@@ -91,6 +91,7 @@ _LOCAL_ENTITY_KINDS = frozenset(
         "discussion",
         "evidence-line",
         "experiment",
+        "falsification",
         "finding",
         "hypothesis",
         "inquiry",

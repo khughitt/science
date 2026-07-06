@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 from conftest import build_entity_graph, build_inquiry_graph
 from rdflib import Dataset
-from rdflib.namespace import PROV, RDF, Namespace
+from rdflib.namespace import PROV, Namespace
 
 from science_tool.cli import main
 
@@ -103,6 +103,46 @@ def _evidence_line(
             ["graph", "add", "question", "q1"],
             "graph add question",
             "science questions create",
+        ),
+        (
+            ["graph", "add", "article", "10.1038/s41586-023-06957-x"],
+            "graph add article",
+            "science entity create paper <title> --id <citekey>",
+        ),
+        (
+            [
+                "graph",
+                "add",
+                "story",
+                "A story",
+                "--summary",
+                "s",
+                "--about",
+                "hypothesis:h1",
+                "--interpretation",
+                "interpretation:i1",
+            ],
+            "graph add story",
+            "science entity create story",
+        ),
+        (
+            [
+                "graph",
+                "add",
+                "falsification",
+                "--predicted",
+                "p",
+                "--source-of-prediction",
+                "topic:x",
+                "--observed",
+                "o",
+                "--decision",
+                "d",
+                "--proposition",
+                "proposition:p1",
+            ],
+            "graph add falsification",
+            "science entity create falsification",
         ),
         (
             ["graph", "add", "edge", "subject", "bad:predicate", "object", "--graph", "not-a-layer"],
@@ -401,74 +441,11 @@ def test_graph_stats_supports_json_format() -> None:
         assert any(row["graph"] == "total" for row in payload["rows"])
 
 
-def test_graph_add_article_records_reference() -> None:
+def test_graph_add_paper_command_is_removed() -> None:
     runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0
-
-        article = runner.invoke(main, ["graph", "add", "article", "10.1038/s41586-023-06957-x"])
-        assert article.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-
-        article_uri = PROJECT_NS["article/doi_10_1038_s41586_023_06957_x"]
-
-        assert (article_uri, RDF.type, SCI.Article) in knowledge
-        assert (article_uri, SCHEMA.identifier, None) in knowledge
-
-
-def test_graph_add_story_warns_graph_only_not_durable() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "story",
-                "A story",
-                "--summary",
-                "Narrative summary",
-                "--about",
-                "hypothesis:h1",
-                "--interpretation",
-                "interpretation:i1",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "written directly to graph.trig" in result.output
-        assert "source-authored story entity" in result.output
-
-
-def test_graph_add_paper_warns_legacy_composition_not_literature_note() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "paper",
-                "A draft paper",
-                "--story",
-                "story:s1",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "legacy composition command" in result.output
-        assert "external literature note" in result.output
+    result = runner.invoke(main, ["graph", "add", "paper", "A title", "--story", "story:s01"])
+    assert result.exit_code == 2
+    assert "No such command 'paper'" in result.output
 
 
 def test_graph_validate_passes_on_fresh_graph() -> None:

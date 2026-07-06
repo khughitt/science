@@ -151,6 +151,36 @@ def test_entity_create_mechanism_writes_model_valid_scaffold() -> None:
         assert frontmatter["propositions"] == ["proposition:placeholder-proposition"]
 
 
+def test_entity_create_and_sections_falsification() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        created = runner.invoke(main, ["entity", "create", "falsification", "Refuted prediction"])
+        assert created.exit_code == 0, created.output
+        assert Path("entities/falsifications/refuted-prediction.md").is_file()
+
+        sections = runner.invoke(main, ["entity", "sections", "falsification"])
+        assert sections.exit_code == 0, sections.output
+        assert "What was predicted" in sections.output
+        assert "Decision" in sections.output
+
+
+def test_entity_create_and_sections_story() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        created = runner.invoke(main, ["entity", "create", "story", "The X-Y regulation arc"])
+        assert created.exit_code == 0, created.output
+        assert Path("entities/stories/the-x-y-regulation-arc.md").is_file()
+
+        sections = runner.invoke(main, ["entity", "sections", "story"])
+        assert sections.exit_code == 0, sections.output
+
+
 def test_entity_create_construct_still_uses_generic_slug_path() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

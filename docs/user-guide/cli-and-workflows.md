@@ -52,7 +52,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `entity` | Canonical | Source-write / Read-only | Generic source-authored entity creation, editing, notes, listing, and inspection. |
 | `questions`, `hypotheses`, `propositions`, `evidence-lines`, `discussions`, `interpretations` | Canonical | Source-write / Read-only | Typed wrappers for common entity kinds. Prefer them when they expose kind-specific options. |
 | `graph` | Derived-state | Mixed | Build, validate, query, export, and inspect graph-derived state. Retired import/migration/stamp surfaces point back to source authoring and `science graph build`. |
-| `graph add` | Mixed / Retired | Mixed | Some deferred helpers still exist, but the old node/edge graph writers are retired. Use source-authoring commands and rebuild for durable project knowledge. |
+| `graph add` | Retired | Read-only failure | Old node/edge graph writers no longer author durable project knowledge. Use source-authoring commands and rebuild instead. |
 | `dag` | Derived-state | Mixed | Render, number, validate, and audit DAG views. This is an older family-local surface and uses `--project` for project roots. |
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
@@ -101,13 +101,12 @@ science entity create <kind> "..."
 science graph build
 ```
 
-Use the few still-deferred `science graph add` helpers only for the specific
-transitional workflows they document. The old graph writers for
-concepts, propositions, observations, evidence, findings, interpretations,
-discussions, mechanisms, hypotheses, questions, and edges are retired. Use
-source authoring instead: `science entity create <kind>`, typed creators such
-as `science propositions create` and `science evidence-lines create`, direct
-edits to `entities/<kind>/*.md`, `relations.yaml`, inquiry `flow_edges`, and
+The old graph writers for concepts, propositions, observations, evidence,
+findings, interpretations, discussions, mechanisms, hypotheses, questions,
+stories, papers, falsifications, articles, and edges are retired. Use source
+authoring instead: `science entity create <kind>`, typed creators such as
+`science propositions create` and `science evidence-lines create`, direct edits
+to `entities/<kind>/*.md`, `relations.yaml`, inquiry `flow_edges`, and
 evidence-line entities, followed by `science graph build`.
 
 ## Generic Entity Commands vs Typed Wrappers

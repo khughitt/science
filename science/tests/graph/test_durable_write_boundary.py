@@ -1,4 +1,4 @@
-"""Durable-writer boundary guard (kernel closure, Phase 3a).
+"""Durable-writer boundary guard (kernel closure, Phase 3b).
 
 Static AST ratchet: the ONLY production modules permitted to call the durable
 graph-write primitives (`save_graph_dataset` / `_save_dataset`) are the compiler
@@ -7,16 +7,17 @@ write phase (`graph/materialize.py`) and the module that defines the primitive
 the source-declaration -> `science graph build` boundary.
 
 Direct writers that are KNOWN and intentionally deferred to a later kernel-closure
-phase are enumerated in `EXPECTED_DEFERRED_WRITERS`, each tagged with its retirement
-phase. The guard fails if:
+phase are enumerated in `EXPECTED_DEFERRED_WRITERS`. Phase 3b intentionally keeps
+that ledger empty. The guard fails if:
   * a writer site appears that is NOT in the ledger (a new boundary violation), or
   * a ledger entry no longer exists in code (a stale ledger after a retirement).
 
-Phase 3a intentionally starts RED: only the four Phase-3b-deferred writers
-remain in `EXPECTED_DEFERRED_WRITERS`, so the guard reports the 14 retiring
-functions as unexpected until those functions are deleted.
+Phase 3b empties the ledger. Until the four Phase-3b writer functions are
+deleted (add_article / add_story / add_paper_entity / add_falsification in
+graph/store/mutations.py), the guard reports them as unexpected -- the RED state
+that the retirement tasks clear.
 
-Scope / limitation: the match is name-based on the call site — a bare
+Scope / limitation: the match is name-based on the call site -- a bare
 `_save_dataset(...)` / `save_graph_dataset(...)` call resolved to its enclosing
 function. It is a ratchet against *accidental* regrowth of a direct writer, not a
 runtime sandbox: an aliased re-import (`from .dataset import _save_dataset as p`)
@@ -36,20 +37,16 @@ _WRITE_FUNCS = {"save_graph_dataset", "_save_dataset"}
 
 # Modules that legitimately own durable graph writes.
 _ALLOWLIST_MODULES = {
-    "graph/materialize.py",  # compiler write phase — sole graph.trig owner
+    "graph/materialize.py",  # compiler write phase -- sole graph.trig owner
     "graph/store/dataset.py",  # defines/wraps the save primitive
 }
 
 # Direct writers that are KNOWN and intentionally deferred to a later
-# kernel-closure phase. Phase 3a retiring sites are deliberately ABSENT — their
-# presence in code is what makes this guard RED until they are deleted.
-EXPECTED_DEFERRED_WRITERS = {
-    # Tier 2 — deferred to Phase 3b (no clean source-authoring file path).
-    "graph/store/mutations.py:add_article",
-    "graph/store/mutations.py:add_falsification",
-    "graph/store/mutations.py:add_story",
-    "graph/store/mutations.py:add_paper_entity",
-}
+# kernel-closure phase. Phase 3b retires the final four, so this ledger is now
+# EMPTY: the allowlist (`graph/materialize.py`, `graph/store/dataset.py`) is the
+# entire set of durable-writer sites. The guard now asserts kernel closure is
+# complete -- any new direct writer outside the allowlist is a boundary violation.
+EXPECTED_DEFERRED_WRITERS: set[str] = set()
 
 
 def _enclosing_writer_sites() -> set[str]:
@@ -93,10 +90,10 @@ def test_no_durable_graph_writer_outside_allowlist() -> None:
     unexpected = actual - EXPECTED_DEFERRED_WRITERS
     stale = EXPECTED_DEFERRED_WRITERS - actual
     assert not unexpected, (
-        "new direct graph writer(s) outside allowlist/ledger — route through "
+        "new direct graph writer(s) outside allowlist/ledger -- route through "
         f"`science graph build` or add to EXPECTED_DEFERRED_WRITERS: {sorted(unexpected)}"
     )
     assert not stale, (
-        "ledger lists writer(s) that no longer exist — prune "
+        "ledger lists writer(s) that no longer exist -- prune "
         f"EXPECTED_DEFERRED_WRITERS: {sorted(stale)}"
     )

@@ -62,6 +62,7 @@ INTENDED_ADDITIONS = frozenset(
         "claim-registry",
         "prose-source",
         "unknown",
+        "falsification",
     }
 )
 

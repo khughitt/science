@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from science_model.entities import (
     DatasetEntity,
@@ -165,3 +167,50 @@ def test_core_registry_resolves_patch_definition() -> None:
 
     assert registry.resolve("patch-definition") is PatchDefinitionEntity
     assert registry.kind_class("patch-definition") is EntityClass.EPISTEMIC
+
+
+def test_load_project_sources_binds_falsification_entity(tmp_path: Path) -> None:
+    """A kind: falsification source file loads as FalsificationEntity, proving CORE_KIND_MODELS."""
+    from science_model.entities import FalsificationEntity
+
+    from _fixtures.entity_helpers import seed_project, write_markdown_entity
+    from science_tool.graph.sources import load_project_sources
+
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/propositions/p1.md",
+        {
+            "id": "proposition:p1",
+            "kind": "proposition",
+            "title": "Drug improves recovery",
+            "status": "active",
+            "source_refs": [],
+        },
+        "Drug improves recovery\n",
+    )
+    write_markdown_entity(
+        tmp_path,
+        "entities/falsifications/f01.md",
+        {
+            "id": "falsification:f01",
+            "kind": "falsification",
+            "title": "Refuted",
+            "status": "active",
+            "falsifies": "proposition:p1",
+            "predicted": "improves",
+            "observed": "no change",
+            "decision": "reject",
+            "source_of_prediction": "topic:x",
+            "related": [],
+            "source_refs": [],
+        },
+        "Refuted\n",
+    )
+
+    sources = load_project_sources(tmp_path)
+
+    loaded = [e for e in sources.entities if e.canonical_id == "falsification:f01"]
+    assert len(loaded) == 1
+    assert isinstance(loaded[0], FalsificationEntity)
+    assert loaded[0].falsifies == "proposition:p1"

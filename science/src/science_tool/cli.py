@@ -58,10 +58,6 @@ from science_tool.graph.materialize import materialization_audit, materialize_gr
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
-    add_article,
-    add_falsification,
-    add_paper_entity,
-    add_story,
     build_graph_dot,
     diff_graph_inputs,
     export_graph_payload,
@@ -2244,8 +2240,11 @@ def graph_add_concept(
 )
 def add_article_cmd(doi: str, graph_path: Path) -> None:
     """Add an external literature reference by DOI."""
-    uri = add_article(graph_path, doi)
-    click.echo(f"Added paper: {uri}")
+    raise _retired_writer(
+        "graph add article",
+        "Run `science entity create paper <title> --id <citekey>` "
+        "(or edit entities/papers/<citekey>.md with a doi: field)",
+    )
 
 
 @graph_add.command("proposition")
@@ -2531,17 +2530,10 @@ def add_falsification_cmd(
     graph_path: Path,
 ) -> None:
     """Add a falsification record linked to a proposition."""
-    uri = add_falsification(
-        graph_path=graph_path,
-        predicted=predicted,
-        source_of_prediction=source_of_prediction,
-        observed=observed,
-        decision=decision,
-        proposition_ref=proposition_ref,
-        falsification_id=falsification_id,
-        supersedes_claim=supersedes_claim,
+    raise _retired_writer(
+        "graph add falsification",
+        "Run `science entity create falsification <title>` (set falsifies: to the proposition ref)",
     )
-    click.echo(f"Added falsification: {uri}")
 
 
 @graph_add.command("story")
@@ -2564,12 +2556,9 @@ def add_story_cmd(
     graph_path: Path,
 ) -> None:
     """Add a story — a narrative arc around a question or hypothesis."""
-    uri = add_story(graph_path, title, summary, about, list(interpretations), status, story_id)
-    click.echo(f"Added story: {uri}")
-    click.echo(
-        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
-        "`science graph build`, which rematerialises the graph from markdown sources. "
-        "Use a source-authored story entity for durable project work."
+    raise _retired_writer(
+        "graph add story",
+        "Run `science entity create story <title>` (author synthesizes/organizedBy edges in relations.yaml)",
     )
 
 
@@ -2594,33 +2583,6 @@ def add_mechanism_cmd(
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
     raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
-
-
-@graph_add.command("paper")
-@click.argument("title")
-@click.option("--story", "stories", multiple=True, required=True, help="Story ref(s)")
-@click.option("--status", default="outline", type=click.Choice(["outline", "draft", "revision", "final"]))
-@click.option("--abstract", default=None, help="Paper abstract")
-@click.option("--id", "paper_id", default=None, help="Custom paper ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_paper_cmd(
-    title: str,
-    stories: tuple[str, ...],
-    status: str,
-    abstract: str | None,
-    paper_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a paper — a composition of stories for communication."""
-    uri = add_paper_entity(graph_path, title, list(stories), status, abstract, paper_id)
-    click.echo(f"Added paper: {uri}")
-    click.echo(
-        "WARNING: this legacy composition command writes directly to graph.trig and will be wiped "
-        "on the next `science graph build`. The current source-authored `paper:<bibkey>` kind is "
-        "an external literature note, not the project's own publication draft."
-    )
 
 
 @main.group("belief")

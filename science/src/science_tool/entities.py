@@ -223,6 +223,9 @@ _LIVE_STATUSES: frozenset[str] = frozenset(
         "amended",
         "deprecated",
         "abandoned",
+        # Story lifecycle (Phase 3b: story kind wired for entity create).
+        "developing",
+        "mature",
         # Adapter-backed kinds (dataset/workflow/workflow-run/workflow-step), wired
         # in the 2026-06-21 adapter-entity-layout migration. All are live lifecycle
         # states (superseded is already hidden above).
