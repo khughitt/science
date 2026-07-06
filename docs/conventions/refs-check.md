@@ -6,8 +6,9 @@ links, DOIs, PMIDs, typed entity refs in frontmatter, and (with
 
 ## Default behavior
 
-Scans `paths.doc_dir` (default `doc/`), `paths.entities_dir` (default
-`entities/`), and `RESEARCH_PLAN.md`. The body-prose typed-ref scan
+Scans `paths.doc_dir` (default `doc/`), `paths.specs_dir` (default `specs/`),
+`paths.entities_dir` (default `entities/`), and root `README.md`. The
+body-prose typed-ref scan
 (opt-in via `--include-body`) validates against the frontmatter `id:`
 sweep — a walk over every markdown file's `id:` field, collecting
 `<kind>:<slug>` strings whose kind is in the canonical local-entity-kinds
@@ -59,7 +60,7 @@ and is the recommended way to pull in the canonical guide files
 (`README.md`, `CLAUDE.md`, `AGENTS.md`, `PRODUCT.md`, etc.) without
 recursing into worktree or build artifacts that may live at the root.
 
-Files surfaced through `_SCAN_FILES` (currently just `RESEARCH_PLAN.md`) are
+Files surfaced through `_SCAN_FILES` (currently just `README.md`) are
 already included by default — duplicates are de-duplicated automatically.
 
 ## Tooling

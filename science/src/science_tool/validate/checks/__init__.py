@@ -35,7 +35,7 @@ CANONICAL_CHECK_MODULES = (
     "papers",
     "unresolved_markers",
     "gap_analysis",
-    "research_plan",
+    "project_readme",
     "discussions",
     "prereg",
     "hypothesis_comparisons",

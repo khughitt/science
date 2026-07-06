@@ -369,20 +369,20 @@ Offer to scaffold `core/overview.md` and `core/decisions.md` from
 `templates/core-overview.md` and
 `templates/core-decisions.md`. Skip if the user declines.
 
-### `RESEARCH_PLAN.md`
+### `README.md`
 
-For `research` projects, create `RESEARCH_PLAN.md` unless the user prefers to inline the high-level plan into `README.md`.
+Create root `README.md` for every project.
 
-If created, keep it strategic only:
+Keep it strategic only:
 
 - research direction
 - major workstreams
 - decision gates
 - strategic risks
 
-Do not put task-queue bookkeeping in it.
+Do not put task-queue bookkeeping in `README.md`.
 
-For `software` projects, prefer `README.md` and `entities/plans/` unless the user explicitly wants a separate root-level plan file.
+For `software` projects, use `README.md` for high-level context and `entities/plans/` or `specs/` for more detailed planning when needed.
 
 ### `tasks/active.md`
 
@@ -450,6 +450,6 @@ Tell the user:
 
 - which profile was scaffolded
 - which aspects were enabled
-- whether `RESEARCH_PLAN.md` was created or the plan was inlined into `README.md`
+- whether `README.md` was created
 - whether any `.ai/` overrides were created
 - suggested next commands

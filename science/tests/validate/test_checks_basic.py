@@ -220,7 +220,7 @@ def test_directory_structure_checks_research_required_dirs_and_files(tmp_path: P
     assert "AGENTS.md exists" in messages
 
 
-def test_directory_structure_accepts_readme_when_research_plan_is_missing(tmp_path: Path) -> None:
+def test_directory_structure_reports_readme_as_project_document(tmp_path: Path) -> None:
     from science_tool.validate.checks.directory_structure import check_directory_structure
 
     ctx = _ctx(tmp_path, profile="research")
@@ -229,8 +229,8 @@ def test_directory_structure_accepts_readme_when_research_plan_is_missing(tmp_pa
     results = list(check_directory_structure(ctx))
     messages = _messages(results)
 
-    assert "README.md exists; RESEARCH_PLAN.md not required" in messages
-    assert "RESEARCH_PLAN.md not found (allowed if high-level planning is in README.md)" not in messages
+    assert "README.md exists" in messages
+    assert "Required project README missing: README.md" not in messages
 
 
 def test_directory_structure_uses_src_for_software_and_warns_about_code(tmp_path: Path) -> None:

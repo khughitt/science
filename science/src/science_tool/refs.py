@@ -1,6 +1,6 @@
 """Cross-reference validation for Science research projects.
 
-Scans markdown files in doc/, entities/, and RESEARCH_PLAN.md for internal
+Scans markdown files in doc/, specs/, entities/, and README.md for internal
 references (hypothesis IDs, citations, markdown links, markers) and validates
 them against the project file system and bibliography.
 """
@@ -79,7 +79,7 @@ _TASK_FALSE_POSITIVE_PARENTS = (
 
 # Directories/files to scan
 _SCAN_DIRS = ("doc", "entities")
-_SCAN_FILES = ("RESEARCH_PLAN.md",)
+_SCAN_FILES = ("README.md",)
 # Skip directories
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
 _LOCAL_ENTITY_KINDS = frozenset(

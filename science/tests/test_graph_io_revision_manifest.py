@@ -53,6 +53,15 @@ def test_build_input_manifest_keeps_report_without_configured_exclude(tmp_path: 
     assert "doc/reports/health-report.json" in manifest
 
 
+def test_build_input_manifest_includes_project_readme(tmp_path: Path) -> None:
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    (tmp_path / "README.md").write_text("# Fixture\n", encoding="utf-8")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert "README.md" in manifest
+
+
 def test_build_input_manifest_rejects_absolute_exclude_pattern(tmp_path: Path) -> None:
     _seed_project(
         tmp_path,

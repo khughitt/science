@@ -29,8 +29,8 @@ def _scaffold(root: Path) -> None:
     (root / "papers" / "references.bib").write_text(
         "% references.bib\n@article{Smith2024,\n  title={Test},\n  author={Smith},\n  year={2024}\n}\n"
     )
-    # Create RESEARCH_PLAN.md
-    (root / "RESEARCH_PLAN.md").write_text("# Research Plan\n")
+    # Create README.md
+    (root / "README.md").write_text("# Demo Project\n")
 
 
 def test_valid_hypothesis_ref() -> None:

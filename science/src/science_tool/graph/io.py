@@ -314,7 +314,7 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
     except Exception:
         include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "code")]
 
-    include_files = ("RESEARCH_PLAN.md", "science.yaml", "CLAUDE.md", "AGENTS.md")
+    include_files = ("README.md", "science.yaml", "CLAUDE.md", "AGENTS.md")
 
     files: set[Path] = set()
     for file_name in include_files:

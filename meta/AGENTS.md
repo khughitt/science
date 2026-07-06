@@ -60,7 +60,7 @@ uv run --frozen science validate --verbose
 ## Load-bearing constraints
 
 - **D-001:** Run science commands from `meta/` (or with `--project meta`); commits touching tool code stay scoped to the repo root, not `meta/`.
-- **D-002:** Implementation root is `src/`, not `code/`; no `RESEARCH_PLAN.md` (the strategic plan lives in `README.md`).
+- **D-002:** Implementation root is `src/`, not `code/`; strategic plan lives in `README.md`.
 - **D-003:** Tool-level beliefs are continuous probabilities strictly bounded away from 0 and 1; do not collapse beliefs to 0 or 1 in code paths, and decisions that need a binary choice compute it from the belief at the decision point.
 - **D-004:** Shipped Python packages live under `meta/src/` (e.g. `h01_simulator`); notebooks under `meta/notebooks/`; `uv sync` from `meta/` is the setup step.
 <!-- END: load-bearing-constraints -->

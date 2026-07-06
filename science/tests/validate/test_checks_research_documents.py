@@ -45,10 +45,10 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
     import science_tool.validate.checks.hypotheses as hypotheses
     import science_tool.validate.checks.hypothesis_comparisons as hypothesis_comparisons
     import science_tool.validate.checks.prereg as prereg
-    import science_tool.validate.checks.research_plan as research_plan
+    import science_tool.validate.checks.project_readme as project_readme
 
     importlib.reload(hypotheses)
-    importlib.reload(research_plan)
+    importlib.reload(project_readme)
     importlib.reload(discussions)
     importlib.reload(prereg)
     importlib.reload(hypothesis_comparisons)
@@ -56,7 +56,7 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-6:]] == [
         ("hypotheses...", 5),
-        ("research plan conventions...", 10),
+        ("project README conventions...", 10),
         ("discussion documents...", 11),
         ("discussion documents...", 12),
         ("discussion documents...", 13),
@@ -64,49 +64,49 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
     ]
 
 
-def test_research_plan_exists_info_and_legacy_section_warnings(tmp_path: Path) -> None:
-    from science_tool.validate.checks.research_plan import check_research_plan
+def test_project_readme_exists_info_and_legacy_section_warnings(tmp_path: Path) -> None:
+    from science_tool.validate.checks.project_readme import check_project_readme
 
     ctx = _ctx(tmp_path)
-    tmp_path.joinpath("RESEARCH_PLAN.md").write_text(
-        "\n".join(["# Plan", "## Current Priorities", "## Next Review Trigger"]),
+    tmp_path.joinpath("README.md").write_text(
+        "\n".join(["# Demo", "## Current Priorities", "## Next Review Trigger"]),
         encoding="utf-8",
     )
 
-    results = list(check_research_plan(ctx))
+    results = list(check_project_readme(ctx))
 
     assert [(result.severity, result.message) for result in results] == [
-        (Severity.INFO, "RESEARCH_PLAN.md exists"),
+        (Severity.INFO, "README.md exists"),
         (
             Severity.WARN,
-            "RESEARCH_PLAN.md contains legacy task-queue section '## Current Priorities' — migrate tasks to tasks/active.md via /science:tasks",
+            "README.md contains legacy task-queue section '## Current Priorities' — migrate tasks to tasks/active.md via /science:tasks",
         ),
         (
             Severity.WARN,
-            "RESEARCH_PLAN.md contains legacy task-queue section '## Next Review Trigger' — migrate tasks to tasks/active.md via /science:tasks",
+            "README.md contains legacy task-queue section '## Next Review Trigger' — migrate tasks to tasks/active.md via /science:tasks",
         ),
     ]
 
 
-def test_research_plan_absence_depends_on_effective_profile(tmp_path: Path) -> None:
-    from science_tool.validate.checks.research_plan import check_research_plan
+def test_project_readme_absence_is_reported_for_all_profiles(tmp_path: Path) -> None:
+    from science_tool.validate.checks.project_readme import check_project_readme
 
-    research_messages = _messages(check_research_plan(_ctx(tmp_path / "research", profile="research")))
-    software_messages = _messages(check_research_plan(_ctx(tmp_path / "software", profile="software")))
+    research_messages = _messages(check_project_readme(_ctx(tmp_path / "research", profile="research")))
+    software_messages = _messages(check_project_readme(_ctx(tmp_path / "software", profile="software")))
 
-    assert research_messages == ["No RESEARCH_PLAN.md — high-level planning may be in README.md or doc/plans/"]
-    assert software_messages == []
+    assert research_messages == ["README.md not found; use README.md for high-level project context and strategy"]
+    assert software_messages == ["README.md not found; use README.md for high-level project context and strategy"]
 
 
-def test_research_plan_check_accepts_readme_when_plan_is_missing(tmp_path: Path) -> None:
-    from science_tool.validate.checks.research_plan import check_research_plan
+def test_project_readme_check_accepts_readme(tmp_path: Path) -> None:
+    from science_tool.validate.checks.project_readme import check_project_readme
 
     ctx = _ctx(tmp_path, profile="research")
     tmp_path.joinpath("README.md").write_text("# Demo\n", encoding="utf-8")
 
-    messages = _messages(check_research_plan(ctx))
+    messages = _messages(check_project_readme(ctx))
 
-    assert messages == ["README.md exists; RESEARCH_PLAN.md not required"]
+    assert messages == ["README.md exists"]
 
 
 def test_discussions_warn_for_missing_sections_and_skip_legacy_comparison_docs(tmp_path: Path) -> None:

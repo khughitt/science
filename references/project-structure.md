@@ -12,7 +12,7 @@ This document describes the standard directory layouts for Science-managed proje
 | `CLAUDE.md` | Single-line pointer to `AGENTS.md` | Agent on project creation |
 | `AGENTS.md` | Operational guide (tools, validation, conventions, managed load-bearing-constraints digest) | Agent during loops; digest section managed by `/science:curate` |
 | `pyproject.toml` | Root tool manifest for project-local Science tooling | Agent on project creation / import |
-| `RESEARCH_PLAN.md` | Optional high-level research strategy when not inlined into `README.md` | Agent during planning |
+| `README.md` | Canonical high-level project context and strategy | User + agent |
 | `validate.sh` | Structural validation script | Copied from plugin |
 
 ## Directories

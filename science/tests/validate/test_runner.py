@@ -635,7 +635,7 @@ def _register_real_canonical_checks() -> None:
         "papers",
         "unresolved_markers",
         "gap_analysis",
-        "research_plan",
+        "project_readme",
         "discussions",
         "prereg",
         "hypothesis_comparisons",

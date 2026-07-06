@@ -52,7 +52,7 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_claude(ctx)
     yield from _check_agents(ctx)
     yield from _check_overview(ctx)
-    yield from _check_research_plan(ctx, profile)
+    yield from _check_readme(ctx)
     yield from _check_duplicate_docs(ctx)
     yield from _check_declared_roots_exist(ctx, paths)
     yield from _check_legacy_roots(ctx, profile, paths)
@@ -111,22 +111,12 @@ def _check_overview(ctx: ValidateContext) -> Iterator[Result]:
         )
 
 
-def _check_research_plan(ctx: ValidateContext, profile: str) -> Iterator[Result]:
-    plan_path = ctx.project_root / "RESEARCH_PLAN.md"
+def _check_readme(ctx: ValidateContext) -> Iterator[Result]:
     readme_path = ctx.project_root / "README.md"
-    if profile == "research":
-        if plan_path.is_file():
-            yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
-        elif readme_path.is_file():
-            yield _result(Severity.INFO, "README.md", "README.md exists; RESEARCH_PLAN.md not required")
-        else:
-            yield _result(
-                Severity.WARN,
-                "RESEARCH_PLAN.md",
-                "RESEARCH_PLAN.md not found (allowed if high-level planning is in README.md)",
-            )
-    elif plan_path.is_file():
-        yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
+    if readme_path.is_file():
+        yield _result(Severity.INFO, "README.md", "README.md exists")
+    else:
+        yield _result(Severity.WARN, "README.md", "Required project README missing: README.md")
 
 
 def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[Result]:

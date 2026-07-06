@@ -131,7 +131,7 @@ project represents its model graph — otherwise `science inquiry show` errors (
    per-hypothesis DAGs as a **file pair** — e.g. `doc/figures/dags/<id>.dot` + `<id>.edges.yaml` —
    consumed by `science big-picture` provenance-coverage rather than by `science graph add`. Check the
    project for such a convention (look under `doc/figures/dags/`, `*.edges.yaml`, or the project's
-   `RESEARCH_PLAN`/conventions) before assuming the inquiry patch path.
+   `*.edges.yaml`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
 
 3. **Route accordingly:**
    - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.

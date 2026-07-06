@@ -131,7 +131,7 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
 
 
 _SCAN_DIRS = ("doc", "entities")
-_SCAN_FILES = ("RESEARCH_PLAN.md",)
+_SCAN_FILES = ("README.md",)
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
 
 

@@ -36,24 +36,24 @@ def _messages(results: Iterable[Result]) -> list[str]:
     return [result.message for result in results]
 
 
-def test_registration_includes_papers_and_gap_analysis_before_research_plan() -> None:
+def test_registration_includes_papers_and_gap_analysis_before_project_readme() -> None:
     clear_checks_for_tests()
 
     import science_tool.validate.checks.gap_analysis as gap_analysis
     import science_tool.validate.checks.hypotheses as hypotheses
     import science_tool.validate.checks.papers as papers
-    import science_tool.validate.checks.research_plan as research_plan
+    import science_tool.validate.checks.project_readme as project_readme
 
     importlib.reload(hypotheses)
     importlib.reload(papers)
     importlib.reload(gap_analysis)
-    importlib.reload(research_plan)
+    importlib.reload(project_readme)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-4:]] == [
         ("hypotheses...", 5),
         ("paper summaries...", 7),
         ("research gap analysis...", 9),
-        ("research plan conventions...", 10),
+        ("project README conventions...", 10),
     ]
 
 

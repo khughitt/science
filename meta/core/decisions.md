@@ -71,7 +71,7 @@ later unified under `entities/<kind>/` by the v3 migration; see Implications.)
 **Implications:**
 - `meta/src/` initially held an empty placeholder; as of 2026-04-24 it holds
   shipped packages (see D-004).
-- No `RESEARCH_PLAN.md`; strategic plan lives in `README.md`.
+- Strategic plan lives in `README.md`.
 - As of 2026-06-20 the project migrated to the unified entity layout
   (`layout_version: 3`): papers, questions, hypotheses, interpretations,
   syntheses, topics, and talks now live under `entities/<kind>/NNNN-slug.md`;
