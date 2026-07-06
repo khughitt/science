@@ -19,6 +19,8 @@ from science_tool.graph.export_types import (
 from science_tool.graph.io import DCAT_NS
 from science_tool.graph.materialize import _build_dataset_from_sources
 from science_tool.graph.sources import load_project_sources
+from conftest import build_inquiry_graph
+
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
     SCI_NS,
@@ -28,13 +30,9 @@ from science_tool.graph.store import (
     add_concept,
     add_edge,
     add_hypothesis,
-    add_inquiry,
-    add_inquiry_node,
     add_mechanism,
     add_proposition,
     export_graph_payload,
-    set_boundary_role,
-    set_treatment_outcome,
 )
 
 
@@ -126,14 +124,40 @@ def graph_path(tmp_path: Path) -> Path:
         "graph/causal",
         claim_refs=["proposition:drug_causes_recovery_evidence"],
     )
-    add_inquiry(gp, "test-dag", "Test DAG", "concept/recovery", inquiry_type="causal")
-    set_boundary_role(gp, "test-dag", "concept/drug", "BoundaryIn")
-    set_boundary_role(gp, "test-dag", "concept/recovery", "BoundaryOut")
-    set_treatment_outcome(gp, "test-dag", "concept/drug", "concept/recovery")
-
-    add_inquiry(gp, "dangling-dag", "Dangling DAG", "concept/recovery", inquiry_type="causal")
-    set_treatment_outcome(gp, "dangling-dag", "concept/drug", "concept/unexported_outcome")
-    set_boundary_role(gp, "dangling-dag", "concept/unexported_boundary", "BoundaryOut")
+    # test_dag: source-built causal inquiry. `concept:modifier` is an interior
+    # node (flow-edge endpoint) so the confounds test can associate a graph/causal
+    # confounds edge with the inquiry once it authors the concept — the
+    # source-model equivalent of the retired `add_inquiry_node`.
+    build_inquiry_graph(
+        gp,
+        slug="test_dag",
+        title="Test DAG",
+        profile="causal",
+        focal="concept:recovery",
+        treatment="concept:drug",
+        outcome="concept:recovery",
+        boundary_roles=[
+            {"ref": "concept:drug", "role": "BoundaryIn"},
+            {"ref": "concept:recovery", "role": "BoundaryOut"},
+        ],
+        flow_edges=[
+            {"subject": "concept:modifier", "predicate": "feedsInto", "object": "concept:recovery"},
+        ],
+    )
+    # dangling_dag: outcome + boundary reference concepts that are never exported,
+    # exercising the export overlay's missing-referent handling.
+    build_inquiry_graph(
+        gp,
+        slug="dangling_dag",
+        title="Dangling DAG",
+        profile="causal",
+        focal="concept:recovery",
+        treatment="concept:drug",
+        outcome="concept:unexported_outcome",
+        boundary_roles=[
+            {"ref": "concept:unexported_boundary", "role": "BoundaryOut"},
+        ],
+    )
 
     return gp
 
@@ -411,8 +435,10 @@ def test_export_graph_payload_includes_causal_overlay_for_inquiry(graph_path: Pa
 
 
 def test_export_graph_payload_includes_confounds_edges_in_causal_overlay(graph_path: Path) -> None:
+    # `concept:modifier` is already an interior node of test_dag (fixture flow
+    # edge); authoring the concept makes it an exported member so the confounds
+    # edge below is associated with the inquiry in the causal overlay.
     add_concept(graph_path, "Modifier", None, None, source="http://example.org/project/source/modifier")
-    add_inquiry_node(graph_path, "test-dag", "concept/modifier")
     add_edge(
         graph_path,
         "concept/modifier",

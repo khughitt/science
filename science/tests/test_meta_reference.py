@@ -272,55 +272,60 @@ class TestMetaRefsInBlockedByAndSourceRefs:
                 assert "meta" not in str(o), f"meta source_ref leaked into KG: {s} {p} {o}"
 
 
-class TestMetaRefsInAddInquiryEdge:
-    def test_add_inquiry_edge_rejects_meta_subject(self, tmp_path: Path) -> None:
-        from science_tool.graph.store import (
-            add_inquiry,
-            add_inquiry_edge,
-            init_graph_file,
+class TestMetaRefsInInquiryFlowEdge:
+    """A meta: ref in an inquiry flow edge must never reach the KG.
+
+    The retired ``add_inquiry_edge`` mutator rejected meta refs interactively.
+    In the source-built pipeline an inquiry flow-edge endpoint is a required
+    member ref, so an authored ``meta:`` endpoint fails the build early in the
+    patch-membership deriver (``_resolve_required`` raises) rather than
+    materializing a spurious edge — a strictly stronger invariant.
+    """
+
+    @staticmethod
+    def _author_inquiry(tmp_path: Path, *, subject: str, object: str) -> None:
+        (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+
+        def _write(rel: str, frontmatter: list[str]) -> None:
+            path = tmp_path / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("\n".join(["---", *frontmatter, "---", "", "Body.", ""]), encoding="utf-8")
+
+        _write(
+            "entities/hypotheses/h1.md",
+            ['id: "hypothesis:h1"', 'kind: "hypothesis"', 'title: "H1"', 'status: "proposed"',
+             "ontology_terms: []", "source_refs: []", "related: []"],
+        )
+        _write(
+            "entities/concepts/x.md",
+            ['id: "concept:x"', 'kind: "concept"', 'title: "X"', 'status: "active"',
+             "ontology_terms: []", "source_refs: []", "related: []"],
+        )
+        _write(
+            "entities/patches/i1.md",
+            ['id: "patch-definition:i1"', 'kind: "patch-definition"', 'title: "Inquiry one"',
+             'status: "active"', "ontology_terms: []", "source_refs: []", "related: []",
+             'focal: "hypothesis:h1"',
+             "scope_set:", '  - scope: "local"',
+             "neighborhood_policy:", '  name: "local-closure-v1"', '  version: "local-closure-v1"', "  max_depth: 2",
+             "patch_type: inquiry",
+             "inquiry:", "  profile: investigation", "  status: sketch",
+             "  flow_edges:",
+             f'    - subject: "{subject}"', "      predicate: feedsInto", f'      object: "{object}"'],
         )
 
-        graph_path = tmp_path / "graph.trig"
-        init_graph_file(graph_path)
-        add_inquiry(
-            graph_path=graph_path,
-            slug="i1",
-            label="Test",
-            target="hypothesis:h01",
-        )
+    def test_meta_subject_fails_build(self, tmp_path: Path) -> None:
+        from science_tool.graph.materialize import materialize_graph
+        from science_tool.graph.patch_membership import PatchMembershipError
 
-        with pytest.raises(click.ClickException) as exc:
-            add_inquiry_edge(
-                graph_path=graph_path,
-                inquiry_slug="i1",
-                subject="meta:phase3b",
-                predicate="skos:related",
-                obj="hypothesis/h01",
-            )
-        assert "meta" in str(exc.value).lower()
+        self._author_inquiry(tmp_path, subject="meta:phase3b", object="concept:x")
+        with pytest.raises(PatchMembershipError, match="meta:phase3b"):
+            materialize_graph(tmp_path)
 
-    def test_add_inquiry_edge_rejects_meta_object(self, tmp_path: Path) -> None:
-        from science_tool.graph.store import (
-            add_inquiry,
-            add_inquiry_edge,
-            init_graph_file,
-        )
+    def test_meta_object_fails_build(self, tmp_path: Path) -> None:
+        from science_tool.graph.materialize import materialize_graph
+        from science_tool.graph.patch_membership import PatchMembershipError
 
-        graph_path = tmp_path / "graph.trig"
-        init_graph_file(graph_path)
-        add_inquiry(
-            graph_path=graph_path,
-            slug="i1",
-            label="Test",
-            target="hypothesis:h01",
-        )
-
-        with pytest.raises(click.ClickException) as exc:
-            add_inquiry_edge(
-                graph_path=graph_path,
-                inquiry_slug="i1",
-                subject="hypothesis/h01",
-                predicate="skos:related",
-                obj="meta:phase3b",
-            )
-        assert "meta" in str(exc.value).lower()
+        self._author_inquiry(tmp_path, subject="concept:x", object="meta:phase3b")
+        with pytest.raises(PatchMembershipError, match="meta:phase3b"):
+            materialize_graph(tmp_path)
