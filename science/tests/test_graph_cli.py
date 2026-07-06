@@ -3,10 +3,11 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 from conftest import build_entity_graph, build_inquiry_graph
-from rdflib import Dataset, Literal
-from rdflib.namespace import PROV, RDF, SKOS, Namespace
+from rdflib import Dataset
+from rdflib.namespace import PROV, RDF, Namespace
 
 from science_tool.cli import main
 
@@ -50,14 +51,90 @@ def _evidence_line(
     )
 
 
-def test_retired_writer_message_names_command_and_forward_path() -> None:
-    from science_tool.cli import _retired_writer
+@pytest.mark.parametrize(
+    ("args", "command", "forward_key"),
+    [
+        (
+            ["graph", "add", "concept", "Example Concept"],
+            "graph add concept",
+            "science entity create concept",
+        ),
+        (
+            ["graph", "add", "proposition", "Example proposition"],
+            "graph add proposition",
+            "science propositions create",
+        ),
+        (
+            ["graph", "add", "observation", "Example observation"],
+            "graph add observation",
+            "science entity create observation",
+        ),
+        (
+            ["graph", "add", "evidence", "observation:o1", "proposition:p1", "--stance", "maybe"],
+            "graph add evidence",
+            "science evidence-lines create",
+        ),
+        (
+            ["graph", "add", "finding", "Example finding"],
+            "graph add finding",
+            "science entity create finding",
+        ),
+        (
+            ["graph", "add", "interpretation", "Example interpretation"],
+            "graph add interpretation",
+            "science interpretations create",
+        ),
+        (
+            ["graph", "add", "discussion", "Example discussion"],
+            "graph add discussion",
+            "science discussions create",
+        ),
+        (
+            ["graph", "add", "mechanism", "Example mechanism"],
+            "graph add mechanism",
+            "science entity create mechanism",
+        ),
+        (
+            ["graph", "add", "hypothesis", "h1"],
+            "graph add hypothesis",
+            "science hypotheses create",
+        ),
+        (
+            ["graph", "add", "question", "q1"],
+            "graph add question",
+            "science questions create",
+        ),
+        (
+            ["graph", "add", "edge", "subject", "bad:predicate", "object", "--graph", "not-a-layer"],
+            "graph add edge",
+            "relations.yaml",
+        ),
+        (
+            ["graph", "import", "does-not-exist.ttl"],
+            "graph import",
+            "Raw-triple import is retired",
+        ),
+        (
+            ["graph", "stamp-revision"],
+            "graph stamp-revision",
+            "compiler stamps revisions",
+        ),
+        (
+            ["graph", "migrate-addresses"],
+            "graph migrate-addresses",
+            "Address direction is canonical",
+        ),
+    ],
+)
+def test_retired_graph_writer_commands_report_forward_path(args: list[str], command: str, forward_key: str) -> None:
+    runner = CliRunner()
 
-    exc = _retired_writer("graph add concept", "Run `science entity create concept <title>`")
-    msg = str(exc)
-    assert "graph add concept is retired" in msg
-    assert "science entity create concept" in msg
-    assert "science graph build" in msg
+    result = runner.invoke(main, args)
+
+    assert result.exit_code != 0
+    assert f"{command} is retired" in result.output
+    assert forward_key in result.output
+    assert "science graph build" in result.output
 
 
 def test_graph_init_creates_trig_with_named_graphs() -> None:
@@ -323,134 +400,7 @@ def test_graph_stats_supports_json_format() -> None:
         assert any(row["graph"] == "total" for row in payload["rows"])
 
 
-def test_graph_add_concept_writes_expected_triples() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0
-
-        add = runner.invoke(
-            main,
-            ["graph", "add", "concept", "BRCA1", "--type", "biolink:Gene", "--ontology-id", "NCBIGene:672"],
-        )
-        assert add.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/brca1"]
-
-        assert (concept_uri, RDF.type, SCI.Concept) in knowledge
-        assert (concept_uri, RDF.type, BIOLINK.Gene) in knowledge
-        assert (concept_uri, SKOS.prefLabel, None) in knowledge
-        assert (concept_uri, SCHEMA.identifier, None) in knowledge
-
-
-def test_graph_add_mechanism_writes_expected_triples() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "PHF19"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "PRC2 complex"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "PHF19-PRC2 dampens IFN signaling",
-                    "--source",
-                    "paper:doi_10_1000_ifn",
-                    "--id",
-                    "ifn_silencing",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "mechanism",
-                "PHF19 / PRC2 / IFN",
-                "--summary",
-                "PHF19-PRC2 dampens IFN signaling.",
-                "--participant",
-                "concept:phf19",
-                "--participant",
-                "concept:prc2_complex",
-                "--proposition",
-                "proposition:ifn_silencing",
-                "--id",
-                "phf19-prc2-ifn",
-            ],
-        )
-        assert add.exit_code == 0
-        assert "Added mechanism:" in add.output
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        mechanism_uri = PROJECT_NS["mechanism/phf19_prc2_ifn"]
-
-        assert (mechanism_uri, RDF.type, SCI.Mechanism) in knowledge
-        assert (mechanism_uri, SKOS.prefLabel, Literal("PHF19 / PRC2 / IFN")) in knowledge
-        assert (mechanism_uri, SCHEMA.description, Literal("PHF19-PRC2 dampens IFN signaling.")) in knowledge
-        assert (mechanism_uri, SCI.hasParticipant, PROJECT_NS["concept/phf19"]) in knowledge
-        assert (mechanism_uri, SCI.hasParticipant, PROJECT_NS["concept/prc2_complex"]) in knowledge
-        assert (mechanism_uri, SCI.hasProposition, PROJECT_NS["proposition/ifn_silencing"]) in knowledge
-        assert (mechanism_uri, SCI.projectStatus, Literal("draft")) in knowledge
-
-
-def test_graph_add_mechanism_requires_two_participants() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "PHF19"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "PHF19-PRC2 dampens IFN signaling",
-                    "--source",
-                    "paper:doi_10_1000_ifn",
-                    "--id",
-                    "ifn_silencing",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "mechanism",
-                "PHF19 / PRC2 / IFN",
-                "--summary",
-                "PHF19-PRC2 dampens IFN signaling.",
-                "--participant",
-                "concept:phf19",
-                "--proposition",
-                "proposition:ifn_silencing",
-            ],
-        )
-
-        assert add.exit_code != 0
-        assert "at least two participants" in add.output.lower()
-
-
-def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
+def test_graph_add_article_records_reference() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
@@ -460,50 +410,14 @@ def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
         article = runner.invoke(main, ["graph", "add", "article", "10.1038/s41586-023-06957-x"])
         assert article.exit_code == 0
 
-        proposition = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "BRCA1 is associated with treatment resistance",
-                "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
-                "--confidence",
-                "0.8",
-            ],
-        )
-        assert proposition.exit_code == 0
-
-        hypothesis = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "hypothesis",
-                "H3",
-                "--text",
-                "BRCA1 overexpression increases resistance",
-                "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
-            ],
-        )
-        assert hypothesis.exit_code == 0
-
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
 
         article_uri = PROJECT_NS["article/doi_10_1038_s41586_023_06957_x"]
-        hypothesis_uri = PROJECT_NS["hypothesis/h3"]
 
         assert (article_uri, RDF.type, SCI.Article) in knowledge
         assert (article_uri, SCHEMA.identifier, None) in knowledge
-        assert (hypothesis_uri, RDF.type, SCI.Hypothesis) in knowledge
-        assert (hypothesis_uri, SCHEMA.text, None) in knowledge
-        assert any(pred == SCI.confidence for _, pred, _ in provenance)
-        assert any(pred == PROV.wasDerivedFrom for _, pred, _ in provenance)
 
 
 def test_graph_add_story_warns_graph_only_not_durable() -> None:
@@ -554,188 +468,6 @@ def test_graph_add_paper_warns_legacy_composition_not_literature_note() -> None:
         assert result.exit_code == 0
         assert "legacy composition command" in result.output
         assert "external literature note" in result.output
-
-
-def test_graph_add_edge_targets_requested_layer() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "skos:broader",
-                "concept/tp53",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-        assert edge.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        assert (PROJECT_NS["concept/brca1"], SKOS.broader, PROJECT_NS["concept/tp53"]) in knowledge
-
-
-def test_graph_add_relation_claim_writes_claim_types_and_relation_metadata() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        proposition = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "brca1 supports h3",
-                "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
-                "--confidence",
-                "0.8",
-                "--id",
-                "RC1",
-                "--subject",
-                "concept/brca1",
-                "--predicate",
-                "cito:supports",
-                "--object",
-                "hypothesis/h3",
-            ],
-        )
-        assert proposition.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/rc1"]
-
-        assert (prop_uri, RDF.type, SCI.Proposition) in knowledge
-        assert (prop_uri, SCI.propSubject, PROJECT_NS["concept/brca1"]) in knowledge
-        assert (prop_uri, SCI.propPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
-        assert (prop_uri, SCI.propObject, PROJECT_NS["hypothesis/h3"]) in knowledge
-        assert (prop_uri, SCHEMA.text, Literal("brca1 supports h3")) in knowledge
-        assert (prop_uri, PROV.wasDerivedFrom, PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]) in provenance
-        assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((prop_uri, None, None)))
-
-
-def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "cito:supports",
-                "hypothesis/h3",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-
-        assert edge.exit_code != 0
-        assert "evidence" in edge.output
-
-        disputes = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "cito:disputes",
-                "hypothesis/h3",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-
-        assert disputes.exit_code != 0
-        assert "evidence" in disputes.output
-
-        # cito:discusses is a linking predicate, not an evidence stance — allowed via add edge
-        discusses = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "proposition/c1",
-                "cito:discusses",
-                "hypothesis/h3",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-
-        assert discusses.exit_code == 0
-
-
-def test_graph_add_edge_allows_structural_skos_related_in_knowledge() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "skos:related",
-                "concept/tp53",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-
-        assert edge.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        assert (PROJECT_NS["concept/brca1"], SKOS.related, PROJECT_NS["concept/tp53"]) in knowledge
-
-
-def test_graph_add_edge_rejects_unknown_curie_prefix() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "scii:relatedTo",
-                "concept/tp53",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-
-        assert edge.exit_code != 0
-        assert "unknown curie prefix" in edge.output.lower()
 
 
 def test_graph_validate_passes_on_fresh_graph() -> None:
@@ -808,75 +540,6 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
 # nodes non-orphaned under the current validator.
 
 
-def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Same proposition text",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Same proposition text",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                ],
-            ).exit_code
-            == 0
-        )
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-
-        proposition_entities = {str(subj) for subj, _, _ in knowledge.triples((None, RDF.type, SCI.Proposition))}
-        assert len(proposition_entities) == 2
-
-
-def test_graph_add_claim_supports_explicit_id() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        proposition = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Proposition with explicit ID",
-                "--source",
-                "paper:doi_10_3333_c",
-                "--id",
-                "C42",
-            ],
-        )
-        assert proposition.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        assert (PROJECT_NS["proposition/c42"], RDF.type, SCI.Proposition) in knowledge
-
-
 def test_graph_diff_supports_json_output() -> None:
     runner = CliRunner()
 
@@ -919,7 +582,9 @@ def test_graph_diff_hybrid_detects_hash_change_with_stable_mtime() -> None:
         doc_file.write_text("version 1", encoding="utf-8")
 
         # Update graph so revision metadata captures current doc file hash/mtime.
-        assert runner.invoke(main, ["graph", "stamp-revision"]).exit_code == 0
+        from science_tool.graph.store import stamp_revision
+
+        stamp_revision(Path("knowledge/graph.trig"))
 
         baseline_mtime_ns = doc_file.stat().st_mtime_ns
         doc_file.write_text("version 2", encoding="utf-8")
@@ -1394,204 +1059,6 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         assert any(row["entity"] == str(PROJECT_NS["proposition/c_disputed"]) for row in payload["rows"])
 
 
-def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Literature support for dashboard summary",
-                "--source",
-                "paper:doi_10_1111_a",
-                "--evidence-type",
-                "literature_evidence",
-                "--id",
-                "lit_support",
-            ],
-        )
-        assert result.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/lit_support"]
-
-        assert (prop_uri, SCI.evidenceType, Literal("literature_evidence")) in provenance
-
-
-def test_graph_add_claim_accepts_explicit_evidence_semantics() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Cross-dataset but mechanistically indirect claim",
-                "--source",
-                "paper:doi_10_7777_semantics",
-                "--id",
-                "semantics_claim",
-                "--statistical-support",
-                "replicated",
-                "--mechanistic-support",
-                "inferred",
-                "--replication-scope",
-                "cross_dataset",
-                "--claim-status",
-                "weakened",
-            ],
-        )
-        assert result.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/semantics_claim"]
-
-        assert (prop_uri, SCI.statisticalSupport, Literal("replicated")) in provenance
-        assert (prop_uri, SCI.mechanisticSupport, Literal("inferred")) in provenance
-        assert (prop_uri, SCI.replicationScope, Literal("cross_dataset")) in provenance
-        assert (prop_uri, SCI.claimStatus, Literal("weakened")) in provenance
-
-
-def test_graph_add_claim_accepts_pre_registration_links() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Claim linked to a pre-registration",
-                "--source",
-                "paper:doi_10_9999_prereg",
-                "--id",
-                "prereg_claim",
-                "--pre-registration",
-                "pre-registration:edge-ribosome-e2f1",
-                "--pre-registration",
-                "pre-registration:edge-mtor-ribosome",
-            ],
-        )
-        assert result.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/prereg_claim"]
-
-        assert (
-            prop_uri,
-            SCI.preRegisteredIn,
-            PROJECT_NS["pre-registration/edge-ribosome-e2f1"],
-        ) in provenance
-        assert (
-            prop_uri,
-            SCI.preRegisteredIn,
-            PROJECT_NS["pre-registration/edge-mtor-ribosome"],
-        ) in provenance
-
-
-def test_graph_add_claim_accepts_interaction_terms() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "KRAS", "--type", "sci:Variable"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "KRAS modifies the drug to recovery slope",
-                "--source",
-                "paper:doi_10_1313_interaction",
-                "--id",
-                "interaction_claim",
-                "--interaction-term",
-                '{"modifier":"concept/kras","effect":"amplifies","note":"stronger survival slope in KRAS-mutant cases"}',
-            ],
-        )
-        assert result.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/interaction_claim"]
-
-        interaction_terms = list(provenance.objects(prop_uri, SCI.interactionTerm))
-        assert len(interaction_terms) == 1
-        payload = json.loads(str(interaction_terms[0]))
-        assert payload["modifier"] == "http://example.org/project/concept/kras"
-        assert payload["effect"] == "amplifies"
-
-
-def test_graph_add_claim_accepts_bridge_between_hypotheses() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main, ["graph", "add", "hypothesis", "H1", "--text", "Hypothesis 1", "--source", "paper:doi_h1"]
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main, ["graph", "add", "hypothesis", "H2", "--text", "Hypothesis 2", "--source", "paper:doi_h2"]
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "Bridge claim between H1 and H2",
-                "--source",
-                "paper:doi_10_1515_bridge",
-                "--id",
-                "bridge_claim",
-                "--bridge-between",
-                "hypothesis:h1",
-                "--bridge-between",
-                "hypothesis:h2",
-            ],
-        )
-        assert result.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        prop_uri = PROJECT_NS["proposition/bridge_claim"]
-
-        assert (prop_uri, SCI.bridgeBetween, PROJECT_NS["hypothesis/h1"]) in provenance
-        assert (prop_uri, SCI.bridgeBetween, PROJECT_NS["hypothesis/h2"]) in provenance
-        assert (prop_uri, CITO.discusses, PROJECT_NS["hypothesis/h1"]) in knowledge
-        assert (prop_uri, CITO.discusses, PROJECT_NS["hypothesis/h2"]) in knowledge
-
-
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
     runner = CliRunner()
 
@@ -1894,124 +1361,6 @@ def test_graph_question_summary_table_headers_are_sensible() -> None:
         assert "Text" in result.output
 
 
-def test_graph_migrate_addresses_flips_anti_canonical_triples() -> None:
-    """Anti-canonical (?prop sci:addresses ?question) triples must flip to canonical
-    (?question sci:addresses ?prop) and become visible to question-summary."""
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "question", "Q1", "--text", "Why?", "--source", "paper:a"],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "proposition", "Because.", "--source", "paper:a", "--id", "p1"],
-            ).exit_code
-            == 0
-        )
-
-        # Write the edge in the anti-canonical direction by going straight through
-        # the store helper, bypassing the warning-only validation in add_edge.
-        from rdflib import Dataset
-
-        from science_tool.graph.store import (
-            DEFAULT_GRAPH_PATH,
-            PROJECT_NS,
-            SCI_NS,
-            _graph_uri,
-            _save_dataset,
-        )
-
-        dataset = Dataset()
-        dataset.parse(source=str(DEFAULT_GRAPH_PATH), format="trig")
-        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-        prop_uri = PROJECT_NS["proposition/p1"]
-        question_uri = PROJECT_NS["question/q1"]
-        knowledge.add((prop_uri, SCI_NS.addresses, question_uri))
-        _save_dataset(dataset, DEFAULT_GRAPH_PATH)
-
-        # Dry-run reports the flip but does not write.
-        dry = runner.invoke(main, ["graph", "migrate-addresses"])
-        assert dry.exit_code == 0
-        assert "Would flip 1" in dry.output
-
-        # Apply actually rewrites.
-        applied = runner.invoke(main, ["graph", "migrate-addresses", "--apply"])
-        assert applied.exit_code == 0
-        assert "Flipped 1" in applied.output
-
-        # Re-running on already-canonical data is a no-op.
-        again = runner.invoke(main, ["graph", "migrate-addresses"])
-        assert again.exit_code == 0
-        assert "No anti-canonical" in again.output
-
-
-def test_graph_add_edge_warns_on_reversed_addresses_direction() -> None:
-    """The bonus validation should warn (but not fail) on anti-canonical writes."""
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "question", "Q1", "--text", "Why?", "--source", "paper:a"],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "proposition", "Because.", "--source", "paper:a", "--id", "p1"],
-            ).exit_code
-            == 0
-        )
-
-        result = runner.invoke(
-            main,
-            ["graph", "add", "edge", "proposition/p1", "sci:addresses", "question/q1"],
-        )
-        assert result.exit_code == 0
-        assert "direction looks reversed" in result.output
-
-
-def test_graph_add_edge_warns_on_invalid_supersedes_kind_pair() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            ["graph", "add", "edge", "interpretation/new_interpretation", "sci:supersedes", "workflow-run/old-run"],
-        )
-        assert result.exit_code == 0
-        assert "unexpected kinds" in result.output
-        assert "interpretation -> workflow-run" in result.output
-
-
-def test_graph_add_edge_accepts_chain_audit_prefixes() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        result = runner.invoke(
-            main,
-            ["graph", "add", "edge", "chain-audit:abc-review", "sci:audits", "chain:abc"],
-        )
-
-        assert result.exit_code == 0
-        assert "Unknown CURIE prefix" not in result.output
-        assert "unexpected kinds" not in result.output
-
-
 def test_graph_project_summary_rolls_up_research_profile() -> None:
     runner = CliRunner()
 
@@ -2165,334 +1514,6 @@ def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
         assert len(payload["rows"]) == 0
 
 
-def test_cito_prefix_resolves_in_relation_claim() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        proposition = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "proposition",
-                "proposition c1 supports hypothesis h1",
-                "--source",
-                "paper:doi_10_1234_example",
-                "--subject",
-                "proposition/c1",
-                "--predicate",
-                "cito:supports",
-                "--object",
-                "hypothesis/h1",
-            ],
-        )
-        assert proposition.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        prop_uri = next(knowledge.subjects(RDF.type, SCI.Proposition))
-        cito_supports = Namespace("http://purl.org/spar/cito/")["supports"]
-        assert (prop_uri, SCI.propPredicate, cito_supports) in knowledge
-
-
-def test_dcterms_prefix_resolves_in_add_edge() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "dcterms:identifier",
-                "concept/ncbigene_672",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-        assert edge.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        dcterms_id = Namespace("http://purl.org/dc/terms/")["identifier"]
-        assert (PROJECT_NS["concept/brca1"], dcterms_id, PROJECT_NS["concept/ncbigene_672"]) in knowledge
-
-
-def test_graph_add_concept_with_note_writes_skos_note() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--note", "12 layers; max context 2048 nt"])
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/dnabert_2"]
-        notes = list(knowledge.objects(concept_uri, SKOS.note))
-        assert len(notes) == 1
-        assert str(notes[0]) == "12 layers; max context 2048 nt"
-
-
-def test_graph_add_concept_with_definition_writes_skos_definition() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "concept",
-                "Epistasis",
-                "--definition",
-                "Nonadditive interactions between genetic variants",
-            ],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/epistasis"]
-        defs = list(knowledge.objects(concept_uri, SKOS.definition))
-        assert len(defs) == 1
-        assert "Nonadditive" in str(defs[0])
-
-
-def test_graph_add_concept_with_property_bare_key_uses_sci_namespace() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "concept",
-                "DNABERT-2",
-                "--property",
-                "hasArchitecture",
-                "BERT encoder",
-                "--property",
-                "hasParameters",
-                "117M",
-            ],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/dnabert_2"]
-        assert (concept_uri, SCI["hasArchitecture"], None) in knowledge
-        assert (concept_uri, SCI["hasParameters"], None) in knowledge
-        arch_vals = [str(o) for o in knowledge.objects(concept_uri, SCI["hasArchitecture"])]
-        assert "BERT encoder" in arch_vals
-
-
-def test_graph_add_concept_with_property_curie_key_resolves_namespace() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(
-            main,
-            ["graph", "add", "concept", "DNABERT-2", "--property", "schema:description", "A DNA foundation model"],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/dnabert_2"]
-        assert (concept_uri, SCHEMA["description"], None) in knowledge
-
-
-def test_graph_add_concept_with_status_writes_project_status() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--status", "selected-primary"])
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        concept_uri = PROJECT_NS["concept/dnabert_2"]
-        statuses = [str(o) for o in knowledge.objects(concept_uri, SCI["projectStatus"])]
-        assert "selected-primary" in statuses
-
-
-def test_graph_add_concept_with_source_writes_provenance() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--source", "paper:doi_10_1234_test"])
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        concept_uri = PROJECT_NS["concept/dnabert_2"]
-        sources = list(provenance.objects(concept_uri, PROV.wasDerivedFrom))
-        assert len(sources) == 1
-        assert str(sources[0]).endswith("doi_10_1234_test")
-
-
-def test_graph_add_hypothesis_with_status_writes_project_status() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "hypothesis",
-                "H1",
-                "--text",
-                "Test hypothesis",
-                "--source",
-                "paper:doi_10_1111_a",
-                "--status",
-                "active",
-            ],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        hyp_uri = PROJECT_NS["hypothesis/h1"]
-        statuses = [str(o) for o in knowledge.objects(hyp_uri, SCI["projectStatus"])]
-        assert "active" in statuses
-
-
-def test_graph_add_question_creates_entity_with_provenance() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "question",
-                "Q01",
-                "--text",
-                "Which tokenization strategy best preserves biological signals?",
-                "--source",
-                "paper:doi_10_1111_a",
-            ],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        q_uri = PROJECT_NS["question/q01"]
-        assert (q_uri, RDF.type, SCI["Question"]) in knowledge
-        assert (q_uri, SCHEMA["text"], None) in knowledge
-        assert (q_uri, SCHEMA["identifier"], None) in knowledge
-        assert any(provenance.triples((q_uri, PROV.wasDerivedFrom, None)))
-        # Default maturity is "open"
-        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
-        assert "open" in maturity_vals
-
-
-def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                ["graph", "add", "hypothesis", "H1", "--text", "Test hyp", "--source", "paper:doi_10_1111_a"],
-            ).exit_code
-            == 0
-        )
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "question",
-                "Q05",
-                "--text",
-                "How should models be selected?",
-                "--source",
-                "paper:doi_10_2222_b",
-                "--maturity",
-                "partially-resolved",
-                "--related",
-                "hypothesis/h1",
-            ],
-        )
-        assert add.exit_code == 0
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        q_uri = PROJECT_NS["question/q05"]
-        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
-        assert "partially-resolved" in maturity_vals
-        related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
-        assert any("hypothesis/h1" in r for r in related)
-
-
-def test_graph_add_question_with_generic_related() -> None:
-    """graph add question --related should accept any entity reference, not just hypotheses."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Add a hypothesis entity first
-        assert (
-            runner.invoke(
-                main, ["graph", "add", "hypothesis", "H1", "--text", "Test", "--source", "paper:doi_10_1111_a"]
-            ).exit_code
-            == 0
-        )
-
-        add = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "question",
-                "Q10",
-                "--text",
-                "How does X relate to Y?",
-                "--source",
-                "paper:doi_10_2222_b",
-                "--related",
-                "hypothesis/h1",
-            ],
-        )
-        assert add.exit_code == 0, add.output
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        q_uri = PROJECT_NS["question/q10"]
-        related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
-        assert any("hypothesis/h1" in r for r in related)
-
-
-def test_graph_stamp_revision_updates_revision_metadata() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        doc_dir = Path("doc")
-        doc_dir.mkdir()
-        (doc_dir / "notes.md").write_text("some notes", encoding="utf-8")
-
-        result = runner.invoke(main, ["graph", "stamp-revision"])
-        assert result.exit_code == 0
-        assert "revision" in result.output.lower()
-
-        # Verify the revision metadata was written by checking diff sees no stale files
-        diff = runner.invoke(main, ["graph", "diff", "--mode", "hybrid", "--format", "json"])
-        assert diff.exit_code == 0
-        payload = json.loads(diff.output)
-        assert len(payload["rows"]) == 0
-
-
 def test_graph_predicates_outputs_table() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["graph", "predicates"])
@@ -2516,86 +1537,6 @@ def test_graph_predicates_outputs_json() -> None:
     assert "scic:causes" in predicates
     assert predicate_rows["cito:supports"]["layer"] == "graph/knowledge"
     assert predicate_rows["cito:disputes"]["layer"] == "graph/knowledge"
-
-
-def test_graph_add_edge_slugifies_bare_terms() -> None:
-    """Bare terms (no prefix, no URL) should be auto-slugified in edge subjects/objects."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Add concept first so it exists
-        assert runner.invoke(main, ["graph", "add", "concept", "Nucleotide Transformer v2"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/nucleotide_transformer_v2",
-                "skos:broader",
-                "Some New Thing",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-        assert edge.exit_code == 0
-
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        # The bare term "Some New Thing" should resolve to slugified URI
-        assert (
-            PROJECT_NS["concept/nucleotide_transformer_v2"],
-            Namespace("http://www.w3.org/2004/02/skos/core#")["broader"],
-            PROJECT_NS["some_new_thing"],
-        ) in knowledge
-
-
-def test_graph_add_edge_warns_on_nonexistent_entity() -> None:
-    """Adding an edge referencing a non-existent entity should emit a warning to stderr."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        # First add a concept so one side exists
-        assert runner.invoke(main, ["graph", "add", "concept", "BRCA1"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "edge",
-                "concept/brca1",
-                "skos:broader",
-                "concept/nonexistent",
-                "--graph",
-                "graph/knowledge",
-            ],
-        )
-        assert edge.exit_code == 0
-        # The warning is written to stderr via click.echo(err=True),
-        # but CliRunner mixes stderr into output by default
-        assert "Warning" in edge.output
-        assert "not yet in the graph" in edge.output
-
-
-def test_graph_add_edge_echoes_resolved_uris() -> None:
-    """The CLI should echo resolved URIs, not raw input strings."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(main, ["graph", "add", "concept", "BRCA1"]).exit_code == 0
-
-        edge = runner.invoke(
-            main,
-            ["graph", "add", "edge", "concept/brca1", "skos:broader", "concept/tp53", "--graph", "graph/knowledge"],
-        )
-        assert edge.exit_code == 0
-        # Output should show resolved short forms, not raw input
-        assert "concept/brca1" in edge.output
-        assert "skos:broader" in edge.output
 
 
 def test_graph_question_summary_returns_all_rows_by_default() -> None:

@@ -6,9 +6,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import numpy as np
 from click.testing import CliRunner
-from rdflib import Dataset as RdfDataset
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import PROV, RDF, SKOS
+from rdflib import Graph, Namespace
+from rdflib.namespace import RDF, SKOS
 
 from science_tool.cli import main
 from science_tool.distill.openalex import distill_openalex
@@ -246,71 +245,33 @@ def test_distill_pykeen_writes_manifest(tmp_path: Path) -> None:
     assert manifest.exists()
 
 
-def _write_test_snapshot(path: Path) -> None:
-    """Write a minimal Turtle snapshot for import testing."""
-    g = Graph()
-    g.bind("sci", SCI)
-    g.bind("skos", SKOS)
-    concept = URIRef("http://example.org/test/concept1")
-    g.add((concept, RDF.type, SCI.Concept))
-    g.add((concept, SKOS.prefLabel, Literal("TestConcept")))
-    g.serialize(destination=str(path), format="turtle")
-
-
-def test_graph_import_merges_into_knowledge_layer() -> None:
+def test_graph_import_reports_retirement_for_existing_snapshot() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
 
         snapshot = Path("snapshot.ttl")
-        _write_test_snapshot(snapshot)
+        snapshot.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
 
         result = runner.invoke(main, ["graph", "import", str(snapshot)])
-        assert result.exit_code == 0
 
-        dataset = RdfDataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(URIRef("http://example.org/project/graph/knowledge"))
-
-        concept = URIRef("http://example.org/test/concept1")
-        assert (concept, RDF.type, SCI.Concept) in knowledge
-        assert (concept, SKOS.prefLabel, Literal("TestConcept")) in knowledge
+        assert result.exit_code != 0
+        assert "graph import is retired" in result.output
+        assert "Raw-triple import is retired" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_import_records_provenance() -> None:
+def test_graph_import_reports_retirement_for_missing_snapshot() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        result = runner.invoke(main, ["graph", "import", "does-not-exist.ttl"])
 
-        snapshot = Path("snapshot.ttl")
-        _write_test_snapshot(snapshot)
-
-        result = runner.invoke(main, ["graph", "import", str(snapshot)])
-        assert result.exit_code == 0
-
-        dataset = RdfDataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        provenance = dataset.graph(URIRef("http://example.org/project/graph/provenance"))
-
-        # Should have an import provenance record
-        import_records = list(provenance.triples((None, PROV.generatedAtTime, None)))
-        assert len(import_records) >= 1
-
-
-def test_graph_import_reports_triple_count() -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
-        snapshot = Path("snapshot.ttl")
-        _write_test_snapshot(snapshot)
-
-        result = runner.invoke(main, ["graph", "import", str(snapshot)])
-        assert result.exit_code == 0
-        assert "2" in result.output  # 2 triples imported
+        assert result.exit_code != 0
+        assert "graph import is retired" in result.output
+        assert "does not exist" not in result.output
+        assert "science graph build" in result.output
 
 
 def test_distill_openalex_cli() -> None:

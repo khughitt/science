@@ -1182,14 +1182,9 @@ def test_interpretation_input_maps_to_source_refs() -> None:
         assert "results/run-1" in Path("entities/interpretations/0001-result.md").read_text(encoding="utf-8")
 
 
-def test_graph_add_question_mentions_entity_create() -> None:
+def test_graph_add_question_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1204,8 +1199,10 @@ def test_graph_add_question_mentions_entity_create() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "entity create question" in result.output
+        assert result.exit_code != 0
+        assert "graph add question is retired" in result.output
+        assert "science questions create" in result.output
+        assert "science graph build" in result.output
 
 
 def test_proposition_create_writes_source() -> None:
@@ -1328,14 +1325,9 @@ def test_evidence_lines_list_and_show_round_trip() -> None:
         assert "Observed support." in shown.output
 
 
-def test_graph_add_proposition_warns_about_ephemerality() -> None:
+def test_graph_add_proposition_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1350,19 +1342,15 @@ def test_graph_add_proposition_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
-        assert "propositions create" in result.output
+        assert result.exit_code != 0
+        assert "graph add proposition is retired" in result.output
+        assert "science propositions create" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_observation_warns_about_ephemerality() -> None:
+def test_graph_add_observation_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1375,18 +1363,15 @@ def test_graph_add_observation_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add observation is retired" in result.output
+        assert "science entity create observation" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_finding_warns_about_ephemerality() -> None:
+def test_graph_add_finding_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1405,18 +1390,15 @@ def test_graph_add_finding_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add finding is retired" in result.output
+        assert "science entity create finding" in result.output
+        assert "science graph build" in result.output
 
 
-def test_graph_add_evidence_warns_about_ephemerality() -> None:
+def test_graph_add_evidence_reports_retirement() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
-        root = Path.cwd()
-        seed_project(root)
-        init = runner.invoke(main, ["graph", "init"])
-        assert init.exit_code == 0, init.output
-
         result = runner.invoke(
             main,
             [
@@ -1430,8 +1412,10 @@ def test_graph_add_evidence_warns_about_ephemerality() -> None:
             ],
         )
 
-        assert result.exit_code == 0, result.output
-        assert "wiped on the next" in result.output
+        assert result.exit_code != 0
+        assert "graph add evidence is retired" in result.output
+        assert "science evidence-lines create" in result.output
+        assert "science graph build" in result.output
 
 
 def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
