@@ -4444,6 +4444,48 @@ def project() -> None:
 project.add_command(_artifacts_group)
 
 
+@project.command("topic-coverage")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    envvar="SCIENCE_PROJECT_ROOT",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root containing entities/topics/.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def project_topic_coverage(project_root: Path, output_format: str) -> None:
+    """Report how much of entities/topics/ is curated (substantive vs. stub)."""
+    from science_tool.topic_coverage import MalformedTopicError, compute_topic_coverage
+
+    try:
+        cov = compute_topic_coverage(project_root)
+    except MalformedTopicError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(cov.to_dict(), indent=2))
+        return
+    if cov.n_topics == 0:
+        click.echo("topics: 0 (no topics)")
+        return
+    warn = "  ⚠ stub-dominated" if cov.stub_dominated else ""
+    click.echo(
+        f"topics: {cov.n_topics} (substantive {cov.n_substantive}, "
+        f"stubs {cov.n_topics - cov.n_substantive}) — stub_ratio {cov.stub_ratio:.2f}{warn}"
+    )
+    if cov.stub_dominated:
+        for r in cov.topics:
+            if not r.substantive:
+                click.echo(f"  stub: {r.id}")
+
+
 @project.command("serialize")
 @click.option(
     "--project-root",
