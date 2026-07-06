@@ -50,6 +50,7 @@ from science_tool.explore_ideas import (
     apply_report,
     backfill_lens_views,
     check_report,
+    resolve_anchors_report,
 )
 from science_tool.feedback_cli import feedback_group
 from science_tool.graph import belief_profile, belief_snapshot
@@ -1231,6 +1232,45 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
 
     if result.failures:
         raise SystemExit(1)
+
+
+@explore_ideas_group.command("resolve-anchors")
+@click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def explore_ideas_resolve_anchors(from_value: str, output_format: str) -> None:
+    """Resolve report literature anchors against papers and references.bib."""
+    try:
+        result = resolve_anchors_report(Path.cwd(), from_value)
+    except ApplyValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(result.to_dict(), indent=2))
+        return
+
+    counts = result.counts
+    click.echo(
+        f"{counts['resolved']} resolved, "
+        f"{counts['already_resolved']} already resolved, "
+        f"{counts['ambiguous']} ambiguous, "
+        f"{counts['unresolved']} unresolved"
+    )
+    for row in result.anchors:
+        label = f"{row.candidate_id}[{row.anchor_index}]"
+        if row.status == "resolved":
+            click.echo(f"  {label} -> {row.resolved} ({row.match_kind})")
+        elif row.status == "already-resolved":
+            click.echo(f"  {label} already resolved: {row.resolved}")
+        elif row.status == "ambiguous":
+            click.echo(f"  {label} ambiguous {row.match_kind}: {', '.join(row.candidates)}")
+        else:
+            click.echo(f"  {label} unresolved: {row.query}")
 
 
 @explore_ideas_group.command("backfill-lens-views")
