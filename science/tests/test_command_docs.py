@@ -238,6 +238,20 @@ def test_explore_ideas_documents_first_run_friction_guardrails() -> None:
     assert "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver" in normalized
 
 
+def test_explore_ideas_documents_multi_lens_convergence_representation() -> None:
+    text = _read("commands/explore-ideas.md")
+    normalized = _norm(text)
+
+    assert "Convergence detection" in text
+    assert "Convergent lenses are **not** collapsed to one" in text
+    assert "single block carrying multiple `lens_views`" in normalized
+    assert "When two lenses independently converge on the **same idea**, emit **one block**" in text
+    assert "not one per lens" in normalized
+    assert "one `origin_plan.origins` entry per lens" in normalized
+    assert "independent: true" in text
+    assert "omits the top-level `lens`/`rationale` fields" in normalized
+
+
 def test_pre_register_documents_derivation_cohort_circularity() -> None:
     text = _read("commands/pre-register.md")
     normalized = _norm(text)

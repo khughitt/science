@@ -125,6 +125,18 @@ def test_feedback_guide_documents_upstream_task_assignment_role() -> None:
     assert "`positive` entries are not tasks, but they are useful evidence" in normalized
 
 
+def test_entities_chapter_documents_lens_view_convergence_representation() -> None:
+    text = _read(GUIDE_ROOT / "entities.md")
+    normalized = _norm(text)
+
+    assert "### Explore-Ideas Lens Views" in text
+    assert "two or more idea lenses independently converge on the same candidate" in normalized
+    assert "one entity with multiple `lens_views`" in normalized
+    assert "one `origins` entry per contributing lens" in normalized
+    assert "`origin_ref` must match one of the entity's own non-null origin refs" in normalized
+    assert "Do not create duplicate question or hypothesis entities merely to preserve each lens" in normalized
+
+
 def test_deleted_user_docs_are_not_reintroduced() -> None:
     deleted = (
         ROOT / "docs" / ("user-guide" + ".md"),

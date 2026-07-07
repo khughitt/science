@@ -626,6 +626,40 @@ an external literature note; create DOI-backed notes with
 `entities/papers/<citekey>.md` with a `doi:` field; do not use `paper:<id>` for
 the project's own publication draft.
 
+### Explore-Ideas Lens Views
+
+Exploration-discovered entities can carry `origins`, `lens_views`, and
+`added_by` metadata. These fields record how an idea entered the project; they
+do not count as evidence and do not update belief by themselves.
+
+When two or more idea lenses independently converge on the same candidate,
+represent that convergence as one entity with multiple `lens_views`, not as
+multiple duplicate entities. The entity should have one `origins` entry per
+contributing lens and one `lens_views` entry per lens-specific framing:
+
+```yaml
+origins:
+  - type: assistant
+    ref: explore-ideas-mechanism
+    independent: true
+  - type: assistant
+    ref: explore-ideas-analogy
+    independent: true
+lens_views:
+  - lens: mechanism
+    rationale: Mechanism-first framing.
+    origin_ref: explore-ideas-mechanism
+  - lens: analogy
+    rationale: Cross-domain analogy framing.
+    origin_ref: explore-ideas-analogy
+added_by: explore-ideas:gpt-5:cand-hspc-trained-immunity
+```
+
+Each `origin_ref` must match one of the entity's own non-null origin refs. Do
+not create duplicate question or hypothesis entities merely to preserve each
+lens; keep the entity singular and preserve the independent lens framings in
+`lens_views`.
+
 ## Paper Dataset Usage
 
 Papers should express dataset dependence with `dataset_usage` entries. The
