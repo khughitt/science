@@ -199,6 +199,11 @@ you *look*. For each arm of the planned comparison:
 - **Count ledger.** Re-derive every numeric count referenced anywhere in the pre-registration from
   the loaded artifacts, not just the headline arm. This includes denominators, subgroup counts, exclusion counts, missingness counts, arm sizes, post-filter counts, and supporting counts in prose, tables, or caveats. Do not only verify the headline arm; if a count will appear in the
   locked criteria or rationale, record where it was re-derived from the loaded artifact.
+- **Derivation-cohort circularity.** If the proposed validation vehicle is also a training or
+  validation cohort for the same scored signature, model, or threshold, that makes the in-cohort
+  predictive-vs-prognostic test circular. It can still be useful for calibration or debugging, but do
+  not register it as independent confirmatory validation; treat it as exploratory or require an
+  independent validation vehicle before assigning confirmatory weight.
 
 If the numbers reveal an arm is underpowered or that the wrong arm was slated as confirmatory, **fix
 the design here** — re-scope, swap which arm is confirmatory/exploratory, or add a feasibility

@@ -394,6 +394,33 @@ def test_generated_pre_register_skill_rederives_every_referenced_count_from_arti
     assert "re-derived from the loaded artifact" in text
 
 
+def test_generated_pre_register_skill_documents_derivation_cohort_circularity(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    normalized = _norm(text)
+
+    assert "Derivation-cohort circularity" in text
+    assert "training or validation cohort" in normalized
+    assert "same scored signature, model, or threshold" in normalized
+    assert "in-cohort predictive-vs-prognostic test circular" in normalized
+    assert "treat it as exploratory or require an independent validation vehicle" in normalized
+
+
+def test_generated_interpret_results_skill_clarifies_single_line_authoring_vs_touching(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-interpret-results"].read_text(encoding="utf-8")
+    normalized = _norm(text)
+
+    assert "Authoring a new single-line proposition" in text
+    assert "Touching an existing proposition" in text
+    assert "do not suppress `belief.fragile-single-line`" in normalized
+    assert "newly fire only when this run made an existing proposition newly single-line" in normalized
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:

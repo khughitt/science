@@ -117,6 +117,14 @@ def test_cli_workflow_documents_kernel_closure_release_note() -> None:
     assert "The retired `science graph add` writer surfaces fail with forward-path guidance" in normalized
 
 
+def test_feedback_guide_documents_upstream_task_assignment_role() -> None:
+    normalized = _norm(_read(GUIDE_ROOT / "feedback-and-telemetry.md"))
+
+    assert "Open feedback is also the upstream task-assignment queue for Science toolkit work" in normalized
+    assert "filing feedback is an actionable request to triage, design, implement, defer, or explicitly decline" in normalized
+    assert "`positive` entries are not tasks, but they are useful evidence" in normalized
+
+
 def test_deleted_user_docs_are_not_reintroduced() -> None:
     deleted = (
         ROOT / "docs" / ("user-guide" + ".md"),

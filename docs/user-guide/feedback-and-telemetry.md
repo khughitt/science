@@ -10,6 +10,12 @@ Science has two related maintenance surfaces:
 Telemetry does not replace feedback. Telemetry provides context; feedback is the
 durable work queue and decision record.
 
+Open feedback is also the upstream task-assignment queue for Science toolkit
+work. For `friction`, `gap`, `guidance`, and `suggestion` categories, filing
+feedback is an actionable request to triage, design, implement, defer, or
+explicitly decline the item. `positive` entries are not tasks, but they are
+useful evidence for keeping or extending a workflow.
+
 ## Storage And Privacy
 
 Feedback entries are YAML files under the feedback directory. By default this is

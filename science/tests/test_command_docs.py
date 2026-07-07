@@ -238,6 +238,27 @@ def test_explore_ideas_documents_first_run_friction_guardrails() -> None:
     assert "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver" in normalized
 
 
+def test_pre_register_documents_derivation_cohort_circularity() -> None:
+    text = _read("commands/pre-register.md")
+    normalized = _norm(text)
+
+    assert "Derivation-cohort circularity" in text
+    assert "training or validation cohort" in normalized
+    assert "same scored signature, model, or threshold" in normalized
+    assert "in-cohort predictive-vs-prognostic test circular" in normalized
+    assert "treat it as exploratory or require an independent validation vehicle" in normalized
+
+
+def test_interpret_results_clarifies_single_line_authoring_vs_touching() -> None:
+    text = _read("commands/interpret-results.md")
+    normalized = _norm(text)
+
+    assert "Authoring a new single-line proposition" in text
+    assert "Touching an existing proposition" in text
+    assert "do not suppress `belief.fragile-single-line`" in normalized
+    assert "newly fire only when this run made an existing proposition newly single-line" in normalized
+
+
 def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() -> None:
     text = _read("commands/plan-analysis.md")
 

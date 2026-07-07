@@ -287,6 +287,17 @@ newly fire** for the proposition you just touched. If it did, the most likely ca
 line placed in its own `independence_group` (see the cohort-grouping rule above) — fix the grouping
 rather than the threshold.
 
+Clarify the single-line case before changing the source:
+- **Authoring a new single-line proposition:** if the result genuinely has only one weak,
+  same-cohort, or otherwise non-independent support line, keep the proposition fragile and do not
+  suppress `belief.fragile-single-line`. The warning is the correct representation of current
+  support, not a tooling failure.
+- **Touching an existing proposition:** `belief.fragile-single-line` should newly fire only when this
+  run made an existing proposition newly single-line, for example by replacing multiple independent
+  lines with one line or by splitting lines into the same `independence_group`. If the warning
+  already existed before this interpretation and remains true, report it as residual risk rather
+  than treating this run as the cause.
+
 ### Structured Output
 
 After analyzing results, create structured entities in addition to the prose document.
