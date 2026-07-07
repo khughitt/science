@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import pytest
 import yaml
@@ -16,10 +17,12 @@ from science_tool.explore_ideas import (
     ApplyValidationError,
     ApplyWriteBackError,
     CandidateBlock,
+    GapReportResult,
     apply_report,
     build_create_plan,
     check_report,
     derive_lens_views,
+    inspect_gaps_report,
     parse_report,
     plan_report,
     resolve_report_path,
@@ -800,6 +803,86 @@ def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
     }
 
 
+def test_inspect_gaps_report_clean_applied_entity(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    # Fill bodies so the newly-created scaffolds are no longer gap-only.
+    for path in (tmp_path / "entities").rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text + "\nSubstantive follow-up note.\n", encoding="utf-8")
+
+    result = inspect_gaps_report(tmp_path, "explore-2026-07-04")
+
+    payload = result.to_dict()
+    entities = cast(list[dict[str, object]], payload["entities"])
+    assert payload["report"] == str(report)
+    assert payload["counts"] == {"entities": 2, "gaps": 0, "errors": 0, "warnings": 0}
+    assert [row["candidate_id"] for row in entities] == [
+        "cand-mechanism-vagal-cytokine-loop",
+        "cand-methodology-retest-drift-threshold",
+    ]
+    assert all(row["gaps"] == [] for row in entities)
+
+
+def _gap_codes(result: GapReportResult) -> list[str]:
+    entities = cast(list[dict[str, object]], result.to_dict()["entities"])
+    return [
+        str(gap["code"])
+        for row in entities
+        for gap in cast(list[dict[str, object]], row["gaps"])
+    ]
+
+
+def test_inspect_gaps_report_reports_missing_applied_as(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-missing.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("```yaml\ncandidate_id: cand-x\ndecision: applied\n```\n", encoding="utf-8")
+
+    result = inspect_gaps_report(tmp_path, str(report))
+
+    assert _gap_codes(result) == ["missing_applied_as"]
+    assert result.counts == {"entities": 1, "gaps": 1, "errors": 1, "warnings": 0}
+
+
+def test_inspect_gaps_report_reports_missing_entity(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-stale.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        "```yaml\ncandidate_id: cand-x\ndecision: applied\napplied_as: question:no-such\n```\n",
+        encoding="utf-8",
+    )
+
+    result = inspect_gaps_report(tmp_path, str(report))
+
+    assert _gap_codes(result) == ["missing_entity"]
+
+
+def test_inspect_gaps_report_reports_entity_gaps(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_fixture(tmp_path)
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+    text = report.read_text(encoding="utf-8").replace("ref: cite:chen2022", "ref: null")
+    text = text.replace("related_existing: []", "related_existing:\n  - question:existing", 1)
+    report.write_text(text, encoding="utf-8")
+    q_path = next((tmp_path / "entities" / "questions").glob("*.md"))
+    fm = _frontmatter(q_path)
+    fm.pop("source_refs", None)
+    fm.pop("related", None)
+    body = "# Vagal tone as a cytokine feedback regulator\n\n## Summary\n\n\n## Notes\n"
+    q_path.write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\n" + body, encoding="utf-8")
+
+    result = inspect_gaps_report(tmp_path, "explore-2026-07-04")
+
+    entities = cast(list[dict[str, object]], result.to_dict()["entities"])
+    first_row_gaps = cast(list[dict[str, object]], entities[0]["gaps"])
+    first_codes = [gap["code"] for gap in first_row_gaps]
+    assert first_codes == ["empty_body", "unresolved_anchors", "missing_related"]
+
+
 def test_check_report_validates_without_writing(tmp_path: Path) -> None:
     seed_project(tmp_path)
     report = _write_fixture(tmp_path)
@@ -1119,6 +1202,38 @@ def test_cli_apply_json_stays_valid_with_warnings(monkeypatch: pytest.MonkeyPatc
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
         assert payload["created"][0]["warnings"] == ["w!"]
+
+
+def test_cli_explore_ideas_gaps_text() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        report = root / "doc" / "explorations" / "explore-gaps.md"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("```yaml\ncandidate_id: cand-x\ndecision: applied\n```\n", encoding="utf-8")
+
+        result = runner.invoke(main, ["explore-ideas", "gaps", "--from", "explore-gaps"])
+
+        assert result.exit_code == 0, result.output
+        assert "applied entities inspected" in result.output
+        assert "missing_applied_as" in result.output
+
+
+def test_cli_explore_ideas_gaps_json() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        report = root / "doc" / "explorations" / "explore-gaps.md"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("```yaml\ncandidate_id: cand-x\ndecision: applied\n```\n", encoding="utf-8")
+
+        result = runner.invoke(main, ["explore-ideas", "gaps", "--from", "explore-gaps", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["counts"] == {"entities": 1, "gaps": 1, "errors": 1, "warnings": 0}
 
 
 def test_cli_apply_check_includes_topic_in_to_create() -> None:

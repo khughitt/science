@@ -189,6 +189,13 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_explore_ideas_documents_gap_closure_command() -> None:
+    text = _read("commands/explore-ideas.md")
+    assert "science explore-ideas gaps --from" in text
+    assert "unresolved_anchors" in text
+    assert "missing_source_refs" in text
+
+
 def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() -> None:
     text = _read("commands/plan-analysis.md")
 

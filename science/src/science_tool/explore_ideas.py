@@ -128,6 +128,70 @@ class ApplyCheckResult:
 
 
 @dataclass(frozen=True)
+class GapItem:
+    code: str
+    severity: str
+    message: str
+    suggested_action: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "message": self.message,
+            "suggested_action": self.suggested_action,
+        }
+
+
+@dataclass(frozen=True)
+class GapEntity:
+    candidate_id: str
+    entity_id: str | None
+    kind: str | None
+    path: Path | None
+    gaps: list[GapItem]
+
+    def to_dict(self, project_root: Path) -> dict[str, object]:
+        path = None
+        if self.path is not None:
+            try:
+                path = str(self.path.relative_to(project_root))
+            except ValueError:
+                path = str(self.path)
+        return {
+            "candidate_id": self.candidate_id,
+            "entity_id": self.entity_id,
+            "kind": self.kind,
+            "path": path,
+            "gaps": [gap.to_dict() for gap in self.gaps],
+        }
+
+
+@dataclass(frozen=True)
+class GapReportResult:
+    report: Path
+    project_root: Path
+    entities: list[GapEntity]
+
+    @property
+    def counts(self) -> dict[str, int]:
+        gaps = [gap for entity in self.entities for gap in entity.gaps]
+        return {
+            "entities": len(self.entities),
+            "gaps": len(gaps),
+            "errors": sum(1 for gap in gaps if gap.severity == "error"),
+            "warnings": sum(1 for gap in gaps if gap.severity == "warn"),
+        }
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "report": str(self.report),
+            "counts": self.counts,
+            "entities": [entity.to_dict(self.project_root) for entity in self.entities],
+        }
+
+
+@dataclass(frozen=True)
 class PaperReference:
     ref: str
     title: str | None = None
@@ -767,6 +831,178 @@ def check_report(project_root: Path, from_value: str, model_id: str) -> ApplyChe
         skipped_other=plan.skipped_other,
         manual=plan.manual,
     )
+
+
+def _entity_index(project_root: Path) -> dict[str, tuple[Path, dict, str]]:
+    index: dict[str, tuple[Path, dict, str]] = {}
+    for path in iter_entity_markdown(project_root / "entities"):
+        frontmatter, body = _parse_markdown_file_preserving_body(path)
+        entity_id = frontmatter.get("id")
+        if isinstance(entity_id, str):
+            index[entity_id] = (path, frontmatter, body)
+    return index
+
+
+def _body_has_substantive_text(body: str) -> bool:
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("<!--"):
+            continue
+        if line.endswith("-->"):
+            continue
+        return True
+    return False
+
+
+def _supporting_anchor_refs(data: dict) -> list[str]:
+    refs: list[str] = []
+    seen: set[str] = set()
+    anchors = data.get("literature_anchors") or []
+    if not isinstance(anchors, list):
+        return []
+    for anchor in anchors:
+        if not isinstance(anchor, dict):
+            continue
+        ref = anchor.get("ref")
+        note = anchor.get("note")
+        if not isinstance(ref, str) or not ref.strip():
+            continue
+        if isinstance(note, str) and note.startswith("predates:"):
+            continue
+        if ref not in seen:
+            seen.add(ref)
+            refs.append(ref)
+    return refs
+
+
+def _unresolved_anchor_count(data: dict) -> int:
+    anchors = data.get("literature_anchors") or []
+    if not isinstance(anchors, list):
+        return 0
+    count = 0
+    for anchor in anchors:
+        if isinstance(anchor, dict) and not anchor.get("ref"):
+            count += 1
+    return count
+
+
+def _candidate_has_lens_views(data: dict) -> bool:
+    if data.get("lens_views"):
+        return True
+    return isinstance(data.get("lens"), str) and isinstance(data.get("rationale"), str) and bool(data["rationale"].strip())
+
+
+def _entity_gap_items(block: CandidateBlock, frontmatter: dict, body: str, report_path: Path) -> list[GapItem]:
+    gaps: list[GapItem] = []
+    if not _body_has_substantive_text(body):
+        gaps.append(
+            GapItem(
+                code="empty_body",
+                severity="warn",
+                message="entity body is still scaffold-only",
+                suggested_action="Fill the entity body from the candidate rationale and supporting evidence.",
+            )
+        )
+
+    unresolved = _unresolved_anchor_count(block.data)
+    if unresolved:
+        plural = "anchor is" if unresolved == 1 else "anchors are"
+        gaps.append(
+            GapItem(
+                code="unresolved_anchors",
+                severity="warn",
+                message=f"{unresolved} literature {plural} unresolved",
+                suggested_action=f"Run science explore-ideas resolve-anchors --from {report_path}",
+            )
+        )
+
+    if _supporting_anchor_refs(block.data) and not frontmatter.get("source_refs"):
+        gaps.append(
+            GapItem(
+                code="missing_source_refs",
+                severity="warn",
+                message="candidate has resolved supporting anchors but entity has no source_refs",
+                suggested_action="Add the resolved supporting refs to source_refs.",
+            )
+        )
+
+    if block.data.get("related_existing") and not frontmatter.get("related"):
+        gaps.append(
+            GapItem(
+                code="missing_related",
+                severity="warn",
+                message="candidate has related_existing but entity has no related links",
+                suggested_action="Add the canonical related refs to related.",
+            )
+        )
+
+    if _candidate_has_lens_views(block.data) and not frontmatter.get("lens_views"):
+        gaps.append(
+            GapItem(
+                code="missing_lens_views",
+                severity="warn",
+                message="candidate has lens views but entity has no lens_views",
+                suggested_action="Backfill lens views from the exploration report.",
+            )
+        )
+    return gaps
+
+
+def inspect_gaps_report(project_root: Path, from_value: str) -> GapReportResult:
+    project_root = project_root.resolve()
+    report_path = resolve_report_path(project_root, from_value)
+    blocks = parse_report(report_path.read_text(encoding="utf-8"))
+    index = _entity_index(project_root)
+
+    entities: list[GapEntity] = []
+    for block in blocks:
+        if block.data.get("decision") != "applied":
+            continue
+        entity_id = block.data.get("applied_as")
+        if not isinstance(entity_id, str) or not entity_id.strip():
+            entities.append(
+                GapEntity(
+                    candidate_id=block.candidate_id,
+                    entity_id=None,
+                    kind=None,
+                    path=None,
+                    gaps=[
+                        GapItem(
+                            code="missing_applied_as",
+                            severity="error",
+                            message="applied block has no applied_as entity id",
+                            suggested_action="Repair the report block with the created entity id.",
+                        )
+                    ],
+                )
+            )
+            continue
+        normalized_entity_id = entity_id.strip()
+        hit = index.get(normalized_entity_id)
+        if hit is None:
+            entities.append(
+                GapEntity(
+                    candidate_id=block.candidate_id,
+                    entity_id=normalized_entity_id,
+                    kind=None,
+                    path=None,
+                    gaps=[
+                        GapItem(
+                            code="missing_entity",
+                            severity="error",
+                            message=f"{normalized_entity_id} does not resolve to a local entity",
+                            suggested_action="Check whether the entity was moved, renamed, or never created.",
+                        )
+                    ],
+                )
+            )
+            continue
+        path, frontmatter, body = hit
+        kind = frontmatter.get("kind") if isinstance(frontmatter.get("kind"), str) else None
+        gaps = _entity_gap_items(block, frontmatter, body, report_path)
+        entities.append(GapEntity(block.candidate_id, normalized_entity_id, kind, path, gaps=gaps))
+
+    return GapReportResult(report=report_path, project_root=project_root, entities=entities)
 
 
 def _file_id(path: Path) -> str | None:
