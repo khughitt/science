@@ -164,6 +164,13 @@ For each `sci:Assumption` and `scic:causes` edge:
 For each input data source (every `BoundaryIn` node or data-acquisition step
 in the plan):
 
+- Cross-check declared plan inputs against the locked pre-registration model
+  before scoring. Required covariates, adjustment variables, strata/subgroup
+  labels, endpoint/timing variables, score inputs, and signature features from
+  the locked model must appear as a plan-declared input or derived input with
+  traceable upstream sources. Treat any undeclared locked-model requirement as
+  a data-availability **FAIL**, because the plan is not stageable for the model
+  it claims to run.
 - Does it resolve to a `dataset:<slug>` entity?
 - Per origin (verification gate):
   - `external`: `access.verified: true` OR `access.exception.mode != ""`.
@@ -180,6 +187,14 @@ in the plan):
     absent runtime files as FAIL in this pattern; instead require WP1 to end by
     producing the runtime artifact, datapackage/checksums, and any updated
     `last_reviewed` evidence before downstream work runs.
+  - Reference-class input deferral: resources such as LD panels, genome builds,
+    annotation releases, and benchmark/reference resources may defer runtime
+    staging only when the plan explicitly labels them as reference-class inputs
+    and names a follow-on design or staging work package that will own
+    acquisition, version pinning, checksums or equivalent identity evidence, and
+    compatibility checks before downstream analysis runs. This carve-out does
+    not apply to primary analytic datasets, ordinary covariates, or
+    locked-model variables.
   - `consumed_by` includes `plan:<this-plan-file-stem>`.
   - The dataset lifecycle contract in `docs/user-guide/entities.md` holds:
     external records use `access:`, derived records use `derivation:`, and
@@ -191,10 +206,11 @@ in the plan):
 
 **Scoring:**
 
-- **PASS** — all sources resolve; verification gate satisfied per origin; runtime
-  stageability satisfied, or runtime stageability is explicitly deferred to WP1
-  under the retrieval-probe exception above; backlink present; freshness OK;
-  invariants hold.
+- **PASS** — all sources resolve; declared plan inputs cover locked-model
+  requirements; verification gate satisfied per origin; runtime stageability
+  satisfied, or runtime stageability is explicitly deferred to WP1 under the
+  retrieval-probe exception above or to an owned reference-class input deferral;
+  backlink present; freshness OK; invariants hold.
 - **WARN** — stale `last_reviewed` (> 12 months); missing canonical `plan:<stem>`
   backlink; cached-field drift between entity and runtime
   (`ontology_terms`/`license`/`update_cadence` only); lineage drift.
@@ -203,6 +219,12 @@ in the plan):
   - External `access.verified: false` with `access.exception.mode: ""`.
   - External `access.verified: true` but `verification_method: ""` or no
     `last_reviewed`.
+  - A locked pre-registration model requires a covariate, adjustment variable,
+    stratum/subgroup label, endpoint/timing variable, score input, or signature
+    feature that the plan never declares as an input or derived input.
+  - A reference-class input is deferred without an explicit follow-on design or
+    staging work package that owns version pinning, checksums or equivalent
+    identity evidence, and compatibility checks.
   - Derived missing `workflow_run` entity, asymmetric `produces:` edge, or broken
     transitive input chain.
   - Runtime stageability fails outside the retrieval-probe exception: neither

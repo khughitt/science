@@ -96,6 +96,38 @@ def test_review_pipeline_runtime_stageability_allows_wp1_retrieval_probe_defer()
     assert "do not score absent runtime files as FAIL" in normalized
 
 
+def test_review_pipeline_checks_locked_model_inputs_against_plan_inputs() -> None:
+    text = _read("commands/review-pipeline.md")
+    normalized = " ".join(text.split())
+
+    assert "locked pre-registration model" in text
+    assert "plan-declared input" in text
+    assert "covariates, adjustment variables, strata" in text
+    assert "endpoint/timing variables" in text
+    assert "score inputs" in text
+    assert "signature features" in text
+    assert "undeclared locked-model requirement" in normalized
+    assert "pre-registration model requires a covariate" in text
+    assert "plan never declares as an input" in text
+
+
+def test_review_pipeline_documents_reference_class_input_carveout() -> None:
+    text = _read("commands/review-pipeline.md")
+    normalized = " ".join(text.split())
+
+    assert "Reference-class input deferral" in text
+    assert "LD panels" in text
+    assert "genome builds" in text
+    assert "annotation releases" in text
+    assert "benchmark/reference resources" in text
+    assert "follow-on design or staging work package" in text
+    assert "version pinning" in text
+    assert "checksums or equivalent identity evidence" in text
+    assert "compatibility checks" in text
+    assert "does not apply to primary analytic datasets" in normalized
+    assert "ordinary covariates, or locked-model variables" in normalized
+
+
 def test_find_datasets_setup_is_layout_v3_aware() -> None:
     text = _read("commands/find-datasets.md")
 

@@ -427,6 +427,21 @@ def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: 
     assert "entities/plans/<stem>-review.md" not in text
 
 
+def test_review_pipeline_skill_documents_data_availability_tightening(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-review-pipeline"].read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+
+    assert "locked pre-registration model" in text
+    assert "covariates, adjustment variables, strata" in text
+    assert "undeclared locked-model requirement" in normalized
+    assert "Reference-class input deferral" in text
+    assert "LD panels" in text
+    assert "follow-on design or staging work package" in text
+    assert "checksums or equivalent identity evidence" in text
+    assert "does not apply to primary analytic datasets" in normalized
+
+
 def test_science_health_mentions_identity_policy_triage() -> None:
     text = _read_skill("science-health")
 
