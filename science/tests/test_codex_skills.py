@@ -442,6 +442,16 @@ def test_review_pipeline_skill_documents_data_availability_tightening(tmp_path: 
     assert "does not apply to primary analytic datasets" in normalized
 
 
+def test_explore_ideas_skill_documents_first_run_friction_guardrails() -> None:
+    text = _read_skill("science-explore-ideas")
+    normalized = _norm(text)
+
+    assert "no `kind:`/entity frontmatter" in normalized
+    assert "prose lint treats that directory as process-output space" in normalized
+    assert 'Omit unknown identifier fields rather than writing empty placeholders such as `doi: ""` or `doi: null`' in normalized
+    assert "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver" in normalized
+
+
 def test_science_health_mentions_identity_policy_triage() -> None:
     text = _read_skill("science-health")
 

@@ -228,6 +228,16 @@ def test_explore_ideas_documents_gap_closure_command() -> None:
     assert "missing_source_refs" in text
 
 
+def test_explore_ideas_documents_first_run_friction_guardrails() -> None:
+    text = _read("commands/explore-ideas.md")
+    normalized = _norm(text)
+
+    assert "no `kind:`/entity frontmatter" in normalized
+    assert "prose lint treats that directory as process-output space" in normalized
+    assert 'Omit unknown identifier fields rather than writing empty placeholders such as `doi: ""` or `doi: null`' in normalized
+    assert "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver" in normalized
+
+
 def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() -> None:
     text = _read("commands/plan-analysis.md")
 

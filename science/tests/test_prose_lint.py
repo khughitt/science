@@ -614,6 +614,14 @@ class TestShortFormIdsDeny:
         result = scan_root(tmp_path, checks=["bare-author-year"])
         assert result["counts"].get("bare-author-year", 0) == 0
 
+    def test_exploration_reports_not_scanned_by_default(self, tmp_path):
+        (tmp_path / "doc" / "explorations").mkdir(parents=True)
+        (tmp_path / "doc" / "explorations" / "explore-2026-07-04.md").write_text(
+            "# Explore\n\nAs Brunton 2022 showed, this process note is not graph prose.\n"
+        )
+        result = scan_root(tmp_path, checks=["bare-author-year"])
+        assert result["counts"].get("bare-author-year", 0) == 0
+
 
 class TestUnsupportedCitationSyntax:
     def test_flags_unsupported_citation_syntax(self, tmp_path):

@@ -331,6 +331,20 @@ def _anchor_key(anchor: dict) -> str | None:
     return None
 
 
+def _anchor_has_identifier(anchor: dict) -> bool:
+    ref = anchor.get("ref")
+    if isinstance(ref, str) and ref.strip():
+        return True
+    if _normalize_doi(anchor.get("doi")) is not None:
+        return True
+    if _anchor_key(anchor) is not None:
+        return True
+    if _normalize_title(anchor.get("title")) is not None:
+        return True
+    openalex_id = anchor.get("openalex_id")
+    return isinstance(openalex_id, str) and bool(openalex_id.strip())
+
+
 def _paper_references(project_root: Path) -> list[PaperReference]:
     refs: list[PaperReference] = []
     papers_root = project_root / "entities" / "papers"
@@ -488,7 +502,10 @@ def resolve_anchors_report(project_root: Path, from_value: str) -> AnchorResolve
         for index, anchor in enumerate(anchors):
             if not isinstance(anchor, dict):
                 raise ApplyValidationError(f"{block.candidate_id}: literature_anchors entry must be a mapping")
-            rows.append(_resolve_anchor(dict(anchor), block.candidate_id, index, refs))
+            anchor_data = dict(anchor)
+            if not _anchor_has_identifier(anchor_data):
+                continue
+            rows.append(_resolve_anchor(anchor_data, block.candidate_id, index, refs))
 
     return AnchorResolveResult(report=report_path, anchors=rows)
 

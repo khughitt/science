@@ -104,6 +104,43 @@ literature_anchors:
     }
 
 
+def test_resolve_anchors_report_skips_empty_placeholder_anchors(tmp_path: Path) -> None:
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """# Explore
+
+```yaml
+candidate_id: cand-a
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - doi: ""
+    title: ""
+    ref: null
+  - doi:
+    note: placeholder from first draft
+  - first_author: Smith
+    year: 2024
+  - doi: 10.2000/jones
+```
+""",
+    )
+
+    result = resolve_anchors_report(tmp_path, "explore-2026-07-06")
+
+    assert len(result.anchors) == 1
+    assert result.anchors[0].status == "resolved"
+    assert result.anchors[0].resolved == "cite:Jones2021"
+    assert result.counts == {
+        "resolved": 1,
+        "already_resolved": 0,
+        "ambiguous": 0,
+        "unresolved": 0,
+    }
+
+
 def test_resolve_anchors_report_prefers_paper_entity_over_bib_duplicate(tmp_path: Path) -> None:
     _seed_references(tmp_path)
     _write_report(

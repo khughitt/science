@@ -698,6 +698,7 @@ _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
 _SCAN_DIRS = ("doc", "entities")
 _SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md")
 _SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "templates"}
+_SKIP_RELATIVE_DIRS = {("doc", "explorations")}
 
 
 def _collect_markdown_files(root: Path) -> list[Path]:
@@ -708,6 +709,9 @@ def _collect_markdown_files(root: Path) -> list[Path]:
             continue
         for path in sub.rglob("*.md"):
             if any(part in _SKIP_DIRS for part in path.parts):
+                continue
+            rel_parts = path.relative_to(root).parts
+            if any(rel_parts[: len(skip)] == skip for skip in _SKIP_RELATIVE_DIRS):
                 continue
             files.append(path)
     for name in _SCAN_ROOT_FILES:

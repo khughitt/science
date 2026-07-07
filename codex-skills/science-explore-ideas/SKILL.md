@@ -257,6 +257,9 @@ already has.
    - `cite:<key>` if the DOI/key is present in `papers/references.bib`.
    - otherwise leave `ref` null — ambiguous and unresolved anchors stay raw
      citations and contribute no literature origin.
+   Omit unknown identifier fields rather than writing empty placeholders such
+   as `doi: ""` or `doi: null`; anchors with no usable `ref`, `doi`, citekey,
+   title, or `openalex_id` are ignored by the resolver.
    Preserve the anchor's `date` (full `YYYY-MM-DD`) if it carries one; a
    `predates:` anchor's date flows into its independent literature origin.
    Finalize each candidate's `origin_plan` from the resolution per the
@@ -274,7 +277,9 @@ already has.
 Write `doc/explorations/explore-<YYYY-MM-DD>.md`. If a report for today
 already exists, suffix with `-<HHMM>` rather than overwrite it. The report is
 a process artifact, not a graph entity — give it a plain human header, no
-`kind:`/entity frontmatter.
+`kind:`/entity frontmatter. Keep generated exploration reports under
+`doc/explorations/`; prose lint treats that directory as process-output space
+and skips it by default.
 
 **Report header — seed coverage.** Near the top of the report (after the intro,
 before the candidates), emit the seed-representativeness diagnostic from Phase 1
