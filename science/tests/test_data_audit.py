@@ -158,15 +158,14 @@ def test_tracked_payload_inside_data_flagged(tmp_path: Path):
 
 
 def test_audit_notes_report_external_data_root(monkeypatch, tmp_path: Path) -> None:
-    from science_tool.data_audit import audit_project, audit_project_notes
+    from science_tool.data_audit import audit_project_notes
 
-    external = tmp_path / "external-data"
+    external = tmp_path.parent / f"{tmp_path.name}-external-data"
     (tmp_path / "science.yaml").write_text(
         f"name: Demo\nid: demo\ndata:\n  root: {external}\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
-    assert audit_project(tmp_path) == []
     notes = audit_project_notes(tmp_path)
     assert [note.code for note in notes] == ["external-data-root"]
     assert str(external) in notes[0].message
@@ -195,3 +194,14 @@ def test_render_json_includes_notes_only_when_present() -> None:
             "message": "external data root: /tmp/x",
         }
     ]
+
+
+def test_audit_notes_ignore_in_repo_nondefault_data_root(monkeypatch, tmp_path: Path) -> None:
+    from science_tool.data_audit import audit_project_notes
+
+    (tmp_path / "science.yaml").write_text(
+        "name: Demo\nid: demo\ndata:\n  root: bulk\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    assert audit_project_notes(tmp_path) == []

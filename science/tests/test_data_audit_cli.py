@@ -87,11 +87,19 @@ def test_honors_science_project_root_env(tmp_path: Path):
 
 def test_audit_json_reports_external_data_root_note(monkeypatch, tmp_path: Path):
     _init_repo(tmp_path)
-    external = tmp_path / "external-data"
+    external = tmp_path.parent / f"{tmp_path.name}-external-data"
     _write(
         tmp_path,
         "science.yaml",
-        f"name: Demo\nid: demo\ndata:\n  root: {external}\n".encode(),
+        (
+            "name: Demo\n"
+            "id: demo\n"
+            "data:\n"
+            f"  root: {external}\n"
+            "data_policy:\n"
+            "  record_patterns:\n"
+            "    - science.yaml\n"
+        ).encode(),
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     res = _run(tmp_path, "--json")
@@ -99,3 +107,24 @@ def test_audit_json_reports_external_data_root_note(monkeypatch, tmp_path: Path)
     assert res.exit_code == 0
     assert payload["violations"] == []
     assert payload["notes"][0]["code"] == "external-data-root"
+
+
+def test_audit_json_omits_notes_for_in_repo_nondefault_data_root(monkeypatch, tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(
+        tmp_path,
+        "science.yaml",
+        b"name: Demo\n"
+        b"id: demo\n"
+        b"data:\n"
+        b"  root: bulk\n"
+        b"data_policy:\n"
+        b"  record_patterns:\n"
+        b"    - science.yaml\n",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    res = _run(tmp_path, "--json")
+    payload = json.loads(res.output)
+    assert res.exit_code == 0
+    assert payload["violations"] == []
+    assert "notes" not in payload

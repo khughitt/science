@@ -82,12 +82,6 @@ def _data_subpath(rel_path: Path, data_dirs: tuple[Path, ...]) -> Path | None:
     return None
 
 
-def _classify_for_audit(rel_path: Path, size: int, policy: DataPolicy) -> FileClass:
-    if rel_path == Path("science.yaml"):
-        return FileClass.RECORD
-    return classify(rel_path, size, policy)
-
-
 def _workflow_slug_from_siblings(project_root: Path, rel_path: Path) -> str | None:
     """Inspect a sibling datapackage for an explicit `workflow:` field only.
 
@@ -179,7 +173,7 @@ def audit_project(
             size = abs_path.stat().st_size
         except OSError:
             continue
-        cls = _classify_for_audit(rel, size, policy)
+        cls = classify(rel, size, policy)
         loc = location(rel, data_dirs)
         is_tracked = rel.as_posix() in tracked
         v = _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs)
@@ -223,9 +217,8 @@ def _escapes_root(project_root: Path, candidate: Path) -> bool:
 def audit_project_notes(project_root: Path) -> list[AuditNote]:
     project_root = project_root.resolve()
     data_root = resolve_data_root(project_root).resolve(strict=False)
-    audit_data_root = (project_root / "data").resolve(strict=False)
     notes: list[AuditNote] = []
-    if data_root != audit_data_root:
+    if not _is_relative_to(data_root, project_root):
         notes.append(
             AuditNote(
                 "info",
@@ -234,6 +227,14 @@ def audit_project_notes(project_root: Path) -> list[AuditNote]:
             )
         )
     return notes
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 _DATAPACKAGE_NAMES = ("datapackage.yaml", "datapackage.json")
