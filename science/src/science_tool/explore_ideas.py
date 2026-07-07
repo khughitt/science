@@ -136,6 +136,21 @@ class PaperReference:
     year: int | None = None
 
 
+def _json_safe(value: object) -> object:
+    """Recursively coerce YAML-parsed values (notably `date`) into JSON-safe forms.
+
+    Report anchors can carry a `date:` field, which YAML parses into a
+    `datetime.date` that `json.dumps` cannot serialize.
+    """
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class AnchorResolution:
     candidate_id: str
@@ -156,7 +171,7 @@ class AnchorResolution:
             "match_kind": self.match_kind,
             "query": self.query,
             "candidates": list(self.candidates),
-            "anchor": dict(self.anchor),
+            "anchor": _json_safe(self.anchor),
         }
 
 
