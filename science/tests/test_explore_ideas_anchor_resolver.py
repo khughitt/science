@@ -281,3 +281,31 @@ literature_anchors:
     payload = json.loads(result.output)
     assert payload["counts"]["resolved"] == 1
     assert payload["anchors"][0]["resolved"] == "cite:Jones2021"
+
+
+def test_cli_resolve_anchors_json_output_serializes_anchor_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A `date:` anchor field is parsed by YAML into a datetime.date, which
+    # json.dumps cannot serialize unless to_dict coerces it to an ISO string.
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-a
+decision: keep
+literature_anchors:
+  - doi: 10.2000/jones
+    date: 2021-06-15
+```
+""",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        main, ["explore-ideas", "resolve-anchors", "--from", "explore-2026-07-06", "--format", "json"]
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["anchors"][0]["anchor"]["date"] == "2021-06-15"
