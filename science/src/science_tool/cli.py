@@ -50,6 +50,7 @@ from science_tool.explore_ideas import (
     apply_report,
     backfill_lens_views,
     check_report,
+    inspect_gaps_report,
     resolve_anchors_report,
 )
 from science_tool.feedback_cli import feedback_group
@@ -1228,6 +1229,46 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
 
     if result.failures:
         raise SystemExit(1)
+
+
+def _render_gap_result_text(result) -> None:
+    counts = result.counts
+    click.echo(
+        f"{counts['entities']} applied entities inspected, "
+        f"{counts['gaps']} gaps ({counts['errors']} errors, {counts['warnings']} warnings)"
+    )
+    for entity in result.entities:
+        if not entity.gaps:
+            continue
+        label = entity.entity_id or "<missing applied_as>"
+        kind = entity.kind or "unknown"
+        click.echo("")
+        click.echo(f"{entity.candidate_id} -> {label} ({kind})")
+        for gap in entity.gaps:
+            click.echo(f"  {gap.severity.upper()} {gap.code}: {gap.message}")
+            click.echo(f"    next: {gap.suggested_action}")
+
+
+@explore_ideas_group.command("gaps")
+@click.option("--from", "from_value", required=True, help="Report file path, or report id (basename stem).")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def explore_ideas_gaps(from_value: str, output_format: str) -> None:
+    """Inspect applied exploration entities for deterministic follow-up gaps."""
+    try:
+        result = inspect_gaps_report(Path.cwd(), from_value)
+    except ApplyValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(result.to_dict(), indent=2))
+    else:
+        _render_gap_result_text(result)
 
 
 @explore_ideas_group.command("resolve-anchors")

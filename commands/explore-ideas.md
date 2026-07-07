@@ -372,3 +372,15 @@ Relay the CLI's created / skipped / manual / failure summary to the user. If
 
 Add `--format json` if you need the machine-readable result instead of the text
 summary.
+
+After apply, inspect the created entities for deterministic follow-up gaps:
+
+```bash
+uv run science explore-ideas gaps --from <report-path-or-id>
+```
+
+Use `--format json` when another tool needs the structured result. The gaps
+command is read-only. It inspects only `decision: applied` blocks and reports
+repair work such as `missing_applied_as`, `missing_entity`, `empty_body`,
+`unresolved_anchors`, `missing_source_refs`, `missing_related`, and
+`missing_lens_views`.
