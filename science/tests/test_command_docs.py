@@ -86,6 +86,16 @@ def test_plan_pipeline_respects_project_plan_numbering_convention() -> None:
     assert "entities/plans/<NNNN>-<slug>.md" in text
 
 
+def test_plan_pipeline_keeps_core_decisions_out_of_related_refs() -> None:
+    text = _read("commands/plan-pipeline.md")
+    normalized = _norm(text)
+
+    assert "Core-log decisions are not graph refs" in text
+    assert "`entities/decision/*.md`" in text
+    assert "Do not put `decision:<id>` in `related:` for a decision that only exists in `core/decisions.md`" in normalized
+    assert "it is not a resolvable entity kind" not in text
+
+
 def test_review_pipeline_runtime_stageability_allows_wp1_retrieval_probe_defer() -> None:
     text = _read("commands/review-pipeline.md")
     normalized = " ".join(text.split())

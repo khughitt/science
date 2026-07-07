@@ -104,7 +104,7 @@ For brevity, the examples below write just `science <command>` — **always expa
 - **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
 - **MUST** write the plan to the project's plan filename convention. Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems; in those projects, use `entities/plans/<NNNN>-<slug>.md` with the next unused sequence number. Date-prefixed plans are only appropriate when the project already uses date-prefixed plan entity stems.
 - **MUST** check whether methodological readiness is already documented by an analysis-plan file under `entities/plans/*-analysis-plan.md` (a `kind: plan` entity with `plan_kind: analysis-plan`, referenced as `plan:<stem>`). If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` before finalizing the pipeline plan.
-- **SHOULD** include frontmatter linking the plan to its hypotheses / questions / tasks via `related: [hypothesis:..., rq:..., plan:..., task:..., paper:...]`. Decisions are not graph-resolvable entity refs; they live as sections in `core/decisions.md`, so reference them in prose or in a non-graph header note instead of `related:`.
+- **SHOULD** include frontmatter linking the plan to its hypotheses / questions / tasks via `related: [hypothesis:..., rq:..., plan:..., task:..., paper:...]`. Core-log decisions are not graph refs: if the decision only exists as a section in `core/decisions.md`, reference it in prose or in a non-graph header note instead of `related:`. Use `decision:<id>` in `related:` only when that ID resolves to a real owner file under `entities/decision/*.md`.
 - **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
 - **SHOULD** add `sci:Transformation` graph nodes ONLY when the project uses formal inquiries (Step 3 below). Skip in `design` / `implementation` modes — the plan document is the canonical artifact and graph annotations are not load-bearing.
 - **SHOULD** reference tool-specific skills where applicable
@@ -328,7 +328,9 @@ related:
 
 If a plan depends on a load-bearing decision from `core/decisions.md`, cite it
 in the body or in a header note such as `Decision context: core/decisions.md#<section>`.
-Do not put `decision:<id>` in `related:`; it is not a resolvable entity kind.
+Do not put `decision:<id>` in `related:` for a decision that only exists in
+`core/decisions.md`; it will not resolve unless the project has promoted that
+decision to an owner file under `entities/decision/*.md`.
 
 Pure upstream design notes (in the science repo itself) may use a header block instead:
 

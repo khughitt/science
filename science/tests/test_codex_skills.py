@@ -243,6 +243,17 @@ def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_
     assert "entities/plans/<NNNN>-<slug>.md" in text
 
 
+def test_generated_plan_pipeline_keeps_core_decisions_out_of_related_refs(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+    normalized = _norm(text)
+
+    assert "Core-log decisions are not graph refs" in text
+    assert "`entities/decision/*.md`" in text
+    assert "Do not put `decision:<id>` in `related:` for a decision that only exists in `core/decisions.md`" in normalized
+    assert "it is not a resolvable entity kind" not in text
+
+
 def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     for skill_name in ("science-tasks", "science-review-tasks"):
