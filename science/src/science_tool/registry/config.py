@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from science_tool.commons.config import CommonsSettings
 
@@ -55,6 +55,14 @@ class SyncSettings(BaseModel):
     stale_after_days: int = 7
 
 
+class DataSettings(BaseModel):
+    """Global shared parent for per-project bulk data roots."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    root: Path | None = None
+
+
 class RegisteredProject(BaseModel):
     """A project registered for cross-project sync."""
 
@@ -71,6 +79,7 @@ class GlobalConfig(BaseModel):
 
     sync: SyncSettings = Field(default_factory=SyncSettings)
     projects: list[RegisteredProject] = Field(default_factory=list)
+    data: DataSettings = Field(default_factory=DataSettings)
     commons: CommonsSettings = Field(default_factory=CommonsSettings)
 
 

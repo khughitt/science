@@ -131,6 +131,14 @@ class DataPolicyConfig(BaseModel):
         )
 
 
+class ProjectDataConfig(BaseModel):
+    """Per-project bulk-data root configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    root: Path | None = None
+
+
 class ReproducibilityPolicyConfig(BaseModel):
     """Project reproducibility gate policy (science.yaml)."""
 
@@ -204,6 +212,7 @@ class ProjectConfig(BaseModel):
     peers: list[PeerEntry] = Field(default_factory=list)
     prose_lint: ProseLintConfig | None = None
     refs: RefsConfig | None = None
+    data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
 
