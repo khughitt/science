@@ -888,23 +888,13 @@ def _fetch(
             ),
         )
 
-    # If Unpaywall is confident there's no OA copy, stop. Caller asks the user.
-    if unpaywall and not is_oa:
-        return _write_and_return(
-            papers_dir,
-            slug,
-            FetchResult(
-                status="paywalled",
-                source="crossref+unpaywall",
-                metadata=metadata,
-                tiers_attempted=tiers,
-                errors=errors,
-                access_hint=(
-                    "Unpaywall reports no open-access copy. "
-                    "Ask the user for a PDF path, or defer with status: paywalled."
-                ),
-            ),
-        )
+    # Unpaywall's negative verdict is NOT final. NIH author manuscripts and other
+    # PMC-hosted copies are frequently reported not-OA by Unpaywall yet served in
+    # full by Europe PMC (Tier 5), so we no longer stop here. Remember the negative
+    # verdict and defer to the terminal fall-through: if every downstream tier —
+    # including the DOI→PMCID→Europe PMC full-text probe — also comes up empty, we
+    # return `paywalled` then. This also un-defeats an explicit `--pmcid`.
+    unpaywall_paywalled = bool(unpaywall and not is_oa)
 
     # Tier 3: arXiv.
     pdf_dest = papers_dir / f"{slug}.pdf"
@@ -1023,10 +1013,11 @@ def _fetch(
                 ),
             )
 
-    # OA per Unpaywall but we couldn't grab the full text. Before stopping,
-    # pull the Europe PMC abstract so callers have something concrete to
-    # summarize from rather than blocking entirely on a missing PDF.
-    if is_oa:
+    # OA per Unpaywall, OR a PMC record exists (author manuscripts are often
+    # PMC-served but flagged not-OA by Unpaywall), but we couldn't grab the full
+    # text. Before stopping, pull the Europe PMC abstract so callers have
+    # something concrete to summarize from rather than blocking on a missing PDF.
+    if is_oa or pmcid:
         tiers.append("europepmc:abstract")
         abstract, err = _try_europepmc_abstract(doi, client, limiter, cfg)
         if err:
@@ -1034,8 +1025,9 @@ def _fetch(
         if abstract:
             metadata["abstract"] = abstract
             metadata["abstract_source"] = "europepmc"
+        lead = "Unpaywall lists an OA copy" if is_oa else "A PMC record exists for this DOI"
         access_hint = (
-            "Unpaywall lists an OA copy but every agent-accessible tier failed. "
+            f"{lead} but every agent-accessible tier failed. "
             "A user browser can likely retrieve it — ask for a PDF path."
         )
         if abstract:
@@ -1053,6 +1045,27 @@ def _fetch(
                 tiers_attempted=tiers,
                 errors=errors,
                 access_hint=access_hint,
+            ),
+        )
+
+    # Every tier failed. If Unpaywall was confident there is no OA copy, that is
+    # the honest verdict now that the PMC / full-text tiers have also come up
+    # empty (deferred from the pre-tier check above).
+    if unpaywall_paywalled:
+        return _write_and_return(
+            papers_dir,
+            slug,
+            FetchResult(
+                status="paywalled",
+                source="crossref+unpaywall",
+                metadata=metadata,
+                tiers_attempted=tiers,
+                errors=errors,
+                access_hint=(
+                    "Unpaywall reports no open-access copy and no PMC / full-text "
+                    "tier resolved it. Ask the user for a PDF path, or defer with "
+                    "status: paywalled."
+                ),
             ),
         )
 

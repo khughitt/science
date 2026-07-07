@@ -110,7 +110,11 @@ def _make_client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Cl
 
 
 class TestFetchPaperBranches:
-    def test_paywalled_short_circuits_full_text_probes(self, tmp_path: Path) -> None:
+    def test_not_oa_still_probes_pmc_then_returns_paywalled(self, tmp_path: Path) -> None:
+        """A not-OA paper with no PMC copy still ends at `paywalled`, but only AFTER
+        the DOI→PMCID→Europe PMC full-text tier has been consulted. Unpaywall's
+        is_oa=False no longer short-circuits before the PMC probe (so PMC-hosted
+        author manuscripts that Unpaywall mis-flags are not lost)."""
         seen: list[str] = []
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -122,12 +126,57 @@ class TestFetchPaperBranches:
                 )
             if req.url.host == "api.unpaywall.org":
                 return httpx.Response(200, json={"is_oa": False})
-            raise AssertionError(f"unexpected host {req.url.host}")
+            if req.url.host == "www.ebi.ac.uk":
+                # Europe PMC: no PMC record for this DOI.
+                return httpx.Response(200, json={"resultList": {"result": []}})
+            # arXiv / bioRxiv / any direct fetch: nothing matches a closed DOI.
+            return httpx.Response(404)
 
         result = fetch_paper(doi="10.9999/p", cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "paywalled"
-        assert set(seen) == {"api.crossref.org", "api.unpaywall.org"}
+        # PMC tier was consulted rather than short-circuited on is_oa=False.
+        assert "europepmc" in result.tiers_attempted
+        assert "www.ebi.ac.uk" in seen
         assert result.metadata["title"] == "Pay"
+
+    def test_not_oa_but_pmc_fulltext_resolves_ok(self, tmp_path: Path) -> None:
+        """Regression (PMC-paywalled mislabel): an NIH author manuscript Unpaywall
+        reports not-OA is still recovered via DOI→PMCID→Europe PMC full text
+        instead of being wrongly labeled paywalled."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            host = req.url.host
+            path = req.url.path
+            if host == "api.crossref.org":
+                return httpx.Response(
+                    200,
+                    json={"message": {"DOI": "10.1016/j.cell.2023.07.019", "title": ["Imprint"]}},
+                )
+            if host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            if host == "www.ebi.ac.uk" and "/search" in path:
+                return httpx.Response(
+                    200,
+                    json={
+                        "resultList": {
+                            "result": [
+                                {"doi": "10.1016/j.cell.2023.07.019", "pmcid": "PMC10426455"}
+                            ]
+                        }
+                    },
+                )
+            if host == "www.ebi.ac.uk" and path.endswith("/fullTextXML"):
+                return httpx.Response(200, text="<article><body>Full text.</body></article>")
+            return httpx.Response(404)
+
+        result = fetch_paper(
+            doi="10.1016/j.cell.2023.07.019", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert result.status == "ok"
+        assert result.source == "europepmc"
+        assert result.metadata["pmcid"] == "PMC10426455"
+        assert result.text_path is not None
+        assert result.text_path.read_text().startswith("<article>")
 
     def test_blocked_but_oa_when_unpaywall_says_oa_but_tiers_fail(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
@@ -451,7 +500,9 @@ class TestIdentifierResolution:
                 return httpx.Response(200, json={"message": {"DOI": "10.1234/ok", "title": ["Found"]}})
             if req.url.host == "api.unpaywall.org":
                 return httpx.Response(200, json={"is_oa": False})
-            raise AssertionError(f"unexpected host {req.url.host}")
+            # The arXiv/bioRxiv/PMC tiers now run past the not-OA check; the DOI
+            # resolves no PMCID (pmcid=""), so the terminal verdict stays paywalled.
+            return httpx.Response(404)
 
         result = fetch_paper(pmid="39581534", cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "paywalled"
@@ -463,13 +514,16 @@ class TestIdentifierResolution:
     def test_pmcid_alone_resolves_to_doi(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             if req.url.host == "www.ebi.ac.uk":
+                if req.url.path.endswith("/fullTextXML"):
+                    # On PMC, but no OA full-text XML served for this record.
+                    return httpx.Response(404)
                 query = dict(req.url.params).get("query", "")
                 if query.startswith("PMCID:"):
                     return httpx.Response(
                         200,
                         json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmid": "", "pmcid": "PMC12934989"}]}},
                     )
-                # DOI verification round
+                # DOI verification / resolution round
                 return httpx.Response(
                     200,
                     json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmid": "", "pmcid": "PMC12934989"}]}},
@@ -478,10 +532,13 @@ class TestIdentifierResolution:
                 return httpx.Response(200, json={"message": {"DOI": "10.1234/pmcok"}})
             if req.url.host == "api.unpaywall.org":
                 return httpx.Response(200, json={"is_oa": False})
-            raise AssertionError(f"unexpected host {req.url.host}")
+            return httpx.Response(404)
 
         result = fetch_paper(pmcid="PMC12934989", cfg=_cfg(tmp_path), http=_make_client(handler))
-        assert result.status == "paywalled"
+        # A resolved PMCID means the paper IS on PMC, so even though Unpaywall says
+        # not-OA and the full-text XML 404s, the honest verdict is blocked_but_oa
+        # (browser-retrievable), NOT paywalled.
+        assert result.status == "blocked_but_oa"
         assert "europepmc:pmcid->doi" in result.tiers_attempted
 
     def test_arxiv_shortcut_constructs_doi_without_lookup(self, tmp_path: Path) -> None:
@@ -525,6 +582,8 @@ class TestIdentifierResolution:
     def test_pmc_url_extracts_pmcid(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             if req.url.host == "www.ebi.ac.uk":
+                if req.url.path.endswith("/fullTextXML"):
+                    return httpx.Response(200, text="<article>body</article>")
                 return httpx.Response(
                     200,
                     json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmcid": "PMC12934989"}]}},
@@ -533,14 +592,18 @@ class TestIdentifierResolution:
                 return httpx.Response(200, json={"message": {"DOI": "10.1234/pmcok"}})
             if req.url.host == "api.unpaywall.org":
                 return httpx.Response(200, json={"is_oa": False})
-            raise AssertionError(f"unexpected host {req.url.host}")
+            return httpx.Response(404)
 
         result = fetch_paper(
             url="https://pmc.ncbi.nlm.nih.gov/articles/PMC12934989/",
             cfg=_cfg(tmp_path),
             http=_make_client(handler),
         )
-        assert result.status == "paywalled"
+        # PMC URL → PMCID → Europe PMC full text, retrieved even though Unpaywall
+        # reports not-OA (the author-manuscript mislabel this fix targets).
+        assert result.status == "ok"
+        assert result.source == "europepmc"
+        assert result.metadata["pmcid"] == "PMC12934989"
 
     def test_arxiv_url_takes_arxiv_path(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
@@ -583,7 +646,8 @@ class TestIdentifierResolution:
                 )
             if req.url.host == "api.unpaywall.org":
                 return httpx.Response(200, json={"is_oa": False})
-            raise AssertionError(f"unexpected host {req.url.host}")
+            # PMC-resolution tier now runs past the not-OA check; no PMC record → paywalled stands.
+            return httpx.Response(404)
 
         result = fetch_paper(
             url="https://aacrjournals.org/cancerres/article/70/3/859/561120",
