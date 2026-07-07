@@ -346,7 +346,8 @@ uv run science explore-ideas apply --from <report-path-or-id> --model-id <your-m
 ```
 
 Use `--format json` with `--check` when you need machine-readable planned
-creates, skipped blocks, and manual `topic`/`theme` blocks.
+creates, skipped blocks, and any manual blocks reserved for future
+valid-but-not-routable decisions.
 
 - `<report-path-or-id>` is the `--from` value: a path to the report file, or the
   report id — its basename stem, e.g. `explore-2026-07-04` (the `explore-` prefix
@@ -354,15 +355,16 @@ creates, skipped blocks, and manual `topic`/`theme` blocks.
 - `<your-model-id>` is the id of the model running this command.
 
 The CLI parses every fenced `yaml` block that has a `candidate_id`, and for each
-`decision: keep` question/hypothesis it creates a real entity — routing
-`origin_plan.origins` to `origins`, supporting (non-`predates:`) resolved anchors
-to `source_refs`, and stamping `--added-by explore-ideas:<model-id>:<candidate_id>`
-— then writes `decision: applied` + `applied_as` + `applied_at` back into that
-block. It is idempotent: a re-run skips blocks already `applied`. `topic`/`theme`
-keeps are reported as "apply manually"; `drop`/`defer` are skipped. Bad input
+`decision: keep` question, hypothesis, topic, or theme it creates a real entity
+— routing `origin_plan.origins` to `origins`, supporting (non-`predates:`)
+resolved anchors to `source_refs`, and stamping
+`--added-by explore-ideas:<model-id>:<candidate_id>` — then writes `decision:
+applied` + `applied_as` + `applied_at` back into that block. It is idempotent: a
+re-run skips blocks already `applied`; `drop`/`defer` are skipped. Bad input
 (duplicate ids, unknown `decision`/`proposed_kind`, a `keep` block missing
-`title`/`origin_plan.origins`, or an invalid origin) is rejected before anything
-is written.
+`title`/`origin_plan.origins`, malformed origins, malformed `lens_views`,
+unresolved or ambiguous `related_existing`, or malformed routed anchors) is
+rejected before anything is written.
 
 Relay the CLI's created / skipped / manual / failure summary to the user. If
 `--commit` was passed, commit the created entities plus the updated report with

@@ -25,8 +25,8 @@ from science_tool.resolve_refs import RefIndex, build_ref_index, load_index_rows
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
-_ROUTABLE_KINDS = {"question", "hypothesis"}
-_MANUAL_KINDS = {"topic", "theme"}
+_ROUTABLE_KINDS = {"question", "hypothesis", "topic", "theme"}
+_MANUAL_KINDS: set[str] = set()
 _VALID_KINDS = _ROUTABLE_KINDS | _MANUAL_KINDS
 
 
