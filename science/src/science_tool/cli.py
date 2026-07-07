@@ -20,6 +20,7 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.commons import commons_group
 from science_tool.curate.cli import curate_group
 from science_tool.data_cli import data_group
+from science_tool.data_root import discover_project_root, resolve_data_root
 from science_tool.dag.cli import dag_group
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
@@ -3306,14 +3307,22 @@ def datasets_files(source_id: str, output_format: str) -> None:
 @datasets.command("download")
 @click.argument("source_id", metavar="SOURCE:ID")
 @click.option("--file", "file_pattern", default=None, help="Download only files matching this pattern")
-@click.option("--dest", "dest_dir", default="data/raw", show_default=True, type=click.Path(path_type=Path))
-def datasets_download(source_id: str, file_pattern: str | None, dest_dir: Path) -> None:
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Project root for resolving the configured data root.",
+)
+@click.option("--dest", "dest_dir", default=None, show_default="resolved data root / raw", type=click.Path(path_type=Path))
+def datasets_download(source_id: str, file_pattern: str | None, project_root: Path | None, dest_dir: Path | None) -> None:
     """Download dataset files. Use SOURCE:ID format."""
     import fnmatch
 
     source, _, dataset_id = source_id.partition(":")
     if not dataset_id:
         raise click.ClickException("Use SOURCE:ID format, e.g. zenodo:12345")
+    if dest_dir is None:
+        dest_dir = resolve_data_root(discover_project_root(project_root)) / "raw"
     adapter = get_adapter(source)
     file_list = adapter.files(dataset_id)
     if not file_list:
@@ -3333,10 +3342,18 @@ def datasets_download(source_id: str, file_pattern: str | None, dest_dir: Path) 
 
 
 @datasets.command("validate")
-@click.option("--path", "data_path", default="data", show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Project root for resolving the configured data root.",
+)
+@click.option("--path", "data_path", default=None, show_default="resolved data root", type=click.Path(path_type=Path))
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def datasets_validate(data_path: Path, output_format: str) -> None:
+def datasets_validate(project_root: Path | None, data_path: Path | None, output_format: str) -> None:
     """Validate Frictionless Data Packages in raw/ and processed/ directories."""
+    if data_path is None:
+        data_path = resolve_data_root(discover_project_root(project_root))
     results = validate_path(data_path)
     emit_query_rows(
         output_format=output_format,
