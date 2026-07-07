@@ -181,6 +181,38 @@ def test_serialize_happy_path(tmp_path: Path):
     assert manifest["boundary_audit"] == {"passed": True, "forced": False}
 
 
+def test_serialize_inventories_out_of_tree_payloads_with_logical_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import tarfile
+    from science_tool.project_package.serialize import serialize_project
+    from science_tool.project_package.verify import verify_project
+
+    project = tmp_path / "project"
+    project.mkdir()
+    bulk = tmp_path / "bulk"
+    _write(project, "science.yaml", f"id: demo\nname: Demo\ndata:\n  root: {bulk}\n".encode())
+    _write(project, "entities/questions/q1.md", b"# q\n")
+    _init_repo(project)
+    _commit_all(project)
+    _write(bulk, "processed/big.parquet", b"\x09" * 16)
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    out = tmp_path / "bundle.tar.gz"
+    result = serialize_project(project, out, force=False)
+
+    assert result.payload_count == 1
+    with tarfile.open(out, "r:gz") as tar:
+        manifest_file = tar.extractfile("demo/manifest.json")
+        assert manifest_file is not None
+        manifest = json.loads(manifest_file.read())
+    assert manifest["payloads"][0]["path"] == "data/processed/big.parquet"
+    assert manifest["payloads"][0]["git_tracked"] is False
+    verified = verify_project(out, against=project)
+    assert verified.exit_code == 0
+    assert verified.status == "clean"
+
+
 def test_serialize_omits_untracked_results(tmp_path: Path):
     import tarfile
     from science_tool.project_package.serialize import serialize_project

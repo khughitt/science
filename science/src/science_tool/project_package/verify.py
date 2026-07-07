@@ -14,6 +14,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from science_tool.data_root import resolve_data_root
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_package.core import content_version
 from science_tool.project_package.core import file_resource
@@ -331,7 +332,9 @@ def _compare_source(bundle: LoadedBundle, root: Path) -> SourceCompare:
 def _compare_payloads(bundle: LoadedBundle, root: Path) -> PayloadCompare:
     tracked = _tracked_set(root)
     try:
-        actual_payloads = payload_inventory(root, DEFAULT_DATA_DIRS, tracked)
+        actual_payloads = payload_inventory(
+            root, DEFAULT_DATA_DIRS, tracked, data_root=resolve_data_root(root)
+        )
     except (PayloadError, OSError) as exc:
         data_dirs = ", ".join(path.as_posix() for path in DEFAULT_DATA_DIRS)
         raise VerifyError(f"payload inventory failed for --against root {root} data dirs [{data_dirs}]: {exc}") from exc

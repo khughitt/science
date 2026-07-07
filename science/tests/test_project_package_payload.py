@@ -35,6 +35,35 @@ def test_payload_inventory_hashes_and_sorts(tmp_path: Path):
     ]
 
 
+def test_payload_inventory_records_logical_path_for_out_of_tree_root(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    data_root = tmp_path / "bulk"
+    _write(data_root, "processed/exp/a.parquet", b"payload")
+    inv = payload_inventory(project, DEFAULT_DATA_DIRS, tracked_set=set(), data_root=data_root)
+    assert inv == [
+        {
+            "path": "data/processed/exp/a.parquet",
+            "sha256": hashlib.sha256(b"payload").hexdigest(),
+            "bytes": 7,
+            "git_tracked": False,
+        }
+    ]
+
+
+def test_payload_inventory_logical_paths_match_in_repo_and_out_of_tree(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    _write(project, "data/processed/exp/a.parquet", b"payload")
+    in_repo = payload_inventory(project, DEFAULT_DATA_DIRS, tracked_set=set())
+    out_root = tmp_path / "bulk"
+    _write(out_root, "processed/exp/a.parquet", b"payload")
+    out_of_tree = payload_inventory(
+        project, DEFAULT_DATA_DIRS, tracked_set=set(), data_root=out_root
+    )
+    assert out_of_tree == in_repo
+
+
 def test_payload_inventory_follows_symlink_to_content(tmp_path: Path):
     target = tmp_path / "outside.bin"
     target.write_bytes(b"hydrated")

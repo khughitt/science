@@ -20,6 +20,7 @@ import yaml
 from pydantic import ValidationError
 
 from science_tool.data_audit import Quadrant, audit_project
+from science_tool.data_root import resolve_data_root
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_config import load_project_config, resolve_data_policy
 from science_tool.project_package.core import FileResource, content_version, file_resource
@@ -68,11 +69,12 @@ def _payload_inventory(
     project_root: Path,
     data_dirs: tuple[Path, ...],
     tracked_set: set[str],
+    data_root: Path | None = None,
 ) -> list[dict]:
     """Serialize's view of the shared walk: translate guard failures to
     SerializeError so the existing fail-loud contract is unchanged."""
     try:
-        return payload_inventory(project_root, data_dirs, tracked_set)
+        return payload_inventory(project_root, data_dirs, tracked_set, data_root=data_root)
     except PayloadError as exc:
         raise SerializeError(str(exc)) from exc
 
@@ -243,7 +245,12 @@ def serialize_project(
 
     try:
         files = [file_resource(project_root, rel) for rel in source_rels]
-        payloads = _payload_inventory(project_root, DEFAULT_DATA_DIRS, set(tracked))
+        payloads = _payload_inventory(
+            project_root,
+            DEFAULT_DATA_DIRS,
+            set(tracked),
+            data_root=resolve_data_root(project_root),
+        )
     except OSError as exc:
         raise SerializeError(f"filesystem error reading project source: {exc}") from exc
 
