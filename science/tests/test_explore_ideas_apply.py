@@ -338,11 +338,22 @@ def test_build_plan_rejects_non_string_note_on_unresolved_anchor() -> None:
         build_create_plan("cand-q", _keep_question(literature_anchors=[{"ref": None, "note": 5}]), "opus")
 
 
-@pytest.mark.parametrize("kind", [None, "topic"])
+@pytest.mark.parametrize("kind", [None, "proverb"])
 def test_build_plan_rejects_invalid_proposed_kind(kind: object) -> None:
     data = _keep_question(proposed_kind=kind)
     with pytest.raises(ApplyValidationError):
         build_create_plan("cand-q", data, "opus")
+
+
+@pytest.mark.parametrize("kind", ["topic", "theme"])
+def test_build_plan_accepts_topic_and_theme(kind: str) -> None:
+    data = _keep_question(proposed_kind=kind, title=f"A {kind}")
+
+    plan = build_create_plan(f"cand-{kind}", data, "opus")
+
+    assert plan.kind == kind
+    assert plan.title == f"A {kind}"
+    assert plan.origins == [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
 
 
 def test_build_plan_missing_note_routes_as_support() -> None:
@@ -380,14 +391,19 @@ candidate_id: t1
 proposed_kind: topic
 title: Four
 decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
 ```
 """
     )
     plan = plan_report(blocks, "opus")
-    assert [p.candidate_id for p in plan.to_create] == ["k1"]
+    assert [p.candidate_id for p in plan.to_create] == ["k1", "t1"]
+    assert [p.kind for p in plan.to_create] == ["question", "topic"]
     assert plan.skipped_applied == ["a1"]
     assert plan.skipped_other == ["d1"]
-    assert plan.manual == [("t1", "topic")]
+    assert plan.manual == []
 
 
 def test_plan_report_rejects_duplicate_ids() -> None:
@@ -877,8 +893,12 @@ id: explore-2026-07-04
 ```yaml
 candidate_id: cand-topic
 proposed_kind: topic
-title: Manual routing candidate
+title: Topic candidate
 decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
 ```
 """
 
@@ -1101,16 +1121,76 @@ def test_cli_apply_json_stays_valid_with_warnings(monkeypatch: pytest.MonkeyPatc
         assert payload["created"][0]["warnings"] == ["w!"]
 
 
-def test_cli_apply_emits_manual_detail_in_text() -> None:
+def test_cli_apply_check_includes_topic_in_to_create() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir="/tmp"):
         root = Path.cwd()
         seed_project(root)
-        _write_keep_topic(root)
-        result = runner.invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
+        report = _write_keep_topic(root)
+        before = report.read_text(encoding="utf-8")
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m", "--check"],
+        )
         assert result.exit_code == 0, result.output
-        assert "1 to apply manually" in result.output
-        assert "apply manually (topic): cand-topic" in result.output
+        assert "1 would create" in result.output
+        assert "would create cand-topic (topic)" in result.output
+        assert "apply manually (" not in result.output
+        assert report.read_text(encoding="utf-8") == before
+        assert not list((root / "entities" / "topics").glob("*.md"))
+
+
+def test_apply_report_creates_topic_and_writes_back(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_keep_topic(tmp_path)
+
+    result = apply_report(tmp_path, str(report), "test-model", date(2026, 7, 6))
+
+    assert result.manual == []
+    assert [(created.candidate_id, created.kind) for created in result.created] == [("cand-topic", "topic")]
+    created_path = result.created[0].path
+    fm = _frontmatter(created_path)
+    assert fm["kind"] == "topic"
+    assert fm["title"] == "Topic candidate"
+    assert fm["origins"] == [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
+    assert fm["added_by"] == "explore-ideas:test-model:cand-topic"
+    assert "decision: applied" in report.read_text(encoding="utf-8")
+    assert f"applied_as: {result.created[0].entity_id}" in report.read_text(encoding="utf-8")
+
+
+def test_apply_report_creates_theme_and_writes_back(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-theme.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        """\
+# Theme report
+
+```yaml
+candidate_id: cand-theme
+proposed_kind: theme
+title: Cross-cutting theme
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-contrast
+```
+""",
+        encoding="utf-8",
+    )
+
+    result = apply_report(tmp_path, str(report), "test-model", date(2026, 7, 6))
+
+    assert result.manual == []
+    assert [(created.candidate_id, created.kind) for created in result.created] == [("cand-theme", "theme")]
+    fm = _frontmatter(result.created[0].path)
+    assert fm["kind"] == "theme"
+    assert fm["title"] == "Cross-cutting theme"
+    assert fm["theme_kind"] == "methodological"
+    assert fm["theme_scope"] == "project"
+    assert fm["origins"] == [{"type": "assistant", "ref": "explore-ideas-contrast"}]
+    assert "decision: applied" in report.read_text(encoding="utf-8")
 
 
 def test_cli_apply_translates_writeback_error_to_click_error(
@@ -1153,6 +1233,60 @@ def test_derive_lens_views_rejects_dangling_origin_ref() -> None:
     origins = [{"type": "assistant", "ref": "explore-ideas-mechanism"}]
     with pytest.raises(ApplyValidationError):
         derive_lens_views(data, origins, candidate_id="cand-x")
+
+
+def test_apply_report_persists_multi_lens_origins_and_views(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-converged.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        """\
+# Converged report
+
+```yaml
+candidate_id: cand-converged
+proposed_kind: question
+title: Shared idea
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+      independent: true
+    - type: assistant
+      ref: explore-ideas-contrarian
+      independent: true
+lens_views:
+  - lens: mechanism
+    rationale: Mechanism-first framing.
+    origin_ref: explore-ideas-mechanism
+  - lens: contrarian
+    rationale: Contrarian framing.
+    origin_ref: explore-ideas-contrarian
+```
+""",
+        encoding="utf-8",
+    )
+
+    result = apply_report(tmp_path, str(report), "test-model", date(2026, 7, 6))
+
+    fm = _frontmatter(result.created[0].path)
+    assert fm["origins"] == [
+        {"type": "assistant", "ref": "explore-ideas-mechanism", "independent": True},
+        {"type": "assistant", "ref": "explore-ideas-contrarian", "independent": True},
+    ]
+    assert fm["lens_views"] == [
+        {
+            "lens": "mechanism",
+            "rationale": "Mechanism-first framing.",
+            "origin_ref": "explore-ideas-mechanism",
+        },
+        {
+            "lens": "contrarian",
+            "rationale": "Contrarian framing.",
+            "origin_ref": "explore-ideas-contrarian",
+        },
+    ]
 
 
 def test_build_create_plan_carries_lens_views() -> None:
