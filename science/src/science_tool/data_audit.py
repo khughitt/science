@@ -14,9 +14,11 @@ import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
+from science_tool.data_root import resolve_data_root
 from science_tool.data_policy import (
     DEFAULT_DATA_POLICY,
     DataPolicy,
@@ -39,6 +41,13 @@ class Violation:
     path: str  # repo-relative posix
     file_class: FileClass
     proposed_target: str | None
+
+
+@dataclass(frozen=True)
+class AuditNote:
+    severity: Literal["info", "warning"]
+    code: str
+    message: str
 
 
 def git_tracked_set(project_root: Path) -> set[str]:
@@ -71,6 +80,12 @@ def _data_subpath(rel_path: Path, data_dirs: tuple[Path, ...]) -> Path | None:
         if d in rel_path.parents:
             return rel_path.relative_to(d)
     return None
+
+
+def _classify_for_audit(rel_path: Path, size: int, policy: DataPolicy) -> FileClass:
+    if rel_path == Path("science.yaml"):
+        return FileClass.RECORD
+    return classify(rel_path, size, policy)
 
 
 def _workflow_slug_from_siblings(project_root: Path, rel_path: Path) -> str | None:
@@ -164,7 +179,7 @@ def audit_project(
             size = abs_path.stat().st_size
         except OSError:
             continue
-        cls = classify(rel, size, policy)
+        cls = _classify_for_audit(rel, size, policy)
         loc = location(rel, data_dirs)
         is_tracked = rel.as_posix() in tracked
         v = _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs)
@@ -205,6 +220,22 @@ def _escapes_root(project_root: Path, candidate: Path) -> bool:
         return True
 
 
+def audit_project_notes(project_root: Path) -> list[AuditNote]:
+    project_root = project_root.resolve()
+    data_root = resolve_data_root(project_root).resolve(strict=False)
+    audit_data_root = (project_root / "data").resolve(strict=False)
+    notes: list[AuditNote] = []
+    if data_root != audit_data_root:
+        notes.append(
+            AuditNote(
+                "info",
+                "external-data-root",
+                f"external data root: {data_root} (not walked by repo-boundary audit)",
+            )
+        )
+    return notes
+
+
 _DATAPACKAGE_NAMES = ("datapackage.yaml", "datapackage.json")
 
 
@@ -219,7 +250,11 @@ def _planned_action(v: Violation) -> str:
     return "flag"  # leaked_payload, flag → never auto-acted
 
 
-def render_json(violations: list[Violation], outcomes: "list | None" = None) -> str:
+def render_json(
+    violations: list[Violation],
+    outcomes: "list | None" = None,
+    notes: list[AuditNote] | None = None,
+) -> str:
     """Stable contract. In read-only mode (outcomes is None) performed is always False
     and `action` reports the *planned* action, matching what --fix would attempt."""
     by_path = {o.violation.path: o for o in (outcomes or [])}
@@ -239,4 +274,10 @@ def render_json(violations: list[Violation], outcomes: "list | None" = None) -> 
         if o is not None and o.rewritten_resources is not None:
             row["rewritten_resources"] = o.rewritten_resources
         rows.append(row)
-    return json.dumps({"version": 1, "violations": rows}, indent=2) + "\n"
+    payload = {"version": 1, "violations": rows}
+    if notes:
+        payload["notes"] = [
+            {"severity": note.severity, "code": note.code, "message": note.message}
+            for note in notes
+        ]
+    return json.dumps(payload, indent=2) + "\n"

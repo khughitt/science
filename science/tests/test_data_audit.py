@@ -155,3 +155,43 @@ def test_tracked_payload_inside_data_flagged(tmp_path: Path):
     assert payload["violations"][0]["quadrant"] == "tracked_payload"
     assert payload["violations"][0]["action"] == "flag"
     assert payload["violations"][0]["performed"] is False
+
+
+def test_audit_notes_report_external_data_root(monkeypatch, tmp_path: Path) -> None:
+    from science_tool.data_audit import audit_project, audit_project_notes
+
+    external = tmp_path / "external-data"
+    (tmp_path / "science.yaml").write_text(
+        f"name: Demo\nid: demo\ndata:\n  root: {external}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    assert audit_project(tmp_path) == []
+    notes = audit_project_notes(tmp_path)
+    assert [note.code for note in notes] == ["external-data-root"]
+    assert str(external) in notes[0].message
+
+
+def test_render_json_includes_notes_only_when_present() -> None:
+    from science_tool.data_audit import AuditNote, render_json
+
+    assert "notes" not in json.loads(render_json([]))
+    payload = json.loads(
+        render_json(
+            [],
+            notes=[
+                AuditNote(
+                    "info",
+                    "external-data-root",
+                    "external data root: /tmp/x",
+                )
+            ],
+        )
+    )
+    assert payload["notes"] == [
+        {
+            "severity": "info",
+            "code": "external-data-root",
+            "message": "external data root: /tmp/x",
+        }
+    ]

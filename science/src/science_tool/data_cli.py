@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from science_tool.data_audit import audit_project, render_json
+from science_tool.data_audit import audit_project, audit_project_notes, render_json
 from science_tool.data_audit_fix import apply_fixes
 from science_tool.project_config import load_project_config, resolve_data_policy
 
@@ -56,11 +56,12 @@ def data_audit_command(project_path: Path | None, fix: bool, output_format: str,
 
         policy = DEFAULT_DATA_POLICY
     violations = audit_project(project_path, policy)
+    notes = audit_project_notes(project_path)
 
     if fix:
         outcomes = apply_fixes(project_path, violations)
         if emit_json:
-            click.echo(render_json(violations, outcomes), nl=False)
+            click.echo(render_json(violations, outcomes, notes), nl=False)
         else:
             performed = sum(1 for o in outcomes if o.performed)
             flagged = sum(1 for o in outcomes if not o.performed)
@@ -72,8 +73,10 @@ def data_audit_command(project_path: Path | None, fix: bool, output_format: str,
         return
 
     if emit_json:
-        click.echo(render_json(violations), nl=False)
+        click.echo(render_json(violations, notes=notes), nl=False)
     else:
+        for note in notes:
+            click.echo(f"  [{note.severity}:{note.code}] {note.message}")
         if not violations:
             click.echo("clean: no data/results boundary violations.")
         for v in violations:

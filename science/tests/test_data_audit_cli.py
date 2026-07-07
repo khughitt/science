@@ -83,3 +83,19 @@ def test_honors_science_project_root_env(tmp_path: Path):
     )
     payload = json.loads(res.output)
     assert payload["violations"][0]["target"] == "results/exp1/RESULTS.md"
+
+
+def test_audit_json_reports_external_data_root_note(monkeypatch, tmp_path: Path):
+    _init_repo(tmp_path)
+    external = tmp_path / "external-data"
+    _write(
+        tmp_path,
+        "science.yaml",
+        f"name: Demo\nid: demo\ndata:\n  root: {external}\n".encode(),
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    res = _run(tmp_path, "--json")
+    payload = json.loads(res.output)
+    assert res.exit_code == 0
+    assert payload["violations"] == []
+    assert payload["notes"][0]["code"] == "external-data-root"
