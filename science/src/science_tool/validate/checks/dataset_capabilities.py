@@ -11,6 +11,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from science_tool.datasets.capability_scope import VALID_SCOPES
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -61,6 +62,42 @@ def _is_demand_closed(status: Any) -> bool:
     return isinstance(status, str) and status in _DEMAND_CLOSED_STATUSES
 
 
+def _scope_gate(
+    scope: Any,
+    ident: str,
+    path_value: str | None,
+    field_issue: str | None,
+    field_name: str,
+) -> tuple[bool, list[Result]]:
+    """Resolve a `capability_scope` value.
+
+    Returns (suppress_missing, results):
+    - no scope declared            -> (False, [])  normal handling proceeds
+    - unknown scope value          -> (False, [scope-unknown])  fail closed
+    - valid scope, field empty     -> (True, [])   suppress *-missing
+    - valid scope, field present   -> (True, [scope-conflict])  mutual exclusion
+    """
+    if scope is None:
+        return False, []
+    if not (isinstance(scope, str) and scope in VALID_SCOPES):
+        return False, [
+            _result(
+                path_value,
+                f"{ident}: unknown capability_scope {scope!r}; allowed: {sorted(VALID_SCOPES)}",
+                "dataset-capabilities.scope-unknown",
+            )
+        ]
+    if field_issue != "missing":
+        return True, [
+            _result(
+                path_value,
+                f"{ident}: capability_scope {scope!r} conflicts with non-empty {field_name}",
+                "dataset-capabilities.scope-conflict",
+            )
+        ]
+    return True, []
+
+
 def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterator[Result]:
     records = list(entities)
     dataset_to_targets, target_to_datasets = _frontmatter_reach(records)
@@ -73,9 +110,14 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
         kind = fm.get("kind")
         path = fm.get("_path")
         path_value = path if isinstance(path, str) else None
+        scope = fm.get("capability_scope")
 
         if kind == "dataset":
             issue = _capability_shape_issue(fm.get(_PROVIDED_FIELD))
+            suppress, scope_results = _scope_gate(scope, ident, path_value, issue, _PROVIDED_FIELD)
+            yield from scope_results
+            if suppress:
+                continue
             if issue == "malformed":
                 yield _result(
                     path_value,
@@ -97,6 +139,10 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
 
         if _is_qh(ident):
             issue = _capability_shape_issue(fm.get(_REQUIRED_FIELD))
+            suppress, scope_results = _scope_gate(scope, ident, path_value, issue, _REQUIRED_FIELD)
+            yield from scope_results
+            if suppress:
+                continue
             if issue == "malformed":
                 yield _result(
                     path_value,

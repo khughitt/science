@@ -207,3 +207,67 @@ def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
 
     assert any(r.rule == "dataset-capabilities.provided-missing" for r in result.results)
     assert any(r.rule == "dataset-capabilities.required-missing" for r in result.results)
+
+
+def test_valid_scope_suppresses_dataset_provided_missing() -> None:
+    dataset = _dataset()
+    dataset.pop("provided_capabilities")
+    dataset["capability_scope"] = "clinical-outcome"
+
+    rules = _rules([dataset, _question()])
+
+    assert (Severity.WARN, "dataset-capabilities.provided-missing") not in rules
+    assert rules == []
+
+
+def test_valid_scope_suppresses_question_required_missing() -> None:
+    question = _question(status="active")
+    question.pop("required_capabilities")
+    question["capability_scope"] = "methodological"
+
+    rules = _rules([_dataset(), question])
+
+    assert (Severity.WARN, "dataset-capabilities.required-missing") not in rules
+
+
+def test_unknown_scope_warns_and_does_not_suppress() -> None:
+    dataset = _dataset()
+    dataset.pop("provided_capabilities")
+    dataset["capability_scope"] = "not-a-real-scope"
+
+    rules = _rules([dataset, _question()])
+
+    assert (Severity.WARN, "dataset-capabilities.scope-unknown") in rules
+    # fail closed: the normal missing warning still fires
+    assert (Severity.WARN, "dataset-capabilities.provided-missing") in rules
+
+
+def test_scope_conflicts_with_non_empty_capabilities() -> None:
+    # provided_capabilities is present AND a scope is declared -> conflict
+    dataset = _dataset(capability_scope="clinical-outcome")
+
+    rules = _rules([dataset, _question()])
+
+    assert (Severity.WARN, "dataset-capabilities.scope-conflict") in rules
+
+
+def test_scope_conflict_on_question_required_capabilities() -> None:
+    question = _question(capability_scope="methodological")
+
+    rules = _rules([_dataset(), question])
+
+    assert (Severity.WARN, "dataset-capabilities.scope-conflict") in rules
+
+
+def test_scope_conflict_suppresses_malformed_capability_warning() -> None:
+    # single signal: a scoped entity with a malformed field yields only
+    # scope-conflict, not the field's own malformed warning.
+    dataset = _dataset(
+        provided_capabilities={"assay": "gene-expression"},  # malformed: mapping, not list
+        capability_scope="clinical-outcome",
+    )
+
+    rules = _rules([dataset, _question()])
+
+    assert (Severity.WARN, "dataset-capabilities.scope-conflict") in rules
+    assert (Severity.WARN, "dataset-capabilities.provided-malformed") not in rules
