@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -42,6 +43,9 @@ def check_tooling(ctx: ValidateContext) -> Iterator[Result]:
 
     env_path = ctx.project_root / ".env"
     if not env_path.is_file():
+        if os.environ.get("SCIENCE_TOOL_PATH"):
+            yield _result(Severity.INFO, ".env", "SCIENCE_TOOL_PATH set in environment")
+            return
         yield _result(
             Severity.WARN,
             ".env",

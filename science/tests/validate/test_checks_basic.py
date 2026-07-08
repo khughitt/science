@@ -99,6 +99,27 @@ def test_tooling_reports_present_pyproject_science_reference_and_env(tmp_path: P
     assert [result.severity for result in results] == [Severity.INFO, Severity.INFO, Severity.INFO]
 
 
+def test_tooling_accepts_environment_science_tool_path_without_env_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.validate.checks.tooling import check_tooling
+
+    ctx = _ctx(tmp_path)
+    tmp_path.joinpath("pyproject.toml").write_text("[project]\nname = 'science-demo'\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_TOOL_PATH", "/tmp/science")
+
+    results = list(check_tooling(ctx))
+
+    assert ".env missing" not in "\n".join(_messages(results))
+    assert _messages(results) == [
+        "pyproject.toml present",
+        "  science reference present",
+        "SCIENCE_TOOL_PATH set in environment",
+    ]
+    assert [result.severity for result in results] == [Severity.INFO, Severity.INFO, Severity.INFO]
+
+
 def test_tooling_warns_when_pyproject_does_not_reference_science(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
