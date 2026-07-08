@@ -1,10 +1,11 @@
 # Project Data-Root Configuration Implementation Plan
 
-> **Status:** DESIGN PROPOSAL — for review before implementation. The Source
-> Design and config surface are settled enough to review now; per-task code/test
-> literals are specified at "what + where + test intent" granularity and will be
-> finalized during implementation (following the guard-test + anchored-docs
-> convention used by `2026-07-02-concept-source-ownership-guidance-implementation-plan.md`).
+> **Status:** IMPLEMENTED on `main`.
+>
+> Landed as the project data-root resolver, dataset CLI defaulting,
+> data-audit reporting, logical payload inventory, package serialize/verify
+> integration, and user-facing documentation. The execution record is
+> `docs/plans/2026-07-07-project-data-root-config-execution-plan.md`.
 >
 > **Rev 2 (2026-07-07, post-review) resolves five gaps:** (1) manifest records a
 > stable **logical** path (`data/processed/x`), not `relative_to(project_root)`,

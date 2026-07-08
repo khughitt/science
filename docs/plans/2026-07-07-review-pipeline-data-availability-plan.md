@@ -1,5 +1,12 @@
 # Review-Pipeline Data Availability Tightening Implementation Plan
 
+> **Status:** IMPLEMENTED on `main`.
+>
+> The locked-model input reconciliation rule, reference-class input deferral
+> carve-out, command-doc tests, and generated Codex skill tests are present.
+> This plan remains as the implementation record; unchecked task boxes below
+> are stale.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tighten the `review-pipeline` data-availability rubric so reviewers catch undeclared locked-model inputs and have a narrow, explicit reference-class input deferral rule.

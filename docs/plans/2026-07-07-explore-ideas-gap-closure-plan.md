@@ -1,5 +1,12 @@
 # Explore-Ideas Gap Closure Implementation Plan
 
+> **Status:** IMPLEMENTED on `main`.
+>
+> The read-only `science explore-ideas gaps` command, structured
+> `inspect_gaps_report` result contract, command docs, Codex skill mirror, and
+> regression tests are present. This plan remains as the implementation record;
+> unchecked task boxes below are stale.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a read-only `science explore-ideas gaps` command that inspects applied exploration candidates and reports deterministic follow-up gaps.
