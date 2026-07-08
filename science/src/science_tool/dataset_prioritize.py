@@ -22,6 +22,7 @@ from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
 from science_tool.datasets.capabilities import capability_fit
+from science_tool.datasets.capability_scope import is_valid_scope
 from science_tool.datasets_catalog import GATED_LEVELS, _local_rows
 from science_tool.entity_scan import iter_entity_markdown
 
@@ -507,10 +508,19 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
     for target, target_rows in by_target.items():
         datasets = sorted(row["id"] for row in target_rows)
         target_fm = targets[target]["frontmatter"]
+        scope = target_fm.get("capability_scope") if isinstance(target_fm, dict) else None
+        if is_valid_scope(scope):
+            targets[target]["datasets"] = datasets
+            targets[target]["dataset_count"] = len(datasets)
+            targets[target]["coverage_state"] = "out-of-molecular-scope"
+            targets[target]["gap_reason"] = str(scope)
+            continue
         compatible_rows: list[dict] = []
         incompatible_datasets: list[dict[str, object]] = []
         for row in target_rows:
             dataset_fm = _frontmatter_for_row(project_root, row)
+            if is_valid_scope(dataset_fm.get("capability_scope")):
+                continue  # scoped dataset is outside the molecular gate: no credit, no gap
             fit = capability_fit(
                 target_fm.get("required_capabilities") if isinstance(target_fm, dict) else None,
                 dataset_fm.get("provided_capabilities"),
@@ -551,7 +561,7 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
                     counts["unverified"] += 1
         if compatible_rows:
             coverage_state, gap_reason = _coverage_state_and_reason(counts)
-        elif target_rows:
+        elif incompatible_datasets:
             gap_reason = _capability_gap_reason(incompatible_datasets)
             coverage_state = gap_reason
         else:

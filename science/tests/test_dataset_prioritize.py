@@ -361,3 +361,50 @@ def test_target_coverage_reports_missing_capability_metadata(tmp_path: Path) -> 
     assert by_target["question:q-unassessed"]["gap_reason"] == "missing-required-capabilities"
     assert by_target["question:q-required"]["coverage_state"] == "missing-provided-capabilities"
     assert by_target["question:q-required"]["gap_reason"] == "missing-provided-capabilities"
+
+
+def test_target_coverage_reports_out_of_molecular_scope(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/questions/q-method.md",
+        '---\nid: "question:q-method"\nkind: "question"\ntitle: "Meta method"\n'
+        'capability_scope: "methodological"\n'
+        'datasets: ["dataset:run"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/run.md",
+        '---\nid: "dataset:run"\nkind: "dataset"\ntitle: "Run"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    coverage = target_coverage(rows, tmp_path)[0]
+
+    assert coverage["coverage_state"] == "out-of-molecular-scope"
+    assert coverage["gap_reason"] == "methodological"
+
+
+def test_scoped_dataset_does_not_gap_classify_a_molecular_target(tmp_path: Path) -> None:
+    # A clinical (scoped) dataset cross-linked to a molecular question must not
+    # drag the target into a capability gap — it is outside the molecular gate.
+    _write(
+        tmp_path / "entities/questions/q-mol.md",
+        '---\nid: "question:q-mol"\nkind: "question"\ntitle: "Molecular"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'datasets: ["dataset:clin"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/clin.md",
+        '---\nid: "dataset:clin"\nkind: "dataset"\ntitle: "Clinical"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/clin/datapackage.json"\n'
+        'capability_scope: "clinical-outcome"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    coverage = target_coverage(rows, tmp_path)[0]
+
+    assert coverage["incompatible_datasets"] == []
+    assert coverage["coverage_state"] == "no-candidate"
+    assert coverage["gap_reason"] == "no-candidate"
