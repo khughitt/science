@@ -85,7 +85,10 @@ axis later without rework.
 - **Never** grant molecular coverage credit to a scoped entity.
 - Record **why** (Type I vs Type II) so the marker is legible and
   forward-compatible with a future outcome axis.
-- Add an **audit lint** that can falsify a wrong marker.
+- Keep marker **integrity** checks (valid vocabulary, mutual exclusion) at the
+  framework level; leave content-level falsification (a marked entity that ships
+  molecular files or satisfies a molecular question by content) to project-local
+  checks.
 - Stay framework-native: no dependency on any project-local ledger or file layout.
 
 ## Non-Goals
@@ -163,17 +166,11 @@ All in `science/src/science_tool/validate/checks/dataset_capabilities.py`.
 3. **Contradiction check.** `capability_scope` set **and any non-empty**
    capability field (`provided_capabilities` / `required_capabilities`) on the
    same entity → WARN (`dataset-capabilities.scope-conflict`).
-4. **Audit lint (falsifiability).** A scoped **dataset** that reaches a live
-   target whose `required_capabilities` is a non-empty molecular set → WARN
-   (`dataset-capabilities.scope-contradicted`): the dataset is declared
-   non-molecular yet sits on the provider side of a live molecular requirement,
-   which usually means either the scope or the reach is wrong. Note this must be a
-   pure graph/frontmatter contradiction — keying the lint on a `capability_fit`
-   *match* would make it inert, because a valid scoped dataset has empty caps and
-   `capability_fit` fail-closes empties, so it can never match. File-level checks
-   ("ships molecular data files") and assay-matrix-consumption checks are
-   project-local, documented as a project responsibility, not implemented in the
-   framework lint.
+
+No graph-level "scoped dataset reaches a molecular target" lint is included — see
+Resolved decisions for why a corpus check retired it. Content-level falsification
+(a scoped entity that ships molecular files or satisfies a molecular question by
+content) is a project-local responsibility, not a framework check.
 
 ## Matching engine and coverage surfacing
 
@@ -251,10 +248,20 @@ away.
 
 ## Resolved decisions
 
-- **Audit-lint reach split — accepted.** The framework lint asserts only
-  graph/frontmatter contradictions (a scoped dataset reaching a live molecular
-  target, per Validator change 4). Checking shipped files and assay-matrix
-  consumption is project-local code, not a framework responsibility.
+- **No framework graph audit lint (revised after a corpus check).** An earlier
+  draft added a `scope-contradicted` lint firing when a scoped dataset reached a
+  live molecular target. A check against the MM30 corpus retired it: all 8
+  candidate cases reach molecular targets only through a *paper-mediated
+  cross-product* — a `Chabrun2026` / `Stubbins2025CHEK2` paper note that both
+  cites clinical datasets (`dataset_usage`) and is filed under molecular questions
+  (`related`), which `_frontmatter_reach` cross-products into spurious
+  dataset→question edges. The lint's premise ("reaching a molecular target means
+  the scope or the reach is wrong") was false 8/8, so it would only convert 8
+  `provided-missing` warnings into 8 false `scope-contradicted` warnings. The
+  framework therefore keeps only the vocabulary (`scope-unknown`) and
+  mutual-exclusion (`scope-conflict`) integrity checks. Content-level
+  falsification (shipped molecular files, assay-matrix consumption) stays
+  project-local, where the data actually lives.
 - **Enum governance — framework-owned registry module.** The allowed values, the
   scope type/class, and their definitions live in one small framework module
   (`science_tool.datasets.capability_scope`), consumed by the validator and
