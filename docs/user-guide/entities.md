@@ -1024,7 +1024,8 @@ evidence line, workflow-derived row, or virtual row records actual use.
 row per question or hypothesis. Coverage states are `covered-runnable`,
 `covered-unstaged`, `covered-reference`, `covered-pointer`, `blocked-access`,
 `unverified`, `missing-required-capabilities`,
-`missing-provided-capabilities`, `capability-mismatch`, and `no-candidate`.
+`missing-provided-capabilities`, `capability-mismatch`, `out-of-molecular-scope`,
+and `no-candidate`.
 Gap reasons include `unstaged-deposit`, `only-reference`, `only-pointer`,
 `only-gated`, `only-unverified`, `missing-required-capabilities`,
 `missing-provided-capabilities`, `capability-mismatch`, and `no-candidate`.
@@ -1055,6 +1056,26 @@ matching set is enough. A dataset linked to a target still appears in
 contribute runtime-state coverage credit. `science validate` warns when
 capability-relevant targets or datasets omit these fields, or when the fields
 are not non-empty lists of non-empty string mappings.
+
+Some entities are non-molecular by nature and legitimately declare no
+capabilities — clinical-only cohorts, outcome/registry data, or method/census
+questions. Mark these with `capability_scope` so the missing-capability warning is
+suppressed instead of firing on an intentional gap:
+
+```yaml
+capability_scope: clinical-outcome
+```
+
+`capability_scope` means "this entity is outside the molecular assay/modality
+gate." Values are `reference-substrate`, `derived-product`, `methodological`,
+`model-system` (terminal — the entity measures nothing on any axis) and
+`clinical-outcome`, `epidemiological`, `behavioral-instrument` (transitional —
+non-molecular measurement, pending a future outcome axis). A scoped target reports
+coverage state `out-of-molecular-scope` rather than a capability gap. The field is
+mutually exclusive with any non-empty `provided_capabilities` /
+`required_capabilities`; declaring both, or using an unknown value, is a
+`science validate` warning. A scoped entity never receives molecular coverage
+credit.
 
 Treat a flood of `no-candidate` rows as a curation-design signal, not only as a
 filtering problem. Especially when the missing rows are internal,
