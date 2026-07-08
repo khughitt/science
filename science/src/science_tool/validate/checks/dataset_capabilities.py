@@ -11,7 +11,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from science_tool.datasets.capability_scope import VALID_SCOPES
+from science_tool.datasets.capability_scope import VALID_SCOPES, is_valid_scope
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -79,7 +79,7 @@ def _scope_gate(
     """
     if scope is None:
         return False, []
-    if not (isinstance(scope, str) and scope in VALID_SCOPES):
+    if not is_valid_scope(scope):
         return False, [
             _result(
                 path_value,
