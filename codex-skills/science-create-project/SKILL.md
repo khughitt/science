@@ -315,6 +315,23 @@ tracked report/plan path and adding it explicitly.
 
 For research projects, also ignore raw/processed data payloads while keeping descriptors or `.gitkeep` files as appropriate.
 
+Use this pattern:
+
+```gitignore
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/external/*
+!data/external/.gitkeep
+```
+
+Keep version-controlled provenance outside the configured data root. Prefer
+`provenance/` or `research/packages/` for lightweight manifests, QA reports,
+and small summary frames. Do not use `data/provenance/` when the project uses
+the default `./data` data root, because that puts committed provenance inside
+the non-version-controlled root.
+
 **Do not exclude a directory wholesale when it also holds version-controlled
 sources.** A whole-directory entry like `models/` is a trap: git does not
 descend into a fully-excluded directory, so a later child `models/.gitignore`

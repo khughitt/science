@@ -1208,6 +1208,37 @@ claim runtime artifacts. Lineage validation checks `parent_dataset` references
 and cycles. Promotion checks enforce the extra requirements needed before a
 dataset can move into the commons.
 
+## Split storage: version-controlled provenance vs out-of-tree bulk
+
+Science separates lightweight, version-controlled provenance from bulk data that
+should stay off git and out of synced folders.
+
+The resolved project data root uses this precedence:
+
+1. `SCIENCE_DATA_ROOT`
+2. `science.yaml` `data.root`
+3. global `~/.config/science/config.yaml` `data.root` plus the project id
+4. `./data`
+
+`SCIENCE_DATA_ROOT` and global `data.root` must be absolute paths after `~`
+expansion. A project `science.yaml` value may be absolute or relative to the
+project root:
+
+```yaml
+data:
+  root: /data/proj/natural-systems
+```
+
+Payload directories keep their logical names even when the physical root moves.
+Logical `data/raw`, `data/processed`, and `data/external` map to
+`<resolved-root>/raw`, `<resolved-root>/processed`, and
+`<resolved-root>/external`.
+
+Never commit files under the resolved data root. Keep version-controlled
+provenance outside that root, using `provenance/` or `research/packages/` for
+manifests, QA reports, and small frames. Do not use `data/provenance/` when the
+resolved root is the default `./data`.
+
 ## Entity Classes
 
 Science groups core entity kinds into three classes.

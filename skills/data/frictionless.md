@@ -28,6 +28,11 @@ Use `science dataset add <slug>` and `science dataset verify-access <slug>` for
 the durable `dataset:<slug>` entity. Use `science datasets validate --path data/raw/`, `science datasets infer-schema`, and `science datasets qa` for
 runtime datapackage descriptors and file-level QA.
 
+Use `science datasets validate` to validate the resolved project data root, or
+`science datasets validate --path data/raw/` when intentionally checking an
+explicit in-repo path. Respect `SCIENCE_DATA_ROOT` and `science.yaml`
+`data.root`. Never commit files under the resolved data root.
+
 ## Creating a Data Package
 
 ### Option A: Auto-describe from existing files

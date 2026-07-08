@@ -26,6 +26,15 @@ def test_command_to_skill_name_uses_science_namespace() -> None:
     assert command_to_skill_name(Path("commands/research-topic.md")) == "science-research-topic"
 
 
+def test_data_skills_document_configured_data_root() -> None:
+    frictionless = (ROOT / "skills/data/frictionless.md").read_text(encoding="utf-8")
+    snakemake = (ROOT / "skills/pipelines/snakemake.md").read_text(encoding="utf-8")
+    for text in (frictionless, snakemake):
+        assert "SCIENCE_DATA_ROOT" in text
+        assert "data.root" in text
+        assert "Never commit files under the resolved data root" in text
+
+
 def test_generate_codex_skills_rewrites_claude_specific_references(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     status_skill = generated["science-status"]

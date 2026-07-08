@@ -14,6 +14,11 @@ description: Snakemake workflow construction and best practices. Use when creati
 
 For interactive exploration, prefer marimo notebooks instead.
 
+For project pipelines, write bulk outputs under the resolved data root. The
+resolver honors `SCIENCE_DATA_ROOT`, then `science.yaml` `data.root`, then
+global `data.root`, then `./data`. Keep logical references as relative
+`data/raw`, `data/processed`, or `data/external` paths in manifests. Never commit files under the resolved data root.
+
 ## Project Structure
 
 ```
