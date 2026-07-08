@@ -373,6 +373,12 @@ def _validate_snakefile_paths(
     findings: list[DatasetPackageFinding],
     snakefile_path: Path,
 ) -> None:
+    """Flag parent-project data paths in commons recipe Snakefiles.
+
+    This check is commons-recipe-scoped. It does not inspect project workflows
+    and intentionally does not flag the commons output layout
+    /data/science-commons/<slug>/...
+    """
     try:
         text = snakefile_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:

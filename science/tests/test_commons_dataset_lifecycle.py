@@ -727,6 +727,38 @@ def test_validate_dataset_package_reports_parent_project_paths(
     assert any(f.code == "parent-project-path" for f in report.findings)
 
 
+def test_validate_snakefile_paths_allows_commons_data_root_output(tmp_path: Path) -> None:
+    from science_tool.commons.dataset_lifecycle import (
+        DatasetPackageFinding,
+        _validate_snakefile_paths,
+    )
+
+    snakefile = tmp_path / "Snakefile"
+    snakefile.write_text(
+        'output = "/data/science-commons/demo/built.csv"\n',
+        encoding="utf-8",
+    )
+    findings: list[DatasetPackageFinding] = []
+
+    _validate_snakefile_paths(findings, snakefile)
+
+    assert findings == []
+
+
+def test_validate_snakefile_paths_still_flags_parent_project_processed_path(
+    tmp_path: Path,
+) -> None:
+    from science_tool.commons.dataset_lifecycle import _validate_snakefile_paths
+
+    snakefile = tmp_path / "Snakefile"
+    snakefile.write_text('input = "/data/processed/run/table.csv"\n', encoding="utf-8")
+    findings = []
+
+    _validate_snakefile_paths(findings, snakefile)
+
+    assert [finding.code for finding in findings] == ["parent-project-path"]
+
+
 def test_validate_dataset_package_reports_unreadable_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
