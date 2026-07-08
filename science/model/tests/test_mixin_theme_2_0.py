@@ -1,8 +1,10 @@
 """Tests for mixin-theme-2.0.json."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import get_args
 
 
 def _load_theme_schema() -> dict[str, object]:
@@ -59,18 +61,14 @@ def test_theme_mixin_2_0_keeps_required_kind_and_scope() -> None:
 
 
 def test_theme_mixin_2_0_keeps_theme_kind_enum_canonical() -> None:
+    from science_model.entities import ThemeEntity
+
     schema = _load_theme_schema()
     properties = schema["properties"]
     assert isinstance(properties, dict)
     theme_kind = properties["theme_kind"]
     assert isinstance(theme_kind, dict)
-    assert theme_kind["enum"] == [
-        "methodological",
-        "conceptual",
-        "empirical",
-        "domain",
-    ]
-    assert "biological" not in theme_kind["enum"]
+    assert theme_kind["enum"] == list(get_args(ThemeEntity.model_fields["theme_kind"].annotation))
 
 
 def test_theme_mixin_2_0_keeps_theme_scope_enum_canonical() -> None:

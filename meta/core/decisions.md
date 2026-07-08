@@ -336,3 +336,32 @@ and upstream feedback `fb-2026-07-04-005`.
   migrations.
 - Convergence reification in the graph adds more noise than signal due to sparse
   view coverage or overlapping lens definitions.
+
+## D-010: `mixin-theme-2.0` owns the canonical `theme_kind` vocabulary
+
+- **Date:** 2026-07-08
+- **Status:** active
+- **Resolves:** Task `t059`.
+- **Decision:** The canonical `theme_kind` enum for Science themes is the
+  `theme_kind` property in `science_model/schemas/mixin-theme-2.0.json`, and it
+  matches the public `ThemeEntity` model:
+  `methodological`, `biological`, `translational`, `evidence-quality`,
+  `organizational`, `conceptual`, `empirical`, and `domain`.
+
+**Why:**
+Toolkit templates, schema validation, and downstream projects had drifted:
+templates documented the older four-value enum while the Python entity model and
+active cancer projects already used biological theme kinds. Making the 2.0
+mixin the source of truth preserves one validation contract for default themes
+and avoids profile-specific schemas silently accepting values that commons
+promotion rejects.
+
+**Implications:**
+- Project templates point authors at the 2.0 mixin instead of describing a
+  separate active-profile override path.
+- Commons theme promotion accepts biological and related core theme kinds.
+- Older `mixin-theme-1.0` remains historical; no compatibility layer is added.
+
+**Revisit if:**
+- A project needs a domain-specific theme taxonomy that cannot fit the core
+  enum; add a versioned profile/mixin rather than silently diverging.

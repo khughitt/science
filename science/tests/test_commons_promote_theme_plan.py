@@ -1,11 +1,10 @@
-"""Theme-kind plan tests, including the biological validation failure."""
+"""Theme-kind promotion plan tests."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, NoReturn
 
-import pytest
 import yaml
 
 FIXTURES = Path(__file__).parent / "fixtures" / "promote"
@@ -42,9 +41,7 @@ def test_theme_plan_happy_path_canonical_keeps_kind_and_scope(tmp_path, monkeypa
     _resolver(monkeypatch)
     discovery = discover_candidates(["proj-alpha", "proj-beta"], PROMOTE_KIND_THEME)
     discovery = type(discovery)(
-        candidates_by_slug={
-            "cross-no-conflict": discovery.candidates_by_slug["cross-no-conflict"]
-        },
+        candidates_by_slug={"cross-no-conflict": discovery.candidates_by_slug["cross-no-conflict"]},
         failed_candidates=[],
     )
 
@@ -78,11 +75,7 @@ def test_theme_plan_happy_path_canonical_keeps_kind_and_scope(tmp_path, monkeypa
         assert overlay_fm["updated"] == "2026-04-05"
 
 
-def test_theme_plan_biological_fails_validation(tmp_path, monkeypatch) -> None:
-    """A cross-project theme with theme_kind: biological is eligible at
-    discovery but fails plan-time validation (the enum doesn't include
-    biological)."""
-    from science_tool.commons.errors import PromoteValidationError
+def test_theme_plan_biological_kind_validates(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_THEME,
         discover_candidates,
@@ -92,15 +85,13 @@ def test_theme_plan_biological_fails_validation(tmp_path, monkeypatch) -> None:
     _resolver(monkeypatch)
     discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_THEME)
     discovery = type(discovery)(
-        candidates_by_slug={
-            "cross-biological": discovery.candidates_by_slug["cross-biological"]
-        },
+        candidates_by_slug={"cross-biological": discovery.candidates_by_slug["cross-biological"]},
         failed_candidates=[],
     )
 
-    with pytest.raises(PromoteValidationError) as exc_info:
-        plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_THEME)
-    err = exc_info.value
-    assert err.decision_slug == "cross-biological"
-    assert err.target_kind == "canonical"
-    assert "biological" in err.schema_message or "theme_kind" in err.schema_message
+    plan = plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_THEME)
+    d = next(d for d in plan.decisions if d.slug == "cross-biological")
+    canonical_content = d.canonical_artifacts[0].content
+    canonical_fm = _frontmatter(canonical_content)
+    assert canonical_fm["theme_kind"] == "biological"
+    assert canonical_fm["theme_scope"] == "cross-project"

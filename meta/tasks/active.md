@@ -587,14 +587,6 @@ Write a baseline-of-harm note for current topology pain points, then apply the i
 
 Start from `core/adaptive-project-topology.md` and `core/bio-meta-scaffold-brief.md`; do not scaffold `~/d/bio/meta` until this pilot confirms that a separate biological substrate project reduces a concrete topology harm.
 
-## [t059] Reconcile theme_kind enum sources across template, schema, and active profiles
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- created: 2026-05-18
-
-Three sources currently define the theme_kind enum and they do not agree. (1) templates/theme.md defaults to 'methodological' with no enum documentation; (2) schemas/mixin-theme-2.0.json declares enum: methodological | conceptual | empirical | domain; (3) some active profiles (e.g., the cancer/mechanisms/evolution project's resolved profile) accept methodological | biological | translational | evidence-quality | organizational instead. Pick a source of truth and propagate, or formally document that active profiles may extend/replace the upstream enum (with a discovery path: science-tool entity sections theme should show the effective enum). Deliverable: (a) reconciliation decision in core/decisions.md, (b) updated schema if the upstream enum changes, (c) updated profile schemas if they should align with the upstream, (d) documentation pointer if extension is the intended pattern. Surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: agent picked theme_kind=conceptual (upstream-correct) which failed validation against the active profile that requires biological/translational/etc. Templates were updated inline 2026-05-18 (added enum comments to templates/theme.md and science/model/src/science_model/templates/theme.md) to mitigate the immediate discoverability problem; this task is the structural fix.
-
 ## [t060] Extend science-tool entity sections to show frontmatter constraints
 - priority: P2
 - status: proposed

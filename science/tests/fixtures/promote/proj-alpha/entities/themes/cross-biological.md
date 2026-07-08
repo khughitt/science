@@ -1,11 +1,11 @@
 ---
 id: "theme:cross-biological"
 kind: "theme"
-title: "Cross-project theme with out-of-enum theme_kind"
+title: "Cross-project biological theme"
 theme_kind: "biological"
 theme_scope: "cross-project"
 ---
 
 ## Definition
 
-biological is not in the theme_kind enum; should fail plan-time validation.
+biological is in the canonical theme_kind enum; promotion should preserve it.

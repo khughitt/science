@@ -8,7 +8,7 @@ from science_model.entity_schema.validator import EntityValidationError, EntityV
 @pytest.fixture
 def base_entity() -> dict:
     return {
-        "schema_profile": "science-entity-base/1.0+theme/1.0",
+        "schema_profile": "science-entity-base/1.0+theme/2.0",
         "id": "theme:homology-aware-evaluation",
         "kind": "theme",
         "title": "Homology-aware evaluation",
@@ -35,6 +35,23 @@ def test_theme_kind_enum_enforced(base_entity: dict) -> None:
     entity = base_entity | {"theme_kind": "vibes"}
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(entity)
+
+
+@pytest.mark.parametrize(
+    "theme_kind",
+    [
+        "methodological",
+        "biological",
+        "translational",
+        "evidence-quality",
+        "organizational",
+        "conceptual",
+        "empirical",
+        "domain",
+    ],
+)
+def test_theme_kind_enum_accepts_canonical_values(base_entity: dict, theme_kind: str) -> None:
+    EntityValidator().validate(base_entity | {"theme_kind": theme_kind})
 
 
 def test_theme_scope_enum_enforced(base_entity: dict) -> None:
