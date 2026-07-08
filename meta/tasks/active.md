@@ -587,14 +587,6 @@ Write a baseline-of-harm note for current topology pain points, then apply the i
 
 Start from `core/adaptive-project-topology.md` and `core/bio-meta-scaffold-brief.md`; do not scaffold `~/d/bio/meta` until this pilot confirms that a separate biological substrate project reduces a concrete topology harm.
 
-## [t062] Improve schema-validation error messages with discovery hints
-- priority: P3
-- status: proposed
-- aspects: [software-development]
-- created: 2026-05-18
-
-When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.
-
 ## [t068] Cross-project entity reference syntax (single addressable world)
 - priority: P1
 - status: proposed
