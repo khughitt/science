@@ -3,7 +3,7 @@ kind: paper
 title: 'Self-Compatibility: Evaluating Causal Discovery without Ground Truth'
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Faller2024
 ontology_terms: []
 source_refs:
@@ -62,7 +62,10 @@ It can detect some assumption violations or finite-sample failures, not all caus
 
 ## Model / Tool Availability
 
-The paper is methodological; code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
+Code availability was checked on 2026-07-08.
+The PMLR paper page is `https://proceedings.mlr.press/v238/faller24a.html`, and the PDF points to `https://github.com/amazon-science/causal-self-compatibility` for source code.
+The GitHub API showed a public Python repository, Apache-2.0 license, archived, last pushed 2024-03-09.
+The root contents include `src/`, `test/`, `requirements.txt`, `Config`, `README.md`, and license files.
 
 ## Follow-up
 

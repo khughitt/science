@@ -4,7 +4,7 @@ title: Joint Estimation and Inference for Data Integration Problems based on Mul
   Multi-layered Gaussian Graphical Models
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Majumdar2022
 ontology_terms: []
 source_refs:
@@ -79,7 +79,8 @@ The real-data example is exploratory and pathway-informed, so biological conclus
 The JMLR page links a public GitHub repository, GeorgeMichailidis/JMMLE_code, for the paper's source code [@Majumdar2022].
 The repository includes R files for JMMLE implementation, synthetic data generation, objective calculation, multitask regression wrapping through grpreg, JSEM support, and simulation examples [@Majumdar2022].
 The paper states that the full algorithm uses multiple group lasso models through the R package grpreg [@Majumdar2022].
-Exact code version, license, dependency versions, and reproducibility status were not checked during the initial summary pass; tracked by task:t074.
+Repository metadata was checked on 2026-07-08 at `https://github.com/GeorgeMichailidis/JMMLE_code`. GitHub API metadata showed the repository as public, not archived, with no detected license, and last pushed on 2022-01-26.
+The repository root contains `Generator.R`, `JMLE.R`, `Objval.R`, `jsem.R`, `l1LS_Main.R`, `sim_est_new.R`, and `README.md`, but no package manifest or release artifact was visible from the GitHub contents API.
 
 ## Follow-up
 

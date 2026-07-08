@@ -3,7 +3,7 @@ kind: paper
 title: 'Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction'
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Klugkist2023
 ontology_terms: []
 source_refs:
@@ -14,7 +14,7 @@ related: []
 # Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction
 
 - **Authors:** Irene Klugkist and Thom Benjamin Volker
-- **Year:** 2023
+- **Year:** 2025 final issue; DOI metadata was created in 2023 during online-first publication
 - **Journal:** Psychological Methods
 - **DOI/URL:** https://doi.org/10.1037/met0000602
 - **BibTeX key:** Klugkist2023
@@ -96,7 +96,8 @@ The analyses use R and the BFpack package, with the appendix specifying BFpack V
 
 The PDF states that the simulations used R Version 4.2.1 [@Klugkist2023].
 
-License, maintenance status, and reproducibility state of the GitHub repository were not checked during the initial summary pass; tracked by task:t074.
+Repository metadata was checked on 2026-07-08. GitHub reports the `thomvolker/bes-intro-paper` repository as public and licensed under GPL-3.0, with no releases and last push on 2023-03-31.
+Crossref was checked on 2026-07-08 and records the DOI as a final Psychological Methods article in volume 30, issue 5, pages 949-965, issued in 2025-10.
 
 ## Follow-up
 

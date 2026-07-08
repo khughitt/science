@@ -682,29 +682,3 @@ science entities migrate --apply has a weaker pre-mutation gate (_postmove_audit
 - created: 2026-06-26
 
 Cancer-meta t026 surfaced a reusable Science pattern: when quantitative synthesis is blocked, the workflow should still produce a structured artifact rather than a terminal abstention. Design whether Science should provide template or command support for minimum viable synthesis outputs: structured comparison, heterogeneity or incompatibility statement, missing-fields list, follow-up route, and an explicitly adapted certainty block when formal GRADE/SWiM is out of scope. Relate this to evidence payload fields, uncertainty reason codes, and source-reliability dimensions without making project-specific certainty labels part of core semantics. Origin: cancer-meta question:0013-adapted-federation-certainty-blocks and feedback fb-2026-06-26-001.
-
-## [t074] Verify paper software and publication-status metadata
-- priority: P3
-- status: proposed
-- aspects: [research, software-development]
-- related: [task:t029]
-- group: paper-summary-verification
-- created: 2026-07-08
-
-Several imported paper summaries record software, repository, license, package-version,
-maintenance, dataset-release, or final-publication-status details as not checked during
-the initial PDF-summary pass. Consolidate those follow-ups into one verification batch
-instead of leaving inline annotation markers in every paper note.
-
-Scope:
-- verify repository URL, license, package version, dependency version, and maintenance
-  status where a software artifact is named;
-- verify code or dataset release status where the summary only had PDF-level evidence;
-- verify publication-status metadata for preprints or ambiguous issue/DOI dates;
-- update the corresponding `entities/papers/*.md` notes with checked source refs and
-  remove the task:t074 caveats once each item is resolved.
-
-Initial paper set: Allen2017, Ban2023, Dai2024GraphAttention, Ding2025, Dong2023,
-Dugourd2021, Faller2024, Gong2024, Han2026, Jiralerspong2024, Klugkist2023, Li2016,
-Linkov2017, Liu2024HiddenWorld, Maier2022, Majumdar2022, Si2025, Srinivasan2024,
-Volker2023, Wang2025, Williams2018, Yu2026, Zhao2012, and Zuber2025.

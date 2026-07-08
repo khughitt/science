@@ -3,7 +3,7 @@ kind: paper
 title: 'Robust Bayesian Meta-Analysis: Addressing Publication Bias With Model-Averaging'
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Maier2022
 ontology_terms: []
 source_refs:
@@ -76,7 +76,9 @@ The approach addresses publication bias in meta-analysis, not broader evidence-q
 The method is available as the RoBMA R package, with model fitting through JAGS and custom weighted distributions for the selection models [@Maier2022].
 The authors also report a JASP implementation for users who do not want to program directly [@Maier2022].
 The article states that data and materials are available on OSF at https://osf.io/y354c/ and that additional simulation materials are available at https://osf.io/buk8g/ [@Maier2022].
-Package license, exact package version used in the paper, and long-term maintenance status were not checked during the initial summary pass; tracked by task:t074.
+RoBMA package metadata was checked on 2026-07-08. CRAN lists RoBMA version 4.0.0, published on 2026-05-07, with `License: GPL-3`, `Depends: R (>= 4.0.0)`, and `SystemRequirements: JAGS >= 4.3.1`.
+CRAN lists imports including `BayesTools`, `bridgesampling`, `loo`, `runjags`, `rjags`, `mvtnorm`, `rlang`, `coda`, and `ggplot2`, and suggests packages including `metafor`, `posterior`, `weightr`, `lme4`, `fixest`, and `metaBMA`.
+The project repository is `https://github.com/FBartos/RoBMA`; GitHub API metadata checked on 2026-07-08 showed it as public, not archived, and pushed on 2026-07-08.
 
 ## Follow-up
 

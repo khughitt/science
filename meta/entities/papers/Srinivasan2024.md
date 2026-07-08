@@ -3,7 +3,7 @@ kind: paper
 title: Bayesian Evidence Estimation from Posterior Samples with Normalizing Flows
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Srinivasan2024
 ontology_terms: []
 source_refs:
@@ -62,7 +62,9 @@ High-dimensional and complex posterior settings remain challenging.
 ## Model / Tool Availability
 
 The paper names the method `floZ`.
-The summary did not check the repository or package availability beyond the PDF text during the initial pass; tracked by task:t074.
+Repository availability was checked on 2026-07-08.
+The APS/Caltech records and arXiv data-availability text point to `https://github.com/Rahul-Srinivasan/floZ`.
+The GitHub API showed a public repository, not archived, no detected license metadata, last pushed 2025-03-11, with primary language reported as Jupyter Notebook.
 
 ## Follow-up
 

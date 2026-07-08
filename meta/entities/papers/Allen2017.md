@@ -3,7 +3,7 @@ kind: paper
 title: 'Statistical Data Integration: Challenges and Opportunities'
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Allen2017
 ontology_terms: []
 source_refs:
@@ -78,7 +78,10 @@ Tool availability is discussed only for TCGA2STAT in the context of TCGA data wr
 
 Allen reports that TCGA2STAT is an R package developed to automatically download and wrangle TCGA data into coupled data frames for integrated statistical analysis [@Allen2017].
 The paper does not report a released implementation of mixed chain graphical models as a practical large-scale integration tool [@Allen2017].
-Package version, repository URL, license, and maintenance status for TCGA2STAT were not checked during the initial summary pass; tracked by task:t074.
+TCGA2STAT availability was checked on 2026-07-08. The package repository is `https://github.com/zhandong/TCGA2STAT`, and the CRAN archive lists versions 1.0 and 1.2, with 1.2 published on 2015-10-22.
+The archived CRAN `DESCRIPTION` for TCGA2STAT 1.2 reports `License: GPL-2`, imports `XML`, `parallel`, and `CNTools`, and lists R >= 3.0.0.
+CRAN now marks TCGA2STAT as removed and archived on 2020-04-03 because check problems were not corrected in time; GitHub API metadata showed the repository as public and not archived, but with the last push on 2015-10-22.
+The package vignette states that TCGA2STAT and its underlying code are distributed under the GPL 2.0 license and are available from CRAN and GitHub.
 
 ## Follow-up
 

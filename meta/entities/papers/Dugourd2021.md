@@ -4,7 +4,7 @@ title: Causal Integration of Multi-Omics Data with Prior Knowledge to Generate M
   Hypotheses
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Dugourd2021
 ontology_terms: []
 source_refs:
@@ -64,7 +64,9 @@ Network coherence does not by itself establish intervention-valid causal effects
 ## Model / Tool Availability
 
 The paper states that COSMOS is freely available as an R package [@Dugourd2021].
-Exact repository status and version were not checked during the initial summary pass; tracked by task:t074.
+COSMOS package metadata was checked on 2026-07-08. Bioconductor lists the package as `cosmosR` release version 1.20.0 in Bioconductor 3.23, with `License: GPL-3`, `Depends: R (>= 4.1)`, and DOI `10.18129/B9.bioc.cosmosR`.
+Bioconductor lists imports including `CARNIVAL`, `dorothea`, `dplyr`, `GSEABase`, `igraph`, `progress`, `purrr`, `rlang`, `stringr`, `visNetwork`, and `decoupleR`.
+The project repository is `https://github.com/saezlab/cosmosR`; GitHub API metadata checked on 2026-07-08 showed it as public, not archived, licensed under GPL-3.0, and pushed on 2026-06-04.
 
 ## Follow-up
 

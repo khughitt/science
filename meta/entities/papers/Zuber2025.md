@@ -4,7 +4,7 @@ title: Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysi
   of Multiple Exposures and Outcomes
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Zuber2025
 ontology_terms: []
 source_refs:
@@ -61,7 +61,10 @@ The real-data application remains observational and model-dependent.
 
 ## Model / Tool Availability
 
-Code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
+Code availability was checked on 2026-07-08.
+The article and supplemental material point to the MrDAG R package at `https://github.com/lb664/MrDAG`.
+The GitHub API showed a public R repository, GPL-2.0 license, not archived, last pushed 2025-04-04.
+The repository README describes MrDAG version 0.1.1 and states that it includes the real-data application data and run instructions.
 
 ## Follow-up
 

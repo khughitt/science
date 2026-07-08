@@ -3,7 +3,7 @@ kind: paper
 title: Efficient Causal Graph Discovery Using Large Language Models
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Jiralerspong2024
 ontology_terms: []
 source_refs:
@@ -16,7 +16,7 @@ related:
 
 - **Authors:** Thomas Jiralerspong, Yash More, Xiaoyin Chen, Vedant Shah, and Yoshua Bengio
 - **Year:** 2024
-- **Venue:** arXiv
+- **Venue:** arXiv; author page lists ICLR 2024 Workshop on How Far Are We From AGI
 - **DOI/URL:** https://arxiv.org/abs/2402.01207
 - **BibTeX key:** Jiralerspong2024
 - **Source:** PDF
@@ -56,11 +56,16 @@ It also suggests that LLM-generated graph edges should be weak hypotheses, not f
 
 The method depends on LLM internal knowledge and variable descriptions.
 Guaranteeing acyclicity does not guarantee causal correctness.
-The PDF is an arXiv version updated in 2026, so final publication status was not checked during the initial summary pass; tracked by task:t074.
+Publication status was checked on 2026-07-08.
+The current arXiv HTML record is version 5, dated 2026-04-02, and the author page `https://superkaiba.github.io/` lists the work as published at the ICLR 2024 Workshop on How Far Are We From AGI.
+No final journal or main-conference proceedings version was identified in the checked sources.
 
 ## Model / Tool Availability
 
-Code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
+Code availability was checked on 2026-07-08.
+The arXiv reproducibility statement says code is provided, and the matching repository is `https://github.com/superkaiba/causal-llm-bfs`.
+The GitHub API showed a public Python repository, not archived, no detected license metadata, last pushed 2024-02-14.
+The root contents include `algs/`, `data/`, `run.py`, `args.py`, `metrics.py`, `utils.py`, and `environment.yml`.
 
 ## Follow-up
 

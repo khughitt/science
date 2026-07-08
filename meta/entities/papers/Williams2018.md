@@ -3,7 +3,7 @@ kind: paper
 title: Bayesian Meta-Analysis with Weakly Informative Prior Distributions
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Williams2018
 ontology_terms: []
 source_refs:
@@ -15,8 +15,8 @@ related: []
 
 - **Authors:** Donald R. Williams, Philippe Rast, Paul-Christian Bürkner
 - **Year:** 2018
-- **Journal:** PsyArXiv preprint; publication-status check tracked by task:t074
-- **DOI/URL:** PsyArXiv, January 16, 2018; metadata check tracked by task:t074
+- **Journal:** PsyArXiv preprint
+- **DOI/URL:** https://doi.org/10.31234/osf.io/7tbrm
 - **BibTeX key:** Williams2018
 - **Source:** PDF
 
@@ -74,7 +74,8 @@ The authors explicitly note that meta-analysis with few studies and high heterog
 
 The paper provides annotated R code in the appendix using `brms`, `metaBMA`, and `metafor` [@Williams2018].
 The simulations and Bayesian examples use Stan through `brms`, with a half-Cauchy prior on tau and a normal prior on the intercept in the shown code [@Williams2018].
-The PDF includes an OSF link for simulation materials or code at `https://osf.io/9n4zp/`; availability check tracked by task:t074.
+The PDF includes an OSF link for simulation materials or code at `https://osf.io/9n4zp/`; the OSF API was checked on 2026-07-08 and showed a public project with `r_code/`, including `simulation`, `functions`, `stan_models`, and `plot_results` folders.
+The OSF preprint API was checked on 2026-07-08 and records the PsyArXiv preprint as public, published on 2018-01-10, with preprint DOI `10.31234/osf.io/7tbrm`.
 No standalone reusable software package from the paper itself is described beyond code examples and existing R packages [@Williams2018].
 
 ## Follow-up

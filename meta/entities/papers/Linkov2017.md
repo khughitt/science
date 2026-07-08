@@ -4,7 +4,7 @@ title: From Weight of Evidence to Quantitative Data Integration using Multicrite
   Decision Analysis and Bayesian Methods
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Linkov2017
 ontology_terms: []
 source_refs:
@@ -75,7 +75,10 @@ The paper discusses tools such as OSIRIS and Netica through prior examples, but 
 
 No standalone model or software artifact is released with the paper [@Linkov2017].
 The commentary mentions the OSIRIS webtool for integrated testing strategies and Netica Bayesian belief network software as examples used in related work [@Linkov2017].
-Access, maintenance status, and current availability of those tools were not checked beyond the PDF during the initial summary pass; tracked by task:t074.
+Tool availability was checked on 2026-07-08.
+The UFZ OSIRIS project pages still describe the OSIRIS ITS webtool as the central OSIRIS software outcome and list `https://www.ufz.de/osiris/index.php?en=22157` for tool information, with SIMPPLE as the contact.
+The separate OSIRIS Property Explorer remains publicly hosted at `https://www.organic-chemistry.org/prog/peo/` and `https://openmolecules.org/propertyexplorer/`.
+Netica remains available from Norsys at `https://www.norsys.com/netica.html` with application and API products; it is commercial/proprietary software rather than an artifact released by this paper.
 
 ## Follow-up
 

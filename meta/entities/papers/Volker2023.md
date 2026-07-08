@@ -4,7 +4,7 @@ title: 'Combining Support for Hypotheses over Heterogeneous Studies with Bayesia
   Evidence Synthesis: A Simulation Study'
 status: active
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-07-08'
 id: paper:Volker2023
 ontology_terms: []
 source_refs:
@@ -64,7 +64,9 @@ It also shows that BES is vulnerable to underpowered studies, so BES-style aggre
 
 ## Model / Tool Availability
 
-The paper references simulation scripts and results being available on GitHub, but the summary did not check repository persistence beyond the PDF text during the initial pass; tracked by task:t074.
+The simulation repository was checked on 2026-07-08 at `https://github.com/thomvolker/bes_master_thesis_ms`.
+GitHub API metadata showed the repository as public, licensed under GPL-3.0, not archived, and last pushed on 2023-01-12.
+The repository root includes `scripts/`, `simulations/`, `output/`, `manuscript/`, `manuscript_VK/`, `DataCpp/`, `DataCpp_1.0.tar.gz`, `CITATION.cff`, and `LICENSE.md`.
 
 ## Follow-up
 

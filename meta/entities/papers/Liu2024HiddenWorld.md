@@ -3,7 +3,7 @@ kind: paper
 title: Discovery of the Hidden World with Large Language Models
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Liu2024HiddenWorld
 ontology_terms: []
 source_refs:
@@ -62,7 +62,8 @@ The causal validity of discovered factors depends on both annotation quality and
 ## Model / Tool Availability
 
 The PDF lists the project site `https://causalcoat.github.io`.
-Repository and license status were not checked during the initial summary pass; tracked by task:t074.
+Repository metadata was checked on 2026-07-08. The project code is available at `https://github.com/LFhase/CausalCOAT`, and a `tmlr-group/CausalCOAT` fork is also public.
+GitHub API metadata for the source repository showed it as public, not archived, with no detected license, last pushed on 2025-03-26, and containing `AppleGastronome/`, `Neuropathic/`, `coat_real_world_case/`, `lingam_coat_result/`, `openai_utils.py`, and `utils.py`.
 
 ## Follow-up
 

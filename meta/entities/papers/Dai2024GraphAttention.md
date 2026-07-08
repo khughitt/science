@@ -3,7 +3,7 @@ kind: paper
 title: Integrating Causal Inference and Graph Attention for Structure-Aware Data Mining
 status: active
 created: '2026-05-06'
-updated: '2026-05-06'
+updated: '2026-07-08'
 id: paper:Dai2024GraphAttention
 ontology_terms: []
 source_refs:
@@ -60,7 +60,9 @@ Science should treat this as a design analogy rather than strong evidence for an
 
 ## Model / Tool Availability
 
-Code availability was not checked during the initial summary pass; tracked by task:t074.
+Code availability was checked on 2026-07-08.
+The paper PDF at `https://www.pspress.org/index.php/tcsm/article/download/261/211` does not identify a repository, package, dataset release, or reusable model artifact.
+Targeted web searches for the exact title, author, and GitHub/code terms did not identify an author-maintained implementation.
 
 ## Follow-up
 
