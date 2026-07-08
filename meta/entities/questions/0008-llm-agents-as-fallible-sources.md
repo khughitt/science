@@ -31,6 +31,8 @@ related:
 - question:0006-source-dependence-detection
 - question:0010-causal-graph-construction-pipeline
 - question:0012-agent-tool-kg-operations
+- question:0016-reproducibility-validation
+- question:0017-benchmark-grounding-metrics
 - topic:structured-scientific-knowledge
 ---
 
@@ -73,6 +75,7 @@ This question asks how the project should represent LLM agents as evidence sourc
 - LLM tool operations should record `tool_chain_ref`, `tool_io_contract`, `execution_trace_ref`, `safety_policy_ref`, `abstention_reason`, and `agent_evaluation_protocol`.
 - Shared prompts and shared models induce dependence across many evidence items; this overlaps with `question:0006-source-dependence-detection`.
 - The major remaining uncertainty is granularity: is one agent-source-per-prompt-version too fine, and is one-per-model too coarse?
+- **Load-bearing extension (2026-07-08):** the residual gap is not representing agent fallibility (this question and `[t033]` cover that) but **wiring an annotator-calibration discount into the belief-update surface itself**. Today the ordinal magnitude consumes authored `strength` / `independence` / `evidence_role` at face value regardless of whether a calibrated human or an agent assigned them; the `expert_judgment` confidence gate and ceiling are the only calibration-aware paths. A per-annotator calibration *profile* (human-expert vs specific agent+prompt+model-version) is the object that should earn a discount, and it is empirically estimable only once external ground truth exists — so this depends on `question:0017-benchmark-grounding-metrics`. Tracked as a Phase-2 follow-up of the reproducibility/grounding roadmap (`doc/plans/2026-07-08-epistemic-reproducibility-and-grounding-roadmap.md`).
 
 ## Connections to Project
 

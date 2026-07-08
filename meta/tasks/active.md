@@ -632,3 +632,134 @@ t066 demonstrated the latent-construct (PMI) correction subtracts the publicatio
 - created: 2026-06-26
 
 Cancer-meta t026 surfaced a reusable Science pattern: when quantitative synthesis is blocked, the workflow should still produce a structured artifact rather than a terminal abstention. Design whether Science should provide template or command support for minimum viable synthesis outputs: structured comparison, heterogeneity or incompatibility statement, missing-fields list, follow-up route, and an explicitly adapted certainty block when formal GRADE/SWiM is out of scope. Relate this to evidence payload fields, uncertainty reason codes, and source-reliability dimensions without making project-specific certainty labels part of core semantics. Origin: cancer-meta question:0013-adapted-federation-certainty-blocks and feedback fb-2026-06-26-001.
+
+## [t075] Reproducibility validation task group
+- priority: P1
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [question:0016-reproducibility-validation, question:0013-robustness-reproducibility-evaluation, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0007-working-model]
+- group: reproducibility-validation
+- created: 2026-07-08
+
+Coordinate the Phase-1 reproducibility-validation work from the 2026-07-08 epistemic-reproducibility-and-grounding roadmap. Distinct from question:0013 / task:t040, which REPRESENT reproducibility claims as typed artifacts: this group ACTIVELY VERIFIES reproducibility by re-execution and feeds the verdict into belief, reusing the dataset-QA-verdict-as-belief-ceiling pattern. Parent task; do not implement directly. Children cover the run contract, static lint, dynamic reproduction check, and the verdict-as-ceiling. Roadmap: doc/plans/2026-07-08-epistemic-reproducibility-and-grounding-roadmap.md.
+
+## [t076] Benchmark grounding and calibration measurement task group
+- priority: P1
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [question:0017-benchmark-grounding-metrics, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, question:0002-evidence-payload-schema]
+- group: benchmark-grounding
+- created: 2026-07-08
+
+Coordinate the Phase-1 benchmark-grounding work from the 2026-07-08 roadmap. Assemble a diverse, relevant benchmark/dataset portfolio as EXTERNAL GROUNDING that yields calibration metrics over time and the ground truth the H02 rich-vs-flat bakeoff needs, with first-class leakage provenance (tune/eval split, held-out rotation) and Goodhart controls. Parent task; do not implement directly. Roadmap: doc/plans/2026-07-08-epistemic-reproducibility-and-grounding-roadmap.md.
+
+## [t077] Define analysis-run reproducibility contract and require belief-eligible empirical evidence to resolve to it
+- priority: P1
+- status: proposed
+- parent: task:t075
+- aspects: [software-development]
+- related: [task:t075, question:0016-reproducibility-validation, question:0004-source-and-pipeline-provenance]
+- group: reproducibility-validation
+- created: 2026-07-08
+
+First-class analysis-run reproducibility record: code SHA, environment digest, input-data content hashes, parameters, seed policy, output hashes. Belief-eligible empirical evidence must transitively resolve to it (directly or through its datasets). Extends what exists but is unenforced today: EvidencePayloadCore.source_commit is optional and not wired into validate; dataset DerivationBlock.git_commit is a bare string that accepts empty and is caller-supplied not captured; no environment digest or seed field exists. Phase warn-only then eligibility gate so existing projects do not break.
+
+## [t078] Active reproduction check: rerun-twice and seeded-subsample smoke test with a verdict
+- priority: P2
+- status: proposed
+- parent: task:t075
+- aspects: [software-development, computational-analysis]
+- related: [task:t075, question:0016-reproducibility-validation]
+- group: reproducibility-validation
+- created: 2026-07-08
+
+Dynamic tier: re-execute a workflow and compare outputs; for computationally expensive workflows use a seeded subsample as a reproduction smoke test. Emit a verdict token (unverified, self-consistent, independently-reproduced, failed) tracked at run/dataset/evidence level. Open design points: same-result tolerance (bitwise vs within-tolerance numeric) and how to bound subsample cost while preserving indicativeness.
+
+## [t079] Pipeline-guidance reproducibility lint: flag stochastic steps without a declared seed and unpinned environments
+- priority: P2
+- status: proposed
+- parent: task:t075
+- aspects: [software-development]
+- related: [task:t075, question:0016-reproducibility-validation]
+- group: reproducibility-validation
+- created: 2026-07-08
+
+Static tier (cheap, first): a lint over pipeline plans flagging stochastic steps with no declared seed, unpinned environments, and uncaptured code SHA. Current pipeline guidance covers QA checks but does not stress-test reproducibility. Ship as visibility warnings first; touches the pipelines skill/guidance.
+
+## [t080] Reproduction verdict as a belief ceiling (mirror the dataset-QA ceiling)
+- priority: P2
+- status: proposed
+- parent: task:t075
+- aspects: [software-development, hypothesis-testing]
+- related: [task:t075, question:0016-reproducibility-validation, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration]
+- group: reproducibility-validation
+- created: 2026-07-08
+
+Turn the reproduction verdict into a belief cap, mirroring the qa_failed_dataset ceiling: empirical support resting on a failed or unverified reproduction is capped unless independently-reproduced support stands alone. New explicit belief-policy version; phase warn-only then gate. This is the run-level instance of the QA-verdict-as-belief-input pattern.
+
+### Notes
+
+- 2026-07-08 (K.H. caution): the eventual policy must preserve a distinction between "not yet checked" (`unverified`) and "checked and failed" (`failed`) — they are directionally similar but must not collapse to the same cap. Warn-only rollout first is the right posture before any eligibility gate.
+
+## [t081] Benchmark/dataset portfolio as first-class grounding with leakage provenance
+- priority: P1
+- status: proposed
+- parent: task:t076
+- aspects: [software-development, computational-analysis]
+- related: [task:t076, question:0017-benchmark-grounding-metrics]
+- group: benchmark-grounding
+- created: 2026-07-08
+
+Register a diverse, relevant benchmark/dataset portfolio as first-class external grounding. Treat benchmark-used-for-grounding as a provenance fact with an explicit tune/eval split (benchmarks used to tune the belief policy disjoint from those used to evaluate it) and held-out rotation so no single benchmark becomes a durable target. Leakage = shared source/dataset/paper between an evidence line and its benchmark ground truth, made mechanically detectable. Builds on the read-only science benchmark tests command and the catalog-benchmarks skill, which today do not author outcomes or score calibration.
+
+## [t082] Calibration-over-time metric: score belief against benchmark outcomes (Brier/ECE)
+- priority: P2
+- status: proposed
+- parent: task:t076
+- aspects: [software-development, hypothesis-testing, computational-analysis]
+- related: [task:t076, question:0017-benchmark-grounding-metrics, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration]
+- group: benchmark-grounding
+- created: 2026-07-08
+
+Generalize the h01_simulator Brier/ground-truth scoring loop (meta/src/h01_simulator) to score belief snapshots against benchmark outcomes with Brier and ECE, producing a standing calibration-over-time metric for the whole representation, not just per-proposition belief.
+
+## [t083] Run the H02 rich-vs-flat calibration bakeoff (milestone)
+- priority: P1
+- status: proposed
+- parent: task:t076
+- aspects: [hypothesis-testing, software-development, computational-analysis]
+- related: [task:t076, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, question:0002-evidence-payload-schema, question:0017-benchmark-grounding-metrics]
+- group: benchmark-grounding
+- created: 2026-07-08
+
+The milestone that converts H02 from a bet into a measurement: on a fixed benchmark set, compare rich-payload aggregation against a flat/scalar baseline scored on held-out outcomes. hypothesis:0002 itself says support is literature/architectural not benchmark-based; this closes that. Reusable pieces exist (h01_simulator scoring, t034_validator / evidence_payload.py schema validators) but have never been combined into a calibration comparison. Depends on t076 grounding + calibration metric.
+
+## [t084] Wire annotator calibration into the belief-update surface as a discount
+- priority: P2
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [task:t033, question:0008-llm-agents-as-fallible-sources, question:0017-benchmark-grounding-metrics, task:t076]
+- group: agent-source-modeling
+- created: 2026-07-08
+
+Phase-2 follow-up. Today the ordinal magnitude consumes authored strength/independence/evidence_role at face value regardless of whether a calibrated human or an agent assigned them (only expert_judgment has a confidence gate/ceiling). Discount agent-assigned fields by an estimated per-annotator calibration profile (human-expert vs specific agent+prompt+model-version). Profiles are estimable only once external ground truth exists, so this depends on the benchmark grounding group (t076/question:0017). Extends question:0008 / task:t033, which represent agent fallibility but do not wire it into belief.
+
+## [t085] Standing inert-field audit and norm-to-check conversion
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [task:t030, task:t021]
+- group: schema-hygiene
+- created: 2026-07-08
+
+Phase-2 follow-up. Audit whether each optional schema field is actually consumed by a validator, belief policy, query, or dashboard; flag inert fields that invite performative filling. Separately, convert do-not-do-X authoring norms (do not relabel weak as strong, do not fake independence groups) into checks, starting as visibility warnings unless the field affects belief eligibility. Extends the t030 authoring-cost audit and the t021 core/extension discipline.
+
+## [t086] Make the ordinal-continuous belief boundary load-bearing
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [question:0018-ordinal-continuous-belief-boundary, question:0009-mcda-bayesian-interoperability, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration]
+- group: belief-representation
+- created: 2026-07-08
+
+Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evidence state and treat the continuous value as a calibrated decision/attention projection. Locate every ordinal-to-continuous conversion; define a single documented conversion point where the projection carries its own config identity (as the log-odds scalar already does) so consumers cannot mistake it for the ordinal truth. Tie projection calibration to benchmark outcomes (question:0017). Relates meta D-003 (continuous operational beliefs) and question:0009.
