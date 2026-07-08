@@ -226,6 +226,17 @@ def audit_project_notes(project_root: Path) -> list[AuditNote]:
                 f"external data root: {data_root} (not walked by repo-boundary audit)",
             )
         )
+    tracked_under_root = _tracked_paths_under_data_root(project_root, data_root)
+    if tracked_under_root:
+        shown = ", ".join(tracked_under_root[:5])
+        suffix = "" if len(tracked_under_root) <= 5 else f", +{len(tracked_under_root) - 5} more"
+        notes.append(
+            AuditNote(
+                "warning",
+                "tracked-data-root",
+                f"git-tracked file(s) under data root: {shown}{suffix}",
+            )
+        )
     return notes
 
 
@@ -235,6 +246,17 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _tracked_paths_under_data_root(project_root: Path, data_root: Path) -> list[str]:
+    if not _is_relative_to(data_root, project_root):
+        return []
+    data_rel = data_root.relative_to(project_root)
+    return sorted(
+        rel
+        for rel in git_tracked_set(project_root)
+        if Path(rel) == data_rel or data_rel in Path(rel).parents
+    )
 
 
 _DATAPACKAGE_NAMES = ("datapackage.yaml", "datapackage.json")

@@ -1385,3 +1385,16 @@ def test_critique_approach_documents_pre_dag_mode() -> None:
     )
     for expected in expected_strings:
         assert expected in text
+
+
+def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
+    text = _read("commands/create-project.md")
+
+    assert "data/raw/*" in text
+    assert "!data/raw/.gitkeep" in text
+    assert "data/processed/*" in text
+    assert "!data/processed/.gitkeep" in text
+    assert "data/external/*" in text
+    assert "!data/external/.gitkeep" in text
+    assert "provenance/" in text
+    assert "data/provenance/" in text

@@ -205,3 +205,23 @@ def test_audit_notes_ignore_in_repo_nondefault_data_root(monkeypatch, tmp_path: 
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     assert audit_project_notes(tmp_path) == []
+
+
+def test_audit_notes_warn_on_tracked_file_under_data_root(tmp_path: Path) -> None:
+    from science_tool.data_audit import audit_project_notes
+
+    (tmp_path / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+    payload = tmp_path / "data" / "processed" / "tracked.bin"
+    payload.parent.mkdir(parents=True)
+    payload.write_bytes(b"x")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "add", "science.yaml", "data/processed/tracked.bin"],
+        cwd=tmp_path,
+        check=True,
+    )
+    notes = audit_project_notes(tmp_path)
+    warnings = [note for note in notes if note.code == "tracked-data-root"]
+    assert len(warnings) == 1
+    assert warnings[0].severity == "warning"
+    assert "data/processed/tracked.bin" in warnings[0].message
