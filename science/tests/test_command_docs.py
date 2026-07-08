@@ -1374,6 +1374,28 @@ def test_add_hypothesis_keeps_cli_creation_before_template_body_editing() -> Non
     assert "Do NOT pre-write the file or hand-pick the ID" in normalized
 
 
+def test_add_theme_keeps_cli_creation_and_schema_discovery_first() -> None:
+    text = _read("commands/add-theme.md")
+    normalized = _norm(text)
+
+    assert "Create first, then draft." in normalized
+    assert "science entity sections theme --format json" in normalized
+    assert "`theme_kind` enum" in normalized
+    assert "`theme_scope` enum" in normalized
+    assert (
+        "`science entity create theme` owns ID sequencing, frontmatter, file placement, "
+        "and prospective validation."
+        in normalized
+    )
+    assert "Do NOT pre-write the file or hand-pick the ID" in normalized
+
+
+def test_agent_workflow_map_lists_add_theme_command() -> None:
+    text = _read("docs/user-guide/agent-workflows.md")
+
+    assert "| Add themes | `/science:add-theme` | `science-add-theme` | `science entity create theme` |" in text
+
+
 def test_critique_approach_documents_pre_dag_mode() -> None:
     text = _read("commands/critique-approach.md")
     expected_strings = (

@@ -18,6 +18,7 @@ intent to agent workflows and representative CLI commands.
 | Search literature | `/science:search-literature` | `science-search-literature` | `science bib add` |
 | Summarize papers | `/science:research-papers` | `science-research-papers` | source-authored docs |
 | Add hypotheses | `/science:add-hypothesis` | `science-add-hypothesis` | `science hypotheses create` |
+| Add themes | `/science:add-theme` | `science-add-theme` | `science entity create theme` |
 | Pre-register | `/science:pre-register` | `science-pre-register` | source-authored docs |
 | Compare alternatives | `/science:compare-hypotheses` | `science-compare-hypotheses` | source-authored docs |
 | Discuss critically | `/science:discuss` | `science-discuss` | `science discussions create` |

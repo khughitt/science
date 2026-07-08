@@ -91,6 +91,16 @@ def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path
     assert "../statistics/SKILL.md" not in writing_skill
 
 
+def test_add_theme_codex_skill_uses_schema_driven_entity_creation() -> None:
+    text = _norm(_read_skill("science-add-theme"))
+
+    assert "Create first, then draft." in text
+    assert "science entity sections theme --format json" in text
+    assert "theme_kind" in text
+    assert "theme_scope" in text
+    assert "`science entity create theme` owns ID sequencing, frontmatter, file placement" in text
+
+
 def test_generated_command_preamble_references_codex_companion_skills(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-research-papers"].read_text(encoding="utf-8")
