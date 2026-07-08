@@ -332,6 +332,13 @@ and small summary frames. Do not use `data/provenance/` when the project uses
 the default `./data` data root, because that puts committed provenance inside
 the non-version-controlled root.
 
+When a project configures an out-of-tree data root, document the same resolution
+order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
+`data.root`, then global `data.root` plus the project id, then `./data`. Keep
+logical references stable: `data/raw` maps to `<resolved-root>/raw`,
+`data/processed` maps to `<resolved-root>/processed`, and `data/external` maps
+to `<resolved-root>/external`.
+
 **Do not exclude a directory wholesale when it also holds version-controlled
 sources.** A whole-directory entry like `models/` is a trap: git does not
 descend into a fully-excluded directory, so a later child `models/.gitignore`

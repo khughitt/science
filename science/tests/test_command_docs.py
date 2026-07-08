@@ -1398,3 +1398,7 @@ def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
     assert "!data/external/.gitkeep" in text
     assert "provenance/" in text
     assert "data/provenance/" in text
+    assert "SCIENCE_DATA_ROOT" in text
+    assert "science.yaml" in text
+    assert "data.root" in text
+    assert "`data/raw` maps to" in text
