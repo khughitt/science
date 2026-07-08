@@ -6,6 +6,13 @@ adapter-backed layout plan cluster. The original plan files were implementation
 work records; current behavior is represented by code, tests, and user-guide
 documentation.
 
+Current status, 2026-07-08: the v2 entity-layout migration command described
+below has since been retired by `6147e473` (`refactor: remove v2 entity layout
+support`). `science entities --help` no longer lists `migrate`, and
+`science/src/science_tool/entity_layout_migration.py` is absent. The migration
+sections below preserve the historical migration contract and cutover rationale;
+they are not instructions for a current command.
+
 ## Three-Root Layout
 
 At `layout_version: 3`, markdown entity files have a structural home based on
@@ -89,15 +96,15 @@ validates the accepted filename-strategy vocabulary.
 
 ## Deferred Or Separate Work
 
-The later `remove-v3-migration-code` plan remains unresolved because current
-code intentionally keeps some migration surfaces live. Do not infer from this
-checkpoint that all migration code is dead.
+The later `remove-v3-migration-code` plan was a superseded cleanup plan. Do not
+infer from this checkpoint that all migration-named code is dead; current live
+surfaces must be checked from the CLI, imports, tests, and user guide.
 
 Task `t071` still tracks the broader user-guide refresh for stale v2 layout
 references outside the specific guide sections updated during this cleanup. Task
-`t072` still tracks hardening the pre-mutation migration gate so it is a superset
-of post-mutation validation for project fan-out. Those are active follow-ups, not
-reasons to keep the completed implementation plans in `docs/plans/`.
+`t072` was retired on 2026-07-08 because the v2 entity-layout migration surface
+it targeted no longer exists on `main`. These notes are therefore historical
+context, not a reason to keep the completed implementation plans in `docs/plans/`.
 
 This checkpoint also does not implement dataset lifecycle semantics such as
 register-run, production/reconciliation invariants, or research-package

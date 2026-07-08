@@ -664,15 +664,6 @@ t066 demonstrated the latent-construct (PMI) correction subtracts the publicatio
 
 Phase 5 of the adapter-entity-layout migration (checkpoint: docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md) updated only docs/user-guide/project-layout.md to the v3 three-root model (entities/ owners, overlays/ borrows, doc/ prose). The rest of docs/user-guide/ is still written for the v2 world: entities.md, science-model.md, epistemic-model.md, evidence-lines.md, graph-and-derived-state.md, agent-workflows.md, cross-project-work.md, health-and-validation.md, introduction.md, index.md mostly describe specs/ + doc/<type>/ placement and never mention entities/ or overlays/. Audit all user-guide docs and bring filesystem/layout references in line with layout_version: 3: owners under entities/<kind>/ (id-local filenames), overlays under overlays/<type>/, doc/ prose-only. Cross-link to the new Three-Root Entity Layout section in project-layout.md. Scope is docs-only; no code/behaviour changes. Enumerate stale refs with: python3 -c "import re,pathlib; [print(p) for p in pathlib.Path('docs/user-guide').glob('*.md') if re.search(r'specs/|doc/(datasets|papers|topics|themes|workflows)', p.read_text())]"
 
-## [t072] Migrator pre-mutation gate should be a superset of post-mutation validation
-- priority: P2
-- status: proposed
-- aspects: []
-- group: v3-migration
-- created: 2026-06-22
-
-science entities migrate --apply has a weaker pre-mutation gate (_postmove_audit_failures in entity_layout_migration.py, via audit_project_sources on the simulated post-move model) than its final post-mutation full graph validation. On protein-landscape, --apply passed the pre-mutation gate (0 unresolved) but then failed post-mutation with 11 unresolved report:/task: related-refs AFTER git-mv'ing 243 owners, self-reporting 'working tree modified; run git restore' and forcing a rollback. The pre-mutation gate should be a superset of the post-mutation validation so fan-out projects fail fast pre-mutation instead of apply-then-rollback. Align the two reference surfaces.
-
 ## [t073] Design first-class minimum viable synthesis artifacts
 - priority: P2
 - status: proposed
