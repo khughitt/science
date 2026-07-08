@@ -181,12 +181,16 @@ entity has an empty molecular set, so it can never satisfy a molecular
 requirement — the "never grants molecular credit" goal holds *for free*. The
 marker is deliberately a validator- and coverage-surfacing concept only.
 
-**Coverage surfacing** (`science/src/science_tool/dataset_prioritize.py`): a scoped target
-or dataset should report a distinct `out-of-molecular-scope` coverage state
-(carrying the `capability_scope` value as its reason) rather than one of the
-capability-gap reasons (`missing-required-capabilities`, etc.). This keeps
-`science dataset prioritize --coverage` from listing intentional scopes as gaps,
-mirroring the validator's suppression.
+**Coverage surfacing** (`science/src/science_tool/dataset_prioritize.py`): a scoped
+**target** reports a distinct `out-of-molecular-scope` coverage state (carrying the
+`capability_scope` value as its reason) rather than a capability-gap reason
+(`missing-required-capabilities`, etc.). A scoped **dataset** is excluded from a
+molecular target's fit tally — it neither earns coverage credit nor counts as an
+incompatible gap — so a clinical cohort cross-linked to a molecular question (e.g.
+via a paper's `dataset_usage` × `related` cross-product) cannot drag that target
+into a false `missing-provided-capabilities` gap. This keeps `science dataset
+prioritize --coverage` from listing intentional scopes as gaps, mirroring the
+validator's suppression.
 
 ## The q0003 vs q0148 discriminator
 

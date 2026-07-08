@@ -226,6 +226,20 @@ def test_scope_conflict_on_question_required_capabilities() -> None:
     rules = _rules([_dataset(), question])
 
     assert (Severity.WARN, "dataset-capabilities.scope-conflict") in rules
+
+
+def test_scope_conflict_suppresses_malformed_capability_warning() -> None:
+    # single signal: a scoped entity with a malformed field yields only
+    # scope-conflict, not the field's own malformed warning.
+    dataset = _dataset(
+        provided_capabilities={"assay": "gene-expression"},  # malformed: mapping, not list
+        capability_scope="clinical-outcome",
+    )
+
+    rules = _rules([dataset, _question()])
+
+    assert (Severity.WARN, "dataset-capabilities.scope-conflict") in rules
+    assert (Severity.WARN, "dataset-capabilities.provided-malformed") not in rules
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -387,6 +401,31 @@ def test_target_coverage_reports_out_of_molecular_scope(tmp_path: Path) -> None:
 
     assert coverage["coverage_state"] == "out-of-molecular-scope"
     assert coverage["gap_reason"] == "methodological"
+
+
+def test_scoped_dataset_does_not_gap_classify_a_molecular_target(tmp_path: Path) -> None:
+    # A clinical (scoped) dataset cross-linked to a molecular question must not
+    # drag the target into a capability gap — it is outside the molecular gate.
+    _write(
+        tmp_path / "entities/questions/q-mol.md",
+        '---\nid: "question:q-mol"\nkind: "question"\ntitle: "Molecular"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'datasets: ["dataset:clin"]\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/clin.md",
+        '---\nid: "dataset:clin"\nkind: "dataset"\ntitle: "Clinical"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/clin/datapackage.json"\n'
+        'capability_scope: "clinical-outcome"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path)
+    coverage = target_coverage(rows, tmp_path)[0]
+
+    assert coverage["incompatible_datasets"] == []
+    assert coverage["coverage_state"] == "no-candidate"
+    assert coverage["gap_reason"] == "no-candidate"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -402,9 +441,11 @@ In `science/src/science_tool/dataset_prioritize.py`, add to the imports near `ca
 from science_tool.datasets.capability_scope import is_valid_scope
 ```
 
-- [ ] **Step 4: Short-circuit scoped targets in `target_coverage`**
+- [ ] **Step 4: Make `target_coverage` scope-aware (targets and datasets)**
 
-In `target_coverage`, inside `for target, target_rows in by_target.items():`, immediately after the two lines:
+Three edits in `target_coverage`.
+
+(a) Short-circuit a scoped **target**. Inside `for target, target_rows in by_target.items():`, immediately after the two lines:
 
 ```python
         datasets = sorted(row["id"] for row in target_rows)
@@ -421,6 +462,25 @@ insert:
             targets[target]["coverage_state"] = "out-of-molecular-scope"
             targets[target]["gap_reason"] = str(scope)
             continue
+```
+
+(b) Exclude a scoped **dataset** from the fit tally. In the inner `for row in target_rows:` loop, immediately after `dataset_fm = _frontmatter_for_row(project_root, row)`, insert:
+
+```python
+            if is_valid_scope(dataset_fm.get("capability_scope")):
+                continue  # scoped dataset is outside the molecular gate: no credit, no gap
+```
+
+(c) Fix the gap-branch guard so a target whose only candidates were scoped becomes `no-candidate`, not a spurious gap. Change:
+
+```python
+        elif target_rows:
+```
+
+to:
+
+```python
+        elif incompatible_datasets:
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -458,7 +518,7 @@ and `no-candidate`.
 
 Immediately after the paragraph that ends "... are not non-empty lists of non-empty string mappings." (the paragraph beginning "Within one capability set..."), insert:
 
-```markdown
+````markdown
 Some entities are non-molecular by nature and legitimately declare no
 capabilities — clinical-only cohorts, outcome/registry data, or method/census
 questions. Mark these with `capability_scope` so the missing-capability warning is
@@ -478,7 +538,7 @@ mutually exclusive with any non-empty `provided_capabilities` /
 `required_capabilities`; declaring both, or using an unknown value, is a
 `science validate` warning. A scoped entity never receives molecular coverage
 credit.
-```
+````
 
 - [ ] **Step 3: Verify no validator/doc drift**
 
@@ -593,15 +653,22 @@ Expected: zero `dataset-capabilities.*` warnings, and no `scope-unknown` / `scop
 
 - [ ] **Step 4: Run the MM30 capability guardrail (registry vocab check)**
 
-The MM30-local guardrail validates `{assay, modality}` vocab; `capability_scope` is a separate scalar it does not police, but run it to confirm no regressions:
+The MM30-local guardrail validates `{assay, modality}` vocab; `capability_scope` is a separate scalar it does not police. Capability *tokens* are untouched by this task, so the guardrail result must be **identical** before and after. Capture a baseline before Step 2:
 
 ```bash
 cd ~/d/cancer/cancer-types/mm30--capability-warnings-cleanup
 uv run --frozen python -m scripts.data_catalog.needs_audit validate-capabilities \
-  --vocab doc/plans/capabilities-vocab.yaml || true
+  --vocab doc/plans/capabilities-vocab.yaml; echo "baseline exit: $?"
 ```
 
-Expected: OK (unchanged from before this task).
+After Step 2, run the same command (no `|| true`) and compare:
+
+```bash
+uv run --frozen python -m scripts.data_catalog.needs_audit validate-capabilities \
+  --vocab doc/plans/capabilities-vocab.yaml; echo "post exit: $?"
+```
+
+Expected: `OK: capabilities valid ...`, exit 0 (the repo is vocab-clean from t856), identical to baseline. If the baseline was already nonzero for a pre-existing unrelated reason, the post-run must show the **same** exit code and message — `capability_scope` must not change it.
 
 - [ ] **Step 5: Commit (MM30 worktree)**
 
@@ -621,7 +688,7 @@ Note: this commit lands on the MM30 worktree branch `capability-warnings-cleanup
 - Enum registry module → Task 1. ✓
 - Validator behavior 1 (suppress) / 2 (scope-unknown, fail-closed) / 3 (scope-conflict) → Task 2. ✓
 - No `scope-contradicted` lint → intentionally absent (Global Constraints + design Resolved decisions). ✓
-- `out-of-molecular-scope` coverage state → Task 3. ✓
+- `out-of-molecular-scope` coverage state (scoped **targets** short-circuited; scoped **datasets** excluded from a molecular target's gap tally) → Task 3. ✓
 - No matching-engine change → honored (capabilities.py untouched; scoped entities keep empty caps and fail-close). ✓
 - User-guide docs → Task 4. ✓
 - MM30 rollout of 32 entities, clearing the 8 live warnings → Task 5 (the 8 = chabrun×6 + chek2 + q0018, all in the mapping). ✓
