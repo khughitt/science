@@ -23,3 +23,46 @@ aspects:
 - software-development
 - causal-modeling
 - hypothesis-testing
+health:
+  accepted_validation:
+  - rule: belief.fragile-single-line
+    severity: warning
+    message_contains:
+    - proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data
+    - evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23
+    reason: Reviewed BES negative proposition sensitivity; the claim remains intentionally narrow two-source literature support pending further independent corroboration.
+  - rule: belief.fragile-single-line
+    severity: warning
+    message_contains:
+    - proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses
+    - evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e
+    reason: Reviewed conceptual-replication aggregation sensitivity; the claim remains intentionally narrow two-source literature support pending further independent corroboration.
+prose_lint:
+  exclude_paths:
+  - "doc/plans/historical/**"
+  anchor_patterns:
+  - "task:"
+  - "\\[t\\d{3}\\]"
+  - "interpretation:"
+  - "pipeline/"
+  - "\\[@"
+  - "data/"
+  - "meta/src/"
+  - "meta/tests/"
+  - "meta/doc/"
+  - "scripts/"
+  - "meta/results/"
+  - "Figure"
+  - "Table"
+  - "constants.py"
+  short_form_ids_deny:
+  - D1
+  - D2
+  - D3
+  - D4
+  - D5
+  - H0
+  - H1
+  - H2
+  - h00
+  - q99

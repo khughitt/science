@@ -64,7 +64,7 @@ It also shows that BES is vulnerable to underpowered studies, so BES-style aggre
 
 ## Model / Tool Availability
 
-The paper references simulation scripts and results being available on GitHub, but the summary did not verify repository persistence beyond the PDF text [UNVERIFIED].
+The paper references simulation scripts and results being available on GitHub, but the summary did not check repository persistence beyond the PDF text during the initial pass; tracked by task:t074.
 
 ## Follow-up
 

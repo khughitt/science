@@ -50,5 +50,5 @@ Whether those findings transfer — and *how they transfer* — is currently ass
 ## Related
 
 - Topic notes: `topic:analytic-flexibility-and-replication`
-- Article notes: (Niepel 2019 paper summary to be written)
+- Article notes: (Niepel 2019 [@Niepel2019] paper summary to be written)
 - Methods/Datasets: (none registered yet)

@@ -35,6 +35,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     selected = list(checks) if checks else None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     enabled_from_config: list[str] | None = None
+    exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
     science_yaml = root / "science.yaml"
@@ -43,6 +44,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns
             enabled_from_config = config.prose_lint.enabled_checks
+            exclude_paths = config.prose_lint.exclude_paths
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
             bare_author_year_deny = config.prose_lint.bare_author_year_deny
     if selected is None and enabled_from_config:
@@ -61,6 +63,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         checks=selected,
         strict=strict,
         anchor_patterns=anchor_patterns,
+        exclude_paths=exclude_paths,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,
         bare_author_year_deny=bare_author_year_deny,

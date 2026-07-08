@@ -75,7 +75,7 @@ The paper discusses tools such as OSIRIS and Netica through prior examples, but 
 
 No standalone model or software artifact is released with the paper [@Linkov2017].
 The commentary mentions the OSIRIS webtool for integrated testing strategies and Netica Bayesian belief network software as examples used in related work [@Linkov2017].
-Access, maintenance status, and current availability of those tools were not verified from outside the PDF [UNVERIFIED].
+Access, maintenance status, and current availability of those tools were not checked beyond the PDF during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

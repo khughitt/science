@@ -79,7 +79,7 @@ The real-data example is exploratory and pathway-informed, so biological conclus
 The JMLR page links a public GitHub repository, GeorgeMichailidis/JMMLE_code, for the paper's source code [@Majumdar2022].
 The repository includes R files for JMMLE implementation, synthetic data generation, objective calculation, multitask regression wrapping through grpreg, JSEM support, and simulation examples [@Majumdar2022].
 The paper states that the full algorithm uses multiple group lasso models through the R package grpreg [@Majumdar2022].
-Exact code version, license, dependency versions, and reproducibility status are [UNVERIFIED].
+Exact code version, license, dependency versions, and reproducibility status were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

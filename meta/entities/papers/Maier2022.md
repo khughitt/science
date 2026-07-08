@@ -76,7 +76,7 @@ The approach addresses publication bias in meta-analysis, not broader evidence-q
 The method is available as the RoBMA R package, with model fitting through JAGS and custom weighted distributions for the selection models [@Maier2022].
 The authors also report a JASP implementation for users who do not want to program directly [@Maier2022].
 The article states that data and materials are available on OSF at https://osf.io/y354c/ and that additional simulation materials are available at https://osf.io/buk8g/ [@Maier2022].
-Package license, exact package version used in the paper, and long-term maintenance status are [UNVERIFIED].
+Package license, exact package version used in the paper, and long-term maintenance status were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

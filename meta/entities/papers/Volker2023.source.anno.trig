@@ -13,8 +13,8 @@ anno:annotations {
       oa:hasSelector [
         a oa:TextQuoteSelector ;
         oa:exact   "It does not behave like data pooling: adding more underpowered studies can amplify support for an alternative rather than rescue a true but weakly supported hypothesis." ;
-        oa:prefix  "" ;
-        oa:suffix  ""
+        oa:prefix  "BES can aggregate support across studies with different analysis models and operationalizations when individual studies have sufficient statistical power.\n" ;
+        oa:suffix  "\n\n## Relevance"
       ]
     ] ;
     oa:hasBody         [

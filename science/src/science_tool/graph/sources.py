@@ -1293,11 +1293,19 @@ def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -
             numeric_match = _NUMERIC_ID_PREFIX_RE.match(head)
         prefix = _KIND_SHORT_PREFIX.get(kind)
         if numeric_match is not None and prefix is not None:
-            token = f"{prefix}{numeric_match.group('number')}"
+            number = numeric_match.group("number")
+            token = f"{prefix}{number}"
             add(f"{kind}:{token.lower()}")
             add(f"{kind}:{token.upper()}")
             add(token.lower())
             add(token.upper())
+            compact_number = number.lstrip("0").zfill(2)
+            if compact_number != number:
+                compact_token = f"{prefix}{compact_number}"
+                add(f"{kind}:{compact_token.lower()}")
+                add(f"{kind}:{compact_token.upper()}")
+                add(compact_token.lower())
+                add(compact_token.upper())
 
     return aliases
 

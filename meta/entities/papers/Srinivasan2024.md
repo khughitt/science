@@ -62,7 +62,7 @@ High-dimensional and complex posterior settings remain challenging.
 ## Model / Tool Availability
 
 The paper names the method `floZ`.
-The summary did not verify the repository or package availability beyond the PDF text [UNVERIFIED].
+The summary did not check the repository or package availability beyond the PDF text during the initial pass; tracked by task:t074.
 
 ## Follow-up
 

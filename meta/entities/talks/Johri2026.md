@@ -37,7 +37,7 @@ Dana-Farber Cancer Institute) then presents ongoing work systematically benchmar
 agentic AI on **real multimodal oncology workflows** via an **M3A** framework
 (Multi-step, Multimodal, Multiomic, Agentic), spanning single-cell RNA + ATAC across
 15 cancer types and 240+ patients, in autonomous and human-copilot configurations.
-A preprint is forthcoming.
+A preprint is forthcoming [@Johri2026].
 
 ## Key Points
 

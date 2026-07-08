@@ -61,7 +61,7 @@ The real-data application remains observational and model-dependent.
 
 ## Model / Tool Availability
 
-Code availability was not verified from the PDF [UNVERIFIED].
+Code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

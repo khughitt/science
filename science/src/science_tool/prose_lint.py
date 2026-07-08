@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable
 
@@ -457,6 +458,10 @@ _IDENTIFIER_LABEL_SPAN_RE = re.compile(
 _VERSION_LABEL_SPAN_RE = re.compile(
     r"\b[A-Za-z][A-Za-z0-9_-]*(?:DB|db|[A-Z][A-Za-z0-9_-]*)\s+v?\d+(?:\.\d+)+\b"
 )
+_RUNTIME_VERSION_SPAN_RE = re.compile(
+    r"\b(?:Python|Node(?:\.js)?|R|NumPy|numpy|pandas|polars|pytest|Click|Typer)\s+v?\d+(?:\.\d+)+(?:\+)?\b"
+)
+_COMPACT_STRUCTURAL_ID_SPAN_RE = re.compile(r"\b[A-Z]{1,3}-\d{3,}\b")
 # Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
 _HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
 _LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
@@ -465,9 +470,9 @@ _LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
 # anchor. The number (including dotted/ranged forms) is consumed alongside the
 # keyword so its span can be excluded from numeric-claim matching.
 _CROSS_REFERENCE_RE = re.compile(
-    r"(?:\b(?:Sections?|Secs?|Chapters?|Chaps?|Figures?|Figs?|Tables?|Tbls?|"
+    r"(?:\b(?:Sections?|Secs?|Chapters?|Chaps?|Figures?|Figs?|Tables?|Tbls?|Lines?|"
     r"Equations?|Eqs?|Appendix|Appendices|Appx|Panels?)|§)"
-    r"\.?\s*\d+(?:\.\d+)*(?:[-–]\d+(?:\.\d+)*)?",
+    r"\.?\s*~?\d+(?:\.\d+)*(?:[-–]\d+(?:\.\d+)*)?\+?",
     re.IGNORECASE,
 )
 _BOLD_STRUCTURAL_LABEL_RE = re.compile(
@@ -482,6 +487,8 @@ def _mask_numeric_identifier_spans(line: str) -> str:
     line = _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
     line = _IDENTIFIER_LABEL_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
     line = _VERSION_LABEL_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    line = _RUNTIME_VERSION_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    line = _COMPACT_STRUCTURAL_ID_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
     return _mask_canonical_id_spans(line)
 
 
@@ -508,7 +515,7 @@ def detect_numeric_anchor(
     except (OSError, UnicodeDecodeError):
         return []
     data, body_start = parse_frontmatter(path)
-    if _paper_note_has_source_context(path, data):
+    if _paper_note_has_source_context(path, data) or _interpretation_has_artifact_context(data):
         return []
     lines = text.splitlines()
     issues: list[LintIssue] = []
@@ -587,6 +594,13 @@ def _paper_note_has_source_context(path: Path, frontmatter: dict) -> bool:
     return any(
         isinstance(frontmatter.get(key), str) and frontmatter[key].strip() for key in ("doi", "pmid", "url", "bibkey")
     )
+
+
+def _interpretation_has_artifact_context(frontmatter: dict) -> bool:
+    """Interpretations with an artifact field are result reports over that artifact."""
+    if frontmatter.get("kind") != "interpretation" and not str(frontmatter.get("id", "")).startswith("interpretation:"):
+        return False
+    return isinstance(frontmatter.get("artifact"), str) and frontmatter["artifact"].strip()
 
 
 def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> list[LintIssue]:
@@ -733,7 +747,15 @@ def _archived_task_aliases(root: Path) -> dict[str, str]:
     try:
         from science_tool.refs import _load_task_ids  # noqa: PLC0415
 
-        return {f"t{num}": f"task:t{num}" for num in _load_task_ids(root)}
+        aliases: dict[str, str] = {}
+        for num in _load_task_ids(root):
+            canonical = f"task:t{num}"
+            aliases[f"t{num}"] = canonical
+            compact_num = num.lstrip("0").zfill(2)
+            if compact_num != num:
+                aliases[f"t{compact_num}"] = canonical
+                aliases[f"T{compact_num}"] = canonical
+        return aliases
     except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on read issues
         logger.warning("archived task aliases unavailable (%s)", exc)
         return {}
@@ -769,6 +791,7 @@ def scan_root(
     checks: list[str] | None = None,
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
+    exclude_paths: list[str] | None = None,
     short_form_ids_deny: list[str] | None = None,
     resolver: dict[str, str] | None = None,
     bare_author_year_deny: list[str] | None = None,
@@ -789,7 +812,11 @@ def scan_root(
     unknown = [c for c in selected if c not in _DETECTORS]
     if unknown:
         raise ValueError(f"unknown checks: {unknown!r}; known: {list(CHECKS)}")
-    files = _collect_markdown_files(root)
+    files = [
+        path
+        for path in _collect_markdown_files(root)
+        if not _matches_excluded_path(root, path, exclude_paths or [])
+    ]
     hits: list[LintIssue] = []
     for path in files:
         for check in selected:
@@ -808,3 +835,13 @@ def scan_root(
     for hit in hits:
         counts[hit.check] = counts.get(hit.check, 0) + 1
     return {"counts": counts, "hits": hits}
+
+
+def _matches_excluded_path(root: Path, path: Path, patterns: list[str]) -> bool:
+    if not patterns:
+        return False
+    try:
+        rel = path.relative_to(root).as_posix()
+    except ValueError:
+        rel = path.as_posix()
+    return any(fnmatch(rel, pattern) for pattern in patterns)

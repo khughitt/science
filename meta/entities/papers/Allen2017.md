@@ -78,7 +78,7 @@ Tool availability is discussed only for TCGA2STAT in the context of TCGA data wr
 
 Allen reports that TCGA2STAT is an R package developed to automatically download and wrangle TCGA data into coupled data frames for integrated statistical analysis [@Allen2017].
 The paper does not report a released implementation of mixed chain graphical models as a practical large-scale integration tool [@Allen2017].
-Package version, repository URL, license, and maintenance status for TCGA2STAT are [UNVERIFIED].
+Package version, repository URL, license, and maintenance status for TCGA2STAT were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

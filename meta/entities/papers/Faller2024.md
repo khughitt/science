@@ -62,7 +62,7 @@ It can detect some assumption violations or finite-sample failures, not all caus
 
 ## Model / Tool Availability
 
-The paper is methodological; code availability was not verified from the PDF [UNVERIFIED].
+The paper is methodological; code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

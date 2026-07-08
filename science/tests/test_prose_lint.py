@@ -375,9 +375,28 @@ class TestNumericAnchor:
         path = _write(tmp_path, "Reported as 0.168 in the paper [@brunton2022].\n")
         assert detect_numeric_anchor(path) == []
 
+    def test_no_flag_interpretation_with_artifact_context(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "The simulation produced recall 0.555 versus 0.320.\n",
+            frontmatter="kind: interpretation\nartifact: results/sweep.parquet",
+        )
+        assert detect_numeric_anchor(path) == []
+
     def test_no_flag_in_section_header(self, tmp_path):
         path = _write(tmp_path, "## 3.2 Methods\n\nText.\n")
         assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_internal_line_reference(self, tmp_path):
+        path = _write(tmp_path, "This converts line 331 into a decidable rule.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_approximate_internal_line_reference(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Add this after line ~268, after lines ~173-198, and near line ~204+.\n",
+        )
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
 
     def test_no_flag_in_bold_structural_task_label(self, tmp_path):
         path = _write(tmp_path, "**Wave 3 Batch 4.10 (completed March 13, 2026)**\n\nText.\n")
@@ -519,6 +538,14 @@ class TestNumericAnchor:
         path = _write(tmp_path, "The import uses SomaMutDB 2.0 as the source release.\n")
         assert detect_numeric_anchor(path, anchor_patterns=[]) == []
 
+    def test_no_flag_runtime_version_labels(self, tmp_path):
+        path = _write(tmp_path, "The tool runs on Python 3.11+ without new dependencies.\n")
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
+    def test_no_flag_compact_decision_ids(self, tmp_path):
+        path = _write(tmp_path, "Batch 1 supports D-003 and refines H01.\n")
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
     def test_no_flag_numeric_segments_inside_accession_like_identifiers(self, tmp_path):
         path = _write(
             tmp_path,
@@ -533,13 +560,14 @@ class TestArchivedTaskAliases:
         (tmp_path / "tasks" / "archive.md").write_text("# Archived\n\n## [t075] Retired pipeline\n\nNotes.\n")
         aliases = _archived_task_aliases(tmp_path)
         assert "t075" in aliases
+        assert aliases["T75"] == "task:t075"
 
     def test_missing_archive_is_empty(self, tmp_path):
         assert _archived_task_aliases(tmp_path) == {}
 
     def test_short_form_skips_resolved_archived_task(self, tmp_path):
-        path = _write(tmp_path, "We retired t075 last cycle.\n")
-        resolver = {"t075": "task:t075"}
+        path = _write(tmp_path, "We retired t075 and T75 last cycle.\n")
+        resolver = {"t075": "task:t075", "T75": "task:t075"}
         assert detect_short_form_ids(path, resolver=resolver) == []
 
 

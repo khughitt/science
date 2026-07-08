@@ -56,11 +56,11 @@ It also suggests that LLM-generated graph edges should be weak hypotheses, not f
 
 The method depends on LLM internal knowledge and variable descriptions.
 Guaranteeing acyclicity does not guarantee causal correctness.
-The PDF is an arXiv version updated in 2026, so final publication status is [UNVERIFIED].
+The PDF is an arXiv version updated in 2026, so final publication status was not checked during the initial summary pass; tracked by task:t074.
 
 ## Model / Tool Availability
 
-Code availability was not verified from the PDF [UNVERIFIED].
+Code availability was not checked beyond the PDF during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

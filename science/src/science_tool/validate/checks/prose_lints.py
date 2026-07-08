@@ -69,6 +69,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
     configured_checks: list[str] | None = None
     selected: list[str] | None = None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
+    exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
     if (ctx.project_root / "science.yaml").is_file():
@@ -78,6 +79,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             configured_checks = config.prose_lint.enabled_checks
             if not ctx.include_all_checks:
                 selected = configured_checks
+            exclude_paths = config.prose_lint.exclude_paths
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
             bare_author_year_deny = config.prose_lint.bare_author_year_deny
 
@@ -102,6 +104,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         checks=selected,
         strict=ctx.strict,
         anchor_patterns=anchor_patterns,
+        exclude_paths=exclude_paths,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,
         bare_author_year_deny=bare_author_year_deny,

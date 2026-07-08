@@ -13,8 +13,8 @@ anno:annotations {
       oa:hasSelector [
         a oa:TextQuoteSelector ;
         oa:exact   "BES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative." ;
-        oa:prefix  "" ;
-        oa:suffix  ""
+        oa:prefix  "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies.\n" ;
+        oa:suffix  "\n\n## Relevance"
       ]
     ] ;
     oa:hasBody         [
@@ -37,8 +37,8 @@ anno:annotations {
       oa:hasSelector [
         a oa:TextQuoteSelector ;
         oa:exact   "BES behaves similarly to meta-analysis in many settings: support for the correct hypothesis increases with larger sample sizes and more studies." ;
-        oa:prefix  "" ;
-        oa:suffix  ""
+        oa:prefix  "## Key Findings\n\n" ;
+        oa:suffix  "\nBES does not solve power problems by pooling data; if most individual studies are underpowered, aggregating them can strengthen support for the null or unconstrained alternative."
       ]
     ] ;
     oa:hasBody         [
