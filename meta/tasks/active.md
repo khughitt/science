@@ -587,14 +587,6 @@ Write a baseline-of-harm note for current topology pain points, then apply the i
 
 Start from `core/adaptive-project-topology.md` and `core/bio-meta-scaffold-brief.md`; do not scaffold `~/d/bio/meta` until this pilot confirms that a separate biological substrate project reduces a concrete topology harm.
 
-## [t061] Add /science:add-theme skill / slash command
-- priority: P3
-- status: proposed
-- aspects: [software-development]
-- created: 2026-05-18
-
-Add a /science:add-theme skill analogous to /science:add-hypothesis so that themes are discoverable from the slash-command list and agents have a guided path to creating them. The skill should wrap 'science-tool entity create theme' with interactive scaffolding: ask for theme_kind (using the effective profile's enum), theme_scope, and the initial related entities; produce a draft with the canonical body sections pre-populated with hint comments; and optionally cross-link to related federation-scope themes when appropriate. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the agent searched the available skills list, found /science:add-hypothesis but no /science:add-theme, and fell back to inventing an ad-hoc theme format. The fallback was eventually rejected by schema validation but it cost the user a multi-turn correction cycle. Depends on: t060 (entity sections CLI should expose theme_kind enum) so the interactive prompt can pull from the effective schema.
-
 ## [t062] Improve schema-validation error messages with discovery hints
 - priority: P3
 - status: proposed
