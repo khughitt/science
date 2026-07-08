@@ -623,16 +623,6 @@ Until both are done, t065 claims stay scoped: 'PROV-O round-trips structurally' 
 
 t066 demonstrated the latent-construct (PMI) correction subtracts the publication-attention axis cleanly at BOTH ends of the slice (7 panel genes positive, 10 universal genes negative, for CMT + HSP) and flips raw-ranking errors. Two things it did NOT establish: (1) behavior on the ambiguous MIDDLE — the clean step is partly a property of a slice built to contrast extremes, so PPMI>0 is a correction, not a calibrated classifier; needs the full 18206x3831 matrix + held-out-panel validation (overlaps pan-disease recall@K / cluster-mate-AUC, the cross-project proving ground). (2) a sampling-variance guard — rare cells have high-variance PMI (e.g. CYP7B1 cooc=39); add shrinkage / Poisson-significance before any fine ranking or near-zero threshold. Code: meta/src/h00_patch_l1/latent.py. Interpretation: interpretation:0003-t066-latent-correction-2026-06-01.
 
-## [t073] Design first-class minimum viable synthesis artifacts
-- priority: P2
-- status: proposed
-- aspects: []
-- related: [task:t021]
-- group: evidence-payload-schema
-- created: 2026-06-26
-
-Cancer-meta t026 surfaced a reusable Science pattern: when quantitative synthesis is blocked, the workflow should still produce a structured artifact rather than a terminal abstention. Design whether Science should provide template or command support for minimum viable synthesis outputs: structured comparison, heterogeneity or incompatibility statement, missing-fields list, follow-up route, and an explicitly adapted certainty block when formal GRADE/SWiM is out of scope. Relate this to evidence payload fields, uncertainty reason codes, and source-reliability dimensions without making project-specific certainty labels part of core semantics. Origin: cancer-meta question:0013-adapted-federation-certainty-blocks and feedback fb-2026-06-26-001.
-
 ## [t075] Reproducibility validation task group
 - priority: P1
 - status: proposed
