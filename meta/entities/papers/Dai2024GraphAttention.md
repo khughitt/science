@@ -60,7 +60,7 @@ Science should treat this as a design analogy rather than strong evidence for an
 
 ## Model / Tool Availability
 
-Code availability is [UNVERIFIED].
+Code availability was not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

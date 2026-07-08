@@ -90,6 +90,30 @@ def test_lint_uses_project_anchor_patterns(tmp_path):
     assert "numeric-anchor" not in payload["counts"]
 
 
+def test_lint_uses_project_exclude_paths(tmp_path):
+    root = _write_project(
+        tmp_path,
+        science_yaml=(
+            "name: demo\n"
+            "prose_lint:\n"
+            "  exclude_paths:\n"
+            "    - 'doc/plans/historical/**'\n"
+        ),
+    )
+    (root / "doc" / "plans" / "historical").mkdir(parents=True)
+    (root / "doc" / "plans" / "historical" / "old.md").write_text(
+        "# Old\n\nUnanchored 47% historical note.\n"
+    )
+    (root / "doc" / "active.md").write_text("# Active\n\nUnanchored 48% active note.\n")
+    runner = CliRunner()
+    result = runner.invoke(
+        prose_group, ["lint", "--root", str(root), "--format", "json"]
+    )
+    payload = json.loads(result.output)
+    assert payload["counts"]["numeric-anchor"] == 1
+    assert payload["hits"][0]["file"] == "doc/active.md"
+
+
 def test_lint_uses_short_form_ids_deny_from_config(tmp_path):
     root = _write_project(
         tmp_path,
@@ -121,7 +145,7 @@ def test_lint_resolves_v3_numeric_entity_ids_as_short_forms(tmp_path):
         "---\n\n"
         "# Foo\n"
     )
-    (root / "doc" / "a.md").write_text("# A\n\nThis cites h0007 and H0007.\n")
+    (root / "doc" / "a.md").write_text("# A\n\nThis cites h0007, H0007, h07, and H07.\n")
 
     runner = CliRunner()
     result = runner.invoke(

@@ -80,6 +80,7 @@ class ProseLintConfig(BaseModel):
 
     enabled_checks: list[str] | None = None
     anchor_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_ANCHOR_PATTERNS))
+    exclude_paths: list[str] = Field(default_factory=list)
     short_form_ids_deny: list[str] = Field(default_factory=list)
     bare_author_year_deny: list[str] = Field(default_factory=list)
 

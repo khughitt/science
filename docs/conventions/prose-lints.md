@@ -45,6 +45,8 @@ prose_lint:
     - "task:"
     - "pipeline/"
     - "\\[@"
+  exclude_paths:
+    - "doc/plans/historical/**"
   short_form_ids_deny:
     - "D1"   # cyclin D1 — biology shorthand, not a project entity ref
     - "H3"   # histone H3
@@ -54,7 +56,12 @@ prose_lint:
     - "CDC 2011"        # org+year, not an author-year citation
 ```
 
-Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`.
+Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`; `exclude_paths` defaults to `[]`.
+
+`exclude_paths` is a list of project-relative glob patterns for markdown files that
+should not be scanned. Use it for archived/generated prose snapshots whose text is
+preserved for historical traceability rather than maintained as current project
+claims.
 
 `short_form_ids_deny` is a list of token strings (e.g., `D1`, `H3`, `t1`)
 that the `short-form-ids` detector will skip. Useful for biology-heavy

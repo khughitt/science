@@ -64,7 +64,7 @@ Network coherence does not by itself establish intervention-valid causal effects
 ## Model / Tool Availability
 
 The paper states that COSMOS is freely available as an R package [@Dugourd2021].
-Exact repository status and version are [UNVERIFIED].
+Exact repository status and version were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

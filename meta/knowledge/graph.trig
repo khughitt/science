@@ -2329,7 +2329,7 @@
             <http://example.org/project/task/t025>,
             <http://example.org/project/task/t027>,
             <http://example.org/project/task/t032> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Stochastic revisiting of down-weighted claims improves final recall under noisy early evidence" ;
         skos:related <http://example.org/project/question/0001-bioinformatics-generalizability>,
@@ -2358,6 +2358,34 @@
             <http://example.org/project/paper/zhang2021jointgraphical>,
             <http://example.org/project/paper/zheng2024>,
             <http://example.org/project/paper/zuber2025>,
+            <http://example.org/project/source-snapshot/09ec5a6fc59135b4>,
+            <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf>,
+            <http://example.org/project/source-snapshot/161719a25644a568>,
+            <http://example.org/project/source-snapshot/27bd5a098f8c4720>,
+            <http://example.org/project/source-snapshot/285c15d42fb7a08f>,
+            <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e>,
+            <http://example.org/project/source-snapshot/39395f69972fa313>,
+            <http://example.org/project/source-snapshot/522140a3cb70c25e>,
+            <http://example.org/project/source-snapshot/707763b7070beeb6>,
+            <http://example.org/project/source-snapshot/7369c2766839740b>,
+            <http://example.org/project/source-snapshot/77761dab8be731ce>,
+            <http://example.org/project/source-snapshot/7ad2f374b05597e1>,
+            <http://example.org/project/source-snapshot/7fefd9380b7ca90d>,
+            <http://example.org/project/source-snapshot/84ad435f56b16cce>,
+            <http://example.org/project/source-snapshot/8ac838df9d5cc786>,
+            <http://example.org/project/source-snapshot/939403311215a826>,
+            <http://example.org/project/source-snapshot/957cd55b219999a6>,
+            <http://example.org/project/source-snapshot/9b674827a22acd08>,
+            <http://example.org/project/source-snapshot/9d97543844db68ea>,
+            <http://example.org/project/source-snapshot/b2544826dbef5626>,
+            <http://example.org/project/source-snapshot/b4b1b67c82cce8ec>,
+            <http://example.org/project/source-snapshot/c58ade737248b8d6>,
+            <http://example.org/project/source-snapshot/cb768c74beee4692>,
+            <http://example.org/project/source-snapshot/d0436c2423de4302>,
+            <http://example.org/project/source-snapshot/d6b4cfa02b477e10>,
+            <http://example.org/project/source-snapshot/e365efffe3101555>,
+            <http://example.org/project/source-snapshot/e407870f451bc688>,
+            <http://example.org/project/source-snapshot/e977325facf329a5>,
             <http://example.org/project/task/t034>,
             <http://example.org/project/task/t035>,
             <http://example.org/project/task/t036>,
@@ -2366,7 +2394,7 @@
             <http://example.org/project/task/t039>,
             <http://example.org/project/task/t040>,
             <http://example.org/project/task/t041> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Rich evidence payloads improve graph calibration" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -2401,6 +2429,32 @@
             <http://example.org/project/paper/yu2026>,
             <http://example.org/project/paper/zhang2021jointgraphical>,
             <http://example.org/project/paper/zheng2024>,
+            <http://example.org/project/source-snapshot/07f905f2026e1820>,
+            <http://example.org/project/source-snapshot/09ec5a6fc59135b4>,
+            <http://example.org/project/source-snapshot/0c81a7bfc95f1cf3>,
+            <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf>,
+            <http://example.org/project/source-snapshot/161719a25644a568>,
+            <http://example.org/project/source-snapshot/20c43e6af45eea6b>,
+            <http://example.org/project/source-snapshot/27bd5a098f8c4720>,
+            <http://example.org/project/source-snapshot/285c15d42fb7a08f>,
+            <http://example.org/project/source-snapshot/522140a3cb70c25e>,
+            <http://example.org/project/source-snapshot/7ad2f374b05597e1>,
+            <http://example.org/project/source-snapshot/7fefd9380b7ca90d>,
+            <http://example.org/project/source-snapshot/8ac838df9d5cc786>,
+            <http://example.org/project/source-snapshot/939403311215a826>,
+            <http://example.org/project/source-snapshot/957cd55b219999a6>,
+            <http://example.org/project/source-snapshot/9b674827a22acd08>,
+            <http://example.org/project/source-snapshot/9d97543844db68ea>,
+            <http://example.org/project/source-snapshot/a548cea58faa6a97>,
+            <http://example.org/project/source-snapshot/af122de935eb4eb3>,
+            <http://example.org/project/source-snapshot/b2544826dbef5626>,
+            <http://example.org/project/source-snapshot/b4b1b67c82cce8ec>,
+            <http://example.org/project/source-snapshot/d0436c2423de4302>,
+            <http://example.org/project/source-snapshot/d6b4cfa02b477e10>,
+            <http://example.org/project/source-snapshot/e365efffe3101555>,
+            <http://example.org/project/source-snapshot/e407870f451bc688>,
+            <http://example.org/project/source-snapshot/e977325facf329a5>,
+            <http://example.org/project/source-snapshot/f685ed96f69b376e>,
             <http://example.org/project/task/t034>,
             <http://example.org/project/task/t035>,
             <http://example.org/project/task/t036>,
@@ -2409,7 +2463,7 @@
             <http://example.org/project/task/t039>,
             <http://example.org/project/task/t040>,
             <http://example.org/project/task/t041> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Reason-coded revisiting beats posterior-only revisiting" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -2437,10 +2491,28 @@
             <http://example.org/project/paper/zhang2021jointgraphical>,
             <http://example.org/project/paper/zheng2024>,
             <http://example.org/project/paper/zuber2025>,
+            <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf>,
+            <http://example.org/project/source-snapshot/15cff83a6b7b2335>,
+            <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e>,
+            <http://example.org/project/source-snapshot/3f1dad966c4a3ef8>,
+            <http://example.org/project/source-snapshot/653c587a1d1e6d17>,
+            <http://example.org/project/source-snapshot/707763b7070beeb6>,
+            <http://example.org/project/source-snapshot/7369c2766839740b>,
+            <http://example.org/project/source-snapshot/77761dab8be731ce>,
+            <http://example.org/project/source-snapshot/7fefd9380b7ca90d>,
+            <http://example.org/project/source-snapshot/84ad435f56b16cce>,
+            <http://example.org/project/source-snapshot/939403311215a826>,
+            <http://example.org/project/source-snapshot/b2544826dbef5626>,
+            <http://example.org/project/source-snapshot/b4b1b67c82cce8ec>,
+            <http://example.org/project/source-snapshot/c58ade737248b8d6>,
+            <http://example.org/project/source-snapshot/d6b4cfa02b477e10>,
+            <http://example.org/project/source-snapshot/e365efffe3101555>,
+            <http://example.org/project/source-snapshot/e977325facf329a5>,
+            <http://example.org/project/source-snapshot/fe0df19d477e8dc1>,
             <http://example.org/project/task/t034>,
             <http://example.org/project/task/t035>,
             <http://example.org/project/task/t036> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Causal-estimand guardrails reduce false causal edge strengthening" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -2451,10 +2523,15 @@
             <http://example.org/project/question/0010-causal-graph-construction-pipeline>,
             <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> ;
         schema:identifier "hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening" .
-    <http://example.org/project/hypothesis/0005-sequential-evidence-improves-attention> sci:freshnessState "fresh" ;
+    <http://example.org/project/hypothesis/0005-sequential-evidence-improves-attention> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "proposed" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/653c587a1d1e6d17>,
+            <http://example.org/project/source-snapshot/99a7597781f88e82>,
+            <http://example.org/project/source-snapshot/e05cff3491e2820d>,
+            <http://example.org/project/source-snapshot/f685ed96f69b376e> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Sequential anytime-valid evidence improves attention and stopping decisions over fixed-N synthesis" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -2468,7 +2545,7 @@
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/da25983235d45823>,
             <http://example.org/project/task/t068> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Adaptive project topology improves research fit" ;
         skos:related <http://example.org/project/question/0014-adaptive-project-topology>,
@@ -2485,7 +2562,7 @@
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/9d9aa4436679f97f>,
             <http://example.org/project/task/t069> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Science working model: a federated patchwork of provenance-typed, uncertainty-bearing epistemic models" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -2515,14 +2592,16 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/2445ba6f5d674d8a> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Interpretation ;
         skos:prefLabel "H01 Sweep Interpretation — 2026-04-24" ;
         schema:identifier "interpretation:0001-simulator-2026-04-24" .
-    <http://example.org/project/interpretation/0002-l1-patch-prototype-2026-06-01> sci:freshnessState "fresh" ;
+    <http://example.org/project/interpretation/0002-l1-patch-prototype-2026-06-01> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/567bd189cde78241> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Interpretation ;
         skos:prefLabel "L1 epistemic-neighborhood patch prototype on the pan-disease q14 slice" ;
         skos:related <http://example.org/project/task/t064>,
@@ -2530,10 +2609,12 @@
             <http://example.org/project/task/t066>,
             <http://example.org/project/task/t069> ;
         schema:identifier "interpretation:0002-l1-patch-prototype-2026-06-01" .
-    <http://example.org/project/interpretation/0003-t066-latent-correction-2026-06-01> sci:freshnessState "fresh" ;
+    <http://example.org/project/interpretation/0003-t066-latent-correction-2026-06-01> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/1a456407e74a4bf2> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Interpretation ;
         skos:prefLabel "Latent-construct correction: subtracting the publication-attention axis on the q14 slice" ;
         skos:related <http://example.org/project/task/t065>,
@@ -2541,10 +2622,12 @@
             <http://example.org/project/task/t067>,
             <http://example.org/project/task/t070> ;
         schema:identifier "interpretation:0003-t066-latent-correction-2026-06-01" .
-    <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> sci:freshnessState "fresh" ;
+    <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/56336322e6b54096> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Interpretation ;
         skos:prefLabel "Patch federation: the bias-corrected latent coordinate as data-driven glue" ;
         skos:related <http://example.org/project/task/t066>,
@@ -3270,10 +3353,13 @@
         skos:prefLabel "Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis of Multiple Exposures and Outcomes" ;
         skos:related <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         schema:identifier "paper:Zuber2025" .
-    <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> sci:freshnessState "fresh" ;
+    <http://example.org/project/proposition/bes-behaves-like-meta-analysis-when-study-evidence-is-informative> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/9cf6c1b37017aadf>,
+            <http://example.org/project/source-snapshot/a548cea58faa6a97> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Proposition ;
         skos:prefLabel "BES behaves like meta-analysis when study evidence is informative" ;
         schema:identifier "proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informative" .
@@ -3283,27 +3369,37 @@
             <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:ArchivedEntity ;
         <http://www.w3.org/2000/01/rdf-schema#label> "BES behaves like pooled meta-analysis" .
-    <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> sci:freshnessState "fresh" ;
+    <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/a12e5fc0d8f608be>,
+            <http://example.org/project/source-snapshot/a548cea58faa6a97>,
+            <http://example.org/project/source-snapshot/af122de935eb4eb3> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Proposition ;
         skos:prefLabel "BES does not rescue underpowered studies by pooling data" ;
         schema:identifier "proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data" .
-    <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> sci:freshnessState "fresh" ;
+    <http://example.org/project/proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/2cb09de6cc569f41>,
+            <http://example.org/project/source-snapshot/376814ac7028eca8>,
+            <http://example.org/project/source-snapshot/d9a30e1b41346cdc> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Proposition ;
         skos:prefLabel "Conceptual-replication evidence can be aggregated over informative hypotheses" ;
         skos:related <http://example.org/project/question/0009-mcda-bayesian-interoperability>,
             <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis>,
             <http://example.org/project/topic/bayesian-methods-continuous-belief> ;
         schema:identifier "proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses" .
-    <http://example.org/project/question/0001-bioinformatics-generalizability> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0001-bioinformatics-generalizability> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/a44f2849fd817cbc> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How well do replication-crisis findings generalize from psychology, cancer biology, and neuroimaging to bioinformatics and genomics?" ;
         skos:related <http://example.org/project/topic/analytic-flexibility-and-replication> ;
@@ -3315,7 +3411,7 @@
         sci:triggeredBy <http://example.org/project/source-snapshot/454a605974560982>,
             <http://example.org/project/task/t040>,
             <http://example.org/project/task/t042> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "What metadata should Science require for quantitative evidence and synthesis updates?" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3332,8 +3428,9 @@
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
-        sci:triggeredBy <http://example.org/project/task/t034> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/7f742e159b04adc7>,
+            <http://example.org/project/task/t034> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "When should synthesized or discovered evidence be allowed to strengthen causal propositions?" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3355,8 +3452,23 @@
             <http://example.org/project/paper/yu2026>,
             <http://example.org/project/paper/zhang2017cancergenomics>,
             <http://example.org/project/paper/zhang2025scientificmethod>,
+            <http://example.org/project/source-snapshot/06bb3a2dceb454da>,
+            <http://example.org/project/source-snapshot/09ec5a6fc59135b4>,
+            <http://example.org/project/source-snapshot/27bd5a098f8c4720>,
+            <http://example.org/project/source-snapshot/522140a3cb70c25e>,
+            <http://example.org/project/source-snapshot/54399d06b7975455>,
+            <http://example.org/project/source-snapshot/77761dab8be731ce>,
+            <http://example.org/project/source-snapshot/8ac838df9d5cc786>,
+            <http://example.org/project/source-snapshot/939403311215a826>,
+            <http://example.org/project/source-snapshot/9d97543844db68ea>,
+            <http://example.org/project/source-snapshot/a738d9318d9d67e9>,
+            <http://example.org/project/source-snapshot/c58ade737248b8d6>,
+            <http://example.org/project/source-snapshot/d0436c2423de4302>,
+            <http://example.org/project/source-snapshot/d41db2d0f358ab0a>,
+            <http://example.org/project/source-snapshot/e407870f451bc688>,
+            <http://example.org/project/source-snapshot/fea9aee3cf657511>,
             <http://example.org/project/task/t038> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent source behavior and pipeline provenance in evidence aggregation?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3371,7 +3483,7 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/223c2552f9f88eb6> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How much of the proposed evidence-payload schema can authors and agents reliably populate?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3379,10 +3491,12 @@
             <http://example.org/project/question/0004-source-and-pipeline-provenance>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "question:0005-authoring-cost-audit" .
-    <http://example.org/project/question/0006-source-dependence-detection> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0006-source-dependence-detection> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/da7eb7f9b115054e> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "Which evidence-source dependence patterns can be inferred mechanically rather than annotated by hand?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3391,10 +3505,12 @@
             <http://example.org/project/question/0004-source-and-pipeline-provenance>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "question:0006-source-dependence-detection" .
-    <http://example.org/project/question/0007-sequential-anytime-valid-evidence> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0007-sequential-anytime-valid-evidence> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/d16ff01501cc00df> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "Should Science treat evidence accumulation as sequential and anytime-valid rather than fixed-N synthesis?" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3407,9 +3523,10 @@
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
-        sci:triggeredBy <http://example.org/project/task/t037>,
+        sci:triggeredBy <http://example.org/project/source-snapshot/fac50f0668e9127c>,
+            <http://example.org/project/task/t037>,
             <http://example.org/project/task/t039> ;
-        sci:upstreamChangeAt "2026-05-06"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science model LLM agents as fallible evidence sources and graph-governed operators?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3422,10 +3539,12 @@
             <http://example.org/project/question/0012-agent-tool-kg-operations>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "question:0008-llm-agents-as-fallible-sources" .
-    <http://example.org/project/question/0009-mcda-bayesian-interoperability> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0009-mcda-bayesian-interoperability> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/3689053cf11f414d> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should MCDA-style decision scores interact with Bayesian belief states in the graph?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3437,7 +3556,7 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/e1ae709b631f8047> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent causal graph construction as a staged evidence pipeline?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3448,10 +3567,12 @@
             <http://example.org/project/question/0008-llm-agents-as-fallible-sources>,
             <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> ;
         schema:identifier "question:0010-causal-graph-construction-pipeline" .
-    <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/2f5802732fecd4f9> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent graph-valued, cluster-valued, and selected-feature synthesis artifacts?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3468,7 +3589,7 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/ee568822fb9e3bb5> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent agent operations, tool graphs, KG transformations, and graph evolution events?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3478,10 +3599,12 @@
             <http://example.org/project/question/0010-causal-graph-construction-pipeline>,
             <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> ;
         schema:identifier "question:0012-agent-tool-kg-operations" .
-    <http://example.org/project/question/0013-robustness-reproducibility-evaluation> sci:freshnessState "fresh" ;
+    <http://example.org/project/question/0013-robustness-reproducibility-evaluation> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/4685012e7078fc04> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent robustness, reproducibility, and replication evaluation claims?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3495,7 +3618,7 @@
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/91e6529d1cd18c71>,
             <http://example.org/project/task/t068> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science adapt project topology to evidence, uncertainty, and decay?" ;
         skos:related <http://example.org/project/hypothesis/0006-adaptive-project-topology-improves-research-fit>,
@@ -3507,7 +3630,7 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/7a70a174efe03655> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science detect and prevent epistemic drift between an entity's claims and its operationalization?" ;
         skos:related <http://example.org/project/question/0005-authoring-cost-audit>,
@@ -3808,10 +3931,25 @@
     <http://example.org/project/source/entities_synthesis_0011-reason-coded-revisiting-beats-posterior-only-revisiting.md> sci:bearsOn <http://example.org/project/synthesis/0011-reason-coded-revisiting-beats-posterior-only-revisiting> .
     <http://example.org/project/source/entities_synthesis_0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md> sci:bearsOn <http://example.org/project/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> .
     <http://example.org/project/source/entities_synthesis_0013-sequential-evidence-improves-attention.md> sci:bearsOn <http://example.org/project/synthesis/0013-sequential-evidence-improves-attention> .
-    <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/0ec28023f386d02a>,
+            <http://example.org/project/source-snapshot/36b07c197f068d3e>,
+            <http://example.org/project/source-snapshot/376814ac7028eca8>,
+            <http://example.org/project/source-snapshot/37c4a47155c5fc2d>,
+            <http://example.org/project/source-snapshot/653c587a1d1e6d17>,
+            <http://example.org/project/source-snapshot/99a7597781f88e82>,
+            <http://example.org/project/source-snapshot/a4b72766d12ca8c6>,
+            <http://example.org/project/source-snapshot/a548cea58faa6a97>,
+            <http://example.org/project/source-snapshot/af122de935eb4eb3>,
+            <http://example.org/project/source-snapshot/c2db0ac12df13819>,
+            <http://example.org/project/source-snapshot/d8545cd2f6f33cc9>,
+            <http://example.org/project/source-snapshot/d9a30e1b41346cdc>,
+            <http://example.org/project/source-snapshot/f685ed96f69b376e>,
+            <http://example.org/project/source-snapshot/fe0df19d477e8dc1> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Bayesian Evidence Synthesis and Meta-Analysis" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3827,10 +3965,21 @@
             <http://example.org/project/topic/bayesian-methods-continuous-belief>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "synthesis:0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis" .
-    <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/15cff83a6b7b2335>,
+            <http://example.org/project/source-snapshot/161719a25644a568>,
+            <http://example.org/project/source-snapshot/2786853bf4ca32cf>,
+            <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e>,
+            <http://example.org/project/source-snapshot/522140a3cb70c25e>,
+            <http://example.org/project/source-snapshot/8ac838df9d5cc786>,
+            <http://example.org/project/source-snapshot/9d97543844db68ea>,
+            <http://example.org/project/source-snapshot/c58ade737248b8d6>,
+            <http://example.org/project/source-snapshot/cb768c74beee4692>,
+            <http://example.org/project/source-snapshot/d0436c2423de4302> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Truth Discovery and Data Integration" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3847,10 +3996,28 @@
             <http://example.org/project/topic/bayesian-methods-continuous-belief>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "synthesis:0002-synthesis-truth-discovery-and-data-integration" .
-    <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/07f905f2026e1820>,
+            <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf>,
+            <http://example.org/project/source-snapshot/20c43e6af45eea6b>,
+            <http://example.org/project/source-snapshot/468baa6e6581b587>,
+            <http://example.org/project/source-snapshot/511ac5e2436835b7>,
+            <http://example.org/project/source-snapshot/63a1a051389a038d>,
+            <http://example.org/project/source-snapshot/707763b7070beeb6>,
+            <http://example.org/project/source-snapshot/7369c2766839740b>,
+            <http://example.org/project/source-snapshot/77f5b76245943168>,
+            <http://example.org/project/source-snapshot/7fefd9380b7ca90d>,
+            <http://example.org/project/source-snapshot/84ad435f56b16cce>,
+            <http://example.org/project/source-snapshot/b67e6dc565e3de70>,
+            <http://example.org/project/source-snapshot/e2134fe382aa2b8d>,
+            <http://example.org/project/source-snapshot/e365efffe3101555>,
+            <http://example.org/project/source-snapshot/e9a7c181412bc394>,
+            <http://example.org/project/source-snapshot/ed0fd99ce0d2a3eb>,
+            <http://example.org/project/source-snapshot/f624bda024684614> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Causal Graph Construction and Discovery" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3862,10 +4029,20 @@
             <http://example.org/project/question/0008-llm-agents-as-fallible-sources>,
             <http://example.org/project/question/0010-causal-graph-construction-pipeline> ;
         schema:identifier "synthesis:0003-synthesis-causal-graph-construction-and-discovery" .
-    <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/77761dab8be731ce>,
+            <http://example.org/project/source-snapshot/939403311215a826>,
+            <http://example.org/project/source-snapshot/b2544826dbef5626>,
+            <http://example.org/project/source-snapshot/b4b1b67c82cce8ec>,
+            <http://example.org/project/source-snapshot/c0d5ce0d679f342a>,
+            <http://example.org/project/source-snapshot/d6b4cfa02b477e10>,
+            <http://example.org/project/source-snapshot/e977325facf329a5>,
+            <http://example.org/project/source-snapshot/f661459ad65ac56d>,
+            <http://example.org/project/source-snapshot/fea9aee3cf657511> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Graphical Models and Multiview Integration" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3876,10 +4053,15 @@
             <http://example.org/project/question/0010-causal-graph-construction-pipeline>,
             <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> ;
         schema:identifier "synthesis:0004-synthesis-graphical-models-and-multiview-integration" .
-    <http://example.org/project/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/285c15d42fb7a08f>,
+            <http://example.org/project/source-snapshot/957cd55b219999a6>,
+            <http://example.org/project/source-snapshot/9b674827a22acd08>,
+            <http://example.org/project/source-snapshot/ca0742e4eaee1904> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Robustness and Reproducibility Evaluation" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3888,10 +4070,20 @@
             <http://example.org/project/question/0013-robustness-reproducibility-evaluation>,
             <http://example.org/project/topic/analytic-flexibility-and-replication> ;
         schema:identifier "synthesis:0005-synthesis-robustness-and-reproducibility-evaluation" .
-    <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/06bb3a2dceb454da>,
+            <http://example.org/project/source-snapshot/09ec5a6fc59135b4>,
+            <http://example.org/project/source-snapshot/27bd5a098f8c4720>,
+            <http://example.org/project/source-snapshot/7ad2f374b05597e1>,
+            <http://example.org/project/source-snapshot/a738d9318d9d67e9>,
+            <http://example.org/project/source-snapshot/d41db2d0f358ab0a>,
+            <http://example.org/project/source-snapshot/dcc905e3f7397671>,
+            <http://example.org/project/source-snapshot/e407870f451bc688>,
+            <http://example.org/project/source-snapshot/f9b4c26c015db108> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Synthesis: Scientific Agents and Knowledge Graph Infrastructure" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3908,21 +4100,25 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/4d6db90b99435525> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Project synthesis - science meta" ;
         schema:identifier "synthesis:0007-project-synthesis-science-meta" .
-    <http://example.org/project/synthesis/0008-emergent-threads-science-meta> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0008-emergent-threads-science-meta> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/caf776bd690db0eb> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Emergent threads - science meta" ;
         schema:identifier "synthesis:0008-emergent-threads-science-meta" .
-    <http://example.org/project/synthesis/0009-stochastic-revisiting> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0009-stochastic-revisiting> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/5f55dc2979ba7ee0> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Stochastic revisiting" ;
         schema:identifier "synthesis:0009-stochastic-revisiting" .
@@ -3931,28 +4127,34 @@
         sci:projectStatus "active" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/b4f0ccf578a1d083> ;
-        sci:upstreamChangeAt "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Rich evidence payloads improve graph calibration" ;
         schema:identifier "synthesis:0010-rich-evidence-payloads-improve-graph-calibration" .
-    <http://example.org/project/synthesis/0011-reason-coded-revisiting-beats-posterior-only-revisiting> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0011-reason-coded-revisiting-beats-posterior-only-revisiting> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/b3cb41ae09d696f2> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Reason-coded revisiting beats posterior-only revisiting" ;
         schema:identifier "synthesis:0011-reason-coded-revisiting-beats-posterior-only-revisiting" .
-    <http://example.org/project/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/5c23c5927268fcd4> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Causal estimand guardrails reduce false causal edge strengthening" ;
         schema:identifier "synthesis:0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening" .
-    <http://example.org/project/synthesis/0013-sequential-evidence-improves-attention> sci:freshnessState "fresh" ;
+    <http://example.org/project/synthesis/0013-sequential-evidence-improves-attention> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/57e2b0dac3ef25cb> ;
+        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Synthesis ;
         skos:prefLabel "Sequential evidence improves attention" ;
         schema:identifier "synthesis:0013-sequential-evidence-improves-attention" .
@@ -4676,6 +4878,13 @@
         skos:prefLabel "Design first-class minimum viable synthesis artifacts" ;
         skos:related <http://example.org/project/task/t021> ;
         schema:identifier "task:t073" .
+    <http://example.org/project/task/t074> sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        a sci:Task ;
+        skos:prefLabel "Verify paper software and publication-status metadata" ;
+        skos:related <http://example.org/project/task/t029> ;
+        schema:identifier "task:t074" .
     <http://example.org/project/topic/analytic-flexibility-and-replication> sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
@@ -4763,10 +4972,10 @@
         sci:independenceGroup "literature-paper:VanLissa2024" ;
         prov:wasDerivedFrom <http://example.org/project/paper/vanlissa2024> .
     <http://example.org/project/graph_revision> a prov:Entity ;
-        schema:dateModified "2026-07-03T14:18:06+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+        schema:dateModified "2026-07-08T10:10:25+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
         schema:name "graph-revision" ;
-        schema:sha256 "5d16fae44257707e8f41733108e92c25d530e58f6620c5258a15269e07782c1a" ;
-        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1783088286757876874,\"sha256\":\"6babce772eaf1e47b2cfc1df1845254479af54b459cb838e0341cc473d93251f\"},\"CLAUDE.md\":{\"mtime_ns\":1783088286757876874,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1783088286758296100,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1783088286758458444,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1783088286759019491,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1783088286760019491,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1783088286768770570,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1783088286768841102,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1783088286818019493,\"sha256\":\"0caa0677399891a74199124ffac98a5a87c9eb664cb98bc52961bc900a675d69\"},\"src/.gitkeep\":{\"mtime_ns\":1783088286818019493,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1783088286819019493,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1783088286819109878,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1783088286819513314,\"sha256\":\"06227894e266f5ab884d8f9c1a741d17d2b7d3b3d84d47b0f070ae93280b47a9\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1783088286819810021,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1783088286819953590,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1783088286820019493,\"sha256\":\"fc73f16c788f11c0deaa7457942e6008693d4db7b8340c37a11582e6a5a14485\"}}" .
+        schema:sha256 "c88378e30435d54767a7160a826e14d8e792c5c22e02eeb8eba38f66fce5060d" ;
+        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1783464975402164954,\"sha256\":\"4782c3bad2b9391d7b569c42a81d482f02d5d12ddafc29fa3889c1bbad5be865\"},\"CLAUDE.md\":{\"mtime_ns\":1783464975402164954,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"README.md\":{\"mtime_ns\":1783464975402164954,\"sha256\":\"308f5cae66c33287799ef23c4e94d0b3e24cd86c81dc687cd37a7716bf933b83\"},\"doc/plans/2026-07-04-multi-lens-first-class-representation-design.md\":{\"mtime_ns\":1783464975402662206,\"sha256\":\"25c8d18bfdd1e1daba4be079e837fe681e154d90046adf91c498272ae20a69ee\"},\"doc/plans/2026-07-04-multi-lens-lens-views-implementation-plan.md\":{\"mtime_ns\":1783464975402786269,\"sha256\":\"d7223c6734326c200619aa69f9df9b575bbec1f984304108d679d051a4a095d1\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1783464975402786269,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1783464975403144871,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1783464975403569307,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1783464975404569307,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1783464975414706280,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1783464975414795898,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1783505425811077709,\"sha256\":\"a4ecdaed780add9bb4b0574ead6b2565c541eed804eeb6811865c32fe882d034\"},\"src/.gitkeep\":{\"mtime_ns\":1783464975468328333,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1783464975468812370,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1783464975468875769,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1783464975469340911,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/__pycache__/__init__.cpython-314.pyc\":{\"mtime_ns\":1783465738867261887,\"sha256\":\"c297e02764545154510701e6de9084648f29d293e7af9fd52a1e78928b9a2541\"},\"src/t034_validator/__pycache__/loader.cpython-314.pyc\":{\"mtime_ns\":1783465738870191891,\"sha256\":\"c3765a7a0e3202c34a27f2aa6d91de6e77dce85571cd8a97b54e790479384f34\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1783464975469340911,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1783504096499028139,\"sha256\":\"58b947c7d9f8f098929aa6abbea6bc153af5153a4c8cfdff384a13623ba23881\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1783464975469693843,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1783464975469858672,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1783464975469858672,\"sha256\":\"fc73f16c788f11c0deaa7457942e6008693d4db7b8340c37a11582e6a5a14485\"}}" .
     <http://example.org/project/hypothesis/0001-stochastic-revisiting> prov:wasDerivedFrom <http://example.org/project/source/entities_hypotheses_0001-stochastic-revisiting.md> .
     <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> prov:wasDerivedFrom <http://example.org/project/paper/allen2017>,
             <http://example.org/project/paper/alnajjar2026>,
@@ -4970,377 +5179,741 @@
     <http://example.org/project/question/0013-robustness-reproducibility-evaluation> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0013-robustness-reproducibility-evaluation.md> .
     <http://example.org/project/question/0014-adaptive-project-topology> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0014-adaptive-project-topology.md> .
     <http://example.org/project/question/0015-claim-operationalization-drift> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0015-claim-operationalization-drift.md> .
-    <http://example.org/project/source-change/1b5abe9e790b0220> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+    <http://example.org/project/source-change/016307d461754e6f> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "11c96908f249f837d212f821b7b01a84d9a880398786a714874779ffa823a710" .
-    <http://example.org/project/source-change/234b386d0bd9fb4e> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "1fc219f5e8c408817dbd682851cb0f906cabd5b7ae1f42cf4e16ade545998d5a" .
+    <http://example.org/project/source-change/02f1ebdedf668a41> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "acc68910b9c235aec25f1fce8cda32c4d7f2fc30faff1c30a553c7fc48594525" .
-    <http://example.org/project/source-change/3dfe30ffb328fe37> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "f28d0b3960f3c67c0d9e46b727486f12dfc8f4dd6f014d85bdaccc1dfa9cf363" .
+    <http://example.org/project/source-change/033d1c9f768005f7> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "e425b65f23a8f634dd89a277a2251e976067137016d7cd62cf8c3b5288a46097" .
-    <http://example.org/project/source-change/4a463bec8b286722> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "f8f18a045104208c56b874a25fcdf8660a6b7683aa358327610b1788a05b295f" .
+    <http://example.org/project/source-change/0363b1edeb91943e> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "5918f657ccc4c62a7926e9ad5c14201b6b109b9db1702c778231ced162c28aa8" .
-    <http://example.org/project/source-change/51f0e90db819f9f6> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "06208d185b7eeae21944e43e67ea114ff53c45d432e65e8bc2ad90a16e552acb" .
+    <http://example.org/project/source-change/04c29c4e1421d112> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "e3a812573d4291eda3944690557d639dddd2470644b64bb14769839d8751573f" .
-    <http://example.org/project/source-change/757e06cebc2c0a36> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "c9d6f4f4e834bcca46268e9711e31632d008674ec3b1ba3ed947eecc49dd1f26" .
+    <http://example.org/project/source-change/0ed824d8f6dd2395> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "eb4ad4e2ad8d154d2ad2cb660dcfd49e0743405056e85800ff42f7a49571e9bf" .
-    <http://example.org/project/source-change/834e8c246175b5f8> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "449cd298f05994178a22f3b11a3111377646542fdc4ab93be5548d674b403fb5" .
+    <http://example.org/project/source-change/109cb135e89611e3> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "27bda10e6878c9e452c1c39101ee1c8eec21add189713eaf701d944ea9586c48" .
-    <http://example.org/project/source-change/84b346a007f1963f> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "a07193fc1a4870d1358fd0818d2e07a7e7fd08052516245a459954c99c1b192f" .
+    <http://example.org/project/source-change/114d28c3a87d84a0> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "d41c768631330a774894d972ccd785e75f63e3549036b8b691e28f98c61aa05c" .
-    <http://example.org/project/source-change/9507b61a2fdb9a31> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "abdb6120df35f3ad9cc03d597a64868c20276b25bdb8b20ce130e487440d833b" .
+    <http://example.org/project/source-change/13e0cf876acd9dd0> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "53d9b6961b4748a2381153a8789b1756ea4a17340e9e85d5de627c6ff1a61ef9" .
-    <http://example.org/project/source-change/97995e75a8c0a933> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "2b779fb78dcf169eb0eb512a7f2d6cbcbee3c68688a75b7534e26452c21049e8" .
+    <http://example.org/project/source-change/148607288847a000> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "82dfe5991b1a0876037f12655bbb34789f0eaa2cb5e40ee31306044394a723a5" .
-    <http://example.org/project/source-change/9e68a902c3de8e43> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "dff2ea0013ea948a005150e31320c186e81ec180d8246f5e5fd7c649c0bc1ba1" .
+    <http://example.org/project/source-change/148700d41af44a2b> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "cce33445b69e6a92e285bbd4ec0f092d3de0aac12087debd904cda23789a1bd3" .
-    <http://example.org/project/source-change/a0aafef2c234d1bd> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "8118ff3f778f0d3a0e12e97e1a90a8974ed140a664ef515c4c6ba504a59f10eb" .
+    <http://example.org/project/source-change/1554ba81916ad9e8> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "3f83f5e8eb74af7de73aafebe862605c8112e8951c57977bde231cd856e249b4" .
-    <http://example.org/project/source-change/a22558b9d63000c9> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "6f45ad3e5fcbd18acfd7acec82dc812e3885bb3a153dedf3719f48a1a3d2bac9" .
+    <http://example.org/project/source-change/159bd0fba77c42cd> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "52ee1d8196ad00d108c1e697e323196c6c24e15cea199a5eb1fa0b03257585a3" .
-    <http://example.org/project/source-change/bb3547d2756d3882> sci:observedOn "2026-07-01"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        schema:sha256 "f0b2ccf316ad4fdfbe693e9c54c1dabffb6d98807e7da31c0796a3d7ca31f079" .
+    <http://example.org/project/source-change/1714c86b5ee71b5a> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
-        schema:sha256 "e9440475758952fe3ec6be913bc952c7f1fa85373acb88efd5476349a0c7befd" .
-    <http://example.org/project/source-snapshot/06bb3a2dceb454da> sci:sourcePath "entities/papers/Gong2024.md" ;
+        schema:sha256 "a582294f3391946b4b8951177927b69d8ceb5b89814501fba739dcee268df573" .
+    <http://example.org/project/source-change/17bfa58bb36ebea0> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "c0a492108ef413b1bfaeb6b5d98533688ed371c8cf2585360b7ac645b6b03fad" .
+    <http://example.org/project/source-change/187a1d4a4738d224> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "bf5926d0a5253fbcc60031fe59c2f49f073759389030581418a27ac510f3e221" .
+    <http://example.org/project/source-change/19510e441380974f> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "bda475164f1821796011ec6ae9519904a121985101ad8b67b8970cea6c0c38ce" .
+    <http://example.org/project/source-change/1aa279d9cc65be63> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "6c302f438664d39985709f588966b090c80e5065c02ac0b79f5a42221924a829" .
+    <http://example.org/project/source-change/219bc830dd2576ce> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "489463ef7764f3235b2d33fdde5457a5c45543502ef124d2188298e7a69af138" .
+    <http://example.org/project/source-change/223c51d72a09a8a5> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "8a2fa7124a36b866285d0decc0a0c2e42df6796a1d50edde58962e161de0cb9f" .
+    <http://example.org/project/source-change/2393248e57e906cb> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "edfc17b219b13e3ee9c65601a8931d44b2eda843a164fb551e8b6fc10e3fcc79" .
+    <http://example.org/project/source-change/28cd3794c38712bb> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "a449d1f5a664e8c4132c26d61ff08cd7e67e98d4b7d70667b29885cd7a4b9cf6" .
+    <http://example.org/project/source-change/2bc734652b8d3ab7> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "90b1a06a69e3f2ec10a50d9908702e6c7edc0078a052ca3cd4a807ec36c4b9c5" .
+    <http://example.org/project/source-change/30e147f7a5ecf7cb> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "050d7115253b3b70429f30b01ab7e29d060af7bf0a956c82215d99445e0143ac" .
+    <http://example.org/project/source-change/38cb9c0d96e3f2ab> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "9dc81df6d98856cac7e9d7c53291a757b45fb3e324206153df7c7925da4c8640" .
+    <http://example.org/project/source-change/41f732ab44f74ac8> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fb7a916217a5bf1de5a206f7ee0e6e8858c682dd010a692d920bc95f4c5a8144" .
+    <http://example.org/project/source-change/4617b96a57bbe091> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fc57c618986b4de93cc84aa0d25e026d1804bdac2aacbddb15e21d07dfbb0d41" .
+    <http://example.org/project/source-change/477ece465bd377ea> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "4fd857ec1dd3afb3723f6f710f2085cf672592bbc31f754d88b5677785d3460b" .
+    <http://example.org/project/source-change/4874fa326a8ea283> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "447de1904716c06f561f9dd35af9d91663bcd7eaf03e1c22966efb5ac342b883" .
+    <http://example.org/project/source-change/4ec96b65e9e2670f> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "d87390884eb560221c57a7245b501e416bbc28959be1fbd35d73c7010fdd91ab" .
+    <http://example.org/project/source-change/500834816a4d2691> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "0e37250561a57238120c3cdc93219022bbdee3631065a43277673975ccefbfe6" .
+    <http://example.org/project/source-change/5042047b11d84752> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "6398d1d720eeddfeaf15a58e18e3c291e9779e78d356f661b746087a53b11993" .
+    <http://example.org/project/source-change/52876738c46e5516> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fa227e86a8a702b39622805be9f0395742ab04239a79bd561259de42f166c0ed" .
+    <http://example.org/project/source-change/54223d2eb18955d0> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "356d270dfc125e5020c7489a5ec6af3ecf2a022f1626619fb409279b4ac709f3" .
+    <http://example.org/project/source-change/54f42ae4c64a02ca> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "12ad53e5ddb31d4065253b08966377addb1c0b160a059be3606361c1aaf37f59" .
+    <http://example.org/project/source-change/5526a8a399f0d4c9> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "41d7b79466fa0181d4832e78340fa7933c7ea30c32f26103df8a809295a6d2a2" .
+    <http://example.org/project/source-change/5548cd37baf90fe1> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "ae896cba5e65a2c9b7ab70653b306e2e159dfd594ea0d3818714ae6a824e0781" .
+    <http://example.org/project/source-change/599d96bcf891a64a> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "210858e9a79998de0b3c96b515eed939820ebedd32d780503e9f93bb4696e115" .
+    <http://example.org/project/source-change/59cf47a4e9617d28> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "b1d0724beefb52d4ae0baf8d78916889261fa8ee71d1687d9e956c8cb1ec529a" .
+    <http://example.org/project/source-change/5a4289337aedb17d> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fddb1e00e4de699d4870d31874c1c9c8a49a59876d95749b278d0c32c9ae544a" .
+    <http://example.org/project/source-change/5def71c8310829e2> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "a0422769b7ad06b5091630a3380d6625d018da1514b21f95d77f5509580ed174" .
+    <http://example.org/project/source-change/60300c46bb830a05> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "df96f6aee38610000b00d0647b50053aee8930c36b491d2bfca76a330dfd6924" .
+    <http://example.org/project/source-change/60a8a79392c3aa6f> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "6dff27356f7030ffd37d4831b7b0306a1dc0adf1e7273304b49ee72a0e3fd617" .
+    <http://example.org/project/source-change/61016bccaae59fb1> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "74878327ccbd1a7d305b8912d10946b64590e4a9431d65f7f1c4339e4948861f" .
+    <http://example.org/project/source-change/66524a41394fc2e3> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "89a1d19627c57b74ec2511738f7621827d06fec6a66056b870fb77870c19e403" .
+    <http://example.org/project/source-change/66b877dee6eb8bc9> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "dc938ea6fb2fa18293ebe768ac7d484d660d560563fe92403339d901c1b56384" .
+    <http://example.org/project/source-change/6d9495940d0a0218> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "5a932d401a9e66a10536c4ce7bf8180fc3b10180d4eca883014b98325a8b1c35" .
+    <http://example.org/project/source-change/6fde41d8b9127f41> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "c15c251d6491e8e4b31a4f36543598865fdb565e986e7daa070c4b68645f758f" .
+    <http://example.org/project/source-change/70db2b0363709ff6> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "67e23fcb78321c74875ff882792f5f98c850aa5e94c6a9e142196bb9cbc58f3a" .
+    <http://example.org/project/source-change/71857b275f88117c> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "707f7a3b1f040bc64324ca24dc7218dda9bac89b220d37d246c8dd636cacdff8" .
+    <http://example.org/project/source-change/73d73df4161d3b51> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "426743e897bc75b31f0ad6407f86e54775029c6500031762e4c88c72011c57bd" .
+    <http://example.org/project/source-change/74ee05cc4693c40d> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "14263b0410977de15954b584fe1bddb40bf0df5ca331845b19dcd2347580a8a5" .
+    <http://example.org/project/source-change/77945b6451996c96> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "355c9e6b7e76e2451edfcb0836a18b727c769cf4cbfd9cffa1aff245e2ba44e7" .
+    <http://example.org/project/source-change/78d467619d09af94> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "379c2155dc5151b68bdd26d9b9a518ee9e9673bcde31d7c338c070d1479a0950" .
+    <http://example.org/project/source-change/790c2da151524f44> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "9b5a61533036bbea1a10cec0a6d633ea48efa3cc58f87fb4369141fe3749c320" .
+    <http://example.org/project/source-change/7b7891be51453ad1> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "30549d0d3c781ecdf8462226bf1110eacf42fc84e9c7ee1b1d1b6785a0bb402e" .
+    <http://example.org/project/source-change/7ca1fb4854196015> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "1f710bf935f65e904eb44048f5e3c9182418120496e55ccd37dc86b5930236fd" .
+    <http://example.org/project/source-change/7f8d04e2889cf43f> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fd91e92ea1b8f063d4de4cc67d1313e6d52ee030c825e9d9a851b05aa41f12e6" .
+    <http://example.org/project/source-change/80d5c4e7168c8a02> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "e9ee7dbc8fb6c565d3ba3450564ef0706957e24aec79196d7fe7f0adee0beda0" .
+    <http://example.org/project/source-change/83677cb1082349de> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "e18fe97ee242960d84d81298866cb0e948696d729ff066a5adbde61ed79a8ca0" .
+    <http://example.org/project/source-change/854bba9d76a6a4b0> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "45ec1da642b087bacadf2383007665a00d544d8883bab33e236c27ad1486f84c" .
+    <http://example.org/project/source-change/876b900685bf39df> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "f1e8b949f1fbf019aceb37e80409700c1489b6c948993329fc74c6564678f1ee" .
+    <http://example.org/project/source-change/8b733df251024ab5> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "227e068e505af28b2d9d1af68c979d02ca0db347784531af4a0716099fa7fb1f" .
+    <http://example.org/project/source-change/8db44fa7774187d1> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "73e263b5ee6b58dcda0107bc2c31ed1ddaa785355b6f8178a3d97ea1dbc5a326" .
+    <http://example.org/project/source-change/8ef0eb38e0a47dac> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "409e0cdc4107ba4812206b60137e9160b3f41a742faca51bf9df83a54235ae37" .
+    <http://example.org/project/source-change/92089766dcf181d8> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "018c089150ccf88c1130cb07bffa90e290cf136f32d869d2e8235a4f58984514" .
+    <http://example.org/project/source-change/96253873530f5f97> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "c0d18d02ae00ea3b96645e5daf007204697d08279cf64f823671affa337816a4" .
+    <http://example.org/project/source-change/99232dd1f5341c4e> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "3c3659c1340018062df98a5cbbfc5552b84ea71b70de260290541425a2300860" .
+    <http://example.org/project/source-change/9b324c9a85fac53d> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "266f66bbbf70b9684a3ee45cd32ce82163928d951b8ea4496ba681965adb0886" .
+    <http://example.org/project/source-change/9e12234ba2eb8435> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "2d13cfeb803e3d893966cb02f97519c8479ac42b6b39061f51bcf780b6ea3019" .
+    <http://example.org/project/source-change/9ea0714ddda7a100> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "9db799f0d2d43ca64cda215d54c24abb7f8ba1b4d6899dacb435b2329a7407fc" .
+    <http://example.org/project/source-change/9ef53b9ccd03f7ea> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "899c5a526a46eb87d84701591188c95844a81359259bf48a92f0e5e354ff6cd7" .
+    <http://example.org/project/source-change/a076a8cbeb190b0b> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "de35069adafc9e7d6d615b086487953642ff8644f837cf164947430d3281e88a" .
+    <http://example.org/project/source-change/a13341bdd3227ee8> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "5ec57c633bd92cabea8bddf89100a406309ddefa0808fcb53c523f612fa8252b" .
+    <http://example.org/project/source-change/a41eddcfb2a3895a> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "3df0349d637fcc703387e9626572484b0de064840c37de7569572157fa2b04ee" .
+    <http://example.org/project/source-change/aad7222b200773f2> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "f27183b535e93b60f41c3e24611dbbf77f5f078af38c4eef6a30dc77e6e114ae" .
+    <http://example.org/project/source-change/ac49aa6e3d21ca1d> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "6afee33fef930c124e52c408b349ff103e88eb122cca7bf099c381e1944f0e34" .
+    <http://example.org/project/source-change/b366a07903e83f25> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "b58e193af87dafbb9c35d658fd5f3b480866095da918b07864f25c62bbc41d03" .
+    <http://example.org/project/source-change/b50418e33dfd4916> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "da1b4d3f5f8b8f69d7e4f1e7f8d7367fa0bd3eba8d3ea8ff2cb29cccf1b67232" .
+    <http://example.org/project/source-change/b5aa7d9bc995f9da> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fe84eabbd2024381d7e050a9f765af53ac175e0a998222a631896397d078c886" .
+    <http://example.org/project/source-change/c1c51538986dc452> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "1d93e7e4d9d5f4a59fe98f41e4d27bb949ef8140e66282402b1b1d274fde3121" .
+    <http://example.org/project/source-change/c5e0a016c71ea109> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "c7b43b3e2b670629825e9991743e183e0c929c61a7a102c2bef7bdc11f426a7d" .
+    <http://example.org/project/source-change/c755848a33f04cd7> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "5d416baa4016ff2769f99e2912c23ddc5a46e4d60bcb9d7351e182b206c75cbf" .
+    <http://example.org/project/source-change/caf70908db00a2b7> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "7c6fc7aa6f494cdbeda3c9178389fd64ed5c25f33e83653752ba4c59f56786f9" .
+    <http://example.org/project/source-change/cd00b61c19db75c1> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "6008cc9dc2a61da93e53659f5393bf857dce5821e0a099365e9eebf651ca26aa" .
+    <http://example.org/project/source-change/cf7477a84a45cb5c> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "7f7de3d3ad5f114b5312ff9c8452f0c8e5d503e6916d005206a36c22da80eac3" .
+    <http://example.org/project/source-change/d14e599cb293d5d3> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "1be135139d454267f7595a31d95d0c97e1df8ca4e25de2870bdf5eab0d8d5d55" .
+    <http://example.org/project/source-change/d60915e9ee41555c> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "742b1ba5984762f52daa9f5184a28d8372a86f3d842d9b8cb9acc77cecab6899" .
+    <http://example.org/project/source-change/dbfadc725eb9a1c1> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "a670441d4289f7b44d360c0027c9f4d718384ddf1781551e1e1be83fb672edb2" .
+    <http://example.org/project/source-change/df3466b987c38973> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "fe5709cc94d474f09bf22d73b19a2bd937ff56bf959bf653db4d8e6fa4633aee" .
+    <http://example.org/project/source-change/e421eed74a7081fd> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "f49df9e0409084a8e673807c7c316ddf680585067f98c962229682b83fc4bdba" .
+    <http://example.org/project/source-change/e4aa4420ecbfc111> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "38aa5bb78748784faaadc0a5194a9441dc6c0574b87df69b206ac470f627c8b1" .
+    <http://example.org/project/source-change/ed1bf9971cd0bf4d> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "a2ed1399e1db28d7088130137243b1139059a98c9352eec9f8b81910d52ce867" .
+    <http://example.org/project/source-change/ef1c7a73e6d2580a> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "8759b53bcd7e6a132d6b8a35d37d8796a4b33ecc36ae1e98ded3561eb7cff663" .
+    <http://example.org/project/source-change/ef9e6265a69ac442> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "3e411a8627feeb522c4d0e087b6cf7331991939c88a132dd89cd5148acb5ec54" .
+    <http://example.org/project/source-change/f0c32bab76ced39a> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "c278dd04f88c1d2465785a2346eb88ab49c41a04ed80da26098e9dcce76861b3" .
+    <http://example.org/project/source-change/f48e043f8b0a24ce> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "bac86977ba5e3d363965827e6db1bbb71f87f85556e849b3f98c564d0d29ab26" .
+    <http://example.org/project/source-change/f4d4059b54049abd> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "70f9d292a42fd63fdc0105b73f169d019089e5608d899bde8d08332e61961c23" .
+    <http://example.org/project/source-change/f855e5a382b159dd> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "7b0abef3a8cc44b9d113581eb935ac4fb1fa433d9b60dad6579138e5347ed5c4" .
+    <http://example.org/project/source-change/f8c38a94ec89f45c> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "1554db2015c31a0e01706af17f67045658149b325febe72af4bd72794849d9fa" .
+    <http://example.org/project/source-change/f98bca2d571ab9a3> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "19f5149a67c27faefbc6aa868618e0387bdb0889ccb65f3e2887713241673343" .
+    <http://example.org/project/source-change/fa04a8d7e67fc3be> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "7360ca89f857aa51c912637ede4f3e272f1d309fbaea80e44822a2a399367f94" .
+    <http://example.org/project/source-change/fa41b57496269780> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "9e3d2135a4cdf7cd3f4ad84bff44d3d33b05ee8f381e2d12bb082cf84561ce98" .
+    <http://example.org/project/source-change/fdf32f27e4cdc92b> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "a9ab7cd6a5fd350932be31c01824836711feaeb5c6350dadcdd85bdf802ce8e9" .
+    <http://example.org/project/source-change/ffd3ccc82bf6c5ca> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "1ea69c353c5468ba4d1eaf696a69d7e461976981ec3bdcb641754a564c72d9af" .
+    <http://example.org/project/source-snapshot/06bb3a2dceb454da> sci:latestSourceChange <http://example.org/project/source-change/caf70908db00a2b7> ;
+        sci:sourcePath "entities/papers/Gong2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "db8eb424cfd37e02288e59091d0d276a8ebe078adc099dae7a4f9226d8c5304d" .
-    <http://example.org/project/source-snapshot/07f905f2026e1820> sci:sourcePath "entities/papers/Liu2024HiddenWorld.md" ;
+        schema:sha256 "7c6fc7aa6f494cdbeda3c9178389fd64ed5c25f33e83653752ba4c59f56786f9" .
+    <http://example.org/project/source-snapshot/07f905f2026e1820> sci:latestSourceChange <http://example.org/project/source-change/73d73df4161d3b51> ;
+        sci:sourcePath "entities/papers/Liu2024HiddenWorld.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "7f7bb253dbcd040370b765b342271bd4b4ac28f1f87ef8a5d489a09c5036b107" .
-    <http://example.org/project/source-snapshot/09ec5a6fc59135b4> sci:sourcePath "entities/papers/Yu2026.md" ;
+        schema:sha256 "426743e897bc75b31f0ad6407f86e54775029c6500031762e4c88c72011c57bd" .
+    <http://example.org/project/source-snapshot/09ec5a6fc59135b4> sci:latestSourceChange <http://example.org/project/source-change/6d9495940d0a0218> ;
+        sci:sourcePath "entities/papers/Yu2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "1d39e1f338da3fa2f60b6157f446c74b42c67674283439f7cffbfebcdff2733c" .
-    <http://example.org/project/source-snapshot/0c81a7bfc95f1cf3> sci:sourcePath "entities/hypotheses/0003-reason-coded-revisiting-beats-posterior-only-revisiting.md" ;
+        schema:sha256 "5a932d401a9e66a10536c4ce7bf8180fc3b10180d4eca883014b98325a8b1c35" .
+    <http://example.org/project/source-snapshot/0c81a7bfc95f1cf3> sci:latestSourceChange <http://example.org/project/source-change/c1c51538986dc452> ;
+        sci:sourcePath "entities/hypotheses/0003-reason-coded-revisiting-beats-posterior-only-revisiting.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e2358756de2dddf441d75dab725ba1f008330a29a16061c09f72f31ab5e0165e" .
-    <http://example.org/project/source-snapshot/0ec28023f386d02a> sci:sourcePath "entities/papers/Gronau2021.md" ;
+        schema:sha256 "1d93e7e4d9d5f4a59fe98f41e4d27bb949ef8140e66282402b1b1d274fde3121" .
+    <http://example.org/project/source-snapshot/0ec28023f386d02a> sci:latestSourceChange <http://example.org/project/source-change/c5e0a016c71ea109> ;
+        sci:sourcePath "entities/papers/Gronau2021.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "b1be8b56e9b7b1c2b2ac2903f4681aaa99d6ae1978fa5a31f7ce410c270b6658" .
-    <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf> sci:sourcePath "entities/papers/Zheng2024.md" ;
+        schema:sha256 "c7b43b3e2b670629825e9991743e183e0c929c61a7a102c2bef7bdc11f426a7d" .
+    <http://example.org/project/source-snapshot/0ff29a8c81ebc3bf> sci:latestSourceChange <http://example.org/project/source-change/77945b6451996c96> ;
+        sci:sourcePath "entities/papers/Zheng2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "f4e68ee3c9ebf8e849111abfc9f07bfa71ef5227240c48b0f48c8349be1d0f23" .
-    <http://example.org/project/source-snapshot/15cff83a6b7b2335> sci:sourcePath "entities/papers/Majumdar2022.md" ;
+        schema:sha256 "355c9e6b7e76e2451edfcb0836a18b727c769cf4cbfd9cffa1aff245e2ba44e7" .
+    <http://example.org/project/source-snapshot/15cff83a6b7b2335> sci:latestSourceChange <http://example.org/project/source-change/223c51d72a09a8a5> ;
+        sci:sourcePath "entities/papers/Majumdar2022.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "be967a8fec193674d6d070a2ad6aaaed31408bdc4f46c2ad65ad8ef07e6a6b02" .
-    <http://example.org/project/source-snapshot/161719a25644a568> sci:sourcePath "entities/papers/Semochkina2025.md" ;
+        schema:sha256 "8a2fa7124a36b866285d0decc0a0c2e42df6796a1d50edde58962e161de0cb9f" .
+    <http://example.org/project/source-snapshot/161719a25644a568> sci:latestSourceChange <http://example.org/project/source-change/54223d2eb18955d0> ;
+        sci:sourcePath "entities/papers/Semochkina2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "ca8ac4bd3f84a8c7e20c0bf36e05526cd997cab2905263a1dbfecfed96c3f67d" .
-    <http://example.org/project/source-snapshot/1a456407e74a4bf2> sci:sourcePath "entities/interpretations/0003-t066-latent-correction-2026-06-01.md" ;
+        schema:sha256 "356d270dfc125e5020c7489a5ec6af3ecf2a022f1626619fb409279b4ac709f3" .
+    <http://example.org/project/source-snapshot/1a456407e74a4bf2> sci:latestSourceChange <http://example.org/project/source-change/ed1bf9971cd0bf4d> ;
+        sci:sourcePath "entities/interpretations/0003-t066-latent-correction-2026-06-01.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "482105decd7d253d1914682f30f097be45c529f21867e93d35b74bc16bc9107f" .
-    <http://example.org/project/source-snapshot/20c43e6af45eea6b> sci:sourcePath "entities/papers/Jiralerspong2024.md" ;
+        schema:sha256 "a2ed1399e1db28d7088130137243b1139059a98c9352eec9f8b81910d52ce867" .
+    <http://example.org/project/source-snapshot/20c43e6af45eea6b> sci:latestSourceChange <http://example.org/project/source-change/1554ba81916ad9e8> ;
+        sci:sourcePath "entities/papers/Jiralerspong2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "d0aa05caa40ced3b43ba2463a7ec02992c718df03f8efb660ac726a3ae299f97" .
-    <http://example.org/project/source-snapshot/223c2552f9f88eb6> sci:latestSourceChange <http://example.org/project/source-change/757e06cebc2c0a36> ;
+        schema:sha256 "6f45ad3e5fcbd18acfd7acec82dc812e3885bb3a153dedf3719f48a1a3d2bac9" .
+    <http://example.org/project/source-snapshot/223c2552f9f88eb6> sci:latestSourceChange <http://example.org/project/source-change/016307d461754e6f> ;
         sci:sourcePath "entities/questions/0005-authoring-cost-audit.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "eb4ad4e2ad8d154d2ad2cb660dcfd49e0743405056e85800ff42f7a49571e9bf" .
-    <http://example.org/project/source-snapshot/2445ba6f5d674d8a> sci:latestSourceChange <http://example.org/project/source-change/97995e75a8c0a933> ;
+        schema:sha256 "1fc219f5e8c408817dbd682851cb0f906cabd5b7ae1f42cf4e16ade545998d5a" .
+    <http://example.org/project/source-snapshot/2445ba6f5d674d8a> sci:latestSourceChange <http://example.org/project/source-change/2bc734652b8d3ab7> ;
         sci:sourcePath "entities/interpretations/0001-simulator-2026-04-24.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "82dfe5991b1a0876037f12655bbb34789f0eaa2cb5e40ee31306044394a723a5" .
-    <http://example.org/project/source-snapshot/2786853bf4ca32cf> sci:sourcePath "entities/synthesis/0002-synthesis-truth-discovery-and-data-integration.md" ;
+        schema:sha256 "90b1a06a69e3f2ec10a50d9908702e6c7edc0078a052ca3cd4a807ec36c4b9c5" .
+    <http://example.org/project/source-snapshot/2786853bf4ca32cf> sci:latestSourceChange <http://example.org/project/source-change/187a1d4a4738d224> ;
+        sci:sourcePath "entities/synthesis/0002-synthesis-truth-discovery-and-data-integration.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "13302e764bb6ca9fca6fca6fea1f29c83804263f432b42081e702ff098e85976" .
-    <http://example.org/project/source-snapshot/27bd5a098f8c4720> sci:sourcePath "entities/papers/Ding2025.md" ;
+        schema:sha256 "bf5926d0a5253fbcc60031fe59c2f49f073759389030581418a27ac510f3e221" .
+    <http://example.org/project/source-snapshot/27bd5a098f8c4720> sci:latestSourceChange <http://example.org/project/source-change/cf7477a84a45cb5c> ;
+        sci:sourcePath "entities/papers/Ding2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "30351a1730a72a11952e8a7082733e96e84efc246a66ad02114919a0fcdb8a9c" .
-    <http://example.org/project/source-snapshot/285c15d42fb7a08f> sci:sourcePath "entities/papers/Banzi2026.md" ;
+        schema:sha256 "7f7de3d3ad5f114b5312ff9c8452f0c8e5d503e6916d005206a36c22da80eac3" .
+    <http://example.org/project/source-snapshot/285c15d42fb7a08f> sci:latestSourceChange <http://example.org/project/source-change/8b733df251024ab5> ;
+        sci:sourcePath "entities/papers/Banzi2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "1ef8be5471f59473327a431fd826ae518c2ecb543b37b2d36a53269870dc3b53" .
-    <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e> sci:sourcePath "entities/papers/Thijssen2017.md" ;
+        schema:sha256 "227e068e505af28b2d9d1af68c979d02ca0db347784531af4a0716099fa7fb1f" .
+    <http://example.org/project/source-snapshot/2a4d93a49fe4fb8e> sci:latestSourceChange <http://example.org/project/source-change/876b900685bf39df> ;
+        sci:sourcePath "entities/papers/Thijssen2017.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "7bd439279af90fef6e3ad896bf89a11a6d8aa58a35730ddd91a9577d9df3fe7b" .
-    <http://example.org/project/source-snapshot/2cb09de6cc569f41> sci:sourcePath "entities/propositions/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md" ;
+        schema:sha256 "f1e8b949f1fbf019aceb37e80409700c1489b6c948993329fc74c6564678f1ee" .
+    <http://example.org/project/source-snapshot/2cb09de6cc569f41> sci:latestSourceChange <http://example.org/project/source-change/033d1c9f768005f7> ;
+        sci:sourcePath "entities/propositions/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "42cc663e5ce3c0d0967c615949cfe3aab8901aafcdb57250ec971f47defe47e6" .
-    <http://example.org/project/source-snapshot/2f5802732fecd4f9> sci:sourcePath "entities/questions/0011-graph-valued-synthesis-artifacts.md" ;
+        schema:sha256 "f8f18a045104208c56b874a25fcdf8660a6b7683aa358327610b1788a05b295f" .
+    <http://example.org/project/source-snapshot/2f5802732fecd4f9> sci:latestSourceChange <http://example.org/project/source-change/5526a8a399f0d4c9> ;
+        sci:sourcePath "entities/questions/0011-graph-valued-synthesis-artifacts.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "3daa7bf3b389f6b3686a52f9074f0d3c8137fcd531f50e360543030ed5a6b924" .
-    <http://example.org/project/source-snapshot/3689053cf11f414d> sci:sourcePath "entities/questions/0009-mcda-bayesian-interoperability.md" ;
+        schema:sha256 "41d7b79466fa0181d4832e78340fa7933c7ea30c32f26103df8a809295a6d2a2" .
+    <http://example.org/project/source-snapshot/3689053cf11f414d> sci:latestSourceChange <http://example.org/project/source-change/04c29c4e1421d112> ;
+        sci:sourcePath "entities/questions/0009-mcda-bayesian-interoperability.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "6db53eee43a3f763c6ac1a427e501f3581233cf1f5c0608dc70cbd1fc651cc90" .
-    <http://example.org/project/source-snapshot/36b07c197f068d3e> sci:sourcePath "entities/papers/Cerullo2023.md" ;
+        schema:sha256 "c9d6f4f4e834bcca46268e9711e31632d008674ec3b1ba3ed947eecc49dd1f26" .
+    <http://example.org/project/source-snapshot/36b07c197f068d3e> sci:latestSourceChange <http://example.org/project/source-change/7ca1fb4854196015> ;
+        sci:sourcePath "entities/papers/Cerullo2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "d4dbb4d7da808cd83e009276b3a403f6bd9764f9139d5c47da2d9de02c0e6f11" .
-    <http://example.org/project/source-snapshot/376814ac7028eca8> sci:sourcePath "entities/papers/VanLissa2024.md" ;
+        schema:sha256 "1f710bf935f65e904eb44048f5e3c9182418120496e55ccd37dc86b5930236fd" .
+    <http://example.org/project/source-snapshot/376814ac7028eca8> sci:latestSourceChange <http://example.org/project/source-change/7b7891be51453ad1> ;
+        sci:sourcePath "entities/papers/VanLissa2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "29046deb34339981b183c92d1e43d228045e46da135300f5d51e93f023c556db" .
-    <http://example.org/project/source-snapshot/37c4a47155c5fc2d> sci:sourcePath "entities/papers/Hackenberger2020.md" ;
+        schema:sha256 "30549d0d3c781ecdf8462226bf1110eacf42fc84e9c7ee1b1d1b6785a0bb402e" .
+    <http://example.org/project/source-snapshot/37c4a47155c5fc2d> sci:latestSourceChange <http://example.org/project/source-change/f48e043f8b0a24ce> ;
+        sci:sourcePath "entities/papers/Hackenberger2020.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "8ac9244afcac0ff331d28b8d9734bbef507d98ab9d9464c6b6ad6a21eb3fd838" .
-    <http://example.org/project/source-snapshot/39395f69972fa313> sci:sourcePath "entities/hypotheses/0002-rich-evidence-payloads-improve-graph-calibration.md" ;
+        schema:sha256 "bac86977ba5e3d363965827e6db1bbb71f87f85556e849b3f98c564d0d29ab26" .
+    <http://example.org/project/source-snapshot/39395f69972fa313> sci:latestSourceChange <http://example.org/project/source-change/83677cb1082349de> ;
+        sci:sourcePath "entities/hypotheses/0002-rich-evidence-payloads-improve-graph-calibration.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "aaa0a10b20198bd30d6e3276d8eec5d53b7ba360553c25ad03d6016884f8d728" .
-    <http://example.org/project/source-snapshot/3f1dad966c4a3ef8> sci:sourcePath "entities/hypotheses/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md" ;
+        schema:sha256 "e18fe97ee242960d84d81298866cb0e948696d729ff066a5adbde61ed79a8ca0" .
+    <http://example.org/project/source-snapshot/3f1dad966c4a3ef8> sci:latestSourceChange <http://example.org/project/source-change/f8c38a94ec89f45c> ;
+        sci:sourcePath "entities/hypotheses/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "4819fe77addbfc5ac65a5382aefe55f149cc02a77bbd579658271503e7ab20c8" .
-    <http://example.org/project/source-snapshot/408a8725228c417b> sci:latestSourceChange <http://example.org/project/source-change/834e8c246175b5f8> ;
+        schema:sha256 "1554db2015c31a0e01706af17f67045658149b325febe72af4bd72794849d9fa" .
+    <http://example.org/project/source-snapshot/408a8725228c417b> sci:latestSourceChange <http://example.org/project/source-change/4874fa326a8ea283> ;
         sci:sourcePath "entities/topics/bayesian-methods-continuous-belief.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "27bda10e6878c9e452c1c39101ee1c8eec21add189713eaf701d944ea9586c48" .
-    <http://example.org/project/source-snapshot/454a605974560982> sci:latestSourceChange <http://example.org/project/source-change/1b5abe9e790b0220> ;
+        schema:sha256 "447de1904716c06f561f9dd35af9d91663bcd7eaf03e1c22966efb5ac342b883" .
+    <http://example.org/project/source-snapshot/454a605974560982> sci:latestSourceChange <http://example.org/project/source-change/c755848a33f04cd7> ;
         sci:sourcePath "entities/questions/0002-evidence-payload-schema.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "11c96908f249f837d212f821b7b01a84d9a880398786a714874779ffa823a710" .
-    <http://example.org/project/source-snapshot/45dc1e4321918c1f> sci:sourcePath "entities/topics/analytic-flexibility-and-replication.md" ;
+        schema:sha256 "5d416baa4016ff2769f99e2912c23ddc5a46e4d60bcb9d7351e182b206c75cbf" .
+    <http://example.org/project/source-snapshot/45dc1e4321918c1f> sci:latestSourceChange <http://example.org/project/source-change/54f42ae4c64a02ca> ;
+        sci:sourcePath "entities/topics/analytic-flexibility-and-replication.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "6e5a81d12897f63ab86586307e8e40cf136c8e53018968d4e607e13fc7647b5e" .
-    <http://example.org/project/source-snapshot/4685012e7078fc04> sci:sourcePath "entities/questions/0013-robustness-reproducibility-evaluation.md" ;
+        schema:sha256 "12ad53e5ddb31d4065253b08966377addb1c0b160a059be3606361c1aaf37f59" .
+    <http://example.org/project/source-snapshot/4685012e7078fc04> sci:latestSourceChange <http://example.org/project/source-change/9ea0714ddda7a100> ;
+        sci:sourcePath "entities/questions/0013-robustness-reproducibility-evaluation.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "fdcff662c1d0621950313e85e72ac27d20fc5a1c754a2646659cd45b2db4ee1e" .
-    <http://example.org/project/source-snapshot/468baa6e6581b587> sci:sourcePath "entities/papers/Ban2023.md" ;
+        schema:sha256 "9db799f0d2d43ca64cda215d54c24abb7f8ba1b4d6899dacb435b2329a7407fc" .
+    <http://example.org/project/source-snapshot/468baa6e6581b587> sci:latestSourceChange <http://example.org/project/source-change/99232dd1f5341c4e> ;
+        sci:sourcePath "entities/papers/Ban2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "9abedbabe16d56a3387eaf65e597861977b52c4803947274429f788461ec811f" .
-    <http://example.org/project/source-snapshot/4ce49dbc1eadd964> sci:latestSourceChange <http://example.org/project/source-change/3dfe30ffb328fe37> ;
+        schema:sha256 "3c3659c1340018062df98a5cbbfc5552b84ea71b70de260290541425a2300860" .
+    <http://example.org/project/source-snapshot/4ce49dbc1eadd964> sci:latestSourceChange <http://example.org/project/source-change/4617b96a57bbe091> ;
         sci:sourcePath "entities/talks/Johri2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e425b65f23a8f634dd89a277a2251e976067137016d7cd62cf8c3b5288a46097" .
-    <http://example.org/project/source-snapshot/4d6db90b99435525> sci:latestSourceChange <http://example.org/project/source-change/a22558b9d63000c9> ;
+        schema:sha256 "fc57c618986b4de93cc84aa0d25e026d1804bdac2aacbddb15e21d07dfbb0d41" .
+    <http://example.org/project/source-snapshot/4d6db90b99435525> sci:latestSourceChange <http://example.org/project/source-change/477ece465bd377ea> ;
         sci:sourcePath "entities/synthesis/0007-project-synthesis-science-meta.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "52ee1d8196ad00d108c1e697e323196c6c24e15cea199a5eb1fa0b03257585a3" .
-    <http://example.org/project/source-snapshot/511ac5e2436835b7> sci:sourcePath "entities/papers/Wang2025.md" ;
+        schema:sha256 "4fd857ec1dd3afb3723f6f710f2085cf672592bbc31f754d88b5677785d3460b" .
+    <http://example.org/project/source-snapshot/511ac5e2436835b7> sci:latestSourceChange <http://example.org/project/source-change/5042047b11d84752> ;
+        sci:sourcePath "entities/papers/Wang2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "79424ba597424e5d4d71ec34c747b0b327377e6eb6f29ce0c980e3f13abcd5d1" .
-    <http://example.org/project/source-snapshot/522140a3cb70c25e> sci:sourcePath "entities/papers/Allen2017.md" ;
+        schema:sha256 "6398d1d720eeddfeaf15a58e18e3c291e9779e78d356f661b746087a53b11993" .
+    <http://example.org/project/source-snapshot/522140a3cb70c25e> sci:latestSourceChange <http://example.org/project/source-change/7f8d04e2889cf43f> ;
+        sci:sourcePath "entities/papers/Allen2017.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e17cc43cbe61f8433b316c1b87206d5507fa20269cd317eab1fdc92b2c72e194" .
-    <http://example.org/project/source-snapshot/54399d06b7975455> sci:sourcePath "entities/questions/0004-source-and-pipeline-provenance.md" ;
+        schema:sha256 "fd91e92ea1b8f063d4de4cc67d1313e6d52ee030c825e9d9a851b05aa41f12e6" .
+    <http://example.org/project/source-snapshot/54399d06b7975455> sci:latestSourceChange <http://example.org/project/source-change/30e147f7a5ecf7cb> ;
+        sci:sourcePath "entities/questions/0004-source-and-pipeline-provenance.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "1f3ed5a75e0d8eb6a9c4724291894f0664ac47b23c9eda14b3ed6c8542078843" .
-    <http://example.org/project/source-snapshot/56336322e6b54096> sci:sourcePath "entities/interpretations/0004-t067-patch-federation-2026-06-01.md" ;
+        schema:sha256 "050d7115253b3b70429f30b01ab7e29d060af7bf0a956c82215d99445e0143ac" .
+    <http://example.org/project/source-snapshot/56336322e6b54096> sci:latestSourceChange <http://example.org/project/source-change/d60915e9ee41555c> ;
+        sci:sourcePath "entities/interpretations/0004-t067-patch-federation-2026-06-01.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "5bc8b25f413e031e2821afd75278fe7d132efc3b06598527879459882e95cc34" .
-    <http://example.org/project/source-snapshot/567bd189cde78241> sci:sourcePath "entities/interpretations/0002-l1-patch-prototype-2026-06-01.md" ;
+        schema:sha256 "742b1ba5984762f52daa9f5184a28d8372a86f3d842d9b8cb9acc77cecab6899" .
+    <http://example.org/project/source-snapshot/567bd189cde78241> sci:latestSourceChange <http://example.org/project/source-change/02f1ebdedf668a41> ;
+        sci:sourcePath "entities/interpretations/0002-l1-patch-prototype-2026-06-01.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "caa9538d635cbe85322ab7cb870fa367606d1bdeee4f3456f35c8d9c5763bcc2" .
-    <http://example.org/project/source-snapshot/57e2b0dac3ef25cb> sci:sourcePath "entities/synthesis/0013-sequential-evidence-improves-attention.md" ;
+        schema:sha256 "f28d0b3960f3c67c0d9e46b727486f12dfc8f4dd6f014d85bdaccc1dfa9cf363" .
+    <http://example.org/project/source-snapshot/57e2b0dac3ef25cb> sci:latestSourceChange <http://example.org/project/source-change/f0c32bab76ced39a> ;
+        sci:sourcePath "entities/synthesis/0013-sequential-evidence-improves-attention.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "62fbae3ae6a35aea95f89439db49a29de8100ffc4732b4f0735a124dc0e9d4b5" .
-    <http://example.org/project/source-snapshot/5c23c5927268fcd4> sci:sourcePath "entities/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md" ;
+        schema:sha256 "c278dd04f88c1d2465785a2346eb88ab49c41a04ed80da26098e9dcce76861b3" .
+    <http://example.org/project/source-snapshot/5c23c5927268fcd4> sci:latestSourceChange <http://example.org/project/source-change/17bfa58bb36ebea0> ;
+        sci:sourcePath "entities/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "b102b4e4dfe279ca2a4a4d3d704b3e3070343be31b333caa410c4f5488e0d126" .
-    <http://example.org/project/source-snapshot/5f55dc2979ba7ee0> sci:sourcePath "entities/synthesis/0009-stochastic-revisiting.md" ;
+        schema:sha256 "c0a492108ef413b1bfaeb6b5d98533688ed371c8cf2585360b7ac645b6b03fad" .
+    <http://example.org/project/source-snapshot/5f55dc2979ba7ee0> sci:latestSourceChange <http://example.org/project/source-change/9ef53b9ccd03f7ea> ;
+        sci:sourcePath "entities/synthesis/0009-stochastic-revisiting.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "0265d424ffcd509c680669d4357ccbefca8684cd21cdb659cd5d76cd2ba77861" .
-    <http://example.org/project/source-snapshot/63a1a051389a038d> sci:sourcePath "entities/papers/Yang2025.md" ;
+        schema:sha256 "899c5a526a46eb87d84701591188c95844a81359259bf48a92f0e5e354ff6cd7" .
+    <http://example.org/project/source-snapshot/63a1a051389a038d> sci:latestSourceChange <http://example.org/project/source-change/5a4289337aedb17d> ;
+        sci:sourcePath "entities/papers/Yang2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e92098a8807976f47d504c3ecdc776b90b6c723fd3c25e9961189fd1e5b6ffae" .
-    <http://example.org/project/source-snapshot/653c587a1d1e6d17> sci:sourcePath "entities/papers/Aitken2024.md" ;
+        schema:sha256 "fddb1e00e4de699d4870d31874c1c9c8a49a59876d95749b278d0c32c9ae544a" .
+    <http://example.org/project/source-snapshot/653c587a1d1e6d17> sci:latestSourceChange <http://example.org/project/source-change/28cd3794c38712bb> ;
+        sci:sourcePath "entities/papers/Aitken2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "c79a30311449ba5da067f2abdca2e7590995af66d7dfd50c7aa1ec048e625afb" .
-    <http://example.org/project/source-snapshot/707763b7070beeb6> sci:sourcePath "entities/papers/Shi2022.md" ;
+        schema:sha256 "a449d1f5a664e8c4132c26d61ff08cd7e67e98d4b7d70667b29885cd7a4b9cf6" .
+    <http://example.org/project/source-snapshot/707763b7070beeb6> sci:latestSourceChange <http://example.org/project/source-change/78d467619d09af94> ;
+        sci:sourcePath "entities/papers/Shi2022.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "dab6749aa60c9d09e3c04342ed911bb1622881147cb3cfd169c5556ea8326643" .
-    <http://example.org/project/source-snapshot/7369c2766839740b> sci:sourcePath "entities/papers/Zuber2025.md" ;
+        schema:sha256 "379c2155dc5151b68bdd26d9b9a518ee9e9673bcde31d7c338c070d1479a0950" .
+    <http://example.org/project/source-snapshot/7369c2766839740b> sci:latestSourceChange <http://example.org/project/source-change/cd00b61c19db75c1> ;
+        sci:sourcePath "entities/papers/Zuber2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "27d8985c6eddd9f9642bac1f53547c9289f4262fdc1cc4d2266768c23f7e8208" .
-    <http://example.org/project/source-snapshot/77761dab8be731ce> sci:sourcePath "entities/papers/Zhang2017CancerGenomics.md" ;
+        schema:sha256 "6008cc9dc2a61da93e53659f5393bf857dce5821e0a099365e9eebf651ca26aa" .
+    <http://example.org/project/source-snapshot/77761dab8be731ce> sci:latestSourceChange <http://example.org/project/source-change/109cb135e89611e3> ;
+        sci:sourcePath "entities/papers/Zhang2017CancerGenomics.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "248118a2e9e9242d0ff2b4dafa749cfa556f3d8196f951f947b581f5acb102e9" .
-    <http://example.org/project/source-snapshot/77f5b76245943168> sci:sourcePath "entities/synthesis/0003-synthesis-causal-graph-construction-and-discovery.md" ;
+        schema:sha256 "a07193fc1a4870d1358fd0818d2e07a7e7fd08052516245a459954c99c1b192f" .
+    <http://example.org/project/source-snapshot/77f5b76245943168> sci:latestSourceChange <http://example.org/project/source-change/13e0cf876acd9dd0> ;
+        sci:sourcePath "entities/synthesis/0003-synthesis-causal-graph-construction-and-discovery.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "c7b9741c034e0f5824450b9e3b0a0c6b6986fddd6c79f6e0648c6e4def1bf2ad" .
-    <http://example.org/project/source-snapshot/7a70a174efe03655> sci:latestSourceChange <http://example.org/project/source-change/4a463bec8b286722> ;
+        schema:sha256 "2b779fb78dcf169eb0eb512a7f2d6cbcbee3c68688a75b7534e26452c21049e8" .
+    <http://example.org/project/source-snapshot/7a70a174efe03655> sci:latestSourceChange <http://example.org/project/source-change/114d28c3a87d84a0> ;
         sci:sourcePath "entities/questions/0015-claim-operationalization-drift.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "5918f657ccc4c62a7926e9ad5c14201b6b109b9db1702c778231ced162c28aa8" .
-    <http://example.org/project/source-snapshot/7ad2f374b05597e1> sci:sourcePath "entities/papers/Si2025.md" ;
+        schema:sha256 "abdb6120df35f3ad9cc03d597a64868c20276b25bdb8b20ce130e487440d833b" .
+    <http://example.org/project/source-snapshot/7ad2f374b05597e1> sci:latestSourceChange <http://example.org/project/source-change/854bba9d76a6a4b0> ;
+        sci:sourcePath "entities/papers/Si2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "52e3056cf277f27f53706142b72cb068ce0c5c530379b52ceab7b8b9402748ce" .
-    <http://example.org/project/source-snapshot/7f742e159b04adc7> sci:sourcePath "entities/questions/0003-causal-synthesis-guardrails.md" ;
+        schema:sha256 "45ec1da642b087bacadf2383007665a00d544d8883bab33e236c27ad1486f84c" .
+    <http://example.org/project/source-snapshot/7f742e159b04adc7> sci:latestSourceChange <http://example.org/project/source-change/a13341bdd3227ee8> ;
+        sci:sourcePath "entities/questions/0003-causal-synthesis-guardrails.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "57f1c1291537c4aa61c5e8ae85a67d5bda7af953aaaed77dc67c8af13f589bcd" .
-    <http://example.org/project/source-snapshot/7fefd9380b7ca90d> sci:sourcePath "entities/papers/Faller2024.md" ;
+        schema:sha256 "5ec57c633bd92cabea8bddf89100a406309ddefa0808fcb53c523f612fa8252b" .
+    <http://example.org/project/source-snapshot/7fefd9380b7ca90d> sci:latestSourceChange <http://example.org/project/source-change/74ee05cc4693c40d> ;
+        sci:sourcePath "entities/papers/Faller2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "dc99c9a81e47b0af3d969e94d1a7e83c0391e6b04761b2d66268fa4fafc68097" .
-    <http://example.org/project/source-snapshot/84ad435f56b16cce> sci:sourcePath "entities/papers/Petersen2014.md" ;
+        schema:sha256 "14263b0410977de15954b584fe1bddb40bf0df5ca331845b19dcd2347580a8a5" .
+    <http://example.org/project/source-snapshot/84ad435f56b16cce> sci:latestSourceChange <http://example.org/project/source-change/ef1c7a73e6d2580a> ;
+        sci:sourcePath "entities/papers/Petersen2014.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e58c89650969d43ebe03bb1f36703dd0ccbf378b8f5e7c36d44c835664221596" .
-    <http://example.org/project/source-snapshot/89bf479e0e17edbb> sci:latestSourceChange <http://example.org/project/source-change/9507b61a2fdb9a31> ;
+        schema:sha256 "8759b53bcd7e6a132d6b8a35d37d8796a4b33ecc36ae1e98ded3561eb7cff663" .
+    <http://example.org/project/source-snapshot/89bf479e0e17edbb> sci:latestSourceChange <http://example.org/project/source-change/599d96bcf891a64a> ;
         sci:sourcePath "entities/hypotheses/0001-stochastic-revisiting.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "53d9b6961b4748a2381153a8789b1756ea4a17340e9e85d5de627c6ff1a61ef9" .
-    <http://example.org/project/source-snapshot/8ac838df9d5cc786> sci:sourcePath "entities/papers/Han2026.md" ;
+        schema:sha256 "210858e9a79998de0b3c96b515eed939820ebedd32d780503e9f93bb4696e115" .
+    <http://example.org/project/source-snapshot/8ac838df9d5cc786> sci:latestSourceChange <http://example.org/project/source-change/b5aa7d9bc995f9da> ;
+        sci:sourcePath "entities/papers/Han2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "dd07ad74cb96d5d1ff44a89d1f69a0df899e8ae215ab9ee910f3db9ee7c8c6ff" .
-    <http://example.org/project/source-snapshot/8c7669ef49a4cb66> sci:sourcePath "entities/topics/structured-scientific-knowledge.md" ;
+        schema:sha256 "fe84eabbd2024381d7e050a9f765af53ac175e0a998222a631896397d078c886" .
+    <http://example.org/project/source-snapshot/8c7669ef49a4cb66> sci:latestSourceChange <http://example.org/project/source-change/8ef0eb38e0a47dac> ;
+        sci:sourcePath "entities/topics/structured-scientific-knowledge.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "ff1bf1daa0662c4d75de78e47618845d8492c6ec1170e37d0ee08709cc7398c6" .
-    <http://example.org/project/source-snapshot/91e6529d1cd18c71> sci:latestSourceChange <http://example.org/project/source-change/a0aafef2c234d1bd> ;
+        schema:sha256 "409e0cdc4107ba4812206b60137e9160b3f41a742faca51bf9df83a54235ae37" .
+    <http://example.org/project/source-snapshot/91e6529d1cd18c71> sci:latestSourceChange <http://example.org/project/source-change/219bc830dd2576ce> ;
         sci:sourcePath "entities/questions/0014-adaptive-project-topology.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "3f83f5e8eb74af7de73aafebe862605c8112e8951c57977bde231cd856e249b4" .
-    <http://example.org/project/source-snapshot/939403311215a826> sci:sourcePath "entities/papers/Vahabi2022.md" ;
+        schema:sha256 "489463ef7764f3235b2d33fdde5457a5c45543502ef124d2188298e7a69af138" .
+    <http://example.org/project/source-snapshot/939403311215a826> sci:latestSourceChange <http://example.org/project/source-change/71857b275f88117c> ;
+        sci:sourcePath "entities/papers/Vahabi2022.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "bb4e3fc16f87396a4d53b5e38031a95097e51d5bd2c1abd2ff0c7007a50a96e8" .
-    <http://example.org/project/source-snapshot/957cd55b219999a6> sci:sourcePath "entities/papers/Heyard2025.md" ;
+        schema:sha256 "707f7a3b1f040bc64324ca24dc7218dda9bac89b220d37d246c8dd636cacdff8" .
+    <http://example.org/project/source-snapshot/957cd55b219999a6> sci:latestSourceChange <http://example.org/project/source-change/9e12234ba2eb8435> ;
+        sci:sourcePath "entities/papers/Heyard2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "7e8e6ff19445b4c8884bd785167eea0c8b68568c1128e53f8186a78423b2b545" .
-    <http://example.org/project/source-snapshot/95aaed18022bf4c8> sci:sourcePath "entities/topics/cross-project.md" ;
+        schema:sha256 "2d13cfeb803e3d893966cb02f97519c8479ac42b6b39061f51bcf780b6ea3019" .
+    <http://example.org/project/source-snapshot/95aaed18022bf4c8> sci:latestSourceChange <http://example.org/project/source-change/b366a07903e83f25> ;
+        sci:sourcePath "entities/topics/cross-project.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "fa539ed28844abcf7643f50f141071662c7d8cff8dfb47eb46d772f6528dc466" .
-    <http://example.org/project/source-snapshot/99a7597781f88e82> sci:sourcePath "entities/papers/Mulder2026.md" ;
+        schema:sha256 "b58e193af87dafbb9c35d658fd5f3b480866095da918b07864f25c62bbc41d03" .
+    <http://example.org/project/source-snapshot/99a7597781f88e82> sci:latestSourceChange <http://example.org/project/source-change/fa04a8d7e67fc3be> ;
+        sci:sourcePath "entities/papers/Mulder2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "6a5b1d804024c03de3ce526b41a28b15aea92f0142cdca051ab70338c6bdea73" .
-    <http://example.org/project/source-snapshot/9b674827a22acd08> sci:sourcePath "entities/papers/Freiesleben2023.md" ;
+        schema:sha256 "7360ca89f857aa51c912637ede4f3e272f1d309fbaea80e44822a2a399367f94" .
+    <http://example.org/project/source-snapshot/9b674827a22acd08> sci:latestSourceChange <http://example.org/project/source-change/60a8a79392c3aa6f> ;
+        sci:sourcePath "entities/papers/Freiesleben2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "8f7f802a59a5c37976fe7346ef174939873c51ed233299111b1520eb24a75f12" .
-    <http://example.org/project/source-snapshot/9cf6c1b37017aadf> sci:sourcePath "entities/propositions/bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md" ;
+        schema:sha256 "6dff27356f7030ffd37d4831b7b0306a1dc0adf1e7273304b49ee72a0e3fd617" .
+    <http://example.org/project/source-snapshot/9cf6c1b37017aadf> sci:latestSourceChange <http://example.org/project/source-change/dbfadc725eb9a1c1> ;
+        sci:sourcePath "entities/propositions/bes-behaves-like-meta-analysis-when-study-evidence-is-informative.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "a8dfbaa725500dd1b436278d1925943b208162355b9f975b50d7fed5798d17cd" .
-    <http://example.org/project/source-snapshot/9d97543844db68ea> sci:sourcePath "entities/papers/Zhao2012.md" ;
+        schema:sha256 "a670441d4289f7b44d360c0027c9f4d718384ddf1781551e1e1be83fb672edb2" .
+    <http://example.org/project/source-snapshot/9d97543844db68ea> sci:latestSourceChange <http://example.org/project/source-change/41f732ab44f74ac8> ;
+        sci:sourcePath "entities/papers/Zhao2012.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "ccc99118634fab829150d7c8558e704e21babc38429b0f29b1ea0b5092bdf6ee" .
-    <http://example.org/project/source-snapshot/9d9aa4436679f97f> sci:latestSourceChange <http://example.org/project/source-change/51f0e90db819f9f6> ;
+        schema:sha256 "fb7a916217a5bf1de5a206f7ee0e6e8858c682dd010a692d920bc95f4c5a8144" .
+    <http://example.org/project/source-snapshot/9d9aa4436679f97f> sci:latestSourceChange <http://example.org/project/source-change/66b877dee6eb8bc9> ;
         sci:sourcePath "entities/hypotheses/0007-working-model.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e3a812573d4291eda3944690557d639dddd2470644b64bb14769839d8751573f" .
-    <http://example.org/project/source-snapshot/a12e5fc0d8f608be> sci:sourcePath "entities/propositions/bes-does-not-rescue-underpowered-studies-by-pooling-data.md" ;
+        schema:sha256 "dc938ea6fb2fa18293ebe768ac7d484d660d560563fe92403339d901c1b56384" .
+    <http://example.org/project/source-snapshot/a12e5fc0d8f608be> sci:latestSourceChange <http://example.org/project/source-change/70db2b0363709ff6> ;
+        sci:sourcePath "entities/propositions/bes-does-not-rescue-underpowered-studies-by-pooling-data.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "f524e0b5449f4a0cc9373b0337f2e0dfea7bc53ace28a75881d0c3e4f69461e0" .
-    <http://example.org/project/source-snapshot/a44f2849fd817cbc> sci:sourcePath "entities/questions/0001-bioinformatics-generalizability.md" ;
+        schema:sha256 "67e23fcb78321c74875ff882792f5f98c850aa5e94c6a9e142196bb9cbc58f3a" .
+    <http://example.org/project/source-snapshot/a44f2849fd817cbc> sci:latestSourceChange <http://example.org/project/source-change/8db44fa7774187d1> ;
+        sci:sourcePath "entities/questions/0001-bioinformatics-generalizability.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "9a447e4215778035fba01868ccadbfc470eb9b78d043484a385a6b6cb11090a7" .
-    <http://example.org/project/source-snapshot/a4b72766d12ca8c6> sci:sourcePath "entities/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md" ;
+        schema:sha256 "73e263b5ee6b58dcda0107bc2c31ed1ddaa785355b6f8178a3d97ea1dbc5a326" .
+    <http://example.org/project/source-snapshot/a4b72766d12ca8c6> sci:latestSourceChange <http://example.org/project/source-change/92089766dcf181d8> ;
+        sci:sourcePath "entities/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "5d40b43a22fcbf5a4adf9cf5ce88409547d2633fd1a7952974fc6f0418599cb3" .
-    <http://example.org/project/source-snapshot/a548cea58faa6a97> sci:sourcePath "entities/papers/VanWonderen2024.md" ;
+        schema:sha256 "018c089150ccf88c1130cb07bffa90e290cf136f32d869d2e8235a4f58984514" .
+    <http://example.org/project/source-snapshot/a548cea58faa6a97> sci:latestSourceChange <http://example.org/project/source-change/59cf47a4e9617d28> ;
+        sci:sourcePath "entities/papers/VanWonderen2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "3abc6c69f16b4e018bcafeace65425e5919646f5f902567a76f2870d3e3db3f6" .
-    <http://example.org/project/source-snapshot/a738d9318d9d67e9> sci:sourcePath "entities/papers/Zhang2025ScientificMethod.md" ;
+        schema:sha256 "b1d0724beefb52d4ae0baf8d78916889261fa8ee71d1687d9e956c8cb1ec529a" .
+    <http://example.org/project/source-snapshot/a738d9318d9d67e9> sci:latestSourceChange <http://example.org/project/source-change/e4aa4420ecbfc111> ;
+        sci:sourcePath "entities/papers/Zhang2025ScientificMethod.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "9706af5e91d14cab90c625fe558036e99c6d33a609c6cabf7720c2f4faed8a23" .
-    <http://example.org/project/source-snapshot/af122de935eb4eb3> sci:sourcePath "entities/papers/Volker2023.md" ;
+        schema:sha256 "38aa5bb78748784faaadc0a5194a9441dc6c0574b87df69b206ac470f627c8b1" .
+    <http://example.org/project/source-snapshot/af122de935eb4eb3> sci:latestSourceChange <http://example.org/project/source-change/a076a8cbeb190b0b> ;
+        sci:sourcePath "entities/papers/Volker2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "81257c66c079db909c25c4ba7091ad31b58d98a21b37d7eeaacdd3bf394c5fd0" .
-    <http://example.org/project/source-snapshot/b2544826dbef5626> sci:sourcePath "entities/papers/Zhang2021JointGraphical.md" ;
+        schema:sha256 "de35069adafc9e7d6d615b086487953642ff8644f837cf164947430d3281e88a" .
+    <http://example.org/project/source-snapshot/b2544826dbef5626> sci:latestSourceChange <http://example.org/project/source-change/2393248e57e906cb> ;
+        sci:sourcePath "entities/papers/Zhang2021JointGraphical.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "414a275d19ef1b5f8625d3e6ec298e49aa7c873f8168feaf5918b1450e8b2f6e" .
-    <http://example.org/project/source-snapshot/b3cb41ae09d696f2> sci:sourcePath "entities/synthesis/0011-reason-coded-revisiting-beats-posterior-only-revisiting.md" ;
+        schema:sha256 "edfc17b219b13e3ee9c65601a8931d44b2eda843a164fb551e8b6fc10e3fcc79" .
+    <http://example.org/project/source-snapshot/b3cb41ae09d696f2> sci:latestSourceChange <http://example.org/project/source-change/96253873530f5f97> ;
+        sci:sourcePath "entities/synthesis/0011-reason-coded-revisiting-beats-posterior-only-revisiting.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e74803db4a26197bd3bc69f56818380b814107b71f410205dc3cb201b1ebe967" .
-    <http://example.org/project/source-snapshot/b4b1b67c82cce8ec> sci:sourcePath "entities/papers/Alnajjar2026.md" ;
+        schema:sha256 "c0d18d02ae00ea3b96645e5daf007204697d08279cf64f823671affa337816a4" .
+    <http://example.org/project/source-snapshot/b4b1b67c82cce8ec> sci:latestSourceChange <http://example.org/project/source-change/1aa279d9cc65be63> ;
+        sci:sourcePath "entities/papers/Alnajjar2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "276e0a3dee5a83c507b8e288f8fa7b95f45eab5f72834a627639490acff5eaf4" .
-    <http://example.org/project/source-snapshot/b4f0ccf578a1d083> sci:latestSourceChange <http://example.org/project/source-change/9e68a902c3de8e43> ;
+        schema:sha256 "6c302f438664d39985709f588966b090c80e5065c02ac0b79f5a42221924a829" .
+    <http://example.org/project/source-snapshot/b4f0ccf578a1d083> sci:latestSourceChange <http://example.org/project/source-change/f4d4059b54049abd> ;
         sci:sourcePath "entities/synthesis/0010-rich-evidence-payloads-improve-graph-calibration.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "cce33445b69e6a92e285bbd4ec0f092d3de0aac12087debd904cda23789a1bd3" .
-    <http://example.org/project/source-snapshot/b67e6dc565e3de70> sci:sourcePath "entities/papers/Dugourd2021.md" ;
+        schema:sha256 "70f9d292a42fd63fdc0105b73f169d019089e5608d899bde8d08332e61961c23" .
+    <http://example.org/project/source-snapshot/b67e6dc565e3de70> sci:latestSourceChange <http://example.org/project/source-change/e421eed74a7081fd> ;
+        sci:sourcePath "entities/papers/Dugourd2021.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "33a8693d52648f771290a14a6739aeab24be2ee5ac94ea8c01f0ea6448aa1400" .
-    <http://example.org/project/source-snapshot/c0d5ce0d679f342a> sci:sourcePath "entities/papers/Liu2020.md" ;
+        schema:sha256 "f49df9e0409084a8e673807c7c316ddf680585067f98c962229682b83fc4bdba" .
+    <http://example.org/project/source-snapshot/c0d5ce0d679f342a> sci:latestSourceChange <http://example.org/project/source-change/ef9e6265a69ac442> ;
+        sci:sourcePath "entities/papers/Liu2020.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "fb243e7d0908704a538f9405f50f9b708e0079decf428e7430553e29fd4df688" .
-    <http://example.org/project/source-snapshot/c2db0ac12df13819> sci:sourcePath "entities/papers/Williams2018.md" ;
+        schema:sha256 "3e411a8627feeb522c4d0e087b6cf7331991939c88a132dd89cd5148acb5ec54" .
+    <http://example.org/project/source-snapshot/c2db0ac12df13819> sci:latestSourceChange <http://example.org/project/source-change/148607288847a000> ;
+        sci:sourcePath "entities/papers/Williams2018.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "d0fb053d47019cb14b1edc6e4c8de7cf82c536bb3931f41d20c87b0806ceb7a8" .
-    <http://example.org/project/source-snapshot/c58ade737248b8d6> sci:sourcePath "entities/papers/Dai2023.md" ;
+        schema:sha256 "dff2ea0013ea948a005150e31320c186e81ec180d8246f5e5fd7c649c0bc1ba1" .
+    <http://example.org/project/source-snapshot/c58ade737248b8d6> sci:latestSourceChange <http://example.org/project/source-change/b50418e33dfd4916> ;
+        sci:sourcePath "entities/papers/Dai2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "7dcc85949957e53d9aadddc777aefac55b729cdb08b7e48d8c73f92df30d0235" .
-    <http://example.org/project/source-snapshot/ca0742e4eaee1904> sci:sourcePath "entities/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation.md" ;
+        schema:sha256 "da1b4d3f5f8b8f69d7e4f1e7f8d7367fa0bd3eba8d3ea8ff2cb29cccf1b67232" .
+    <http://example.org/project/source-snapshot/ca0742e4eaee1904> sci:latestSourceChange <http://example.org/project/source-change/159bd0fba77c42cd> ;
+        sci:sourcePath "entities/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "da908ac4a95581b1b97b1498a81e91081e4b57e923fd9928b9ace70c1c6348fb" .
-    <http://example.org/project/source-snapshot/caf776bd690db0eb> sci:sourcePath "entities/synthesis/0008-emergent-threads-science-meta.md" ;
+        schema:sha256 "f0b2ccf316ad4fdfbe693e9c54c1dabffb6d98807e7da31c0796a3d7ca31f079" .
+    <http://example.org/project/source-snapshot/caf776bd690db0eb> sci:latestSourceChange <http://example.org/project/source-change/d14e599cb293d5d3> ;
+        sci:sourcePath "entities/synthesis/0008-emergent-threads-science-meta.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "acd625e98e2483146b22df167344c0c7784fcb17ca4e62c6ec68c0360d145903" .
-    <http://example.org/project/source-snapshot/cb768c74beee4692> sci:sourcePath "entities/papers/Linkov2017.md" ;
+        schema:sha256 "1be135139d454267f7595a31d95d0c97e1df8ca4e25de2870bdf5eab0d8d5d55" .
+    <http://example.org/project/source-snapshot/cb768c74beee4692> sci:latestSourceChange <http://example.org/project/source-change/80d5c4e7168c8a02> ;
+        sci:sourcePath "entities/papers/Linkov2017.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "5dd5beb9d6c9740e86d42cfef3e7b1ae8957599950a8127fb4951484bd0c9f28" .
-    <http://example.org/project/source-snapshot/d0436c2423de4302> sci:sourcePath "entities/papers/Li2016.md" ;
+        schema:sha256 "e9ee7dbc8fb6c565d3ba3450564ef0706957e24aec79196d7fe7f0adee0beda0" .
+    <http://example.org/project/source-snapshot/d0436c2423de4302> sci:latestSourceChange <http://example.org/project/source-change/a41eddcfb2a3895a> ;
+        sci:sourcePath "entities/papers/Li2016.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "fd4e56223ae65c187b88855b064c7e565e9bb3eec607af8b56032dd4562d7fb8" .
-    <http://example.org/project/source-snapshot/d16ff01501cc00df> sci:sourcePath "entities/questions/0007-sequential-anytime-valid-evidence.md" ;
+        schema:sha256 "3df0349d637fcc703387e9626572484b0de064840c37de7569572157fa2b04ee" .
+    <http://example.org/project/source-snapshot/d16ff01501cc00df> sci:latestSourceChange <http://example.org/project/source-change/500834816a4d2691> ;
+        sci:sourcePath "entities/questions/0007-sequential-anytime-valid-evidence.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "4364e0c8fe743b6afbaf372835b1d618621a0313c1984f021e8da2b98c6fcf7f" .
-    <http://example.org/project/source-snapshot/d41db2d0f358ab0a> sci:sourcePath "entities/papers/Jiang2024.md" ;
+        schema:sha256 "0e37250561a57238120c3cdc93219022bbdee3631065a43277673975ccefbfe6" .
+    <http://example.org/project/source-snapshot/d41db2d0f358ab0a> sci:latestSourceChange <http://example.org/project/source-change/19510e441380974f> ;
+        sci:sourcePath "entities/papers/Jiang2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "b5f101067c2182d267849b3a7f5af160fcc0a6f15f6030c326fb309473ae9502" .
-    <http://example.org/project/source-snapshot/d6b4cfa02b477e10> sci:sourcePath "entities/papers/Deleu2023.md" ;
+        schema:sha256 "bda475164f1821796011ec6ae9519904a121985101ad8b67b8970cea6c0c38ce" .
+    <http://example.org/project/source-snapshot/d6b4cfa02b477e10> sci:latestSourceChange <http://example.org/project/source-change/fa41b57496269780> ;
+        sci:sourcePath "entities/papers/Deleu2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "b944974bd4acd66d3fe506b1d5f69929e69684365512391f322c7c7463e3e821" .
-    <http://example.org/project/source-snapshot/d8545cd2f6f33cc9> sci:sourcePath "entities/papers/Srinivasan2024.md" ;
+        schema:sha256 "9e3d2135a4cdf7cd3f4ad84bff44d3d33b05ee8f381e2d12bb082cf84561ce98" .
+    <http://example.org/project/source-snapshot/d8545cd2f6f33cc9> sci:latestSourceChange <http://example.org/project/source-change/0363b1edeb91943e> ;
+        sci:sourcePath "entities/papers/Srinivasan2024.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "b0f0eb8e126a74cfe93b46784d44f18e3ed5a3ff192ef2d9edbd08445f133a56" .
-    <http://example.org/project/source-snapshot/d9a30e1b41346cdc> sci:sourcePath "entities/papers/Klugkist2023.md" ;
+        schema:sha256 "06208d185b7eeae21944e43e67ea114ff53c45d432e65e8bc2ad90a16e552acb" .
+    <http://example.org/project/source-snapshot/d9a30e1b41346cdc> sci:latestSourceChange <http://example.org/project/source-change/ac49aa6e3d21ca1d> ;
+        sci:sourcePath "entities/papers/Klugkist2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "cffbee0c0b1a904cf68078ba793d0caf2da168256c07c1e48bdb64be2c094466" .
-    <http://example.org/project/source-snapshot/da25983235d45823> sci:latestSourceChange <http://example.org/project/source-change/234b386d0bd9fb4e> ;
+        schema:sha256 "6afee33fef930c124e52c408b349ff103e88eb122cca7bf099c381e1944f0e34" .
+    <http://example.org/project/source-snapshot/da25983235d45823> sci:latestSourceChange <http://example.org/project/source-change/aad7222b200773f2> ;
         sci:sourcePath "entities/hypotheses/0006-adaptive-project-topology-improves-research-fit.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "acc68910b9c235aec25f1fce8cda32c4d7f2fc30faff1c30a553c7fc48594525" .
-    <http://example.org/project/source-snapshot/da7eb7f9b115054e> sci:sourcePath "entities/questions/0006-source-dependence-detection.md" ;
+        schema:sha256 "f27183b535e93b60f41c3e24611dbbf77f5f078af38c4eef6a30dc77e6e114ae" .
+    <http://example.org/project/source-snapshot/da7eb7f9b115054e> sci:latestSourceChange <http://example.org/project/source-change/6fde41d8b9127f41> ;
+        sci:sourcePath "entities/questions/0006-source-dependence-detection.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "1b7f3c46666e2d29e9377634b6cd89fac7936694d8d4a2ce995133c9baf15d51" .
-    <http://example.org/project/source-snapshot/dcc905e3f7397671> sci:sourcePath "entities/papers/Dai2024GraphAttention.md" ;
+        schema:sha256 "c15c251d6491e8e4b31a4f36543598865fdb565e986e7daa070c4b68645f758f" .
+    <http://example.org/project/source-snapshot/dcc905e3f7397671> sci:latestSourceChange <http://example.org/project/source-change/52876738c46e5516> ;
+        sci:sourcePath "entities/papers/Dai2024GraphAttention.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "449a42bf664a041a7d7a01e9f10dd5ed5fe062f3f3d566d5ac579dca2cd054dc" .
-    <http://example.org/project/source-snapshot/e05cff3491e2820d> sci:sourcePath "entities/hypotheses/0005-sequential-evidence-improves-attention.md" ;
+        schema:sha256 "fa227e86a8a702b39622805be9f0395742ab04239a79bd561259de42f166c0ed" .
+    <http://example.org/project/source-snapshot/e05cff3491e2820d> sci:latestSourceChange <http://example.org/project/source-change/66524a41394fc2e3> ;
+        sci:sourcePath "entities/hypotheses/0005-sequential-evidence-improves-attention.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "1fd0cbd434780f45d2660e51336bc2b481ab834e1341138214ace9013915bbf9" .
-    <http://example.org/project/source-snapshot/e1ae709b631f8047> sci:latestSourceChange <http://example.org/project/source-change/bb3547d2756d3882> ;
+        schema:sha256 "89a1d19627c57b74ec2511738f7621827d06fec6a66056b870fb77870c19e403" .
+    <http://example.org/project/source-snapshot/e1ae709b631f8047> sci:latestSourceChange <http://example.org/project/source-change/5548cd37baf90fe1> ;
         sci:sourcePath "entities/questions/0010-causal-graph-construction-pipeline.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e9440475758952fe3ec6be913bc952c7f1fa85373acb88efd5476349a0c7befd" .
-    <http://example.org/project/source-snapshot/e2134fe382aa2b8d> sci:sourcePath "entities/papers/Bhagwat2023.md" ;
+        schema:sha256 "ae896cba5e65a2c9b7ab70653b306e2e159dfd594ea0d3818714ae6a824e0781" .
+    <http://example.org/project/source-snapshot/e2134fe382aa2b8d> sci:latestSourceChange <http://example.org/project/source-change/60300c46bb830a05> ;
+        sci:sourcePath "entities/papers/Bhagwat2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "9ab8d11adacbeac31ee974a59b2cc818f4dcd4dd80b87b4dcb35192a15cddcf9" .
-    <http://example.org/project/source-snapshot/e365efffe3101555> sci:sourcePath "entities/papers/Dong2023.md" ;
+        schema:sha256 "df96f6aee38610000b00d0647b50053aee8930c36b491d2bfca76a330dfd6924" .
+    <http://example.org/project/source-snapshot/e365efffe3101555> sci:latestSourceChange <http://example.org/project/source-change/61016bccaae59fb1> ;
+        sci:sourcePath "entities/papers/Dong2023.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "16006f94ea1c9de488b6a6bfe62810e04ff7efc727b10271b2902abb4f1a7557" .
-    <http://example.org/project/source-snapshot/e407870f451bc688> sci:sourcePath "entities/papers/Jin2025.md" ;
+        schema:sha256 "74878327ccbd1a7d305b8912d10946b64590e4a9431d65f7f1c4339e4948861f" .
+    <http://example.org/project/source-snapshot/e407870f451bc688> sci:latestSourceChange <http://example.org/project/source-change/ffd3ccc82bf6c5ca> ;
+        sci:sourcePath "entities/papers/Jin2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "fd41d6116cf0d8dfba1ddf30540bc41765cd3950d95123b3d23bad5fc4db9520" .
-    <http://example.org/project/source-snapshot/e977325facf329a5> sci:sourcePath "entities/papers/Mohammadi2025.md" ;
+        schema:sha256 "1ea69c353c5468ba4d1eaf696a69d7e461976981ec3bdcb641754a564c72d9af" .
+    <http://example.org/project/source-snapshot/e977325facf329a5> sci:latestSourceChange <http://example.org/project/source-change/38cb9c0d96e3f2ab> ;
+        sci:sourcePath "entities/papers/Mohammadi2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "6514c85b94068cc2e7fd52ec9300351469e0793dc6a363d4eac2069a6d954594" .
-    <http://example.org/project/source-snapshot/e9a7c181412bc394> sci:sourcePath "entities/papers/Wan2025.md" ;
+        schema:sha256 "9dc81df6d98856cac7e9d7c53291a757b45fb3e324206153df7c7925da4c8640" .
+    <http://example.org/project/source-snapshot/e9a7c181412bc394> sci:latestSourceChange <http://example.org/project/source-change/f855e5a382b159dd> ;
+        sci:sourcePath "entities/papers/Wan2025.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "48e4c6526ca4e4c64af29435dd8c733975b1602927e3416538fe90b51bc02e8a" .
-    <http://example.org/project/source-snapshot/ed0fd99ce0d2a3eb> sci:sourcePath "entities/papers/Zhang2021gCastle.md" ;
+        schema:sha256 "7b0abef3a8cc44b9d113581eb935ac4fb1fa433d9b60dad6579138e5347ed5c4" .
+    <http://example.org/project/source-snapshot/ed0fd99ce0d2a3eb> sci:latestSourceChange <http://example.org/project/source-change/df3466b987c38973> ;
+        sci:sourcePath "entities/papers/Zhang2021gCastle.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "5828925c893c65cfcb6844ea713c8e44bf286932b87e018b17c916940b0b9fd3" .
-    <http://example.org/project/source-snapshot/ee568822fb9e3bb5> sci:latestSourceChange <http://example.org/project/source-change/84b346a007f1963f> ;
+        schema:sha256 "fe5709cc94d474f09bf22d73b19a2bd937ff56bf959bf653db4d8e6fa4633aee" .
+    <http://example.org/project/source-snapshot/ee568822fb9e3bb5> sci:latestSourceChange <http://example.org/project/source-change/790c2da151524f44> ;
         sci:sourcePath "entities/questions/0012-agent-tool-kg-operations.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "d41c768631330a774894d972ccd785e75f63e3549036b8b691e28f98c61aa05c" .
-    <http://example.org/project/source-snapshot/f2f5cfc2b677d114> sci:sourcePath "entities/papers/Vasilevsky2022.md" ;
+        schema:sha256 "9b5a61533036bbea1a10cec0a6d633ea48efa3cc58f87fb4369141fe3749c320" .
+    <http://example.org/project/source-snapshot/f2f5cfc2b677d114> sci:latestSourceChange <http://example.org/project/source-change/4ec96b65e9e2670f> ;
+        sci:sourcePath "entities/papers/Vasilevsky2022.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "ba7f2b37498bb10de43db120d172a52383055230341db42781bf68bd317d09fc" .
-    <http://example.org/project/source-snapshot/f624bda024684614> sci:sourcePath "entities/papers/Fedak2015.md" ;
+        schema:sha256 "d87390884eb560221c57a7245b501e416bbc28959be1fbd35d73c7010fdd91ab" .
+    <http://example.org/project/source-snapshot/f624bda024684614> sci:latestSourceChange <http://example.org/project/source-change/0ed824d8f6dd2395> ;
+        sci:sourcePath "entities/papers/Fedak2015.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "18da1e197f96a6c6e77e63917fd86d8da19540a535d6fcfee5e8cc2e7c66fb1b" .
-    <http://example.org/project/source-snapshot/f661459ad65ac56d> sci:sourcePath "entities/synthesis/0004-synthesis-graphical-models-and-multiview-integration.md" ;
+        schema:sha256 "449cd298f05994178a22f3b11a3111377646542fdc4ab93be5548d674b403fb5" .
+    <http://example.org/project/source-snapshot/f661459ad65ac56d> sci:latestSourceChange <http://example.org/project/source-change/fdf32f27e4cdc92b> ;
+        sci:sourcePath "entities/synthesis/0004-synthesis-graphical-models-and-multiview-integration.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "0285234d871637b3f3eb0d46d8bb485243364744606e0a70ef215aa95ef432a5" .
-    <http://example.org/project/source-snapshot/f685ed96f69b376e> sci:sourcePath "entities/papers/Maier2022.md" ;
+        schema:sha256 "a9ab7cd6a5fd350932be31c01824836711feaeb5c6350dadcdd85bdf802ce8e9" .
+    <http://example.org/project/source-snapshot/f685ed96f69b376e> sci:latestSourceChange <http://example.org/project/source-change/1714c86b5ee71b5a> ;
+        sci:sourcePath "entities/papers/Maier2022.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "e681fa9f88e71fbc6f2d89030bdaa471db488c221886b006d0b4e23121ab1cca" .
-    <http://example.org/project/source-snapshot/f9b4c26c015db108> sci:sourcePath "entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md" ;
+        schema:sha256 "a582294f3391946b4b8951177927b69d8ceb5b89814501fba739dcee268df573" .
+    <http://example.org/project/source-snapshot/f9b4c26c015db108> sci:latestSourceChange <http://example.org/project/source-change/9b324c9a85fac53d> ;
+        sci:sourcePath "entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "8cbd6b351739033e68d049f97cb965d99400f8b5bc4f99daaac6f80067eb1c5b" .
-    <http://example.org/project/source-snapshot/fac50f0668e9127c> sci:sourcePath "entities/questions/0008-llm-agents-as-fallible-sources.md" ;
+        schema:sha256 "266f66bbbf70b9684a3ee45cd32ce82163928d951b8ea4496ba681965adb0886" .
+    <http://example.org/project/source-snapshot/fac50f0668e9127c> sci:latestSourceChange <http://example.org/project/source-change/148700d41af44a2b> ;
+        sci:sourcePath "entities/questions/0008-llm-agents-as-fallible-sources.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "7e928ec2680ce1b533d2c6a135419c0929a4217c139ccb482f9021b9bcd9ea5a" .
-    <http://example.org/project/source-snapshot/fe0df19d477e8dc1> sci:sourcePath "entities/papers/Berenfeld2026.md" ;
+        schema:sha256 "8118ff3f778f0d3a0e12e97e1a90a8974ed140a664ef515c4c6ba504a59f10eb" .
+    <http://example.org/project/source-snapshot/fe0df19d477e8dc1> sci:latestSourceChange <http://example.org/project/source-change/5def71c8310829e2> ;
+        sci:sourcePath "entities/papers/Berenfeld2026.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "ae1e66852648f43761a5a987ddd3ac6807d863828a45261dba6a6531a19d0945" .
-    <http://example.org/project/source-snapshot/fea9aee3cf657511> sci:sourcePath "entities/papers/Maity2020.md" ;
+        schema:sha256 "a0422769b7ad06b5091630a3380d6625d018da1514b21f95d77f5509580ed174" .
+    <http://example.org/project/source-snapshot/fea9aee3cf657511> sci:latestSourceChange <http://example.org/project/source-change/f98bca2d571ab9a3> ;
+        sci:sourcePath "entities/papers/Maity2020.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "24ded517b8216bcbce1668ec1cf77c0e7868630cc16a29b458cfc4d4f1ba8804" .
+        schema:sha256 "19f5149a67c27faefbc6aa868618e0387bdb0889ccb65f3e2887713241673343" .
     <http://example.org/project/source/entities_hypotheses_0001-stochastic-revisiting.md> a prov:Entity ;
         schema:identifier "entities/hypotheses/0001-stochastic-revisiting.md" .
     <http://example.org/project/source/entities_hypotheses_0002-rich-evidence-payloads-improve-graph-calibration.md> a prov:Entity ;
@@ -5725,10 +6298,41 @@
     <http://example.org/project/task/t071> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
     <http://example.org/project/task/t072> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
     <http://example.org/project/task/t073> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t074> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
     <http://example.org/project/topic/analytic-flexibility-and-replication> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_analytic-flexibility-and-replication.md> .
     <http://example.org/project/topic/bayesian-methods-continuous-belief> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_bayesian-methods-continuous-belief.md> .
     <http://example.org/project/topic/cross-project> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_cross-project.md> .
     <http://example.org/project/topic/structured-scientific-knowledge> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_structured-scientific-knowledge.md> .
+    <http://example.org/science/vocab/lens/analogy> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "analogy" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "cross-disciplinary analogy - how an adjacent field would frame it" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Analogy" .
+    <http://example.org/science/vocab/lens/contrarian> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "contrarian" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "what if the dominant assumption is wrong; null/negative framing" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Contrarian" .
+    <http://example.org/science/vocab/lens/mechanism> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "mechanism" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "causal/biological mechanism and pathway" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Mechanism" .
+    <http://example.org/science/vocab/lens/methodology> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "methodology" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "measurement, assay, study-design, analysis method" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Methodology" .
+    <http://example.org/science/vocab/lens/population> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "population" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "population, context, subgroup, setting, boundary conditions" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Population" .
+    <http://example.org/science/vocab/lens/temporal> sci:lensKind "generative-analytical" ;
+        sci:lensSlug "temporal" ;
+        a sci:Lens ;
+        <http://www.w3.org/2000/01/rdf-schema#comment> "temporal/longitudinal/dynamics dimension" ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Temporal" .
 }
 
 <http://example.org/project/graph/datasets> {

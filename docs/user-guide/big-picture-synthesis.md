@@ -12,6 +12,7 @@ The command produces three synthesis roles:
 | `hypothesis-synthesis` | One file per hypothesis, focused on state, arc, research fronts, candidate frames, and local gaps. |
 | `emergent-threads` | Cross-cutting patterns and orphan research questions that are not yet attached to a hypothesis. |
 | `synthesis-rollup` | Project-level rollup across the per-hypothesis files and emergent threads. |
+| `paper-batch-synthesis` | Literature-batch synthesis over a set of paper summaries, used as authored source material for later hypothesis and project rollups. |
 
 All generated synthesis files use `kind: synthesis` and distinguish their role
 with `report_kind`. The canonical section shape lives in
@@ -47,7 +48,7 @@ id: synthesis:<local-part>
 kind: synthesis
 title: "<human-readable title>"
 status: active
-report_kind: hypothesis-synthesis | synthesis-rollup | emergent-threads
+report_kind: hypothesis-synthesis | synthesis-rollup | emergent-threads | paper-batch-synthesis
 generated_at: "<ISO-8601 timestamp>"
 source_commit: "<project commit SHA>"
 ```

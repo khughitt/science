@@ -36,6 +36,26 @@ def test_enabled_checks(tmp_path):
     assert config.prose_lint.enabled_checks == ["bare-author-year"]
 
 
+def test_exclude_paths_defaults_to_empty(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint is not None
+    assert config.prose_lint.exclude_paths == []
+
+
+def test_exclude_paths_explicit_list(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\n"
+        "prose_lint:\n"
+        "  exclude_paths:\n"
+        "    - 'doc/plans/historical/**'\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.exclude_paths == ["doc/plans/historical/**"]
+
+
 def test_short_form_ids_deny_defaults_to_empty(tmp_path):
     (tmp_path / "science.yaml").write_text(
         "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"

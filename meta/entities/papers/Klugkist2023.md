@@ -96,7 +96,7 @@ The analyses use R and the BFpack package, with the appendix specifying BFpack V
 
 The PDF states that the simulations used R Version 4.2.1 [@Klugkist2023].
 
-License, maintenance status, and reproducibility state of the GitHub repository were not checked locally [UNVERIFIED].
+License, maintenance status, and reproducibility state of the GitHub repository were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 

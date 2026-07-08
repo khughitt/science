@@ -15,8 +15,8 @@ related: []
 
 - **Authors:** Donald R. Williams, Philippe Rast, Paul-Christian Bürkner
 - **Year:** 2018
-- **Journal:** PsyArXiv preprint [UNVERIFIED]
-- **DOI/URL:** PsyArXiv, January 16, 2018 [UNVERIFIED]
+- **Journal:** PsyArXiv preprint; publication-status check tracked by task:t074
+- **DOI/URL:** PsyArXiv, January 16, 2018; metadata check tracked by task:t074
 - **BibTeX key:** Williams2018
 - **Source:** PDF
 
@@ -74,7 +74,7 @@ The authors explicitly note that meta-analysis with few studies and high heterog
 
 The paper provides annotated R code in the appendix using `brms`, `metaBMA`, and `metafor` [@Williams2018].
 The simulations and Bayesian examples use Stan through `brms`, with a half-Cauchy prior on tau and a normal prior on the intercept in the shown code [@Williams2018].
-The PDF includes an OSF link for simulation materials or code at `https://osf.io/9n4zp/` [UNVERIFIED].
+The PDF includes an OSF link for simulation materials or code at `https://osf.io/9n4zp/`; availability check tracked by task:t074.
 No standalone reusable software package from the paper itself is described beyond code examples and existing R packages [@Williams2018].
 
 ## Follow-up

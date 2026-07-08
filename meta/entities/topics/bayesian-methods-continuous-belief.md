@@ -40,7 +40,7 @@ Directly relevant when the tool needs to represent evidence aggregated across re
 
 **Calibration.**
 The property that stated probabilities match empirical frequencies: across all events the model rates at 0.7, roughly 70% should occur.
-A continuous-belief system is only as useful as it is calibrated; miscalibrated probabilities are often worse than a coarse binary decision because they confer false precision.
+A continuous-belief system is only as useful as it is calibrated; miscalibrated probabilities are often worse than a coarse binary decision because they confer false precision [@vandeSchoot2021].
 Brier scores, reliability diagrams, and log-loss are standard calibration diagnostics.
 
 **Posterior predictive checks.**

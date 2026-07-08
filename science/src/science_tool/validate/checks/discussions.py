@@ -33,7 +33,13 @@ _DOUBLE_BLIND_SECTIONS = (
     "### Comparison",
     "### Combined Synthesis",
 )
-_VALID_SYNTHESIS_KINDS = {"hypothesis-synthesis", "synthesis-rollup", "emergent-threads", "cluster-digest"}
+_VALID_SYNTHESIS_KINDS = {
+    "hypothesis-synthesis",
+    "synthesis-rollup",
+    "emergent-threads",
+    "cluster-digest",
+    "paper-batch-synthesis",
+}
 _DOUBLE_BLIND_RE = re.compile(r'^mode:\s*"?double-blind"?', re.MULTILINE)
 _RAW_FIELD_RE = re.compile(r"^{field}:\s*['\"]?([^'\"\n]*)['\"]?\s*$", re.MULTILINE)
 

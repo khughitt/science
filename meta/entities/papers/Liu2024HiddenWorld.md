@@ -62,7 +62,7 @@ The causal validity of discovered factors depends on both annotation quality and
 ## Model / Tool Availability
 
 The PDF lists the project site `https://causalcoat.github.io`.
-Repository and license status are [UNVERIFIED].
+Repository and license status were not checked during the initial summary pass; tracked by task:t074.
 
 ## Follow-up
 
