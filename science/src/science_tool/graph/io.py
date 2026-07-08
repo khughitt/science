@@ -333,6 +333,8 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
     manifest: dict[str, dict[str, int | str]] = {}
     for file_path in sorted(files):
         rel_path = file_path.relative_to(project_root).as_posix()
+        if _is_generated_python_cache(rel_path):
+            continue
         if _matches_revision_manifest_exclude(rel_path, exclude_patterns):
             continue
         stat = file_path.stat()
@@ -341,6 +343,11 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
             "sha256": _sha256_file(file_path),
         }
     return manifest
+
+
+def _is_generated_python_cache(rel_path: str) -> bool:
+    parts = rel_path.split("/")
+    return "__pycache__" in parts or rel_path.endswith((".pyc", ".pyo"))
 
 
 def _revision_manifest_excludes(project_root: Path) -> tuple[str, ...]:

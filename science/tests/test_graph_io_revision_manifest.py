@@ -62,6 +62,20 @@ def test_build_input_manifest_includes_project_readme(tmp_path: Path) -> None:
     assert "README.md" in manifest
 
 
+def test_build_input_manifest_excludes_python_bytecode_cache(tmp_path: Path) -> None:
+    _seed_project(tmp_path, "name: fixture\nprofile: software\n")
+    package = tmp_path / "src" / "tooling"
+    cache = package / "__pycache__"
+    cache.mkdir(parents=True)
+    (package / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (cache / "module.cpython-314.pyc").write_bytes(b"bytecode")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert "src/tooling/module.py" in manifest
+    assert "src/tooling/__pycache__/module.cpython-314.pyc" not in manifest
+
+
 def test_build_input_manifest_rejects_absolute_exclude_pattern(tmp_path: Path) -> None:
     _seed_project(
         tmp_path,
