@@ -160,6 +160,21 @@ def test_deleted_user_docs_are_not_reintroduced() -> None:
         assert not path.exists(), f"retired doc path should not exist: {path.relative_to(ROOT)}"
 
 
+def test_user_guide_does_not_teach_retired_v2_entity_roots() -> None:
+    retired_patterns = (
+        re.compile(r"doc/<plural>/<plural>\.\{json,yaml\}"),
+        re.compile(r"doc/(datasets|papers|topics|themes|workflows)"),
+    )
+    offenders: list[str] = []
+    for path in sorted(GUIDE_ROOT.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for pattern in retired_patterns:
+            if pattern.search(text):
+                offenders.append(f"{path.relative_to(ROOT)} contains retired layout root pattern {pattern.pattern}")
+
+    assert not offenders
+
+
 def test_convention_docs_do_not_link_retired_user_docs() -> None:
     retired_refs = (
         "project-organization-profiles.md",

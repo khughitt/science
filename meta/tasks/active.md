@@ -655,15 +655,6 @@ Until both are done, t065 claims stay scoped: 'PROV-O round-trips structurally' 
 
 t066 demonstrated the latent-construct (PMI) correction subtracts the publication-attention axis cleanly at BOTH ends of the slice (7 panel genes positive, 10 universal genes negative, for CMT + HSP) and flips raw-ranking errors. Two things it did NOT establish: (1) behavior on the ambiguous MIDDLE — the clean step is partly a property of a slice built to contrast extremes, so PPMI>0 is a correction, not a calibrated classifier; needs the full 18206x3831 matrix + held-out-panel validation (overlaps pan-disease recall@K / cluster-mate-AUC, the cross-project proving ground). (2) a sampling-variance guard — rare cells have high-variance PMI (e.g. CYP7B1 cooc=39); add shrinkage / Poisson-significance before any fine ranking or near-zero threshold. Code: meta/src/h00_patch_l1/latent.py. Interpretation: interpretation:0003-t066-latent-correction-2026-06-01.
 
-## [t071] Refresh user-guide docs for v3 three-root layout
-- priority: P2
-- status: proposed
-- aspects: []
-- group: docs
-- created: 2026-06-22
-
-Phase 5 of the adapter-entity-layout migration (checkpoint: docs/audits/plans-cleanup/2026-06-03-entity-layout-v3-checkpoint.md) updated only docs/user-guide/project-layout.md to the v3 three-root model (entities/ owners, overlays/ borrows, doc/ prose). The rest of docs/user-guide/ is still written for the v2 world: entities.md, science-model.md, epistemic-model.md, evidence-lines.md, graph-and-derived-state.md, agent-workflows.md, cross-project-work.md, health-and-validation.md, introduction.md, index.md mostly describe specs/ + doc/<type>/ placement and never mention entities/ or overlays/. Audit all user-guide docs and bring filesystem/layout references in line with layout_version: 3: owners under entities/<kind>/ (id-local filenames), overlays under overlays/<type>/, doc/ prose-only. Cross-link to the new Three-Root Entity Layout section in project-layout.md. Scope is docs-only; no code/behaviour changes. Enumerate stale refs with: python3 -c "import re,pathlib; [print(p) for p in pathlib.Path('docs/user-guide').glob('*.md') if re.search(r'specs/|doc/(datasets|papers|topics|themes|workflows)', p.read_text())]"
-
 ## [t073] Design first-class minimum viable synthesis artifacts
 - priority: P2
 - status: proposed

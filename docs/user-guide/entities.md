@@ -94,8 +94,9 @@ The source entity CLI creates only kinds that have a built-in Markdown path
 policy. Current owners live under `entities/` according to the core profile, for
 example `entities/questions/`, `entities/hypotheses/`,
 `entities/propositions/`, `entities/evidence-lines/`, and
-`entities/interpretations/`. The `doc/` tree is prose-only in layout v3, and
-`knowledge/` is generated state.
+`entities/interpretations/`. In layout v3, the prose tree is prose-only and
+the knowledge tree is generated state. See [Project Layout](project-layout.md)
+for the full root contract.
 
 By default, filenames follow the entity id local part. Numeric kinds generate a
 four-digit local part plus slug, such as `question:0001-observed-signal`.
@@ -106,8 +107,8 @@ or `--id` to set the complete canonical id; do not pass both.
 
 `--path` is intentionally narrow: it must be a project-relative `.md` path under
 `entities/`, must not be absolute, and must not contain `..`. It is for unusual
-source placement inside the owner tree, not for writing entity owners into
-`doc/`, `specs/`, overlays, or generated graph files.
+source placement inside the owner tree, not for writing entity owners into prose
+or specification roots, overlays, or generated graph files.
 
 References accepted by `show`, `edit`, `note`, and `neighbors` are exact
 canonical ids or unambiguous local shorthands. Registered shortforms such as
@@ -577,8 +578,9 @@ do not replace a project owner file when the project has one.
 Author durable entities as owner files under `entities/`, keep external
 authority rows in `external_refs.yaml`, and keep generated graph output out of
 source ownership. Do not create aggregate entity manifests such as
-`knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, or
-`doc/<plural>/<plural>.{json,yaml}`.
+`knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, or retired per-kind
+doc-tree manifests. Use owner files under `entities/<kind>/`; use
+`overlays/<type>/` only for borrower files with `overlay_of:`.
 
 Decision owners are authoritative after promotion. Render the derived decision
 log view with:
