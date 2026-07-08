@@ -587,14 +587,6 @@ Write a baseline-of-harm note for current topology pain points, then apply the i
 
 Start from `core/adaptive-project-topology.md` and `core/bio-meta-scaffold-brief.md`; do not scaffold `~/d/bio/meta` until this pilot confirms that a separate biological substrate project reduces a concrete topology harm.
 
-## [t060] Extend science-tool entity sections to show frontmatter constraints
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- created: 2026-05-18
-
-Currently 'science-tool entity sections <kind>' (and its alias 'science entity sections <kind>') lists only the body sections required by a template — it does NOT show frontmatter field requirements or enum constraints. This is the CLI surface that should answer 'how do I create a valid <kind>?', so the absence of frontmatter info forces agents/users to either hand-inspect schema files or guess and validate by trial-and-error. Deliverable: extend the command output to include a Frontmatter section listing each required/optional field, its type, and (for enums) the accepted values. The accepted values must come from the effective schema (post-profile-resolution), not just the upstream mixin schema, so the output reflects what will actually validate in the current project. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the agent ran 'science-tool entity sections theme' looking for theme_kind enum, got only body sections, fell back to inspecting mixin-theme-2.0.json, which had a different enum than the active profile actually accepted. Sibling: t059 (reconcile theme_kind enums); together they close the discoverability gap.
-
 ## [t061] Add /science:add-theme skill / slash command
 - priority: P3
 - status: proposed

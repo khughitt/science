@@ -365,3 +365,38 @@ promotion rejects.
 **Revisit if:**
 - A project needs a domain-specific theme taxonomy that cannot fit the core
   enum; add a versioned profile/mixin rather than silently diverging.
+
+## D-011: `entity sections` reports the effective entity-schema contract
+
+- **Date:** 2026-07-08
+- **Status:** active
+- **Resolves:** Task `t060`.
+- **Decision:** `science entity sections <kind>` describes the effective
+  entity-schema frontmatter contract for the kind's default profile, then the
+  packaged template body-section contract. Frontmatter constraints are computed
+  from the composed JSON Schema profile, so `allOf` means intersection rather
+  than "last property wins": const narrows enum, enum sets intersect, root
+  required fields are unioned, and simultaneous pattern/format constraints are
+  preserved.
+
+**Why:**
+The command is the discoverability surface users and agents reach for when they
+need to author a valid entity. Reporting only template body sections forced
+schema-file inspection and trial-and-error validation, especially for theme
+fields such as `theme_kind`. The schema layer already owns validation, so the
+CLI should expose that same contract instead of maintaining a separate
+template-only vocabulary.
+
+**Implications:**
+- JSON output keeps one `rows` array and adds `area`, `type`, and structured
+  `constraints` so consumers can filter `frontmatter` versus `body`.
+- Base-profile fields such as `schema_profile` and `version` appear because
+  they are part of the entity-schema contract; source-template ergonomics remain
+  a separate authoring concern.
+- Future profile extensions must expose their composed constraints through the
+  schema introspector rather than duplicating CLI-specific merge logic.
+
+**Revisit if:**
+- Source-authored Markdown owners intentionally diverge from shared entity
+  schema requirements; then add an explicit source-owner contract rather than
+  weakening this schema-discovery surface.

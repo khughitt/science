@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from science_model.entity_schema import read_canonical_body_sections
+from science_model.entity_schema import read_canonical_body_sections, read_effective_frontmatter_fields
 from science_model.entity_schema.merge import MergePolicy, read_merge_policy
 from science_model.entity_schema.profile import parse_profile
 
@@ -48,3 +48,27 @@ def test_read_canonical_body_sections_returns_empty_when_annotation_absent() -> 
     # base schema has no x-canonical-body-sections
     profile = parse_profile("science-entity-base/1.0")
     assert read_canonical_body_sections(profile) == []
+
+
+def test_read_effective_frontmatter_fields_intersects_composed_schema_constraints() -> None:
+    profile = parse_profile("science-entity-base/1.0+theme/2.0")
+    fields = {field.key: field for field in read_effective_frontmatter_fields(profile)}
+
+    assert fields["kind"].required is True
+    assert fields["kind"].type == "string"
+    assert fields["kind"].constraints == {"const": "theme"}
+
+    assert fields["theme_kind"].required is True
+    assert fields["theme_kind"].type == "string"
+    assert fields["theme_kind"].constraints == {
+        "enum": [
+            "methodological",
+            "biological",
+            "translational",
+            "evidence-quality",
+            "organizational",
+            "conceptual",
+            "empirical",
+            "domain",
+        ]
+    }

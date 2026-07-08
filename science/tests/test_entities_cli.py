@@ -1641,6 +1641,47 @@ def test_entity_sections_accepts_format_json() -> None:
         assert "double-blind-addendum" in keys
 
 
+def test_entity_sections_json_includes_effective_frontmatter_constraints() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["entity", "sections", "theme", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        frontmatter = {
+            row["key"]: row for row in payload["rows"] if row["area"] == "frontmatter"
+        }
+        body_rows = [row for row in payload["rows"] if row["area"] == "body"]
+
+        assert frontmatter["theme_kind"] == {
+            "area": "frontmatter",
+            "key": "theme_kind",
+            "required": "required",
+            "name": "theme_kind",
+            "hint": "",
+            "type": "string",
+            "constraints": {
+                "enum": [
+                    "methodological",
+                    "biological",
+                    "translational",
+                    "evidence-quality",
+                    "organizational",
+                    "conceptual",
+                    "empirical",
+                    "domain",
+                ]
+            },
+        }
+        assert frontmatter["kind"]["constraints"] == {"const": "theme"}
+        assert frontmatter["theme_scope"]["constraints"] == {
+            "enum": ["project", "cross-project"]
+        }
+        assert any(row["key"] == "definition" for row in body_rows)
+        assert all(row["type"] is None for row in body_rows)
+        assert all(row["constraints"] == {} for row in body_rows)
+
+
 def test_discussion_create_unknown_section_key_errors() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

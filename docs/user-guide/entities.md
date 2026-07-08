@@ -73,7 +73,7 @@ The generic command surface is:
 | `science entity edit <ref>` | Update frontmatter metadata such as `title`, `status`, `related`, and `source_refs`. Relation and source-ref edits are additive. |
 | `science entity note <ref> <note>` | Append a dated note under `## Notes` and advance `updated`. |
 | `science entity list [kind]` | List source-authored entities, with `--kind`, `--status`, `--related`, `--include-hidden`, and `--include-archived` filters. |
-| `science entity sections <kind>` | Inspect template section keys for kinds backed by packaged templates. |
+| `science entity sections <kind>` | Inspect effective frontmatter constraints and template section keys for kinds backed by packaged templates. |
 | `science entity neighbors <ref>` | Query graph neighbors from the materialized graph. This may warn when source files are newer than `knowledge/graph.trig`. |
 
 Typed wrappers call the same writer and validation path as `science entity`.

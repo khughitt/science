@@ -13,6 +13,10 @@ from science_model.entity_schema.loader import (
     SchemaLoader,
     SchemaNotFoundError,
 )
+from science_model.entity_schema.introspection import (
+    FrontmatterField,
+    read_effective_frontmatter_fields,
+)
 from science_model.entity_schema.merge import (
     MergePolicy,
     read_canonical_body_sections,
@@ -39,6 +43,7 @@ __all__ = [
     "TYPE_MIXIN_NAMES",
     "EntityValidationError",
     "EntityValidator",
+    "FrontmatterField",
     "MergePolicy",
     "ProfileComponent",
     "ProfileParseError",
@@ -49,6 +54,7 @@ __all__ = [
     "default_profile_for_kind",
     "parse_profile",
     "read_canonical_body_sections",
+    "read_effective_frontmatter_fields",
     "read_merge_policy",
     "read_overlay_merge_policy",
 ]

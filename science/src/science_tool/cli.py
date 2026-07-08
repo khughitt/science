@@ -676,21 +676,90 @@ def entity_sections(kind: str, output_format: str) -> None:
         sections = Renderer().sections(kind)
     except EntityTemplateError as exc:
         raise click.ClickException(str(exc)) from exc
-    rows = [
+    frontmatter_rows = _entity_frontmatter_section_rows(kind)
+    body_rows = [
         {
+            "area": "body",
             "key": section.key,
             "required": "required" if section.required else "optional",
             "name": section.name,
+            "type": None,
+            "constraints": {},
             "hint": section.hint[:80],
         }
         for section in sections
     ]
+    rows = [*frontmatter_rows, *body_rows]
+    columns = [
+        ("key", "KEY"),
+        ("required", "REQ?"),
+        ("name", "NAME"),
+        ("hint", "HINT"),
+    ]
+    if output_format == "json" or frontmatter_rows:
+        columns = [
+            ("area", "AREA"),
+            ("key", "KEY"),
+            ("required", "REQ?"),
+            ("name", "NAME"),
+            ("type", "TYPE"),
+            ("constraints", "CONSTRAINTS"),
+            ("hint", "HINT"),
+        ]
     emit_query_rows(
         output_format=output_format,
         title=f"{kind} Template Sections",
-        columns=[("key", "KEY"), ("required", "REQ?"), ("name", "NAME"), ("hint", "HINT")],
+        columns=columns,
         rows=rows,
+        renderers={
+            "type": lambda value, _row: "" if value is None else str(value),
+            "constraints": lambda value, _row: _format_frontmatter_constraints(value),
+        },
     )
+
+
+def _entity_frontmatter_section_rows(kind: str) -> list[dict[str, Any]]:
+    from science_model.entity_schema import (
+        ProfileParseError,
+        default_profile_for_kind,
+        read_effective_frontmatter_fields,
+    )
+
+    try:
+        fields = read_effective_frontmatter_fields(default_profile_for_kind(kind))
+    except ProfileParseError:
+        return []
+    return [
+        {
+            "area": "frontmatter",
+            "key": field.key,
+            "required": "required" if field.required else "optional",
+            "name": field.key,
+            "type": field.type,
+            "constraints": field.constraints,
+            "hint": "",
+        }
+        for field in fields
+    ]
+
+
+def _format_frontmatter_constraints(value: Any) -> str:
+    if not isinstance(value, dict) or not value:
+        return ""
+    if "const" in value:
+        return f"const={value['const']}"
+    if "enum" in value:
+        return "enum=" + "|".join(str(item) for item in value["enum"])
+    parts: list[str] = []
+    for key in ("pattern", "patterns", "format", "formats"):
+        if key in value:
+            constraint = value[key]
+            if isinstance(constraint, list):
+                rendered = "&".join(str(item) for item in constraint)
+            else:
+                rendered = str(constraint)
+            parts.append(f"{key}={rendered}")
+    return "; ".join(parts)
 
 
 @entity_group.command("neighbors")
