@@ -988,8 +988,11 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
             }
         )
     else:
-        env_text = env_path.read_text(encoding="utf-8")
-        if not any(line.strip().startswith("SCIENCE_TOOL_PATH=") for line in env_text.splitlines()):
+        try:
+            env_text = env_path.read_text(encoding="utf-8")
+        except OSError:
+            env_text = None
+        if env_text is not None and not any(line.strip().startswith("SCIENCE_TOOL_PATH=") for line in env_text.splitlines()):
             findings.append(
                 {
                     "code": "env_path_missing",

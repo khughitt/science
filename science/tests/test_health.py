@@ -1428,6 +1428,28 @@ class TestHealthCLI:
         assert result.exit_code == 0
         assert "no issues" in result.output.lower() or "clean" in result.output.lower()
 
+    def test_tooling_scaffold_skips_unreadable_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from science_tool.graph.health import collect_tooling_scaffold_findings
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
+            encoding="utf-8",
+        )
+        (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")
+
+        original_read_text = Path.read_text
+
+        def fake_read_text(self: Path, *args, **kwargs):
+            if self.name == ".env":
+                raise PermissionError("simulated denied .env")
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+        findings = collect_tooling_scaffold_findings(tmp_path)
+
+        assert findings == []
+
     def test_table_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 

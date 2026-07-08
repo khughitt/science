@@ -127,7 +127,7 @@ def test_tooling_warns_when_env_lacks_science_tool_path(tmp_path: Path) -> None:
     ) in [(result.severity, result.message) for result in results]
 
 
-def test_tooling_warns_when_env_cannot_be_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tooling_infos_when_env_cannot_be_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
     ctx = _ctx(tmp_path)
@@ -145,9 +145,10 @@ def test_tooling_warns_when_env_cannot_be_read(tmp_path: Path, monkeypatch: pyte
     results = list(check_tooling(ctx))
 
     assert (
-        Severity.WARN,
+        Severity.INFO,
         ".env exists but could not be inspected; skipping secret file contents: simulated denied .env",
     ) in [(result.severity, result.message) for result in results]
+    assert not any(result.severity is Severity.WARN and result.path == Path(".env") for result in results)
     assert not any(result.rule == "validate.check-error" for result in results)
 
 

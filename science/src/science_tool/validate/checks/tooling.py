@@ -53,7 +53,7 @@ def check_tooling(ctx: ValidateContext) -> Iterator[Result]:
         env_lines = ctx.read_text_cached(env_path).splitlines()
     except OSError as exc:
         yield _result(
-            Severity.WARN,
+            Severity.INFO,
             ".env",
             f".env exists but could not be inspected; skipping secret file contents: {exc}",
         )
