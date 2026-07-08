@@ -1,5 +1,7 @@
 ---
 object: meta-analysis-like accumulation of support under informative study evidence
+identification_strength: observational
+claim_layer: empirical_regularity
 polarity: positive
 predicate: associates_with
 subject: Bayesian Evidence Synthesis

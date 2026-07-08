@@ -978,6 +978,35 @@ health:
         migration_issues = report["layered_claims"]["migration_issues"]
         assert any("mechanistic" in " ".join(row["warnings"]).lower() for row in migration_issues)
 
+    def test_unregistered_ref_kinds_ignores_annotation_source_refs(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import collect_unregistered_ref_kinds
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        propositions = tmp_path / "entities" / "propositions"
+        propositions.mkdir(parents=True)
+        (propositions / "claim.md").write_text(
+            "\n".join(
+                [
+                    "---",
+                    "id: proposition:claim",
+                    "kind: proposition",
+                    "title: Claim",
+                    "status: active",
+                    "source_refs:",
+                    "  - annotation:entities/papers/Smith2020.source#a-1",
+                    "---",
+                    "",
+                    "Claim body.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        rows = collect_unregistered_ref_kinds(tmp_path)
+
+        assert rows == []
+
     def test_archive_lag_zero_when_active_md_missing(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 

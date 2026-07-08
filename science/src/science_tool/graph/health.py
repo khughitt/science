@@ -153,6 +153,7 @@ def collect_unregistered_ref_kinds(
                 if (
                     ":" not in raw
                     or is_metadata_reference(raw)
+                    or (field == "source_refs" and raw.startswith("annotation:"))
                     or (field in _BIBLIOGRAPHY_REFERENCE_FIELDS and is_bibliography_reference(raw))
                     or is_external_reference(raw)
                     or is_external_reference(raw, known_prefixes=external)

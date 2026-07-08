@@ -1,5 +1,7 @@
 ---
 object: data-pooling rescue of underpowered studies
+identification_strength: observational
+claim_layer: empirical_regularity
 polarity: negative
 predicate: associates_with
 subject: Bayesian Evidence Synthesis

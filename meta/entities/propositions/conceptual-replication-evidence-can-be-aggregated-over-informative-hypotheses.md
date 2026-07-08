@@ -2,6 +2,8 @@
 kind: proposition
 title: Conceptual-replication evidence can be aggregated over informative hypotheses
 status: active
+claim_layer: empirical_regularity
+identification_strength: observational
 created: '2026-06-30'
 updated: '2026-06-30'
 id: proposition:conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses
