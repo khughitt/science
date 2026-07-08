@@ -367,6 +367,40 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
     assert theme.theme_scope == "federation"
 
 
+def test_load_project_sources_schema_error_suggests_entity_discovery_commands(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "entities" / "themes").mkdir(parents=True)
+    (tmp_path / "entities" / "themes" / "transportability.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "theme:transportability"',
+                'kind: "theme"',
+                'title: "Transportability"',
+                'status: "active"',
+                'theme_kind: "invalid-kind"',
+                'theme_scope: "federation"',
+                "related: []",
+                "source_refs: []",
+                "evidence_refs: []",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        load_project_sources(tmp_path)
+
+    message = str(excinfo.value)
+    assert "theme_kind: Input should be" in message
+    assert 'science entity sections theme --format json' in message
+    assert 'science entity create theme "Title"' in message
+    assert "schema source:" in message
+    assert "science_model/entities.py" in message
+
+
 def test_load_project_sources_rejects_invalid_reasoning_enum(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -669,6 +703,12 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
 
     assert "hypothesis:h1" in by_id
     assert "labnote:rollup" not in by_id
+    assert len(sources.skipped_entities) == 1
+    skipped = sources.skipped_entities[0]
+    assert skipped.kind == "labnote"
+    assert 'science entity sections labnote --format json' in skipped.details
+    assert 'science entity create labnote "Title"' in skipped.details
+    assert "schema source:" in skipped.details
 
 
 def test_load_project_sources_local_kind_graduated_to_core_does_not_crash(tmp_path: Path) -> None:

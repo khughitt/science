@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import re
@@ -375,6 +376,7 @@ def load_project_sources(
                     entity = schema.model_validate(raw)
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
+                    failure = _format_schema_validation_failure(kind=kind, schema=schema, exc=exc)
                     if registry.is_core_kind(kind):
                         if adapter.skip_core_on_missing_identity and _is_missing_identity_validation(exc):
                             logger.warning(
@@ -393,7 +395,7 @@ def load_project_sources(
                             continue
                         if strict_core_schema:
                             raise ValueError(
-                                f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
+                                f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {failure}"
                             ) from exc
                         logger.warning(
                             "skipping %s: schema validation failed for registered core kind %r (%s)",
@@ -411,7 +413,7 @@ def load_project_sources(
                                 path=str(ref.path),
                                 kind=kind,
                                 reason="core_schema_validation_failed",
-                                details=details,
+                                details=failure,
                             )
                         )
                         continue
@@ -426,7 +428,7 @@ def load_project_sources(
                             path=str(ref.path),
                             kind=kind,
                             reason="entity_schema_validation_failed",
-                            details=details,
+                            details=failure,
                         )
                     )
                     continue
@@ -1349,6 +1351,20 @@ def _format_missing_fields(exc: ValidationError) -> str:
         msg = err.get("msg", "invalid")
         parts.append(f"{loc}: {msg}" if loc else msg)
     return "; ".join(parts) if parts else str(exc)
+
+
+def _format_schema_validation_failure(*, kind: str, schema: type[Entity], exc: ValidationError) -> str:
+    """Format an entity validation failure with authoring discovery hints."""
+    details = _format_missing_fields(exc)
+    source = inspect.getsourcefile(schema) or inspect.getfile(schema)
+    return "\n".join(
+        [
+            details,
+            f"inspect effective schema: science entity sections {kind} --format json",
+            f'create a valid stub: science entity create {kind} "Title"',
+            f"schema source: {Path(source).as_posix()}",
+        ]
+    )
 
 
 def _is_missing_identity_validation(exc: ValidationError) -> bool:
