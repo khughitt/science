@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from science_tool.data_audit import audit_project, audit_project_notes, render_json
+from science_tool.data_root import DataRootConfigError
 from science_tool.data_audit_fix import apply_fixes
 from science_tool.project_config import load_project_config, resolve_data_policy
 
@@ -56,7 +57,10 @@ def data_audit_command(project_path: Path | None, fix: bool, output_format: str,
 
         policy = DEFAULT_DATA_POLICY
     violations = audit_project(project_path, policy)
-    notes = audit_project_notes(project_path)
+    try:
+        notes = audit_project_notes(project_path)
+    except DataRootConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if fix:
         outcomes = apply_fixes(project_path, violations)

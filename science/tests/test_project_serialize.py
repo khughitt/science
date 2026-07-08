@@ -213,6 +213,60 @@ def test_serialize_inventories_out_of_tree_payloads_with_logical_paths(
     assert verified.status == "clean"
 
 
+def test_serialize_payload_manifest_is_stable_across_physical_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tarfile
+    from science_tool.project_package.serialize import serialize_project
+
+    default_project = tmp_path / "default"
+    default_project.mkdir()
+    _write(default_project, "science.yaml", b"id: demo\nname: Demo\n")
+    _write(default_project, "entities/questions/q1.md", b"# q\n")
+    _write(default_project, ".gitignore", b"data/\n")
+    _write(default_project, "data/processed/big.parquet", b"\x09" * 16)
+    _init_repo(default_project)
+    _commit_all(default_project)
+
+    configured_project = tmp_path / "configured"
+    configured_project.mkdir()
+    bulk = tmp_path / "bulk"
+    _write(configured_project, "science.yaml", f"id: demo\nname: Demo\ndata:\n  root: {bulk}\n".encode())
+    _write(configured_project, "entities/questions/q1.md", b"# q\n")
+    _write(bulk, "processed/big.parquet", b"\x09" * 16)
+    _init_repo(configured_project)
+    _commit_all(configured_project)
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    default_out = tmp_path / "default.tar.gz"
+    configured_out = tmp_path / "configured.tar.gz"
+    serialize_project(default_project, default_out, force=True)
+    serialize_project(configured_project, configured_out, force=False)
+
+    def payloads(path: Path) -> list[dict]:
+        with tarfile.open(path, "r:gz") as tar:
+            manifest_file = tar.extractfile("demo/manifest.json")
+            assert manifest_file is not None
+            return json.loads(manifest_file.read())["payloads"]
+
+    assert payloads(default_out) == payloads(configured_out)
+
+
+def test_serialize_wraps_invalid_configured_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.project_package.serialize import serialize_project
+
+    _write(tmp_path, "science.yaml", b"id: demo\nname: Demo\n")
+    _write(tmp_path, "entities/questions/q1.md", b"# q\n")
+    _init_repo(tmp_path)
+    _commit_all(tmp_path)
+    monkeypatch.setenv("SCIENCE_DATA_ROOT", "relative-data")
+
+    with pytest.raises(SerializeError, match="SCIENCE_DATA_ROOT must be absolute"):
+        serialize_project(tmp_path, tmp_path.parent / "invalid-data-root.tar.gz")
+
+
 def test_serialize_omits_untracked_results(tmp_path: Path):
     import tarfile
     from science_tool.project_package.serialize import serialize_project

@@ -128,3 +128,18 @@ def test_audit_json_omits_notes_for_in_repo_nondefault_data_root(monkeypatch, tm
     assert res.exit_code == 0
     assert payload["violations"] == []
     assert "notes" not in payload
+
+
+def test_audit_reports_invalid_configured_data_root(monkeypatch, tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "science.yaml", b"name: Demo\nid: demo\n")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("SCIENCE_DATA_ROOT", "relative-data")
+
+    res = CliRunner().invoke(
+        science_cli,
+        ["data", "audit", "--project", str(tmp_path)],
+    )
+
+    assert res.exit_code != 0
+    assert "SCIENCE_DATA_ROOT must be absolute" in res.output

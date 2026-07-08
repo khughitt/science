@@ -20,7 +20,7 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.commons import commons_group
 from science_tool.curate.cli import curate_group
 from science_tool.data_cli import data_group
-from science_tool.data_root import discover_project_root, resolve_data_root
+from science_tool.data_root import DataRootConfigError, discover_project_root, resolve_data_root
 from science_tool.dag.cli import dag_group
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
@@ -3304,6 +3304,14 @@ def datasets_files(source_id: str, output_format: str) -> None:
     )
 
 
+
+def _resolve_cli_data_root(project_root: Path | None) -> Path:
+    try:
+        return resolve_data_root(discover_project_root(project_root))
+    except DataRootConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 @datasets.command("download")
 @click.argument("source_id", metavar="SOURCE:ID")
 @click.option("--file", "file_pattern", default=None, help="Download only files matching this pattern")
@@ -3322,7 +3330,7 @@ def datasets_download(source_id: str, file_pattern: str | None, project_root: Pa
     if not dataset_id:
         raise click.ClickException("Use SOURCE:ID format, e.g. zenodo:12345")
     if dest_dir is None:
-        dest_dir = resolve_data_root(discover_project_root(project_root)) / "raw"
+        dest_dir = _resolve_cli_data_root(project_root) / "raw"
     adapter = get_adapter(source)
     file_list = adapter.files(dataset_id)
     if not file_list:
@@ -3353,7 +3361,7 @@ def datasets_download(source_id: str, file_pattern: str | None, project_root: Pa
 def datasets_validate(project_root: Path | None, data_path: Path | None, output_format: str) -> None:
     """Validate Frictionless Data Packages in raw/ and processed/ directories."""
     if data_path is None:
-        data_path = resolve_data_root(discover_project_root(project_root))
+        data_path = _resolve_cli_data_root(project_root)
     results = validate_path(data_path)
     emit_query_rows(
         output_format=output_format,

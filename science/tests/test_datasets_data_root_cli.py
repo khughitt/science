@@ -118,3 +118,17 @@ def test_validate_default_uses_configured_data_root(monkeypatch, tmp_path: Path)
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
+
+
+def test_validate_reports_invalid_configured_data_root(monkeypatch, tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("SCIENCE_DATA_ROOT", "relative-data")
+
+    result = CliRunner().invoke(
+        main,
+        ["datasets", "validate", "--project-root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "SCIENCE_DATA_ROOT must be absolute" in result.output

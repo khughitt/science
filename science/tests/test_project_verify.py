@@ -615,6 +615,16 @@ def test_verify_project_wraps_payload_inventory_os_error(tmp_path: Path):
         verify_project(bundle, against=proj)
 
 
+def test_verify_project_wraps_invalid_configured_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    proj, bundle = _make_bundle(tmp_path)
+    monkeypatch.setenv("SCIENCE_DATA_ROOT", "relative-data")
+
+    with pytest.raises(VerifyError, match="SCIENCE_DATA_ROOT must be absolute"):
+        verify_project(bundle, against=proj)
+
+
 def test_verify_project_differ_dominates_missing(tmp_path: Path):
     proj, bundle = _make_bundle(tmp_path)
     target = tmp_path / "target"
