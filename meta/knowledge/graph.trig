@@ -28,6 +28,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/957cd55b219999a6> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/02999ca2996fb258> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t081> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/02d5089007fe0409> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source/entities_interpretations_0004-t067-patch-federation-2026-06-01.md> ;
         sci:bearsOnTarget <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> ;
@@ -216,6 +220,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/36b07c197f068d3e> ;
         sci:bearsOnTarget <http://example.org/project/paper/cerullo2023> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/18f8c6efa09c35f9> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_questions_0018-ordinal-continuous-belief-boundary.md> ;
+        sci:bearsOnTarget <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/1974bc923a31b5a1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t021> ;
         sci:bearsOnTarget <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
@@ -364,6 +372,10 @@
         sci:bearsOnSource <http://example.org/project/paper/vahabi2022> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/26b34e44bb26fab1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t083> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/26b3dc546612b024> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/7fefd9380b7ca90d> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> ;
@@ -452,6 +464,10 @@
         sci:bearsOnSource <http://example.org/project/task/t031> ;
         sci:bearsOnTarget <http://example.org/project/question/0011-graph-valued-synthesis-artifacts> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/343b00f184362882> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t086> ;
+        sci:bearsOnTarget <http://example.org/project/question/0009-mcda-bayesian-interoperability> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/3466953e68c0844e> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/7fefd9380b7ca90d> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -499,6 +515,10 @@
     <http://example.org/project/bears-on-edge/3968411d193ae79c> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/d9a30e1b41346cdc> ;
         sci:bearsOnTarget <http://example.org/project/paper/klugkist2023> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/3972cb7ccc205ddb> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t075> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0007-working-model> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/39dba6dc1af9cccb> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t005> ;
@@ -552,6 +572,10 @@
         sci:bearsOnSource <http://example.org/project/task/t042> ;
         sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/3fb5b79c936c6279> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/5a7864185a63b330> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/41570d67e57cebc8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/vahabi2022> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
@@ -588,6 +612,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/91e6529d1cd18c71> ;
         sci:bearsOnTarget <http://example.org/project/question/0014-adaptive-project-topology> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/44956841da78363f> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t083> ;
+        sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/44c32e57604011e2> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/c0d5ce0d679f342a> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
@@ -607,6 +635,10 @@
     <http://example.org/project/bears-on-edge/458246cda314f0f0> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source/entities_synthesis_0008-emergent-threads-science-meta.md> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0008-emergent-threads-science-meta> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/46085ab46278c08b> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t084> ;
+        sci:bearsOnTarget <http://example.org/project/question/0008-llm-agents-as-fallible-sources> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/465408da7275c1b7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/e977325facf329a5> ;
@@ -667,6 +699,10 @@
     <http://example.org/project/bears-on-edge/4b83462228f73754> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/han2026> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/4c6855643eadc666> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t076> ;
+        sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/4c9f75abace3e6b5> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/dai2023> ;
@@ -744,6 +780,10 @@
         sci:bearsOnSource <http://example.org/project/evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23> ;
         sci:bearsOnTarget <http://example.org/project/proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/556bb6f20a629b21> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t082> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/5575ec39b7d2a239> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/yu2026> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
@@ -759,6 +799,14 @@
     <http://example.org/project/bears-on-edge/569e817ced66c1d2> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/mohammadi2025> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/578e97c0b63d0067> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t084> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/587cf196f2feb7d6> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t086> ;
+        sci:bearsOnTarget <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/58978d26c4081dfa> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/8ac838df9d5cc786> ;
@@ -795,6 +843,14 @@
     <http://example.org/project/bears-on-edge/5d5382d27b3d8ec0> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/yu2026> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/5dfbbd50e67d27b0> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t076> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/5e12d9a9f6bf59a7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t075> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/5e5bd673642e7aea> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/27bd5a098f8c4720> ;
@@ -992,6 +1048,10 @@
         sci:bearsOnSource <http://example.org/project/task/t028> ;
         sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/7374a3fef4d24e12> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t076> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/7396addac9529b71> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t036> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
@@ -1104,6 +1164,10 @@
         sci:bearsOnSource <http://example.org/project/paper/majumdar2022> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/80820e0076e984b7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t079> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/811e19d2a522dcf8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/alnajjar2026> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
@@ -1111,6 +1175,10 @@
     <http://example.org/project/bears-on-edge/813dbb9ac15a1a6c> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/d6b4cfa02b477e10> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0003-reason-coded-revisiting-beats-posterior-only-revisiting> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/81732aa23584d788> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t086> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/8234b9922721b2f3> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/a738d9318d9d67e9> ;
@@ -1296,6 +1364,10 @@
         sci:bearsOnSource <http://example.org/project/paper/mulder2026> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0005-sequential-evidence-improves-attention> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/9965835849eaddea> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t080> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/9a1fa60c102b57af> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/939403311215a826> ;
         sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
@@ -1307,6 +1379,10 @@
     <http://example.org/project/bears-on-edge/9a9faac99f4b5dee> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/09ec5a6fc59135b4> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/9c0f06d893e84a14> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t077> ;
+        sci:bearsOnTarget <http://example.org/project/question/0004-source-and-pipeline-provenance> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/9c2e6328f2cb8395> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/07f905f2026e1820> ;
@@ -1364,9 +1440,21 @@
         sci:bearsOnSource <http://example.org/project/task/t025> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0001-stochastic-revisiting> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/a2253a1ab494efc7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_questions_0017-benchmark-grounding-metrics.md> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/a2b72c904468da95> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/fea9aee3cf657511> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0004-synthesis-graphical-models-and-multiview-integration> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/a3feb7328b262f3a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t082> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/a4314504b7ddbf09> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t078> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/a593986be394281a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/dong2023> ;
@@ -1415,6 +1503,10 @@
     <http://example.org/project/bears-on-edge/ac3a605f8c53d860> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/si2025> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/acd0baede9bfaddd> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t075> ;
+        sci:bearsOnTarget <http://example.org/project/question/0013-robustness-reproducibility-evaluation> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/ad4b28377622fe78> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/b67e6dc565e3de70> ;
@@ -1688,6 +1780,10 @@
         sci:bearsOnSource <http://example.org/project/source-snapshot/4d6db90b99435525> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0007-project-synthesis-science-meta> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/c7e13ffbc900643a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/82dd446a6cb9d23a> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/c8152a7b798a4af8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/20c43e6af45eea6b> ;
         sci:bearsOnTarget <http://example.org/project/paper/jiralerspong2024> ;
@@ -1764,6 +1860,10 @@
         sci:bearsOnSource <http://example.org/project/task/t001> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0001-stochastic-revisiting> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/ceda5c26dc51eead> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source/entities_questions_0016-reproducibility-validation.md> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/cf27f9aadb047a8e> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/a44f2849fd817cbc> ;
         sci:bearsOnTarget <http://example.org/project/question/0001-bioinformatics-generalizability> ;
@@ -1807,6 +1907,10 @@
     <http://example.org/project/bears-on-edge/d50a9c92090f8dc7> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/jin2025> ;
         sci:bearsOnTarget <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/d513e754508a3e0b> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t075> ;
+        sci:bearsOnTarget <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/d5c989f43a9a13f1> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/linkov2017> ;
@@ -1992,6 +2096,10 @@
         sci:bearsOnSource <http://example.org/project/source/entities_questions_0003-causal-synthesis-guardrails.md> ;
         sci:bearsOnTarget <http://example.org/project/question/0003-causal-synthesis-guardrails> ;
         a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/ea7ff82d5cd0aab9> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t077> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/eaa40b4f9824df73> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t001> ;
         sci:bearsOnTarget <http://example.org/project/question/0001-bioinformatics-generalizability> ;
@@ -1999,6 +2107,10 @@
     <http://example.org/project/bears-on-edge/eab6e1e6c50a99c8> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t002> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0001-stochastic-revisiting> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/eaf39a2b248bf032> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t080> ;
+        sci:bearsOnTarget <http://example.org/project/question/0016-reproducibility-validation> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/eb147dab53479b1d> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/7fefd9380b7ca90d> ;
@@ -2015,6 +2127,10 @@
     <http://example.org/project/bears-on-edge/eb82bc4e7d2319cf> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/shi2022> ;
         sci:bearsOnTarget <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/eb918284049503a2> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/source-snapshot/46b4df927948b00a> ;
+        sci:bearsOnTarget <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/ebd5e45398afb34e> sci:bearsOnDepth "2"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/source-snapshot/f685ed96f69b376e> ;
@@ -2091,6 +2207,10 @@
     <http://example.org/project/bears-on-edge/f108992db2970390> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/task/t027> ;
         sci:bearsOnTarget <http://example.org/project/question/0002-evidence-payload-schema> ;
+        a sci:BearsOnEdge .
+    <http://example.org/project/bears-on-edge/f15f40d7431deb8a> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+        sci:bearsOnSource <http://example.org/project/task/t083> ;
+        sci:bearsOnTarget <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
         a sci:BearsOnEdge .
     <http://example.org/project/bears-on-edge/f161f5b6d406785d> sci:bearsOnDepth "1"^^<http://www.w3.org/2001/XMLSchema#integer> ;
         sci:bearsOnSource <http://example.org/project/paper/han2026> ;
@@ -2398,7 +2518,13 @@
             <http://example.org/project/task/t038>,
             <http://example.org/project/task/t039>,
             <http://example.org/project/task/t040>,
-            <http://example.org/project/task/t041> ;
+            <http://example.org/project/task/t041>,
+            <http://example.org/project/task/t075>,
+            <http://example.org/project/task/t076>,
+            <http://example.org/project/task/t080>,
+            <http://example.org/project/task/t082>,
+            <http://example.org/project/task/t083>,
+            <http://example.org/project/task/t086> ;
         sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Rich evidence payloads improve graph calibration" ;
@@ -2574,8 +2700,9 @@
         sci:projectStatus "proposed" ;
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/9d9aa4436679f97f>,
-            <http://example.org/project/task/t069> ;
-        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+            <http://example.org/project/task/t069>,
+            <http://example.org/project/task/t075> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Hypothesis ;
         skos:prefLabel "Science working model: a federated patchwork of provenance-typed, uncertainty-bearing epistemic models" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3425,8 +3552,10 @@
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/454a605974560982>,
             <http://example.org/project/task/t040>,
-            <http://example.org/project/task/t042> ;
-        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+            <http://example.org/project/task/t042>,
+            <http://example.org/project/task/t076>,
+            <http://example.org/project/task/t083> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "What metadata should Science require for quantitative evidence and synthesis updates?" ;
         skos:related <http://example.org/project/hypothesis/0001-stochastic-revisiting>,
@@ -3486,7 +3615,8 @@
             <http://example.org/project/source-snapshot/d41db2d0f358ab0a>,
             <http://example.org/project/source-snapshot/e407870f451bc688>,
             <http://example.org/project/source-snapshot/fea9aee3cf657511>,
-            <http://example.org/project/task/t038> ;
+            <http://example.org/project/task/t038>,
+            <http://example.org/project/task/t077> ;
         sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent source behavior and pipeline provenance in evidence aggregation?" ;
@@ -3544,8 +3674,9 @@
         sci:scope "project" ;
         sci:triggeredBy <http://example.org/project/source-snapshot/fac50f0668e9127c>,
             <http://example.org/project/task/t037>,
-            <http://example.org/project/task/t039> ;
-        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+            <http://example.org/project/task/t039>,
+            <http://example.org/project/task/t084> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science model LLM agents as fallible evidence sources and graph-governed operators?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3556,14 +3687,17 @@
             <http://example.org/project/question/0006-source-dependence-detection>,
             <http://example.org/project/question/0010-causal-graph-construction-pipeline>,
             <http://example.org/project/question/0012-agent-tool-kg-operations>,
+            <http://example.org/project/question/0016-reproducibility-validation>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics>,
             <http://example.org/project/topic/structured-scientific-knowledge> ;
         schema:identifier "question:0008-llm-agents-as-fallible-sources" .
     <http://example.org/project/question/0009-mcda-bayesian-interoperability> sci:freshnessState "needs-review" ;
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
-        sci:triggeredBy <http://example.org/project/source-snapshot/3689053cf11f414d> ;
-        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/3689053cf11f414d>,
+            <http://example.org/project/task/t086> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should MCDA-style decision scores interact with Bayesian belief states in the graph?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3622,8 +3756,9 @@
         sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
-        sci:triggeredBy <http://example.org/project/source-snapshot/4685012e7078fc04> ;
-        sci:upstreamChangeAt "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        sci:triggeredBy <http://example.org/project/source-snapshot/4685012e7078fc04>,
+            <http://example.org/project/task/t075> ;
+        sci:upstreamChangeAt "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:Question ;
         skos:prefLabel "How should Science represent robustness, reproducibility, and replication evaluation claims?" ;
         skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
@@ -3655,6 +3790,42 @@
         skos:related <http://example.org/project/question/0005-authoring-cost-audit>,
             <http://example.org/project/question/0014-adaptive-project-topology> ;
         schema:identifier "question:0015-claim-operationalization-drift" .
+    <http://example.org/project/question/0016-reproducibility-validation> sci:freshnessState "fresh" ;
+        sci:profile "core" ;
+        sci:projectStatus "active" ;
+        sci:scope "project" ;
+        a sci:Question ;
+        skos:prefLabel "How should Science actively validate analysis reproducibility, and when should a reproduction verdict cap belief?" ;
+        skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/hypothesis/0007-working-model>,
+            <http://example.org/project/question/0004-source-and-pipeline-provenance>,
+            <http://example.org/project/question/0013-robustness-reproducibility-evaluation>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        schema:identifier "question:0016-reproducibility-validation" .
+    <http://example.org/project/question/0017-benchmark-grounding-metrics> sci:freshnessState "fresh" ;
+        sci:profile "core" ;
+        sci:projectStatus "active" ;
+        sci:scope "project" ;
+        a sci:Question ;
+        skos:prefLabel "How should Science use benchmark and dataset portfolios as external grounding to measure whether its knowledge representation improves over time?" ;
+        skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0002-evidence-payload-schema>,
+            <http://example.org/project/question/0008-llm-agents-as-fallible-sources>,
+            <http://example.org/project/question/0013-robustness-reproducibility-evaluation>,
+            <http://example.org/project/question/0016-reproducibility-validation>,
+            <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
+        schema:identifier "question:0017-benchmark-grounding-metrics" .
+    <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> sci:freshnessState "fresh" ;
+        sci:profile "core" ;
+        sci:projectStatus "active" ;
+        sci:scope "project" ;
+        a sci:Question ;
+        skos:prefLabel "Where is the load-bearing boundary between ordinal evidence state and continuous calibrated belief?" ;
+        skos:related <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/hypothesis/0007-working-model>,
+            <http://example.org/project/question/0009-mcda-bayesian-interoperability>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        schema:identifier "question:0018-ordinal-continuous-belief-boundary" .
     <http://example.org/project/source-snapshot/06bb3a2dceb454da> sci:bearsOn <http://example.org/project/paper/gong2024>,
             <http://example.org/project/question/0004-source-and-pipeline-provenance>,
             <http://example.org/project/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure> .
@@ -3719,6 +3890,7 @@
     <http://example.org/project/source-snapshot/4685012e7078fc04> sci:bearsOn <http://example.org/project/question/0013-robustness-reproducibility-evaluation> .
     <http://example.org/project/source-snapshot/468baa6e6581b587> sci:bearsOn <http://example.org/project/paper/ban2023>,
             <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> .
+    <http://example.org/project/source-snapshot/46b4df927948b00a> sci:bearsOn <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> .
     <http://example.org/project/source-snapshot/4ce49dbc1eadd964> sci:bearsOn <http://example.org/project/talk/johri2026> .
     <http://example.org/project/source-snapshot/4d6db90b99435525> sci:bearsOn <http://example.org/project/synthesis/0007-project-synthesis-science-meta> .
     <http://example.org/project/source-snapshot/511ac5e2436835b7> sci:bearsOn <http://example.org/project/paper/wang2025>,
@@ -3732,6 +3904,7 @@
     <http://example.org/project/source-snapshot/56336322e6b54096> sci:bearsOn <http://example.org/project/interpretation/0004-t067-patch-federation-2026-06-01> .
     <http://example.org/project/source-snapshot/567bd189cde78241> sci:bearsOn <http://example.org/project/interpretation/0002-l1-patch-prototype-2026-06-01> .
     <http://example.org/project/source-snapshot/57e2b0dac3ef25cb> sci:bearsOn <http://example.org/project/synthesis/0013-sequential-evidence-improves-attention> .
+    <http://example.org/project/source-snapshot/5a7864185a63b330> sci:bearsOn <http://example.org/project/question/0016-reproducibility-validation> .
     <http://example.org/project/source-snapshot/5c23c5927268fcd4> sci:bearsOn <http://example.org/project/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening> .
     <http://example.org/project/source-snapshot/5f55dc2979ba7ee0> sci:bearsOn <http://example.org/project/synthesis/0009-stochastic-revisiting> .
     <http://example.org/project/source-snapshot/63a1a051389a038d> sci:bearsOn <http://example.org/project/paper/yang2025>,
@@ -3765,6 +3938,7 @@
             <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening>,
             <http://example.org/project/paper/faller2024>,
             <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> .
+    <http://example.org/project/source-snapshot/82dd446a6cb9d23a> sci:bearsOn <http://example.org/project/question/0017-benchmark-grounding-metrics> .
     <http://example.org/project/source-snapshot/84ad435f56b16cce> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
             <http://example.org/project/hypothesis/0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening>,
             <http://example.org/project/paper/petersen2014>,
@@ -3937,6 +4111,9 @@
     <http://example.org/project/source/entities_questions_0013-robustness-reproducibility-evaluation.md> sci:bearsOn <http://example.org/project/question/0013-robustness-reproducibility-evaluation> .
     <http://example.org/project/source/entities_questions_0014-adaptive-project-topology.md> sci:bearsOn <http://example.org/project/question/0014-adaptive-project-topology> .
     <http://example.org/project/source/entities_questions_0015-claim-operationalization-drift.md> sci:bearsOn <http://example.org/project/question/0015-claim-operationalization-drift> .
+    <http://example.org/project/source/entities_questions_0016-reproducibility-validation.md> sci:bearsOn <http://example.org/project/question/0016-reproducibility-validation> .
+    <http://example.org/project/source/entities_questions_0017-benchmark-grounding-metrics.md> sci:bearsOn <http://example.org/project/question/0017-benchmark-grounding-metrics> .
+    <http://example.org/project/source/entities_questions_0018-ordinal-continuous-belief-boundary.md> sci:bearsOn <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> .
     <http://example.org/project/source/entities_synthesis_0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md> sci:bearsOn <http://example.org/project/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis> .
     <http://example.org/project/source/entities_synthesis_0002-synthesis-truth-discovery-and-data-integration.md> sci:bearsOn <http://example.org/project/synthesis/0002-synthesis-truth-discovery-and-data-integration> .
     <http://example.org/project/source/entities_synthesis_0003-synthesis-causal-graph-construction-and-discovery.md> sci:bearsOn <http://example.org/project/synthesis/0003-synthesis-causal-graph-construction-and-discovery> .
@@ -4928,6 +5105,137 @@
         skos:prefLabel "Verify paper software and publication-status metadata" ;
         skos:related <http://example.org/project/task/t029> ;
         schema:identifier "task:t074" .
+    <http://example.org/project/task/t075> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/hypothesis/0007-working-model>,
+            <http://example.org/project/question/0013-robustness-reproducibility-evaluation>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/hypothesis/0007-working-model>,
+            <http://example.org/project/question/0013-robustness-reproducibility-evaluation>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:Task ;
+        skos:prefLabel "Reproducibility validation task group" ;
+        schema:identifier "task:t075" .
+    <http://example.org/project/task/t076> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0002-evidence-payload-schema>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0002-evidence-payload-schema>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:Task ;
+        skos:prefLabel "Benchmark grounding and calibration measurement task group" ;
+        schema:identifier "task:t076" .
+    <http://example.org/project/task/t077> sci:bearsOn <http://example.org/project/question/0004-source-and-pipeline-provenance>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/question/0004-source-and-pipeline-provenance>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:Task ;
+        skos:prefLabel "Define analysis-run reproducibility contract and require belief-eligible empirical evidence to resolve to it" ;
+        skos:related <http://example.org/project/task/t075> ;
+        schema:identifier "task:t077" .
+    <http://example.org/project/task/t078> sci:bearsOn <http://example.org/project/question/0016-reproducibility-validation> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:Task ;
+        skos:prefLabel "Active reproduction check: rerun-twice and seeded-subsample smoke test with a verdict" ;
+        skos:related <http://example.org/project/task/t075> ;
+        schema:identifier "task:t078" .
+    <http://example.org/project/task/t079> sci:bearsOn <http://example.org/project/question/0016-reproducibility-validation> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:Task ;
+        skos:prefLabel "Pipeline-guidance reproducibility lint: flag stochastic steps without a declared seed and unpinned environments" ;
+        skos:related <http://example.org/project/task/t075> ;
+        schema:identifier "task:t079" .
+    <http://example.org/project/task/t080> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0016-reproducibility-validation> ;
+        a sci:Task ;
+        skos:prefLabel "Reproduction verdict as a belief ceiling (mirror the dataset-QA ceiling)" ;
+        skos:related <http://example.org/project/task/t075> ;
+        schema:identifier "task:t080" .
+    <http://example.org/project/task/t081> sci:bearsOn <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:Task ;
+        skos:prefLabel "Benchmark/dataset portfolio as first-class grounding with leakage provenance" ;
+        skos:related <http://example.org/project/task/t076> ;
+        schema:identifier "task:t081" .
+    <http://example.org/project/task/t082> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:Task ;
+        skos:prefLabel "Calibration-over-time metric: score belief against benchmark outcomes (Brier/ECE)" ;
+        skos:related <http://example.org/project/task/t076> ;
+        schema:identifier "task:t082" .
+    <http://example.org/project/task/t083> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0002-evidence-payload-schema>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0002-evidence-payload-schema>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:Task ;
+        skos:prefLabel "Run the H02 rich-vs-flat calibration bakeoff (milestone)" ;
+        skos:related <http://example.org/project/task/t076> ;
+        schema:identifier "task:t083" .
+    <http://example.org/project/task/t084> sci:bearsOn <http://example.org/project/question/0008-llm-agents-as-fallible-sources>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/question/0008-llm-agents-as-fallible-sources>,
+            <http://example.org/project/question/0017-benchmark-grounding-metrics> ;
+        a sci:Task ;
+        skos:prefLabel "Wire annotator calibration into the belief-update surface as a discount" ;
+        skos:related <http://example.org/project/task/t033>,
+            <http://example.org/project/task/t076> ;
+        schema:identifier "task:t084" .
+    <http://example.org/project/task/t085> sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        a sci:Task ;
+        skos:prefLabel "Standing inert-field audit and norm-to-check conversion" ;
+        skos:related <http://example.org/project/task/t021>,
+            <http://example.org/project/task/t030> ;
+        schema:identifier "task:t085" .
+    <http://example.org/project/task/t086> sci:bearsOn <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0009-mcda-bayesian-interoperability>,
+            <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
+        sci:profile "core" ;
+        sci:projectStatus "proposed" ;
+        sci:scope "project" ;
+        sci:tests <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration>,
+            <http://example.org/project/question/0009-mcda-bayesian-interoperability>,
+            <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> ;
+        a sci:Task ;
+        skos:prefLabel "Make the ordinal-continuous belief boundary load-bearing" ;
+        schema:identifier "task:t086" .
     <http://example.org/project/topic/analytic-flexibility-and-replication> sci:profile "core" ;
         sci:projectStatus "active" ;
         sci:scope "project" ;
@@ -5015,10 +5323,10 @@
         sci:independenceGroup "literature-paper:VanLissa2024" ;
         prov:wasDerivedFrom <http://example.org/project/paper/vanlissa2024> .
     <http://example.org/project/graph_revision> a prov:Entity ;
-        schema:dateModified "2026-07-08T22:44:06+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+        schema:dateModified "2026-07-08T23:40:35+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
         schema:name "graph-revision" ;
-        schema:sha256 "cb98641faf09fa01735b4467ac4a0a252fbe0c687a8792ac7f81f213068e3617" ;
-        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1783339316085883452,\"sha256\":\"4782c3bad2b9391d7b569c42a81d482f02d5d12ddafc29fa3889c1bbad5be865\"},\"CLAUDE.md\":{\"mtime_ns\":1776995988800669311,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"README.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"308f5cae66c33287799ef23c4e94d0b3e24cd86c81dc687cd37a7716bf933b83\"},\"doc/plans/2026-07-04-multi-lens-first-class-representation-design.md\":{\"mtime_ns\":1783208188571030050,\"sha256\":\"25c8d18bfdd1e1daba4be079e837fe681e154d90046adf91c498272ae20a69ee\"},\"doc/plans/2026-07-04-multi-lens-lens-views-implementation-plan.md\":{\"mtime_ns\":1783244994481863146,\"sha256\":\"d7223c6734326c200619aa69f9df9b575bbec1f984304108d679d051a4a095d1\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1782910655391527307,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1782937338680390614,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1782910655394395590,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1781978375291040115,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1783507429084152412,\"sha256\":\"a4ecdaed780add9bb4b0574ead6b2565c541eed804eeb6811865c32fe882d034\"},\"src/.gitkeep\":{\"mtime_ns\":1776996015722667356,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1780153231143867959,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1780153274380869571,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1780153239632868275,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1780153247867868583,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1780153254574868833,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1780153260792869064,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1780153266677869284,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1780153299835870520,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1780153292864870260,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/active.md\":{\"mtime_ns\":1783550646937311859,\"sha256\":\"f92f0eb9b3e0654f5cb95d05cda25c164bd59fe1b7b358513de60148781f3127\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1782926092096971227,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1783550646937311859,\"sha256\":\"6d36f676c463a08ae61ecb427860f6dae97a6312f87719e04711ca6baea2967c\"}}" .
+        schema:sha256 "e332ed06532a258efc81fcb57be3235de475df25e81cac34d905ecddaa8f2a11" ;
+        schema:text "{\"AGENTS.md\":{\"mtime_ns\":1783339316085883452,\"sha256\":\"4782c3bad2b9391d7b569c42a81d482f02d5d12ddafc29fa3889c1bbad5be865\"},\"CLAUDE.md\":{\"mtime_ns\":1776995988800669311,\"sha256\":\"336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49\"},\"README.md\":{\"mtime_ns\":1781981272733937325,\"sha256\":\"308f5cae66c33287799ef23c4e94d0b3e24cd86c81dc687cd37a7716bf933b83\"},\"doc/plans/2026-07-04-multi-lens-first-class-representation-design.md\":{\"mtime_ns\":1783208188571030050,\"sha256\":\"25c8d18bfdd1e1daba4be079e837fe681e154d90046adf91c498272ae20a69ee\"},\"doc/plans/2026-07-04-multi-lens-lens-views-implementation-plan.md\":{\"mtime_ns\":1783244994481863146,\"sha256\":\"d7223c6734326c200619aa69f9df9b575bbec1f984304108d679d051a4a095d1\"},\"doc/plans/2026-07-08-epistemic-reproducibility-and-grounding-roadmap.md\":{\"mtime_ns\":1783554035943890389,\"sha256\":\"42c429b3fb03611d4b74bbc24c94a05698a908a16667ee789f268999df8edb10\"},\"doc/plans/historical/2026-04-24-h01-engine-followups.md\":{\"mtime_ns\":1782910655391527307,\"sha256\":\"88c72a779e913cfc0c3924193cd7910ee772db3090d32b2f049da40b5ded53c5\"},\"doc/plans/historical/2026-04-24-h01-simulator-spec.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"a390cf9f5b65cc2cdf7a859f610da393095e85ae8f2e6cfab274e2281bf7c9f8\"},\"doc/plans/historical/2026-04-24-h01-simulator.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"9fe10bbd20fe38130b57b7e441a09504fdf37f77e8e771da725557caf47cf2e2\"},\"doc/plans/historical/2026-04-24-h01-sweep-and-interpretation.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"870fe17030955087b09b15f1db7d053bbc0ac4d2d00070d94e77a4a2bfa7866b\"},\"doc/plans/historical/2026-05-06-evidence-payload-core-and-extension-contract.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"f5ff3ddf52488d1f3ca7338dcec0bfa0c4a2f01854de6b75b34687499b956fba\"},\"doc/plans/historical/2026-05-06-t030-full-audit-results.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"acfc852ecc51d7239b8ad3179e3e9ba6c63c0e8414e901e1e15e40e8a6bcd386\"},\"doc/plans/historical/2026-05-06-t030-full-sampling-plan-and-rubric.md\":{\"mtime_ns\":1782926092093568552,\"sha256\":\"a1d1049f6c340924015b2c12a7acd57d1f8c3528cba4be2309d1d32dc8b1f6bd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-1-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"923dd33f80a0a663f703676d93c7dbf5da975a2ae521609afbf5afd0f88ec2dd\"},\"doc/plans/historical/2026-05-06-t030-llm-pass-2-output.md\":{\"mtime_ns\":1782910655393023613,\"sha256\":\"4080709d9d2c5f8cc7ab747bfc57c3e49a28e3573df7bd45f508136dfc8b4237\"},\"doc/plans/historical/2026-05-06-t030-narrow-authoring-cost-audit.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"a55588bacc9b9a7d2c93d0d2f33196c2ea050d9bf86a52a59da6b5c2fc1bdd96\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-extension-design.md\":{\"mtime_ns\":1782926092093971227,\"sha256\":\"aeee8ff8c764c306d749de15763f9e60a907f48c3a9041e4ce60a1048fcfb45f\"},\"doc/plans/historical/2026-05-06-t034-causal-graph-validator-prototype.py\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"1d4f77aec56dbf591fea63a79a5227098b1324ebaa40eac1592645fbc5103229\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-findings.md\":{\"mtime_ns\":1782912284916456355,\"sha256\":\"576fa2a1e7de784cef9f9352cc5e8666c46e40f517bcbc5f561b73894340e840\"},\"doc/plans/historical/2026-05-06-t034-effective-codes-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"442c6f755549210e3732037dd73db857f4d98ce17e2ace18d8fb47622a84ca3c\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-findings.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"8e432483031d3cb0c6ae2b54b7163590b4899f2ee32af20d84919872c960a367\"},\"doc/plans/historical/2026-05-06-t034-mr-graph-model-validator-prototype.py\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"d55e6ed10353c1fb850e039b93fbe9f6c655eb2e44182eaa05bc454bd415f00b\"},\"doc/plans/historical/2026-05-06-t034-pilot-extraction.md\":{\"mtime_ns\":1782912284917456355,\"sha256\":\"e1c10c386571b801334a4f9fd6f4f7ec3bcf81279a3ecf05cff2a21b1709ee8f\"},\"doc/plans/historical/2026-05-06-t034-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"e358764d51f5037e612761f2ca542741876851d4c4a776ad8a73e45c26e6aed7\"},\"doc/plans/historical/2026-05-07-t023-typed-synthesis-nodes-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"731a802f9211d4bbaee48bf357bcb11d5b99ce32924cde8184e06bde7c41cb5c\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operation-validator-prototype.py\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"de5e356739af801edb147b4e48a56d412d73f705142a720b9adacf403e25b265\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-extension-design.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"b39fa050092c4adbf7ce302cf59e49067cc964dc80be18a630565afcc39f7bf2\"},\"doc/plans/historical/2026-05-07-t037-agent-tool-operations-implementation-plan.md\":{\"mtime_ns\":1782926092094971227,\"sha256\":\"3c0ad5ea51b666849aad93e2370efe864f242070b1065417f3fa1af73d36aa73\"},\"doc/plans/historical/2026-05-07-t037-pilot-extraction.md\":{\"mtime_ns\":1782910655393395590,\"sha256\":\"defd7d2e0cc2a691fa5de17e41d1d5a425b9c429ce936cf8ce31bf60ef977e9a\"},\"doc/plans/historical/2026-05-07-t037-validator-prototype-findings.md\":{\"mtime_ns\":1782912284918456355,\"sha256\":\"f49df865c2b0a6f00d1662cf906706d82f6e0657c151d93adcebf7167bc5b749\"},\"doc/plans/historical/2026-05-17-adaptive-project-topology-and-bio-meta-next-steps.md\":{\"mtime_ns\":1782937338680390614,\"sha256\":\"9186a257687e8a0a182a5423db74e7da31014c3a42ea738644a68fe8761ba362\"},\"doc/plans/historical/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md\":{\"mtime_ns\":1782910655394395590,\"sha256\":\"bde965f8f423d25d63dd6a5248a4ffd2fbdce9b882f17c67bff839cfa6c4d47e\"},\"knowledge/sources/local/manifest.yaml\":{\"mtime_ns\":1781978375291040115,\"sha256\":\"6d2d2b08ef5547d812a047d95eb4f8462b1c810f0cca08b03f9df74dcfc3e931\"},\"knowledge/sources/local/mappings.yaml\":{\"mtime_ns\":1781981272741603287,\"sha256\":\"0f2ab50287a995ea4d4c826885576aad4dee24b5f6b72b382312004dc11f96f6\"},\"science.yaml\":{\"mtime_ns\":1783507429084152412,\"sha256\":\"a4ecdaed780add9bb4b0574ead6b2565c541eed804eeb6811865c32fe882d034\"},\"src/.gitkeep\":{\"mtime_ns\":1776996015722667356,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"src/h01_simulator/__init__.py\":{\"mtime_ns\":1780153231143867959,\"sha256\":\"83923c9a01af421f009eee07461e3b567d7564c74e35814a80406657880ab1ed\"},\"src/h01_simulator/cli.py\":{\"mtime_ns\":1780153274380869571,\"sha256\":\"ad6202bf53b8dfe43da9b38cc224aed51ba75ef8bd7291e73350e1766145d4de\"},\"src/h01_simulator/config.py\":{\"mtime_ns\":1780153239632868275,\"sha256\":\"60ee9f7d2b932849052cd30bd04bc7f245acff4c2b1078b56534a274d58b391f\"},\"src/h01_simulator/metrics.py\":{\"mtime_ns\":1780153247867868583,\"sha256\":\"c817013e6e970a277a2281289b5e6f880652d591be9d2eef40e3b959bfa85436\"},\"src/h01_simulator/model.py\":{\"mtime_ns\":1780153254574868833,\"sha256\":\"5ba099d9c8386c97fb9f91924e198b452f4fcc8db19ea37e4c9667bb0d9664a2\"},\"src/h01_simulator/policies.py\":{\"mtime_ns\":1780153260792869064,\"sha256\":\"d68999c6f7478eedd5f5d953cff541464803c61dd11943b1c64a5c9684f05c0b\"},\"src/h01_simulator/sweep.py\":{\"mtime_ns\":1780153266677869284,\"sha256\":\"d83ea79dab4ab220ea4bd1f144db37acbfd42404296ee03753d43054b88c5598\"},\"src/t034_validator/__init__.py\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"a9c719a06375e5dbbc1c14dc83a07b2d9acaaa3f32b581c1450ab937cff7cec0\"},\"src/t034_validator/__main__.py\":{\"mtime_ns\":1780153299835870520,\"sha256\":\"ebf4748c8ef475f23ca9955cdb0571c0261e6a8c4ae029228f1f3e907ffa7511\"},\"src/t034_validator/loader.py\":{\"mtime_ns\":1780153292864870260,\"sha256\":\"da6bc88ff870c60bfd14eb75706a457d378c081a8b02f6f6fbc8dcfa865e2738\"},\"tasks/.tasks.lock\":{\"mtime_ns\":1783552010616814864,\"sha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"tasks/active.md\":{\"mtime_ns\":1783554035944890389,\"sha256\":\"6c1b8227406b11c4601f00fe5f33ed24c93c0f620af9522c4e38c73a19f5181e\"},\"tasks/done/2026-05.md\":{\"mtime_ns\":1782926092096971227,\"sha256\":\"506480e802e09717ab79c9b7246cc699c21d67ed8fcef905618c7134baf0cd8b\"},\"tasks/done/2026-06.md\":{\"mtime_ns\":1782912284921456355,\"sha256\":\"709afdbe4f4051a66f04105ae13ae1c59d16c4df7c40a60b232719188f77b226\"},\"tasks/done/2026-07.md\":{\"mtime_ns\":1783550646937311859,\"sha256\":\"6d36f676c463a08ae61ecb427860f6dae97a6312f87719e04711ca6baea2967c\"}}" .
     <http://example.org/project/hypothesis/0001-stochastic-revisiting> prov:wasDerivedFrom <http://example.org/project/source/entities_hypotheses_0001-stochastic-revisiting.md> .
     <http://example.org/project/hypothesis/0002-rich-evidence-payloads-improve-graph-calibration> prov:wasDerivedFrom <http://example.org/project/paper/allen2017>,
             <http://example.org/project/paper/alnajjar2026>,
@@ -5228,6 +5536,9 @@
     <http://example.org/project/question/0013-robustness-reproducibility-evaluation> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0013-robustness-reproducibility-evaluation.md> .
     <http://example.org/project/question/0014-adaptive-project-topology> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0014-adaptive-project-topology.md> .
     <http://example.org/project/question/0015-claim-operationalization-drift> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0015-claim-operationalization-drift.md> .
+    <http://example.org/project/question/0016-reproducibility-validation> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0016-reproducibility-validation.md> .
+    <http://example.org/project/question/0017-benchmark-grounding-metrics> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0017-benchmark-grounding-metrics.md> .
+    <http://example.org/project/question/0018-ordinal-continuous-belief-boundary> prov:wasDerivedFrom <http://example.org/project/source/entities_questions_0018-ordinal-continuous-belief-boundary.md> .
     <http://example.org/project/source-change/016307d461754e6f> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
         schema:sha256 "1fc219f5e8c408817dbd682851cb0f906cabd5b7ae1f42cf4e16ade545998d5a" .
@@ -5261,9 +5572,6 @@
     <http://example.org/project/source-change/13e0cf876acd9dd0> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
         schema:sha256 "2b779fb78dcf169eb0eb512a7f2d6cbcbee3c68688a75b7534e26452c21049e8" .
-    <http://example.org/project/source-change/148700d41af44a2b> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
-        a sci:SourceChange ;
-        schema:sha256 "8118ff3f778f0d3a0e12e97e1a90a8974ed140a664ef515c4c6ba504a59f10eb" .
     <http://example.org/project/source-change/159bd0fba77c42cd> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
         schema:sha256 "f0b2ccf316ad4fdfbe693e9c54c1dabffb6d98807e7da31c0796a3d7ca31f079" .
@@ -5501,6 +5809,9 @@
     <http://example.org/project/source-change/e4aa4420ecbfc111> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
         schema:sha256 "38aa5bb78748784faaadc0a5194a9441dc6c0574b87df69b206ac470f627c8b1" .
+    <http://example.org/project/source-change/eb1d5964fda31875> sci:observedOn "2026-07-08"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        a sci:SourceChange ;
+        schema:sha256 "280da2c2ce651216e9b51d81396b24b4f0c35084f7fabf878db9aa0002137558" .
     <http://example.org/project/source-change/ed1bf9971cd0bf4d> sci:observedOn "2026-07-07"^^<http://www.w3.org/2001/XMLSchema#date> ;
         a sci:SourceChange ;
         schema:sha256 "a2ed1399e1db28d7088130137243b1139059a98c9352eec9f8b81910d52ce867" .
@@ -5659,6 +5970,9 @@
         sci:sourcePath "entities/papers/Ban2023.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "e9759254e78dec105b41afdf661594dd1b1865bfb2e36483761ae13d3e82ecdd" .
+    <http://example.org/project/source-snapshot/46b4df927948b00a> sci:sourcePath "entities/questions/0018-ordinal-continuous-belief-boundary.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "f7caf5e06013ff2479533a0f5c3faa8360bfe7df1708d9dec0647a543c8f4b52" .
     <http://example.org/project/source-snapshot/4ce49dbc1eadd964> sci:latestSourceChange <http://example.org/project/source-change/4617b96a57bbe091> ;
         sci:sourcePath "entities/talks/Johri2026.md" ;
         a sci:SourceSnapshot ;
@@ -5691,6 +6005,9 @@
         sci:sourcePath "entities/synthesis/0013-sequential-evidence-improves-attention.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "c278dd04f88c1d2465785a2346eb88ab49c41a04ed80da26098e9dcce76861b3" .
+    <http://example.org/project/source-snapshot/5a7864185a63b330> sci:sourcePath "entities/questions/0016-reproducibility-validation.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "942a478da777ad53d8e091d0be84abf316801a6242bae6e34f26d1e1e69e8f52" .
     <http://example.org/project/source-snapshot/5c23c5927268fcd4> sci:latestSourceChange <http://example.org/project/source-change/17bfa58bb36ebea0> ;
         sci:sourcePath "entities/synthesis/0012-causal-estimand-guardrails-reduce-false-causal-edge-strengthening.md" ;
         a sci:SourceSnapshot ;
@@ -5739,6 +6056,9 @@
         sci:sourcePath "entities/papers/Faller2024.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "e12220e3206c5c4532913d4374326c485f024c66172db4c053c8fa8175aba0ba" .
+    <http://example.org/project/source-snapshot/82dd446a6cb9d23a> sci:sourcePath "entities/questions/0017-benchmark-grounding-metrics.md" ;
+        a sci:SourceSnapshot ;
+        schema:sha256 "3012bb51826d4fd2b9622df59f7e450d182c63f2732f2004268d4bcb80e67498" .
     <http://example.org/project/source-snapshot/84ad435f56b16cce> sci:latestSourceChange <http://example.org/project/source-change/ef1c7a73e6d2580a> ;
         sci:sourcePath "entities/papers/Petersen2014.md" ;
         a sci:SourceSnapshot ;
@@ -5951,10 +6271,10 @@
         sci:sourcePath "entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md" ;
         a sci:SourceSnapshot ;
         schema:sha256 "266f66bbbf70b9684a3ee45cd32ce82163928d951b8ea4496ba681965adb0886" .
-    <http://example.org/project/source-snapshot/fac50f0668e9127c> sci:latestSourceChange <http://example.org/project/source-change/148700d41af44a2b> ;
+    <http://example.org/project/source-snapshot/fac50f0668e9127c> sci:latestSourceChange <http://example.org/project/source-change/eb1d5964fda31875> ;
         sci:sourcePath "entities/questions/0008-llm-agents-as-fallible-sources.md" ;
         a sci:SourceSnapshot ;
-        schema:sha256 "8118ff3f778f0d3a0e12e97e1a90a8974ed140a664ef515c4c6ba504a59f10eb" .
+        schema:sha256 "280da2c2ce651216e9b51d81396b24b4f0c35084f7fabf878db9aa0002137558" .
     <http://example.org/project/source-snapshot/fe0df19d477e8dc1> sci:latestSourceChange <http://example.org/project/source-change/5def71c8310829e2> ;
         sci:sourcePath "entities/papers/Berenfeld2026.md" ;
         a sci:SourceSnapshot ;
@@ -6137,6 +6457,12 @@
         schema:identifier "entities/questions/0014-adaptive-project-topology.md" .
     <http://example.org/project/source/entities_questions_0015-claim-operationalization-drift.md> a prov:Entity ;
         schema:identifier "entities/questions/0015-claim-operationalization-drift.md" .
+    <http://example.org/project/source/entities_questions_0016-reproducibility-validation.md> a prov:Entity ;
+        schema:identifier "entities/questions/0016-reproducibility-validation.md" .
+    <http://example.org/project/source/entities_questions_0017-benchmark-grounding-metrics.md> a prov:Entity ;
+        schema:identifier "entities/questions/0017-benchmark-grounding-metrics.md" .
+    <http://example.org/project/source/entities_questions_0018-ordinal-continuous-belief-boundary.md> a prov:Entity ;
+        schema:identifier "entities/questions/0018-ordinal-continuous-belief-boundary.md" .
     <http://example.org/project/source/entities_synthesis_0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md> a prov:Entity ;
         schema:identifier "entities/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md" .
     <http://example.org/project/source/entities_synthesis_0002-synthesis-truth-discovery-and-data-integration.md> a prov:Entity ;
@@ -6348,6 +6674,18 @@
     <http://example.org/project/task/t072> prov:wasDerivedFrom <http://example.org/project/source/tasks_done_2026-07.md> .
     <http://example.org/project/task/t073> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
     <http://example.org/project/task/t074> prov:wasDerivedFrom <http://example.org/project/source/tasks_done_2026-07.md> .
+    <http://example.org/project/task/t075> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t076> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t077> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t078> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t079> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t080> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t081> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t082> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t083> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t084> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t085> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
+    <http://example.org/project/task/t086> prov:wasDerivedFrom <http://example.org/project/source/tasks_active.md> .
     <http://example.org/project/topic/analytic-flexibility-and-replication> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_analytic-flexibility-and-replication.md> .
     <http://example.org/project/topic/bayesian-methods-continuous-belief> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_bayesian-methods-continuous-belief.md> .
     <http://example.org/project/topic/cross-project> prov:wasDerivedFrom <http://example.org/project/source/entities_topics_cross-project.md> .
