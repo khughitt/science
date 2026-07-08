@@ -1,13 +1,11 @@
 # capability_scope Marker Implementation Plan
 
-> **Status:** FRAMEWORK IMPLEMENTED on `main`; downstream MM30 rollout remains
-> a separate consumer-project follow-through.
+> **Status:** IMPLEMENTED on `main`; downstream MM30 rollout is also landed.
 >
 > The framework registry, validation behavior, dataset-prioritize coverage
 > state, and user-guide docs are present. This plan remains as the
 > implementation record; unchecked framework task boxes below are stale. Task 5
-> names the downstream MM30 marker rollout and should be checked against that
-> project before being treated as complete.
+> landed in MM30 as `2c5be544` and was merged by `c1c99e75`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
