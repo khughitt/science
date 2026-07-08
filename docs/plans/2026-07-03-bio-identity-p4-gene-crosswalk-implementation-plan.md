@@ -1,5 +1,12 @@
 # Bio Identity P4.2 Gene Crosswalk Implementation Plan
 
+> **Status:** IMPLEMENTED on `main`; `science-commons` artifact work is also landed.
+>
+> Science landed via `e697c403` (`bio-identity-p4-gene-crosswalk` merge), including
+> contract hardening, built-artifact fixture sync, review fixes, and umbrella
+> progress documentation. `science-commons` landed via `0752782`, including the
+> hardened HGNC recipe and pinned generated artifact.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish P4.2 by hardening `dataset:gene-crosswalk-hgnc` as a reproducible pinned commons artifact and proving Science resolves gene identifiers from built-artifact bytes offline.
