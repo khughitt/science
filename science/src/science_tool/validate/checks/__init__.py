@@ -69,6 +69,7 @@ CANONICAL_CHECK_MODULES = (
     "propositions",
     "origins",
     "lens_views",
+    "workflow_runs",
 )
 
 
