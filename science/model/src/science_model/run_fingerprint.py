@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -131,7 +131,10 @@ class RunFingerprint(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fingerprint_policy: Literal[FINGERPRINT_POLICY_V1]
+    # Spelled as a bare literal because `Literal[<variable>]` is not a valid type
+    # expression; `_POLICY_LITERAL_MATCHES_CONSTANT` below keeps it tied to
+    # FINGERPRINT_POLICY_V1 so the two cannot drift.
+    fingerprint_policy: Literal["science-run-fingerprint/v1"]
     executor: ExecutorKind
     input_artifact_locality: ArtifactLocality
     output_artifact_locality: ArtifactLocality
@@ -165,3 +168,16 @@ class RunFingerprint(BaseModel):
         if not is_commons and self.capture_origin is not None:
             raise ValueError(f"capture_origin is only valid for executor='commons', not {self.executor.value!r}")
         return self
+
+
+def _reconcile_policy_literal() -> None:
+    """Fail at import if the annotated literal and FINGERPRINT_POLICY_V1 drift apart."""
+    (annotated,) = get_args(RunFingerprint.model_fields["fingerprint_policy"].annotation)
+    if annotated != FINGERPRINT_POLICY_V1:
+        raise RuntimeError(
+            f"run-fingerprint drift: RunFingerprint.fingerprint_policy accepts {annotated!r} "
+            f"but FINGERPRINT_POLICY_V1 is {FINGERPRINT_POLICY_V1!r}"
+        )
+
+
+_reconcile_policy_literal()
