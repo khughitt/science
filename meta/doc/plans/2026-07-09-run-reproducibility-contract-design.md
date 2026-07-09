@@ -336,13 +336,21 @@ non-`member_of` ancestor decides.
 ### D. Validation surfaces and capture
 
 The contract is enforced at **two layers**, because the information each needs
-lives at a different layer. This is forced, not stylistic: `ValidateContext`
-(`validate/context.py:25-39`) carries only paths, the manifest, and
-frontmatter/YAML caches — **it has no RDF graph**, and
-`dependence_datasets_by_line` requires materialized `knowledge` / `provenance`
-graphs. Re-deriving dataset resolution from frontmatter inside `validate` would
-duplicate the traversal and destroy substrate parity, which is the one property
-this design most wants to keep.
+lives at a different layer.
+
+`ValidateContext` (`validate/context.py:25-39`) carries only paths, the manifest,
+and frontmatter/YAML caches — no RDF graph — while `dependence_datasets_by_line`
+requires materialized `knowledge` / `provenance` graphs. A validate check *can*
+reach them anyway by loading `knowledge/graph.trig` directly; `check_belief_authoring`
+(`validate/checks/evidence_lines.py:429-432`) does exactly this. **But it silently
+`return`s when the graph is absent.** Placing run-resolution there would inherit
+that behavior: no `graph.trig`, invariant silently unenforced — the precise silent
+fallback this contract forbids. Graph-phase placement is the only surface where
+the `Dataset` exists by construction and the invariant cannot be skipped.
+
+Re-deriving dataset resolution from frontmatter inside `validate` is the other
+rejected option: it would duplicate the traversal and destroy substrate parity,
+the property this design most wants to keep.
 
 **Layer 1 — `validate` (frontmatter-local).** Fingerprint *well-formedness*
 needs nothing but the workflow-run entity's own frontmatter, so it is an ordinary
