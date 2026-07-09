@@ -643,17 +643,6 @@ Coordinate the Phase-1 reproducibility-validation work from the 2026-07-08 epist
 
 Coordinate the Phase-1 benchmark-grounding work from the 2026-07-08 roadmap. Assemble a diverse, relevant benchmark/dataset portfolio as EXTERNAL GROUNDING that yields calibration metrics over time and the ground truth the H02 rich-vs-flat bakeoff needs, with first-class leakage provenance (tune/eval split, held-out rotation) and Goodhart controls. Parent task; do not implement directly. Roadmap: doc/plans/2026-07-08-epistemic-reproducibility-and-grounding-roadmap.md.
 
-## [t077] Define analysis-run reproducibility contract and require belief-eligible empirical evidence to resolve to it
-- priority: P1
-- status: proposed
-- parent: task:t075
-- aspects: [software-development]
-- related: [task:t075, question:0016-reproducibility-validation, question:0004-source-and-pipeline-provenance]
-- group: reproducibility-validation
-- created: 2026-07-08
-
-First-class analysis-run reproducibility record: code SHA, environment digest, input-data content hashes, parameters, seed policy, output hashes. Belief-eligible empirical evidence must transitively resolve to it (directly or through its datasets). Extends what exists but is unenforced today: EvidencePayloadCore.source_commit is optional and not wired into validate; dataset DerivationBlock.git_commit is a bare string that accepts empty and is caller-supplied not captured; no environment digest or seed field exists. Phase warn-only then eligibility gate so existing projects do not break.
-
 ## [t078] Active reproduction check: rerun-twice and seeded-subsample smoke test with a verdict
 - priority: P2
 - status: proposed
