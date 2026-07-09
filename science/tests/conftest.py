@@ -6,6 +6,15 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from science_model.run_fingerprint import (
+    FINGERPRINT_POLICY_V1,
+    ArtifactLocality,
+    ComponentProvenance,
+    ExecutorKind,
+    FingerprintComponent,
+    RunFingerprint,
+    SeedPolicy,
+)
 
 # Keep pytest's tmp_path off the per-user /tmp tmpfs quota. The validate parity
 # gates stage real downstream projects into tmp_path; on Linux, systemd applies a
@@ -144,3 +153,28 @@ def build_entity_graph(project_root: Path, entities: list[dict], relations: list
         )
 
     return materialize_graph(project_root)
+
+
+@pytest.fixture
+def local_fingerprint():
+    def _cap(v: str) -> FingerprintComponent:
+        return FingerprintComponent(value=v, provenance=ComponentProvenance.CAPTURED)
+
+    def _make(**over) -> RunFingerprint:
+        base = dict(
+            fingerprint_policy=FINGERPRINT_POLICY_V1,
+            executor=ExecutorKind.LOCAL,
+            input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            code_sha=_cap("a" * 40),
+            code_dirty=_cap("false"),
+            environment_digest=_cap("sha256:env"),
+            parameters_digest=_cap("sha256:params"),
+            input_manifest_digest=_cap("sha256:in"),
+            output_manifest_digest=_cap("sha256:out"),
+            seed_policy=SeedPolicy(kind="deterministic"),
+        )
+        base.update(over)
+        return RunFingerprint(**base)
+
+    return _make
