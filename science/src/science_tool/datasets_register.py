@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -916,6 +918,15 @@ class FingerprintCaptureError(Exception):
     """The run frontmatter conflicts with what `register-run` must capture."""
 
 
+#: The only `fingerprint.*` keys a human may write — declarations, not observations.
+_AUTHORED_FINGERPRINT_FIELDS: tuple[str, ...] = (
+    "executor",
+    "input_artifact_locality",
+    "output_artifact_locality",
+    "seed_policy",
+)
+
+
 def _captured(value: str) -> FingerprintComponent:
     return FingerprintComponent(value=value, provenance=ComponentProvenance.CAPTURED)
 
@@ -954,16 +965,174 @@ def capture_fingerprint(
             "the code behaves and is never inferred"
         )
 
-    return RunFingerprint(
-        fingerprint_policy=FINGERPRINT_POLICY_V1,
+    try:
+        seed_policy = SeedPolicy.model_validate(raw_seed)
+        return RunFingerprint(
+            fingerprint_policy=FINGERPRINT_POLICY_V1,
+            executor=executor,
+            input_artifact_locality=input_locality,
+            output_artifact_locality=output_locality,
+            code_sha=_captured(code_sha),
+            code_dirty=_captured("true" if code_dirty else "false"),
+            environment_digest=_captured(environment_digest),
+            parameters_digest=_captured(parameters_digest),
+            input_manifest_digest=_captured(input_manifest_digest),
+            output_manifest_digest=_captured(output_manifest_digest),
+            seed_policy=seed_policy,
+        )
+    except ValidationError as exc:
+        raise FingerprintCaptureError(
+            f"workflow-run frontmatter fingerprint.seed_policy is invalid: {exc}"
+        ) from exc
+
+
+def _git(project_root: Path, *args: str) -> str:
+    """Run `git <args>` in `project_root`. Fail loud — no silent fallback."""
+    try:
+        done = subprocess.run(
+            ["git", *args], cwd=project_root, capture_output=True, text=True, check=True
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise FingerprintCaptureError(f"cannot capture git state: {exc}") from exc
+    return done.stdout.strip()
+
+
+def _sha256_file(path: Path, label: str) -> str:
+    if not path.is_file():
+        raise FingerprintCaptureError(f"cannot capture {label}: {path} does not exist")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _manifest_digest(entries: list[str]) -> str:
+    """sha256 over a canonical, sorted, newline-joined manifest.
+
+    An empty manifest is a real, stable digest (sha256 of ""), not an error —
+    a run with no input or output artifacts is not itself unfingerprintable.
+    """
+    canonical = "\n".join(sorted(entries)).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _run_input_manifest(run_fm: dict) -> list[str]:
+    """Canonical per-file entries for what this run consumed.
+
+    The run's declared `inputs:` (upstream dataset ids) is the only input
+    identity available at capture time — `persist_run_fingerprint` runs before
+    `write_per_output_datapackages`/`write_derived_dataset_entities`, so no
+    fresher content-level manifest exists yet to hash instead.
+    """
+    return sorted(str(value) for value in (run_fm.get("inputs") or []))
+
+
+def _resource_manifest_entries(resources: Any, *, source: str) -> list[str]:
+    """Canonicalize a datapackage-style `resources:` list into digest entries.
+
+    Each entry pairs a name with a content-identifying field (hash/digest over
+    a bare path) so an unchanged path with changed content moves the digest.
+    """
+    if not isinstance(resources, list):
+        raise FingerprintCaptureError(f"{source} 'resources' must be a list")
+    entries: list[str] = []
+    for resource in resources:
+        if not isinstance(resource, dict):
+            raise FingerprintCaptureError(f"{source} resources entries must be mappings")
+        name = resource.get("name") or resource.get("path")
+        content_id = resource.get("hash") or resource.get("sha256") or resource.get("digest") or resource.get("path")
+        if not name or not content_id:
+            raise FingerprintCaptureError(f"{source} resources entry {resource!r} lacks a name/content identifier")
+        entries.append(f"{name}:{content_id}")
+    return sorted(entries)
+
+
+def _run_output_manifest(project_root: Path, run_fm: dict, workflow_run_id: str) -> list[str]:
+    """Canonical per-file entries for what this run produced.
+
+    Sourced from the run-aggregate datapackage the workflow executor writes to
+    `results/<workflow>/<run>/datapackage.yaml` before `register-run` runs —
+    the same file `write_per_output_datapackages` reads. A run with no
+    declared `workflow:` has no aggregate manifest to hash against: that is
+    not a failure, it is nothing produced yet, and yields the empty-manifest
+    digest. A *declared* workflow whose aggregate manifest is missing is a
+    real fail-loud condition, not a silent empty manifest.
+    """
+    workflow_id = str(run_fm.get("workflow") or "")
+    if not workflow_id:
+        return []
+    workflow_slug = workflow_id.removeprefix("workflow:")
+    run_entity_slug = workflow_run_id.removeprefix("workflow-run:")
+    run_slug = _run_dir_slug(workflow_slug, run_entity_slug)
+    try:
+        _rt_path, rt = _read_run_aggregate_datapackage(project_root, workflow_slug, run_slug)
+    except FileNotFoundError as exc:
+        raise FingerprintCaptureError(f"cannot capture output_manifest_digest: {exc}") from exc
+    return _resource_manifest_entries(rt.get("resources") or [], source="run-aggregate datapackage")
+
+
+def _rewrite_run_frontmatter(run_path: Path, frontmatter: dict[str, Any]) -> None:
+    """Rewrite `run_path`'s frontmatter in place, preserving its markdown body."""
+    parsed = parse_frontmatter(run_path)
+    body = parsed[1] if parsed else ""
+    dumped = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True)
+    run_path.write_text(f"---\n{dumped}---\n{body}", encoding="utf-8")
+
+
+def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
+    """Capture the fingerprint for `run_id` and write it into the run entity.
+
+    NOT idempotent by design: `code_dirty` reflects the worktree state at
+    capture time, and this call's own frontmatter write leaves the tree dirty.
+    A second call therefore captures `code_dirty=true` even though `code_sha`
+    and every digest are unchanged. Commit the run entity before re-registering
+    if a clean `code_dirty` is wanted — do not special-case the run entity's
+    own path out of the dirty check; that would silently narrow "dirty".
+    """
+    run_path, run_fm = _read_run(project_root, run_id)
+    declared = run_fm.get("fingerprint") or {}
+
+    for key in ("executor", "input_artifact_locality", "output_artifact_locality"):
+        if key not in declared:
+            raise FingerprintCaptureError(
+                f"{run_path.name}: fingerprint.{key} must be declared before register-run "
+                f"(it is a declaration, not an observation)"
+            )
+
+    try:
+        executor = ExecutorKind(declared["executor"])
+        input_locality = ArtifactLocality(declared["input_artifact_locality"])
+        output_locality = ArtifactLocality(declared["output_artifact_locality"])
+    except ValueError as exc:
+        raise FingerprintCaptureError(f"{run_path.name}: invalid fingerprint declaration: {exc}") from exc
+
+    config_snapshot = run_fm.get("config_snapshot") or ""
+    if not config_snapshot:
+        raise FingerprintCaptureError(f"{run_path.name}: config_snapshot is required to capture parameters_digest")
+
+    # A prior `persist_run_fingerprint` call already wrote captured components back
+    # into `declared` (that's what makes it non-idempotent, per this function's own
+    # docstring) — re-forwarding them to `capture_fingerprint` would trip its
+    # hand-authored guard on our own output. Forward only the fields a human may
+    # legitimately write; `capture_fingerprint` recomputes every captured component
+    # fresh regardless of what is currently on disk.
+    authored_only = {key: declared[key] for key in _AUTHORED_FINGERPRINT_FIELDS if key in declared}
+    fingerprint = capture_fingerprint(
+        run_fm={**run_fm, "fingerprint": authored_only},
         executor=executor,
-        input_artifact_locality=input_locality,
-        output_artifact_locality=output_locality,
-        code_sha=_captured(code_sha),
-        code_dirty=_captured("true" if code_dirty else "false"),
-        environment_digest=_captured(environment_digest),
-        parameters_digest=_captured(parameters_digest),
-        input_manifest_digest=_captured(input_manifest_digest),
-        output_manifest_digest=_captured(output_manifest_digest),
-        seed_policy=SeedPolicy.model_validate(raw_seed),
+        input_locality=input_locality,
+        output_locality=output_locality,
+        code_sha=_git(project_root, "rev-parse", "HEAD"),
+        code_dirty=bool(_git(project_root, "status", "--porcelain")),
+        environment_digest=_sha256_file(project_root / "uv.lock", "uv.lock"),
+        parameters_digest=_sha256_file(project_root / config_snapshot, "config_snapshot"),
+        input_manifest_digest=_manifest_digest(_run_input_manifest(run_fm)),
+        output_manifest_digest=_manifest_digest(_run_output_manifest(project_root, run_fm, run_id)),
     )
+
+    manifest_ref = run_fm.get("manifest_path") or None
+    if manifest_ref:
+        fingerprint = fingerprint.model_copy(
+            update={"input_manifest_ref": manifest_ref, "output_manifest_ref": manifest_ref}
+        )
+
+    payload = fingerprint.model_dump(mode="json", exclude_none=True)
+    _rewrite_run_frontmatter(run_path, {**run_fm, "fingerprint": payload})
+    return fingerprint

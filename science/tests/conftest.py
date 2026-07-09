@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -153,6 +154,46 @@ def build_entity_graph(project_root: Path, entities: list[dict], relations: list
         )
 
     return materialize_graph(project_root)
+
+
+#: Splice this into a hand-authored `workflow-run` frontmatter block so
+#: `register-run`'s fail-loud fingerprint capture (Task 6b) has an authored
+#: executor/localities/seed_policy to work with. Pairs with `seed_git_repo`,
+#: which supplies the `config.yaml` this declares as `config_snapshot`.
+REGISTER_RUN_FINGERPRINT_FRONTMATTER = (
+    "config_snapshot: config.yaml\n"
+    "fingerprint:\n"
+    "  executor: local\n"
+    "  input_artifact_locality: science-managed\n"
+    "  output_artifact_locality: science-managed\n"
+    "  seed_policy: {kind: deterministic}\n"
+)
+
+
+def seed_git_repo(root: Path) -> None:
+    """git-init `root` (idempotent), commit, and write `uv.lock` + `config.yaml`.
+
+    Fixture prerequisite for `register-run`'s fingerprint capture, which shells
+    out to git (`rev-parse HEAD`, `status --porcelain`) and hashes `uv.lock` and
+    the run's declared `config_snapshot`. Safe to call more than once in one
+    test (e.g. once per simulated run) — each call adds a commit.
+    """
+    if not (root / ".git").is_dir():
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    lock = root / "uv.lock"
+    if not lock.exists():
+        lock.write_text("lock\n", encoding="utf-8")
+    config = root / "config.yaml"
+    if not config.exists():
+        config.write_text("alpha: 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git", "-c", "user.email=test@test", "-c", "user.name=test",
+            "commit", "-q", "-m", "seed", "--allow-empty",
+        ],
+        cwd=root, check=True,
+    )
 
 
 @pytest.fixture

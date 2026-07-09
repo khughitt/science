@@ -8,6 +8,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from conftest import REGISTER_RUN_FINGERPRINT_FRONTMATTER, seed_git_repo
 from science_tool.cli import main as science_cli
 
 
@@ -51,6 +52,7 @@ def _seed_workflow_and_run(
         'workflow: "workflow:wf"\n'
         "produces: []\n"
         f"inputs: {run_inputs or []!r}\n"
+        f"{REGISTER_RUN_FINGERPRINT_FRONTMATTER}"
         "---\n",
         encoding="utf-8",
     )
@@ -66,6 +68,7 @@ def _seed_workflow_and_run(
         ),
         encoding="utf-8",
     )
+    seed_git_repo(root)
 
 
 def _seed_resource_files(root: Path, names: list[str]) -> None:
@@ -1600,6 +1603,7 @@ def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
         "inputs: []\n"
         'git_commit: "def"\n'
         'last_run: "2026-04-20T12:00:00Z"\n'
+        f"{REGISTER_RUN_FINGERPRINT_FRONTMATTER}"
         "---\n",
         encoding="utf-8",
     )
