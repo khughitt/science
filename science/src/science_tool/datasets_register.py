@@ -13,9 +13,19 @@ from pydantic import ValidationError
 import yaml
 from science_model.frontmatter import parse_frontmatter
 from science_model.packages.schema import IdentityContext, WorkflowOutput
+from science_model.run_fingerprint import (
+    FINGERPRINT_POLICY_V1,
+    ArtifactLocality,
+    ComponentProvenance,
+    ExecutorKind,
+    FingerprintComponent,
+    RunFingerprint,
+    SeedPolicy,
+)
 
 from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
+from science_tool.run_fingerprint_policy import COMPONENT_FIELDS
 
 
 def _format_validation_error(exc: ValidationError) -> str:
@@ -900,3 +910,60 @@ def write_symmetric_edges(project_root: Path, workflow_run_id: str, written_data
         upstream_path = project_root / "entities" / "datasets" / f"{slug}.md"
         if upstream_path.exists():
             _append_yaml_list_item(upstream_path, "consumed_by", workflow_run_id)
+
+
+class FingerprintCaptureError(Exception):
+    """The run frontmatter conflicts with what `register-run` must capture."""
+
+
+def _captured(value: str) -> FingerprintComponent:
+    return FingerprintComponent(value=value, provenance=ComponentProvenance.CAPTURED)
+
+
+def capture_fingerprint(
+    *,
+    run_fm: dict,
+    executor: ExecutorKind,
+    input_locality: ArtifactLocality,
+    output_locality: ArtifactLocality,
+    code_sha: str,
+    code_dirty: bool,
+    environment_digest: str,
+    parameters_digest: str,
+    input_manifest_digest: str,
+    output_manifest_digest: str,
+) -> RunFingerprint:
+    """Build a captured fingerprint. Only `seed_policy` may be authored.
+
+    Pure: takes already-computed digests as arguments. Does no git, no file
+    reads — that belongs to the caller (`persist_run_fingerprint`, Task 6b).
+    """
+    authored = run_fm.get("fingerprint") or {}
+
+    hand_authored = sorted(set(authored) & set(COMPONENT_FIELDS))
+    if hand_authored:
+        raise FingerprintCaptureError(
+            "these fingerprint components are captured by register-run and must not be "
+            f"hand-authored in the workflow-run frontmatter: {', '.join(hand_authored)}"
+        )
+
+    raw_seed = authored.get("seed_policy")
+    if not raw_seed:
+        raise FingerprintCaptureError(
+            "workflow-run frontmatter must declare fingerprint.seed_policy — it asserts how "
+            "the code behaves and is never inferred"
+        )
+
+    return RunFingerprint(
+        fingerprint_policy=FINGERPRINT_POLICY_V1,
+        executor=executor,
+        input_artifact_locality=input_locality,
+        output_artifact_locality=output_locality,
+        code_sha=_captured(code_sha),
+        code_dirty=_captured("true" if code_dirty else "false"),
+        environment_digest=_captured(environment_digest),
+        parameters_digest=_captured(parameters_digest),
+        input_manifest_digest=_captured(input_manifest_digest),
+        output_manifest_digest=_captured(output_manifest_digest),
+        seed_policy=SeedPolicy.model_validate(raw_seed),
+    )
