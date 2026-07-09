@@ -276,12 +276,23 @@ zero or more runs to the union:
 
 | derivation shape | contributes to `resolved_runs` | if it contributes nothing |
 |---|---|---|
-| `DerivationBlock` → `workflow_run` with a fingerprint | the run | — |
+| `DerivationBlock` → `workflow_run` **with a fingerprint** | the run | — |
+| `DerivationBlock` → `workflow_run` **without a fingerprint** | **nothing** | reason: `run-unfingerprinted` |
 | `WorkflowRecipeDerivationBlock` (recipe only) | nothing | reason: `recipe-only` |
 | commons dataset → fingerprinted `executor: commons` run | the run | — |
 | `MemberOfDerivationBlock` | recurse to parent | reason inherited from parent |
 | `derivation is None` **and** `produced_by` set | **nothing** | reason: `code-only-no-run` |
 | `derivation is None`, no `produced_by` | nothing | reason: `no-provenance` |
+
+**A run is not a fingerprinted run.** Naming a `workflow-run` satisfies nothing by
+itself; the run must *bear a fingerprint*. This applies equally to a `run_refs`
+entry. Enforcing it graph-phase requires the fingerprint to be **visible in the
+graph**, so materialization emits `sci:fingerprintPolicy` on every workflow-run
+node that carries one, and run-resolution admits only runs bearing that
+predicate. Without this marker the invariant would fail open: a run entity with
+no fingerprint block emits no `validate` finding (§D — fingerprint checks are
+skipped when the block is absent), so an unfingerprinted run would silently
+satisfy resolution.
 
 **Code is not a run, either.** `produced_by` is constrained by the model to
 `code-file:<id>` references (`entities.py:479-481`); it names *source code*, not
@@ -303,7 +314,8 @@ datasets contributed. If it is empty, the collected reasons pick the finding:
 - any `recipe-only` reason → `evidence.empirical-run-recipe-only` (the most
   specific diagnosis, and the only reason with its own code);
 - otherwise → `evidence.empirical-run-unresolved`, whose message names the
-  collected reasons, distinguishing *dataset provenance is code-only, not
+  collected reasons, distinguishing *a run was named but bears no fingerprint*
+  (`run-unfingerprinted`) from *dataset provenance is code-only, not
   run-produced* (`code-only-no-run`) from *no dataset provenance at all*
   (`no-provenance`).
 

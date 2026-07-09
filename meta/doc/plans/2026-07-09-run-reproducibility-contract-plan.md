@@ -16,7 +16,8 @@
 - Model tests: `cd science/model && uv run --frozen pytest`. Tool tests: `cd science && uv run --frozen pytest`.
 - Lint/types from `science/`: `uv run ruff check` and `uv run pyright`.
 - **`graph/belief.py` MUST NOT be modified by this plan.** A missing run is absent required structure, not a weak epistemic verdict.
-- **P1 (Tasks 1–6) is behavior-neutral**: no new finding may fire on an existing project. P2 (Tasks 7–11) introduces findings at WARN except the two day-1 errors.
+- **P1 (Tasks 1–6b) is behavior-neutral**: no new finding may fire on an existing project. P2 (Tasks 7–11) introduces findings at WARN except the two day-1 errors.
+- **The contract must fail CLOSED.** Naming a `workflow-run` is not the same as resolving to a *fingerprinted* one. Any code path that admits a run without checking for a fingerprint is a bug, not a shortcut.
 - **Out of scope:** P3 (`DerivationBlock.git_commit` removal, schema bump to `1.1`, commons sweep) and P4 (WARN→ERROR flip). Do not touch `packages/schema.py:173`, `frontmatter.py:327`, or `schemas/science-pkg-entity-1.0.json`.
 - Conventions: composition over inheritance; explicit over defensive; fail early, no silent fallbacks; no "legacy"/"compatibility" layers; no `Unified` prefix.
 - **Commit messages carry no AI-attribution trailer or footer.** No `Co-Authored-By`, no "Generated with" line.
@@ -31,7 +32,7 @@
 **Create:**
 - `science/model/src/science_model/run_fingerprint.py` — leaf module: enums + `FingerprintComponent`, `CaptureOrigin`, `SeedPolicy`, `RunFingerprint`. Leaf so `entities.py` imports it without cycles (mirrors the `digests.py` precedent).
 - `science/src/science_tool/run_fingerprint_policy.py` — `Obligation` enum, the frozen obligation table, the import-time reconciliation gate, `evaluate_fingerprint()`.
-- `science/src/science_tool/graph/run_resolution.py` — `own_derivation_run()`, `resolved_empirical_runs()`, `resolved_runs_by_line()`, `MemberOfCycleError`.
+- `science/src/science_tool/graph/run_resolution.py` — `own_derivation_run()`, `resolved_empirical_runs()`, `NoRunReason`, `MemberOfCycleError`. (The per-line union `_runs_for_line` lives with its only caller in `graph/store/validation.py`.)
 - `science/model/tests/test_run_fingerprint.py`
 - `science/tests/test_run_fingerprint_policy.py`
 - `science/tests/test_run_resolution.py`
@@ -39,7 +40,8 @@
 
 **Modify:**
 - `science/model/src/science_model/entities.py` — `WorkflowRunEntity.fingerprint`; `EvidenceLineEntity.run_refs`.
-- `science/src/science_tool/datasets_register.py` — capture the fingerprint.
+- `science/src/science_tool/datasets_register.py` — capture and persist the fingerprint.
+- `science/src/science_tool/cli.py:7291-7314` — `register-run` calls `persist_run_fingerprint`.
 - `science/src/science_tool/validate/checks/workflow_runs.py` *(create)* — the `run.*` checks.
 - `science/src/science_tool/graph/store/validation.py` — the `empirical_run_resolution` row.
 - `science/src/science_tool/graph/store/constants.py` — register the `sci:runRef` predicate.
@@ -1117,6 +1119,200 @@ git commit -m "Capture the run fingerprint at dataset register-run (t077 P1)"
 
 ---
 
+### Task 6b: Wire `register-run` to persist the captured fingerprint
+
+**Files:**
+- Modify: `science/src/science_tool/datasets_register.py`
+- Modify: `science/src/science_tool/cli.py:7291-7314` (`dataset_register_run`)
+- Test: `science/tests/test_datasets_register_fingerprint.py`
+
+**Interfaces:**
+- Consumes: Task 6's `capture_fingerprint`, `FingerprintCaptureError`.
+- Produces: `persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint` — reads the workflow-run entity, captures every capturable component, writes the `fingerprint` block back into its frontmatter, and returns it. Called by `dataset_register_run` after `preflight_register_run_identity`.
+
+**Declared vs captured, restated:** `executor`, `input_artifact_locality`, `output_artifact_locality`, and `seed_policy` are **authored** in the run's frontmatter (they are declarations, not observations) and are the only `fingerprint.*` keys a human may write. Every `COMPONENT_FIELDS` entry is captured here. Task 6's `capture_fingerprint` already rejects a hand-authored component.
+
+**Fail loud** (no silent fallbacks): missing `uv.lock`, absent `git`, a run frontmatter with no `fingerprint.executor`, or a `config_snapshot` path that does not exist each raise `FingerprintCaptureError`.
+
+`register-run` continues to copy `git_commit` down onto `DerivationBlock` during P1/P2; P3 removes that copy-down. The two coexist for now — this task adds the fingerprint, it does not remove the denormalized field.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# append to science/tests/test_datasets_register_fingerprint.py
+import subprocess
+from pathlib import Path
+
+import pytest
+import yaml
+
+from science_tool.datasets_register import persist_run_fingerprint
+
+
+@pytest.fixture
+def git_project(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "uv.lock").write_text("lock", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")
+    runs = tmp_path / "entities" / "workflow-runs"
+    runs.mkdir(parents=True)
+    (runs / "r1.md").write_text(
+        "---\n"
+        "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+        "config_snapshot: config.yaml\n"
+        "fingerprint:\n"
+        "  executor: local\n"
+        "  input_artifact_locality: science-managed\n"
+        "  output_artifact_locality: science-managed\n"
+        "  seed_policy: {kind: deterministic}\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=tmp_path, check=True,
+    )
+    return tmp_path
+
+
+def test_persist_writes_captured_components_into_frontmatter(git_project):
+    fp = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert fp.code_sha.provenance == "captured" and len(fp.code_sha.value) == 40
+    assert fp.code_dirty.value == "false"
+
+    written = yaml.safe_load(
+        (git_project / "entities" / "workflow-runs" / "r1.md").read_text().split("---")[1]
+    )
+    assert written["fingerprint"]["code_sha"]["provenance"] == "captured"
+    assert written["fingerprint"]["seed_policy"]["kind"] == "deterministic"
+
+
+def test_dirty_worktree_is_captured_as_true(git_project):
+    (git_project / "config.yaml").write_text("alpha: 2\n", encoding="utf-8")
+    assert persist_run_fingerprint(git_project, "workflow-run:r1").code_dirty.value == "true"
+
+
+def test_persisted_fingerprint_evaluates_clean(git_project):
+    from science_tool.run_fingerprint_policy import evaluate_fingerprint
+
+    assert evaluate_fingerprint(persist_run_fingerprint(git_project, "workflow-run:r1")) == []
+
+
+def test_missing_lockfile_fails_loud(git_project):
+    (git_project / "uv.lock").unlink()
+    with pytest.raises(FingerprintCaptureError, match="uv.lock"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_missing_executor_declaration_fails_loud(git_project):
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(run.read_text().replace("  executor: local\n", ""), encoding="utf-8")
+    with pytest.raises(FingerprintCaptureError, match="executor"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_persist_is_idempotent(git_project):
+    first = persist_run_fingerprint(git_project, "workflow-run:r1")
+    second = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert first.model_dump() == second.model_dump()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_datasets_register_fingerprint.py -k persist -v`
+Expected: FAIL — `ImportError: cannot import name 'persist_run_fingerprint'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+# append to science/src/science_tool/datasets_register.py
+import hashlib
+import subprocess
+from pathlib import Path
+
+
+def _sha256_file(path: Path, label: str) -> str:
+    if not path.is_file():
+        raise FingerprintCaptureError(f"cannot capture {label}: {path} does not exist")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git(project_root: Path, *args: str) -> str:
+    try:
+        done = subprocess.run(
+            ["git", *args], cwd=project_root, capture_output=True, text=True, check=True
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise FingerprintCaptureError(f"cannot capture git state: {exc}") from exc
+    return done.stdout.strip()
+
+
+def _manifest_digest(entries: list[str]) -> str:
+    """sha256 over a canonical, sorted, newline-joined manifest."""
+    canonical = "\n".join(sorted(entries)).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
+    """Capture the fingerprint for `run_id` and write it into the run entity."""
+    run_path, run_fm = _read_run(project_root, run_id)
+    declared = run_fm.get("fingerprint") or {}
+
+    for key in ("executor", "input_artifact_locality", "output_artifact_locality"):
+        if key not in declared:
+            raise FingerprintCaptureError(
+                f"{run_path.name}: fingerprint.{key} must be declared before register-run "
+                f"(it is a declaration, not an observation)"
+            )
+
+    config_snapshot = run_fm.get("config_snapshot") or ""
+    if not config_snapshot:
+        raise FingerprintCaptureError(f"{run_path.name}: config_snapshot is required to capture parameters_digest")
+
+    fingerprint = capture_fingerprint(
+        run_fm=run_fm,
+        executor=ExecutorKind(declared["executor"]),
+        input_locality=ArtifactLocality(declared["input_artifact_locality"]),
+        output_locality=ArtifactLocality(declared["output_artifact_locality"]),
+        code_sha=_git(project_root, "rev-parse", "HEAD"),
+        code_dirty=bool(_git(project_root, "status", "--porcelain")),
+        environment_digest=_sha256_file(project_root / "uv.lock", "uv.lock"),
+        parameters_digest=_sha256_file(project_root / config_snapshot, "config_snapshot"),
+        input_manifest_digest=_manifest_digest(_run_input_manifest(project_root, run_fm)),
+        output_manifest_digest=_manifest_digest(_run_output_manifest(project_root, run_fm)),
+    )
+
+    payload = fingerprint.model_dump(mode="json", exclude_none=True)
+    _rewrite_run_frontmatter(run_path, {**run_fm, "fingerprint": payload})
+    return fingerprint
+```
+
+Then in `science/src/science_tool/cli.py`, inside `dataset_register_run` (currently `:7299-7314`), immediately after `preflight_register_run_identity(root, workflow_run_id)`:
+
+```python
+        from science_tool.datasets_register import persist_run_fingerprint
+
+        fingerprint = persist_run_fingerprint(root, workflow_run_id)
+        click.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
+```
+
+> **Implementer:** `_run_input_manifest` / `_run_output_manifest` / `_rewrite_run_frontmatter` are three seams. The run entity already carries `manifest_path` and `resources` (`entities.py:898-899`); derive the per-file entries from `resources`, and set `input_manifest_ref` / `output_manifest_ref` on the fingerprint to `manifest_path` when present. For the frontmatter rewrite, reuse whatever writer `datasets_register.py` already uses to emit dataset markdown (see the `git_commit` emission at `:253`) rather than introducing a new YAML dumper. Fail loud if `resources` is empty and the declared locality is `science-managed`.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd science && uv run --frozen pytest tests/test_datasets_register_fingerprint.py -v && uv run --frozen pytest tests/ -q -k register`
+Expected: PASS (6 seams-free tests from Task 6 + 6 new; existing register tests green)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/datasets_register.py science/src/science_tool/cli.py science/tests/test_datasets_register_fingerprint.py
+git commit -m "Persist the captured fingerprint from dataset register-run (t077 P1)"
+```
+
+---
+
 ## P2 — Validate check and graph-phase resolution
 
 ### Task 7: `validate` check for run-fingerprint obligations
@@ -1544,6 +1740,94 @@ git commit -m "Emit evidence-line run_refs as sci:runRef (t077 P2)"
 
 ---
 
+### Task 8c: Emit a graph-visible fingerprint marker (`sci:fingerprintPolicy`)
+
+**Files:**
+- Modify: `science/src/science_tool/graph/store/constants.py` (register `SCI_NS.fingerprintPolicy`)
+- Modify: `science/src/science_tool/graph/materialize.py` (emit on workflow-run nodes)
+- Test: `science/tests/test_materialize_run_fingerprint.py`
+
+**Interfaces:**
+- Consumes: Task 3's `WorkflowRunEntity.fingerprint`.
+- Produces: `(<run-uri>, SCI_NS.fingerprintPolicy, Literal(fingerprint.fingerprint_policy))` for every workflow-run entity bearing a fingerprint. Task 10 builds its `is_fingerprinted` predicate from exactly this triple.
+
+**Why this task exists:** run-resolution is graph-phase, so "does this run have a fingerprint?" must be answerable *from the graph*. Nothing else in the graph reveals it. And Task 7 deliberately emits **no** `validate` finding for a run with no fingerprint block. Without this marker the contract fails **open**: an unfingerprinted run would satisfy resolution, and no check anywhere would object. Emitting the *policy identity* rather than a bare boolean also lets a later `science-run-fingerprint/v2` be distinguished in-graph at no extra cost.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# science/tests/test_materialize_run_fingerprint.py
+from rdflib import Literal
+
+from science_tool.graph.io import SCI_NS
+
+
+def test_fingerprinted_run_emits_policy_marker(materialized_knowledge_for_run):
+    knowledge, run_uri = materialized_knowledge_for_run(with_fingerprint=True)
+    assert list(knowledge.objects(run_uri, SCI_NS.fingerprintPolicy)) == [
+        Literal("science-run-fingerprint/v1")
+    ]
+
+
+def test_unfingerprinted_run_emits_no_marker(materialized_knowledge_for_run):
+    knowledge, run_uri = materialized_knowledge_for_run(with_fingerprint=False)
+    assert list(knowledge.objects(run_uri, SCI_NS.fingerprintPolicy)) == []
+
+
+def test_fingerprint_policy_predicate_is_registered():
+    from science_tool.graph.store.constants import PREDICATE_REGISTRY
+
+    assert any(entry["predicate"] == "sci:fingerprintPolicy" for entry in PREDICATE_REGISTRY)
+```
+
+> **Implementer:** write `materialized_knowledge_for_run` in `science/tests/conftest.py`, reusing the `local_fingerprint` fixture from Task 4 to build the `WorkflowRunEntity`.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_materialize_run_fingerprint.py -v`
+Expected: FAIL — no `sci:fingerprintPolicy` triple; no matching `PREDICATE_REGISTRY` entry
+
+- [ ] **Step 3: Write minimal implementation**
+
+Register in `science/src/science_tool/graph/store/constants.py`, matching the `sci:evidenceType` dict shape at `:229`:
+
+```python
+    {
+        "predicate": "sci:fingerprintPolicy",
+        "domain": "sci:WorkflowRun",
+        "range": "xsd:string",
+        "description": "Policy version of the run's reproducibility fingerprint; presence means fingerprinted",
+    },
+```
+
+Emit in `science/src/science_tool/graph/materialize.py` where workflow-run entities are projected:
+
+```python
+def _add_run_fingerprint_marker(entity, run_uri, *, knowledge) -> None:
+    """Make fingerprint presence visible in the graph.
+
+    Run resolution is graph-phase; without this triple an unfingerprinted run
+    would silently satisfy the empirical-run invariant.
+    """
+    if entity.fingerprint is None:
+        return
+    knowledge.add((run_uri, SCI_NS.fingerprintPolicy, Literal(entity.fingerprint.fingerprint_policy)))
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd science && uv run --frozen pytest tests/test_materialize_run_fingerprint.py -v && uv run --frozen pytest tests/ -q -k materialize`
+Expected: PASS (3 new tests; existing materialize tests green)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/graph/store/constants.py science/src/science_tool/graph/materialize.py science/tests/test_materialize_run_fingerprint.py science/tests/conftest.py
+git commit -m "Emit sci:fingerprintPolicy so run resolution cannot fail open (t077 P2)"
+```
+
+---
+
 ### Task 9: Resolution helpers — `own_derivation_run` and `resolved_empirical_runs`
 
 **Files:**
@@ -1554,11 +1838,13 @@ git commit -m "Emit evidence-line run_refs as sci:runRef (t077 P2)"
 - Consumes: `science_model.entities` derivation union (`DerivationBlock`, `WorkflowRecipeDerivationBlock`, `MemberOfDerivationBlock`).
 - Produces:
   - `class MemberOfCycleError(Exception)`
-  - `class NoRunReason(StrEnum)`: `RECIPE_ONLY="recipe-only"`, `CODE_ONLY_NO_RUN="code-only-no-run"`, `NO_PROVENANCE="no-provenance"`
+  - `class NoRunReason(StrEnum)`: `RECIPE_ONLY="recipe-only"`, `RUN_UNFINGERPRINTED="run-unfingerprinted"`, `CODE_ONLY_NO_RUN="code-only-no-run"`, `NO_PROVENANCE="no-provenance"`
   - `own_derivation_run(dataset) -> str | None` — the dataset's *own* derivation edge; `None` for `member_of`.
-  - `resolved_empirical_runs(dataset, lookup) -> tuple[list[str], list[NoRunReason]]` — recurses `member_of` via `lookup: Callable[[str], object]`; raises `MemberOfCycleError` on a repeat.
+  - `resolved_empirical_runs(dataset, lookup, is_fingerprinted) -> tuple[list[str], list[NoRunReason]]` — recurses `member_of` via `lookup: Callable[[str], object | None]`; raises `MemberOfCycleError` on a repeat. `is_fingerprinted: Callable[[str], bool]` decides whether a named run actually bears a fingerprint.
 
 Two helpers, deliberately. A single one would smuggle the edge-level `member_of` exemption into evidence resolution.
+
+**A run is not a fingerprinted run.** `is_fingerprinted` is not optional and has no default. A `DerivationBlock` naming a run that bears no fingerprint contributes **nothing**, with reason `run-unfingerprinted`. Task 7 deliberately emits no `validate` finding for a run with no fingerprint block, so if this helper admitted bare run names the whole contract would fail open — an unfingerprinted run would satisfy resolution and nothing anywhere would object.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1594,6 +1880,10 @@ def _patch_union(monkeypatch):
     monkeypatch.setattr(rr, "MemberOfDerivationBlock", MemberDeriv)
 
 
+ALL_FINGERPRINTED = lambda _run: True    # noqa: E731
+NONE_FINGERPRINTED = lambda _run: False  # noqa: E731
+
+
 def test_own_derivation_run_returns_the_run():
     ds = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
     assert own_derivation_run(ds) == "workflow-run:r1"
@@ -1607,32 +1897,46 @@ def test_own_derivation_run_is_none_for_member_of():
 def test_resolved_runs_recurse_through_member_of_to_parent():
     parent = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
     member = FakeDataset("dataset:m", MemberDeriv("dataset:a"))
-    runs, reasons = resolved_empirical_runs(member, {"dataset:a": parent}.get)
+    runs, reasons = resolved_empirical_runs(member, {"dataset:a": parent}.get, ALL_FINGERPRINTED)
     assert runs == ["workflow-run:r1"] and reasons == []
+
+
+def test_run_without_a_fingerprint_contributes_nothing():
+    """A run is not a fingerprinted run. Failing open here would void the contract."""
+    ds = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
+    runs, reasons = resolved_empirical_runs(ds, {}.get, NONE_FINGERPRINTED)
+    assert runs == [] and reasons == [NoRunReason.RUN_UNFINGERPRINTED]
+
+
+def test_member_of_parent_run_must_also_be_fingerprinted():
+    parent = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
+    member = FakeDataset("dataset:m", MemberDeriv("dataset:a"))
+    runs, reasons = resolved_empirical_runs(member, {"dataset:a": parent}.get, NONE_FINGERPRINTED)
+    assert runs == [] and reasons == [NoRunReason.RUN_UNFINGERPRINTED]
 
 
 def test_member_of_cycle_raises():
     a = FakeDataset("dataset:a", MemberDeriv("dataset:b"))
     b = FakeDataset("dataset:b", MemberDeriv("dataset:a"))
     with pytest.raises(MemberOfCycleError, match="dataset:a"):
-        resolved_empirical_runs(a, {"dataset:a": a, "dataset:b": b}.get)
+        resolved_empirical_runs(a, {"dataset:a": a, "dataset:b": b}.get, ALL_FINGERPRINTED)
 
 
 def test_recipe_only_contributes_nothing_with_reason():
     ds = FakeDataset("dataset:c", RecipeDeriv())
-    runs, reasons = resolved_empirical_runs(ds, {}.get)
+    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.RECIPE_ONLY]
 
 
 def test_produced_by_only_is_code_only_no_run():
     ds = FakeDataset("dataset:d", None, produced_by=["code-file:x"])
-    runs, reasons = resolved_empirical_runs(ds, {}.get)
+    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.CODE_ONLY_NO_RUN]
 
 
 def test_raw_external_dataset_is_no_provenance():
     ds = FakeDataset("dataset:e", None)
-    runs, reasons = resolved_empirical_runs(ds, {}.get)
+    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.NO_PROVENANCE]
 ```
 
@@ -1678,6 +1982,7 @@ class MemberOfCycleError(Exception):
 
 class NoRunReason(StrEnum):
     RECIPE_ONLY = "recipe-only"
+    RUN_UNFINGERPRINTED = "run-unfingerprinted"
     CODE_ONLY_NO_RUN = "code-only-no-run"
     NO_PROVENANCE = "no-provenance"
 
@@ -1691,9 +1996,16 @@ def own_derivation_run(dataset: object) -> str | None:
 
 
 def resolved_empirical_runs(
-    dataset: object, lookup: Callable[[str], object | None]
+    dataset: object,
+    lookup: Callable[[str], object | None],
+    is_fingerprinted: Callable[[str], bool],
 ) -> tuple[list[str], list[NoRunReason]]:
-    """Runs this dataset resolves to, recursing member_of to the parent chain."""
+    """Fingerprinted runs this dataset resolves to, recursing member_of to the parent.
+
+    `is_fingerprinted` is required and has no default: naming a workflow-run is
+    not the same as resolving to a *fingerprinted* one. A run with no fingerprint
+    yields no runs and the `run-unfingerprinted` reason.
+    """
     visited: set[str] = set()
     current = dataset
 
@@ -1707,7 +2019,10 @@ def resolved_empirical_runs(
         derivation = getattr(current, "derivation", None)
 
         if isinstance(derivation, DerivationBlock):
-            return [derivation.workflow_run], []
+            run = derivation.workflow_run
+            if not is_fingerprinted(run):
+                return [], [NoRunReason.RUN_UNFINGERPRINTED]
+            return [run], []
 
         if isinstance(derivation, WorkflowRecipeDerivationBlock):
             return [], [NoRunReason.RECIPE_ONLY]
@@ -1793,8 +2108,36 @@ def test_resolved_empirical_line_passes(empirical_line_with_run_trig):
 
 def test_member_of_cycle_fails(member_of_cycle_trig):
     rows, has_failures = validate_graph_dataset(_dataset_from_trig(member_of_cycle_trig))
-    assert _row(rows, "empirical_run_resolution")["status"] == "fail"
+    row = _row(rows, "empirical_run_resolution")
+    assert row["status"] == "fail"
+    assert "dataset.member-of-cycle" in row["details"]
     assert has_failures
+
+
+def test_derivation_run_without_fingerprint_still_warns(empirical_line_with_unfingerprinted_run_trig):
+    """The contract must fail CLOSED: naming a run is not bearing a fingerprint."""
+    rows, _ = validate_graph_dataset(_dataset_from_trig(empirical_line_with_unfingerprinted_run_trig))
+    row = _row(rows, "empirical_run_resolution")
+    assert row["status"] == "warn"
+    assert "run-unfingerprinted" in row["details"]
+
+
+def test_run_refs_to_unfingerprinted_run_still_warns(line_with_unfingerprinted_run_ref_trig):
+    """run_refs must not be a back door around the fingerprint requirement."""
+    rows, _ = validate_graph_dataset(_dataset_from_trig(line_with_unfingerprinted_run_ref_trig))
+    row = _row(rows, "empirical_run_resolution")
+    assert row["status"] == "warn"
+    assert "run-unfingerprinted" in row["details"]
+
+
+def test_run_refs_to_fingerprinted_run_resolves_a_code_only_dataset(
+    line_with_produced_by_dataset_and_fingerprinted_run_ref_trig,
+):
+    """The rescue case: sound dataset provenance that cannot itself name a run."""
+    rows, _ = validate_graph_dataset(
+        _dataset_from_trig(line_with_produced_by_dataset_and_fingerprinted_run_ref_trig)
+    )
+    assert _row(rows, "empirical_run_resolution")["status"] == "pass"
 ```
 
 > **Implementer:** build the three `*_trig` fixtures in `science/tests/conftest.py` by copying the graph-construction style used in `science/tests/test_dataset_independence.py:338-360` (which builds `knowledge` / `provenance` graphs and an evidence line with a `dependence` dataset usage). Each fixture returns a TriG string. Do not invent predicates — reuse `SCI_NS` terms from `science_tool.graph.io`.
@@ -1813,23 +2156,34 @@ from science_tool.graph.run_resolution import MemberOfCycleError
 
 ...
 
+def _is_fingerprinted(knowledge, run_ref: str) -> bool:
+    """A run bears a fingerprint iff it carries sci:fingerprintPolicy (Task 8c)."""
+    run_uri = project_entity_uri(run_ref)
+    return (run_uri, SCI_NS.fingerprintPolicy, None) in knowledge
+
+
 def validate_empirical_run_resolution(dataset: Dataset) -> tuple[list[str], bool]:
-    """Belief-eligible empirical lines must resolve to a fingerprinted run.
+    """Belief-eligible empirical lines must resolve to a FINGERPRINTED run.
 
     Returns (messages, is_fatal). A member_of cycle is fatal; unresolved lines
     warn during P2 and become fatal at the P4 flip.
+
+    `MemberOfCycleError` originates inside `_runs_for_line` (which calls
+    `resolved_empirical_runs`), NOT inside `dependence_datasets_by_line`. The
+    try/except must therefore wrap the per-line loop, and a cycle short-circuits
+    the whole check as fatal.
     """
     from science_tool.graph.dataset_independence import dependence_datasets_by_line
 
     knowledge, provenance = _knowledge_and_provenance(dataset)
-    messages: list[str] = []
-    try:
-        by_line = dependence_datasets_by_line(knowledge, provenance)
-    except MemberOfCycleError as exc:
-        return [str(exc)], True
+    by_line = dependence_datasets_by_line(knowledge, provenance)
 
+    messages: list[str] = []
     for line, datasets in sorted(by_line.items()):
-        runs, reasons = _runs_for_line(knowledge, line, datasets)
+        try:
+            runs, reasons = _runs_for_line(knowledge, line, datasets)
+        except MemberOfCycleError as exc:
+            return [f"{line}: dataset.member-of-cycle ({exc})"], True
         if runs:
             continue
         if NoRunReason.RECIPE_ONLY in reasons:
@@ -1862,7 +2216,15 @@ and the row, mirroring the `patch_membership_convenience` shape exactly:
         )
 ```
 
-> **Implementer:** `_knowledge_and_provenance(dataset)` and `_runs_for_line(...)` are the two seams you must write. Follow `graph/dataset_qa.py:60-91` for how it obtains the knowledge/provenance graphs from a materialized dataset and reads `SCI_NS.evidenceType` off a line; restrict to `EvidenceType.EMPIRICAL_DATA` exactly as `dataset_qa.py:88` does, and union in the line's `SCI_NS.runRef` objects.
+> **Implementer:** `_knowledge_and_provenance(dataset)` and `_runs_for_line(...)` are the two seams you must write. Follow `graph/dataset_qa.py:60-91` for how it obtains the knowledge/provenance graphs from a materialized dataset and reads `SCI_NS.evidenceType` off a line; restrict to `EvidenceType.EMPIRICAL_DATA` exactly as `dataset_qa.py:88` does.
+>
+> `_runs_for_line(knowledge, line, datasets) -> tuple[list[str], list[NoRunReason]]` must:
+> 1. build `is_fingerprinted = partial(_is_fingerprinted, knowledge)`;
+> 2. for each dataset, call `resolved_empirical_runs(ds, lookup, is_fingerprinted)` and accumulate runs + reasons (letting `MemberOfCycleError` propagate to the caller);
+> 3. union in the line's `SCI_NS.runRef` objects **filtered through the same `is_fingerprinted` predicate** — a `run_refs` entry naming an unfingerprinted run contributes nothing and adds `NoRunReason.RUN_UNFINGERPRINTED`;
+> 4. return `([], reasons)` when the union is empty.
+>
+> Filtering `run_refs` through the same predicate is what stops `run_refs` from becoming a back door around the fingerprint requirement.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1986,15 +2348,21 @@ git commit -m "Pin determinism and substrate-parity invariants (t077 P2)"
 
 **Spec coverage.** §A → Tasks 1–3. §B obligation table + reconciliation gate → Task 4; evaluation → Task 5. §C resolution rule, two helpers, `member_of` recursion + cycle, reason tokens → Tasks 9–10; `run_refs` → Tasks 8 and 8b. §D layer split, findings, capture chokepoint → Tasks 6, 7, 10. §E migration → **deliberately excluded** (P3, out of scope). Testing section → distributed, with the two load-bearing tests isolated in Task 11.
 
-**Gap found during self-review and closed:** the spec assumes graph-phase resolution can union a line's `run_refs`, but `materialize.py` emits evidence-line fields explicitly and no `sci:runRef` predicate exists. Without **Task 8b**, `run_refs` would be authored, validated, then dropped at the graph boundary — an inert field that could never affect a verdict. Task 8b is not optional polish; Task 10 depends on it.
+**Three gaps found in review and closed — all of them ways the contract could have shipped hollow:**
+
+1. **`run_refs` would never reach the graph.** `materialize.py` emits evidence-line fields explicitly and no `sci:runRef` predicate exists, so `run_refs` would be authored, validated, then dropped at the graph boundary — an inert field that could never affect a verdict. → **Task 8b**.
+2. **Resolution would have failed OPEN.** `resolved_empirical_runs` returned any `DerivationBlock.workflow_run`, and nothing made fingerprint presence visible in the graph. Since Task 7 deliberately emits no finding for a run with no fingerprint block, an entirely unfingerprinted run would have satisfied the whole contract. → **Task 8c** (`sci:fingerprintPolicy`), a required `is_fingerprinted` predicate on `resolved_empirical_runs`, the `run-unfingerprinted` reason, and `run_refs` filtered through the same predicate so it cannot become a back door.
+3. **Nothing would ever write a fingerprint.** Deferring the CLI wiring left P1+P2 with a model, a validator, and a pure function, but no normal path producing captured fingerprints. → **Task 6b** wires `cli.py:7291` now; only `git_commit` removal stays in P3.
+
+**Also corrected:** `MemberOfCycleError` originates in `resolved_empirical_runs` (inside `_runs_for_line`), not in `dependence_datasets_by_line`. Task 10's try/except wraps the per-line loop and maps the cycle to a `fail` row carrying `dataset.member-of-cycle`.
 
 **Deferred to P3/P4, tracked, not forgotten:**
-- `DerivationBlock.git_commit` removal + `science-pkg-entity-1.1.json` + commons sweep.
+- `DerivationBlock.git_commit` removal + `science-pkg-entity-1.1.json` + commons sweep. `register-run` keeps copying `git_commit` down during P1/P2; the two coexist.
 - WARN→ERROR flip for `empirical_run_resolution` and `run.fingerprint-incomplete`.
-- Wiring `register-run`'s CLI (`cli.py:7291`) to *call* `capture_fingerprint`. Task 6 delivers and tests the pure function; the CLI's git/lockfile/manifest plumbing is mechanical and belongs with P3's `datasets_register.py` sweep, so the two touch that file once rather than twice.
 
 **Seams the implementer must resolve against real code** (flagged inline, not hand-waved):
 - `_knowledge_and_provenance` / `_runs_for_line` in Task 10 must mirror `graph/dataset_qa.py:60-91`, restricting to `EvidenceType.EMPIRICAL_DATA` exactly as `dataset_qa.py:88` does.
-- Three test fixtures (`empirical_line_*_trig`, `member_of_cycle_trig`, `materialized_knowledge_for_evidence_line`) must be built from the existing graph-construction style in `tests/test_dataset_independence.py:338-360`.
+- `_run_input_manifest` / `_run_output_manifest` / `_rewrite_run_frontmatter` in Task 6b, derived from the run entity's existing `manifest_path` / `resources`.
+- The TriG and materialization fixtures (`empirical_line_*_trig`, `member_of_cycle_trig`, `line_with_unfingerprinted_run_ref_trig`, `line_with_produced_by_dataset_and_fingerprinted_run_ref_trig`, `materialized_knowledge_for_evidence_line`, `materialized_knowledge_for_run`), built from the existing graph-construction style in `tests/test_dataset_independence.py:338-360`.
 
 **Verified against the code while planning** (no longer seams): `MemberOfDerivationBlock.parent_dataset` (`packages/schema.py:245`); `resolve_path_policy("workflow-run") → entities/workflow-runs`; `science_model` resolves to the worktree's own `model/src`, so no `PYTHONPATH` override is needed.
