@@ -39,13 +39,6 @@ markers = [
 [tool.ruff]
 line-length = 120
 
-[tool.pyright]
-pythonVersion = "3.11"
-typeCheckingMode = "basic"
-include = ["src"]
-venvPath = "."
-venv = ".venv"
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/science_tool"]
 

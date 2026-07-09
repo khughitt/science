@@ -23,12 +23,6 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 
-[tool.pyright]
-pythonVersion = "3.11"
-typeCheckingMode = "basic"
-venvPath = "."
-venv = ".venv"
-
 [dependency-groups]
 dev = [
     "pytest>=9.0",

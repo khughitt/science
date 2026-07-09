@@ -1,5 +1,5 @@
 {
-  "include": ["science/src"],
+  "include": ["science/src", "science/model/src", "science/qa/src"],
   "pythonVersion": "3.11",
   "typeCheckingMode": "basic",
   "venvPath": "science",

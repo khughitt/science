@@ -52,6 +52,17 @@ uv run ruff check
 uv run pyright
 ```
 
+Pyright is configured **once**, by `pyrightconfig.json` at the repo root. Pyright
+walks up from the working directory to find it, so that one config governs no
+matter which package you run from — a `[tool.pyright]` block in a package's
+`pyproject.toml` would be silently ignored. It covers all three source trees
+(`science/src`, `science/model/src`, `science/qa/src`) and resolves imports
+against `science/.venv`, which has `science-model` and `science-qa` installed
+editable. Test directories are **not** type-checked.
+
+Widening coverage means editing `include` in that one file. Ruff, unlike pyright,
+is configured per package — run it from the package you changed.
+
 ## Worktrees
 
 Worktrees of *this* repo are safe: the `science-model` / `science-qa` uv sources
