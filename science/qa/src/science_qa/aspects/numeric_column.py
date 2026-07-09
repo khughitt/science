@@ -24,7 +24,7 @@ def low_variance(ctx: TableContext, params: dict) -> list[Flag]:
     flags: list[Flag] = []
     for col in ctx.columns:
         series = cast("pd.Series", pd.to_numeric(ctx.table[col], errors="coerce")).dropna()
-        if len(series) > 1 and float(series.var()) == 0.0:
+        if len(series) > 1 and float(cast("float", series.var())) == 0.0:
             flags.append(Flag(ASPECT, "low_variance", col, None, SEVERITY_DISTRIBUTION,
                               "0.0", ">0", f"{col} has zero variance (constant)"))
     return flags
@@ -63,7 +63,7 @@ def missing_sentinels(ctx: TableContext, params: dict) -> list[Flag]:
     for col in ctx.columns:
         if not pd.api.types.is_numeric_dtype(ctx.table[col]):
             continue
-        survivors = int(ctx.table[col].isin(sentinels).sum())
+        survivors = int(cast("int", ctx.table[col].isin(sentinels).sum()))
         if survivors:
             flags.append(Flag(ASPECT, "missing_sentinel", col, None, SEVERITY_STRUCTURAL,
                               str(survivors), "0", f"{survivors} surviving missing-sentinel value(s)"))

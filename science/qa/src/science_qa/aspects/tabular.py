@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -36,7 +37,7 @@ def unique_key(ctx: TableContext, params: dict) -> list[Flag]:
 
 def required_complete(ctx: TableContext, params: dict) -> list[Flag]:
     col = ctx.columns[0]
-    missing = int(ctx.table[col].isna().sum())
+    missing = int(cast("int", ctx.table[col].isna().sum()))
     if missing:
         return [Flag("tabular", "required_complete", col, None, SEVERITY_STRUCTURAL,
                      str(missing), "0", f"{missing} missing value(s)")]

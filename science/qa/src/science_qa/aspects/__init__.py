@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
-from science_qa.context import Context
 from science_qa.flags import Flag
 
 CHECK_REQUIRED = "required"
 CHECK_FAMILY = "family"
 
-CheckFn = Callable[[Context, dict], list[Flag]]
+# Each check declares the Context subtype it consumes in `CheckSpec.accepts`, and
+# the runner refuses to call it with anything else. A static annotation cannot tie
+# `fn`'s first parameter to the sibling `accepts` field, so the context is Any here.
+CheckFn = Callable[[Any, dict], list[Flag]]
 
 
 @dataclass(frozen=True)

@@ -175,8 +175,7 @@ def _qa_one_resource(resource: dict, pkg_dir: Path, package: dict,
                      runknobs_path: Path | None) -> ResourceOutcome:
     name = resource.get("name", "?")
     path = resource.get("path")
-    suffix = Path(path).suffix.lower() if path else ""
-    if suffix not in _TABULAR_SUFFIXES:
+    if not path or Path(path).suffix.lower() not in _TABULAR_SUFFIXES:
         return ResourceOutcome(name, "not-applicable", "non-tabular", None)
     schema = resource.get("schema") or {}
     if not schema.get("fields"):
