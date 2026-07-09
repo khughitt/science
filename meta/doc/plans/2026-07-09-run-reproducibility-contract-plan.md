@@ -1340,7 +1340,7 @@ git commit -m "Persist the captured fingerprint from dataset register-run (t077 
 
 **Interfaces:**
 - Consumes: Task 5's `evaluate_fingerprint`, `FingerprintFinding`.
-- Produces: `check_run_fingerprint_obligations(ctx) -> Iterator[Result]` emitting `run.fingerprint-incomplete` (WARN), `run.fingerprint-authored-capturable` (ERROR), `run.fingerprint-origin-unverified` (ERROR).
+- Produces: `check_run_fingerprint_obligations(ctx) -> Iterator[Result]` emitting `run.fingerprint-incomplete` (WARN), `run.fingerprint-malformed` (ERROR), `run.fingerprint-authored-capturable` (ERROR), `run.fingerprint-origin-unverified` (ERROR).
 
 A run without a `fingerprint` block emits nothing — P1/P2 are behavior-neutral for existing projects; the *evidence* side (Task 10) is what notices a missing run.
 
@@ -1418,6 +1418,17 @@ def test_unknown_capturable_component_is_warn(tmp_path):
     assert results[0].severity is Severity.WARN
 
 
+def test_malformed_fingerprint_is_error(tmp_path):
+    bad = CLEAN.replace(
+        '  code_dirty: {value: "false", provenance: captured}',
+        '  code_dirty: {value: "", provenance: captured}',
+    )
+    _write_run(tmp_path, "r1", bad)
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.fingerprint-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
 def test_commons_origin_digest_mismatch_is_error(tmp_path):
     src = tmp_path / "imported.md"
     src.write_text("real content", encoding="utf-8")
@@ -1487,6 +1498,7 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 RULE_ORIGIN_UNVERIFIED = "run.fingerprint-origin-unverified"
+RULE_MALFORMED = "run.fingerprint-malformed"
 
 
 def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -1542,7 +1554,7 @@ def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
             yield Result(
                 severity=Severity.ERROR, path=path, line=None,
                 message=f"{path.name}: malformed fingerprint: {exc.errors()[0]['msg']}",
-                rule="run.fingerprint-incomplete", task=None,
+                rule=RULE_MALFORMED, task=None,
             )
             continue
 
@@ -1565,7 +1577,7 @@ Register the module wherever `validate/checks/__init__.py` imports its sibling c
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/validate/test_checks_workflow_runs.py -v`
-Expected: PASS (6 tests)
+Expected: PASS (7 tests)
 
 - [ ] **Step 5: Commit**
 
