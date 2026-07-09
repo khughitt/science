@@ -73,6 +73,11 @@ from science_tool.graph.patch_membership import (
     emit_patch_memberships,
 )
 from science_tool.graph.reference_resolution import ReferenceResolver
+from science_tool.graph.run_resolution import (
+    KIND_MEMBER_OF,
+    KIND_WORKFLOW_RECIPE,
+    KIND_WORKFLOW_RUN,
+)
 from science_tool.graph.source_snapshots import (
     SourceSnapshotResult,
     compute_source_snapshots,
@@ -1262,7 +1267,7 @@ def _add_derivation_edges(sources: ProjectSources, *, resolver: ReferenceResolve
         ds_uri = _entity_uri(entity.canonical_id)
 
         if isinstance(derivation, DerivationBlock):
-            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-run")))
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal(KIND_WORKFLOW_RUN)))
             resolution = resolver.resolve(derivation.workflow_run)
             if resolution.status != "resolved" or resolution.canonical_id is None:
                 raise ValueError(f"{entity.canonical_id}: unresolved workflow_run {derivation.workflow_run!r}")
@@ -1273,9 +1278,9 @@ def _add_derivation_edges(sources: ProjectSources, *, resolver: ReferenceResolve
                 )
             knowledge.add((ds_uri, SCI_NS.workflowRun, _entity_uri(resolution.canonical_id)))
         elif isinstance(derivation, WorkflowRecipeDerivationBlock):
-            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-recipe")))
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal(KIND_WORKFLOW_RECIPE)))
         elif isinstance(derivation, MemberOfDerivationBlock):
-            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("member_of")))
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal(KIND_MEMBER_OF)))
             resolution = resolver.resolve(derivation.parent_dataset)
             if resolution.status != "resolved" or resolution.canonical_id is None:
                 raise ValueError(f"{entity.canonical_id}: unresolved member_of parent {derivation.parent_dataset!r}")
