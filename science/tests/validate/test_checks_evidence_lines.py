@@ -921,6 +921,29 @@ def test_dataset_usage_check_ignores_non_empirical(tmp_path: Path):
     assert "evidence.empirical.requires_dataset_usage" not in rules
 
 
+def test_run_refs_only_line_still_fails_dataset_usage_check(tmp_path: Path):
+    """run_refs must NEVER open a bypass around the dataset-QA substrate.
+
+    A belief-eligible empirical line with run_refs but no dataset_usage stays
+    invalid: it would otherwise skip dependence_datasets_by_line, and with it the
+    dataset-QA ceiling.
+    """
+    from science_tool.validate.checks.evidence_lines import (
+        check_belief_eligible_empirical_has_dataset_usage,
+    )
+
+    _write(
+        tmp_path,
+        "entities/evidence-lines/e1.md",
+        "---\nid: evidence-line:e1\nkind: evidence-line\ntitle: E1\n"
+        "stance: supports\ntarget: hypothesis:h1\n"
+        "evidence_type: empirical_data\nbelief_eligible: true\n"
+        "run_refs: [workflow-run:r1]\n---\n",
+    )
+    results = list(check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["evidence.empirical.requires_dataset_usage"]
+
+
 # ---------------------------------------------------------------------------
 # Rule: belief.nonreproducible — golden snapshot comparison of qa_dataset_capped
 # ---------------------------------------------------------------------------

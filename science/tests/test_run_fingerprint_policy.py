@@ -162,3 +162,16 @@ def test_external_container_digest_absent_is_still_incomplete(local_fingerprint)
     findings = evaluate_fingerprint(fp)
     assert [f.rule for f in findings] == ["run.fingerprint-incomplete"]
     assert "container_digest" in findings[0].message
+
+
+def test_obligation_never_consults_the_filesystem(local_fingerprint, monkeypatch):
+    """Obligation resolution must not touch the disk."""
+    import pathlib
+
+    def _boom(*a, **k):
+        raise AssertionError("obligation resolution touched the filesystem")
+
+    monkeypatch.setattr(pathlib.Path, "exists", _boom)
+    monkeypatch.setattr(pathlib.Path, "is_file", _boom)
+    fp = local_fingerprint()
+    assert evaluate_fingerprint(fp) == []
