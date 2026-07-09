@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
-from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity
+from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity, WorkflowRunEntity
 from science_model.identity import EntityClass, EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.patch_definition import PatchDefinitionEntity
@@ -662,6 +662,8 @@ def _add_entity(
         _add_evidence_line_metadata(uri=uri, provenance=provenance, entity=entity)
     if isinstance(entity, FalsificationEntity):
         _add_falsification_metadata(uri=uri, knowledge=knowledge, entity=entity)
+    if isinstance(entity, WorkflowRunEntity):
+        _add_run_fingerprint_marker(entity=entity, uri=uri, knowledge=knowledge)
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.file_path)))
     if overlay_paths is not None and entity.canonical_id in overlay_paths:
@@ -1134,6 +1136,17 @@ def _add_falsification_metadata(*, uri: URIRef, knowledge, entity: Falsification
         value = getattr(entity, field, None)
         if value:
             knowledge.add((uri, predicate, Literal(str(value))))
+
+
+def _add_run_fingerprint_marker(*, entity: WorkflowRunEntity, uri: URIRef, knowledge) -> None:
+    """Make fingerprint presence visible in the graph.
+
+    Run resolution is graph-phase; without this triple an unfingerprinted run
+    would silently satisfy the empirical-run invariant.
+    """
+    if entity.fingerprint is None:
+        return
+    knowledge.add((uri, SCI_NS.fingerprintPolicy, Literal(entity.fingerprint.fingerprint_policy)))
 
 
 def _add_falsification_relations(

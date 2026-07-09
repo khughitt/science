@@ -301,3 +301,62 @@ def materialized_knowledge_for_evidence_line(tmp_path: Path):
         return knowledge, line_uri
 
     return _build
+
+
+@pytest.fixture
+def materialized_knowledge_for_run(tmp_path: Path, local_fingerprint):
+    """Materialize a real project graph for one workflow-run entity and hand
+    back its knowledge-graph named subgraph plus the run's URI.
+
+    Runs the actual `science graph build` CLI pipeline (not a hand-built
+    rdflib.Graph) so tests using this fixture prove what the real materializer
+    emits, not what a test author assumes it emits. The fingerprint block, when
+    present, is built from the `local_fingerprint` fixture and serialized to
+    the same frontmatter shape `register-run` writes.
+    """
+
+    def _build(*, with_fingerprint: bool):
+        import yaml
+        from click.testing import CliRunner
+        from rdflib import Dataset, URIRef
+
+        from science_tool.cli import main
+        from science_tool.graph.io import PROJECT_NS
+
+        root = tmp_path
+        (root / "science.yaml").write_text(
+            "name: run-fingerprint-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+        )
+
+        fingerprint_block = ""
+        if with_fingerprint:
+            fingerprint = local_fingerprint()
+            fingerprint_yaml = yaml.safe_dump(
+                {"fingerprint": fingerprint.model_dump(mode="json", exclude_none=True)},
+                sort_keys=False,
+            )
+            fingerprint_block = fingerprint_yaml
+
+        runs_dir = root / "entities" / "workflow-runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        (runs_dir / "r1.md").write_text(
+            "---\n"
+            "id: workflow-run:r1\n"
+            "kind: workflow-run\n"
+            "title: R1\n"
+            f"{fingerprint_block}"
+            "---\n",
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["graph", "build", "--project-root", str(root)])
+        assert result.exit_code == 0, f"graph build failed:\n{result.output}"
+
+        dataset = Dataset()
+        dataset.parse(source=str(root / "knowledge" / "graph.trig"), format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        run_uri = URIRef(PROJECT_NS["workflow-run/r1"])
+        return knowledge, run_uri
+
+    return _build

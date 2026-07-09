@@ -236,6 +236,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/knowledge",
     },
     {
+        "predicate": "sci:fingerprintPolicy",
+        "description": "Policy version of the run's reproducibility fingerprint; presence means fingerprinted",
+        "layer": "graph/knowledge",
+    },
+    {
         "predicate": "sci:compositionalStatus",
         "description": "Compositional robustness status for proposition-backed claims",
         "layer": "graph/provenance",
