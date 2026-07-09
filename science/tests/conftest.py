@@ -491,3 +491,168 @@ def materialized_knowledge_for_dataset(tmp_path: Path):
         return knowledge, ds_uri, related_uri
 
     return _build
+
+
+# ---------------------------------------------------------------------------
+# Hand-built TriG fixtures for `empirical_run_resolution` (Task 10).
+#
+# Style copied from `test_dataset_independence.py:338-360`: build the
+# knowledge/provenance graphs directly with rdflib, then serialize to TriG
+# text so `validate_graph_dataset` can parse it via `Dataset.parse(data=...,
+# format="trig")`, exactly like the graph-phase validator consumes a real
+# `graph.trig`. Do not invent predicates — reuse `SCI_NS`/`CITO_NS` terms
+# from `science_tool.graph.io`.
+# ---------------------------------------------------------------------------
+
+
+def _run_resolution_dataset():
+    from rdflib import Dataset
+
+    from science_tool.graph.io import PROJECT_NS
+
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    provenance = ds.graph(PROJECT_NS["graph/provenance"])
+    return ds, knowledge, provenance
+
+
+def _add_empirical_line(knowledge, provenance, line, target, dataset, usage, *, role="analyzed", overlap="full"):
+    """Wire up a belief-eligible empirical_data evidence line with one DEPENDENCE dataset usage."""
+    from rdflib import RDF, Literal
+
+    from science_tool.graph.io import CITO_NS, SCI_NS
+
+    knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+    knowledge.add((line, CITO_NS.supports, target))
+    provenance.add((line, SCI_NS.hasDatasetUsage, usage))
+    provenance.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    provenance.add((usage, SCI_NS.dataset, dataset))
+    provenance.add((usage, SCI_NS.usageRole, Literal(role)))
+    provenance.add((usage, SCI_NS.usageOverlap, Literal(overlap)))
+    provenance.add((line, SCI_NS.evidenceType, Literal("empirical_data")))
+
+
+@pytest.fixture
+def empirical_line_without_run_trig():
+    """Dataset has no derivation at all → NoRunReason.NO_PROVENANCE, no run_refs rescue."""
+    from rdflib import URIRef
+
+    from science_tool.graph.io import PROJECT_NS
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    return ds.serialize(format="trig")
+
+
+@pytest.fixture
+def empirical_line_with_run_trig():
+    """Dataset's own derivation names a FINGERPRINTED workflow-run → resolves, passes."""
+    from rdflib import Literal, URIRef
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.run_resolution import KIND_WORKFLOW_RUN
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    run = URIRef(PROJECT_NS["workflow-run/r1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    knowledge.add((dataset, SCI_NS.derivationKind, Literal(KIND_WORKFLOW_RUN)))
+    knowledge.add((dataset, SCI_NS.workflowRun, run))
+    knowledge.add((run, SCI_NS.fingerprintPolicy, Literal("science-run-fingerprint/v1")))
+    return ds.serialize(format="trig")
+
+
+@pytest.fixture
+def member_of_cycle_trig():
+    """Dataset's own member_of chain revisits itself → MemberOfCycleError → fatal row."""
+    from rdflib import Literal, URIRef
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.run_resolution import KIND_MEMBER_OF
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    knowledge.add((dataset, SCI_NS.derivationKind, Literal(KIND_MEMBER_OF)))
+    knowledge.add((dataset, SCI_NS.memberOfParent, dataset))  # self-cycle
+    return ds.serialize(format="trig")
+
+
+@pytest.fixture
+def empirical_line_with_unfingerprinted_run_trig():
+    """Dataset's own derivation names a run that carries NO sci:fingerprintPolicy → warns.
+
+    Proves the contract fails CLOSED: naming a run is not the same as resolving to a
+    fingerprinted one.
+    """
+    from rdflib import Literal, URIRef
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.run_resolution import KIND_WORKFLOW_RUN
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    run = URIRef(PROJECT_NS["workflow-run/r1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    knowledge.add((dataset, SCI_NS.derivationKind, Literal(KIND_WORKFLOW_RUN)))
+    knowledge.add((dataset, SCI_NS.workflowRun, run))
+    # Deliberately no sci:fingerprintPolicy on `run`.
+    return ds.serialize(format="trig")
+
+
+@pytest.fixture
+def line_with_unfingerprinted_run_ref_trig():
+    """`run_refs` names an unfingerprinted run and the dataset has no provenance of its
+    own → the run_refs entry must NOT rescue resolution; run_refs is not a back door.
+    """
+    from rdflib import URIRef
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    run = URIRef(PROJECT_NS["workflow-run/r1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    # dataset has no derivation of its own (NO_PROVENANCE)
+    knowledge.add((line, SCI_NS.runRef, run))
+    # `run` deliberately carries no sci:fingerprintPolicy.
+    return ds.serialize(format="trig")
+
+
+@pytest.fixture
+def line_with_produced_by_dataset_and_fingerprinted_run_ref_trig():
+    """Rescue case: dataset provenance is sound but code-only (sci:producedBy, no run),
+    and `run_refs` names a FINGERPRINTED run → resolves via the run_refs union.
+    """
+    from rdflib import Literal, URIRef
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+
+    ds, knowledge, provenance = _run_resolution_dataset()
+    line = URIRef(PROJECT_NS["evidence-line/e1"])
+    target = URIRef(PROJECT_NS["proposition/p1"])
+    dataset = URIRef(PROJECT_NS["dataset/d1"])
+    usage = URIRef(PROJECT_NS["usage/u1"])
+    code = URIRef(PROJECT_NS["code-file/producer"])
+    run = URIRef(PROJECT_NS["workflow-run/r1"])
+    _add_empirical_line(knowledge, provenance, line, target, dataset, usage)
+    knowledge.add((dataset, SCI_NS.producedBy, code))  # code-only, no run
+    knowledge.add((line, SCI_NS.runRef, run))
+    knowledge.add((run, SCI_NS.fingerprintPolicy, Literal("science-run-fingerprint/v1")))
+    return ds.serialize(format="trig")

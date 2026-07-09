@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 
 import click
-from rdflib import Dataset
+from rdflib import Dataset, Graph, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
+from science_model.reasoning import EvidenceType
 
+from science_tool.graph.belief_weights import normalize_evidence_type
 from science_tool.graph.io import (
     build_input_manifest as _build_input_manifest,
 )
@@ -13,6 +16,7 @@ from science_tool.graph.io import (
     read_revision_manifest as _read_revision_manifest,
 )
 from science_tool.graph.patch_membership import validate_patch_membership_convenience
+from science_tool.graph.run_resolution import MemberOfCycleError, NoRunReason, resolved_empirical_runs
 
 from .constants import PREDICATE_REGISTRY, SCHEMA_NS, SCI_NS, SCIC_NS
 from .dataset import _load_dataset
@@ -155,8 +159,110 @@ def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool
             }
         )
 
+    run_messages, run_fatal = validate_empirical_run_resolution(dataset)
+    if run_messages:
+        rows.append(
+            {
+                "check": "empirical_run_resolution",
+                "status": "fail" if run_fatal else "warn",
+                "details": f"{len(run_messages)} empirical line(s) without a fingerprinted run: {run_messages[0]}",
+            }
+        )
+    else:
+        rows.append(
+            {
+                "check": "empirical_run_resolution",
+                "status": "pass",
+                "details": "all belief-eligible empirical lines resolve to a fingerprinted run",
+            }
+        )
+
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures
+
+
+def _knowledge_and_provenance(dataset: Dataset) -> tuple[Graph, Graph]:
+    return (
+        dataset.graph(_graph_uri("graph/knowledge")),
+        dataset.graph(_graph_uri("graph/provenance")),
+    )
+
+
+def _is_fingerprinted(knowledge: Graph, run_uri: URIRef) -> bool:
+    """A run bears a fingerprint iff it carries sci:fingerprintPolicy (Task 8c)."""
+    return (run_uri, SCI_NS.fingerprintPolicy, None) in knowledge
+
+
+def _runs_for_line(
+    knowledge: Graph, line: URIRef, datasets: set[URIRef]
+) -> tuple[list[URIRef], list[NoRunReason]]:
+    """Fingerprinted runs a line resolves to: dataset-derivation union `run_refs`.
+
+    `run_refs` widens the RUN set, never the DATASET set — every entry is
+    filtered through the SAME `is_fingerprinted` predicate used for
+    dataset-derived resolution, so an unfingerprinted `run_refs` target
+    contributes nothing (and adds `RUN_UNFINGERPRINTED` to the reasons).
+    `MemberOfCycleError` propagates to the caller (it must be handled per-line,
+    not swallowed here).
+    """
+    is_fingerprinted = partial(_is_fingerprinted, knowledge)
+
+    runs: set[URIRef] = set()
+    reasons: list[NoRunReason] = []
+    for ds in sorted(datasets, key=str):
+        ds_runs, ds_reasons = resolved_empirical_runs(knowledge, ds, is_fingerprinted)
+        runs.update(ds_runs)
+        reasons.extend(ds_reasons)
+
+    for run_ref in knowledge.objects(line, SCI_NS.runRef):
+        if not isinstance(run_ref, URIRef):
+            continue
+        if is_fingerprinted(run_ref):
+            runs.add(run_ref)
+        else:
+            reasons.append(NoRunReason.RUN_UNFINGERPRINTED)
+
+    if runs:
+        return sorted(runs, key=str), []
+    return [], reasons
+
+
+def validate_empirical_run_resolution(dataset: Dataset) -> tuple[list[str], bool]:
+    """Belief-eligible empirical lines must resolve to a FINGERPRINTED run.
+
+    Returns (messages, is_fatal). A member_of cycle is fatal; unresolved lines
+    warn during P2 and become fatal at the P4 flip (Task 11).
+
+    Resolution reuses `dependence_datasets_by_line` — the same substrate the
+    dataset-QA ceiling uses — restricted to `EvidenceType.EMPIRICAL_DATA` lines,
+    exactly as `graph/dataset_qa.py` does. `MemberOfCycleError` originates inside
+    `_runs_for_line` (via `resolved_empirical_runs`), NOT inside
+    `dependence_datasets_by_line`; the try/except therefore wraps the per-line
+    loop, and a cycle short-circuits the whole check as fatal.
+    """
+    from science_tool.graph.dataset_independence import dependence_datasets_by_line
+
+    knowledge, provenance = _knowledge_and_provenance(dataset)
+    by_line = dependence_datasets_by_line(knowledge, provenance)
+
+    messages: list[str] = []
+    for line, datasets in sorted(by_line.items()):
+        evidence_type = next(provenance.objects(line, SCI_NS.evidenceType), None)
+        token = normalize_evidence_type(str(evidence_type) if evidence_type is not None else None)
+        if token != EvidenceType.EMPIRICAL_DATA:
+            continue
+        try:
+            runs, reasons = _runs_for_line(knowledge, line, datasets)
+        except MemberOfCycleError as exc:
+            return [f"{line}: dataset.member-of-cycle ({exc})"], True
+        if runs:
+            continue
+        if NoRunReason.RECIPE_ONLY in reasons:
+            messages.append(f"{line}: evidence.empirical-run-recipe-only")
+        else:
+            detail = ", ".join(sorted({r.value for r in reasons})) or "no-provenance"
+            messages.append(f"{line}: evidence.empirical-run-unresolved ({detail})")
+    return sorted(messages), False
 
 
 def _parse_failure_rows(exc: Exception) -> list[dict[str, str]]:
