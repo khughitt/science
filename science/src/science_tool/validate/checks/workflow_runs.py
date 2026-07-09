@@ -21,6 +21,7 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 RULE_ORIGIN_UNVERIFIED = "run.fingerprint-origin-unverified"
+RULE_MALFORMED = "run.fingerprint-malformed"
 
 
 def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -76,7 +77,7 @@ def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
             yield Result(
                 severity=Severity.ERROR, path=path, line=None,
                 message=f"{path.name}: malformed fingerprint: {exc.errors()[0]['msg']}",
-                rule="run.fingerprint-incomplete", task=None,
+                rule=RULE_MALFORMED, task=None,
             )
             continue
 

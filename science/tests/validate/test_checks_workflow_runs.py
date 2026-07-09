@@ -67,6 +67,18 @@ def test_unknown_capturable_component_is_warn(tmp_path):
     assert results[0].severity is Severity.WARN
 
 
+def test_malformed_fingerprint_is_error(tmp_path):
+    bad = CLEAN.replace(
+        '  code_dirty: {value: "false", provenance: captured}',
+        '  code_dirty: {value: "", provenance: captured}',
+    )
+    assert bad != CLEAN, "replace() found no match against CLEAN; fixture text has drifted"
+    _write_run(tmp_path, "r1", bad)
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.fingerprint-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
 def test_commons_origin_digest_mismatch_is_error(tmp_path):
     src = tmp_path / "imported.md"
     src.write_text("real content", encoding="utf-8")
