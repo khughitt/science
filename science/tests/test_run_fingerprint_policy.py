@@ -1,8 +1,26 @@
-from science_model.run_fingerprint import ArtifactLocality, ExecutorKind, RunFingerprint
+from datetime import UTC, datetime
+
+from science_model.run_fingerprint import (
+    ArtifactLocality,
+    ComponentProvenance,
+    ExecutorKind,
+    FingerprintComponent,
+    RunFingerprint,
+)
 
 from science_tool.run_fingerprint_policy import (
-    COMPONENT_FIELDS, LOCALITY_OBLIGATION, OBLIGATIONS, Obligation, obligation_for,
+    COMPONENT_FIELDS, LOCALITY_OBLIGATION, OBLIGATIONS, Obligation, evaluate_fingerprint, obligation_for,
 )
+
+WHEN = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+UNKNOWN = FingerprintComponent(provenance=ComponentProvenance.UNKNOWN)
+
+
+def _attested(v: str) -> FingerprintComponent:
+    return FingerprintComponent(
+        value=v, provenance=ComponentProvenance.ATTESTED,
+        attested_by="nextflow", attested_at=WHEN,
+    )
 
 
 def test_every_executor_declares_every_component():
@@ -50,3 +68,65 @@ def test_by_locality_never_leaks_to_callers(local_fingerprint):
 def test_locality_obligation_table():
     assert LOCALITY_OBLIGATION[ArtifactLocality.SCIENCE_MANAGED] is Obligation.MUST_CAPTURED
     assert LOCALITY_OBLIGATION[ArtifactLocality.EXTERNAL] is Obligation.MAY_ATTESTED
+
+
+def test_clean_local_fingerprint_has_no_findings(local_fingerprint):
+    assert evaluate_fingerprint(local_fingerprint()) == []
+
+
+def test_attested_where_capture_required_is_authored_capturable(local_fingerprint):
+    fp = local_fingerprint(environment_digest=_attested("sha256:env"))
+    rules = [f.rule for f in evaluate_fingerprint(fp)]
+    assert rules == ["run.fingerprint-authored-capturable"]
+    assert "environment_digest" in evaluate_fingerprint(fp)[0].message
+
+
+def test_unknown_where_capture_required_is_incomplete(local_fingerprint):
+    fp = local_fingerprint(parameters_digest=UNKNOWN)
+    assert [f.rule for f in evaluate_fingerprint(fp)] == ["run.fingerprint-incomplete"]
+
+
+def test_container_digest_present_on_local_is_incomplete(local_fingerprint):
+    fp = local_fingerprint(container_digest=_attested("sha256:img"))
+    findings = evaluate_fingerprint(fp)
+    assert [f.rule for f in findings] == ["run.fingerprint-incomplete"]
+    assert "not applicable" in findings[0].message
+
+
+def test_external_may_attest_environment_digest(local_fingerprint):
+    fp = local_fingerprint(
+        executor=ExecutorKind.EXTERNAL,
+        environment_digest=_attested("sha256:env"),
+        container_digest=_attested("sha256:img"),
+        parameters_digest=_attested("sha256:params"),
+        code_dirty=UNKNOWN,
+    )
+    assert evaluate_fingerprint(fp) == []
+
+
+def test_external_still_cannot_attest_code_sha(local_fingerprint):
+    fp = local_fingerprint(
+        executor=ExecutorKind.EXTERNAL, code_sha=_attested("b" * 40),
+        environment_digest=_attested("sha256:env"),
+        container_digest=_attested("sha256:img"),
+        parameters_digest=_attested("sha256:params"), code_dirty=UNKNOWN,
+    )
+    assert [f.rule for f in evaluate_fingerprint(fp)] == ["run.fingerprint-authored-capturable"]
+
+
+def test_external_input_locality_allows_attested_manifest(local_fingerprint):
+    fp = local_fingerprint(
+        executor=ExecutorKind.EXTERNAL,
+        input_artifact_locality=ArtifactLocality.EXTERNAL,
+        input_manifest_digest=_attested("sha256:in"),
+        environment_digest=_attested("sha256:env"),
+        container_digest=_attested("sha256:img"),
+        parameters_digest=_attested("sha256:params"), code_dirty=UNKNOWN,
+    )
+    assert evaluate_fingerprint(fp) == []
+
+
+def test_findings_are_deterministically_ordered(local_fingerprint):
+    fp = local_fingerprint(environment_digest=UNKNOWN, parameters_digest=UNKNOWN)
+    messages = [f.message for f in evaluate_fingerprint(fp)]
+    assert messages == sorted(messages)

@@ -10,12 +10,15 @@ artifact locality. It is never a function of what validate can observe on disk.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 
 from science_model.run_fingerprint import (
     ArtifactLocality,
+    ComponentProvenance,
     ExecutorKind,
+    FingerprintComponent,
     RunFingerprint,
 )
 
@@ -128,3 +131,61 @@ def _reconcile_obligation_table() -> None:
 
 
 _reconcile_obligation_table()
+
+
+RULE_INCOMPLETE = "run.fingerprint-incomplete"
+RULE_AUTHORED_CAPTURABLE = "run.fingerprint-authored-capturable"
+
+
+@dataclass(frozen=True, slots=True)
+class FingerprintFinding:
+    rule: str
+    message: str
+
+
+def _evaluate_component(
+    name: str, component: FingerprintComponent | None, obligation: Obligation
+) -> FingerprintFinding | None:
+    if obligation is Obligation.NOT_APPLICABLE:
+        if component is not None:
+            return FingerprintFinding(
+                RULE_INCOMPLETE, f"{name} is not applicable for this executor but is present"
+            )
+        return None
+
+    if component is None:
+        return FingerprintFinding(RULE_INCOMPLETE, f"{name} is required but absent")
+
+    if obligation is Obligation.MUST_CAPTURED:
+        if component.provenance is ComponentProvenance.CAPTURED:
+            return None
+        if component.provenance is ComponentProvenance.ATTESTED:
+            return FingerprintFinding(
+                RULE_AUTHORED_CAPTURABLE,
+                f"{name} must be captured for this executor but is attested",
+            )
+        return FingerprintFinding(RULE_INCOMPLETE, f"{name} must be captured but is unknown")
+
+    if obligation is Obligation.MAY_ATTESTED:
+        if component.provenance is ComponentProvenance.UNKNOWN:
+            return FingerprintFinding(
+                RULE_INCOMPLETE, f"{name} must be captured or attested but is unknown"
+            )
+        return None
+
+    if obligation is Obligation.MAY_UNKNOWN:
+        # Any present state is acceptable.
+        return None
+
+    raise AssertionError(f"unhandled obligation {obligation!r} for component {name!r}")
+
+
+def evaluate_fingerprint(fingerprint: RunFingerprint) -> list[FingerprintFinding]:
+    """Findings for one run's fingerprint. Pure; reads no disk state."""
+    findings: list[FingerprintFinding] = []
+    for name in COMPONENT_FIELDS:
+        obligation = obligation_for(fingerprint.executor, name, fingerprint)
+        finding = _evaluate_component(name, getattr(fingerprint, name), obligation)
+        if finding is not None:
+            findings.append(finding)
+    return sorted(findings, key=lambda f: f.message)
