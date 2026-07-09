@@ -131,7 +131,7 @@ class RunFingerprint(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fingerprint_policy: str
+    fingerprint_policy: Literal[FINGERPRINT_POLICY_V1]
     executor: ExecutorKind
     input_artifact_locality: ArtifactLocality
     output_artifact_locality: ArtifactLocality

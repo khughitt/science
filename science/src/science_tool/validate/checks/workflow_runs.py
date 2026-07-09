@@ -35,9 +35,16 @@ def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Resu
     if fp.executor is not ExecutorKind.COMMONS:
         return None
     origin = fp.capture_origin
-    assert origin is not None  # model invariant: commons => capture_origin
+    if origin is None:
+        raise AssertionError("model invariant violated: executor='commons' requires capture_origin")
     if origin.source_ref is None:
         return None
+    if Path(origin.source_ref).is_absolute():
+        return Result(
+            severity=Severity.ERROR, path=path, line=None,
+            message=f"{path.name}: capture_origin.source_ref {origin.source_ref!r} must be relative to the project root",
+            rule=RULE_ORIGIN_UNVERIFIED, task=None,
+        )
     source = ctx.project_root / origin.source_ref
     if not source.is_file():
         return Result(

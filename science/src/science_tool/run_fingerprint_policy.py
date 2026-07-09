@@ -123,6 +123,10 @@ def _reconcile_obligation_table() -> None:
             f"{sorted(COMPONENT_FIELDS)} != RunFingerprint components {sorted(model_components)}"
         )
     for executor in ExecutorKind:
+        if executor not in OBLIGATIONS:
+            raise RuntimeError(
+                f"run-fingerprint drift: ExecutorKind {executor.value!r} has no OBLIGATIONS entry"
+            )
         declared = set(OBLIGATIONS[executor])
         if declared != model_components:
             missing = sorted(model_components - declared)
@@ -131,7 +135,12 @@ def _reconcile_obligation_table() -> None:
                 f"run-fingerprint drift for executor={executor.value}: missing={missing} extra={extra}"
             )
     if set(LOCALITY_OBLIGATION) != set(ArtifactLocality):
-        raise RuntimeError("run-fingerprint drift: LOCALITY_OBLIGATION must cover every ArtifactLocality")
+        missing = sorted(loc.value for loc in set(ArtifactLocality) - set(LOCALITY_OBLIGATION))
+        extra = sorted(loc.value for loc in set(LOCALITY_OBLIGATION) - set(ArtifactLocality))
+        raise RuntimeError(
+            "run-fingerprint drift: LOCALITY_OBLIGATION must cover every ArtifactLocality: "
+            f"missing={missing} extra={extra}"
+        )
 
 
 _reconcile_obligation_table()

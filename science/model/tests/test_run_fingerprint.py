@@ -114,6 +114,11 @@ def _fp(**over) -> RunFingerprint:
     return RunFingerprint(**base)
 
 
+def test_fingerprint_policy_rejects_non_v1_value():
+    with pytest.raises(ValidationError):
+        _fp(fingerprint_policy="science-run-fingerprint/v2")
+
+
 def test_code_dirty_must_be_true_or_false_token():
     assert _fp().code_dirty.value == "false"
     with pytest.raises(ValidationError):

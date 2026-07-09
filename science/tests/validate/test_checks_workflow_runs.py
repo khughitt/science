@@ -99,6 +99,29 @@ def test_commons_origin_digest_mismatch_is_error(tmp_path):
     assert results[0].severity is Severity.ERROR
 
 
+def test_commons_origin_absolute_source_ref_is_error(tmp_path):
+    """An absolute source_ref must be rejected rather than silently resolved
+    outside project_root (pathlib join semantics discard project_root for an
+    absolute right-hand side)."""
+    outside = tmp_path / "outside.md"
+    outside.write_text("real content", encoding="utf-8")
+    commons = CLEAN.replace("  executor: local", "  executor: commons") + (
+        "  container_digest: {provenance: unknown}\n"
+        "  capture_origin:\n"
+        "    origin_project: project:pan-disease\n"
+        "    origin_run_ref: workflow-run:r0\n"
+        "    captured_at: '2026-07-09T12:00:00Z'\n"
+        "    captured_by: science\n"
+        "    capture_policy: science-run-fingerprint/v1\n"
+        f"    source_ref: {outside}\n"
+    )
+    _write_run(tmp_path, "r1", commons)
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.fingerprint-origin-unverified"]
+    assert results[0].severity is Severity.ERROR
+    assert "must be relative" in results[0].message
+
+
 def test_commons_origin_matching_digest_passes(tmp_path):
     src = tmp_path / "imported.md"
     src.write_text("real content", encoding="utf-8")

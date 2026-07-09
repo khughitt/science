@@ -39,6 +39,12 @@ def test_member_of_cycle_fails(member_of_cycle_trig):
     assert row["status"] == "fail"
     assert "dataset.member-of-cycle" in row["details"]
     assert has_failures
+    # Would catch: reverting the fail-arm detail to the "no fingerprinted
+    # run" wording it shares with the warn arm — a cycle is a structural
+    # defect, not a missing-fingerprint condition, so the row header must say
+    # so instead of misdescribing what actually happened.
+    assert "without a fingerprinted run" not in row["details"]
+    assert "structural defect" in row["details"]
 
 
 def test_derivation_run_without_fingerprint_still_warns(empirical_line_with_unfingerprinted_run_trig):
@@ -154,6 +160,102 @@ def test_real_materialized_unfingerprinted_run_does_not_resolve(tmp_path):
     assert "run-unfingerprinted" in row["details"]
     assert not has_failures
     assert (run_uri, SCI_NS.fingerprintPolicy, None) not in knowledge
+
+
+def test_real_materialized_fingerprinted_run_resolves(tmp_path, local_fingerprint):
+    """The positive flip of `test_real_materialized_unfingerprinted_run_does_not_resolve`:
+    real `graph build` output for an empirical line resting on a dataset whose
+    derivation names a real, FINGERPRINTED `workflow-run` must PASS. Every other
+    real-materialized-graph test in this file proves the fail-closed direction only
+    (warn on missing fingerprint); this proves the emit/consume predicates agree on
+    the positive case too.
+    """
+    import yaml
+    from rdflib import Dataset
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.materialize import materialize_graph
+
+    root = tmp_path
+    (root / "science.yaml").write_text(
+        "name: run-resolution-positive-e2e\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
+
+    props = root / "entities" / "propositions"
+    props.mkdir(parents=True)
+    (props / "p1.md").write_text(
+        "---\nid: proposition:p1\nkind: proposition\ntitle: P1\n---\n\nClaim.\n",
+        encoding="utf-8",
+    )
+
+    fingerprint_yaml = yaml.safe_dump(
+        {"fingerprint": local_fingerprint().model_dump(mode="json", exclude_none=True)},
+        sort_keys=False,
+    )
+    runs = root / "entities" / "workflow-runs"
+    runs.mkdir(parents=True)
+    (runs / "r1.md").write_text(
+        f"---\nid: workflow-run:r1\nkind: workflow-run\ntitle: R1\n{fingerprint_yaml}---\n",
+        encoding="utf-8",
+    )
+
+    datasets = root / "entities" / "datasets"
+    datasets.mkdir(parents=True)
+    (datasets / "ds1.md").write_text(
+        "---\n"
+        "id: dataset:ds1\n"
+        "kind: dataset\n"
+        "title: DS1\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:wf\n"
+        "  workflow_run: workflow-run:r1\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: config.yaml\n"
+        "  produced_at: '2026-04-19T00:00:00Z'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    lines = root / "entities" / "evidence-lines"
+    lines.mkdir(parents=True)
+    (lines / "e1.md").write_text(
+        "---\n"
+        "id: evidence-line:e1\n"
+        "kind: evidence-line\n"
+        "title: E1\n"
+        "status: active\n"
+        "stance: supports\n"
+        "target: proposition:p1\n"
+        "strength: moderate\n"
+        "belief_eligible: true\n"
+        "evidence_type: empirical_data_evidence\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:ds1\n"
+        "    role: analyzed\n"
+        "    overlap: full\n"
+        "created: '2026-05-01'\n"
+        "updated: '2026-05-01'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(root)
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+
+    run_uri = PROJECT_NS["workflow-run/r1"]
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    dataset_uri = PROJECT_NS["dataset/ds1"]
+    # The dataset's derivation really does name the run, and the run really is
+    # fingerprinted — this is not a no-op fixture.
+    assert (dataset_uri, SCI_NS.workflowRun, run_uri) in knowledge
+    assert (run_uri, SCI_NS.fingerprintPolicy, None) in knowledge
+
+    rows, has_failures = validate_graph_dataset(dataset)
+    row = _row(rows, "empirical_run_resolution")
+    assert row["status"] == "pass"
+    assert not has_failures
 
 
 def test_verdict_is_identical_with_and_without_data_files_on_disk(

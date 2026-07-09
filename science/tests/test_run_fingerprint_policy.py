@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+from types import MappingProxyType
 
+import pytest
 from science_model.run_fingerprint import (
     ArtifactLocality,
     ComponentProvenance,
@@ -8,6 +10,7 @@ from science_model.run_fingerprint import (
     RunFingerprint,
 )
 
+import science_tool.run_fingerprint_policy as run_fingerprint_policy_module
 from science_tool.run_fingerprint_policy import (
     COMPONENT_FIELDS, LOCALITY_OBLIGATION, OBLIGATIONS, Obligation, evaluate_fingerprint, obligation_for,
 )
@@ -162,6 +165,28 @@ def test_external_container_digest_absent_is_still_incomplete(local_fingerprint)
     findings = evaluate_fingerprint(fp)
     assert [f.rule for f in findings] == ["run.fingerprint-incomplete"]
     assert "container_digest" in findings[0].message
+
+
+def test_reconcile_gate_names_executor_missing_from_obligations(monkeypatch):
+    """Would catch: dropping the bare-index guard in `_reconcile_obligation_table`
+    (a future ExecutorKind with no OBLIGATIONS entry must raise a descriptive
+    RuntimeError naming the executor, not a bare KeyError)."""
+    drifted = MappingProxyType(
+        {k: v for k, v in OBLIGATIONS.items() if k is not ExecutorKind.EXTERNAL}
+    )
+    monkeypatch.setattr(run_fingerprint_policy_module, "OBLIGATIONS", drifted)
+    with pytest.raises(RuntimeError, match="external"):
+        run_fingerprint_policy_module._reconcile_obligation_table()
+
+
+def test_reconcile_gate_names_missing_locality_member(monkeypatch):
+    """Would catch: the LOCALITY_OBLIGATION drift check reverting to its old
+    unnamed message instead of naming the missing/extra ArtifactLocality
+    members, like its sibling raises do."""
+    drifted = MappingProxyType({ArtifactLocality.SCIENCE_MANAGED: Obligation.MUST_CAPTURED})
+    monkeypatch.setattr(run_fingerprint_policy_module, "LOCALITY_OBLIGATION", drifted)
+    with pytest.raises(RuntimeError, match="external"):
+        run_fingerprint_policy_module._reconcile_obligation_table()
 
 
 def test_obligation_never_consults_the_filesystem(local_fingerprint, monkeypatch):

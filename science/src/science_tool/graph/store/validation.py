@@ -161,11 +161,18 @@ def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool
 
     run_messages, run_fatal = validate_empirical_run_resolution(dataset)
     if run_messages:
+        if run_fatal:
+            # Fatal today means a structural `dataset.member-of-cycle` defect
+            # (see `validate_empirical_run_resolution`), not "no fingerprinted
+            # run" — the per-line message already names the actual defect.
+            details = f"structural defect blocking run resolution: {run_messages[0]}"
+        else:
+            details = f"{len(run_messages)} empirical line(s) without a fingerprinted run: {run_messages[0]}"
         rows.append(
             {
                 "check": "empirical_run_resolution",
                 "status": "fail" if run_fatal else "warn",
-                "details": f"{len(run_messages)} empirical line(s) without a fingerprinted run: {run_messages[0]}",
+                "details": details,
             }
         )
     else:
