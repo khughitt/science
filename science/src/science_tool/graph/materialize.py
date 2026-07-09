@@ -718,6 +718,7 @@ def _add_relations(
             provenance=provenance,
             ext_prefixes=ext_prefixes,
         )
+        _add_run_ref_edges(entity, entity_uri, resolver=resolver, knowledge=knowledge)
 
     if isinstance(entity, FalsificationEntity):
         _add_falsification_relations(
@@ -1057,6 +1058,29 @@ def _add_evidence_line_relations(
                 source_entity = entity_index.get(resolution.canonical_id)
                 if source_entity is not None:
                     provenance.add((line_uri, PROV.wasDerivedFrom, _entity_uri(source_entity.canonical_id)))
+
+
+def _add_run_ref_edges(
+    entity: EvidenceLineEntity,
+    line_uri: URIRef,
+    *,
+    resolver: ReferenceResolver,
+    knowledge,
+) -> None:
+    """Emit sci:runRef for each authored run_refs entry.
+
+    Staged lines (belief_eligible=False) are skipped — they must not enter the
+    belief substrate, and run resolution is part of that substrate.
+    """
+    if not entity.belief_eligible:
+        return
+    for ref in entity.run_refs:
+        resolution = resolver.resolve(ref)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
+            raise ValueError(f"unresolved workflow-run reference in run_refs: {ref}")
+        if not resolution.canonical_id.startswith("workflow-run:"):
+            raise ValueError(f"run_refs entry resolved to non-workflow-run: {ref} -> {resolution.canonical_id}")
+        knowledge.add((line_uri, SCI_NS.runRef, project_entity_uri(resolution.canonical_id)))
 
 
 def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLineEntity) -> None:

@@ -231,6 +231,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:runRef",
+        "description": "Supplemental workflow-run reference widening the line's resolved-run set",
+        "layer": "graph/knowledge",
+    },
+    {
         "predicate": "sci:compositionalStatus",
         "description": "Compositional robustness status for proposition-backed claims",
         "layer": "graph/provenance",

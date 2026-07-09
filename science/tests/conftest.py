@@ -219,3 +219,85 @@ def local_fingerprint():
         return RunFingerprint(**base)
 
     return _make
+
+
+@pytest.fixture
+def materialized_knowledge_for_evidence_line(tmp_path: Path):
+    """Materialize a real project graph for one evidence line and hand back its
+    knowledge-graph named subgraph plus the evidence line's URI.
+
+    Runs the actual `science graph build` CLI pipeline (not a hand-built
+    rdflib.Graph) so tests using this fixture prove what the real materializer
+    emits, not what a test author assumes it emits. Any `run_refs` entries are
+    backed by minimal authored `workflow-run` entities so reference resolution
+    succeeds.
+    """
+
+    def _build(*, run_refs: list[str], belief_eligible: bool):
+        from click.testing import CliRunner
+        from rdflib import Dataset, URIRef
+
+        from science_tool.cli import main
+        from science_tool.graph.io import PROJECT_NS
+
+        root = tmp_path
+        (root / "science.yaml").write_text(
+            "name: run-refs-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+        )
+
+        propositions = root / "entities" / "propositions"
+        propositions.mkdir(parents=True, exist_ok=True)
+        (propositions / "p1.md").write_text(
+            "---\nid: proposition:p1\nkind: proposition\ntitle: P1\n---\n\nClaim.\n",
+            encoding="utf-8",
+        )
+
+        papers = root / "entities" / "papers"
+        papers.mkdir(parents=True, exist_ok=True)
+        (papers / "x.md").write_text(
+            "---\nid: paper:x\nkind: paper\ntitle: X\n---\n\nAbstract.\n",
+            encoding="utf-8",
+        )
+
+        runs_dir = root / "entities" / "workflow-runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        for ref in run_refs:
+            slug = ref.split(":", 1)[1]
+            run_path = runs_dir / f"{slug}.md"
+            if not run_path.exists():
+                run_path.write_text(
+                    f"---\nid: workflow-run:{slug}\nkind: workflow-run\ntitle: {slug.upper()}\n---\n",
+                    encoding="utf-8",
+                )
+
+        run_refs_block = "run_refs: []\n"
+        if run_refs:
+            run_refs_block = "run_refs:\n" + "".join(f"  - {ref}\n" for ref in run_refs)
+
+        evidence_lines = root / "entities" / "evidence-lines"
+        evidence_lines.mkdir(parents=True, exist_ok=True)
+        (evidence_lines / "e1.md").write_text(
+            "---\n"
+            "id: evidence-line:e1\n"
+            "kind: evidence-line\n"
+            "title: Evidence line\n"
+            "stance: supports\n"
+            "target: proposition:p1\n"
+            "source: paper:x\n"
+            f"belief_eligible: {belief_eligible}\n"
+            f"{run_refs_block}"
+            "---\n",
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["graph", "build", "--project-root", str(root)])
+        assert result.exit_code == 0, f"graph build failed:\n{result.output}"
+
+        dataset = Dataset()
+        dataset.parse(source=str(root / "knowledge" / "graph.trig"), format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        line_uri = URIRef(PROJECT_NS["evidence-line/e1"])
+        return knowledge, line_uri
+
+    return _build
