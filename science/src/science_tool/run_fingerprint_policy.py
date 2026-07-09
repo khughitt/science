@@ -74,7 +74,10 @@ OBLIGATIONS: Mapping[ExecutorKind, Mapping[str, Obligation]] = MappingProxyType(
                 "code_sha": Obligation.MUST_CAPTURED,
                 "code_dirty": Obligation.MUST_CAPTURED,
                 "environment_digest": Obligation.MUST_CAPTURED,
-                "container_digest": Obligation.MAY_ATTESTED,
+                # No standalone "we used no container" state existed under MAY_ATTESTED
+                # (a present-but-unknown component still failed as incomplete), so a
+                # legitimately containerless commons run had no way to say so.
+                "container_digest": Obligation.MAY_UNKNOWN,
                 "parameters_digest": Obligation.MUST_CAPTURED,
                 "input_manifest_digest": Obligation.BY_LOCALITY,
                 "output_manifest_digest": Obligation.BY_LOCALITY,
@@ -85,7 +88,8 @@ OBLIGATIONS: Mapping[ExecutorKind, Mapping[str, Obligation]] = MappingProxyType(
                 "code_sha": Obligation.MUST_CAPTURED,
                 "code_dirty": Obligation.MAY_UNKNOWN,
                 "environment_digest": Obligation.MAY_ATTESTED,
-                "container_digest": Obligation.MAY_ATTESTED,
+                # See the COMMONS comment above — same rationale.
+                "container_digest": Obligation.MAY_UNKNOWN,
                 "parameters_digest": Obligation.MAY_ATTESTED,
                 "input_manifest_digest": Obligation.BY_LOCALITY,
                 "output_manifest_digest": Obligation.BY_LOCALITY,

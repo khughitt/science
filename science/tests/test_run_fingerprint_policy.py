@@ -130,3 +130,35 @@ def test_findings_are_deterministically_ordered(local_fingerprint):
     fp = local_fingerprint(environment_digest=UNKNOWN, parameters_digest=UNKNOWN)
     messages = [f.message for f in evaluate_fingerprint(fp)]
     assert messages == sorted(messages)
+
+
+def test_container_digest_is_may_unknown_for_external_and_commons():
+    assert OBLIGATIONS[ExecutorKind.EXTERNAL]["container_digest"] is Obligation.MAY_UNKNOWN
+    assert OBLIGATIONS[ExecutorKind.COMMONS]["container_digest"] is Obligation.MAY_UNKNOWN
+    assert OBLIGATIONS[ExecutorKind.LOCAL]["container_digest"] is Obligation.NOT_APPLICABLE
+
+
+def test_external_container_digest_unknown_yields_no_findings(local_fingerprint):
+    """A non-local run that legitimately used no container states it explicitly:
+    a present component with `provenance: unknown`, not absence."""
+    fp = local_fingerprint(
+        executor=ExecutorKind.EXTERNAL,
+        environment_digest=_attested("sha256:env"),
+        container_digest=UNKNOWN,
+        parameters_digest=_attested("sha256:params"),
+        code_dirty=UNKNOWN,
+    )
+    assert evaluate_fingerprint(fp) == []
+
+
+def test_external_container_digest_absent_is_still_incomplete(local_fingerprint):
+    fp = local_fingerprint(
+        executor=ExecutorKind.EXTERNAL,
+        environment_digest=_attested("sha256:env"),
+        container_digest=None,
+        parameters_digest=_attested("sha256:params"),
+        code_dirty=UNKNOWN,
+    )
+    findings = evaluate_fingerprint(fp)
+    assert [f.rule for f in findings] == ["run.fingerprint-incomplete"]
+    assert "container_digest" in findings[0].message
