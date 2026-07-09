@@ -1738,7 +1738,12 @@ def _add_run_ref_edges(entity, line_uri, *, resolver, knowledge) -> None:
     if not entity.belief_eligible:
         return
     for ref in entity.run_refs:
-        knowledge.add((line_uri, SCI_NS.runRef, project_entity_uri(resolver.resolve_ref(ref))))
+        resolution = resolver.resolve(ref)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
+            raise ValueError(f"unresolved workflow-run reference in run_refs: {ref}")
+        if not resolution.canonical_id.startswith("workflow-run:"):
+            raise ValueError(f"run_refs entry resolved to non-workflow-run: {ref} -> {resolution.canonical_id}")
+        knowledge.add((line_uri, SCI_NS.runRef, project_entity_uri(resolution.canonical_id)))
 ```
 
 Call it from the same place the sibling evidence-line emitters are called.
@@ -1951,12 +1956,28 @@ def _add_derivation_edges(entity, *, resolver, knowledge) -> None:
 
     if isinstance(derivation, DerivationBlock):
         knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-run")))
-        knowledge.add((ds_uri, SCI_NS.workflowRun, _entity_uri(resolver.resolve_ref(derivation.workflow_run))))
+        resolution = resolver.resolve(derivation.workflow_run)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
+            raise ValueError(f"{entity.canonical_id}: unresolved workflow_run {derivation.workflow_run!r}")
+        if not resolution.canonical_id.startswith("workflow-run:"):
+            raise ValueError(
+                f"{entity.canonical_id}: workflow_run resolved to non-workflow-run "
+                f"{resolution.canonical_id!r}"
+            )
+        knowledge.add((ds_uri, SCI_NS.workflowRun, _entity_uri(resolution.canonical_id)))
     elif isinstance(derivation, WorkflowRecipeDerivationBlock):
         knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-recipe")))
     elif isinstance(derivation, MemberOfDerivationBlock):
         knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("member_of")))
-        knowledge.add((ds_uri, SCI_NS.memberOfParent, _entity_uri(resolver.resolve_ref(derivation.parent_dataset))))
+        resolution = resolver.resolve(derivation.parent_dataset)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
+            raise ValueError(f"{entity.canonical_id}: unresolved member_of parent {derivation.parent_dataset!r}")
+        if not resolution.canonical_id.startswith("dataset:"):
+            raise ValueError(
+                f"{entity.canonical_id}: member_of parent resolved to non-dataset "
+                f"{resolution.canonical_id!r}"
+            )
+        knowledge.add((ds_uri, SCI_NS.memberOfParent, _entity_uri(resolution.canonical_id)))
     else:
         raise TypeError(f"unhandled derivation shape {type(derivation).__name__} on {entity.canonical_id}")
 ```
