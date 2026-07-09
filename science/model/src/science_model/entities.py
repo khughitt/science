@@ -41,6 +41,7 @@ from science_model.reasoning import (
     SupportScope,
     canonical_evidence_type_token,
 )
+from science_model.run_fingerprint import RunFingerprint
 from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
 
@@ -897,6 +898,7 @@ class WorkflowRunEntity(ProjectEntity):
 
     manifest_path: str = ""
     resources: list[dict[str, Any]] = Field(default_factory=list)
+    fingerprint: RunFingerprint | None = None
 
     def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.status == "complete":

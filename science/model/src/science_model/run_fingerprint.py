@@ -119,3 +119,49 @@ class CaptureOrigin(BaseModel):
         if not v.startswith("workflow-run:"):
             raise ValueError(f"origin_run_ref must be a workflow-run:<slug> reference, got {v!r}")
         return v
+
+
+class RunFingerprint(BaseModel):
+    """A captured reproducibility fingerprint for one workflow run.
+
+    Which components must be `captured` (vs. `attested`/`unknown`) is decided
+    elsewhere, by a frozen obligation table keyed on the declared `executor`
+    and artifact localities — this model only enforces well-formedness.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    fingerprint_policy: str
+    executor: ExecutorKind
+    input_artifact_locality: ArtifactLocality
+    output_artifact_locality: ArtifactLocality
+    capture_origin: CaptureOrigin | None = None
+
+    code_sha: FingerprintComponent
+    code_dirty: FingerprintComponent
+    environment_digest: FingerprintComponent
+    container_digest: FingerprintComponent | None = None
+    parameters_digest: FingerprintComponent
+    input_manifest_digest: FingerprintComponent
+    output_manifest_digest: FingerprintComponent
+
+    input_manifest_ref: str | None = None
+    output_manifest_ref: str | None = None
+
+    seed_policy: SeedPolicy
+
+    @field_validator("code_dirty")
+    @classmethod
+    def _dirty_token(cls, v: FingerprintComponent) -> FingerprintComponent:
+        if v.value is not None and v.value not in ("true", "false"):
+            raise ValueError(f'code_dirty.value must be "true" or "false", got {v.value!r}')
+        return v
+
+    @model_validator(mode="after")
+    def _capture_origin_iff_commons(self) -> "RunFingerprint":
+        is_commons = self.executor is ExecutorKind.COMMONS
+        if is_commons and self.capture_origin is None:
+            raise ValueError("executor='commons' requires capture_origin")
+        if not is_commons and self.capture_origin is not None:
+            raise ValueError(f"capture_origin is only valid for executor='commons', not {self.executor.value!r}")
+        return self
