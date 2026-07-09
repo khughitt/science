@@ -70,7 +70,9 @@ Four defects in the current representation, all in scope:
    `canonical_prefix` is `workflow-step`; its template declares `id: "step:<slug>"`.
    Because `workflow`, `workflow-run`, and `workflow-step` are all
    `template_ready=False`, their templates are *hand-copied* rather than rendered
-   — so an author following the template writes a non-canonical ID. Real.
+   — so an author following the template writes a non-canonical ID. The
+   id-prefix validator would catch it, but only as a **warn**, and only after the
+   author has already written the file.
 
    The sibling case is **not** a defect and is recorded here so it is not
    "fixed" by mistake: `templates/method.md` shows `id: "method:{{nn}}-{{slug}}"`,
@@ -79,9 +81,19 @@ Four defects in the current representation, all in scope:
    `entity_id`. Rendering `method` yields `id: method:leiden`. The literal line
    is inert illustration; only its wording misleads.
 
-4. **`id_prefixes.py` does not list `method`'s workflow siblings.** `workflow`,
-   `workflow-run`, and `workflow-step` are absent, which is why defect 3 goes
-   uncaught.
+4. **A `workflow-run` cannot reach its `workflow`.** `WorkflowRunEntity` carries
+   only `manifest_path`, `resources`, and `fingerprint` — there is no `workflow`
+   field. The `sci:executes` relation (`workflow-run` → `workflow`) is declared in
+   the core profile and materialized **nowhere**. Derived datasets *can* reach
+   both (`DerivationBlock` names `workflow` and `workflow_run`), but the run
+   itself cannot name what it ran. Any derivation of `seed_policy` from a
+   workflow's steps requires this edge to exist first.
+
+   A note for implementers on where **not** to look: `validate/checks/id_prefixes.py`
+   opens with a raw docstring containing a `PREFIX_RULES` dict — a fossil of the
+   retired bash validator. It is not code. The live rule is `prefix_rules()`,
+   derived from `markdown_entity_kinds()`, and it **already covers** `workflow`,
+   `workflow-run`, `workflow-step`, and `method`. Nothing needs registering.
 
 Separately, the word **transformation is overloaded three ways**:
 
@@ -141,33 +153,43 @@ method is seeded (e.g. `["random_state"]`). It is required when and only when
 
 `workflow-step` becomes **definition-only**. Its statuses become the definition
 lifecycle (`active` / `superseded` / `retired`); the `run:` field leaves the
-template. A step declares the method it applies and, when that method is
-`seedable`, the seed it supplies:
+template.
+
+A definition-only step must not carry a seed **value**. Two runs of the same
+workflow may legitimately use different seeds — that is the point of a seed. What
+the step declares is the *binding*: which of the method's `seed_params` are
+supplied, and from where. The realized value is a run observation.
 
 ```yaml
 # entities/workflow-steps/cluster.md
 id: "workflow-step:cluster"
 kind: "workflow-step"
 workflow: "workflow:scrna-pipeline"
-rule_name: "cluster"          # the snakemake rule that executes it
-method: "method:leiden"       # sci:applies
-seed: 42
+rule_name: "cluster"                  # the snakemake rule that executes it
+method: "method:leiden"               # sci:applies
+seed_bindings:
+  random_state: "config.seed"         # a source, not a value
 ```
+
+A binding's source may be a config key, or the literal form `literal:42` when a
+step pins its seed. Either way the *declaration* says the parameter is supplied;
+the *run* says what it was supplied with.
 
 The step is where the obligation is discharged because the step is what
 executes — it is the thing whose code SHA and environment `t077` fingerprints.
 
 ### A seed value is an observation of a run
 
-The run records the seeds actually realized, per step, inside the fingerprint:
+The run records the seeds actually realized, per step, inside the fingerprint.
+`step_seeds` is the **authoritative** record of seed values:
 
 ```yaml
 fingerprint:
   step_seeds:
     workflow-step:cluster: {random_state: 42}
+    workflow-step:embed:   {random_state: 7}   # same param name, different value
   seed_policy:                # DERIVED, not authored
     kind: seeded
-    seeds: {random_state: 42}
 ```
 
 ### `seed_policy.kind` becomes derived
@@ -175,15 +197,22 @@ fingerprint:
 | steps of the workflow | derived `seed_policy.kind` |
 |---|---|
 | every step's method is `deterministic` | `deterministic` |
-| every `seedable` step supplied a seed, no `nondeterministic` step | `seeded` |
-| any `seedable` step supplied no seed, **or** any step's method is `nondeterministic` | `stochastic-unseeded` |
+| every `seedable` step bound and realized all its `seed_params`, no `nondeterministic` step | `seeded` |
+| any `seedable` step left a `seed_param` unbound, **or** any step's method is `nondeterministic` | `stochastic-unseeded` |
 
 This lands on `t077`'s **existing** three-value vocabulary — no token is added or
 removed. What changes is provenance: `seed_policy` stops being an assertion the
 author makes and becomes a fact the tool captures, computed from declared
-methods and supplied seeds. `SeedPolicy.seeds` is the union of `step_seeds`;
-`SeedPolicy.rationale` (required for `stochastic-unseeded`) is composed from the
-offending steps.
+methods, declared bindings, and realized values.
+
+**`SeedPolicy.seeds` is removed.** As shipped it is `dict[str, int]` — one value
+per parameter name — so two steps that both seed `random_state` with different
+values cannot both be represented. Any run-level summary of per-step seeds is
+either lossy or a namespaced duplicate of `step_seeds`. `SeedPolicy` therefore
+becomes `{kind, rationale}`, and the invariant `t077` placed on it (`kind ==
+seeded` requires non-empty `seeds`) moves up to `RunFingerprint`: `kind ==
+seeded` requires non-empty `step_seeds`. `SeedPolicy.rationale` (required for
+`stochastic-unseeded`) is composed from the offending steps.
 
 This resolves the discomfort `t077`'s design recorded. Once methods carry
 stochasticity, the run no longer has to assert how the code behaves. It observes.
@@ -197,13 +226,19 @@ workflow:scrna-pipeline
     v
 workflow-step:cluster  (implementation — the thing that executes)
     rule_name: cluster                   snakemake rule
-    seed: 42                             obligation discharged here
+    seed_bindings:                       obligation discharged here
+      random_state: config.seed          a source, never a value
     |
     | sci:applies                        (new)
     v
 method:leiden
     stochasticity: seedable
     seed_params: [random_state]
+
+
+workflow-run:r1 --sci:executes--> workflow:scrna-pipeline   (edge added in Spec 0)
+    fingerprint.step_seeds:
+      workflow-step:cluster: {random_state: 42}             the realized value
 ```
 
 Vocabulary changes required:
@@ -235,11 +270,13 @@ Representation hygiene. **No new behavior**; nothing about stochasticity yet.
   `method:<slug>` to stop misleading readers, but this is cosmetic — the rendered
   ID is already correct. `method` keeps `strategy="slug"`: slug IDs are portable
   across projects, which is what a reusable method record needs and what a future
-  move to `science-commons` requires.
-- Register `workflow`, `workflow-run`, `workflow-step` in `id_prefixes.py`
-  (defect 4), so defect 3 cannot recur. Note these kinds are
-  `template_ready=False`; making them generator-rendered is a plausible follow-up
-  but is not required here.
+  move to `science-commons` requires. Do **not** touch `id_prefixes.py`: the live
+  `prefix_rules()` already covers these kinds. Making the `template_ready=False`
+  workflow kinds generator-rendered is a plausible follow-up, not required here.
+- Add `WorkflowRunEntity.workflow` (a `workflow:` ref) and materialize the
+  already-declared `sci:executes` edge (defect 4), with a graph-validate check
+  that the target resolves to a `workflow`. Without this edge, Spec 2 cannot
+  traverse run → workflow → steps at all.
 - Retire `sci:realizes`; delete the inert `method:` field from
   `templates/workflow.md` (defect 2).
 
@@ -256,30 +293,44 @@ and the reconciliation gate pass; no template/descriptor divergence remains.
   `is_fingerprinted`).
 - `MethodEntity.seed_params: list[str]`, required iff `stochasticity == seedable`.
 - `WorkflowStepEntity.method: str` (a `method:` ref) and
-  `WorkflowStepEntity.seed`, plus `rationale` for `nondeterministic` methods.
+  `WorkflowStepEntity.seed_bindings: dict[str, str]` mapping a `seed_param` name
+  to its source (a config key, or `literal:<n>`), plus `rationale` for
+  `nondeterministic` methods. No seed **value** lives on the step.
 - Add `sci:applies` and materialize it.
 - **Warn-only** validate checks, per `t079`'s "ship as visibility warnings first":
-  - `workflow-step.seed-missing` — step applies a `seedable` method, supplies no seed.
+  - `workflow-step.seed-binding-missing` — step applies a `seedable` method and leaves one of its `seed_params` unbound.
   - `workflow-step.rationale-missing` — step applies a `nondeterministic` method, supplies no rationale.
-  - `workflow-step.seed-on-deterministic-method` — a seed where none is meaningful.
+  - `workflow-step.seed-binding-on-deterministic-method` — a binding where none is meaningful.
+  - `workflow-step.seed-binding-unknown-param` — a binding naming a parameter absent from the method's `seed_params`.
   - `method.seed-params-missing` — `seedable` method names no seed parameter.
 
-**Done when:** a workflow whose step applies `method:leiden` without a seed
-produces a warning, and no run is blocked.
+**Done when:** a workflow whose step applies `method:leiden` without binding
+`random_state` produces a warning, and no run is blocked.
 
 ### Spec 2 — Runs observe seeds
 
+Depends on Spec 0's `sci:executes` edge: `register-run` reaches the workflow
+through `WorkflowRunEntity.workflow`, then its steps through `sci:contains`.
+
 - `RunFingerprint.step_seeds: dict[str, dict[str, int]]`, keyed by
-  `workflow-step:` ref.
+  `workflow-step:` ref. This is the authoritative seed record.
+- **Remove `SeedPolicy.seeds`** (lossy: `dict[str, int]` cannot hold two steps
+  seeding `random_state` differently). `SeedPolicy` becomes `{kind, rationale}`.
+  Move `t077`'s "`seeded` requires non-empty `seeds`" invariant up to
+  `RunFingerprint`: `seed_policy.kind == "seeded"` requires non-empty
+  `step_seeds`. This is a breaking change to `t077`'s model, and safe: the
+  population is zero.
 - `seed_policy` becomes **derived and captured** at `register-run` from the
-  workflow's steps and their supplied seeds, per the table above. It is no longer
-  authored.
+  workflow's steps, their `seed_bindings`, and the realized values, per the table
+  above. It is no longer authored.
 - A run whose workflow declares no steps **fails closed** at `register-run`: the
   policy cannot be derived, and a defaulted policy would fail open. The empty
   entity population makes this safe to impose from day one.
 
 **Done when:** `register-run` derives `seed_policy` and refuses to invent one;
-`t077`'s fingerprint tests still pass with `seed_policy` no longer hand-authored.
+two steps seeding the same parameter name with different values round-trip
+without collision; `t077`'s fingerprint tests pass with `seed_policy` no longer
+hand-authored and `SeedPolicy.seeds` gone.
 
 ### Spec 3 — Downstream transparency
 
@@ -309,13 +360,15 @@ any derived dataset's provenance.
 
 ## Open questions
 
-- **Seeds by value or by reference.** Spec 1 declares `seed: 42` on the step. Real
-  pipelines often thread a seed from config. Whether the step may declare
-  `seed_ref: config.seed` — and what `register-run` then records — is deferred to
-  Spec 1's own design.
+- **Binding source grammar.** `seed_bindings` maps a parameter to a source string
+  (`config.seed`, `literal:42`). Whether that grammar needs more forms — an env
+  var, a per-run override — and who resolves it at `register-run` time, is a
+  Spec 1 question. The two forms above are sufficient for the checks specified.
 - **Multi-seed steps.** `seed_params` is a list, so a method may take several
-  seeds. Whether a step must supply all of them, or may supply a subset, is a
-  Spec 1 question.
+  seeds. The `seeded` derivation above requires **all** of a step's `seed_params`
+  to be bound and realized; a partially-seeded step derives
+  `stochastic-unseeded`. Whether a partial binding is ever legitimate is a Spec 1
+  question.
 - **Snakemake reconciliation.** `workflow-step.rule_name` names a snakemake rule.
   Nothing checks that the rule exists. A cross-check belongs with `t079`'s
   successor work, not here.
