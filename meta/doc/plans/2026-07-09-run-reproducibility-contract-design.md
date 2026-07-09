@@ -195,10 +195,20 @@ artifact locality. **Never** of what validate can observe on disk.
 | `code_sha` | MUST captured | MUST captured | MUST captured *(repo-owned ref)* |
 | `code_dirty` | MUST captured | MUST captured | MAY unknown |
 | `environment_digest` | MUST captured | MUST captured | MAY attested |
-| `container_digest` | NOT APPLICABLE | MAY attested | MAY attested |
+| `container_digest` | NOT APPLICABLE | MAY unknown | MAY unknown |
 | `parameters_digest` | MUST captured | MUST captured | MAY attested |
 | `input_manifest_digest` | *by `input_artifact_locality`* | ″ | ″ |
 | `output_manifest_digest` | *by `output_artifact_locality`* | ″ | ″ |
+
+`container_digest` is `MAY_UNKNOWN`, not `MAY_ATTESTED`, for `commons` and
+`external`. Any obligation other than `NOT_APPLICABLE` still requires the
+field to be **present** (absence still yields `run.fingerprint-incomplete`);
+under `MAY_ATTESTED` a present-but-`unknown` component *also* fails as
+incomplete, which left a non-local run that legitimately used no container
+with no way to say so. `MAY_UNKNOWN` accepts any present state — a
+`FingerprintComponent` with `provenance: unknown` is exactly how such a run
+declares "no container / not known." `local` keeps `NOT_APPLICABLE`
+unchanged: a local run may not declare a container at all.
 
 Manifest-digest obligation, keyed on **its own** locality (inputs are commonly
 external reference datasets while outputs are Science-managed — hence the split):
@@ -425,6 +435,37 @@ already runs `preflight_register_run_identity`. It writes components with
 A hand-authored MUST-captured component is rejected at `register-run` **and** at
 validate.
 
+**Known limitation — the hand-authored guard's scope.** `capture_fingerprint`'s
+hand-authored-component guard (the paragraph above) inspects the run's
+frontmatter as passed in. `persist_run_fingerprint`, the `register-run` entry
+point, filters that frontmatter down to the four **authored** keys (`executor`,
+`input_artifact_locality`, `output_artifact_locality`, `seed_policy`) before
+calling `capture_fingerprint` — otherwise a component this same function wrote
+on a *prior* call would trip the guard on its own output. Consequently the
+guard **cannot fire on the `register-run` path**: it protects only a direct
+caller of `capture_fingerprint`. This is accepted as intended, not a gap to
+close — `register-run` always recomputes every captured component and the
+freshly captured value is authoritative regardless of what was already on
+disk. There is no implementation that both tolerates the fingerprint block a
+previous `persist_run_fingerprint` call wrote **and** rejects a hand-authored
+component, because nothing on disk distinguishes the two shapes: a captured
+`code_sha` this tool wrote yesterday and one a human typed by hand are
+byte-identical. Detecting the difference would require an out-of-band
+observer log, which this design does not add. `validate`'s
+`run.fingerprint-authored-capturable` check (day-1 ERROR) inherits the same
+blind spot for exactly the same reason — see `validate/checks/workflow_runs.py`.
+
+Each `output_manifest_digest` / `input_manifest_digest` manifest entry pairs a
+resource's `name` with a content-identifying field — `hash`, `sha256`, or
+`digest`. A resource carrying none of those fails loud
+(`FingerprintCaptureError`, naming the offending resource and the source)
+rather than falling back to its declared `path`: a bare path is stable across
+content changes, so accepting it would silently leave the digest blind to
+exactly the change it exists to detect. Frictionless-style datapackages in
+this repo already carry `hash: "sha256:..."` (e.g.
+`tests/fixtures/commons/refcoll/datasets/parent-collection/datapackage.yaml`),
+so this is authorable, not a new burden invented for this contract.
+
 **No belief-local fallback.** Run-resolution joins the build gate that already
 carries the convenience-edge invariant in `science validate` / `graph validate`,
 so `graph build` surfaces the finding or fails early rather than letting belief
@@ -459,6 +500,31 @@ Edits:
 
 `member_of` derivations are explicitly exempt: they are classification/membership
 edges, not run-produced derivations.
+
+### E.1 Migration — existing `workflow-run` entities (manual, no tooling)
+
+`register-run` hard-fails on any `workflow-run` entity whose frontmatter lacks
+`fingerprint.executor`, `fingerprint.input_artifact_locality`,
+`fingerprint.output_artifact_locality`, or `fingerprint.seed_policy`, and on a
+project with no `uv.lock` or no git repository. This is intended, and it is
+shipped **without** an automated migration: existing `workflow-run` entities
+authored before this contract must be re-authored by hand, adding a
+`fingerprint:` block that declares the four authored keys, before their next
+`register-run`. `register-run` recomputes and overwrites every captured
+component regardless of what (if anything) already sits under `fingerprint:`
+(see the "Known limitation" discussion above), so no historical capture is
+recoverable — a project's first post-contract `register-run` is the point at
+which that run acquires a real fingerprint.
+
+Required keys, minimally:
+
+```yaml
+fingerprint:
+  executor: local | commons | external
+  input_artifact_locality: science-managed | external
+  output_artifact_locality: science-managed | external
+  seed_policy: {kind: seeded | deterministic | stochastic-unseeded, ...}
+```
 
 ## Phasing
 
