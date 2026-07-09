@@ -278,14 +278,32 @@ zero or more runs to the union:
 | `WorkflowRecipeDerivationBlock` (recipe only) | nothing | reason: `recipe-only` |
 | commons dataset → fingerprinted `executor: commons` run | the run | — |
 | `MemberOfDerivationBlock` | recurse to parent | reason inherited from parent |
-| `derivation is None` **and** `produced_by` set | run via `produced_by` | reason: `no-provenance` |
+| `derivation is None` **and** `produced_by` set | **nothing** | reason: `code-only-no-run` |
 | `derivation is None`, no `produced_by` | nothing | reason: `no-provenance` |
+
+**Code is not a run, either.** `produced_by` is constrained by the model to
+`code-file:<id>` references (`entities.py:479-481`); it names *source code*, not
+an execution. A code-file ref carries no fingerprint — no environment digest, no
+seed policy, no input/output hashes. It therefore contributes **no** run, for
+exactly the reason a recipe contributes none. A dataset whose only provenance is
+`produced_by` (`_derived_readiness` calls this `derived-via-code`) can be used by
+an empirical line only if that line's `run_refs` names a fingerprinted run.
+
+The same holds for a raw `origin: external` dataset, which by invariant carries
+neither `derivation` nor `produced_by`: an empirical line depending *directly* on
+raw input data resolves only via `run_refs` naming the analysis run. This is the
+principal reason `run_refs` exists.
 
 Findings are computed on the **line**, from the union — never per dataset. If
 `resolved_runs(line)` is non-empty the line resolves, whatever individual
 datasets contributed. If it is empty, the collected reasons pick the finding:
-any `recipe-only` reason yields `evidence.empirical-run-recipe-only` (the more
-specific diagnosis), otherwise `evidence.empirical-run-unresolved`.
+
+- any `recipe-only` reason → `evidence.empirical-run-recipe-only` (the most
+  specific diagnosis, and the only reason with its own code);
+- otherwise → `evidence.empirical-run-unresolved`, whose message names the
+  collected reasons, distinguishing *dataset provenance is code-only, not
+  run-produced* (`code-only-no-run`) from *no dataset provenance at all*
+  (`no-provenance`).
 
 **Recipe is not a run.** `workflow_recipe` + `recipe_lockfile` is reproducible
 *recipe provenance* — it says the computation *could* be re-run, not that a
@@ -433,6 +451,11 @@ sequence them as such rather than as a single change.
   `run_refs` names a fingerprinted one resolves; a line with an empty union and a
   recipe-only dataset reports `evidence.empirical-run-recipe-only` rather than
   the generic `evidence.empirical-run-unresolved`.
+- **Code is not a run** — a `produced_by`-only (`derived-via-code`) dataset
+  contributes no run; the line fails with `evidence.empirical-run-unresolved`
+  carrying the `code-only-no-run` reason, and passes once `run_refs` names a
+  fingerprinted run. Same for a line depending directly on a raw
+  `origin: external` dataset (`no-provenance` reason).
 
 ## Consequences
 
