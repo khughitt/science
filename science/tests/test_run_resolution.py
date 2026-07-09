@@ -71,6 +71,13 @@ def test_member_of_cycle_raises():
         resolved_empirical_runs(g, DS("a"), ALL_FINGERPRINTED)
 
 
+def test_member_of_self_loop_raises():
+    g = Graph()
+    _member_of(g, DS("s"), DS("s"))
+    with pytest.raises(MemberOfCycleError, match="dataset/s"):
+        resolved_empirical_runs(g, DS("s"), ALL_FINGERPRINTED)
+
+
 def test_recipe_only_contributes_nothing_with_reason():
     g = Graph()
     _recipe_derived(g, DS("c"))
