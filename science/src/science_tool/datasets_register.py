@@ -1027,8 +1027,12 @@ def _run_input_manifest(run_fm: dict) -> list[str]:
 def _resource_manifest_entries(resources: Any, *, source: str) -> list[str]:
     """Canonicalize a datapackage-style `resources:` list into digest entries.
 
-    Each entry pairs a name with a content-identifying field (hash/digest over
-    a bare path) so an unchanged path with changed content moves the digest.
+    Each entry pairs a name with a content hash (`hash`/`sha256`/`digest`) so an
+    unchanged path with changed content moves the digest. A resource with none
+    of those fields fails loud rather than falling back to its `path` — a bare
+    path is stable across content changes, so accepting it would silently leave
+    `output_manifest_digest` (or `input_manifest_digest`) blind to exactly the
+    change it exists to detect.
     """
     if not isinstance(resources, list):
         raise FingerprintCaptureError(f"{source} 'resources' must be a list")
@@ -1037,7 +1041,7 @@ def _resource_manifest_entries(resources: Any, *, source: str) -> list[str]:
         if not isinstance(resource, dict):
             raise FingerprintCaptureError(f"{source} resources entries must be mappings")
         name = resource.get("name") or resource.get("path")
-        content_id = resource.get("hash") or resource.get("sha256") or resource.get("digest") or resource.get("path")
+        content_id = resource.get("hash") or resource.get("sha256") or resource.get("digest")
         if not name or not content_id:
             raise FingerprintCaptureError(f"{source} resources entry {resource!r} lacks a name/content identifier")
         entries.append(f"{name}:{content_id}")
@@ -1085,6 +1089,18 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
     and every digest are unchanged. Commit the run entity before re-registering
     if a clean `code_dirty` is wanted — do not special-case the run entity's
     own path out of the dirty check; that would silently narrow "dirty".
+
+    Any captured component already present in the run's frontmatter (written by
+    a prior call to this function, or hand-authored) is ignored and overwritten:
+    every captured component is recomputed fresh on every call, and that fresh
+    value is authoritative — `register-run` always recomputes, it never trusts
+    what is on disk. Because of this, `capture_fingerprint`'s hand-authored-component
+    guard can never fire on this path (see the `authored_only` filter below); it
+    protects only callers that invoke `capture_fingerprint` directly. There is no
+    way to both tolerate a fingerprint block this function previously wrote AND
+    reject one a human hand-authored, because nothing on disk distinguishes the
+    two shapes — this is an accepted, permanent limitation (see the design doc's
+    "Known limitation" discussion), not a gap to close later.
     """
     run_path, run_fm = _read_run(project_root, run_id)
     declared = run_fm.get("fingerprint") or {}

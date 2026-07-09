@@ -12,6 +12,16 @@ from conftest import REGISTER_RUN_FINGERPRINT_FRONTMATTER, seed_git_repo
 from science_tool.cli import main as science_cli
 
 
+def _with_content_hash(resource: dict) -> dict:
+    """`output_manifest_digest` capture requires a content-identifying field
+    (`hash`/`sha256`/`digest`) on every resource — fixtures that only care about
+    other register-run behavior get a synthetic one so capture doesn't reject
+    them for an unrelated reason."""
+    if any(key in resource for key in ("hash", "sha256", "digest")):
+        return resource
+    return {**resource, "hash": f"sha256:{resource['name']}"}
+
+
 def _seed_workflow_and_run(
     root: Path,
     *,
@@ -24,6 +34,7 @@ def _seed_workflow_and_run(
     If ``workflow_outputs`` is not provided, outputs are inferred from
     ``run_resources`` (one output per resource, slug = resource name).
     """
+    run_resources = [_with_content_hash(r) for r in run_resources]
     if workflow_outputs is None:
         workflow_outputs = [
             {
@@ -1614,7 +1625,7 @@ def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
             {
                 "profiles": ["science-pkg-runtime-1.0"],
                 "name": "wf-r2",
-                "resources": [{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+                "resources": [{"name": "kappa", "path": "kappa.csv", "format": "csv", "hash": "sha256:kappa2"}],
             }
         ),
         encoding="utf-8",

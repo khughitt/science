@@ -42,7 +42,7 @@ def _seed_full_pipeline(root: Path) -> None:
             {
                 "profiles": ["science-pkg-runtime-1.0"],
                 "name": "toy-r1",
-                "resources": [{"name": "result", "path": "result.csv", "format": "csv"}],
+                "resources": [{"name": "result", "path": "result.csv", "format": "csv", "hash": "sha256:result"}],
             }
         ),
         encoding="utf-8",

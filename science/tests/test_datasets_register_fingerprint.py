@@ -189,3 +189,63 @@ def test_code_sha_is_stable_across_repeated_capture(git_project):
     second = persist_run_fingerprint(git_project, "workflow-run:r1")
     assert first.code_sha.value == second.code_sha.value
     assert first.environment_digest.value == second.environment_digest.value
+
+
+def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
+    """A `git_project`-style fixture whose run declares a `workflow:` and whose
+    results directory carries one run-aggregate resource, so
+    `output_manifest_digest` capture reads it.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    (root / "uv.lock").write_text("lock", encoding="utf-8")
+    (root / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")
+    runs = root / "entities" / "workflow-runs"
+    runs.mkdir(parents=True)
+    (runs / "r1.md").write_text(
+        "---\n"
+        "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+        'workflow: "workflow:wf"\n'
+        "config_snapshot: config.yaml\n"
+        "fingerprint:\n"
+        "  executor: local\n"
+        "  input_artifact_locality: science-managed\n"
+        "  output_artifact_locality: science-managed\n"
+        "  seed_policy: {kind: deterministic}\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    results = root / "results" / "wf" / "r1"
+    results.mkdir(parents=True)
+    (results / "datapackage.yaml").write_text(
+        yaml.safe_dump({"resources": [resource]}), encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=root, check=True,
+    )
+    return root
+
+
+def test_resource_without_content_hash_fails_loud(tmp_path: Path):
+    """No `hash`/`sha256`/`digest` on a resource must not silently fall back to
+    its declared `path` — that would leave `output_manifest_digest` blind to
+    content changes. It must name the offending resource and the source."""
+    project = _project_with_output_resource(tmp_path, resource={"name": "out", "path": "out.csv"})
+    with pytest.raises(FingerprintCaptureError, match="out.csv"):
+        persist_run_fingerprint(project, "workflow-run:r1")
+
+
+def test_changing_resource_hash_changes_output_manifest_digest(tmp_path: Path):
+    project_a = _project_with_output_resource(
+        tmp_path / "a", resource={"name": "out", "path": "out.csv", "hash": "sha256:aaa"}
+    )
+    fp_a = persist_run_fingerprint(project_a, "workflow-run:r1")
+
+    project_b = _project_with_output_resource(
+        tmp_path / "b", resource={"name": "out", "path": "out.csv", "hash": "sha256:bbb"}
+    )
+    fp_b = persist_run_fingerprint(project_b, "workflow-run:r1")
+
+    assert fp_a.output_manifest_digest.value != fp_b.output_manifest_digest.value
