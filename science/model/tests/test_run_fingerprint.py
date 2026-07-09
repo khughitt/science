@@ -48,3 +48,47 @@ def test_captured_forbids_attestation_fields():
 def test_extra_fields_forbidden():
     with pytest.raises(ValidationError):
         FingerprintComponent(value="a", provenance=ComponentProvenance.CAPTURED, bogus=1)
+
+
+from science_model.run_fingerprint import (
+    ArtifactLocality, CaptureOrigin, ExecutorKind, SeedPolicy,
+)
+
+
+def test_seed_policy_seeded_requires_seeds():
+    ok = SeedPolicy(kind="seeded", seeds={"numpy": 7})
+    assert ok.seeds == {"numpy": 7}
+    with pytest.raises(ValidationError):
+        SeedPolicy(kind="seeded")
+
+
+def test_seed_policy_stochastic_unseeded_requires_rationale():
+    ok = SeedPolicy(kind="stochastic-unseeded", rationale="vendor binary exposes no seed")
+    assert ok.rationale
+    with pytest.raises(ValidationError):
+        SeedPolicy(kind="stochastic-unseeded")
+
+
+def test_seed_policy_deterministic_takes_neither():
+    ok = SeedPolicy(kind="deterministic")
+    assert ok.seeds is None and ok.rationale is None
+    with pytest.raises(ValidationError):
+        SeedPolicy(kind="deterministic", seeds={"numpy": 1})
+
+
+def test_capture_origin_requires_run_ref_prefix():
+    ok = CaptureOrigin(
+        origin_project="project:pan-disease", origin_run_ref="workflow-run:r1",
+        captured_at=WHEN, captured_by="science", capture_policy="science-run-fingerprint/v1",
+    )
+    assert ok.origin_run_ref == "workflow-run:r1"
+    with pytest.raises(ValidationError):
+        CaptureOrigin(
+            origin_project="project:pan-disease", origin_run_ref="r1",
+            captured_at=WHEN, captured_by="science", capture_policy="science-run-fingerprint/v1",
+        )
+
+
+def test_enum_values():
+    assert ExecutorKind.LOCAL == "local"
+    assert ArtifactLocality.SCIENCE_MANAGED == "science-managed"
