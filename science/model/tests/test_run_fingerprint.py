@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from science_model.run_fingerprint import ComponentProvenance, FingerprintComponent
+from science_model.run_fingerprint import (
+    ArtifactLocality, CaptureOrigin, ComponentProvenance, ExecutorKind,
+    FingerprintComponent, SeedPolicy,
+)
 
 WHEN = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
 
@@ -48,11 +51,6 @@ def test_captured_forbids_attestation_fields():
 def test_extra_fields_forbidden():
     with pytest.raises(ValidationError):
         FingerprintComponent(value="a", provenance=ComponentProvenance.CAPTURED, bogus=1)
-
-
-from science_model.run_fingerprint import (
-    ArtifactLocality, CaptureOrigin, ExecutorKind, SeedPolicy,
-)
 
 
 def test_seed_policy_seeded_requires_seeds():
