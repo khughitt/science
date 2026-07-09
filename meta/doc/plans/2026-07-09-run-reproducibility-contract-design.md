@@ -231,34 +231,71 @@ obligation ⇒ it must be present.
 
 ### C. Resolution rule
 
-For a line where `belief_eligible AND evidence_type == empirical_data`, it must
-resolve to at least one fingerprinted run by one of **two** declared paths. Both
-are pure functions over authored source, so validate is deterministic:
+A belief-eligible `empirical_data` line must satisfy **both** conditions:
 
-1. **Direct run ref** — new `EvidenceLineEntity.run_refs: list[str]`, each
-   validated to the `workflow-run:` prefix (mirroring `DerivationBlock._wfrun_id`).
-2. **Via `dataset_usage`** — reusing `dependence_datasets_by_line`
-   (`graph/dataset_independence.py:215`) **verbatim**, so run-resolution and the
-   dataset-QA ceiling see identically the same empirical substrate. This
-   deliberately inherits its `direct`/`virtual` paths and its exclusion of
-   `indirect-bears-on`.
+1. **`dataset_usage` is non-empty.** This is the *existing* invariant, enforced
+   as an ERROR by `check_belief_eligible_empirical_has_dataset_usage`
+   (rule `evidence.empirical.requires_dataset_usage`,
+   `validate/checks/evidence_lines.py:612`). **It is unchanged by `t077`.**
+2. **At least one fingerprinted run is resolved**, where the resolved run set is
 
-Each resolved dataset dispatches on the `derivation` discriminated union:
+   ```
+   resolved_runs(line) =
+        ⋃ { resolved_empirical_runs(d) : d ∈ dependence_datasets_by_line(line) }
+      ∪ run_refs(line)
+   ```
 
-| derivation shape | outcome |
-|---|---|
-| `DerivationBlock` → `workflow_run` with a fingerprint | **resolved** |
-| `WorkflowRecipeDerivationBlock` (recipe only) | **`evidence.empirical-run-recipe-only`** |
-| commons dataset → fingerprinted `executor: commons` run | **resolved** |
-| `MemberOfDerivationBlock` | recurse to parent |
-| `derivation is None` **and** `produced_by` set | resolve via `produced_by` |
-| `derivation is None`, no `produced_by` | unresolved (`missing-provenance`) |
+`dependence_datasets_by_line` (`graph/dataset_independence.py:215`) is reused
+**verbatim**, inheriting its `direct` / `virtual` paths and its exclusion of
+`indirect-bears-on`. Both conditions are pure functions over authored source, so
+validate is deterministic.
+
+**`run_refs` are supplemental, never a standalone substitute.** The new field
+`EvidenceLineEntity.run_refs: list[str]` (each validated to the `workflow-run:`
+prefix, mirroring `DerivationBlock._wfrun_id`) *widens the resolved **run** set;
+it never widens the **dataset** set and never waives condition 1.* A direct-only
+`run_refs` line remains invalid, exactly as it is today.
+
+This is a load-bearing choice, not a conservatism. Because condition 1 holds for
+every belief-eligible empirical line, every such line necessarily passes through
+`dependence_datasets_by_line` — the same function the dataset-QA ceiling uses
+(`graph/dataset_qa.py`). **Substrate parity is therefore structural, not merely
+tested:** no line shape can reach run-resolution while bypassing the QA ceiling.
+Allowing direct-only `run_refs` would have created precisely that bypass.
+
+`run_refs` is still consequential (it is not an inert field): it rescues a line
+whose datasets carry sound dataset-level provenance but cannot themselves name a
+fingerprinted run — e.g. a `produced_by`-only code-derived dataset, or a commons
+dataset whose derivation is recipe-only but whose analysis this project actually
+executed and registered.
+
+Each dataset dispatches on the `derivation` discriminated union, contributing
+zero or more runs to the union:
+
+| derivation shape | contributes to `resolved_runs` | if it contributes nothing |
+|---|---|---|
+| `DerivationBlock` → `workflow_run` with a fingerprint | the run | — |
+| `WorkflowRecipeDerivationBlock` (recipe only) | nothing | reason: `recipe-only` |
+| commons dataset → fingerprinted `executor: commons` run | the run | — |
+| `MemberOfDerivationBlock` | recurse to parent | reason inherited from parent |
+| `derivation is None` **and** `produced_by` set | run via `produced_by` | reason: `no-provenance` |
+| `derivation is None`, no `produced_by` | nothing | reason: `no-provenance` |
+
+Findings are computed on the **line**, from the union — never per dataset. If
+`resolved_runs(line)` is non-empty the line resolves, whatever individual
+datasets contributed. If it is empty, the collected reasons pick the finding:
+any `recipe-only` reason yields `evidence.empirical-run-recipe-only` (the more
+specific diagnosis), otherwise `evidence.empirical-run-unresolved`.
 
 **Recipe is not a run.** `workflow_recipe` + `recipe_lockfile` is reproducible
 *recipe provenance* — it says the computation *could* be re-run, not that a
-specific execution happened with an observed fingerprint. It therefore does not
-satisfy an invariant that says empirical evidence resolves to a **run**. It gets
-its own finding rather than being silently lumped with "no provenance at all."
+specific execution happened with an observed fingerprint. It therefore never
+satisfies an invariant that says empirical evidence resolves to a **run**, and it
+earns a distinct finding rather than being silently lumped with "no provenance at
+all." A `run_ref` naming a genuinely fingerprinted run may legitimately resolve
+such a line — that is not a loophole, because the referenced run must itself
+satisfy the full obligation table (a `local` run with a hand-authored `code_sha`
+is a day-1 ERROR).
 
 **Two helpers, not one.** A single `run_code_sha(dataset) -> str | None` would
 smuggle the edge-level `member_of` exemption into evidence resolution:
@@ -389,6 +426,13 @@ sequence them as such rather than as a single change.
   verifiable one passes by *reading* the authored commons record.
 - **Substrate parity** — run-resolution and the dataset-QA ceiling resolve the
   same dataset set for a given line (both go through `dependence_datasets_by_line`).
+  Includes a **regression test that a `run_refs`-only line still fails**
+  `evidence.empirical.requires_dataset_usage`, pinning the property that
+  `run_refs` cannot open a bypass around the QA substrate.
+- **Union semantics** — a line whose datasets contribute no run but whose
+  `run_refs` names a fingerprinted one resolves; a line with an empty union and a
+  recipe-only dataset reports `evidence.empirical-run-recipe-only` rather than
+  the generic `evidence.empirical-run-unresolved`.
 
 ## Consequences
 
@@ -396,6 +440,11 @@ sequence them as such rather than as a single change.
   fingerprint that lets you re-run it.*
 - `""` becomes unrepresentable in run provenance; absence is explicit `unknown`.
 - Run identity stops being denormalized onto datasets.
+- Because `dataset_usage` remains mandatory, every belief-eligible empirical line
+  passes through `dependence_datasets_by_line`. Run-resolution and the dataset-QA
+  ceiling therefore **cannot** see different empirical substrate — parity is a
+  structural property of the line shape, not a test we must remember to keep
+  passing. `t077` adds **no** new bypass around the QA ceiling.
 - `[t080]` inherits a resolved, fingerprinted run on which to hang a reproduction
   **verdict** and its belief ceiling — and, per the `[t080]` note, must still
   distinguish *not yet checked* (`unverified`) from *checked and failed*
