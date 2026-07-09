@@ -4,9 +4,10 @@
 **Raised from:** `cancer/mechanisms/evolution`, `/science:explore-ideas` pass 2026-07-08
 **Author:** assistant (Claude Opus 4.8), at user request
 **Companion:** `2026-07-09-explore-ideas-third-run-frictions-design.md` — its
-group E (`decision: merge` for `already-covered` candidates) is sequenced after
-this proposal, because a merge must write a typed edge rather than an untyped
-`related` entry.
+group E ships its anchor-routing half independently (paper → entity refs need no
+typed edge). Its *typed provenance edge* half, plan slice 5b, is deferred pending
+an answer to open question 1 below. Nothing is sequenced behind this document
+while it remains a report rather than a design.
 
 ## The gap
 

@@ -224,16 +224,23 @@ for.
    fuzzy. It fixes the wrong answer *and* the unresolved ones, and it is the tier
    the resolver was missing.
 
+   Scope the tier to the kinds `resolve_refs` actually indexes. `_INDEX_KINDS`
+   (`resolve_refs.py:10`) is exactly `("hypothesis", "question")`, so the map is
+   `h` and `q` only. Widening it to tasks or papers means widening the index, which
+   is a separate change.
+
 2. **Never resolve a short-id-shaped query via substring.** If a query matches
    `^[a-z]\d+$` and the short-id tier does not resolve it, return `unresolved`.
    Falling through to substring matching on such a query is what produced the wrong
-   answer; there is no case where it produces a right one.
-
-3. **Return `match_kind` in the text output**, not only JSON, so a caller can see
-   that a resolution came from `title-slug` and treat it with suspicion.
+   answer; there is no case where it produces a right one. This covers unmapped
+   prefixes as well: `t077` should be `unresolved`, not silently matched against
+   whichever entity mentions it.
 
 The substring tiers stay as they are for long, descriptive queries, where they
 work well and their failure mode is `ambiguous` rather than wrong.
+
+`match_kind` **already** renders in text output (`cli.py:4400`) — it is how the
+wrong resolution was spotted in the first place. No change needed there.
 
 ## Group E — `already-covered` candidates are silently discarded
 
@@ -270,19 +277,35 @@ relationship "this sharpens that" is not recoverable from the graph.
    orchestrator to fold each merged candidate's rationale into its parent's
    `## Thoughts`, and to record the reciprocal pointer.
 
-### Why this belongs with the typed-relations proposal
+### Relationship to the typed-relations report
 
-`merge` and `sharpens-existing` both need to express *what kind of link* they
-created, and today both collapse into `related: list[str]`. The companion design
-(`2026-07-09-typed-claim-to-claim-relations-design.md`) proposes typed,
-directional claim-to-claim relations reusing the existing `SupportDirection` /
-`ValidationRole` / `PropagationPolicy` vocabularies, which are currently reachable
-only from `evidence-line → proposition`.
+An earlier draft of this design said `merge` was blocked on typed relations. That
+was wrong twice over, and the split below is the correction.
 
-If typed relations land without `merge`, the harvest workflow stays manual
-forever. If `merge` lands without typed relations, it writes untyped `related`
-edges and we re-open it later to type them. They should land together, and E is
-sequenced after the typed-relations slice for that reason.
+**It is not blocked.** `2026-07-09-typed-claim-to-claim-relations-design.md` is a
+substrate-gap *report*, not a design carrying a decision — it states "No code
+change proposed here" and closes on three unanswered maintainer questions, chiefly
+whether an entity↔entity `qualifies` is a first-class edge or a `proposition`
+whose `target` is another entity. There is no edge field, relation kind, validator,
+or materialization behavior to build against, so nothing can be sequenced behind
+it.
+
+**And most of `merge` never needed it.** Routing a resolved anchor into an
+entity's `source_refs` is a *paper → entity* reference, which the substrate
+already types. Only the *entity → entity* half needs the typed edge. So:
+
+- **Merge's anchor routing ships now** (plan slice 5a). It is the half that was
+  silently losing information, and it introduces no untyped `related` entry — a
+  test enforces that.
+- **Typed provenance edges defer** (plan slice 5b), with an explicit entry
+  condition: the maintainer answers open question 1 of the typed-relations report,
+  and a real design + plan pair exists specifying field, values, validator, and
+  materialization.
+
+Until then, `sharpens-existing` keeps writing untyped `related`, and folding a
+merged candidate's *prose* into its parent stays a manual curator step. That
+workflow ran across five entities in the third run and worked. It is slow, not
+broken — and slice 5a is careful not to entrench the untyped edge meanwhile.
 
 ## Handled elsewhere
 

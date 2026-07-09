@@ -4,9 +4,8 @@
 **Design:** `2026-07-09-explore-ideas-third-run-frictions-design.md`
 **Companion design:** `2026-07-09-typed-claim-to-claim-relations-design.md`
 
-Five slices, ordered by independence. Slices 1–4 do not depend on each other and
-can land in any order. Slice 5 depends on the typed-relations design landing
-first.
+Slices 1–4 and 5a do not depend on each other and can land in any order. Slice 5b
+is **deferred**, not scheduled: it has no entry condition yet (see below).
 
 Each slice is independently shippable and independently revertible.
 
@@ -24,23 +23,39 @@ losing a right one, and `apply` hard-validates against it.
 
 **Changes**
 
-1. Add `_SHORT_ID_RE = re.compile(r"^([a-z])(\d+)$")` and a kind map
-   (`h` → `hypothesis`, `q` → `question`, `t` → `task`, …) sourced from the
-   existing entity-kind registry rather than a new literal.
+1. Add `_SHORT_ID_RE = re.compile(r"^([a-z])(\d+)$")` and a kind map derived from
+   `_INDEX_KINDS` — **`h` → `hypothesis`, `q` → `question`, and nothing else.**
+
+   `resolve_refs.py:10` indexes exactly `("hypothesis", "question")`, so those are
+   the only kinds a short id can resolve to. Do not promise `t` → `task`:
+   expanding `_INDEX_KINDS` is a separate change with its own index-shape and
+   cross-kind-collision questions (`science project index` exposes the same two
+   kinds, and both would have to move together).
+
 2. In `RefIndex.resolve`, insert **Tier 1.5** after `id-exact`: if the query
-   matches `_SHORT_ID_RE`, resolve by zero-padded numeric match within the mapped
-   kind. Return `match_kind: "short-id"`.
-3. If the query matches `_SHORT_ID_RE` and Tier 1.5 finds nothing, return
-   `unresolved` immediately — do **not** fall through to the substring tiers.
-4. Render `match_kind` in the text output.
+   matches `_SHORT_ID_RE` *and* its prefix is in the kind map, resolve by
+   zero-padded numeric match within that kind. Return `match_kind: "short-id"`.
+
+3. If the query matches `_SHORT_ID_RE`, return `unresolved` immediately when Tier
+   1.5 finds nothing — do **not** fall through to the substring tiers. This
+   deliberately covers unmapped prefixes too: `t077` returns `unresolved` rather
+   than substring-matching some entity whose title happens to mention it. That is
+   the correct answer for an un-indexed kind, and it is the safe one.
 
 **Tests**
 
 - `h012` → `hypothesis:0012-*` while a decoy entity's title contains
   `h012-class` (regression for the observed failure).
-- `h999` → `unresolved`, never `title-slug`.
+- `q0060` and `q60` both → `question:0060-*` (zero-padding is normalized).
+- `h999` (mapped prefix, no match) → `unresolved`, never `title-slug`.
+- `t077` (unmapped prefix) → `unresolved` even when an entity title contains the
+  literal `t077`.
 - Long descriptive query still resolves via `id-slug` / `title-slug`.
 - Two decoys still yield `ambiguous`.
+
+**Not in this slice:** `match_kind` already renders in text output
+(`cli.py:4400`, `f"{r.query} -> {r.resolved} ({r.match_kind})"`) — it is how the
+original wrong resolution was spotted. No change needed.
 
 ---
 
@@ -110,7 +125,7 @@ losing a right one, and `apply` hard-validates against it.
 
 **Files**
 
-- `science/src/science_tool/project/topic_coverage.py`
+- `science/src/science_tool/topic_coverage.py`
 - `commands/explore-ideas.md` (Phase 1 + report header)
 - Codex skill mirror
 - `science/tests/test_topic_coverage.py`
@@ -139,10 +154,11 @@ losing a right one, and `apply` hard-validates against it.
 
 ---
 
-## Slice 5 — `already-covered` harvest (design group E)
+## Slice 5a — `already-covered` harvest, anchor routing (design group E)
 
-**Blocked on:** the typed-relations slice. `merge` must write a typed edge, not an
-untyped `related` entry, or it will be re-opened to type it later.
+**Not blocked.** Routing a paper into an entity's `source_refs` is a paper→entity
+reference, which the substrate already types. No entity↔entity edge is created, so
+nothing here waits on the typed-relations question.
 
 **Files**
 
@@ -154,12 +170,13 @@ untyped `related` entry, or it will be re-opened to type it later.
 
 1. Accept `decision: merge`; require exactly one `related_existing` target.
 2. `apply` routes the block's resolved supporting (non-`predates:`) anchors into
-   the target entity's `source_refs`, idempotently. It creates nothing and writes
-   no prose.
+   the target entity's `source_refs`, idempotently. It creates nothing, writes no
+   prose, and adds no `related` entry.
 3. Write back `decision: merged` + `merged_into: <entity-id>` + `merged_at`.
 4. Report merges as a distinct category in the created/skipped/manual summary.
 5. Phase 4 instructs the orchestrator to fold each merged candidate's rationale
-   into the parent's `## Thoughts`, and to record the reciprocal pointer.
+   into the parent's `## Thoughts`. The *prose* pointer is the curator's job, per
+   the gap-closure design's rule that apply moves refs, never sentences.
 6. `gaps` learns `unharvested_merge`: a `merged` block whose target's body has no
    prose citing the merged anchor.
 
@@ -171,6 +188,39 @@ untyped `related` entry, or it will be re-opened to type it later.
 - `merge` with zero or multiple `related_existing` targets → validation error.
 - `merge` naming an unresolved target → validation error (same path as
   `related_existing` today).
+- `merge` writes no `related` entry on the target (guards against re-introducing
+  the untyped edge this design set out to avoid).
+
+---
+
+## Slice 5b — typed provenance edges — DEFERRED, no entry condition yet
+
+**Status:** deferred. Do not schedule.
+
+`2026-07-09-typed-claim-to-claim-relations-design.md` is a substrate-gap *report*,
+not a design with a decision: its "Not doing yet" section states *"No code change
+proposed here,"* and it closes on three unanswered maintainer questions — most
+critically whether an entity↔entity `qualifies` is a first-class edge or a
+`proposition` whose `target` is another entity. Until that is answered there is no
+edge field, relation kind, validation rule, or materialization behavior to
+implement against, and therefore nothing for this slice to be blocked *on*.
+
+**Entry condition:** maintainer answers open question 1 of the typed-relations
+report, and a typed-relations design + plan pair exists specifying the field name,
+the permitted relation values, the validator, and the graph materialization.
+
+**Scope when unblocked**
+
+- A typed edge from a `sharpens-existing` child to its parent, replacing the
+  untyped `related` link `apply` writes today.
+- A typed provenance edge from a `merge`d candidate to its target, so the harvest
+  is recoverable from the graph rather than only from the report.
+
+**Until then**, `sharpens-existing` continues to write untyped `related`, and the
+harvest of merged candidates' prose stays a manual curator step. That manual
+workflow was exercised across five entities in the third run and worked; it is
+slow, not broken. Slice 5a makes its *reference* half durable and machine-checked,
+which is the part that was silently lost.
 
 ---
 
