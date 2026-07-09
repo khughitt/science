@@ -164,3 +164,43 @@ def test_workflow_run_entity_carries_optional_fingerprint():
     assert e.fingerprint is None
     e2 = WorkflowRunEntity(**_minimal_workflow_run("workflow-run:r2"), fingerprint=_fp())
     assert e2.fingerprint.code_sha.value == "a" * 40
+
+
+def _minimal_evidence_line(id_: str = "evidence-line:e1", **overrides) -> dict:
+    base = {
+        "id": id_,
+        "canonical_id": id_,
+        "kind": "evidence-line",
+        "title": "E1 supports H1",
+        "project": "demo",
+        "ontology_terms": [],
+        "related": [],
+        "source_refs": [],
+        "content_preview": "",
+        "file_path": f"doc/evidence-lines/{id_}.md",
+        "stance": "supports",
+        "target": "hypothesis:h1",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_evidence_line_run_refs_require_workflow_run_prefix():
+    from science_model.entities import EvidenceLineEntity
+
+    ok = EvidenceLineEntity(
+        **_minimal_evidence_line("evidence-line:e1", run_refs=["workflow-run:r1"])
+    )
+    assert ok.run_refs == ["workflow-run:r1"]
+
+    with pytest.raises(ValidationError):
+        EvidenceLineEntity(
+            **_minimal_evidence_line("evidence-line:e2", run_refs=["r1"])
+        )
+
+
+def test_evidence_line_run_refs_default_empty():
+    from science_model.entities import EvidenceLineEntity
+
+    e = EvidenceLineEntity(**_minimal_evidence_line("evidence-line:e3"))
+    assert e.run_refs == []

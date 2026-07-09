@@ -987,6 +987,9 @@ class EvidenceLineEntity(ProjectEntity):
     evidence_type: EvidenceType | None = None
     quantitative_result: QuantitativeResult | None = None
     belief_eligible: bool = True
+    #: Supplemental workflow-run references. These WIDEN the resolved-run set for
+    #: t077 but never substitute for `dataset_usage`, which stays mandatory.
+    run_refs: list[str] = Field(default_factory=list)
 
     @field_validator("evidence_type", mode="before")
     @classmethod
@@ -996,6 +999,14 @@ class EvidenceLineEntity(ProjectEntity):
         if isinstance(value, str):
             return canonical_evidence_type_token(value)
         return value
+
+    @field_validator("run_refs")
+    @classmethod
+    def _run_ref_ids(cls, v: list[str]) -> list[str]:
+        for ref in v:
+            if not ref.startswith("workflow-run:"):
+                raise ValueError(f"run_refs entries must be workflow-run:<slug> references, got {ref!r}")
+        return v
 
 
 class FalsificationEntity(ProjectEntity):
