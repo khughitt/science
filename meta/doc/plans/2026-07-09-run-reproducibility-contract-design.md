@@ -259,9 +259,11 @@ it never widens the **dataset** set and never waives condition 1.* A direct-only
 This is a load-bearing choice, not a conservatism. Because condition 1 holds for
 every belief-eligible empirical line, every such line necessarily passes through
 `dependence_datasets_by_line` — the same function the dataset-QA ceiling uses
-(`graph/dataset_qa.py`). **Substrate parity is therefore structural, not merely
-tested:** no line shape can reach run-resolution while bypassing the QA ceiling.
-Allowing direct-only `run_refs` would have created precisely that bypass.
+(`graph/dataset_qa.py:85`). Condition 2 is evaluated graph-phase and calls that
+same function on the same materialized graphs (see §D). **Substrate parity is
+therefore structural, not merely tested:** no line shape can reach run-resolution
+while bypassing the QA ceiling. Allowing direct-only `run_refs` would have
+created precisely that bypass.
 
 `run_refs` is still consequential (it is not an inert field): it rescues a line
 whose datasets carry sound dataset-level provenance but cannot themselves name a
@@ -331,25 +333,45 @@ Consumers choose explicitly instead of inheriting a hidden exemption. The
 (`dataset.member-of-cycle`), and the terminal rule is that the first
 non-`member_of` ancestor decides.
 
-### D. Validate check and capture
+### D. Validation surfaces and capture
 
-One check, sibling to `check_belief_eligible_empirical_has_dataset_usage`
-(`validate/checks/evidence_lines.py:612`):
-`check_belief_eligible_empirical_resolves_to_run`.
+The contract is enforced at **two layers**, because the information each needs
+lives at a different layer. This is forced, not stylistic: `ValidateContext`
+(`validate/context.py:25-39`) carries only paths, the manifest, and
+frontmatter/YAML caches — **it has no RDF graph**, and
+`dependence_datasets_by_line` requires materialized `knowledge` / `provenance`
+graphs. Re-deriving dataset resolution from frontmatter inside `validate` would
+duplicate the traversal and destroy substrate parity, which is the one property
+this design most wants to keep.
 
-| finding | severity |
-|---|---|
-| `evidence.empirical-run-unresolved` | WARN → ERROR *(phased)* |
-| `evidence.empirical-run-recipe-only` | WARN → ERROR *(phased)* |
-| `evidence.run-fingerprint-incomplete` | WARN → ERROR *(phased)* |
-| `evidence.run-fingerprint-authored-capturable` | **ERROR from day 1** |
-| `evidence.run-fingerprint-origin-unverified` | **ERROR from day 1** |
-| `dataset.member-of-cycle` | **ERROR always** |
+**Layer 1 — `validate` (frontmatter-local).** Fingerprint *well-formedness*
+needs nothing but the workflow-run entity's own frontmatter, so it is an ordinary
+check in `validate/checks/`. Condition 1 (`dataset_usage` non-empty) is the
+existing check, untouched.
 
-`dataset.member-of-cycle` is raised by `resolved_empirical_runs`' parent walk,
-not by the evidence check itself; it is a malformed-dataset-graph finding and is
-surfaced wherever resolution runs. The other five are emitted by the evidence
-check.
+**Layer 2 — `graph/store/validation.py` (graph-phase).** Run *resolution* is a
+traversal, so it becomes a row in `validate_graph_dataset` beside
+`patch_membership_convenience` (`graph/store/validation.py:137`), which is the
+established precedent for a structural invariant surfaced by both
+`science validate` and `graph validate`. Its `pass` / `warn` / `fail` row status
+maps directly onto the phased rollout.
+
+| finding | layer | severity |
+|---|---|---|
+| `evidence.empirical-run-unresolved` | graph-phase | WARN → ERROR *(phased)* |
+| `evidence.empirical-run-recipe-only` | graph-phase | WARN → ERROR *(phased)* |
+| `dataset.member-of-cycle` | graph-phase | **ERROR always** |
+| `run.fingerprint-incomplete` | validate | WARN → ERROR *(phased)* |
+| `run.fingerprint-authored-capturable` | validate | **ERROR from day 1** |
+| `run.fingerprint-origin-unverified` | validate | **ERROR from day 1** |
+
+The three fingerprint findings are renamed from `evidence.*` to `run.*`: they are
+properties of a **workflow-run entity**, not of an evidence line, and they fire
+whether or not any evidence line references the run.
+
+`dataset.member-of-cycle` is raised by `resolved_empirical_runs`' parent walk, so
+it surfaces wherever resolution runs (graph-phase). The two `evidence.*` findings
+are emitted by the graph-phase resolution row.
 
 The phased findings can fire on **existing** projects (old missing structure), so
 they start warn-only. The day-1 errors can only arise from **newly authored**
@@ -440,7 +462,7 @@ sequence them as such rather than as a single change.
 - **Capture** — `register-run` writes `provenance: captured`; a hand-authored
   MUST-captured component is rejected at both `register-run` and validate.
 - **Commons origin** — a `commons` captured component without a verifiable
-  `capture_origin` raises `evidence.run-fingerprint-origin-unverified`; a
+  `capture_origin` raises `run.fingerprint-origin-unverified`; a
   verifiable one passes by *reading* the authored commons record.
 - **Substrate parity** — run-resolution and the dataset-QA ceiling resolve the
   same dataset set for a given line (both go through `dependence_datasets_by_line`).
