@@ -132,14 +132,25 @@ Three levels, three different facts.
 
 ### Stochasticity is a property of a method
 
+`stochasticity` is a **seed-control classification**, not a reproducibility
+verdict. It answers one question — can this method's stochastic behavior be
+pinned by seed parameters? — and nothing else. Whether a run actually reproduced
+is `t080`'s question.
+
 `method` gains a **trichotomy**, not a boolean, because "stochastic" hides two
 materially different cases:
 
 | `method.stochasticity` | meaning | step obligation |
 |---|---|---|
-| `deterministic` | same inputs, same outputs (a t-test) | none |
-| `seedable` | stochastic, accepts a seed (UMAP, k-means, bootstrap) | must supply a seed |
-| `nondeterministic` | stochastic and **cannot** be seeded (GPU atomics, parallel float reduction order) | must supply a rationale |
+| `deterministic` | no stochastic degree of freedom relevant to the output (a t-test) | none |
+| `seedable` | stochastic, and *all* relevant stochastic degrees of freedom are controlled by the declared `seed_params` (UMAP, k-means, bootstrap) | must supply a seed |
+| `nondeterministic` | stochastic behavior **remains after inputs, config, and environment are fixed**, or no complete seed interface exists | must supply a rationale |
+
+`nondeterministic` is deliberately wider than "cannot be seeded". A method that
+*accepts* a seed but retains residual nondeterminism — GPU kernels, parallel
+float reduction order, `atomicAdd` — is `nondeterministic`, because binding its
+seed would not make the run reproducible. The distinction is *fully*
+seed-controlled versus not.
 
 A boolean would force `nondeterministic` methods to either claim a seed they
 cannot honor, or masquerade as deterministic. Both are lies the graph would
@@ -213,6 +224,16 @@ becomes `{kind, rationale}`, and the invariant `t077` placed on it (`kind ==
 seeded` requires non-empty `seeds`) moves up to `RunFingerprint`: `kind ==
 seeded` requires non-empty `step_seeds`. `SeedPolicy.rationale` (required for
 `stochastic-unseeded`) is composed from the offending steps.
+
+Removing `seeds` leaves `seed_policy.kind` as a **coarse run classification**,
+and that is the intended weight. It does not distinguish "a step left a seed
+unbound" from "a step's method is inherently nondeterministic" — both derive
+`stochastic-unseeded`. The explanation lives one level down, in `step_seeds` and
+in the `rationale` composed from the offending steps; a downstream consumer that
+needs the distinction inspects those steps and their methods. **No enum values
+are added to `SeedPolicy.kind`** to carry that distinction. Widening the
+top-level policy would recreate exactly the summary-versus-record duplication
+that `SeedPolicy.seeds` was removed for.
 
 This resolves the discomfort `t077`'s design recorded. Once methods carry
 stochasticity, the run no longer has to assert how the code behaves. It observes.
@@ -324,13 +345,29 @@ through `WorkflowRunEntity.workflow`, then its steps through `sci:contains`.
   workflow's steps, their `seed_bindings`, and the realized values, per the table
   above. It is no longer authored.
 - A run whose workflow declares no steps **fails closed** at `register-run`: the
-  policy cannot be derived, and a defaulted policy would fail open. The empty
-  entity population makes this safe to impose from day one.
+  policy cannot be derived, and defaulting it — to `deterministic`, to `seeded`,
+  or to an "unknown but acceptable" value — would reintroduce the unverifiable
+  assertion this umbrella exists to remove. The empty entity population makes
+  this safe to impose from day one.
+
+  Adoption pressure is answered by **phasing and a legible error**, never by a
+  soft fallback. The error must name the fix, not the invariant:
+
+  > `register-run` cannot derive `seed_policy`: `workflow:X` declares no
+  > `workflow-step`. Declare at least one step before registering a run.
+
+  The **minimum adoption unit is one step**. A one-step workflow is fully valid:
+  it names a method, and if that method is `seedable` it binds a seed. Because
+  Spec 1's `seed-binding-missing` is warn-only, an adopter can declare that step
+  with no bindings at all and still register runs — the graph then reports
+  `stochastic-unseeded`, which is true, rather than a defaulted `seeded`, which
+  would not be. Migration is: add one step, then tighten.
 
 **Done when:** `register-run` derives `seed_policy` and refuses to invent one;
-two steps seeding the same parameter name with different values round-trip
-without collision; `t077`'s fingerprint tests pass with `seed_policy` no longer
-hand-authored and `SeedPolicy.seeds` gone.
+a zero-step workflow errors with the message above; two steps seeding the same
+parameter name with different values round-trip without collision; `t077`'s
+fingerprint tests pass with `seed_policy` no longer hand-authored and
+`SeedPolicy.seeds` gone.
 
 ### Spec 3 — Downstream transparency
 
@@ -367,8 +404,11 @@ any derived dataset's provenance.
 - **Multi-seed steps.** `seed_params` is a list, so a method may take several
   seeds. The `seeded` derivation above requires **all** of a step's `seed_params`
   to be bound and realized; a partially-seeded step derives
-  `stochastic-unseeded`. Whether a partial binding is ever legitimate is a Spec 1
-  question.
+  `stochastic-unseeded`. This follows from the definition of `seedable` — a
+  method is `seedable` only if its declared `seed_params` control *all* relevant
+  stochastic degrees of freedom, so leaving one unbound leaves the step
+  uncontrolled. Whether a partial binding is ever worth expressing as something
+  other than a warning is a Spec 1 question.
 - **Snakemake reconciliation.** `workflow-step.rule_name` names a snakemake rule.
   Nothing checks that the rule exists. A cross-check belongs with `t079`'s
   successor work, not here.
