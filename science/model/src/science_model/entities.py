@@ -41,6 +41,7 @@ from science_model.reasoning import (
     SupportScope,
     canonical_evidence_type_token,
 )
+from science_model.run_fingerprint import RunFingerprint
 from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
 
@@ -897,6 +898,7 @@ class WorkflowRunEntity(ProjectEntity):
 
     manifest_path: str = ""
     resources: list[dict[str, Any]] = Field(default_factory=list)
+    fingerprint: RunFingerprint | None = None
 
     def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.status == "complete":
@@ -985,6 +987,9 @@ class EvidenceLineEntity(ProjectEntity):
     evidence_type: EvidenceType | None = None
     quantitative_result: QuantitativeResult | None = None
     belief_eligible: bool = True
+    #: Supplemental workflow-run references. These WIDEN the resolved-run set for
+    #: t077 but never substitute for `dataset_usage`, which stays mandatory.
+    run_refs: list[str] = Field(default_factory=list)
 
     @field_validator("evidence_type", mode="before")
     @classmethod
@@ -994,6 +999,14 @@ class EvidenceLineEntity(ProjectEntity):
         if isinstance(value, str):
             return canonical_evidence_type_token(value)
         return value
+
+    @field_validator("run_refs")
+    @classmethod
+    def _run_ref_ids(cls, v: list[str]) -> list[str]:
+        for ref in v:
+            if not ref.startswith("workflow-run:"):
+                raise ValueError(f"run_refs entries must be workflow-run:<slug> references, got {ref!r}")
+        return v
 
 
 class FalsificationEntity(ProjectEntity):

@@ -7303,6 +7303,8 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
     and updates symmetric edges (produces/consumed_by).
     """
     from science_tool.datasets_register import (
+        FingerprintCaptureError,
+        persist_run_fingerprint,
         preflight_register_run_identity,
         write_derived_dataset_entities,
         write_per_output_datapackages,
@@ -7312,8 +7314,10 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
         preflight_register_run_identity(root, workflow_run_id)
+        fingerprint = persist_run_fingerprint(root, workflow_run_id)
+        click.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
         dp_paths = write_per_output_datapackages(root, workflow_run_id)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, FingerprintCaptureError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
     for p in dp_paths:

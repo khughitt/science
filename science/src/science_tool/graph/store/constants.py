@@ -231,6 +231,34 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:runRef",
+        "description": "Supplemental workflow-run reference widening the line's resolved-run set",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:fingerprintPolicy",
+        "description": "Policy version of the run's reproducibility fingerprint; presence means fingerprinted",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:derivationKind",
+        "description": (
+            "Discriminator for a dataset's derivation union "
+            "(workflow-run | workflow-recipe | member_of); emitted for every dataset with a derivation"
+        ),
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:workflowRun",
+        "description": "The workflow-run that produced this dataset (DerivationBlock derivations only)",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:memberOfParent",
+        "description": "Parent dataset for a member_of derivation; membership is a structural edge, not run-produced",
+        "layer": "graph/knowledge",
+    },
+    {
         "predicate": "sci:compositionalStatus",
         "description": "Compositional robustness status for proposition-backed claims",
         "layer": "graph/provenance",
