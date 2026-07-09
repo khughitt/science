@@ -16,6 +16,7 @@ from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
 from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity, WorkflowRunEntity
 from science_model.identity import EntityClass, EntityScope
 from science_model.ontologies.schema import OntologyCatalog
+from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlock, WorkflowRecipeDerivationBlock
 from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
@@ -368,6 +369,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
         )
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
+    _add_derivation_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
     _add_sub_cohort_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_resource_edges(sources, datasets=datasets)
@@ -1232,6 +1234,59 @@ def _add_produced_by_edges(
             if target is None or target.kind != "code-file":
                 continue
             knowledge.add((_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id)))
+
+
+def _add_derivation_edges(sources: ProjectSources, *, resolver: ReferenceResolver, knowledge) -> None:
+    """Make each dataset's `derivation` union visible in the graph as triples.
+
+    Run resolution (Task 10) is graph-phase and sees RDF nodes, not
+    `DatasetEntity` objects: without these triples a `DerivationBlock`'s
+    `workflow_run` is unreachable from the dataset URI, and a recipe-only
+    derivation is indistinguishable from having no derivation at all. The
+    discriminator (`sci:derivationKind`) is emitted positively for every arm,
+    including the recipe arm, so "recipe-only" and "no derivation" are two
+    distinct, decidable states from triples alone.
+
+    A dataset's `workflow_run` / `parent_dataset` reference must resolve to a
+    real registered entity of the expected kind — unlike `produced_by` (code
+    provenance, lenient by design), a named-but-unresolved run or parent is a
+    broken derivation, not an absence, so this raises rather than skipping.
+    """
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        derivation = entity.derivation
+        if derivation is None:
+            continue
+
+        ds_uri = _entity_uri(entity.canonical_id)
+
+        if isinstance(derivation, DerivationBlock):
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-run")))
+            resolution = resolver.resolve(derivation.workflow_run)
+            if resolution.status != "resolved" or resolution.canonical_id is None:
+                raise ValueError(f"{entity.canonical_id}: unresolved workflow_run {derivation.workflow_run!r}")
+            if not resolution.canonical_id.startswith("workflow-run:"):
+                raise ValueError(
+                    f"{entity.canonical_id}: workflow_run resolved to non-workflow-run "
+                    f"{resolution.canonical_id!r}"
+                )
+            knowledge.add((ds_uri, SCI_NS.workflowRun, _entity_uri(resolution.canonical_id)))
+        elif isinstance(derivation, WorkflowRecipeDerivationBlock):
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-recipe")))
+        elif isinstance(derivation, MemberOfDerivationBlock):
+            knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("member_of")))
+            resolution = resolver.resolve(derivation.parent_dataset)
+            if resolution.status != "resolved" or resolution.canonical_id is None:
+                raise ValueError(f"{entity.canonical_id}: unresolved member_of parent {derivation.parent_dataset!r}")
+            if not resolution.canonical_id.startswith("dataset:"):
+                raise ValueError(
+                    f"{entity.canonical_id}: member_of parent resolved to non-dataset "
+                    f"{resolution.canonical_id!r}"
+                )
+            knowledge.add((ds_uri, SCI_NS.memberOfParent, _entity_uri(resolution.canonical_id)))
+        else:
+            raise TypeError(f"unhandled derivation shape {type(derivation).__name__} on {entity.canonical_id}")
 
 
 def _add_sub_cohort_edges(sources: ProjectSources, *, resolver: ReferenceResolver, knowledge) -> None:

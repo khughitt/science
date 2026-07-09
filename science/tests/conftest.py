@@ -360,3 +360,134 @@ def materialized_knowledge_for_run(tmp_path: Path, local_fingerprint):
         return knowledge, run_uri
 
     return _build
+
+
+@pytest.fixture
+def materialized_knowledge_for_dataset(tmp_path: Path):
+    """Materialize a real project graph for one dataset entity and hand back its
+    knowledge-graph named subgraph, the dataset's URI, and (kind-dependent) the
+    URI the dataset's derivation should reach.
+
+    Runs the actual `science graph build` CLI pipeline (not a hand-built
+    rdflib.Graph) so tests using this fixture prove what the real materializer
+    emits for each of the three `derivation` union arms, not what a test author
+    assumes it emits.
+
+    ``kind`` selects the derivation shape authored on `dataset:ds1`:
+      - "workflow-run": a full `DerivationBlock` naming `workflow-run:r1`;
+        `related_uri` is the run's URI.
+      - "workflow-recipe": a `WorkflowRecipeDerivationBlock` naming a recipe
+        (not a run); `related_uri` is None.
+      - "member_of": a `MemberOfDerivationBlock` naming `dataset:parent`;
+        `related_uri` is the parent dataset's URI.
+      - None: no `derivation` block at all (origin=external); `related_uri`
+        is None.
+    """
+
+    def _build(*, kind: str | None):
+        from click.testing import CliRunner
+        from rdflib import Dataset, URIRef
+
+        from science_tool.cli import main
+        from science_tool.graph.io import PROJECT_NS
+
+        root = tmp_path
+        (root / "science.yaml").write_text(
+            "name: dataset-derivation-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+        )
+
+        datasets_dir = root / "entities" / "datasets"
+        datasets_dir.mkdir(parents=True, exist_ok=True)
+
+        related_uri = None
+
+        if kind == "workflow-run":
+            runs_dir = root / "entities" / "workflow-runs"
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            (runs_dir / "r1.md").write_text(
+                "---\nid: workflow-run:r1\nkind: workflow-run\ntitle: R1\n---\n",
+                encoding="utf-8",
+            )
+            (datasets_dir / "ds1.md").write_text(
+                "---\n"
+                "id: dataset:ds1\n"
+                "kind: dataset\n"
+                "title: DS1\n"
+                "origin: derived\n"
+                "derivation:\n"
+                "  workflow: workflow:wf\n"
+                "  workflow_run: workflow-run:r1\n"
+                "  git_commit: abc\n"
+                "  config_snapshot: config.yaml\n"
+                "  produced_at: '2026-04-19T00:00:00Z'\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            related_uri = URIRef(PROJECT_NS["workflow-run/r1"])
+        elif kind == "workflow-recipe":
+            (datasets_dir / "ds1.md").write_text(
+                "---\n"
+                "id: dataset:ds1\n"
+                "kind: dataset\n"
+                "title: DS1\n"
+                "origin: derived\n"
+                "derivation:\n"
+                "  kind: workflow\n"
+                "  workflow_recipe: workflow:wf\n"
+                "---\n",
+                encoding="utf-8",
+            )
+        elif kind == "member_of":
+            (datasets_dir / "parent.md").write_text(
+                "---\n"
+                "id: dataset:parent\n"
+                "kind: dataset\n"
+                "title: Parent\n"
+                "origin: external\n"
+                "access:\n"
+                "  level: public\n"
+                "  verified: true\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            (datasets_dir / "ds1.md").write_text(
+                "---\n"
+                "id: dataset:ds1\n"
+                "kind: dataset\n"
+                "title: DS1\n"
+                "origin: derived\n"
+                "derivation:\n"
+                "  kind: member_of\n"
+                "  parent_dataset: dataset:parent\n"
+                "  member_key: row1\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            related_uri = URIRef(PROJECT_NS["dataset/parent"])
+        elif kind is None:
+            (datasets_dir / "ds1.md").write_text(
+                "---\n"
+                "id: dataset:ds1\n"
+                "kind: dataset\n"
+                "title: DS1\n"
+                "origin: external\n"
+                "access:\n"
+                "  level: public\n"
+                "  verified: true\n"
+                "---\n",
+                encoding="utf-8",
+            )
+        else:
+            raise ValueError(f"unknown derivation kind {kind!r}")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["graph", "build", "--project-root", str(root)])
+        assert result.exit_code == 0, f"graph build failed:\n{result.output}"
+
+        dataset = Dataset()
+        dataset.parse(source=str(root / "knowledge" / "graph.trig"), format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        ds_uri = URIRef(PROJECT_NS["dataset/ds1"])
+        return knowledge, ds_uri, related_uri
+
+    return _build

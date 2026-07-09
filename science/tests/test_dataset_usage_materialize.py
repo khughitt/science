@@ -392,10 +392,23 @@ def _load_trig(path):
     return ds
 
 
+def _write_workflow_run(root, slug="r"):
+    """Author a minimal workflow-run entity so a `derivation.workflow_run` ref
+    referencing it resolves (Task 8d: an unresolved workflow_run now hard-fails
+    graph materialization)."""
+    runs_dir = root / "entities" / "workflow-runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    (runs_dir / f"{slug}.md").write_text(
+        f"---\nid: workflow-run:{slug}\nkind: workflow-run\ntitle: {slug.upper()}\n---\n",
+        encoding="utf-8",
+    )
+
+
 def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
+    _write_workflow_run(tmp_path)
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
@@ -461,6 +474,7 @@ def test_materialize_graph_emits_transformation_reference_usage_nodes(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
+    _write_workflow_run(tmp_path)
     _write_dataset(
         tmp_path / "data" / "raw" / "datapackage.yaml",
         "raw",
@@ -726,6 +740,7 @@ def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
+    _write_workflow_run(tmp_path)
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
@@ -762,6 +777,7 @@ def test_materialize_graph_rejects_dataset_self_reference_through_alias(tmp_path
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
+    _write_workflow_run(tmp_path)
     _write_dataset(
         tmp_path / "data" / "derived" / "datapackage.yaml",
         "derived",
