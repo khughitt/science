@@ -44,8 +44,8 @@
 - `science/src/science_tool/cli.py:7291-7314` — `register-run` calls `persist_run_fingerprint`.
 - `science/src/science_tool/validate/checks/workflow_runs.py` *(create)* — the `run.*` checks.
 - `science/src/science_tool/graph/store/validation.py` — the `empirical_run_resolution` row.
-- `science/src/science_tool/graph/store/constants.py` — register the `sci:runRef` predicate.
-- `science/src/science_tool/graph/materialize.py` — emit `sci:runRef` for authored `run_refs`.
+- `science/src/science_tool/graph/store/constants.py` — register `sci:runRef`, `sci:fingerprintPolicy`, `sci:derivationKind`, `sci:workflowRun`, `sci:memberOfParent`.
+- `science/src/science_tool/graph/materialize.py` — emit all five (evidence-line `run_refs`, run fingerprint marker, dataset derivation union).
 
 ---
 
@@ -1134,6 +1134,8 @@ git commit -m "Capture the run fingerprint at dataset register-run (t077 P1)"
 
 **Fail loud** (no silent fallbacks): missing `uv.lock`, absent `git`, a run frontmatter with no `fingerprint.executor`, or a `config_snapshot` path that does not exist each raise `FingerprintCaptureError`.
 
+**`persist_run_fingerprint` is deliberately NOT idempotent, and there is no bug here.** `code_dirty` records the worktree state *at capture time*, and the command's own frontmatter write leaves the tree dirty — so a second call captures `code_dirty=true`. `code_sha` and the digests are stable; only `code_dirty` moves. Making it idempotent would require excluding the run entity's own path from the dirty check, which silently narrows what "dirty" means. **Do not add that exclusion in this plan.** If it is ever wanted, it needs its own design; the honest semantics is: commit the run entity, then the recorded `code_dirty` describes the tree that produced the run.
+
 `register-run` continues to copy `git_commit` down onto `DerivationBlock` during P1/P2; P3 removes that copy-down. The two coexist for now — this task adds the fingerprint, it does not remove the denormalized field.
 
 - [ ] **Step 1: Write the failing test**
@@ -1212,10 +1214,25 @@ def test_missing_executor_declaration_fails_loud(git_project):
         persist_run_fingerprint(git_project, "workflow-run:r1")
 
 
-def test_persist_is_idempotent(git_project):
+def test_persist_is_not_idempotent_because_its_own_write_dirties_the_tree(git_project):
+    """`code_dirty` is the worktree state AT CAPTURE TIME — including the previous
+    run's uncommitted fingerprint write. This is the honest semantics; commit the
+    run entity before re-registering.
+    """
+    first = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert first.code_dirty.value == "false"
+
+    second = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert second.code_dirty.value == "true"  # the first call's write is uncommitted
+    assert second.code_sha.value == first.code_sha.value
+
+
+def test_code_sha_is_stable_across_repeated_capture(git_project):
+    """Only `code_dirty` moves; the commit identity does not."""
     first = persist_run_fingerprint(git_project, "workflow-run:r1")
     second = persist_run_fingerprint(git_project, "workflow-run:r1")
-    assert first.model_dump() == second.model_dump()
+    assert first.code_sha.value == second.code_sha.value
+    assert first.environment_digest.value == second.environment_digest.value
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1828,6 +1845,140 @@ git commit -m "Emit sci:fingerprintPolicy so run resolution cannot fail open (t0
 
 ---
 
+### Task 8d: Emit dataset derivation provenance into the graph
+
+**Files:**
+- Modify: `science/src/science_tool/graph/store/constants.py` (register `sci:derivationKind`, `sci:workflowRun`, `sci:memberOfParent`)
+- Modify: `science/src/science_tool/graph/materialize.py` (emit beside `_add_produced_by_edges`, `:1183-1197`)
+- Test: `science/tests/test_materialize_dataset_derivation.py`
+
+**Interfaces:**
+- Consumes: the `derivation` discriminated union on dataset entities.
+- Produces, per dataset carrying a `derivation`:
+  - `(<ds>, SCI_NS.derivationKind, Literal("workflow-run" | "workflow-recipe" | "member_of"))` — always;
+  - `(<ds>, SCI_NS.workflowRun, <run-uri>)` — `DerivationBlock` only;
+  - `(<ds>, SCI_NS.memberOfParent, <parent-ds-uri>)` — `MemberOfDerivationBlock` only.
+
+**Why this task exists:** run-resolution is graph-phase and sees RDF nodes, not `DatasetEntity` objects. `materialize.py` emits only `sci:producedBy` today (`:1183-1197`); the `derivation` union never reaches the graph. Without these triples `_runs_for_line` has dataset URIs and no way to reach a run — hand-built TriG fixtures would pass while every real materialized graph failed to resolve a `DerivationBlock`. `derivationKind` is emitted as an explicit discriminator so `recipe-only` is *positively* distinguishable from "no derivation at all", rather than inferred from an absence.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# science/tests/test_materialize_dataset_derivation.py
+from rdflib import Literal
+
+from science_tool.graph.io import SCI_NS
+
+
+def test_workflow_run_derivation_emits_kind_and_run_edge(materialized_knowledge_for_dataset):
+    knowledge, ds_uri, run_uri = materialized_knowledge_for_dataset(kind="workflow-run")
+    assert list(knowledge.objects(ds_uri, SCI_NS.derivationKind)) == [Literal("workflow-run")]
+    assert list(knowledge.objects(ds_uri, SCI_NS.workflowRun)) == [run_uri]
+
+
+def test_recipe_derivation_emits_kind_but_no_run_edge(materialized_knowledge_for_dataset):
+    knowledge, ds_uri, _ = materialized_knowledge_for_dataset(kind="workflow-recipe")
+    assert list(knowledge.objects(ds_uri, SCI_NS.derivationKind)) == [Literal("workflow-recipe")]
+    assert list(knowledge.objects(ds_uri, SCI_NS.workflowRun)) == []
+
+
+def test_member_of_derivation_emits_parent_edge(materialized_knowledge_for_dataset):
+    knowledge, ds_uri, parent_uri = materialized_knowledge_for_dataset(kind="member_of")
+    assert list(knowledge.objects(ds_uri, SCI_NS.derivationKind)) == [Literal("member_of")]
+    assert list(knowledge.objects(ds_uri, SCI_NS.memberOfParent)) == [parent_uri]
+    assert list(knowledge.objects(ds_uri, SCI_NS.workflowRun)) == []
+
+
+def test_dataset_without_derivation_emits_no_kind(materialized_knowledge_for_dataset):
+    knowledge, ds_uri, _ = materialized_knowledge_for_dataset(kind=None)
+    assert list(knowledge.objects(ds_uri, SCI_NS.derivationKind)) == []
+
+
+def test_derivation_predicates_are_registered():
+    from science_tool.graph.store.constants import PREDICATE_REGISTRY
+
+    names = {entry["predicate"] for entry in PREDICATE_REGISTRY}
+    assert {"sci:derivationKind", "sci:workflowRun", "sci:memberOfParent"} <= names
+```
+
+> **Implementer:** write `materialized_knowledge_for_dataset` in `science/tests/conftest.py`, returning `(knowledge, dataset_uri, related_uri)` where `related_uri` is the run URI, the parent-dataset URI, or `None` depending on `kind`.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_materialize_dataset_derivation.py -v`
+Expected: FAIL — `AttributeError: derivationKind` / missing `PREDICATE_REGISTRY` entries
+
+- [ ] **Step 3: Write minimal implementation**
+
+Register three predicates in `science/src/science_tool/graph/store/constants.py`, matching the existing dict shape:
+
+```python
+    {
+        "predicate": "sci:derivationKind",
+        "domain": "sci:Dataset",
+        "range": "xsd:string",
+        "description": "Discriminator for the dataset's derivation union (workflow-run|workflow-recipe|member_of)",
+    },
+    {
+        "predicate": "sci:workflowRun",
+        "domain": "sci:Dataset",
+        "range": "sci:WorkflowRun",
+        "description": "The workflow-run that produced this dataset (workflow-run derivations only)",
+    },
+    {
+        "predicate": "sci:memberOfParent",
+        "domain": "sci:Dataset",
+        "range": "sci:Dataset",
+        "description": "Parent collection for a member_of derivation; membership is not run-produced",
+    },
+```
+
+Emit in `science/src/science_tool/graph/materialize.py`, beside `_add_produced_by_edges`:
+
+```python
+def _add_derivation_edges(entity, *, resolver, knowledge) -> None:
+    """Make the dataset derivation union visible in the graph.
+
+    Run resolution is graph-phase; without these triples a DerivationBlock's
+    workflow_run is unreachable and recipe-only state is indistinguishable from
+    having no derivation at all.
+    """
+    derivation = entity.derivation
+    if derivation is None:
+        return
+
+    ds_uri = _entity_uri(entity.canonical_id)
+
+    if isinstance(derivation, DerivationBlock):
+        knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-run")))
+        knowledge.add((ds_uri, SCI_NS.workflowRun, _entity_uri(resolver.resolve_ref(derivation.workflow_run))))
+    elif isinstance(derivation, WorkflowRecipeDerivationBlock):
+        knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("workflow-recipe")))
+    elif isinstance(derivation, MemberOfDerivationBlock):
+        knowledge.add((ds_uri, SCI_NS.derivationKind, Literal("member_of")))
+        knowledge.add((ds_uri, SCI_NS.memberOfParent, _entity_uri(resolver.resolve_ref(derivation.parent_dataset))))
+    else:
+        raise TypeError(f"unhandled derivation shape {type(derivation).__name__} on {entity.canonical_id}")
+```
+
+The `else: raise` is deliberate — a new derivation arm must fail loudly here rather than silently resolve to nothing.
+
+Call it from the same loop that calls `_add_produced_by_edges`.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd science && uv run --frozen pytest tests/test_materialize_dataset_derivation.py -v && uv run --frozen pytest tests/ -q -k "materialize or dataset"`
+Expected: PASS (5 new tests; existing materialize/dataset tests green)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/graph/store/constants.py science/src/science_tool/graph/materialize.py science/tests/test_materialize_dataset_derivation.py science/tests/conftest.py
+git commit -m "Emit dataset derivation provenance so run resolution is graph-decidable (t077 P2)"
+```
+
+---
+
 ### Task 9: Resolution helpers — `own_derivation_run` and `resolved_empirical_runs`
 
 **Files:**
@@ -1835,109 +1986,120 @@ git commit -m "Emit sci:fingerprintPolicy so run resolution cannot fail open (t0
 - Test: `science/tests/test_run_resolution.py`
 
 **Interfaces:**
-- Consumes: `science_model.entities` derivation union (`DerivationBlock`, `WorkflowRecipeDerivationBlock`, `MemberOfDerivationBlock`).
+- Consumes: Task 8d's `sci:derivationKind` / `sci:workflowRun` / `sci:memberOfParent` triples and the pre-existing `sci:producedBy`.
 - Produces:
   - `class MemberOfCycleError(Exception)`
   - `class NoRunReason(StrEnum)`: `RECIPE_ONLY="recipe-only"`, `RUN_UNFINGERPRINTED="run-unfingerprinted"`, `CODE_ONLY_NO_RUN="code-only-no-run"`, `NO_PROVENANCE="no-provenance"`
-  - `own_derivation_run(dataset) -> str | None` — the dataset's *own* derivation edge; `None` for `member_of`.
-  - `resolved_empirical_runs(dataset, lookup, is_fingerprinted) -> tuple[list[str], list[NoRunReason]]` — recurses `member_of` via `lookup: Callable[[str], object | None]`; raises `MemberOfCycleError` on a repeat. `is_fingerprinted: Callable[[str], bool]` decides whether a named run actually bears a fingerprint.
+  - `own_derivation_run(knowledge: Graph, dataset: URIRef) -> URIRef | None` — the dataset's *own* derivation edge; `None` for `member_of`.
+  - `resolved_empirical_runs(knowledge: Graph, dataset: URIRef, is_fingerprinted: Callable[[URIRef], bool]) -> tuple[list[URIRef], list[NoRunReason]]` — walks `sci:memberOfParent` to the parent chain; raises `MemberOfCycleError` on a repeat.
+
+**These operate on the graph, not on entity objects.** Resolution runs graph-phase, where `DatasetEntity` instances do not exist — only RDF nodes. An entity-object signature would be unusable by its only caller.
 
 Two helpers, deliberately. A single one would smuggle the edge-level `member_of` exemption into evidence resolution.
 
-**A run is not a fingerprinted run.** `is_fingerprinted` is not optional and has no default. A `DerivationBlock` naming a run that bears no fingerprint contributes **nothing**, with reason `run-unfingerprinted`. Task 7 deliberately emits no `validate` finding for a run with no fingerprint block, so if this helper admitted bare run names the whole contract would fail open — an unfingerprinted run would satisfy resolution and nothing anywhere would object.
+**A run is not a fingerprinted run.** `is_fingerprinted` is not optional and has no default. A `workflow-run` derivation naming a run that bears no fingerprint contributes **nothing**, with reason `run-unfingerprinted`. Task 7 deliberately emits no `validate` finding for a run with no fingerprint block, so if this helper admitted bare run names the whole contract would fail open — an unfingerprinted run would satisfy resolution and nothing anywhere would object.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # science/tests/test_run_resolution.py
 import pytest
+from rdflib import Graph, Literal, URIRef
 
+from science_tool.graph.io import SCI_NS
 from science_tool.graph.run_resolution import (
     MemberOfCycleError, NoRunReason, own_derivation_run, resolved_empirical_runs,
 )
 
-
-class FakeDataset:
-    def __init__(self, id_, derivation=None, produced_by=()):
-        self.id = id_
-        self.derivation = derivation
-        self.produced_by = list(produced_by)
-
-
-class RunDeriv:
-    def __init__(self, workflow_run): self.workflow_run = workflow_run
-class RecipeDeriv:
-    def __init__(self): self.workflow_recipe = "workflow:w1"
-class MemberDeriv:
-    def __init__(self, parent): self.parent_dataset = parent
-
-
-@pytest.fixture(autouse=True)
-def _patch_union(monkeypatch):
-    import science_tool.graph.run_resolution as rr
-    monkeypatch.setattr(rr, "DerivationBlock", RunDeriv)
-    monkeypatch.setattr(rr, "WorkflowRecipeDerivationBlock", RecipeDeriv)
-    monkeypatch.setattr(rr, "MemberOfDerivationBlock", MemberDeriv)
-
+DS = lambda n: URIRef(f"http://example.org/dataset/{n}")   # noqa: E731
+RUN = lambda n: URIRef(f"http://example.org/workflow-run/{n}")  # noqa: E731
 
 ALL_FINGERPRINTED = lambda _run: True    # noqa: E731
 NONE_FINGERPRINTED = lambda _run: False  # noqa: E731
 
 
+def _run_derived(g: Graph, ds: URIRef, run: URIRef) -> None:
+    g.add((ds, SCI_NS.derivationKind, Literal("workflow-run")))
+    g.add((ds, SCI_NS.workflowRun, run))
+
+
+def _recipe_derived(g: Graph, ds: URIRef) -> None:
+    g.add((ds, SCI_NS.derivationKind, Literal("workflow-recipe")))
+
+
+def _member_of(g: Graph, ds: URIRef, parent: URIRef) -> None:
+    g.add((ds, SCI_NS.derivationKind, Literal("member_of")))
+    g.add((ds, SCI_NS.memberOfParent, parent))
+
+
 def test_own_derivation_run_returns_the_run():
-    ds = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
-    assert own_derivation_run(ds) == "workflow-run:r1"
+    g = Graph()
+    _run_derived(g, DS("a"), RUN("r1"))
+    assert own_derivation_run(g, DS("a")) == RUN("r1")
 
 
 def test_own_derivation_run_is_none_for_member_of():
-    ds = FakeDataset("dataset:m", MemberDeriv("dataset:a"))
-    assert own_derivation_run(ds) is None
+    g = Graph()
+    _member_of(g, DS("m"), DS("a"))
+    assert own_derivation_run(g, DS("m")) is None
 
 
 def test_resolved_runs_recurse_through_member_of_to_parent():
-    parent = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
-    member = FakeDataset("dataset:m", MemberDeriv("dataset:a"))
-    runs, reasons = resolved_empirical_runs(member, {"dataset:a": parent}.get, ALL_FINGERPRINTED)
-    assert runs == ["workflow-run:r1"] and reasons == []
+    g = Graph()
+    _run_derived(g, DS("a"), RUN("r1"))
+    _member_of(g, DS("m"), DS("a"))
+    runs, reasons = resolved_empirical_runs(g, DS("m"), ALL_FINGERPRINTED)
+    assert runs == [RUN("r1")] and reasons == []
 
 
 def test_run_without_a_fingerprint_contributes_nothing():
     """A run is not a fingerprinted run. Failing open here would void the contract."""
-    ds = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
-    runs, reasons = resolved_empirical_runs(ds, {}.get, NONE_FINGERPRINTED)
+    g = Graph()
+    _run_derived(g, DS("a"), RUN("r1"))
+    runs, reasons = resolved_empirical_runs(g, DS("a"), NONE_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.RUN_UNFINGERPRINTED]
 
 
 def test_member_of_parent_run_must_also_be_fingerprinted():
-    parent = FakeDataset("dataset:a", RunDeriv("workflow-run:r1"))
-    member = FakeDataset("dataset:m", MemberDeriv("dataset:a"))
-    runs, reasons = resolved_empirical_runs(member, {"dataset:a": parent}.get, NONE_FINGERPRINTED)
+    g = Graph()
+    _run_derived(g, DS("a"), RUN("r1"))
+    _member_of(g, DS("m"), DS("a"))
+    runs, reasons = resolved_empirical_runs(g, DS("m"), NONE_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.RUN_UNFINGERPRINTED]
 
 
 def test_member_of_cycle_raises():
-    a = FakeDataset("dataset:a", MemberDeriv("dataset:b"))
-    b = FakeDataset("dataset:b", MemberDeriv("dataset:a"))
-    with pytest.raises(MemberOfCycleError, match="dataset:a"):
-        resolved_empirical_runs(a, {"dataset:a": a, "dataset:b": b}.get, ALL_FINGERPRINTED)
+    g = Graph()
+    _member_of(g, DS("a"), DS("b"))
+    _member_of(g, DS("b"), DS("a"))
+    with pytest.raises(MemberOfCycleError, match="dataset/a"):
+        resolved_empirical_runs(g, DS("a"), ALL_FINGERPRINTED)
 
 
 def test_recipe_only_contributes_nothing_with_reason():
-    ds = FakeDataset("dataset:c", RecipeDeriv())
-    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
+    g = Graph()
+    _recipe_derived(g, DS("c"))
+    runs, reasons = resolved_empirical_runs(g, DS("c"), ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.RECIPE_ONLY]
 
 
 def test_produced_by_only_is_code_only_no_run():
-    ds = FakeDataset("dataset:d", None, produced_by=["code-file:x"])
-    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
+    g = Graph()
+    g.add((DS("d"), SCI_NS.producedBy, URIRef("http://example.org/code-file/x")))
+    runs, reasons = resolved_empirical_runs(g, DS("d"), ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.CODE_ONLY_NO_RUN]
 
 
 def test_raw_external_dataset_is_no_provenance():
-    ds = FakeDataset("dataset:e", None)
-    runs, reasons = resolved_empirical_runs(ds, {}.get, ALL_FINGERPRINTED)
+    runs, reasons = resolved_empirical_runs(Graph(), DS("e"), ALL_FINGERPRINTED)
     assert runs == [] and reasons == [NoRunReason.NO_PROVENANCE]
+
+
+def test_unknown_derivation_kind_fails_loud():
+    g = Graph()
+    g.add((DS("x"), SCI_NS.derivationKind, Literal("teleportation")))
+    with pytest.raises(ValueError, match="teleportation"):
+        resolved_empirical_runs(g, DS("x"), ALL_FINGERPRINTED)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1949,19 +2111,23 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.graph.run
 
 ```python
 # science/src/science_tool/graph/run_resolution.py
-"""Resolve a dataset to the workflow-run(s) that produced it.
+"""Resolve a dataset NODE to the fingerprinted workflow-run(s) that produced it.
+
+Operates on the materialized graph, not on entity objects: run resolution is
+graph-phase, where `DatasetEntity` instances do not exist. Reads the derivation
+triples emitted by `materialize._add_derivation_edges`.
 
 Two helpers, deliberately:
 
 * `own_derivation_run` answers "does THIS dataset's own derivation edge name a
   run?" and returns None for `member_of`, because a membership edge is not
   run-produced.
-* `resolved_empirical_runs` recurses through `member_of` to the parent chain and
-  is what evidence validation uses.
+* `resolved_empirical_runs` walks `member_of` to the parent chain and is what
+  evidence validation uses.
 
 Collapsing them would smuggle the edge-level exemption into evidence resolution.
 Neither reads the disk. Recipe provenance is not a run; code provenance is not a
-run either.
+run either; and a run without a fingerprint is not a fingerprinted run.
 """
 
 from __future__ import annotations
@@ -1969,11 +2135,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import StrEnum
 
-from science_model.packages.schema import (
-    DerivationBlock,
-    MemberOfDerivationBlock,
-    WorkflowRecipeDerivationBlock,
-)
+from rdflib import Graph, URIRef
+
+from science_tool.graph.io import SCI_NS
+
+KIND_WORKFLOW_RUN = "workflow-run"
+KIND_WORKFLOW_RECIPE = "workflow-recipe"
+KIND_MEMBER_OF = "member_of"
 
 
 class MemberOfCycleError(Exception):
@@ -1987,55 +2155,61 @@ class NoRunReason(StrEnum):
     NO_PROVENANCE = "no-provenance"
 
 
-def own_derivation_run(dataset: object) -> str | None:
+def _derivation_kind(knowledge: Graph, dataset: URIRef) -> str | None:
+    value = knowledge.value(dataset, SCI_NS.derivationKind)
+    return None if value is None else str(value)
+
+
+def own_derivation_run(knowledge: Graph, dataset: URIRef) -> URIRef | None:
     """The run named by this dataset's OWN derivation edge, or None."""
-    derivation = getattr(dataset, "derivation", None)
-    if isinstance(derivation, DerivationBlock):
-        return derivation.workflow_run
-    return None
+    if _derivation_kind(knowledge, dataset) != KIND_WORKFLOW_RUN:
+        return None
+    return knowledge.value(dataset, SCI_NS.workflowRun)
 
 
 def resolved_empirical_runs(
-    dataset: object,
-    lookup: Callable[[str], object | None],
-    is_fingerprinted: Callable[[str], bool],
-) -> tuple[list[str], list[NoRunReason]]:
-    """Fingerprinted runs this dataset resolves to, recursing member_of to the parent.
+    knowledge: Graph,
+    dataset: URIRef,
+    is_fingerprinted: Callable[[URIRef], bool],
+) -> tuple[list[URIRef], list[NoRunReason]]:
+    """Fingerprinted runs this dataset resolves to, walking member_of to the parent.
 
     `is_fingerprinted` is required and has no default: naming a workflow-run is
-    not the same as resolving to a *fingerprinted* one. A run with no fingerprint
-    yields no runs and the `run-unfingerprinted` reason.
+    not the same as resolving to a *fingerprinted* one.
     """
-    visited: set[str] = set()
+    visited: set[URIRef] = set()
     current = dataset
 
     while True:
-        ds_id = getattr(current, "id", None)
-        if ds_id in visited:
-            raise MemberOfCycleError(f"member_of cycle revisits {ds_id}")
-        if ds_id is not None:
-            visited.add(ds_id)
+        if current in visited:
+            raise MemberOfCycleError(f"member_of cycle revisits {current}")
+        visited.add(current)
 
-        derivation = getattr(current, "derivation", None)
+        kind = _derivation_kind(knowledge, current)
 
-        if isinstance(derivation, DerivationBlock):
-            run = derivation.workflow_run
+        if kind == KIND_WORKFLOW_RUN:
+            run = knowledge.value(current, SCI_NS.workflowRun)
+            if run is None:
+                return [], [NoRunReason.NO_PROVENANCE]
             if not is_fingerprinted(run):
                 return [], [NoRunReason.RUN_UNFINGERPRINTED]
             return [run], []
 
-        if isinstance(derivation, WorkflowRecipeDerivationBlock):
+        if kind == KIND_WORKFLOW_RECIPE:
             return [], [NoRunReason.RECIPE_ONLY]
 
-        if isinstance(derivation, MemberOfDerivationBlock):
-            parent = lookup(derivation.parent_dataset)
+        if kind == KIND_MEMBER_OF:
+            parent = knowledge.value(current, SCI_NS.memberOfParent)
             if parent is None:
                 return [], [NoRunReason.NO_PROVENANCE]
             current = parent
             continue
 
-        # derivation is None
-        if getattr(current, "produced_by", None):
+        if kind is not None:
+            raise ValueError(f"unknown sci:derivationKind {kind!r} on {current}")
+
+        # No derivation. Code-only provenance is not a run.
+        if (current, SCI_NS.producedBy, None) in knowledge:
             return [], [NoRunReason.CODE_ONLY_NO_RUN]
         return [], [NoRunReason.NO_PROVENANCE]
 ```
@@ -2156,9 +2330,8 @@ from science_tool.graph.run_resolution import MemberOfCycleError
 
 ...
 
-def _is_fingerprinted(knowledge, run_ref: str) -> bool:
+def _is_fingerprinted(knowledge, run_uri: URIRef) -> bool:
     """A run bears a fingerprint iff it carries sci:fingerprintPolicy (Task 8c)."""
-    run_uri = project_entity_uri(run_ref)
     return (run_uri, SCI_NS.fingerprintPolicy, None) in knowledge
 
 
@@ -2218,9 +2391,9 @@ and the row, mirroring the `patch_membership_convenience` shape exactly:
 
 > **Implementer:** `_knowledge_and_provenance(dataset)` and `_runs_for_line(...)` are the two seams you must write. Follow `graph/dataset_qa.py:60-91` for how it obtains the knowledge/provenance graphs from a materialized dataset and reads `SCI_NS.evidenceType` off a line; restrict to `EvidenceType.EMPIRICAL_DATA` exactly as `dataset_qa.py:88` does.
 >
-> `_runs_for_line(knowledge, line, datasets) -> tuple[list[str], list[NoRunReason]]` must:
+> `_runs_for_line(knowledge, line, datasets) -> tuple[list[URIRef], list[NoRunReason]]` must:
 > 1. build `is_fingerprinted = partial(_is_fingerprinted, knowledge)`;
-> 2. for each dataset, call `resolved_empirical_runs(ds, lookup, is_fingerprinted)` and accumulate runs + reasons (letting `MemberOfCycleError` propagate to the caller);
+> 2. for each dataset URI, call `resolved_empirical_runs(knowledge, ds, is_fingerprinted)` and accumulate runs + reasons (letting `MemberOfCycleError` propagate to the caller). All three arguments are graph values — there is no entity lookup and no disk access;
 > 3. union in the line's `SCI_NS.runRef` objects **filtered through the same `is_fingerprinted` predicate** — a `run_refs` entry naming an unfingerprinted run contributes nothing and adds `NoRunReason.RUN_UNFINGERPRINTED`;
 > 4. return `([], reasons)` when the union is empty.
 >
@@ -2354,7 +2527,11 @@ git commit -m "Pin determinism and substrate-parity invariants (t077 P2)"
 2. **Resolution would have failed OPEN.** `resolved_empirical_runs` returned any `DerivationBlock.workflow_run`, and nothing made fingerprint presence visible in the graph. Since Task 7 deliberately emits no finding for a run with no fingerprint block, an entirely unfingerprinted run would have satisfied the whole contract. → **Task 8c** (`sci:fingerprintPolicy`), a required `is_fingerprinted` predicate on `resolved_empirical_runs`, the `run-unfingerprinted` reason, and `run_refs` filtered through the same predicate so it cannot become a back door.
 3. **Nothing would ever write a fingerprint.** Deferring the CLI wiring left P1+P2 with a model, a validator, and a pure function, but no normal path producing captured fingerprints. → **Task 6b** wires `cli.py:7291` now; only `git_commit` removal stays in P3.
 
-**Also corrected:** `MemberOfCycleError` originates in `resolved_empirical_runs` (inside `_runs_for_line`), not in `dependence_datasets_by_line`. Task 10's try/except wraps the per-line loop and maps the cycle to a `fail` row carrying `dataset.member-of-cycle`.
+4. **Resolution had nothing to walk.** `materialize.py` emits only `sci:producedBy`; the `derivation` union never reached the graph, and `resolved_empirical_runs` took `DatasetEntity` objects that **do not exist graph-phase**. Hand-built TriG fixtures would have gone green while every real materialized graph failed to resolve a `DerivationBlock`. → **Task 8d** emits `sci:derivationKind` / `sci:workflowRun` / `sci:memberOfParent`, and Task 9 was rewritten to walk triples (`knowledge: Graph, dataset: URIRef`), with an unknown `derivationKind` raising rather than silently resolving to nothing.
+
+**Also corrected:**
+- `MemberOfCycleError` originates in `resolved_empirical_runs` (inside `_runs_for_line`), not in `dependence_datasets_by_line`. Task 10's try/except wraps the per-line loop and maps the cycle to a `fail` row carrying `dataset.member-of-cycle`.
+- `persist_run_fingerprint` is **not** idempotent: its own frontmatter write dirties the tree, so a second capture sees `code_dirty=true`. The plan pins that as the documented behavior rather than asserting a false idempotence, and explicitly forbids "fixing" it by excluding the run file from the dirty check.
 
 **Deferred to P3/P4, tracked, not forgotten:**
 - `DerivationBlock.git_commit` removal + `science-pkg-entity-1.1.json` + commons sweep. `register-run` keeps copying `git_commit` down during P1/P2; the two coexist.

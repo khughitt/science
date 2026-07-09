@@ -294,6 +294,16 @@ no fingerprint block emits no `validate` finding (§D — fingerprint checks are
 skipped when the block is absent), so an unfingerprinted run would silently
 satisfy resolution.
 
+**The whole resolution walk must be graph-visible.** Because resolution runs
+graph-phase (§D), it sees RDF nodes, not `DatasetEntity` objects. Today
+materialization emits only `sci:producedBy` from a dataset's code-only
+`produced_by` (`graph/materialize.py:1183-1197`); the `derivation` union reaches
+the graph **not at all**. Resolution therefore also requires materializing the
+derivation itself — a `sci:derivationKind` discriminator plus `sci:workflowRun`
+and `sci:memberOfParent` edges — so that every arm of the table above is
+decidable from triples. Without them the resolver has dataset URIs and no way to
+reach a run.
+
 **Code is not a run, either.** `produced_by` is constrained by the model to
 `code-file:<id>` references (`entities.py:479-481`); it names *source code*, not
 an execution. A code-file ref carries no fingerprint — no environment digest, no
