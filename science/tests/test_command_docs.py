@@ -881,11 +881,6 @@ def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
             "sci:amends",
             "sci:supersedes",
         ),
-        "science/model/src/science_model/templates/interpretation-dev.md": (
-            "relations:",
-            "sci:amends",
-            "sci:supersedes",
-        ),
     }
     for path, expected_strings in expected_by_path.items():
         text = _read(path)
@@ -1191,7 +1186,7 @@ def test_comparison_template_satisfies_validator_sections() -> None:
     """
     from science_tool.validate.checks.hypothesis_comparisons import _SECTIONS
 
-    for path in ("templates/comparison.md", "science/model/src/science_model/templates/comparison.md"):
+    for path in ("templates/comparison.md",):
         text = _read(path)
         for section in _SECTIONS:
             assert f"## {section}" in text, f"{path} missing required section: {section}"
@@ -1202,7 +1197,7 @@ def test_comparison_template_satisfies_discussion_schema_and_numeric_path() -> N
     discussion section schema and use the numeric discussion id/path shape."""
     from science_tool.validate.checks.discussions import _REQUIRED_SECTIONS
 
-    for path in ("templates/comparison.md", "science/model/src/science_model/templates/comparison.md"):
+    for path in ("templates/comparison.md",):
         text = _read(path)
         assert 'id: "discussion:{{NNNN}}-{{slug}}"' in text
         assert 'id: "discussion:{{slug}}"' not in text
@@ -1219,7 +1214,7 @@ def test_compare_hypotheses_command_uses_numeric_discussion_output() -> None:
 
 
 def test_bias_audit_templates_emit_report_not_task() -> None:
-    for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
+    for path in ("templates/bias-audit.md",):
         text = _read(path)
         assert 'id: "report:{{NNNN}}-bias-audit-{{slug}}"' in text
         assert 'kind: "report"' in text

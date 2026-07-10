@@ -35,8 +35,6 @@ class CrossImpactRow(TypedDict):
     dependent_text: str
     relation: str
     hypotheses: str
-    interpretations: str
-    discussions: str
     questions: str
     scope: str
     scope_reason: str
@@ -126,12 +124,6 @@ def _build_cross_impact_row(
     target_uri: URIRef,
 ) -> CrossImpactRow:
     hypotheses = sorted(shorten_uri(str(uri)) for uri in indexes["proposition_hypotheses"].get(dependent_uri, set()))
-    interpretations = sorted(
-        shorten_uri(str(uri))
-        for finding_uri in indexes["proposition_findings"].get(dependent_uri, set())
-        for uri in indexes["finding_interpretations"].get(finding_uri, set())
-    )
-    discussions = sorted(shorten_uri(str(uri)) for uri in indexes["proposition_discussions"].get(dependent_uri, set()))
     questions = sorted(shorten_uri(str(uri)) for uri in _questions_for_proposition(dependent_uri, hypotheses, indexes))
     row_scope_rank, scope_reason = _classify_scope(
         provenance=provenance,
@@ -145,8 +137,6 @@ def _build_cross_impact_row(
         "dependent_text": _entity_text(knowledge, dependent_uri),
         "relation": relation_label,
         "hypotheses": "; ".join(hypotheses) if hypotheses else "-",
-        "interpretations": "; ".join(interpretations) if interpretations else "-",
-        "discussions": "; ".join(discussions) if discussions else "-",
         "questions": "; ".join(questions) if questions else "-",
         "scope": _scope_label_from_rank(row_scope_rank),
         "scope_reason": scope_reason,
@@ -155,9 +145,6 @@ def _build_cross_impact_row(
 
 def _build_cross_impact_indexes(knowledge, provenance) -> dict[str, dict[URIRef, set[URIRef]]]:
     proposition_hypotheses: dict[URIRef, set[URIRef]] = defaultdict(set)
-    proposition_findings: dict[URIRef, set[URIRef]] = defaultdict(set)
-    finding_interpretations: dict[URIRef, set[URIRef]] = defaultdict(set)
-    proposition_discussions: dict[URIRef, set[URIRef]] = defaultdict(set)
     proposition_questions: dict[URIRef, set[URIRef]] = defaultdict(set)
     hypothesis_questions: dict[URIRef, set[URIRef]] = defaultdict(set)
 
@@ -166,36 +153,6 @@ def _build_cross_impact_indexes(knowledge, provenance) -> dict[str, dict[URIRef,
             continue
         if (hyp_uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
             proposition_hypotheses[prop_uri].add(hyp_uri)
-
-    for finder_uri, _, prop_uri in knowledge.triples((None, SCI_NS.contains, None)):
-        if not isinstance(finder_uri, URIRef) or not isinstance(prop_uri, URIRef):
-            continue
-        if (finder_uri, RDF.type, SCI_NS.Finding) in knowledge and (
-            prop_uri,
-            RDF.type,
-            SCI_NS.Proposition,
-        ) in knowledge:
-            proposition_findings[prop_uri].add(finder_uri)
-
-    for interp_uri, _, finding_uri in knowledge.triples((None, SCI_NS.contains, None)):
-        if not isinstance(interp_uri, URIRef) or not isinstance(finding_uri, URIRef):
-            continue
-        if (interp_uri, RDF.type, SCI_NS.Interpretation) in knowledge and (
-            finding_uri,
-            RDF.type,
-            SCI_NS.Finding,
-        ) in knowledge:
-            finding_interpretations[finding_uri].add(interp_uri)
-
-    for disc_uri, _, prop_uri in knowledge.triples((None, SCI_NS.contains, None)):
-        if not isinstance(disc_uri, URIRef) or not isinstance(prop_uri, URIRef):
-            continue
-        if (disc_uri, RDF.type, SCI_NS.Discussion) in knowledge and (
-            prop_uri,
-            RDF.type,
-            SCI_NS.Proposition,
-        ) in knowledge:
-            proposition_discussions[prop_uri].add(disc_uri)
 
     for question_uri, _, prop_uri in knowledge.triples((None, SCI_NS.addresses, None)):
         if not isinstance(question_uri, URIRef) or not isinstance(prop_uri, URIRef):
@@ -216,9 +173,6 @@ def _build_cross_impact_indexes(knowledge, provenance) -> dict[str, dict[URIRef,
 
     return {
         "proposition_hypotheses": proposition_hypotheses,
-        "proposition_findings": proposition_findings,
-        "finding_interpretations": finding_interpretations,
-        "proposition_discussions": proposition_discussions,
         "proposition_questions": proposition_questions,
         "hypothesis_questions": hypothesis_questions,
     }

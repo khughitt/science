@@ -114,8 +114,11 @@ def test_mapping_template_scaffolds_origins(kind):
 
 
 def test_topic_template_scaffolds_origins():
-    text = (_PKG_TEMPLATES / "background-topic.md").read_text(encoding="utf-8")
-    assert "origins: []" in text  # plain line; topic has no _template mapping
+    # background-topic is non-migrated: it lives only in root templates/ (its
+    # unused packaged shadow was retired in task:t090). topic has no _template
+    # mapping, so the scaffold line is plain.
+    text = (_ROOT_TEMPLATES / "background-topic.md").read_text(encoding="utf-8")
+    assert "origins: []" in text
 
 
 @pytest.mark.parametrize("kind", _MAPPING_KINDS)
@@ -124,11 +127,6 @@ def test_mapping_templates_scaffold_origins_in_both_dirs(kind):
         text = (base / f"{kind}.md").read_text(encoding="utf-8")
         assert "origins: []" in text
         assert "origins: { from: origins, default: [] }" in text
-
-
-def test_topic_template_scaffolds_origins_in_both_dirs():
-    for base in (_PKG_TEMPLATES, _ROOT_TEMPLATES):
-        assert "origins: []" in (base / "background-topic.md").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("kind", _MAPPING_KINDS)

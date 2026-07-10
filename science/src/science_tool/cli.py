@@ -1916,8 +1916,6 @@ def graph_cross_impact(target_ref: str, limit: int, output_format: str, graph_pa
             ("dependent_text", "Text"),
             ("relation", "Relation"),
             ("hypotheses", "Hypotheses"),
-            ("interpretations", "Interpretations"),
-            ("discussions", "Discussions"),
             ("questions", "Questions"),
             ("scope", "Scope"),
             ("scope_reason", "Reason"),

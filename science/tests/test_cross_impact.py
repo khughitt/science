@@ -80,26 +80,6 @@ def _build_cross_hypothesis_graph(graph_path: Path) -> None:
     knowledge.add((cross_dep, CITO.discusses, h1))
     knowledge.add((cross_dep, CITO.discusses, h2))
 
-    obs = PROJECT_NS["observation/obs_1"]
-    knowledge.add((obs, RDF.type, SCI_NS.Observation))
-    knowledge.add((obs, SCHEMA_NS.description, Literal("Root signal")))
-
-    finding = PROJECT_NS["finding/finding_cross"]
-    knowledge.add((finding, RDF.type, SCI_NS.Finding))
-    knowledge.add((finding, SCHEMA_NS.description, Literal("Cross dependent finding")))
-    knowledge.add((finding, SCI_NS.contains, cross_dep))
-    knowledge.add((finding, SCI_NS.contains, obs))
-
-    interpretation = PROJECT_NS["interpretation/interp_cross"]
-    knowledge.add((interpretation, RDF.type, SCI_NS.Interpretation))
-    knowledge.add((interpretation, SCHEMA_NS.description, Literal("Cross dependent interpretation")))
-    knowledge.add((interpretation, SCI_NS.contains, finding))
-
-    discussion = PROJECT_NS["discussion/disc_cross"]
-    knowledge.add((discussion, RDF.type, SCI_NS.Discussion))
-    knowledge.add((discussion, SCHEMA_NS.description, Literal("Cross dependent discussion")))
-    knowledge.add((discussion, SCI_NS.contains, cross_dep))
-
     question = PROJECT_NS["question/cross_q"]
     knowledge.add((question, RDF.type, SCI_NS.Question))
     knowledge.add((question, SCHEMA_NS.text, Literal("Does the root proposition generalize?")))
@@ -156,8 +136,6 @@ def test_cross_impact_local_only_update_returns_local_scope(runner: CliRunner, g
             "dependent_text": "Local dependent proposition",
             "relation": "supports",
             "hypotheses": "-",
-            "interpretations": "-",
-            "discussions": "-",
             "questions": "-",
             "scope": "local",
             "scope_reason": "direct_link",
@@ -178,8 +156,6 @@ def test_cross_impact_cross_hypothesis_propagates_beyond_bundle(runner: CliRunne
             "dependent_text": "Cross dependent proposition",
             "relation": "supports",
             "hypotheses": "hypothesis/h1; hypothesis/h2",
-            "interpretations": "interpretation/interp_cross",
-            "discussions": "discussion/disc_cross",
             "questions": "question/cross_q",
             "scope": "project-wide",
             "scope_reason": "direct_link + hypothesis_bundle + supports_scope(project_wide)",

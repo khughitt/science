@@ -73,7 +73,7 @@ def test_core_profile_no_pipeline_step() -> None:
 
 def test_core_profile_workflow_relations() -> None:
     relation_names = {relation.name for relation in CORE_PROFILE.relation_kinds}
-    assert {"contains", "executes", "supersedes"} <= relation_names
+    assert {"executes", "supersedes"} <= relation_names
 
 
 def test_core_profile_declares_amends_and_non_cartesian_supersedes() -> None:
@@ -286,15 +286,13 @@ def test_grounds_relation() -> None:
     assert rel.predicate == "sci:grounds"
 
 
-def test_contains_broadened() -> None:
-    contains = next(r for r in CORE_PROFILE.relation_kinds if r.name == "contains")
-    assert "workflow" in contains.source_kinds
-    assert "finding" in contains.source_kinds
-    assert "interpretation" in contains.source_kinds
-    assert "discussion" in contains.source_kinds
-    assert "workflow-step" in contains.target_kinds
-    assert "proposition" in contains.target_kinds
-    assert "observation" in contains.target_kinds
+def test_contains_retired() -> None:
+    """sci:contains is retired (task:t092): declared but never emitted, its only
+    readers dead against a source-built graph."""
+    names = {r.name for r in CORE_PROFILE.relation_kinds}
+    predicates = {r.predicate for r in CORE_PROFILE.relation_kinds}
+    assert "contains" not in names
+    assert "sci:contains" not in predicates
 
 
 def test_load_shared_profile_missing(tmp_path: object) -> None:

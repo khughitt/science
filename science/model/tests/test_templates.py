@@ -194,6 +194,18 @@ def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
     assert packaged_template.read_text(encoding="utf-8") == root_template.read_text(encoding="utf-8")
 
 
+def test_packaged_templates_are_exactly_the_migrated_kinds() -> None:
+    """The packaged templates dir must hold exactly one .md per migrated kind and
+    nothing else. The Renderer only ever reads packaged templates for migrated
+    kinds, so any other .md is an unread, unguarded shadow (task:t092/t090). This
+    invariant keeps test_root_and_packaged_migrated_templates_match's coverage
+    complete: every packaged file it does not check cannot exist."""
+    packaged_dir = Path(__file__).parents[1] / "src" / "science_model" / "templates"
+    packaged = {p.name for p in packaged_dir.glob("*.md")}
+    expected = {f"{kind}.md" for kind in MIGRATED_KINDS}
+    assert packaged == expected
+
+
 # ---------------------------------------------------------------------------
 # evidence-line template
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 id: "dataset:<slug>"
 kind: "dataset"
 title: "<Dataset Name — artefact-level specific>"
-status: "active"
+status: "candidate"               # candidate (not yet acquired) | active (acquired, has datapackage/local_path)
 profiles: ["science-pkg-entity-1.0"]
 origin: "external"                # external | derived
 dataset_class: "deposit"          # deposit | reference | pointer

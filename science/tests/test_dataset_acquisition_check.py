@@ -36,8 +36,11 @@ def test_non_dataset_is_skipped():
 
 
 def test_template_default_status_is_candidate():
-    from importlib.resources import files
+    from pathlib import Path
 
-    text = files("science_model").joinpath("templates/dataset.md").read_text(encoding="utf-8")
+    # dataset is non-migrated: its authoritative template is the root copy; the
+    # unused packaged shadow was retired in task:t090.
+    root_templates = Path(__file__).resolve().parents[2] / "templates"
+    text = (root_templates / "dataset.md").read_text(encoding="utf-8")
     assert 'status: "candidate"' in text
     assert 'status: "active"' not in text
