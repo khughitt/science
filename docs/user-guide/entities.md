@@ -1320,7 +1320,7 @@ project machinery.
 - `transformation` - A data transformation applied within an analysis.
 - `workflow` - Reusable pipeline definition (Snakefile + config + rules).
 - `workflow-run` - Concrete execution of a workflow producing durable outputs.
-- `workflow-step` - Individual step within a workflow definition or run.
+- `workflow-step` - Individual step within a workflow definition.
 <!-- entity-kinds:operational:end -->
 
 ### Reference
