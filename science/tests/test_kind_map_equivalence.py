@@ -95,7 +95,7 @@ FROZEN_DEFAULT_STATUS = {
     "dataset": "active",
     "workflow": "active",
     "workflow-run": "running",
-    "workflow-step": "pending",
+    "workflow-step": "active",
 }
 
 FROZEN_STATUS_VALUES = {
@@ -133,7 +133,7 @@ FROZEN_STATUS_VALUES = {
     "dataset": frozenset({"proposed", "candidate", "active", "retired", "deprecated"}),
     "workflow": frozenset({"planned", "active", "deprecated", "retired"}),
     "workflow-run": frozenset({"running", "complete", "failed"}),
-    "workflow-step": frozenset({"pending", "running", "complete", "failed"}),
+    "workflow-step": frozenset({"active", "superseded", "retired"}),
 }
 
 FROZEN_SHORTFORM = {
