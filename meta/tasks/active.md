@@ -754,34 +754,6 @@ Decide explicitly whether the CLI reports the dataset's OWN producer run or prov
 
 - 2026-07-10: Shipped: `science dataset stochasticity <dataset-ref>` (+--format json). Graph resolves dataset->fingerprinted run + member_of chain; source layer supplies step_seeds, steps, method stochasticity. Two behaviour-preserving refactors: (1) resolve_run_chain returns the run+chain, resolved_empirical_runs delegates; (2) shared workflow_steps_index reused by register-run. Inherited resolution DISPLAYS the chain (child <- member_of <- parent). Unclassified methods surfaced not hidden; unresolved run = valid report (exit 0), only bad ref/unbuilt graph = exit 1. Skipped workflow-step/method fails loud (mirrors register-run guard). science 7843 pass / model 991 / ruff+pyright clean. Merged --no-ff local main af207e56, NOT pushed.
 
-## [t090] Guard the hand-copied template mirror (root vs packaged)
-- priority: P3
-- status: proposed
-- aspects: [software-development]
-- group: schema-hygiene
-- created: 2026-07-09
-
-test_root_and_packaged_migrated_templates_match (science/model/tests/test_templates.py) guards root templates/ against science/model/src/science_model/templates/ byte-for-byte, but only over the 19 template_ready=True kinds in MIGRATED_KINDS. The 10 hand-copied (template_ready=False) templates — the ones authors literally copy into entity files — are exactly the unguarded set. Coverage is inverted with respect to risk: a divergence in a rendered template is caught, a divergence in a copied one is not. Surfaced during Spec 0 (t087): templates/workflow-step.md silently diverged from its packaged copy mid-branch and had to be resynced by hand, and 8 packaged files still differ from root on main (bias-audit's status 'proposed' is illegal under its own descriptor). Fix: either widen the mirror guard to all templates and reconcile the 8 pre-existing divergences, or delete the packaged copies of non-template_ready kinds, which no Renderer call site reads (both gate on kind in MIGRATED_KINDS). Prefer deletion if nothing consumes them.
-
-## [t091] Fix workflow-run refs broken by Spec 0 typing WorkflowRunEntity.workflow
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- related: [task:t087]
-- group: reproducibility-validation
-- created: 2026-07-10
-
-Spec 0 (t087) typed WorkflowRunEntity.workflow, so graph/migrate.py now audits the field; refs that were previously inert untyped frontmatter are now hard audit failures. health/processes/post-acute-infection authors 'workflow: "t035-cross-trigger-pathway-overlap"' (bare slug, missing the 'workflow:' prefix) and resolves unresolved -- 'science graph audit' FAILS in that project today. One-line fix: prefix the ref. natural-systems/entities/workflow-runs/h07-clean-bases-2026-05-30.md declares no workflow: field at all, so its sci:executes edge is silently skipped; that project already carries ~50 unresolved refs. Verified 2026-07-10 across all 23 project roots: 11 authored run files, 9 correct, these 2 broken. Both are consumer-repo data fixes, not toolkit fixes.
-
-## [t092] Materialize sci:contains, or retire it
-- priority: P3
-- status: proposed
-- aspects: [software-development]
-- group: schema-hygiene
-- created: 2026-07-10
-
-CORE_PROFILE declares RelationKind 'contains' (sci:contains) over workflow -> workflow-step, finding -> proposition/observation, interpretation/discussion -> finding. Nothing in graph/materialize.py ever emits it. Three call sites READ it -- cross_impact.py:170,180,190 and freshness.py:103 -- so those code paths are dead against a source-built graph. Declared-and-inert, exactly the pathology the method-stochasticity umbrella design's Findings section describes. Surfaced while planning Spec 2 (t088), whose design text wrongly claimed register-run would reach a workflow's steps 'through sci:contains'; it uses a source-layer reverse index over WorkflowStepEntity.workflow instead and needs no edge. Decide: emit it, or delete the RelationKind and the dead readers.
-
 ## [t093] RunFingerprint cannot represent 'declared, not yet captured'
 - priority: P2
 - status: done
