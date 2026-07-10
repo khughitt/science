@@ -21,6 +21,15 @@ def test_reports_seeded_and_nondeterministic_steps(registrable_run_project):
     assert report.deterministic_step_count >= 1
 
 
+def test_member_dataset_inherits_and_displays_the_chain(registrable_member_project):
+    project_root, member_dataset_id, run_id = registrable_member_project
+    report = report_dataset_stochasticity(project_root, member_dataset_id)
+    assert report.run_id == run_id
+    assert report.inherited is True
+    assert len(report.chain) >= 2
+    assert report.chain[0] == member_dataset_id
+
+
 def test_unknown_dataset_raises(tmp_path):
     (tmp_path / "science.yaml").write_text(
         "id: project:x\nname: X\nprofile: software\n", encoding="utf-8"

@@ -779,3 +779,33 @@ def registrable_run_project(tmp_path: Path) -> tuple[Path, str]:
     """A project with a registered run + built graph; returns (root, dataset_id)."""
     dataset_id = _seed_stochastic_pipeline(tmp_path)
     return tmp_path, dataset_id
+
+
+@pytest.fixture
+def registrable_member_project(tmp_path: Path) -> tuple[Path, str, str]:
+    """A member dataset joined by `member_of` to the run-produced parent.
+
+    Returns (root, member_dataset_id, run_id). Reporting on the member must
+    resolve the parent's run and mark it inherited.
+    """
+    from click.testing import CliRunner
+
+    from science_tool.cli import main as science_cli
+
+    parent_id = _seed_stochastic_pipeline(tmp_path)
+    member = tmp_path / "entities" / "datasets" / "clusters-subset.md"
+    member.write_text(
+        '---\nid: "dataset:clusters-subset"\nkind: "dataset"\ntitle: "Clusters subset"\n'
+        'origin: "derived"\n'
+        "derivation:\n"
+        '  kind: "member_of"\n'
+        f'  parent_dataset: "{parent_id}"\n'
+        '  member_key: "subset-a"\n---\n',
+        encoding="utf-8",
+    )
+    build = CliRunner().invoke(
+        science_cli, ["graph", "build", "--project-root", str(tmp_path)],
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False,
+    )
+    assert build.exit_code == 0, build.output
+    return tmp_path, "dataset:clusters-subset", "workflow-run:pipe-r1"
