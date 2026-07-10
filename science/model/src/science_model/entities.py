@@ -41,7 +41,7 @@ from science_model.reasoning import (
     SupportScope,
     canonical_evidence_type_token,
 )
-from science_model.run_fingerprint import RunFingerprint
+from science_model.run_fingerprint import RunDeclaration, RunFingerprint
 from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
 
@@ -903,6 +903,12 @@ class WorkflowRunEntity(ProjectEntity):
     workflow: str = ""
     manifest_path: str = ""
     resources: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Authored by a human; complete on its own (t093). Optional here for the same
+    # reason `workflow` is: `register-run` is what refuses a run that declares
+    # nothing. `fingerprint` is its observed counterpart — written only by
+    # `register-run`, never authored, and absent until the run is registered.
+    execution: RunDeclaration | None = None
     fingerprint: RunFingerprint | None = None
 
     def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:

@@ -19,7 +19,13 @@ def _write_run(tmp_path, name: str, fingerprint_yaml: str) -> None:
     )
 
 
-CLEAN = """fingerprint:
+EXECUTION = """execution:
+  executor: local
+  input_artifact_locality: science-managed
+  output_artifact_locality: science-managed
+"""
+
+CLEAN = EXECUTION + """fingerprint:
   fingerprint_policy: science-run-fingerprint/v1
   executor: local
   input_artifact_locality: science-managed
@@ -79,20 +85,34 @@ def test_malformed_fingerprint_is_error(tmp_path):
     assert results[0].severity is Severity.ERROR
 
 
-def test_commons_origin_digest_mismatch_is_error(tmp_path):
-    src = tmp_path / "imported.md"
-    src.write_text("real content", encoding="utf-8")
-    commons = CLEAN.replace("  executor: local", "  executor: commons") + (
-        "  container_digest: {provenance: unknown}\n"
+def _origin(*extra: str) -> str:
+    """A `capture_origin:` block, indented one level under its parent key."""
+    return (
         "  capture_origin:\n"
         "    origin_project: project:pan-disease\n"
         "    origin_run_ref: workflow-run:r0\n"
         "    captured_at: '2026-07-09T12:00:00Z'\n"
         "    captured_by: science\n"
         "    capture_policy: science-run-fingerprint/v1\n"
-        "    source_ref: imported.md\n"
-        "    source_digest: deadbeef\n"
+    ) + "".join(extra)
+
+
+def _commons(*origin_extra: str) -> str:
+    """A commons run: the declaration and the fingerprint agree, as register-run writes them."""
+    origin = _origin(*origin_extra)
+    execution = EXECUTION.replace("  executor: local\n", "  executor: commons\n") + origin
+    fingerprint = (
+        CLEAN[len(EXECUTION):].replace("  executor: local\n", "  executor: commons\n")
+        + "  container_digest: {provenance: unknown}\n"
+        + origin
     )
+    return execution + fingerprint
+
+
+def test_commons_origin_digest_mismatch_is_error(tmp_path):
+    src = tmp_path / "imported.md"
+    src.write_text("real content", encoding="utf-8")
+    commons = _commons("    source_ref: imported.md\n", "    source_digest: deadbeef\n")
     _write_run(tmp_path, "r1", commons)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
     assert [r.rule for r in results] == ["run.fingerprint-origin-unverified"]
@@ -105,16 +125,7 @@ def test_commons_origin_absolute_source_ref_is_error(tmp_path):
     absolute right-hand side)."""
     outside = tmp_path / "outside.md"
     outside.write_text("real content", encoding="utf-8")
-    commons = CLEAN.replace("  executor: local", "  executor: commons") + (
-        "  container_digest: {provenance: unknown}\n"
-        "  capture_origin:\n"
-        "    origin_project: project:pan-disease\n"
-        "    origin_run_ref: workflow-run:r0\n"
-        "    captured_at: '2026-07-09T12:00:00Z'\n"
-        "    captured_by: science\n"
-        "    capture_policy: science-run-fingerprint/v1\n"
-        f"    source_ref: {outside}\n"
-    )
+    commons = _commons(f"    source_ref: {outside}\n")
     _write_run(tmp_path, "r1", commons)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
     assert [r.rule for r in results] == ["run.fingerprint-origin-unverified"]
@@ -126,16 +137,58 @@ def test_commons_origin_matching_digest_passes(tmp_path):
     src = tmp_path / "imported.md"
     src.write_text("real content", encoding="utf-8")
     digest = hashlib.sha256(b"real content").hexdigest()
-    commons = CLEAN.replace("  executor: local", "  executor: commons") + (
-        "  container_digest: {provenance: unknown}\n"
-        "  capture_origin:\n"
-        "    origin_project: project:pan-disease\n"
-        "    origin_run_ref: workflow-run:r0\n"
-        "    captured_at: '2026-07-09T12:00:00Z'\n"
-        "    captured_by: science\n"
-        "    capture_policy: science-run-fingerprint/v1\n"
-        "    source_ref: imported.md\n"
-        f"    source_digest: {digest}\n"
-    )
+    commons = _commons("    source_ref: imported.md\n", f"    source_digest: {digest}\n")
     _write_run(tmp_path, "r1", commons)
     assert list(check_run_fingerprint_obligations(_ctx(tmp_path))) == []
+
+
+# --- t093: the captured fingerprint must agree with the authored declaration ---
+
+
+def test_fingerprint_without_a_declaration_is_an_error(tmp_path):
+    """A capture with nothing to have been captured from is orphaned."""
+    _write_run(tmp_path, "r1", CLEAN.replace(EXECUTION, ""))
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.fingerprint-declaration-drift"]
+    assert results[0].severity is Severity.ERROR
+    assert "declares no `execution:`" in results[0].message
+
+
+def test_declaration_drift_is_an_error(tmp_path):
+    """Edit `execution.executor` after registering and the fingerprint goes stale."""
+    _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: external\n", 1))
+    results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
+               if r.rule == "run.fingerprint-declaration-drift"]
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "executor" in results[0].message
+    assert "re-register" in results[0].message
+
+
+def test_declaration_drift_on_locality_is_an_error(tmp_path):
+    _write_run(tmp_path, "r1", CLEAN.replace(
+        "  input_artifact_locality: science-managed\n", "  input_artifact_locality: external\n", 1))
+    results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
+               if r.rule == "run.fingerprint-declaration-drift"]
+    assert len(results) == 1
+    assert "input_artifact_locality" in results[0].message
+
+
+def test_declaration_alone_emits_nothing(tmp_path):
+    """The point of t093: an authored, unregistered run validates clean."""
+    _write_run(tmp_path, "r1", EXECUTION)
+    assert list(check_run_fingerprint_obligations(_ctx(tmp_path))) == []
+
+
+def test_malformed_declaration_is_an_error(tmp_path):
+    _write_run(tmp_path, "r1", "execution:\n  executor: teleporter\n")
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.execution-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
+def test_malformed_declaration_does_not_also_report_drift(tmp_path):
+    """One defect, one finding: an unparseable declaration cannot be compared."""
+    _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: teleporter\n", 1))
+    rules = [r.rule for r in check_run_fingerprint_obligations(_ctx(tmp_path))]
+    assert rules == ["run.execution-malformed"]

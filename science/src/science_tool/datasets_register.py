@@ -18,10 +18,9 @@ from science_model.frontmatter import parse_frontmatter
 from science_model.packages.schema import IdentityContext, WorkflowOutput
 from science_model.run_fingerprint import (
     FINGERPRINT_POLICY_V1,
-    ArtifactLocality,
     ComponentProvenance,
-    ExecutorKind,
     FingerprintComponent,
+    RunDeclaration,
     RunFingerprint,
     SeedPolicy,
 )
@@ -30,7 +29,6 @@ from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import ProjectSources, load_project_sources
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
-from science_tool.run_fingerprint_policy import COMPONENT_FIELDS
 from science_tool.seed_policy_derivation import SeedPolicyDerivationError, derive_seed_policy
 
 
@@ -922,26 +920,13 @@ class FingerprintCaptureError(Exception):
     """The run frontmatter conflicts with what `register-run` must capture."""
 
 
-#: The only `fingerprint.*` keys a human may write — declarations, not observations.
-#: `seed_policy` and `step_seeds` are NOT here: both are derived from the workflow's
-#: steps at register-run (Spec 2, t088), never authored.
-_AUTHORED_FINGERPRINT_FIELDS: tuple[str, ...] = (
-    "executor",
-    "input_artifact_locality",
-    "output_artifact_locality",
-)
-
-
 def _captured(value: str) -> FingerprintComponent:
     return FingerprintComponent(value=value, provenance=ComponentProvenance.CAPTURED)
 
 
 def capture_fingerprint(
     *,
-    run_fm: dict,
-    executor: ExecutorKind,
-    input_locality: ArtifactLocality,
-    output_locality: ArtifactLocality,
+    declaration: RunDeclaration,
     code_sha: str,
     code_dirty: bool,
     environment_digest: str,
@@ -951,34 +936,23 @@ def capture_fingerprint(
     seed_policy: SeedPolicy,
     step_seeds: dict[str, dict[str, int]],
 ) -> RunFingerprint:
-    """Build a captured fingerprint from already-derived inputs.
+    """Build a captured fingerprint from the run's declaration plus observations.
 
-    Pure: takes already-computed digests and the already-derived `seed_policy` /
-    `step_seeds` as arguments. Does no git, no file reads, and no seed-policy
-    derivation — those belong to the caller (`persist_run_fingerprint`).
+    Pure: takes the authored `declaration`, already-computed digests, and the
+    already-derived `seed_policy` / `step_seeds`. Does no git, no file reads, and
+    no seed-policy derivation — those belong to the caller.
 
-    Every captured component AND both derived fields (`seed_policy`, `step_seeds`)
-    are supplied by the caller; none may be hand-authored in the run frontmatter.
-    The guard below enforces that for callers that invoke `capture_fingerprint`
-    directly. On the `persist_run_fingerprint` path it can never fire, because
-    that function strips the frontmatter to `_AUTHORED_FINGERPRINT_FIELDS` before
-    calling here (and rejects an authored `seed_policy`/`step_seeds` itself, up
-    front) — see its docstring.
+    Takes no frontmatter, and needs no guard against hand-authored components:
+    since t093 the only authored input is the typed `declaration`, so a caller
+    has nowhere to smuggle an observation in. The declared fields are copied into
+    the fingerprint so it stands alone as a `science-run-fingerprint/v1` record.
     """
-    authored = run_fm.get("fingerprint") or {}
-
-    forbidden = sorted(set(authored) & (set(COMPONENT_FIELDS) | {"seed_policy", "step_seeds"}))
-    if forbidden:
-        raise FingerprintCaptureError(
-            "these fingerprint components are derived by register-run and must not be "
-            f"hand-authored in the workflow-run frontmatter: {', '.join(forbidden)}"
-        )
-
     return RunFingerprint(
         fingerprint_policy=FINGERPRINT_POLICY_V1,
-        executor=executor,
-        input_artifact_locality=input_locality,
-        output_artifact_locality=output_locality,
+        executor=declaration.executor,
+        input_artifact_locality=declaration.input_artifact_locality,
+        output_artifact_locality=declaration.output_artifact_locality,
+        capture_origin=declaration.capture_origin,
         code_sha=_captured(code_sha),
         code_dirty=_captured("true" if code_dirty else "false"),
         environment_digest=_captured(environment_digest),
@@ -988,6 +962,49 @@ def capture_fingerprint(
         seed_policy=seed_policy,
         step_seeds=step_seeds,
     )
+
+
+def _read_declaration(run_path: Path, run_fm: dict) -> RunDeclaration:
+    """Parse the run's authored `execution:` block, or name the fix."""
+    declared = run_fm.get("execution")
+    if not declared:
+        raise FingerprintCaptureError(
+            f"{run_path.name}: `execution:` must be declared before register-run "
+            "(executor, input_artifact_locality, output_artifact_locality). It is a "
+            "declaration, not an observation — register-run captures the fingerprint from it."
+        )
+    try:
+        return RunDeclaration.model_validate(declared)
+    except ValidationError as exc:
+        raise FingerprintCaptureError(
+            f"{run_path.name}: invalid `execution:` declaration: {_format_validation_error(exc)}"
+        ) from exc
+
+
+def _reject_authored_fingerprint(run_path: Path, run_fm: dict) -> None:
+    """`fingerprint:` is captured by register-run; a human never authors one.
+
+    A fingerprint this function previously wrote round-trips through the model
+    (it was serialized from one), so anything that fails to parse was written by
+    hand. That is precisely the shape a pre-t093 template produces: the three
+    declaration fields nested under `fingerprint:`. Name the migration.
+
+    A hand-authored *complete and valid* fingerprint is indistinguishable from a
+    prior capture and is silently recomputed — the same accepted limitation as
+    before, but now it takes a deliberate forgery rather than following the
+    template to reach it.
+    """
+    raw = run_fm.get("fingerprint")
+    if not raw:
+        return
+    try:
+        RunFingerprint.model_validate(raw)
+    except ValidationError as exc:
+        raise FingerprintCaptureError(
+            f"{run_path.name}: `fingerprint:` is captured by register-run, never authored. "
+            "Move executor / input_artifact_locality / output_artifact_locality under an "
+            f"`execution:` block and delete the rest ({_format_validation_error(exc)})"
+        ) from exc
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -1233,55 +1250,21 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
     if a clean `code_dirty` is wanted — do not special-case the run entity's
     own path out of the dirty check; that would silently narrow "dirty".
 
-    Any captured component already present in the run's frontmatter (written by
-    a prior call to this function, or hand-authored) is ignored and overwritten:
-    every captured component is recomputed fresh on every call, and that fresh
-    value is authoritative — `register-run` always recomputes, it never trusts
-    what is on disk. Because of this, `capture_fingerprint`'s guard can never fire
-    on this path (see the `authored_only` filter below); it protects only callers
-    that invoke `capture_fingerprint` directly. There is no way to both tolerate a
-    captured component this function previously wrote AND reject one a human
-    hand-authored, because nothing on disk distinguishes the two shapes — this is
-    an accepted, permanent limitation (see the design doc's "Known limitation"
-    discussion), not a gap to close later.
+    The whole `fingerprint:` block is an observation: every field is recomputed
+    fresh on every call and that fresh value is authoritative — `register-run`
+    always recomputes, it never trusts what is on disk. Its authored counterpart
+    is the run's `execution:` block, which this function reads and copies in.
+    Before `task:t093` the two lived together under `fingerprint:`, which made a
+    freshly authored run unvalidatable: the declaration stub could not satisfy the
+    full `RunFingerprint` schema, and strict loading is the default for `validate`
+    and `graph build`.
 
-    `seed_policy` and `step_seeds` are DERIVED here from the workflow's steps
-    (Spec 2, t088), never authored. They are rejected up front when a human writes
-    them onto a run that this function has not yet fingerprinted — recognizable
-    because such a run carries no captured components yet. Once a fingerprint has
-    been written, the derived `seed_policy`/`step_seeds` coexist with captured
-    components and are re-derived (not rejected) on every subsequent call, exactly
-    like the captured components above.
+    `seed_policy` and `step_seeds` are likewise DERIVED here from the workflow's
+    steps (Spec 2, t088), never authored.
     """
     run_path, run_fm = _read_run(project_root, run_id)
-    declared = run_fm.get("fingerprint") or {}
-
-    for key in ("executor", "input_artifact_locality", "output_artifact_locality"):
-        if key not in declared:
-            raise FingerprintCaptureError(
-                f"{run_path.name}: fingerprint.{key} must be declared before register-run "
-                f"(it is a declaration, not an observation)"
-            )
-
-    # `seed_policy`/`step_seeds` are derived, never authored. A run this function
-    # has already fingerprinted carries captured components alongside the derived
-    # fields (its own prior write) — those are re-derived below, not rejected. But
-    # a run with the derived fields and NO captured components was hand-authored:
-    # fail loud so the fix (delete them; they are derived) is named.
-    if not (set(declared) & set(COMPONENT_FIELDS)):
-        authored_derived = sorted(set(declared) & {"seed_policy", "step_seeds"})
-        if authored_derived:
-            raise FingerprintCaptureError(
-                "these fingerprint components are derived by register-run and must not be "
-                f"hand-authored in the workflow-run frontmatter: {', '.join(authored_derived)}"
-            )
-
-    try:
-        executor = ExecutorKind(declared["executor"])
-        input_locality = ArtifactLocality(declared["input_artifact_locality"])
-        output_locality = ArtifactLocality(declared["output_artifact_locality"])
-    except ValueError as exc:
-        raise FingerprintCaptureError(f"{run_path.name}: invalid fingerprint declaration: {exc}") from exc
+    declaration = _read_declaration(run_path, run_fm)
+    _reject_authored_fingerprint(run_path, run_fm)
 
     config_snapshot = run_fm.get("config_snapshot") or ""
     if not config_snapshot:
@@ -1298,18 +1281,8 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
         project_root, run_path, run_fm, config_snapshot, config_path
     )
 
-    # A prior `persist_run_fingerprint` call already wrote captured components back
-    # into `declared` (that's what makes it non-idempotent, per this function's own
-    # docstring) — re-forwarding them to `capture_fingerprint` would trip its
-    # guard on our own output. Forward only the fields a human may legitimately
-    # write; `capture_fingerprint` recomputes every captured component and takes
-    # the freshly derived `seed_policy`/`step_seeds` regardless of what is on disk.
-    authored_only = {key: declared[key] for key in _AUTHORED_FINGERPRINT_FIELDS if key in declared}
     fingerprint = capture_fingerprint(
-        run_fm={**run_fm, "fingerprint": authored_only},
-        executor=executor,
-        input_locality=input_locality,
-        output_locality=output_locality,
+        declaration=declaration,
         code_sha=_git(project_root, "rev-parse", "HEAD"),
         code_dirty=bool(_git(project_root, "status", "--porcelain")),
         environment_digest=_sha256_file(project_root / "uv.lock", "uv.lock"),

@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from conftest import REGISTER_RUN_FINGERPRINT_FRONTMATTER, seed_git_repo
+from conftest import REGISTER_RUN_EXECUTION_FRONTMATTER, seed_git_repo
 from science_tool.cli import main as science_cli
 
 
@@ -49,7 +49,7 @@ def _seed_full_pipeline(root: Path) -> None:
         '---\nid: "workflow-run:toy-r1"\nkind: "workflow-run"\ntitle: "Toy r1"\n'
         'workflow: "workflow:toy"\nproduces: []\ninputs: ["dataset:src"]\n'
         'git_commit: "abc"\nlast_run: "2026-04-19T12:00:00Z"\n'
-        f"{REGISTER_RUN_FINGERPRINT_FRONTMATTER}"
+        f"{REGISTER_RUN_EXECUTION_FRONTMATTER}"
         "---\n",
         encoding="utf-8",
     )

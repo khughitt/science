@@ -1,4 +1,5 @@
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,10 @@ import yaml
 from science_model.frontmatter import parse_frontmatter
 from science_model.run_fingerprint import (
     ArtifactLocality,
+    CaptureOrigin,
     ComponentProvenance,
     ExecutorKind,
+    RunDeclaration,
     SeedPolicy,
 )
 from science_tool.datasets_register import (
@@ -18,11 +21,19 @@ from science_tool.datasets_register import (
 )
 
 
-def _kwargs(**over):
+def _declaration(**over) -> RunDeclaration:
     base = dict(
         executor=ExecutorKind.LOCAL,
-        input_locality=ArtifactLocality.SCIENCE_MANAGED,
-        output_locality=ArtifactLocality.SCIENCE_MANAGED,
+        input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+        output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+    )
+    base.update(over)
+    return RunDeclaration(**base)
+
+
+def _kwargs(**over):
+    base = dict(
+        declaration=_declaration(),
         code_sha="a" * 40,
         code_dirty=False,
         environment_digest="sha256:env",
@@ -37,7 +48,7 @@ def _kwargs(**over):
 
 
 def test_capture_marks_every_component_captured():
-    fp = capture_fingerprint(run_fm={}, **_kwargs())
+    fp = capture_fingerprint(**_kwargs())
     for name in ("code_sha", "code_dirty", "environment_digest",
                  "parameters_digest", "input_manifest_digest", "output_manifest_digest"):
         assert getattr(fp, name).provenance is ComponentProvenance.CAPTURED
@@ -49,7 +60,7 @@ def test_capture_marks_every_component_captured():
 
 
 def test_capture_encodes_dirty_as_lowercase_token():
-    fp = capture_fingerprint(run_fm={}, **_kwargs(code_dirty=True))
+    fp = capture_fingerprint(**_kwargs(code_dirty=True))
     assert fp.code_dirty.value == "true"
 
 
@@ -57,7 +68,6 @@ def test_capture_carries_supplied_seed_policy_and_step_seeds():
     """`seed_policy`/`step_seeds` are arguments now (derived by the caller), not
     read from `run_fm`; `capture_fingerprint` places them on the fingerprint verbatim."""
     fp = capture_fingerprint(
-        run_fm={},
         **_kwargs(
             seed_policy=SeedPolicy(kind="seeded"),
             step_seeds={"workflow-step:cluster": {"random_state": 42}},
@@ -67,24 +77,50 @@ def test_capture_carries_supplied_seed_policy_and_step_seeds():
     assert fp.step_seeds == {"workflow-step:cluster": {"random_state": 42}}
 
 
-def test_hand_authored_capturable_component_is_rejected():
-    run_fm = {"fingerprint": {"code_sha": {"value": "dead" * 10, "provenance": "captured"}}}
-    with pytest.raises(FingerprintCaptureError, match="code_sha"):
-        capture_fingerprint(run_fm=run_fm, **_kwargs())
+def test_capture_takes_no_frontmatter_so_nothing_can_be_hand_authored():
+    """t093 made the old `run_fm` guard structurally unnecessary.
+
+    `capture_fingerprint` used to accept the run's frontmatter and reject any
+    observation found under `fingerprint:`. It now accepts only the typed
+    declaration, so there is no channel to smuggle one through — asserted here so
+    a future signature change cannot quietly reopen one.
+    """
+    import inspect
+
+    params = set(inspect.signature(capture_fingerprint).parameters)
+    assert "run_fm" not in params
+    assert "declaration" in params
 
 
-def test_hand_authored_seed_policy_is_rejected_by_direct_caller():
-    """A direct `capture_fingerprint` caller may not smuggle `seed_policy` in via
-    `run_fm` — it is derived, and the widened guard rejects it."""
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "deterministic"}}}
-    with pytest.raises(FingerprintCaptureError, match="derived by register-run"):
-        capture_fingerprint(run_fm=run_fm, **_kwargs())
+def test_capture_copies_declared_fields_onto_the_fingerprint():
+    """The fingerprint stands alone as a science-run-fingerprint/v1 record."""
+    fp = capture_fingerprint(**_kwargs(declaration=_declaration(
+        input_artifact_locality=ArtifactLocality.EXTERNAL)))
+    assert fp.executor is ExecutorKind.LOCAL
+    assert fp.input_artifact_locality is ArtifactLocality.EXTERNAL
+    assert fp.output_artifact_locality is ArtifactLocality.SCIENCE_MANAGED
+    assert fp.capture_origin is None
+
+
+def test_a_commons_run_can_be_captured_because_capture_origin_is_declared():
+    """Before t093 `capture_origin` was unreachable, so a commons run could not
+    be registered at all: the model demands it and nothing could supply it."""
+    origin = CaptureOrigin(
+        origin_project="upstream", origin_run_ref="workflow-run:up",
+        captured_at=datetime(2026, 7, 10, tzinfo=UTC), captured_by="science",
+        capture_policy="science-run-fingerprint/v1",
+    )
+    fp = capture_fingerprint(**_kwargs(declaration=_declaration(
+        executor=ExecutorKind.COMMONS, capture_origin=origin)))
+    assert fp.executor is ExecutorKind.COMMONS
+    assert fp.capture_origin is not None
+    assert fp.capture_origin.origin_run_ref == "workflow-run:up"
 
 
 def test_captured_fingerprint_evaluates_clean():
     from science_tool.run_fingerprint_policy import evaluate_fingerprint
 
-    assert evaluate_fingerprint(capture_fingerprint(run_fm={}, **_kwargs())) == []
+    assert evaluate_fingerprint(capture_fingerprint(**_kwargs())) == []
 
 
 @pytest.fixture
@@ -107,7 +143,7 @@ def git_project(tmp_path: Path) -> Path:
         ("workflow-runs", "r1",
          "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
          "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
-         "fingerprint:\n"
+         "execution:\n"
          "  executor: local\n"
          "  input_artifact_locality: science-managed\n"
          "  output_artifact_locality: science-managed\n"),
@@ -138,8 +174,12 @@ def test_persisted_fingerprint_carries_derived_policy_and_step_seeds(git_project
     assert "seeds" not in written["fingerprint"]["seed_policy"]
 
 
-def test_authored_seed_policy_is_rejected(git_project):
-    # Spec 2 inverts t077: seed_policy was the ONE authored fingerprint field.
+def test_authored_seed_policy_in_the_declaration_is_rejected(git_project):
+    """Spec 2 inverted t077: `seed_policy` was the ONE authored fingerprint field.
+
+    It is derived, so it is not part of the declaration — `extra="forbid"` on
+    `RunDeclaration` is what says so.
+    """
     run = git_project / "entities" / "workflow-runs" / "r1.md"
     run.write_text(
         run.read_text(encoding="utf-8").replace(
@@ -148,8 +188,42 @@ def test_authored_seed_policy_is_rejected(git_project):
         ),
         encoding="utf-8",
     )
-    with pytest.raises(FingerprintCaptureError, match="derived by register-run"):
+    with pytest.raises(FingerprintCaptureError, match="seed_policy"):
         persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_a_pre_t093_authored_fingerprint_stub_is_rejected_and_names_the_migration(git_project):
+    """The exact block the old template told authors to write is now refused."""
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(
+        run.read_text(encoding="utf-8").replace("execution:\n", "fingerprint:\n", 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="`execution:` must be declared"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_authored_fingerprint_alongside_a_declaration_is_rejected(git_project):
+    """`fingerprint:` is captured, never authored. A partial one is hand-written
+    by construction: every fingerprint register-run writes round-trips the model."""
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(
+        run.read_text(encoding="utf-8").replace(
+            "config_snapshot: config.yaml\n",
+            "config_snapshot: config.yaml\nfingerprint:\n  code_sha: {value: abc, provenance: captured}\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="captured by register-run, never authored"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_reregistering_accepts_the_fingerprint_it_previously_wrote(git_project):
+    """The guard above must not reject register-run's own output."""
+    first = persist_run_fingerprint(git_project, "workflow-run:r1")
+    second = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert first.code_sha.value == second.code_sha.value
+    assert second.seed_policy.kind == "seeded"
 
 
 def test_run_without_a_workflow_ref_fails_closed(git_project):
@@ -252,7 +326,7 @@ def test_absent_git_repo_fails_loud(tmp_path: Path):
         ("workflow-runs", "r1",
          "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
          "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
-         "fingerprint:\n"
+         "execution:\n"
          "  executor: local\n"
          "  input_artifact_locality: science-managed\n"
          "  output_artifact_locality: science-managed\n"),
@@ -314,7 +388,7 @@ def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
         "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
         'workflow: "workflow:wf"\n'
         "config_snapshot: config.yaml\n"
-        "fingerprint:\n"
+        "execution:\n"
         "  executor: local\n"
         "  input_artifact_locality: science-managed\n"
         "  output_artifact_locality: science-managed\n"
@@ -430,3 +504,107 @@ def test_step_belonging_to_another_workflow_is_excluded_not_rejected(git_project
     fp = persist_run_fingerprint(git_project, "workflow-run:r1")
     assert fp.seed_policy.kind == "seeded"
     assert fp.step_seeds == {"workflow-step:cluster": {"random_state": 42}}
+
+
+def test_commons_run_persists_and_reregisters_with_capture_origin(git_project):
+    """End-to-end for the path t093 unblocked.
+
+    A commons run was previously impossible to register: `RunFingerprint` requires
+    `capture_origin` when executor='commons', and nothing could supply it. Now the
+    run declares it. The second call proves the serialized `capture_origin` survives
+    the YAML round-trip and is re-accepted as register-run's own prior write.
+    """
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(
+        run.read_text(encoding="utf-8").replace(
+            "  executor: local\n",
+            "  executor: commons\n"
+            "  capture_origin:\n"
+            "    origin_project: upstream\n"
+            "    origin_run_ref: workflow-run:up\n"
+            "    captured_at: 2026-07-10T00:00:00Z\n"
+            "    captured_by: science\n"
+            "    capture_policy: science-run-fingerprint/v1\n",
+        ),
+        encoding="utf-8",
+    )
+    first = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert first.executor is ExecutorKind.COMMONS
+    assert first.capture_origin is not None
+    assert first.capture_origin.origin_project == "upstream"
+
+    second = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert second.capture_origin == first.capture_origin
+
+
+def test_declaring_capture_origin_on_a_local_run_fails_loud(git_project):
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(
+        run.read_text(encoding="utf-8").replace(
+            "  output_artifact_locality: science-managed\n",
+            "  output_artifact_locality: science-managed\n"
+            "  capture_origin:\n"
+            "    origin_project: upstream\n"
+            "    origin_run_ref: workflow-run:up\n"
+            "    captured_at: 2026-07-10T00:00:00Z\n"
+            "    captured_by: science\n"
+            "    capture_policy: science-run-fingerprint/v1\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="capture_origin"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_author_then_validate_then_register_then_validate(git_project):
+    """The catch-22 t093 names, asserted end to end.
+
+    Before the fix, step 2 raised: the authored `fingerprint:` stub could not
+    satisfy the full `RunFingerprint` schema, and `strict_core_schema=True` is the
+    default that `science validate` and `science graph build` both load under.
+    """
+    from science_tool.graph.sources import load_project_sources
+    from science_tool.validate.checks.workflow_runs import check_run_fingerprint_obligations
+    from science_tool.validate.context import ValidateContext
+
+    def fingerprint_findings() -> list:
+        ctx = ValidateContext.from_project_root(git_project, strict=False, verbose=False)
+        return list(check_run_fingerprint_obligations(ctx))
+
+    # 1. The run is authored, declaring how it executed. Nothing is captured yet.
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    assert "execution:" in run.read_text(encoding="utf-8")
+    assert "fingerprint:" not in run.read_text(encoding="utf-8")
+
+    # 2. It strict-loads and validates clean BEFORE it has ever been registered.
+    sources = load_project_sources(git_project, strict_core_schema=True)
+    assert not sources.skipped_entities
+    assert fingerprint_findings() == []
+
+    # 3. Register it.
+    persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert "fingerprint:" in run.read_text(encoding="utf-8")
+
+    # 4. It still strict-loads and validates clean, now with a captured fingerprint.
+    sources = load_project_sources(git_project, strict_core_schema=True)
+    assert not sources.skipped_entities
+    assert fingerprint_findings() == []
+
+
+def test_editing_the_declaration_after_registering_is_caught_as_drift(git_project):
+    """The fail-open the split introduces: two copies of `executor` can diverge."""
+    from science_tool.validate.checks.workflow_runs import check_run_fingerprint_obligations
+    from science_tool.validate.context import ValidateContext
+
+    persist_run_fingerprint(git_project, "workflow-run:r1")
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    text = run.read_text(encoding="utf-8")
+    head, sep, tail = text.partition("fingerprint:")
+    run.write_text(
+        head.replace("  input_artifact_locality: science-managed\n",
+                     "  input_artifact_locality: external\n") + sep + tail,
+        encoding="utf-8",
+    )
+    ctx = ValidateContext.from_project_root(git_project, strict=False, verbose=False)
+    rules = [r.rule for r in check_run_fingerprint_obligations(ctx)]
+    assert rules == ["run.fingerprint-declaration-drift"]
