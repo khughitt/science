@@ -535,16 +535,10 @@ def detect_project(start: Path) -> str:
     """Detect the project name by walking up to find science.yaml.
 
     Returns the directory name of the nearest ancestor containing science.yaml,
-    or the start directory name if none found. Walk stops at $HOME.
+    or the start directory name if none found.
     """
-    home = Path.home()
-    current = start.resolve()
+    from science_tool.data_root import nearest_project_root
 
-    while current != current.parent:
-        if (current / "science.yaml").exists():
-            return current.name
-        if current == home:
-            break
-        current = current.parent
-
-    return start.resolve().name
+    resolved = start.resolve()
+    root = nearest_project_root(resolved)
+    return root.name if root is not None else resolved.name
