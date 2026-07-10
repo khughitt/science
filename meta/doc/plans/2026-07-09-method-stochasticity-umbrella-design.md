@@ -331,24 +331,72 @@ and the reconciliation gate pass; no template/descriptor divergence remains.
 
 ### Spec 1 — Stochasticity and seeds (`t079`'s real content)
 
-- `MethodEntity.stochasticity: Stochasticity` (required, defaultless — a default
-  would make the contract fail open, exactly as `t077` reasoned about
-  `is_fingerprinted`).
-- `MethodEntity.seed_params: list[str]`, required iff `stochasticity == seedable`.
-- `WorkflowStepEntity.method: str` (a `method:` ref) and
-  `WorkflowStepEntity.seed_bindings: dict[str, str]` mapping a `seed_param` name
-  to its source (a config key, or `literal:<n>`), plus `rationale` for
-  `nondeterministic` methods. No seed **value** lives on the step.
-- Add `sci:applies` and materialize it.
+The vocabulary lives on the **method**; the bindings live on the **step**; no seed
+*value* appears on either.
+
+- `Stochasticity` — a new `StrEnum` in `science_model.entities`:
+  `deterministic | seedable | nondeterministic`.
+- `MethodEntity.stochasticity: Stochasticity | None = None` — **optional on the
+  model, required at the point of use.**
+
+  This spec originally called the field "required, defaultless," reasoning by
+  analogy to `t077`'s `is_fingerprinted`. A survey of the live corpus refuted the
+  premise. 51 `method` entities exist — `cancer` 27, `protein-landscape` 13,
+  `health` 6, `seq-feats` 5 — and **46 of them are not computational procedures at
+  all.** Twenty are glossary terms auto-promoted from
+  `knowledge/sources/local/terms.yaml` (`method:chip-seq` is a one-line definition
+  of a wet-lab assay); the rest are design documents — `CC-2: ResponseDefinition
+  ontology`, `Coverage Denominators and Allowed Claims`, `UK Biobank data-field
+  specification & access plan`. Only 4 are `seedable` and 1 `deterministic`, and
+  none names a seed parameter.
+
+  Requiring the field on the model would hard-fail the graph build in four live
+  projects — `load_project_sources` runs with `strict_core_schema=True` under
+  `validate` and the compiler, so a missing required field raises — until 46
+  category errors had been authored. That is the same unverifiable assertion this
+  umbrella exists to remove, at 90% of the corpus.
+
+  So the contract is enforced **where it is consumed, not where it is declared**:
+  `workflow-step.method-stochasticity-missing` is a validate **ERROR** when a step
+  applies a method that declares no `stochasticity`. `None` means *unclassified*
+  and is distinguishable from every classification, so nothing fails open. A
+  method gets classified when someone first wires it into a workflow — which is
+  also the first moment the answer is both knowable and checkable. Spec 2's
+  `register-run` fails closed on the same condition. Zero `workflow-step` entities
+  exist today, so this ships green and imposes no migration.
+
+- `MethodEntity.seed_params: list[str] = []`. It is deliberately **not** a
+  model-level invariant that `seedable` implies non-empty `seed_params`: all four
+  seedable methods in the corpus describe their stochastic step without naming its
+  parameter, so a hard requirement would outlaw the honest record *"seedable, and I
+  have not yet identified the parameter."* `method.seed-params-missing` reports it
+  as a warning instead.
+
+- `WorkflowStepEntity.method: str = ""` (a `method:` ref),
+  `seed_bindings: dict[str, str]`, and `rationale: str = ""`.
+- `seed_bindings` maps a `seed_param` name to its **source**, never its value:
+  `config.<key>` or `literal:<int>`. Any other form is a model-level `ValueError`.
+  A malformed source is a syntax error, not an epistemic gap, and the population is
+  zero — so it fails early and costs no migration.
+- Add `sci:applies` (`workflow-step` → `method`) and materialize it. The resolution
+  guard mirrors `sci:executes`: a ref that does not resolve, or resolves to a
+  non-`method`, is a hard compiler error.
+- Delete the `inquiry:` key from `templates/workflow-step.md` (carried over from
+  Spec 0). No `RelationKind` in `CORE_PROFILE` names `inquiry` as a source or
+  target, and the template's `inquiry AnnotatedParam` hint points at a mechanism
+  `test_inquiry.py` records as retired. The key is untyped, unaudited, and silently
+  dropped at parse — precisely the defect class Spec 0 closed.
 - **Warn-only** validate checks, per `t079`'s "ship as visibility warnings first":
   - `workflow-step.seed-binding-missing` — step applies a `seedable` method and leaves one of its `seed_params` unbound.
   - `workflow-step.rationale-missing` — step applies a `nondeterministic` method, supplies no rationale.
   - `workflow-step.seed-binding-on-deterministic-method` — a binding where none is meaningful.
-  - `workflow-step.seed-binding-unknown-param` — a binding naming a parameter absent from the method's `seed_params`.
+  - `workflow-step.seed-binding-unknown-param` — a binding naming a parameter absent from the method's `seed_params`. **Suppressed** when the method declares no `seed_params` at all: `method.seed-params-missing` already reports that, and firing both would report one defect twice.
   - `method.seed-params-missing` — `seedable` method names no seed parameter.
 
 **Done when:** a workflow whose step applies `method:leiden` without binding
-`random_state` produces a warning, and no run is blocked.
+`random_state` produces a warning and blocks no run; a step applying a method with
+no `stochasticity` is an error; `science validate` stays green in all four
+consumer projects with zero entity edits.
 
 ### Spec 2 — Runs observe seeds
 
@@ -419,18 +467,17 @@ any derived dataset's provenance.
 
 ## Open questions
 
-- **Binding source grammar.** `seed_bindings` maps a parameter to a source string
-  (`config.seed`, `literal:42`). Whether that grammar needs more forms — an env
-  var, a per-run override — and who resolves it at `register-run` time, is a
-  Spec 1 question. The two forms above are sufficient for the checks specified.
-- **Multi-seed steps.** `seed_params` is a list, so a method may take several
-  seeds. The `seeded` derivation above requires **all** of a step's `seed_params`
-  to be bound and realized; a partially-seeded step derives
-  `stochastic-unseeded`. This follows from the definition of `seedable` — a
-  method is `seedable` only if its declared `seed_params` control *all* relevant
-  stochastic degrees of freedom, so leaving one unbound leaves the step
-  uncontrolled. Whether a partial binding is ever worth expressing as something
-  other than a warning is a Spec 1 question.
+- ~~**Binding source grammar.**~~ *Settled in Spec 1:* exactly two forms,
+  `config.<key>` and `literal:<int>`. Any other value is a model-level `ValueError`.
+  Env vars and per-run overrides are deferred until a real workflow needs one; who
+  resolves the source at `register-run` time is Spec 2's question.
+- ~~**Multi-seed steps.**~~ *Settled in Spec 1:* a partial binding stays a warning
+  (`seed-binding-missing`, one per unbound parameter). The `seeded` derivation
+  requires **all** of a step's `seed_params` to be bound and realized; a partially
+  bound step derives `stochastic-unseeded`. This follows from the definition of
+  `seedable` — a method is `seedable` only if its declared `seed_params` control
+  *all* relevant stochastic degrees of freedom, so leaving one unbound leaves the
+  step uncontrolled.
 - **Snakemake reconciliation.** `workflow-step.rule_name` names a snakemake rule.
   Nothing checks that the rule exists. A cross-check belongs with `t079`'s
   successor work, not here.
