@@ -355,3 +355,22 @@ def test_changing_resource_hash_changes_output_manifest_digest(tmp_path: Path):
     fp_b = persist_run_fingerprint(project_b, "workflow-run:r1")
 
     assert fp_a.output_manifest_digest.value != fp_b.output_manifest_digest.value
+
+
+def test_skipped_workflow_step_file_fails_closed(git_project):
+    # `persist_run_fingerprint` loads with strict_core_schema=False (the run it is
+    # registering carries an incomplete fingerprint by construction). That makes the
+    # loader SILENTLY SKIP any workflow-step whose frontmatter fails validation.
+    # Deriving from the surviving subset would stamp this run with a seed_policy
+    # computed from an incomplete step set -- here, `seeded` while a second step
+    # vanished. A skipped method is already fail-closed (its ref stops resolving);
+    # a skipped step is not, because nothing knows it should have been there.
+    broken = git_project / "entities" / "workflow-steps" / "broken.md"
+    broken.write_text(
+        "---\nid: workflow-step:broken\nkind: workflow-step\ntitle: Broken\n"
+        "workflow: workflow:w1\nmethod: method:leiden\n"
+        'seed_bindings:\n  random_state: "env.SEED"\n---\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="failed schema validation"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")

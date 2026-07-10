@@ -28,7 +28,7 @@ from science_model.run_fingerprint import (
 
 from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.graph.reference_resolution import ReferenceResolver
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.sources import ProjectSources, load_project_sources
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
 from science_tool.run_fingerprint_policy import COMPONENT_FIELDS
 from science_tool.seed_policy_derivation import SeedPolicyDerivationError, derive_seed_policy
@@ -1099,6 +1099,31 @@ def _resolve_or_raise(resolver: ReferenceResolver, ref: str, run_path: Path) -> 
     return resolution.canonical_id
 
 
+def _reject_skipped_steps(project_root: Path, sources: ProjectSources) -> None:
+    """Fail closed when a `workflow-step` file exists but did not load.
+
+    The non-strict load this function's caller performs skips any entity whose
+    frontmatter fails schema validation, logging a warning and moving on. For a
+    `workflow-step` that is not survivable: `seed_policy` is derived by counting
+    steps, so a skipped one silently shrinks the step set and a workflow with a
+    malformed `seedable` step would register as `deterministic`.
+    """
+    step_dir = project_root / "entities" / "workflow-steps"
+    if not step_dir.is_dir():
+        return
+    loaded = {
+        entity.file_path for entity in sources.entities if isinstance(entity, WorkflowStepEntity)
+    }
+    for path in sorted(step_dir.glob("*.md")):
+        rel = path.relative_to(project_root).as_posix()
+        if rel not in loaded:
+            raise FingerprintCaptureError(
+                f"{rel} failed schema validation and was skipped by the loader, so the "
+                f"workflow's step set is incomplete and seed_policy cannot be derived "
+                f"from it. Run `science validate` and fix {rel}."
+            )
+
+
 def _derive_seed_policy_for_run(
     project_root: Path,
     run_path: Path,
@@ -1125,10 +1150,14 @@ def _derive_seed_policy_for_run(
     # strict_core_schema=False: the run being registered legitimately carries an
     # incomplete fingerprint (register-run is what completes it), so it fails
     # RunFingerprint validation and would abort a strict load. Skipping it lets the
-    # workflow/steps/methods this derivation needs load; any genuinely-required
-    # step or method that goes missing is caught below by `derive_seed_policy`,
-    # which fails loud.
+    # workflow/steps/methods this derivation needs load.
+    #
+    # A skipped METHOD is fail-closed for free: its step's `method:` ref stops
+    # resolving and `derive_seed_policy` raises. A skipped STEP is not — nothing
+    # downstream knows it should have been there, so the policy would be derived
+    # from a surviving subset. `_reject_skipped_steps` closes that hole.
     sources = load_project_sources(project_root, strict_core_schema=False)
+    _reject_skipped_steps(project_root, sources)
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     workflow_id = _resolve_or_raise(resolver, workflow_ref, run_path)
 
