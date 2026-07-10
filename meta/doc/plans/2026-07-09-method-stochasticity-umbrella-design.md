@@ -495,12 +495,23 @@ each step, and that step's method `stochasticity`, and answer:
 > These two steps were stochastic. `cluster` used `random_state=42`.
 > `embed` was `nondeterministic` (GPU atomics) and cannot be reproduced exactly.
 
-**Blocked by `t093`, not by `t088`.** Spec 2 is done, but *no run in any project
-carries a `fingerprint`*, because `register-run` demands an authored fingerprint
-stub that strict loading — the default for `validate` and `graph build` — rejects.
-Spec 3 would be built against a surface nobody can populate. `t093` fixes that by
-splitting the run's **declarations** (executor, artifact localities) from its
-**captured** `fingerprint`, which is this umbrella's own thesis applied one level up.
+**Was blocked by `t093`; `t093` is done (2026-07-10), so Spec 3 is ready.** Spec 2
+left *no run in any project carrying a `fingerprint`*: `register-run` demanded an
+authored fingerprint stub that strict loading — the default for `validate` and
+`graph build` — rejected, so Spec 3 would have been built against a surface nobody
+could populate. `t093` split the run's **declarations** into an authored
+`execution:` block (`RunDeclaration`: executor, both artifact localities, and
+`capture_origin`) and left `fingerprint:` **wholly captured** by `register-run` —
+this umbrella's own thesis applied one level up. A run now validates before it is
+ever registered.
+
+Two consequences Spec 3 inherits. `capture_origin` moved to the declaration, which
+made `executor: commons` registrable for the first time (the model required it and
+nothing could supply it). And because the declared fields are copied into the
+fingerprint so it stands alone, they can now **drift**: `validate` emits
+`run.fingerprint-declaration-drift` when `execution:` is edited after registering.
+Spec 3 reads the captured fingerprint, so it inherits that guarantee rather than
+re-checking it.
 
 **Not a graph-only traversal.** `materialize.py` emits exactly one fingerprint
 fact — `sci:fingerprintPolicy`, a presence marker (`materialize.py:1234`). It
