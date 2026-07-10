@@ -228,12 +228,12 @@ def test_pick_canonical_bibkey_case_tiebreaks_by_slug() -> None:
 
 
 def test_coerce_date_for_yaml() -> None:
-    from science_tool.commons.promote import _coerce_date_for_yaml
+    from science_model.frontmatter import _coerce_frontmatter_date
 
-    assert _coerce_date_for_yaml(date(2026, 5, 15)) == "2026-05-15"
-    assert _coerce_date_for_yaml(datetime(2026, 5, 15, 12, 30)) == "2026-05-15"
-    assert _coerce_date_for_yaml("2026-05-15") == "2026-05-15"
-    assert _coerce_date_for_yaml("already-not-a-date") == "already-not-a-date"
+    assert _coerce_frontmatter_date(date(2026, 5, 15)) == "2026-05-15"
+    assert _coerce_frontmatter_date(datetime(2026, 5, 15, 12, 30)) == "2026-05-15"
+    assert _coerce_frontmatter_date("2026-05-15") == "2026-05-15"
+    assert _coerce_frontmatter_date("already-not-a-date") == "already-not-a-date"
 
 
 def test_render_canonical_includes_base_required_fields() -> None:
