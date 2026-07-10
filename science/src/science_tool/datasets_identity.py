@@ -11,6 +11,7 @@ from typing import Any
 
 import click
 import yaml
+from science_model.frontmatter import atomic_write_text
 
 from science_tool.commons.assembly import ASSEMBLY_REGISTRY_ID
 from science_tool.commons.gene_crosswalk import GENE_CROSSWALK_ID
@@ -34,13 +35,7 @@ def _render_entity(frontmatter: dict[str, Any], body_suffix: str) -> str:
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    try:
-        tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, path)
-    finally:
-        if tmp.exists():
-            tmp.unlink()
+    atomic_write_text(path, text)
 
 
 def _dataset_id_from_path(path: Path) -> str:

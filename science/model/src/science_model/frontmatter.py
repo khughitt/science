@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 from typing import Literal, cast
@@ -62,6 +63,29 @@ def nearest_project_root(start: Path) -> Path | None:
         if project_config_path(root).is_file():
             return root
     return None
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically via a temp file + ``os.replace``.
+
+    The single sanctioned atomic-write dance for entity/frontmatter files. It
+    absorbs the duplicated temp-file logic formerly in
+    ``science_tool.entities._atomic_replace_text`` and
+    ``science_tool.datasets_identity._atomic_write``. Same-filesystem
+    ``os.replace`` only (no ``fsync``); on failure the temp file is removed and
+    the exception re-raised.
+    """
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def parse_frontmatter(path: Path) -> tuple[dict, str] | None:

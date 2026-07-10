@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import yaml
 from science_model.entities import OriginRecord, ProjectEntity
+from science_model.frontmatter import atomic_write_text
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
@@ -1366,17 +1367,7 @@ def _append_unique_string_values(existing: object, additions: list[str]) -> list
 
 
 def _atomic_replace_text(path: Path, text: str) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    try:
-        tmp_path.write_text(text, encoding="utf-8")
-        os.replace(tmp_path, path)
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
+    atomic_write_text(path, text)
 
 
 def _validate_status(kind: str, status: str) -> None:
