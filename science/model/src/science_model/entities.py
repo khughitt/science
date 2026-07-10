@@ -912,6 +912,28 @@ class WorkflowEntity(ProjectEntity):
     outputs: list[WorkflowOutput] = Field(default_factory=list)
 
 
+class MethodEntity(ProjectEntity):
+    """Analytical method or computational approach.
+
+    Carries no fields beyond ProjectEntity today: `templates/method.md`'s only
+    non-base key is `datasets`, which base Entity already declares. Spec 1 adds
+    `stochasticity` and `seed_params` here — the class exists now so that the
+    kind is bound to a real schema rather than to bare ProjectEntity.
+    """
+
+
+class WorkflowStepEntity(ProjectEntity):
+    """One step of a workflow *definition* (not of a run).
+
+    `workflow` names the owning workflow; `rule_name` names the snakemake rule
+    that executes the step. Both were declared by the template and silently
+    dropped at load until this class existed.
+    """
+
+    workflow: str = ""
+    rule_name: str = ""
+
+
 class ResearchPackageEntity(ProjectEntity):
     """Research package — placeholder typed entity for package composition."""
 
