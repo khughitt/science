@@ -30,6 +30,7 @@ from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import ProjectSources, load_project_sources
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
 from science_tool.seed_policy_derivation import SeedPolicyDerivationError, derive_seed_policy
+from science_tool.workflow_steps_index import steps_and_methods_for_workflow
 
 
 def _format_validation_error(exc: ValidationError) -> str:
@@ -1210,22 +1211,11 @@ def _derive_seed_policy_for_run(
     _reject_unattributable_steps(sources, resolver)
     workflow_id = _resolve_or_raise(resolver, workflow_ref, run_path)
 
-    steps = [
-        entity
-        for entity in sources.entities
-        if isinstance(entity, WorkflowStepEntity)
-        and entity.workflow
-        and resolver.resolve(entity.workflow).canonical_id == workflow_id
-    ]
-    method_for_step: dict[str, MethodEntity] = {}
-    by_id = {entity.id: entity for entity in sources.entities}
-    for step in steps:
-        if not step.method:
-            continue  # derive_seed_policy raises with the right message
-        resolution = resolver.resolve(step.method)
-        target = by_id.get(resolution.canonical_id) if resolution.canonical_id else None
-        if isinstance(target, MethodEntity):
-            method_for_step[step.id] = target
+    pairs = steps_and_methods_for_workflow(sources, resolver, workflow_id)
+    steps = [step for step, _method in pairs]
+    method_for_step: dict[str, MethodEntity] = {
+        step.id: method for step, method in pairs if method is not None
+    }
 
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     try:
