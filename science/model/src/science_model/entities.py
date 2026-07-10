@@ -955,16 +955,43 @@ class MethodEntity(ProjectEntity):
     seed_params: list[str] = Field(default_factory=list)
 
 
+_CONFIG_BINDING_SOURCE = re.compile(r"^config\.[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+_LITERAL_BINDING_SOURCE = re.compile(r"^literal:-?\d+$")
+
+
 class WorkflowStepEntity(ProjectEntity):
     """One step of a workflow *definition* (not of a run).
 
-    `workflow` names the owning workflow; `rule_name` names the snakemake rule
-    that executes the step. Both were declared by the template and silently
-    dropped at load until this class existed.
+    `workflow` names the owning workflow; `method` names the method the step
+    applies (materialized as `sci:applies`); `rule_name` names the snakemake rule
+    that executes the step.
+
+    `seed_bindings` maps one of the method's `seed_params` to the SOURCE that
+    supplies it — never to a value. A realized seed value is an observation of a
+    run, and belongs to Spec 2's `RunFingerprint.step_seeds`.
+
+    `rationale` explains why a step applying a `nondeterministic` method is
+    acceptable; `workflow-step.rationale-missing` warns when it is absent.
     """
 
     workflow: str = ""
+    method: str = ""
     rule_name: str = ""
+    seed_bindings: dict[str, str] = Field(default_factory=dict)
+    rationale: str = ""
+
+    @field_validator("seed_bindings")
+    @classmethod
+    def _validate_binding_sources(cls, value: dict[str, str]) -> dict[str, str]:
+        for param, source in value.items():
+            if not param:
+                raise ValueError("seed_bindings parameter name must not be empty")
+            if not (_CONFIG_BINDING_SOURCE.match(source) or _LITERAL_BINDING_SOURCE.match(source)):
+                raise ValueError(
+                    f"seed_bindings[{param!r}] = {source!r} is not a valid binding source; "
+                    "use 'config.<key>' or 'literal:<int>'"
+                )
+        return value
 
 
 class ResearchPackageEntity(ProjectEntity):
