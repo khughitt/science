@@ -663,7 +663,11 @@ Dynamic tier: re-execute a workflow and compare outputs; for computationally exp
 - group: reproducibility-validation
 - created: 2026-07-08
 
-Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add MethodEntity.stochasticity (deterministic|seedable|nondeterministic — a seed-control classification, required and defaultless) and MethodEntity.seed_params, required iff seedable. Add WorkflowStepEntity.method (sci:applies, new relation, materialized) and WorkflowStepEntity.seed_bindings mapping a seed_param to its source (config key or literal:<n>) — a binding, never a value. Warn-only validate checks: workflow-step.seed-binding-missing, .rationale-missing, .seed-binding-on-deterministic-method, .seed-binding-unknown-param, method.seed-params-missing. Supersedes this task's original framing (a lint over pipeline plan files): the lint subject is the entity layer, and t077 already ships unpinned-environment and uncaptured-code-SHA coverage as run.fingerprint-incomplete. Blocked on Spec 0 (typed Method/WorkflowStep classes).
+Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add MethodEntity.stochasticity (deterministic|seedable|nondeterministic — a seed-control classification, required and defaultless) and MethodEntity.seed_params, required iff seedable. Add WorkflowStepEntity.method (sci:applies, new relation, materialized) and WorkflowStepEntity.seed_bindings mapping a seed_param to its source (config key or literal:<n>) — a binding, never a value. Warn-only validate checks: workflow-step.seed-binding-missing, .rationale-missing, .seed-binding-on-deterministic-method, .seed-binding-unknown-param, method.seed-params-missing. Supersedes this task's original framing (a lint over pipeline plan files): the lint subject is the entity layer, and t077 already ships unpinned-environment and uncaptured-code-SHA coverage as run.fingerprint-incomplete. Spec 0 (t087) shipped the typed Method/WorkflowStep classes this depends on; merged as 92d752b4.
+
+Carried over from Spec 0, decide here: templates/workflow-step.md declares an `inquiry:` key that WorkflowStepEntity does not type, so it is silently dropped at parse — the same dropped-field class Spec 0 exists to eliminate. Default ruling: delete it from the template unless Spec 1 can name a concrete consumer and relation for a step-definition to inquiry link. If it stays, it must be typed on the entity and audited.
+
+Also carried over: _add_executes_edge's unresolved-ref branch (science/src/science_tool/graph/materialize.py) is unreachable through the normal pipeline, because the audit gate in _compile raises first. It is retained deliberately — it preserves the helper's local invariant for any caller that reaches the materialization layer outside the audited path. Do not spend budget stripping it unless Spec 1 is already editing that helper.
 
 ## [t080] Reproduction verdict as a belief ceiling (mirror the dataset-QA ceiling)
 - priority: P2
@@ -766,3 +770,12 @@ Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add RunF
 - created: 2026-07-09
 
 Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. The reader-facing payoff. Given dataset:X, traverse to its run, to fingerprint.step_seeds, to each workflow-step, to its method's stochasticity, and report: which steps were stochastic, what seeds the original run supplied, and which steps are nondeterministic and therefore not exactly reproducible. CLI surface over derived-dataset provenance. Depends on Specs 0-2.
+
+## [t090] Guard the hand-copied template mirror (root vs packaged)
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- group: schema-hygiene
+- created: 2026-07-09
+
+test_root_and_packaged_migrated_templates_match (science/model/tests/test_templates.py) guards root templates/ against science/model/src/science_model/templates/ byte-for-byte, but only over the 19 template_ready=True kinds in MIGRATED_KINDS. The 10 hand-copied (template_ready=False) templates — the ones authors literally copy into entity files — are exactly the unguarded set. Coverage is inverted with respect to risk: a divergence in a rendered template is caught, a divergence in a copied one is not. Surfaced during Spec 0 (t087): templates/workflow-step.md silently diverged from its packaged copy mid-branch and had to be resynced by hand, and 8 packaged files still differ from root on main (bias-audit's status 'proposed' is illegal under its own descriptor). Fix: either widen the mirror guard to all templates and reconcile the 8 pre-existing divergences, or delete the packaged copies of non-template_ready kinds, which no Renderer call site reads (both gate on kind in MIGRATED_KINDS). Prefer deletion if nothing consumes them.
