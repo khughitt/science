@@ -11,6 +11,17 @@ is permitted in exactly ONE module — `science_model/frontmatter.py`, which def
 `PROJECT_CONFIG_FILENAME`. `data_root.py` and `project_config.py` are deliberately
 NOT exempt (they consume the constant like everyone else), so "one place" is
 literally true rather than "three places we trust."
+
+Scope of the ratchet: it matches only an exact ``ast.Constant`` whose value is
+``"science.yaml"``. That is necessary-but-not-sufficient. It deliberately does
+NOT flag the filename *embedded* in a larger string (e.g. the shell heredoc in
+`validate/checks/cross_references.py`) — which is why an AST scan is used rather
+than a raw-text regex that would false-positive on it. The trade-off is that a
+future author could still evade the guard by *constructing* the name at runtime
+(`"science" + ".yaml"`, an f-string, `.format()`, `%`-templating, a bytes
+literal). None exist today. Reviewers of new filename-handling code must still
+check for those forms by eye; this guard catches the one form that actually
+recurred (the bare literal), not every conceivable one.
 """
 
 from __future__ import annotations
