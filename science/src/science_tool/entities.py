@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import yaml
 from science_model.entities import OriginRecord, ProjectEntity
-from science_model.frontmatter import atomic_write_text
+from science_model.frontmatter import atomic_write_text, split_frontmatter
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
@@ -1536,20 +1536,4 @@ def _parse_markdown_file(path: Path) -> tuple[dict[str, Any], str]:
 def _parse_markdown_file_preserving_body(path: Path) -> tuple[dict[str, Any], str]:
     with path.open("r", encoding="utf-8", newline="") as fh:
         text = fh.read()
-    if text.startswith("---\r\n"):
-        newline = "\r\n"
-    elif text.startswith("---\n"):
-        newline = "\n"
-    else:
-        return ({}, text)
-    after_opening_marker = text[len("---" + newline) :]
-    closing_marker = f"{newline}---{newline}"
-    closing_marker_index = after_opening_marker.find(closing_marker)
-    if closing_marker_index == -1:
-        return ({}, text)
-    frontmatter_text = after_opening_marker[:closing_marker_index]
-    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
-    frontmatter = yaml.safe_load(frontmatter_text) or {}
-    if not isinstance(frontmatter, dict):
-        return ({}, body)
-    return (frontmatter, body)
+    return split_frontmatter(text)
