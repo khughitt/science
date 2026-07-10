@@ -227,8 +227,11 @@ def test_preserves_body_verbatim_unlike_parse_frontmatter(tmp_path):
     text = "---\nid: q:demo\nkind: question\n---\n\n  leading and trailing spaces  \n\n"
     fm, body = split_frontmatter(text)
     assert fm == {"id": "q:demo", "kind": "question"}
-    # verbatim: the blank line + surrounding whitespace + trailing blank are kept
-    assert body == "  leading and trailing spaces  \n\n"
+    # verbatim: the newline after the closing fence, the blank line, the
+    # surrounding whitespace, and the trailing blank are ALL kept. The closing
+    # marker is "\n---\n"; the body is everything after it, so it starts with
+    # the "\n" that preceded the blank line below the fence.
+    assert body == "\n  leading and trailing spaces  \n\n"
     # contrast: the lossy reader strips them
     p = tmp_path / "q.md"
     p.write_text(text, encoding="utf-8")
@@ -260,9 +263,13 @@ def test_non_mapping_frontmatter_returns_body_only():
     assert body == "body\n"
 
 
-def test_empty_frontmatter_block():
+def test_adjacent_fences_are_not_a_block():
+    # Adjacent fences ("---\n" immediately followed by "---\n") contain no
+    # "\n---\n" closing marker, so the hand-rolls treat the whole text as
+    # having no parseable frontmatter and return it unchanged. split_frontmatter
+    # must match that byte-for-byte.
     text = "---\n---\nbody\n"
-    assert split_frontmatter(text) == ({}, "body\n")
+    assert split_frontmatter(text) == ({}, "---\n---\nbody\n")
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -310,11 +317,15 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
 Run: `cd science/model && uv run --frozen pytest tests/test_split_frontmatter.py -v`
 Expected: PASS (6 passed).
 
-Note: `test_empty_frontmatter_block` documents the exact boundary behavior of the shared hand-rolls — `"---\n---\nbody\n"` has opening `---\n`; `after_opening_marker` is `"---\nbody\n"`; the closing marker `"\n---\n"` is **not** found (there is no newline *before* the second `---`), so it returns `({}, text)` … but the test asserts `({}, "body\n")`. **Verify against the real hand-roll behavior** by running the existing workbench/entities suites in Task 3; if the hand-rolls treat this case differently, match them exactly and update this test's expectation to whatever the hand-rolls produce (byte-neutrality with the code being replaced is the requirement, not any independent notion of "correct"). Do not weaken the *verbatim body* assertions.
+Note: every assertion here is calibrated to the **exact bytes the two hand-rolls produce** (`workbench_apply._parse_existing_target_text` and `entities._parse_markdown_file_preserving_body`), because byte-neutrality with the code Task 3 replaces is the requirement — not any independent notion of "correct." Two consequences that look surprising but are the hand-roll behavior: (a) the preserved body *keeps the newline that followed the closing fence* (`test_preserves_body_verbatim...` asserts a leading `\n`); (b) adjacent fences `"---\n---\n..."` have no `"\n---\n"` closing marker and so return the whole text unchanged (`test_adjacent_fences_are_not_a_block`). Task 3's existing-suite run is the final confirmation; if any hand-roll edge differs, reconcile `split_frontmatter` to the hand-roll and update the offending expectation here (never weaken the *verbatim body* assertions).
 
 - [ ] **Step 5: Lint/type-check**
 
-Run: `cd science/model && uv run ruff check && cd ../.. && cd science && uv run pyright`
+Run (two commands, each from the worktree root):
+```bash
+cd science/model && uv run ruff check
+cd science && uv run pyright
+```
 Expected: clean.
 
 - [ ] **Step 6: Commit**
@@ -550,7 +561,11 @@ Expected: PASS (8 passed).
 
 - [ ] **Step 5: Lint/type-check**
 
-Run: `cd science/model && uv run ruff check && cd ../science && uv run pyright`
+Run (two commands, each from the worktree root — `cd ../science` from `science/model` would wrongly resolve to `science/science`):
+```bash
+cd science/model && uv run ruff check
+cd science && uv run pyright
+```
 Expected: clean.
 
 - [ ] **Step 6: Commit**
@@ -759,11 +774,16 @@ In `science/src/science_tool/topic_coverage.py:61`, update the comment mentionin
 
 - [ ] **Step 5: Verify no `markdown_utils.parse_frontmatter` reference remains**
 
-Run:
+Run (multiline-aware — `prose_lint.py` imports the name inside a parenthesized `from ... import (\n  ...\n)` block that a single-line `[^\n]*` regex would skip):
 ```bash
-cd science && rg -n "markdown_utils import[^\n]*parse_frontmatter|markdown_utils\.parse_frontmatter" src tests
+# -U makes rg match across newlines, so parenthesized multiline imports are caught.
+cd science && rg -U -n "markdown_utils\s+import\s*\(?[^)]*\bparse_frontmatter\b" src tests
+cd science && rg -n "markdown_utils\.parse_frontmatter" src tests
+# Broad backstop: eyeball that EVERY remaining hit resolves to the canonical
+# science_model.frontmatter reader, never markdown_utils.
+cd science && rg -n "\bparse_frontmatter\b" src tests
 ```
-Expected: **no matches**. (The canonical `science_model.frontmatter.parse_frontmatter` imports are unaffected and must still be present.)
+Expected: the first two commands report **no matches**; the third reports only `science_model.frontmatter`-sourced imports/uses (the canonical reader), which are unaffected and must still be present. The Task 7 guard (`test_parse_frontmatter_defined_once`) and the full suite (an `ImportError` on any stale `from markdown_utils import parse_frontmatter`) are the durable backstops if the grep is ever wrong.
 
 - [ ] **Step 6: Run affected suites + full suite**
 
@@ -799,10 +819,15 @@ git commit -m "Rename markdown_utils.parse_frontmatter to frontmatter_span (conv
 
 **Context:** Written **last**, against the migrated tree (umbrella rule). Modeled on Phase 1's `tests/test_project_root_boundary.py` and on `tests/graph/test_durable_write_boundary.py`. Two rules realize the owner's additive-guard directive:
 
-- **Rule A (no new ad-hoc emitters).** A *frontmatter-emitter function* — one that contains a `"---"`/`"---\n"`/`"\n---\n"` delimiter literal **and** emits YAML (calls `yaml.safe_dump`/`yaml.dump` directly, or calls a module-local helper that does) — is permitted only in the canonical module or on a named allowlist. Each allowlist entry carries a reason: `byte-preservation` (kwargs/unicode differ), `structural` (fence spacing / body handling differ), `hand-template` (does not dump the top-level frontmatter), or `pending-normalization`.
+- **Rule A (no new ad-hoc emitters).** A *frontmatter-emitter function* — one that contains a `---` **fence line** in a string literal used to *build* output **and** emits YAML (calls `yaml.safe_dump`/`yaml.dump` directly, or calls a module-local helper that does) — is permitted only in the canonical module, a named emitter allowlist, or a named detector-false-positive set. Each emitter-allowlist entry carries a reason: `byte-preservation` (kwargs/unicode differ), `structural` (fence spacing / body handling differ), `hand-template` (does not dump the top-level frontmatter), or `pending-normalization`.
 - **Rule B (reader-name uniqueness).** Exactly one function named `parse_frontmatter` is defined across both source trees, and it is `science_model/frontmatter.py`'s canonical reader. Prevents the namesake collision (just removed in Task 6) from regrowing.
 
-**Necessary-but-not-sufficient, stated candidly** (as the durable-write guard does): the scan matches the *delimiter literal* + a *dump call/known-dumper call* in one function. It will not catch an emitter that constructs the fence at runtime (`"--" + "-"`), emits via a cross-module helper it neither defines nor is a known local dumper for, or writes through `str.format`. Those are not in the tree today; reviewers of new frontmatter code still check by eye. The guard catches the one form that actually recurred.
+**Two detector subtleties that the naive version got wrong (both found in review):**
+
+1. **Fence detection must be line-based, not exact-equality, because Python folds implicitly-concatenated string literals.** `datasets_register._entity_yaml_block` writes `"---\n" f'schema_profile: "{...}"\n' ... "---\n"`. CPython merges the leading `"---\n"` with the adjacent f-string into a single `Constant("---\nschema_profile: \"")`, which is never `== "---\n"`. So the detector checks whether *any line of any string constant* (walking into `JoinedStr` values, which `ast.walk` yields) is exactly `---` — catching the merged form. Exact-set membership would silently miss this hand-template emitter and let future ones hide behind the same shape.
+2. **A `---` literal that is the argument of a string *parsing* method is a read, not an emit.** `cli.py::inquiry_import` calls the local dumper `_render_inquiry_source` **and** later does `text.split("---")`; a naive detector flags it as an emitter, polluting the normalization worklist with a pure consumer. The detector therefore excludes fence constants that appear as arguments to `split`/`partition`/`startswith`/`find`/… so a validator that parses fences is not mistaken for one that emits them.
+
+**Necessary-but-not-sufficient, stated candidly** (as the durable-write guard does): even so, the scan matches a *fence-line literal* + a *dump/known-dumper call* in one function. It will not catch an emitter that constructs the fence at runtime (`"--" + "-"`), emits via a cross-module helper it neither defines nor is a known local dumper for, or writes through `str.format`. Those are not in the tree today; reviewers of new frontmatter code still check by eye. The guard catches the one form that actually recurred. Any residual *consumer* the parsing-arg exclusion does not clear is recorded in `_DETECTOR_FALSE_POSITIVES` (a category kept separate from the emitter allowlist so the normalization worklist stays clean).
 
 - [ ] **Step 1: Draft the guard with an empty allowlist and see what it reports**
 
@@ -816,14 +841,18 @@ outside the canonical module (science_model/frontmatter.py) and the named
 legacy allowlist below. It also asserts the reader name `parse_frontmatter` is
 defined in exactly one place, so the namesake collision cannot regrow.
 
-Detection (Rule A): a function is a frontmatter emitter if it contains a
-`---`/`---\\n`/`\\n---\\n` delimiter string literal AND emits YAML — either a
-direct `yaml.safe_dump`/`yaml.dump` call, or a call to a module-local helper
-that itself calls one. This is necessary-but-not-sufficient: it will not catch
+Detection (Rule A): a function is a frontmatter emitter if it contains a `---`
+*fence line* inside a string literal that is NOT a parsing-method argument, AND
+emits YAML — either a direct `yaml.safe_dump`/`yaml.dump` call, or a call to a
+module-local helper that itself calls one. Fence detection is line-based (any
+line of any string constant equal to `---`), so it survives CPython folding
+implicitly-concatenated literals into one `Constant`; `ast.walk` descends into
+`JoinedStr` values, so f-strings are covered. Parsing-method arguments
+(`split`/`partition`/`startswith`/…) are excluded so a fence *reader* is not
+mistaken for an emitter. This is necessary-but-not-sufficient: it will not catch
 a fence constructed at runtime, emitted via an unknown cross-module helper, or
 written through `str.format`. None exist today; this guard stops the bare form
-that recurred. It intentionally does NOT flag pure fence-*parsing* (a `---`
-literal with no dump/known-dumper call in the same function).
+that recurred.
 """
 
 from __future__ import annotations
@@ -838,7 +867,12 @@ _MODEL_SRC = Path(__file__).resolve().parents[1] / "model" / "src" / "science_mo
 # with fence literals without allowlisting.
 _CANONICAL = _MODEL_SRC / "frontmatter.py"
 
-_DELIMITERS = {"---", "---\n", "\n---\n", "---\r\n", "\n---\r\n"}
+# String methods that *read* a fence rather than emit one; a fence literal
+# passed to one of these is not evidence of emission.
+_PARSING_METHODS = {
+    "split", "rsplit", "partition", "rpartition",
+    "startswith", "endswith", "find", "rfind", "index", "rindex", "count",
+}
 
 
 def _source_files() -> list[Path]:
@@ -846,6 +880,16 @@ def _source_files() -> list[Path]:
     for root in (_SCIENCE_SRC, _MODEL_SRC):
         files.extend(p for p in root.rglob("*.py"))
     return files
+
+
+def _contains_fence(value: str) -> bool:
+    """True if any line of ``value`` is exactly a ``---`` frontmatter fence.
+
+    Line-based (not exact-equality) so it matches the merged ``Constant`` that
+    results from implicitly-concatenating ``"---\\n"`` with an adjacent
+    f-string (e.g. ``"---\\nschema_profile: \\""``).
+    """
+    return any(line.rstrip("\r") == "---" for line in value.split("\n"))
 
 
 def _is_yaml_dump_call(node: ast.AST) -> bool:
@@ -862,28 +906,45 @@ def _local_dumper_names(tree: ast.Module) -> set[str]:
     """Names of module-level functions whose body calls yaml.safe_dump/dump."""
     names: set[str] = set()
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and any(
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
             _is_yaml_dump_call(n) for n in ast.walk(node)
         ):
             names.add(node.name)
     return names
 
 
-def _function_is_emitter(func: ast.AST, dumpers: set[str]) -> bool:
-    has_delim = False
-    emits = False
+def _parsing_arg_constant_ids(func: ast.AST) -> set[int]:
+    """id()s of string constants passed to fence-*parsing* methods, so a
+    ``text.split("---")`` validator is not read as an emitter."""
+    ids: set[int] = set()
     for n in ast.walk(func):
-        if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in _DELIMITERS:
-            has_delim = True
-        if _is_yaml_dump_call(n):
-            emits = True
         if (
             isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Name)
-            and n.func.id in dumpers
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr in _PARSING_METHODS
         ):
+            for arg in n.args:
+                ids.add(id(arg))
+    return ids
+
+
+def _function_is_emitter(func: ast.AST, dumpers: set[str]) -> bool:
+    parsing_ids = _parsing_arg_constant_ids(func)
+    has_emitting_fence = False
+    emits = False
+    for n in ast.walk(func):
+        if (
+            isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and _contains_fence(n.value)
+            and id(n) not in parsing_ids
+        ):
+            has_emitting_fence = True
+        if _is_yaml_dump_call(n):
             emits = True
-    return has_delim and emits
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in dumpers:
+            emits = True
+    return has_emitting_fence and emits
 
 
 def _emitter_functions() -> list[tuple[str, str]]:
@@ -904,27 +965,38 @@ def _emitter_functions() -> list[tuple[str, str]]:
     return found
 
 
-# (rel_path, function_name) -> reason. Filled in Step 2 from the Step-1 report.
+# (rel_path, function_name) -> reason. Genuinely-divergent legacy emitters =
+# the format-normalization worklist. Filled in Step 2 from the Step-1 report.
 _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {}
+
+# (rel_path, function_name) -> reason. Consumers/validators that trip the
+# heuristic but emit nothing distinct (e.g. call a renderer AND parse fences).
+# Kept OUT of _ALLOWED_EMITTERS so the normalization worklist stays clean.
+_DETECTOR_FALSE_POSITIVES: dict[tuple[str, str], str] = {}
+
+
+def _exempt() -> set[tuple[str, str]]:
+    return set(_ALLOWED_EMITTERS) | set(_DETECTOR_FALSE_POSITIVES)
 
 
 def test_no_new_frontmatter_emitters() -> None:
-    offenders = [pair for pair in _emitter_functions() if pair not in _ALLOWED_EMITTERS]
+    offenders = [pair for pair in _emitter_functions() if pair not in _exempt()]
     assert not offenders, (
         "New hand-rolled frontmatter emitter(s) found outside the canonical "
         "module (science_model/frontmatter.py) and the named allowlist. Route "
-        "new writers through render_frontmatter(fields, body), or — if the byte "
-        "form is deliberately divergent — add an entry to _ALLOWED_EMITTERS with "
-        f"a reason. Offenders: {sorted(offenders)}"
+        "new writers through render_frontmatter(fields, body); if the byte form "
+        "is deliberately divergent add an _ALLOWED_EMITTERS entry with a reason; "
+        "if it is a consumer the detector misclassified, add a "
+        f"_DETECTOR_FALSE_POSITIVES entry. Offenders: {sorted(offenders)}"
     )
 
 
 def test_allowlist_has_no_stale_entries() -> None:
     live = set(_emitter_functions())
-    stale = [pair for pair in _ALLOWED_EMITTERS if pair not in live]
+    stale = [pair for pair in _exempt() if pair not in live]
     assert not stale, (
-        "Allowlisted emitters no longer detected as emitters (migrated or "
-        f"removed?). Delete these stale allowlist entries: {sorted(stale)}"
+        "Allowlisted/false-positive entries no longer detected as emitters "
+        f"(migrated or removed?). Delete these stale entries: {sorted(stale)}"
     )
 
 
@@ -944,7 +1016,7 @@ def test_parse_frontmatter_defined_once() -> None:
 ```
 
 Run: `cd science && uv run --frozen pytest tests/test_frontmatter_boundary.py -v`
-Expected: `test_no_new_frontmatter_emitters` FAILS, printing the emitter list. `test_parse_frontmatter_defined_once` should PASS (Task 6 already removed the namesake). `test_allowlist_has_no_stale_entries` PASSES (empty allowlist).
+Expected: `test_no_new_frontmatter_emitters` FAILS, printing the emitter list. `test_parse_frontmatter_defined_once` should PASS (Task 6 already removed the namesake). `test_allowlist_has_no_stale_entries` PASSES (both exemption sets empty). Confirm the printed list **includes** `datasets_register.py::_entity_yaml_block` (the line-based fence check must catch the folded-constant hand-template) and **excludes** `cli.py::inquiry_import` (the parsing-arg exclusion must drop the `text.split("---")` consumer). If either is wrong, the detector is not behaving as intended — fix it before Step 2.
 
 - [ ] **Step 2: Pin the reported emitters into the allowlist with reasons**
 
@@ -977,7 +1049,13 @@ _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
 }
 ```
 
-If the actual report contains a pair not listed here, investigate it: it is either a genuinely-missed emitter (add it with the correct reason) or a false positive from the detector (tighten `_function_is_emitter`). If a listed pair is *absent* from the report, remove it (Rule: allowlist has no stale entries — enforced by `test_allowlist_has_no_stale_entries`).
+Note `datasets_register.py::_entity_yaml_block` and `commons/dataset_lifecycle.py::_entity_text` appear (both are hand-templates the line-based fence check now catches). Note `cli.py::inquiry_import` should **not** appear (parsing-arg exclusion).
+
+Triage every reported pair into exactly one of two sets:
+- **Genuinely-divergent legacy emitter** → `_ALLOWED_EMITTERS` (above), with a `byte-preservation` / `structural` / `hand-template` / `pending-normalization` reason. These are the format-normalization worklist.
+- **Detector false positive** (a consumer/validator that calls a renderer and/or parses fences but emits no distinct byte form) → `_DETECTOR_FALSE_POSITIVES`, with a `consumer:` reason. Keeping these out of `_ALLOWED_EMITTERS` stops the worklist from being polluted. If the parsing-arg exclusion already cleared the ones you expected (e.g. `inquiry_import`), this set may stay empty.
+
+If a pair listed above is *absent* from the report, remove it (stale entries fail `test_allowlist_has_no_stale_entries`). If a pair appears that is in neither category, it is a real new emitter the detector correctly caught — that is the guard doing its job, not something to allowlist away.
 
 - [ ] **Step 3: Run the guard green**
 
