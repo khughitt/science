@@ -73,7 +73,7 @@ def test_core_profile_no_pipeline_step() -> None:
 
 def test_core_profile_workflow_relations() -> None:
     relation_names = {relation.name for relation in CORE_PROFILE.relation_kinds}
-    assert {"realizes", "contains", "executes", "supersedes"} <= relation_names
+    assert {"contains", "executes", "supersedes"} <= relation_names
 
 
 def test_core_profile_declares_amends_and_non_cartesian_supersedes() -> None:

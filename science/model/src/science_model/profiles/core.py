@@ -643,14 +643,6 @@ CORE_PROFILE = ProfileManifest(
             description="A question is addressed by a proposition.",
         ),
         RelationKind(
-            name="realizes",
-            predicate="sci:realizes",
-            source_kinds=["workflow"],
-            target_kinds=["method"],
-            layer="layer/core",
-            description="A workflow is the executable realization of a method.",
-        ),
-        RelationKind(
             name="contains",
             predicate="sci:contains",
             source_kinds=["workflow", "finding", "interpretation", "discussion"],
