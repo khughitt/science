@@ -31,36 +31,33 @@ require touching all of them again.
 
 ---
 
-## Phase 0 (pre-phase) — Delete dead code
+## Phase 0 (pre-phase) — Dead-code investigation → **deletes nothing**
 
-**This is the one phase with no guard**, and it is numbered 0 to say so. The
-umbrella's rule — *a phase that migrates call sites without landing its guard is
-not done* — governs exactly that: phases moving call sites onto a canonical form,
-because those can decay. A deletion
-cannot decay: there is no call site to regrow, and re-adding a deleted module
-would be a deliberate act, not a bypass. What it *can* do is get resurrected from
-the design docs that still describe the features as planned, so the ledger below
-substitutes for a guard.
+**Retracted.** This phase originally proposed deleting `plan_gate.py` (196 lines)
+and `synthesis_payload.py` (324) as "confirmed dead code," on the strength of zero
+production importers. Investigation on 2026-07-10 (git `-S` history + design-doc +
+registry trace) found that inference wrong: *no importer* does not mean *dead* for
+a tested, documented feature — it can equally mean *built ahead of its wiring*, and
+here it does.
 
-**Change.** Remove `src/science_tool/plan_gate.py` (196 lines),
-`src/science_tool/synthesis_payload.py` (324), and their test files.
+- `plan_gate.py` is the implemented planning-gate of reproducibility-gate-v1
+  (`docs/plans/2026-07-01-reproducibility-gate-v1-design.md`), whose approved scope
+  *deliberately defers* CLI surfacing. It is exercised by ~450 lines of tests
+  including `test_workflow_registration_e2e.py`, which drives a real `dataset
+  register-run` flow. **Keep.**
+- `synthesis_payload.py` is a typed registry for a synthesis family the code marks
+  as future work (`graph/sources.py:247` "intentionally refuses" it "in a later
+  release"). Orphaned but ambiguous, not confirmed scrap. Deleting ambiguous
+  built-and-tested code in a simplification pass is the wrong trade. **Keep unless
+  the owner confirms abandonment.**
 
-**Evidence.** Zero importers in `src/`, `model/`, or `scripts/`. Both are
-referenced only by design docs under `docs/plans/` and by their own tests.
+`codex_skills.py` — flagged as looking identical — is live via
+`scripts/generate_codex_skills.py:10` and was never a candidate.
 
-**Care.** `codex_skills.py` presents identically (no `src/` importer) but is live
-via `scripts/generate_codex_skills.py:10`. Do not remove it. Before deleting
-either target, re-run the check rather than trusting this doc:
-
-```bash
-rg -n 'plan_gate|synthesis_payload' src/ model/ ../scripts/ ../commands/ ../skills/
-```
-
-**Ledger, in place of a guard.** Add the two removed features to
-`docs/plans/2026-07-08-current-frontier.md` under an explicit *Abandoned* heading,
-naming the design docs that describe them, so those docs are not read as an open
-backlog by the next person who greps `docs/plans/`. This is the phase's
-deliverable and its acceptance criterion.
+**Net effect: no deletion, no ledger, no code change.** The phase survives only as
+the record that the deletion was considered and rejected on evidence, so a future
+reader does not re-propose it. Everything below (Phase 1 onward) is unaffected —
+the convergence work never depended on these removals.
 
 ---
 
@@ -111,10 +108,17 @@ Two structural rules instead:
 
 1. **The string is the tell.** Outside `data_root.py` / `project_config.py` /
    `science_model/frontmatter.py`, no module may contain the string literal
-   `"science.yaml"` at all. Constructing the path is the thing being centralized;
-   whoever needs it calls `data_root.project_config_path(root)`. This catches the
-   aliased read (`io.py:353`), the raw builds in all ~44 files, and the walk-up
-   loops in one rule, because every one of them must name the file somewhere.
+   `"science.yaml"` at all. This catches the aliased read (`io.py:353`), the raw
+   builds, and the walk-up loops in one rule, because every one of them must name
+   the file somewhere. **Two sanctioned forms absorb every real use** (the
+   implementation plan found ~43 sites split between them): a *filename constant*
+   `PROJECT_CONFIG_FILENAME = "science.yaml"` for relative-token uses (git args,
+   file-inventory tuples, membership tests, display paths — ~10 sites where an
+   absolute path would be the wrong type), and `project_config_path(root) = root /
+   PROJECT_CONFIG_FILENAME` for the path builds (~33 sites). The literal itself
+   appears only in the constant's definition. This corrects an over-simplification
+   in an earlier draft of this rule, which assumed every use was a path build and
+   would have had no correct target for the token sites.
 2. **The loader is the tell.** No module outside those three may call
    `yaml.safe_load`/`yaml.load` on the result of a `.read_text()` whose receiver
    was assigned from an expression containing `"science.yaml"` — a one-hop

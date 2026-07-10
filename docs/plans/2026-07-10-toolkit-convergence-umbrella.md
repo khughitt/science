@@ -94,9 +94,30 @@ Three claims that would have been reasonable to expect, and are false:
   CRUD. The only leak is that the latter re-implements serialization instead of
   using the former's.
 
-## Confirmed dead code
+## Suspected dead code — investigated, and it is *not* dead
 
-`plan_gate.py` (196 lines) and `synthesis_payload.py` (324 lines) have tests and
-design docs but zero production importers anywhere in `src/`, `model/`, or
-`scripts/`. Note `codex_skills.py` looks identical but *is* live — it is imported
-by `scripts/generate_codex_skills.py`.
+An earlier draft listed `plan_gate.py` (196 lines) and `synthesis_payload.py`
+(324) as "confirmed dead code" on the strength of *zero production importers* in
+`src/`, `model/`, or `scripts/`. That inference is wrong for tested, documented
+features: no importer distinguishes *abandoned* from *built ahead of its wiring*,
+and investigation (2026-07-10, git `-S` + design-doc + registry trace) found both
+are the latter:
+
+- **`plan_gate.py`** implements the reproducibility-gate-v1 feature
+  (`docs/plans/2026-07-01-reproducibility-gate-v1-design.md`), whose approved scope
+  *explicitly defers* CLI surfacing to a fast-follow ("No CLI surfacing" is a
+  stated non-goal). It is the built, tested planning-gate half of an in-progress
+  feature, exercised by ~450 lines of tests including an e2e CLI test. **Keep.**
+- **`synthesis_payload.py`** is a typed payload registry for a synthesis family
+  that the code itself marks as future work (`graph/sources.py:247`: the registry
+  "intentionally refuses" it "in a later release"). It has no dedicated design doc
+  and its registration functions are never called — genuinely orphaned, but
+  ambiguous between built-ahead and false-start, not confirmed scrap. Deleting
+  built-and-tested code of ambiguous status in a *simplification* pass trades a
+  real risk (destroying intended work) for a cosmetic gain. **Keep unless the
+  owner confirms it abandoned.**
+
+Net: **Phase 0 deletes nothing.** `codex_skills.py`, which the earlier draft
+flagged as looking identical, is live via `scripts/generate_codex_skills.py` and
+was never a deletion candidate. The convergence spec's Phase 0 is retained only as
+the record of this investigation.
