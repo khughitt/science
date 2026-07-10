@@ -656,11 +656,10 @@ Dynamic tier: re-execute a workflow and compare outputs; for computationally exp
 
 ## [t079] Method stochasticity and step seed bindings (umbrella Spec 1)
 - priority: P2
-- status: blocked
+- status: active
 - parent: task:t075
 - aspects: [software-development]
 - related: [task:t075, question:0016-reproducibility-validation]
-- blocked-by: [task:t087]
 - group: reproducibility-validation
 - created: 2026-07-08
 
@@ -743,17 +742,6 @@ Phase-2 follow-up. Audit whether each optional schema field is actually consumed
 - created: 2026-07-08
 
 Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evidence state and treat the continuous value as a calibrated decision/attention projection. Locate every ordinal-to-continuous conversion; define a single documented conversion point where the projection carries its own config identity (as the log-odds scalar already does) so consumers cannot mistake it for the ordinal truth. Tie projection calibration to benchmark outcomes (question:0017). Relates meta D-003 (continuous operational beliefs) and question:0009.
-
-## [t087] Coherent method and step representation (umbrella Spec 0)
-- priority: P2
-- status: proposed
-- parent: task:t075
-- aspects: [software-development]
-- related: [task:t075, task:t079, question:0016-reproducibility-validation]
-- group: reproducibility-validation
-- created: 2026-07-09
-
-Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Representation hygiene, no new behavior. Add MethodEntity and WorkflowStepEntity typed classes (neither exists today; both kinds are declared descriptors carrying no fields). Make workflow-step definition-only: statuses become active/superseded/retired, run: leaves the template — the definition/execution split t077 did for workflow vs workflow-run, left undone one level down. Correct templates/workflow-step.md to id: workflow-step:<slug> (it mints step:<slug>). Add WorkflowRunEntity.workflow and materialize the already-declared sci:executes edge, with a graph-validate check that the target resolves to a workflow — without it Spec 2 cannot traverse run -> workflow -> steps. Retire sci:realizes and delete the inert method: field from templates/workflow.md. Do NOT touch validate/checks/id_prefixes.py: the live prefix_rules() already covers all four kinds; the PREFIX_RULES dict at the top of that file is a fossil inside a raw docstring. Entity population is zero across all projects, so nothing migrates.
 
 ## [t088] Runs observe seeds; derive seed_policy at register-run (umbrella Spec 2)
 - priority: P2
