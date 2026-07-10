@@ -62,9 +62,11 @@ def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) ->
             RULE_RATIONALE_MISSING,
         )
 
-    if not method.seed_params:
-        # `method.seed-params-missing` owns this gap; reporting an unknown
-        # parameter here as well would report one defect twice.
+    if not method.seed_params and method.stochasticity is Stochasticity.SEEDABLE:
+        # `method.seed-params-missing` fires for exactly this state -- a seedable
+        # method naming no parameter -- so reporting every binding as an unknown
+        # parameter here too would report one defect twice. It does NOT fire for a
+        # nondeterministic method, so that case falls through to the loop below.
         return
 
     for param in sorted(set(step.seed_bindings) - set(method.seed_params)):

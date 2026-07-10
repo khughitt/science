@@ -41,11 +41,13 @@ def test_config_source_is_accepted() -> None:
 
 
 def test_dotted_config_key_is_accepted() -> None:
-    assert _step(seed_bindings={"s": "config.cluster.random_state"}).seed_bindings["s"]
+    step = _step(seed_bindings={"s": "config.cluster.random_state"})
+    assert step.seed_bindings["s"] == "config.cluster.random_state"
 
 
 def test_literal_source_is_accepted() -> None:
-    assert _step(seed_bindings={"random_state": "literal:42"}).seed_bindings["random_state"]
+    step = _step(seed_bindings={"random_state": "literal:42"})
+    assert step.seed_bindings["random_state"] == "literal:42"
 
 
 def test_negative_literal_is_accepted() -> None:

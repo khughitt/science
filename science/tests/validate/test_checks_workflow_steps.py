@@ -156,6 +156,36 @@ def test_nondeterministic_method_reports_rationale_and_unknown_param_together(tm
     assert "typo" in results[1].message
 
 
+def test_nondeterministic_method_with_no_seed_params_still_reports_unknown_binding(
+    tmp_path: Path,
+) -> None:
+    # The suppression is scoped to `seedable`, because `method.seed-params-missing`
+    # only fires for seedable methods. A nondeterministic method naming no params
+    # would otherwise let a bogus binding through unreported by any rule.
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: nondeterministic\n",
+        step_frontmatter='method: method:leiden\nrationale: "GPU atomics"\nseed_bindings:\n  typo: "literal:1"\n',
+    )
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+    assert _rules(results) == [("workflow-step.seed-binding-unknown-param", Severity.WARN)]
+    assert "typo" in results[0].message
+
+
+def test_seedable_method_with_no_seed_params_reports_the_gap_only_once(tmp_path: Path) -> None:
+    # The other side of the same branch: here `method.seed-params-missing` owns it,
+    # so the step-scoped check must stay silent rather than warn per binding.
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: seedable\n",
+        step_frontmatter='method: method:leiden\nseed_bindings:\n  typo: "literal:1"\n',
+    )
+    assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
+    assert _rules(list(check_method_seed_params(_ctx(root)))) == [
+        ("method.seed-params-missing", Severity.WARN)
+    ]
+
+
 def test_nondeterministic_method_does_not_warn_about_unbound_params(tmp_path: Path) -> None:
     root = _project(
         tmp_path,
