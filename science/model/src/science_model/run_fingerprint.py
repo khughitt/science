@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 
 class ComponentProvenance(StrEnum):
@@ -149,7 +149,7 @@ class RunFingerprint(BaseModel):
     output_manifest_ref: str | None = None
 
     seed_policy: SeedPolicy
-    step_seeds: dict[str, dict[str, int]] = Field(default_factory=dict)
+    step_seeds: dict[str, dict[str, StrictInt]] = Field(default_factory=dict)
 
     @field_validator("code_dirty")
     @classmethod
@@ -160,10 +160,15 @@ class RunFingerprint(BaseModel):
 
     @field_validator("step_seeds")
     @classmethod
-    def _step_refs(cls, v: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
-        for ref in v:
+    def _step_refs(cls, v: dict[str, dict[str, StrictInt]]) -> dict[str, dict[str, StrictInt]]:
+        for ref, seeds in v.items():
             if not ref.startswith("workflow-step:"):
                 raise ValueError(f"step_seeds key must be a workflow-step: reference, got {ref!r}")
+            if not seeds:
+                raise ValueError(
+                    f"step_seeds[{ref!r}] is empty; a step that contributes no seeds must not "
+                    "appear in step_seeds"
+                )
         return v
 
     @model_validator(mode="after")

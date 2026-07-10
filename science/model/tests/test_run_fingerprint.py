@@ -252,3 +252,26 @@ def test_step_seeds_key_must_be_a_workflow_step_ref() -> None:
 
 def test_step_seeds_defaults_to_empty() -> None:
     assert _fp(seed_policy=SeedPolicy(kind="deterministic")).step_seeds == {}
+
+
+def test_step_seeds_rejects_empty_inner_mapping() -> None:
+    # A step key with no seeds inside it is truthy at the outer-dict level, so
+    # `_seed_policy_matches_step_seeds`'s `not self.step_seeds` check misses it.
+    # A step that contributes no seeds must not appear in step_seeds at all.
+    with pytest.raises(ValidationError, match="step_seeds"):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={"workflow-step:a": {}})
+
+
+def test_step_seeds_rejects_bool_value_because_bool_is_an_int_subclass() -> None:
+    # bool is a subclass of int, so pydantic's lax `int` accepts True and would
+    # silently record it as 1. StrictInt must reject it.
+    with pytest.raises(ValidationError):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={"workflow-step:a": {"s": True}})
+
+
+def test_step_seeds_accepts_normal_int_value() -> None:
+    fp = _fp(
+        seed_policy=SeedPolicy(kind="seeded"),
+        step_seeds={"workflow-step:a": {"random_state": 1}},
+    )
+    assert fp.step_seeds["workflow-step:a"]["random_state"] == 1
