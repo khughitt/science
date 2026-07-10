@@ -142,6 +142,51 @@ def test_step_without_a_method_is_skipped(tmp_path: Path) -> None:
     assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
 
 
+def test_nondeterministic_method_reports_rationale_and_unknown_param_together(tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: nondeterministic\nseed_params: [random_state]\n",
+        step_frontmatter='method: method:leiden\nseed_bindings:\n  typo: "literal:2"\n',
+    )
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+    assert _rules(results) == [
+        ("workflow-step.rationale-missing", Severity.WARN),
+        ("workflow-step.seed-binding-unknown-param", Severity.WARN),
+    ]
+    assert "typo" in results[1].message
+
+
+def test_nondeterministic_method_does_not_warn_about_unbound_params(tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: nondeterministic\nseed_params: [random_state]\n",
+        step_frontmatter='method: method:leiden\nrationale: "GPU atomics"\n',
+    )
+    assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
+
+
+def test_method_resolved_through_same_as_is_checked(tmp_path: Path) -> None:
+    # Pins Finding 1: the check must resolve a step's `method:` ref through the
+    # same `ReferenceResolver` machinery the compiler uses -- including project
+    # `manual_aliases` (knowledge/sources/<profile>/mappings.yaml), which an
+    # entity's own `canonical_id`/`aliases:` frontmatter can never satisfy. (Not
+    # `same_as`: the compiler's `_add_applies_edge` calls `resolver.resolve(entity.method)`
+    # with no `allow_cross_kind_fallback`, so `same_as` -- which only feeds the
+    # cross-kind slug-index fallback -- never actually participates in resolving
+    # a step's method reference. See the fix report for the full trace.)
+    root = _project(
+        tmp_path,
+        method_frontmatter="",
+        step_frontmatter="method: method:leidenalg\n",
+    )
+    mappings = root / "knowledge" / "sources" / "local" / "mappings.yaml"
+    mappings.parent.mkdir(parents=True)
+    mappings.write_text('aliases:\n  "method:leidenalg": "method:leiden"\n', encoding="utf-8")
+
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+    assert _rules(results) == [("workflow-step.method-stochasticity-missing", Severity.ERROR)]
+
+
 def test_seedable_method_without_seed_params_warns(tmp_path: Path) -> None:
     root = _project(tmp_path, method_frontmatter="stochasticity: seedable\n", step_frontmatter="")
     results = list(check_method_seed_params(_ctx(root)))

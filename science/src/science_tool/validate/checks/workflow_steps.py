@@ -12,6 +12,7 @@ from pathlib import Path
 
 from science_model.entities import Entity, MethodEntity, Stochasticity, WorkflowStepEntity
 
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -21,17 +22,6 @@ RULE_SEED_BINDING_MISSING = "workflow-step.seed-binding-missing"
 RULE_RATIONALE_MISSING = "workflow-step.rationale-missing"
 RULE_BINDING_ON_DETERMINISTIC = "workflow-step.seed-binding-on-deterministic-method"
 RULE_BINDING_UNKNOWN_PARAM = "workflow-step.seed-binding-unknown-param"
-
-
-def _method_index(entities: list[Entity]) -> dict[str, MethodEntity]:
-    index: dict[str, MethodEntity] = {}
-    for entity in entities:
-        if not isinstance(entity, MethodEntity):
-            continue
-        index[entity.canonical_id] = entity
-        for alias in entity.aliases or []:
-            index.setdefault(alias, entity)
-    return index
 
 
 def _warn(path: Path, message: str, rule: str) -> Result:
@@ -100,12 +90,18 @@ def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) ->
 def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
     """A step's seed bindings must agree with the method it applies."""
     sources = ctx.project_sources()
-    methods = _method_index(sources.entities)
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    entity_index: dict[str, Entity] = {entity.canonical_id: entity for entity in sources.entities}
     for step in sources.entities:
         if not isinstance(step, WorkflowStepEntity) or not step.method:
             continue
-        method = methods.get(step.method)
-        if method is None:
+        resolution = resolver.resolve(step.method)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
             # An unresolved reference is the compiler's and `graph audit`'s defect.
+            continue
+        method = entity_index.get(resolution.canonical_id)
+        if not isinstance(method, MethodEntity):
+            # A ref that resolves to a non-method entity is the compiler's defect
+            # (it raises on a step whose `method:` resolves to a non-method).
             continue
         yield from _step_results(step, method, ctx.project_root / step.file_path)
