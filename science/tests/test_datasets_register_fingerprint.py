@@ -374,3 +374,59 @@ def test_skipped_workflow_step_file_fails_closed(git_project):
     )
     with pytest.raises(FingerprintCaptureError, match="failed schema validation"):
         persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_skipped_workflow_step_in_a_subdirectory_fails_closed(git_project):
+    # Entity discovery is recursive (`rglob`), so a step may live anywhere under
+    # entities/. A guard that enumerates only `entities/workflow-steps/*.md` misses
+    # a nested one, and the derivation proceeds on the surviving subset.
+    bad = git_project / "entities" / "workflow-steps" / "nested" / "embed.md"
+    bad.parent.mkdir(parents=True)
+    bad.write_text(
+        "---\nid: workflow-step:embed\nkind: workflow-step\ntitle: Embed\n"
+        "workflow: workflow:w1\nmethod: method:leiden\n"
+        'seed_bindings:\n  random_state: "env.SEED"\n---\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="failed schema validation"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def _write_nondeterministic_step(root, workflow_ref: str) -> None:
+    (root / "entities" / "methods" / "embed.md").write_text(
+        "---\nid: method:embed\nkind: method\ntitle: Embed\nstochasticity: nondeterministic\n---\n",
+        encoding="utf-8",
+    )
+    (root / "entities" / "workflow-steps" / "embed.md").write_text(
+        f"---\nid: workflow-step:embed\nkind: workflow-step\ntitle: Embed\n"
+        f"workflow: {workflow_ref}\nmethod: method:embed\n---\n",
+        encoding="utf-8",
+    )
+
+
+def test_step_with_an_unresolvable_workflow_ref_fails_closed(git_project):
+    # A bare slug is a REAL pattern in the corpus (post-acute-infection authors
+    # `workflow: "t035-..."`). Matching step membership on canonical_id silently
+    # excludes such a step, so this nondeterministic one would vanish and the run
+    # would be stamped `seeded` -- a false reproducibility claim.
+    _write_nondeterministic_step(git_project, '"w1"')
+    with pytest.raises(FingerprintCaptureError, match="does not resolve"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_step_with_no_workflow_ref_fails_closed(git_project):
+    _write_nondeterministic_step(git_project, '""')
+    with pytest.raises(FingerprintCaptureError, match="declares no workflow"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_step_belonging_to_another_workflow_is_excluded_not_rejected(git_project):
+    # The guards must not over-reject: a step that resolves cleanly to a DIFFERENT
+    # workflow is simply not part of this run's step set.
+    (git_project / "entities" / "workflows" / "w2.md").write_text(
+        "---\nid: workflow:w2\nkind: workflow\ntitle: W2\n---\n", encoding="utf-8"
+    )
+    _write_nondeterministic_step(git_project, "workflow:w2")
+    fp = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert fp.seed_policy.kind == "seeded"
+    assert fp.step_seeds == {"workflow-step:cluster": {"random_state": 42}}

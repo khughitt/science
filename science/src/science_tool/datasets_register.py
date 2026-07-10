@@ -1099,28 +1099,58 @@ def _resolve_or_raise(resolver: ReferenceResolver, ref: str, run_path: Path) -> 
     return resolution.canonical_id
 
 
-def _reject_skipped_steps(project_root: Path, sources: ProjectSources) -> None:
-    """Fail closed when a `workflow-step` file exists but did not load.
+def _reject_skipped_steps(sources: ProjectSources) -> None:
+    """Fail closed when the loader dropped a `workflow-step`.
 
     The non-strict load this function's caller performs skips any entity whose
     frontmatter fails schema validation, logging a warning and moving on. For a
     `workflow-step` that is not survivable: `seed_policy` is derived by counting
     steps, so a skipped one silently shrinks the step set and a workflow with a
     malformed `seedable` step would register as `deterministic`.
+
+    Read the loader's own `skipped_entities` record rather than re-deriving which
+    files should have loaded. Entity discovery is recursive and keyed on
+    frontmatter `kind`, not on directory, so a step may live anywhere under
+    `entities/`; a glob of `entities/workflow-steps/*.md` misses a nested one.
+
+    A skipped step's `workflow:` is unknowable — the entity never loaded — so this
+    fails closed project-wide rather than only for the run's own workflow. That is
+    deliberate: a step set that *might* be short yields a policy that is wrong,
+    and a wrong policy is the one outcome this whole spec exists to prevent.
     """
-    step_dir = project_root / "entities" / "workflow-steps"
-    if not step_dir.is_dir():
-        return
-    loaded = {
-        entity.file_path for entity in sources.entities if isinstance(entity, WorkflowStepEntity)
-    }
-    for path in sorted(step_dir.glob("*.md")):
-        rel = path.relative_to(project_root).as_posix()
-        if rel not in loaded:
+    for skipped in sources.skipped_entities:
+        if skipped.kind == "workflow-step":
             raise FingerprintCaptureError(
-                f"{rel} failed schema validation and was skipped by the loader, so the "
-                f"workflow's step set is incomplete and seed_policy cannot be derived "
-                f"from it. Run `science validate` and fix {rel}."
+                f"{skipped.path} failed schema validation and was skipped by the loader "
+                f"({skipped.reason}), so the workflow's step set may be incomplete and "
+                f"seed_policy cannot be derived from it. Run `science validate` and fix "
+                f"{skipped.path}."
+            )
+
+
+def _reject_unattributable_steps(sources: ProjectSources, resolver: ReferenceResolver) -> None:
+    """Fail closed when a loaded step cannot be attributed to a workflow.
+
+    Step membership is matched on the resolved `workflow:` ref. A step whose ref is
+    empty, or a bare slug, or a typo, resolves to nothing and would be silently
+    excluded from every workflow's step set — dropping, say, a `nondeterministic`
+    step and letting the run register as `seeded`. Bare-slug workflow refs are a
+    real pattern in the corpus, so this is not hypothetical.
+    """
+    for entity in sources.entities:
+        if not isinstance(entity, WorkflowStepEntity):
+            continue
+        if not entity.workflow:
+            raise FingerprintCaptureError(
+                f"{entity.file_path}: {entity.id} declares no workflow, so it cannot be "
+                f"attributed to one and seed_policy cannot be safely derived. Add "
+                f"`workflow: workflow:<slug>`."
+            )
+        if resolver.resolve(entity.workflow).canonical_id is None:
+            raise FingerprintCaptureError(
+                f"{entity.file_path}: {entity.id} references workflow "
+                f"{entity.workflow!r}, which does not resolve to a known entity, so it "
+                f"cannot be attributed to one and seed_policy cannot be safely derived."
             )
 
 
@@ -1153,12 +1183,14 @@ def _derive_seed_policy_for_run(
     # workflow/steps/methods this derivation needs load.
     #
     # A skipped METHOD is fail-closed for free: its step's `method:` ref stops
-    # resolving and `derive_seed_policy` raises. A skipped STEP is not — nothing
-    # downstream knows it should have been there, so the policy would be derived
-    # from a surviving subset. `_reject_skipped_steps` closes that hole.
+    # resolving and `derive_seed_policy` raises. A step is not, on two axes — it can
+    # be dropped by the loader, or loaded but attributable to no workflow. Either
+    # shrinks the step set silently, and a short step set yields a policy that is
+    # wrong. The two guards below close both.
     sources = load_project_sources(project_root, strict_core_schema=False)
-    _reject_skipped_steps(project_root, sources)
+    _reject_skipped_steps(sources)
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    _reject_unattributable_steps(sources, resolver)
     workflow_id = _resolve_or_raise(resolver, workflow_ref, run_path)
 
     steps = [
