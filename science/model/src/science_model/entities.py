@@ -896,6 +896,11 @@ class DatasetEntity(ProjectEntity):
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""
 
+    # The workflow this run executed. Authored on every run today (the template
+    # declares it and `science qa-audit` errors without it); it was simply never
+    # typed, so `sci:executes` could not be materialized. Optional here: Spec 2's
+    # register-run is what refuses a run that cannot name its workflow.
+    workflow: str = ""
     manifest_path: str = ""
     resources: list[dict[str, Any]] = Field(default_factory=list)
     fingerprint: RunFingerprint | None = None
@@ -910,6 +915,28 @@ class WorkflowEntity(ProjectEntity):
     """Workflow definition with declared logical outputs."""
 
     outputs: list[WorkflowOutput] = Field(default_factory=list)
+
+
+class MethodEntity(ProjectEntity):
+    """Analytical method or computational approach.
+
+    Carries no fields beyond ProjectEntity today: `templates/method.md`'s only
+    non-base key is `datasets`, which base Entity already declares. Spec 1 adds
+    `stochasticity` and `seed_params` here — the class exists now so that the
+    kind is bound to a real schema rather than to bare ProjectEntity.
+    """
+
+
+class WorkflowStepEntity(ProjectEntity):
+    """One step of a workflow *definition* (not of a run).
+
+    `workflow` names the owning workflow; `rule_name` names the snakemake rule
+    that executes the step. Both were declared by the template and silently
+    dropped at load until this class existed.
+    """
+
+    workflow: str = ""
+    rule_name: str = ""
 
 
 class ResearchPackageEntity(ProjectEntity):

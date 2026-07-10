@@ -2,7 +2,7 @@
 id: "report:{{NNNN}}-bias-audit-{{slug}}"
 kind: "report"
 title: "Bias Audit: {{Short Title}}"
-status: "proposed"
+status: "active"
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

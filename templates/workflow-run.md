@@ -3,7 +3,7 @@ id: "workflow-run:<slug>"
 kind: "workflow-run"
 title: "<Run Description>"
 status: "complete"
-workflow: "<workflow-slug>"          # materializes the executes link the audit walks
+workflow: "workflow:<slug>"          # materializes the sci:executes edge
 manifest_path: "results/<workflow>/<slug>/datapackage.yaml"  # read by `science qa-audit`
 supersedes: []                       # ["workflow-run:<prior-slug>"] when re-run with changed params
 # Symmetric edges (populated by `science dataset register-run`).

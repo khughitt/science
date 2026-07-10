@@ -22,6 +22,7 @@ from science_model.entities import (
     FalsificationEntity,
     InquiryEntity,
     MechanismEntity,
+    MethodEntity,
     PaperEntity,
     ProjectEntity,
     ResearchPackageEntity,
@@ -30,6 +31,7 @@ from science_model.entities import (
     TaskEntity,
     ThemeEntity,
     WorkflowRunEntity,
+    WorkflowStepEntity,
 )
 from science_model.identity import EntityClass
 from science_model.patch_definition import PatchDefinitionEntity
@@ -57,6 +59,8 @@ CORE_KIND_MODELS: dict[str, type[Entity]] = {
     "task": TaskEntity,
     "dataset": DatasetEntity,
     "workflow-run": WorkflowRunEntity,
+    "workflow-step": WorkflowStepEntity,
+    "method": MethodEntity,
     "research-package": ResearchPackageEntity,
     "mechanism": MechanismEntity,
     "theme": ThemeEntity,

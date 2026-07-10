@@ -192,8 +192,6 @@ PREDICATE_ROLE = {
     "feeds_into": ("feeds_into", False),
     "sci:bearson": ("bears_on", False),
     "bears_on": ("bears_on", False),
-    "sci:realizes": ("realizes", False),
-    "realizes": ("realizes", False),
     "sci:implements": ("implements", False),
     "implements": ("implements", False),
     "cito:usesmethodin": ("uses", False),

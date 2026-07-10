@@ -1,11 +1,10 @@
 ---
-id: "step:<slug>"
+id: "workflow-step:<slug>"
 kind: "workflow-step"
 title: "<Step Name>"
-status: "planned"
-workflow: "<workflow-slug>"
-run: "<workflow-run-slug>"
-inquiry: "<inquiry-slug>"
+status: "active"
+workflow: "workflow:<slug>"
+inquiry: "inquiry:<slug>"
 rule_name: "<snakemake-rule-name>"
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"
@@ -45,7 +44,6 @@ What the step does and why it exists.
 ## Related
 
 - **Workflow:** `workflow:<slug>`
-- **Run:** `workflow-run:<slug>` (if documenting a specific execution)
 - **Inquiry:** `inquiry:<slug>`
-- **Upstream:** `step:<slug>`
-- **Downstream:** `step:<slug>`
+- **Upstream:** `workflow-step:<slug>`
+- **Downstream:** `workflow-step:<slug>`

@@ -1,5 +1,5 @@
 ---
-id: "method:{{nn}}-{{slug}}"
+id: "method:{{slug}}"
 kind: "method"
 title: "{{title}}"
 status: "active"

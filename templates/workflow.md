@@ -3,7 +3,6 @@ id: "workflow:<slug>"
 kind: "workflow"
 title: "<Workflow Name>"
 status: "active"
-method: "<method-slug>"
 # Logical outputs declared by this workflow. Used by `science dataset register-run`
 # to emit one derived `dataset:<slug>` entity per output, plus a per-output runtime
 # datapackage.yaml at results/<wf>/<run>/<output-slug>/datapackage.yaml.
@@ -81,7 +80,7 @@ What this workflow does and what research questions it addresses.
 
 | Step | Rule | Purpose |
 |------|------|---------|
-| `step:<slug>` | `rule_name` | Brief description |
+| `workflow-step:<slug>` | `rule_name` | Brief description |
 
 ## Inputs
 
@@ -101,6 +100,5 @@ What this workflow does and what research questions it addresses.
 
 ## Related
 
-- **Method:** `method:<slug>`
 - **Questions tested:** `question:<id>`, ...
 - **Hypotheses tested:** `hypothesis:<id>`, ...
