@@ -917,14 +917,42 @@ class WorkflowEntity(ProjectEntity):
     outputs: list[WorkflowOutput] = Field(default_factory=list)
 
 
+class Stochasticity(StrEnum):
+    """How thoroughly a method's randomness is controlled by its seeds.
+
+    A seed-control classification, NOT a reproducibility verdict — that verdict
+    is `task:t080`'s question. `nondeterministic` therefore means "not fully
+    seed-controlled", which is deliberately wider than "cannot be seeded": a CUDA
+    method that accepts a `random_state` but retains residual nondeterminism
+    (parallel float reduction order, `atomicAdd`) classifies honestly here.
+    """
+
+    DETERMINISTIC = "deterministic"
+    SEEDABLE = "seedable"
+    NONDETERMINISTIC = "nondeterministic"
+
+
 class MethodEntity(ProjectEntity):
     """Analytical method or computational approach.
 
-    Carries no fields beyond ProjectEntity today: `templates/method.md`'s only
-    non-base key is `datasets`, which base Entity already declares. Spec 1 adds
-    `stochasticity` and `seed_params` here — the class exists now so that the
-    kind is bound to a real schema rather than to bare ProjectEntity.
+    `stochasticity` is optional here and required at the point of use: a
+    `workflow-step` that applies an unclassified method is a validate ERROR
+    (`workflow-step.method-stochasticity-missing`), and Spec 2's `register-run`
+    fails closed on the same condition. `None` means *unclassified* and is
+    distinguishable from every classification, so nothing fails open.
+
+    Requiring it here instead would hard-fail the graph build in four live
+    projects: 46 of the 51 authored `method` entities are glossary terms or
+    design documents rather than computational procedures, and asking whether
+    `method:chip-seq` is seed-controlled is a category error.
+
+    `seedable` does not imply a non-empty `seed_params` — a method may be known
+    to be seedable before its parameter is identified. `method.seed-params-missing`
+    reports that as a warning.
     """
+
+    stochasticity: Stochasticity | None = None
+    seed_params: list[str] = Field(default_factory=list)
 
 
 class WorkflowStepEntity(ProjectEntity):
