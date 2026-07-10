@@ -54,7 +54,7 @@ def test_cli_promote_topic_dry_run_lists_candidates(tmp_path, monkeypatch) -> No
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(
@@ -82,7 +82,7 @@ def test_cli_promote_topic_single_entity_form(tmp_path, monkeypatch) -> None:
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(
@@ -105,7 +105,7 @@ def test_cli_promote_topic_rejects_wrong_id_prefix(tmp_path, monkeypatch) -> Non
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(
@@ -131,7 +131,7 @@ def test_cli_promote_topic_apply_writes_commons_and_rewrites_overlay(
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(

@@ -248,7 +248,7 @@ def restore_data_override_from_backup(*, op_id: str) -> None:
     os.replace(backup_path, yaml_path)
 
 
-def resolve_project_root(name: str) -> Path:
+def registry_root_for_name(name: str) -> Path:
     """Look up a registered project by name and return its root path.
 
     Reads `projects[]` from the global config. Raises ProjectNotRegisteredError
@@ -270,7 +270,7 @@ def resolve_project_root(name: str) -> Path:
     raise ProjectNotRegisteredError(name)
 
 
-def resolve_project_by_id(project_id: str) -> Path:
+def registry_root_for_id(project_id: str) -> Path:
     """Look up a registered project by `id:` (not `name:`) and return its root path.
 
     Reads `projects[]` from the global config. Distinguishes three failure modes:
@@ -283,7 +283,7 @@ def resolve_project_by_id(project_id: str) -> Path:
     - all good → return the path (expanded `~`).
 
     Used by `science commons promote --from <id>` to enforce the id-based
-    `--from` contract. The legacy `resolve_project_root(name)` matches by name and
+    `--from` contract. The legacy `registry_root_for_name(name)` matches by name and
     is left alone for callers that still want name-based lookup.
     """
     from science_tool.registry.config import load_global_config

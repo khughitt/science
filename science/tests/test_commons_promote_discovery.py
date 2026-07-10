@@ -25,7 +25,7 @@ def test_promote_public_surface_exports() -> None:
         discover_candidates,
         plan_promote,
         prompt_resolve,
-        resolve_project_by_id,
+        registry_root_for_id,
     )
 
     # Reference every name so pyright doesn't complain about unused imports.
@@ -44,7 +44,7 @@ def test_promote_public_surface_exports() -> None:
             discover_candidates,
             plan_promote,
             prompt_resolve,
-            resolve_project_by_id,
+            registry_root_for_id,
         ]
     )
 
@@ -353,7 +353,7 @@ def test_discover_groups_by_normalized_bibkey(tmp_path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj_a": proj_a, "proj_b": proj_b}[slug],
     )
 
@@ -370,7 +370,7 @@ def test_discover_rejects_null_id_via_resolver(tmp_path, monkeypatch) -> None:
     def fake_resolve(slug: str):
         raise CommonsError(f"project {slug!r} is registered with id: null; ...")
 
-    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", fake_resolve)
+    monkeypatch.setattr("science_tool.commons.promote.registry_root_for_id", fake_resolve)
     with pytest.raises(CommonsError, match="id: null"):
         discover_candidates(["legacy-slug"], PROMOTE_KIND_PAPER)
 
@@ -390,7 +390,7 @@ def test_discover_carries_failures(tmp_path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -411,7 +411,7 @@ def test_discover_candidates_paper_kind_returns_expected_result(tmp_path, monkey
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -434,7 +434,7 @@ def test_discover_candidates_topic_kind_reads_entities_topics(tmp_path, monkeypa
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -456,7 +456,7 @@ def test_discover_candidates_rejects_explicit_id_with_wrong_prefix(tmp_path, mon
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -477,7 +477,7 @@ def test_discover_candidates_rejects_explicit_id_with_invalid_slug(tmp_path, mon
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -497,7 +497,7 @@ def test_discover_candidates_rejects_non_string_explicit_id(tmp_path, monkeypatc
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -518,7 +518,7 @@ def test_discover_candidates_theme_cross_project_scope_is_candidate(tmp_path, mo
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -537,7 +537,7 @@ def test_discover_candidates_theme_project_scope_is_silently_skipped(tmp_path, m
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -556,7 +556,7 @@ def test_discover_candidates_theme_missing_scope_is_failed_candidate(tmp_path, m
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -576,7 +576,7 @@ def test_discover_candidates_theme_malformed_scope_is_failed_candidate(tmp_path,
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -597,7 +597,7 @@ def test_discover_candidates_ignores_legacy_doc_topic_duplicate(tmp_path, monkey
         "---\nid: topic:collide\n---\n", encoding="utf-8"
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 

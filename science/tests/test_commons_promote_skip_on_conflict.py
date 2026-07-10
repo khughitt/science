@@ -88,7 +88,7 @@ def _discovery_for(monkeypatch, projects: dict[str, Path]):
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: projects[slug],
     )
     return discover_candidates(list(projects), PROMOTE_KIND_PAPER)

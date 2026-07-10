@@ -40,7 +40,7 @@ def test_cli_promote_dataset_requires_slug(tmp_path, monkeypatch):
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -55,11 +55,11 @@ def test_cli_promote_dataset_rejects_positional_entity_id(tmp_path, monkeypatch)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -86,11 +86,11 @@ def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -144,11 +144,11 @@ def test_cli_promote_dataset_single_slug_omits_unrelated_failed_candidates(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -179,11 +179,11 @@ def test_cli_promote_dataset_dry_run_override_conflict_is_click_error(tmp_path, 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(config_dir))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -214,11 +214,11 @@ def test_cli_promote_dataset_dry_run_resource_read_failure_is_click_error(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
@@ -251,11 +251,11 @@ def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.cli import commons_group
@@ -289,11 +289,11 @@ def test_promote_dataset_verify_digests_prints_skip(tmp_path, monkeypatch):
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.delenv("OUTPUT_ROOT", raising=False)
     monkeypatch.setattr(
-        "science_tool.commons.config.resolve_project_by_id",
+        "science_tool.commons.config.registry_root_for_id",
         lambda s: {"proj-dataset": proj}[s],
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: {"proj-dataset": proj}[s],
     )
 

@@ -69,7 +69,7 @@ def test_cli_promote_theme_dry_run_excludes_project_scope(tmp_path, monkeypatch)
     commons = _create_commons(tmp_path)
     projects = {"proj-alpha": alpha, "proj-beta": beta}
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: projects[slug],
     )
     monkeypatch.setattr(
@@ -101,7 +101,7 @@ def test_cli_promote_theme_single_entity_apply_writes_commons(
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(
@@ -131,7 +131,7 @@ def test_cli_promote_theme_rejects_wrong_id_prefix(tmp_path, monkeypatch) -> Non
 
     proj, commons = _setup(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     monkeypatch.setattr(

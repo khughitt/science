@@ -472,6 +472,19 @@ def test_detect_project_no_science_yaml_uses_cwd_name(tmp_path: Path):
     assert result == "some-dir"
 
 
+def test_detect_project_returns_nearest_root_name(tmp_path: Path):
+    (tmp_path / "science.yaml").write_text("id: p\n", encoding="utf-8")
+    nested = tmp_path / "sub"
+    nested.mkdir()
+    assert detect_project(nested) == tmp_path.name
+
+
+def test_detect_project_falls_back_to_start_name(tmp_path: Path):
+    nested = tmp_path / "loose"
+    nested.mkdir()
+    assert detect_project(nested) == nested.name
+
+
 def test_concern_defaults_to_tooling():
     entry = FeedbackEntry(id="fb-2026-06-28-001", target="command:x", summary="s")
     assert entry.concern == "tooling"

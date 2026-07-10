@@ -5,6 +5,8 @@ from pathlib import Path
 
 import yaml
 
+from science_tool.data_root import project_config_path
+
 
 @dataclass(frozen=True)
 class DagPaths:
@@ -23,7 +25,7 @@ def load_dag_paths(project_root: Path) -> DagPaths:
     no ``dag:`` block and no ``*.dot`` files is a valid empty state:
     auto-discover yields zero slugs and audit/validate return clean results.
     """
-    cfg: dict = yaml.safe_load((project_root / "science.yaml").read_text()) or {}
+    cfg: dict = yaml.safe_load(project_config_path(project_root).read_text()) or {}
     block: dict | None = cfg.get("dag")
 
     if block is None:

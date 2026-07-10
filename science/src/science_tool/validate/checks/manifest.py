@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -14,7 +15,7 @@ _REQUIRED_FIELDS = ("name", "created", "last_modified", "status", "summary", "pr
 
 
 def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, Path("science.yaml"), None, message, "manifest", None)
+    return Result(severity, Path(PROJECT_CONFIG_FILENAME), None, message, "manifest", None)
 
 
 @Check(section="project manifest...", order=1)

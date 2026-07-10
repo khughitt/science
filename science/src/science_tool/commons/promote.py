@@ -38,7 +38,7 @@ from science_model.entity_schema import (
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
 
-from science_tool.commons.config import check_override_conflict, resolve_project_by_id
+from science_tool.commons.config import check_override_conflict, registry_root_for_id
 from science_tool.commons.datapackage import (
     Resolved,
     ResourceSource,
@@ -530,7 +530,7 @@ def discover_candidates(
     failures: list[FailedCandidate] = []
 
     for slug in project_slugs:
-        project_root = resolve_project_by_id(slug)  # raises CommonsError on bad slug
+        project_root = registry_root_for_id(slug)  # raises CommonsError on bad slug
         candidates, project_failures = _scan_project(project_root, slug, kind)
         failures.extend(project_failures)
         for cand in candidates:

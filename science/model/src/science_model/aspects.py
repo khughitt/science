@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from science_model.frontmatter import project_config_path
+
 KNOWN_ASPECTS: frozenset[str] = frozenset(
     {
         "causal-modeling",
@@ -90,7 +92,7 @@ def load_project_aspects(project_root: Path) -> list[str]:
     Returns an empty list if the field is absent or the list is empty.
     Raises ``FileNotFoundError`` if science.yaml is missing.
     """
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     if not yaml_path.is_file():
         raise FileNotFoundError(f"science.yaml not found at {yaml_path}")
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}

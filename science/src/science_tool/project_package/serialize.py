@@ -20,7 +20,12 @@ import yaml
 from pydantic import ValidationError
 
 from science_tool.data_audit import Quadrant, audit_project
-from science_tool.data_root import DataRootConfigError, resolve_data_root
+from science_tool.data_root import (
+    PROJECT_CONFIG_FILENAME,
+    DataRootConfigError,
+    project_config_path,
+    resolve_data_root,
+)
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 from science_tool.project_config import load_project_config, resolve_data_policy
 from science_tool.project_package.core import FileResource, content_version, file_resource
@@ -29,7 +34,7 @@ from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
 SOURCE_ROOTS = ("entities", "results")
-TOP_LEVEL_SINGLES = ("science.yaml", "papers/references.bib", "knowledge/graph.trig")
+TOP_LEVEL_SINGLES = (PROJECT_CONFIG_FILENAME, "papers/references.bib", "knowledge/graph.trig")
 
 
 class SerializeError(Exception):
@@ -89,7 +94,7 @@ def _build_manifest(
     git_commit: str,
 ) -> dict:
     config = load_project_config(project_root)
-    raw = yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
     base = str(raw.get("last_modified") or raw.get("version") or "0")
 
     file_records = sorted(
@@ -216,11 +221,11 @@ def serialize_project(
 
     if _out_inside_root(project_root, out_archive):
         raise SerializeError(f"--out must not be inside the project root: {out_archive}")
-    if not (project_root / "science.yaml").exists():
-        raise SerializeError(f"missing science.yaml: {project_root / 'science.yaml'}")
+    if not project_config_path(project_root).exists():
+        raise SerializeError(f"missing science.yaml: {project_config_path(project_root)}")
 
     tracked = _tracked_files(project_root)  # raises if not a git worktree
-    if "science.yaml" not in tracked:
+    if PROJECT_CONFIG_FILENAME not in tracked:
         raise SerializeError("science.yaml is not git-tracked; cannot build a portable bundle")
     commit = _head_commit(project_root)  # raises if no HEAD commit
 

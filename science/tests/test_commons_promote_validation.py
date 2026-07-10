@@ -74,7 +74,7 @@ def test_plan_promote_validates_canonical_against_kind_profile(tmp_path, monkeyp
     commons = _init_commons_repo(tmp_path / "commons")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -115,7 +115,7 @@ def test_skip_on_invalid_drops_bad_decision_and_keeps_valid(tmp_path, monkeypatc
     commons = _init_commons_repo(tmp_path / "commons")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -157,7 +157,7 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
     commons = _init_commons_repo(tmp_path / "commons")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 

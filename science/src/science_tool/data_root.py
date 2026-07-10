@@ -5,6 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from science_model.frontmatter import (  # noqa: F401
+    PROJECT_CONFIG_FILENAME,
+    nearest_project_root,
+    project_config_path,
+)
 from science_tool.project_config import ProjectConfig, load_project_config
 from science_tool.registry.config import load_global_config
 
@@ -23,7 +28,7 @@ def discover_project_root(start: Path | None = None) -> Path:
     if candidate.is_file():
         candidate = candidate.parent
     for root in (candidate, *candidate.parents):
-        if (root / "science.yaml").is_file():
+        if project_config_path(root).is_file():
             return root
     return candidate
 
@@ -53,7 +58,7 @@ def resolve_data_root(project_root: Path, config: ProjectConfig | None = None) -
 
 
 def _load_project_config_if_present(project_root: Path) -> ProjectConfig | None:
-    if not (project_root / "science.yaml").is_file():
+    if not project_config_path(project_root).is_file():
         return None
     return load_project_config(project_root)
 

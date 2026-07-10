@@ -14,7 +14,7 @@ from science_tool.commons.config import (
     load_data_overrides,
     resolve_commons_data_root,
     resolve_commons_root,
-    resolve_project_by_id,
+    registry_root_for_id,
     restore_data_override_from_backup,
     upsert_data_override,
 )
@@ -522,10 +522,10 @@ def test_restore_data_override_from_backup_rejects_data_yaml_directory(
         restore_data_override_from_backup(op_id="opDIR")
 
 
-def test_resolve_project_root_returns_registered_path(
+def test_registry_root_for_name_returns_registered_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from science_tool.commons.config import resolve_project_root
+    from science_tool.commons.config import registry_root_for_name
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -544,12 +544,12 @@ def test_resolve_project_root_returns_registered_path(
         encoding="utf-8",
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
-    assert resolve_project_root("protein-landscape") == Path(
+    assert registry_root_for_name("protein-landscape") == Path(
         "/home/me/d/protein-landscape"
     )
 
 
-def test_resolve_project_root_accepts_id_as_fallback(
+def test_registry_root_for_name_accepts_id_as_fallback(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """validate --project should accept the project id too, matching promote --from.
@@ -558,7 +558,7 @@ def test_resolve_project_root_accepts_id_as_fallback(
     validate --project resolved only by name, so the same logical argument
     needed a different value for each command.
     """
-    from science_tool.commons.config import resolve_project_root
+    from science_tool.commons.config import registry_root_for_name
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -579,16 +579,16 @@ def test_resolve_project_root_accepts_id_as_fallback(
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     # name still works
-    assert resolve_project_root("cancer-meta") == Path("/home/me/d/cancer/meta")
+    assert registry_root_for_name("cancer-meta") == Path("/home/me/d/cancer/meta")
     # id now works too
-    assert resolve_project_root("meta") == Path("/home/me/d/cancer/meta")
+    assert registry_root_for_name("meta") == Path("/home/me/d/cancer/meta")
 
 
-def test_resolve_project_by_id_accepts_name_as_fallback(
+def test_registry_root_for_id_accepts_name_as_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """promote --from should accept the project name too, matching validate --project."""
-    from science_tool.commons.config import resolve_project_by_id
+    from science_tool.commons.config import registry_root_for_id
 
     cfg_dir = _write_config(
         tmp_path,
@@ -605,15 +605,15 @@ def test_resolve_project_by_id_accepts_name_as_fallback(
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setenv("HOME", str(tmp_path))
     # id still works
-    assert resolve_project_by_id("meta") == (tmp_path / "d" / "cancer" / "meta")
+    assert registry_root_for_id("meta") == (tmp_path / "d" / "cancer" / "meta")
     # name now works too
-    assert resolve_project_by_id("cancer-meta") == (tmp_path / "d" / "cancer" / "meta")
+    assert registry_root_for_id("cancer-meta") == (tmp_path / "d" / "cancer" / "meta")
 
 
-def test_resolve_project_root_unknown_name_raises(
+def test_registry_root_for_name_unknown_name_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from science_tool.commons.config import resolve_project_root
+    from science_tool.commons.config import registry_root_for_name
     from science_tool.commons.errors import ProjectNotRegisteredError
 
     cfg_dir = tmp_path / "cfg"
@@ -623,7 +623,7 @@ def test_resolve_project_root_unknown_name_raises(
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     with pytest.raises(ProjectNotRegisteredError, match="nope"):
-        resolve_project_root("nope")
+        registry_root_for_name("nope")
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -635,7 +635,7 @@ def _write_config(tmp_path: Path, body: str) -> Path:
     return cfg_dir
 
 
-def test_resolve_project_by_id_returns_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_root_for_id_returns_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_dir = _write_config(
         tmp_path,
         """
@@ -650,11 +650,11 @@ def test_resolve_project_by_id_returns_path(tmp_path: Path, monkeypatch: pytest.
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setenv("HOME", str(tmp_path))
-    p = resolve_project_by_id("natural-systems")
+    p = registry_root_for_id("natural-systems")
     assert p == (tmp_path / "d" / "natural-systems")
 
 
-def test_resolve_project_by_id_rejects_unregistered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_root_for_id_rejects_unregistered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_dir = _write_config(
         tmp_path,
         """
@@ -670,10 +670,10 @@ def test_resolve_project_by_id_rejects_unregistered(tmp_path: Path, monkeypatch:
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setenv("HOME", str(tmp_path))
     with pytest.raises(CommonsError, match="no registered project with id"):
-        resolve_project_by_id("not-a-real-id")
+        registry_root_for_id("not-a-real-id")
 
 
-def test_resolve_project_by_id_rejects_null_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_root_for_id_rejects_null_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_dir = _write_config(
         tmp_path,
         """
@@ -689,10 +689,10 @@ def test_resolve_project_by_id_rejects_null_id(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setenv("HOME", str(tmp_path))
     with pytest.raises(CommonsError, match="id: null"):
-        resolve_project_by_id("legacy-project")
+        registry_root_for_id("legacy-project")
 
 
-def test_resolve_project_by_id_rejects_ambiguous_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_root_for_id_rejects_ambiguous_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Multiple projects sharing one id must fail loudly, not silently pick the first."""
     cfg_dir = _write_config(
         tmp_path,
@@ -715,4 +715,4 @@ def test_resolve_project_by_id_rejects_ambiguous_id(tmp_path: Path, monkeypatch:
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setenv("HOME", str(tmp_path))
     with pytest.raises(CommonsError, match="ambiguous"):
-        resolve_project_by_id("meta")
+        registry_root_for_id("meta")

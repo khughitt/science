@@ -23,8 +23,8 @@ from science_tool.commons.config import (
     load_data_overrides,
     resolve_commons_data_root,
     resolve_commons_root,
-    resolve_project_by_id,
-    resolve_project_root,
+    registry_root_for_id,
+    registry_root_for_name,
 )
 from science_tool.commons.datapackage import (
     DatapackageDescriptor,
@@ -179,8 +179,8 @@ __all__ = [
     "resolve_entity",
     "resolve_member",
     "resolve_virtual_member_payload",
-    "resolve_project_by_id",
-    "resolve_project_root",
+    "registry_root_for_id",
+    "registry_root_for_name",
     "validate_project_overlays",
     "validate_logical_path",
 ]

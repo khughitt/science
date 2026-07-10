@@ -22,6 +22,13 @@ def _write_project(root: Path, extra: dict | None = None) -> None:
     (root / "science.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
 
 
+def test_nearest_project_root_reexported(tmp_path: Path) -> None:
+    from science_tool.data_root import nearest_project_root
+
+    (tmp_path / "science.yaml").write_text("id: p\n", encoding="utf-8")
+    assert nearest_project_root(tmp_path) == tmp_path
+
+
 def test_default_root_is_project_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _write_project(tmp_path)
     cfg = tmp_path / "cfg"
@@ -119,3 +126,10 @@ def test_discover_project_root_walks_up(tmp_path: Path) -> None:
 
 def test_discover_project_root_falls_back_without_science_yaml(tmp_path: Path) -> None:
     assert discover_project_root(tmp_path) == tmp_path.resolve()
+
+
+def test_project_config_path_reexported():
+    from science_tool.data_root import PROJECT_CONFIG_FILENAME, project_config_path
+
+    assert PROJECT_CONFIG_FILENAME == "science.yaml"
+    assert project_config_path(Path("/x/y")) == Path("/x/y/science.yaml")

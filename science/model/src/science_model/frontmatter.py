@@ -32,6 +32,37 @@ from science_model.packages.schema import (
 from science_model.reasoning import EvidenceStance
 from science_model.sync import SyncSource
 
+PROJECT_CONFIG_FILENAME = "science.yaml"
+"""The project manifest filename. The single place this literal appears across
+both packages; path builders call ``project_config_path`` and filename-token
+sites (git args, inventory tuples, membership checks) import this constant, so
+``tests/test_project_root_boundary.py`` can ban the bare literal everywhere else."""
+
+
+def project_config_path(root: Path) -> Path:
+    """Return the path to a project's ``science.yaml`` manifest.
+
+    The single sanctioned constructor of the absolute manifest path. Callers in
+    ``science_tool`` reach it via the ``data_root`` re-export. It lives in
+    ``science_model`` because ``science_model`` needs it and must not import
+    ``science_tool``.
+    """
+    return root / PROJECT_CONFIG_FILENAME
+
+
+def nearest_project_root(start: Path) -> Path | None:
+    """Nearest ancestor of ``start`` (inclusive) containing the project manifest.
+
+    Lives here — not in ``science_tool`` — because ``science_model`` must not
+    import ``science_tool`` and this locates the file the schema describes.
+    ``science_tool.data_root`` re-exports it and composes the env-var layer.
+    """
+    candidate = start if start.is_dir() else start.parent
+    for root in (candidate, *candidate.parents):
+        if project_config_path(root).is_file():
+            return root
+    return None
+
 
 def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
     """Parse YAML frontmatter and body from a markdown file.
@@ -354,11 +385,9 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     entity_type = core_entity_type_for_kind(kind)
 
     rel_path = str(path)
-    # Try to make relative to project root
-    for parent in path.parents:
-        if (parent / "science.yaml").exists():
-            rel_path = str(path.relative_to(parent))
-            break
+    project_root = nearest_project_root(path)
+    if project_root is not None:
+        rel_path = str(path.relative_to(project_root))
 
     entity_kwargs = {
         "id": fm.get("id", f"{kind}:{path.stem}"),

@@ -59,6 +59,7 @@ from science_tool.graph.storage_adapters.curie_ref import CurieRefAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
+from science_tool.data_root import project_config_path
 from science_tool.graph.storage_adapters.workflow_run import WorkflowRunAdapter
 from science_tool.paths import resolve_paths
 
@@ -1133,7 +1134,7 @@ def _load_typed_records(
 
 
 def _read_project_config(project_root: Path) -> dict[str, object]:
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     cache_key: tuple[str, int] | None = None
     if yaml_path.is_file():
         cache_key = (str(yaml_path.resolve()), yaml_path.stat().st_mtime_ns)

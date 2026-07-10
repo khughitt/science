@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from science_tool.bibliography import load_bib_author_surnames
+from science_tool.data_root import project_config_path
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
 from science_tool.prose_lint import CHECKS, LintIssue, build_short_form_resolver, scan_root
 from science_tool.validate.checks import Check
@@ -72,7 +73,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
-    if (ctx.project_root / "science.yaml").is_file():
+    if project_config_path(ctx.project_root).is_file():
         config = load_project_config(ctx.project_root)
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns

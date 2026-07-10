@@ -10,6 +10,7 @@ from science_model.ontologies import load_catalogs_for_names
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 
+from science_tool.data_root import project_config_path
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import local_profile_sources_dir
 
@@ -137,7 +138,7 @@ def _format_validation_error(exc: ValidationError) -> str:
 
 
 def _read_project_config(project_root: Path) -> dict:
-    config_path = project_root / "science.yaml"
+    config_path = project_config_path(project_root)
     if not config_path.exists():
         return {}
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
