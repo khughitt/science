@@ -896,6 +896,11 @@ class DatasetEntity(ProjectEntity):
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""
 
+    # The workflow this run executed. Authored on every run today (the template
+    # declares it and `science qa-audit` errors without it); it was simply never
+    # typed, so `sci:executes` could not be materialized. Optional here: Spec 2's
+    # register-run is what refuses a run that cannot name its workflow.
+    workflow: str = ""
     manifest_path: str = ""
     resources: list[dict[str, Any]] = Field(default_factory=list)
     fingerprint: RunFingerprint | None = None

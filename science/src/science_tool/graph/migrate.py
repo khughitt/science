@@ -317,6 +317,10 @@ def _audit_entity(
         rows.extend(
             _audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids)
         )
+    # `workflow` lives on WorkflowRunEntity; getattr mirrors `blocked_by` above.
+    workflow_ref = getattr(entity, "workflow", "")
+    if workflow_ref:
+        rows.extend(_audit_reference(entity, "workflow", workflow_ref, resolver, ext_prefixes=ext_prefixes))
     for target in entity.source_refs:
         rows.extend(
             _audit_reference(

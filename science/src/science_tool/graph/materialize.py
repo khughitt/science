@@ -738,6 +738,15 @@ def _add_relations(
             resolver=resolver,
         )
 
+    if isinstance(entity, WorkflowRunEntity):
+        _add_executes_edge(
+            entity,
+            entity_uri,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+        )
+
     for raw_target in sorted(getattr(entity, "participants", []) or []):
         if is_metadata_reference(raw_target):
             continue
@@ -1067,6 +1076,37 @@ def _add_evidence_line_relations(
                 source_entity = entity_index.get(resolution.canonical_id)
                 if source_entity is not None:
                     provenance.add((line_uri, PROV.wasDerivedFrom, _entity_uri(source_entity.canonical_id)))
+
+
+def _add_executes_edge(
+    entity: WorkflowRunEntity,
+    run_uri: URIRef,
+    *,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+    knowledge,
+) -> None:
+    """Emit sci:executes for a run that names the workflow it executed.
+
+    A run that names no workflow emits no edge (Spec 2's register-run is the
+    gate). A run that names one it cannot resolve is a hard error: silently
+    dropping the edge would delete provenance on a typo.
+    """
+    if not entity.workflow:
+        return
+    resolution = resolver.resolve(entity.workflow)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise ValueError(
+            f"{entity.canonical_id} executes {entity.workflow!r}, which does not resolve "
+            "to a known entity; a run's workflow must resolve to a workflow."
+        )
+    target = entity_index.get(resolution.canonical_id)
+    if target is None or target.kind != "workflow":
+        raise ValueError(
+            f"{entity.canonical_id} executes {resolution.canonical_id!r}, which resolved to a "
+            "non-workflow entity; a run's workflow must name a workflow."
+        )
+    knowledge.add((run_uri, SCI_NS.executes, _entity_uri(resolution.canonical_id)))
 
 
 def _add_run_ref_edges(
