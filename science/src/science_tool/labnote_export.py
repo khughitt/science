@@ -16,6 +16,7 @@ import yaml
 from rdflib import URIRef
 
 from science_tool.bibliography import load_bib_entries
+from science_tool.data_root import project_config_path
 from science_tool.project_package.core import content_version, file_resource
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
 from science_tool.graph.store.dataset import _load_dataset
@@ -572,7 +573,7 @@ def _current_export_diagnostics(out_dir: Path, stamp: dict[str, Any]) -> dict[st
 
 
 def _load_raw_project_yaml(project_root: Path) -> dict[str, Any]:
-    science_yaml = project_root / "science.yaml"
+    science_yaml = project_config_path(project_root)
     if not science_yaml.exists():
         raise FileNotFoundError(f"missing science.yaml: {science_yaml}")
     return yaml.safe_load(science_yaml.read_text(encoding="utf-8")) or {}
@@ -852,7 +853,7 @@ def _data_version(
     base = str(raw_config.get("last_modified") or raw_config.get("version") or "0")
 
     def chunks() -> Iterator[bytes]:
-        yield (project_root / "science.yaml").read_bytes()
+        yield project_config_path(project_root).read_bytes()
         bib = project_root / "papers" / "references.bib"
         if bib.exists():
             yield bib.read_bytes()

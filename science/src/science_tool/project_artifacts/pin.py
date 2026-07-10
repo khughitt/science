@@ -7,6 +7,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from science_tool.data_root import project_config_path
 from science_tool.project_artifacts.registry_schema import Pin
 
 
@@ -22,12 +23,12 @@ def _load(project_root: Path) -> tuple[YAML, Any]:
     """Return (yaml-instance, parsed-data) for science.yaml."""
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
-    text = (project_root / "science.yaml").read_text(encoding="utf-8")
+    text = project_config_path(project_root).read_text(encoding="utf-8")
     return yaml, yaml.load(text) or {}
 
 
 def _save(project_root: Path, yaml: YAML, data: Any) -> None:
-    with (project_root / "science.yaml").open("w", encoding="utf-8") as f:
+    with project_config_path(project_root).open("w", encoding="utf-8") as f:
         yaml.dump(data, f)
 
 

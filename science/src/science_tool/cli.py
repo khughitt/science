@@ -20,7 +20,12 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.commons import commons_group
 from science_tool.curate.cli import curate_group
 from science_tool.data_cli import data_group
-from science_tool.data_root import DataRootConfigError, discover_project_root, resolve_data_root
+from science_tool.data_root import (
+    DataRootConfigError,
+    discover_project_root,
+    project_config_path,
+    resolve_data_root,
+)
 from science_tool.dag.cli import dag_group
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
@@ -434,7 +439,7 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
         render_decisions_view,
     )
 
-    _manifest = _yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
+    _manifest = _yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
     _v = _manifest.get("layout_version")
     version = _v if isinstance(_v, int) else None
     if version is None or version < 3:
@@ -1611,7 +1616,7 @@ def graph_build(project_root: Path, local_only: bool) -> None:
     from science_tool.registry.config import ensure_registered
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
-    _science_yaml = _project_root / "science.yaml"
+    _science_yaml = project_config_path(_project_root)
     _cfg = None
     if _science_yaml.is_file():
         _cfg = load_project_config(_project_root)
