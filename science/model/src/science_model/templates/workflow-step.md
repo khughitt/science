@@ -4,8 +4,11 @@ kind: "workflow-step"
 title: "<Step Name>"
 status: "active"
 workflow: "workflow:<slug>"
-inquiry: "inquiry:<slug>"
+method: "method:<slug>"           # materializes the sci:applies edge
 rule_name: "<snakemake-rule-name>"
+seed_bindings:                    # a seed_param -> its SOURCE, never its value
+  random_state: "config.seed"     #   config.<key> | literal:<int>
+rationale: ""                     # why a nondeterministic method is acceptable here
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"
 ---
@@ -28,7 +31,7 @@ What the step does and why it exists.
 
 | Parameter | Value | Source | Notes |
 |-----------|-------|--------|-------|
-| | | inquiry AnnotatedParam / config.yaml | |
+| | | config.yaml / literal | |
 
 ## Validation
 
@@ -44,6 +47,6 @@ What the step does and why it exists.
 ## Related
 
 - **Workflow:** `workflow:<slug>`
-- **Inquiry:** `inquiry:<slug>`
+- **Method:** `method:<slug>`
 - **Upstream:** `workflow-step:<slug>`
 - **Downstream:** `workflow-step:<slug>`
