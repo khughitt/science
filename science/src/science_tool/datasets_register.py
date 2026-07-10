@@ -986,8 +986,8 @@ def _reject_authored_fingerprint(run_path: Path, run_fm: dict) -> None:
 
     A fingerprint this function previously wrote round-trips through the model
     (it was serialized from one), so anything that fails to parse was written by
-    hand. That is precisely the shape a pre-t093 template produces: the three
-    declaration fields nested under `fingerprint:`. Name the migration.
+    hand. Reached only when `execution:` is present too — a run carrying nothing
+    but a pre-t093 stub is caught earlier, by `_read_declaration`.
 
     A hand-authored *complete and valid* fingerprint is indistinguishable from a
     prior capture and is silently recomputed — the same accepted limitation as

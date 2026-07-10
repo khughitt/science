@@ -192,3 +192,20 @@ def test_malformed_declaration_does_not_also_report_drift(tmp_path):
     _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: teleporter\n", 1))
     rules = [r.rule for r in check_run_fingerprint_obligations(_ctx(tmp_path))]
     assert rules == ["run.execution-malformed"]
+
+
+def test_a_run_in_a_subdirectory_is_checked(tmp_path):
+    """Entity discovery is recursive `rglob` keyed on frontmatter `kind`, so a
+    run may legally live in a subdirectory. A check that globs one level deep
+    silently exempts it — and a drifted fingerprint that nothing reports is the
+    exact false reproducibility claim this rule exists to catch."""
+    nested = tmp_path / "entities" / "workflow-runs" / "2026" / "q3"
+    nested.mkdir(parents=True)
+    drifted = CLEAN.replace("  executor: local\n", "  executor: external\n", 1)
+    (nested / "deep.md").write_text(
+        f"---\nid: workflow-run:deep\nkind: workflow-run\ntitle: deep\n{drifted}---\n",
+        encoding="utf-8",
+    )
+    results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
+    assert [r.rule for r in results] == ["run.fingerprint-declaration-drift"]
+    assert results[0].path.name == "deep.md"

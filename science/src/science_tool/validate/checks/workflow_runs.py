@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from science_model.run_fingerprint import ExecutorKind, RunDeclaration, RunFingerprint
 
 from science_tool.entities import resolve_path_policy
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.run_fingerprint_policy import RULE_AUTHORED_CAPTURABLE, evaluate_fingerprint
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -37,10 +38,14 @@ _DECLARED_FIELDS: tuple[str, ...] = (
 
 
 def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
+    """Every workflow-run under the kind's root, at any depth.
+
+    Recursive, because entity discovery is: `load_project_sources` keys on the
+    frontmatter `kind`, not the directory, so a run in a subdirectory is a real,
+    loaded entity. Globbing one level deep would exempt it from every rule below.
+    """
     root = ctx.project_root / resolve_path_policy("workflow-run").root
-    if not root.is_dir():
-        return []
-    return [(p, ctx.frontmatter(p)) for p in sorted(root.glob("*.md"))]
+    return [(p, ctx.frontmatter(p)) for p in iter_entity_markdown(root)]
 
 
 def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Result | None:

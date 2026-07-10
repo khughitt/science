@@ -51,6 +51,7 @@ ENTITY_SCANNERS: set[str] = {
     "validate/checks/id_prefixes.py",
     "validate/checks/entity_conformance.py",
     "validate/checks/hypotheses.py",
+    "validate/checks/workflow_runs.py",
     "big_picture/validator.py",
     "entities.py",
     "explore_ideas.py",
