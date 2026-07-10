@@ -654,25 +654,6 @@ Coordinate the Phase-1 benchmark-grounding work from the 2026-07-08 roadmap. Ass
 
 Dynamic tier: re-execute a workflow and compare outputs; for computationally expensive workflows use a seeded subsample as a reproduction smoke test. Emit a verdict token (unverified, self-consistent, independently-reproduced, failed) tracked at run/dataset/evidence level. Open design points: same-result tolerance (bitwise vs within-tolerance numeric) and how to bound subsample cost while preserving indicativeness.
 
-## [t079] Method stochasticity and step seed bindings (umbrella Spec 1)
-- priority: P2
-- status: active
-- parent: task:t075
-- aspects: [software-development]
-- related: [task:t075, question:0016-reproducibility-validation]
-- group: reproducibility-validation
-- created: 2026-07-08
-
-Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add MethodEntity.stochasticity (deterministic|seedable|nondeterministic — a seed-control classification) and MethodEntity.seed_params. Add WorkflowStepEntity.method (sci:applies, new relation, materialized), WorkflowStepEntity.seed_bindings mapping a seed_param to its source (config.<key> or literal:<int>, a binding never a value), and rationale. Warn-only validate checks: workflow-step.seed-binding-missing, .rationale-missing, .seed-binding-on-deterministic-method, .seed-binding-unknown-param, method.seed-params-missing. Supersedes this task's original framing (a lint over pipeline plan files): the lint subject is the entity layer, and t077 already ships unpinned-environment and uncaptured-code-SHA coverage as run.fingerprint-incomplete. Spec 0 (t087) shipped the typed Method/WorkflowStep classes this depends on; merged as 92d752b4.
-
-RULING (2026-07-09, supersedes the design's original 'required, defaultless'): stochasticity is OPTIONAL on the model and REQUIRED AT THE POINT OF USE. A corpus survey found 51 method entities (cancer 27, protein-landscape 13, health 6, seq-feats 5) of which 46 are not computational procedures — 20 are glossary terms auto-promoted from knowledge/sources/local/terms.yaml (method:chip-seq defines a wet-lab assay), the rest are design documents. Only 4 are seedable, 1 deterministic, and none names a seed parameter. A required field would hard-fail the graph build in all four projects (strict_core_schema=True raises) until 46 category errors were authored. Instead: workflow-step.method-stochasticity-missing is a validate ERROR when a step applies an unclassified method. None means unclassified, distinguishable from every classification, so nothing fails open; Spec 2's register-run fails closed on the same condition. Zero workflow-step entities exist, so this ships green with no migration. Corollary: seedable does NOT imply non-empty seed_params at the model layer (all 4 seedable methods lack named params); method.seed-params-missing warns instead.
-
-Open questions closed here: seed_bindings grammar is exactly config.<key> | literal:<int>, any other form a model-level ValueError; a partial binding stays a warning (one per unbound param) and derives stochastic-unseeded in Spec 2.
-
-Carried over from Spec 0, now decided: DELETE the inquiry: key from templates/workflow-step.md. No RelationKind in CORE_PROFILE names inquiry as source or target, and the template's 'inquiry AnnotatedParam' hint points at a mechanism test_inquiry.py records as retired. No consumer, no relation.
-
-Also carried over: _add_executes_edge's unresolved-ref branch (science/src/science_tool/graph/materialize.py) is unreachable through the normal pipeline, because the audit gate in _compile raises first. It is retained deliberately — it preserves the helper's local invariant for any caller that reaches the materialization layer outside the audited path. Do not spend budget stripping it unless Spec 1 is already editing that helper.
-
 ## [t080] Reproduction verdict as a belief ceiling (mirror the dataset-QA ceiling)
 - priority: P2
 - status: proposed
@@ -762,6 +743,10 @@ Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evide
 - created: 2026-07-09
 
 Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add RunFingerprint.step_seeds: dict[str, dict[str, int]] keyed by workflow-step ref — the authoritative seed record. Remove SeedPolicy.seeds (dict[str,int] cannot hold two steps seeding random_state differently); SeedPolicy becomes {kind, rationale} and t077's 'seeded requires non-empty seeds' invariant moves up to RunFingerprint as 'seeded requires non-empty step_seeds'. Breaking change to t077's model, safe because the population is zero. seed_policy.kind becomes derived and captured at register-run from the workflow's steps, their seed_bindings, and the realized values — no longer hand-authored. A run whose workflow declares no steps fails closed: no defaulted policy. Error must name the fix, not the invariant. Minimum adoption unit is one step; Spec 1's seed-binding-missing stays warn-only so a bare step still registers and derives stochastic-unseeded. No new SeedPolicy.kind enum values.
+
+Carried over from Spec 1 (t079, merged 8268d86a), decide here: a workflow-step with NO method: ref emits no sci:applies edge and triggers no Spec 1 rule — neither error nor warning. So at graph-traversal time a methodless step is indistinguishable from a step whose method simply produced no edge, while the seed_policy derivation table implicitly assumes every step names a method. Spec 2 must decide whether a methodless step is deterministic, ignored, or a register-run hard error. Defaulting it silently would reintroduce exactly the unverifiable assertion this umbrella exists to remove — the same argument that makes a zero-step workflow fail closed. Spec 1 deliberately left this unruled: it has no consumer until seed_policy is derived.
+
+Also from Spec 1: MethodEntity.stochasticity is optional on the model (None = unclassified) and enforced at the point of use by workflow-step.method-stochasticity-missing (ERROR). register-run must fail closed on the same condition rather than assume a classification; the error should name the fix, as the validate check's does.
 
 ## [t089] Downstream stochasticity transparency for derived datasets (umbrella Spec 3)
 - priority: P3
