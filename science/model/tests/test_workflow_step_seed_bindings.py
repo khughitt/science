@@ -62,6 +62,10 @@ def test_negative_literal_is_accepted() -> None:
         "config",         # no key
         "env.SEED",       # unsupported form
         "",               # empty
+        "literal:42\n",   # `$` would accept this; `\Z` must not
+        "config.seed\n",  # likewise
+        " literal:42",    # leading whitespace
+        "literal:42 ",    # trailing whitespace
     ],
 )
 def test_malformed_binding_source_is_rejected(source: str) -> None:

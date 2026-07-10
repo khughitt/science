@@ -955,8 +955,10 @@ class MethodEntity(ProjectEntity):
     seed_params: list[str] = Field(default_factory=list)
 
 
-_CONFIG_BINDING_SOURCE = re.compile(r"^config\.[A-Za-z0-9_][A-Za-z0-9_.-]*$")
-_LITERAL_BINDING_SOURCE = re.compile(r"^literal:-?\d+$")
+# `\Z`, not `$`: Python's `$` also matches just before a trailing newline, so
+# `$` would accept "literal:42\n" as a legal binding source.
+_CONFIG_BINDING_SOURCE = re.compile(r"^config\.[A-Za-z0-9_][A-Za-z0-9_.-]*\Z")
+_LITERAL_BINDING_SOURCE = re.compile(r"^literal:-?\d+\Z")
 
 
 class WorkflowStepEntity(ProjectEntity):
