@@ -22,6 +22,7 @@ RULE_SEED_BINDING_MISSING = "workflow-step.seed-binding-missing"
 RULE_RATIONALE_MISSING = "workflow-step.rationale-missing"
 RULE_BINDING_ON_DETERMINISTIC = "workflow-step.seed-binding-on-deterministic-method"
 RULE_BINDING_UNKNOWN_PARAM = "workflow-step.seed-binding-unknown-param"
+RULE_METHOD_MISSING = "workflow-step.method-missing"
 
 
 def _warn(path: Path, message: str, rule: str) -> Result:
@@ -95,7 +96,21 @@ def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     entity_index: dict[str, Entity] = {entity.canonical_id: entity for entity in sources.entities}
     for step in sources.entities:
-        if not isinstance(step, WorkflowStepEntity) or not step.method:
+        if not isinstance(step, WorkflowStepEntity):
+            continue
+        path = ctx.project_root / step.file_path
+        if not step.method:
+            yield Result(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=(
+                    f"{step.canonical_id} declares no method; seed_policy cannot be derived "
+                    f"from it. Add `method: method:<slug>` to {step.file_path}."
+                ),
+                rule=RULE_METHOD_MISSING,
+                task=None,
+            )
             continue
         resolution = resolver.resolve(step.method)
         if resolution.status != "resolved" or resolution.canonical_id is None:
@@ -106,4 +121,4 @@ def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
             # A ref that resolves to a non-method entity is the compiler's defect
             # (it raises on a step whose `method:` resolves to a non-method).
             continue
-        yield from _step_results(step, method, ctx.project_root / step.file_path)
+        yield from _step_results(step, method, path)

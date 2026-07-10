@@ -768,3 +768,32 @@ Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. The read
 - created: 2026-07-09
 
 test_root_and_packaged_migrated_templates_match (science/model/tests/test_templates.py) guards root templates/ against science/model/src/science_model/templates/ byte-for-byte, but only over the 19 template_ready=True kinds in MIGRATED_KINDS. The 10 hand-copied (template_ready=False) templates — the ones authors literally copy into entity files — are exactly the unguarded set. Coverage is inverted with respect to risk: a divergence in a rendered template is caught, a divergence in a copied one is not. Surfaced during Spec 0 (t087): templates/workflow-step.md silently diverged from its packaged copy mid-branch and had to be resynced by hand, and 8 packaged files still differ from root on main (bias-audit's status 'proposed' is illegal under its own descriptor). Fix: either widen the mirror guard to all templates and reconcile the 8 pre-existing divergences, or delete the packaged copies of non-template_ready kinds, which no Renderer call site reads (both gate on kind in MIGRATED_KINDS). Prefer deletion if nothing consumes them.
+
+## [t091] Fix workflow-run refs broken by Spec 0 typing WorkflowRunEntity.workflow
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [task:t087]
+- group: reproducibility-validation
+- created: 2026-07-10
+
+Spec 0 (t087) typed WorkflowRunEntity.workflow, so graph/migrate.py now audits the field; refs that were previously inert untyped frontmatter are now hard audit failures. health/processes/post-acute-infection authors 'workflow: "t035-cross-trigger-pathway-overlap"' (bare slug, missing the 'workflow:' prefix) and resolves unresolved -- 'science graph audit' FAILS in that project today. One-line fix: prefix the ref. natural-systems/entities/workflow-runs/h07-clean-bases-2026-05-30.md declares no workflow: field at all, so its sci:executes edge is silently skipped; that project already carries ~50 unresolved refs. Verified 2026-07-10 across all 23 project roots: 11 authored run files, 9 correct, these 2 broken. Both are consumer-repo data fixes, not toolkit fixes.
+
+## [t092] Materialize sci:contains, or retire it
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- group: schema-hygiene
+- created: 2026-07-10
+
+CORE_PROFILE declares RelationKind 'contains' (sci:contains) over workflow -> workflow-step, finding -> proposition/observation, interpretation/discussion -> finding. Nothing in graph/materialize.py ever emits it. Three call sites READ it -- cross_impact.py:170,180,190 and freshness.py:103 -- so those code paths are dead against a source-built graph. Declared-and-inert, exactly the pathology the method-stochasticity umbrella design's Findings section describes. Surfaced while planning Spec 2 (t088), whose design text wrongly claimed register-run would reach a workflow's steps 'through sci:contains'; it uses a source-layer reverse index over WorkflowStepEntity.workflow instead and needs no edge. Decide: emit it, or delete the RelationKind and the dead readers.
+
+## [t093] RunFingerprint cannot represent 'declared, not yet captured'
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [task:t077]
+- group: reproducibility-validation
+- created: 2026-07-10
+
+register-run REQUIRES fingerprint.executor / input_artifact_locality / output_artifact_locality to be authored on the workflow-run before it will capture anything (persist_run_fingerprint raises otherwise). But those three fields live INSIDE WorkflowRunEntity.fingerprint, typed as a full RunFingerprint, whose other components (fingerprint_policy, code_sha, code_dirty, environment_digest, parameters_digest, input/output_manifest_digest, seed_policy) are all required. So a run in the authored-but-not-yet-registered state fails schema validation, and load_project_sources(strict_core_schema=True) -- the DEFAULT, used by science validate and graph build -- raises on it. Catch-22: you cannot validate a run until you register it, and registering requires authoring the stub that breaks validation. Verified 2026-07-10 by authoring a run exactly as templates/workflow-run.md instructs and calling load_project_sources with defaults. Pre-existing since t077 (seed_policy was authored the same way); Spec 2 (t088) only made it visible by documenting the block in the template. Consistent with the corpus: 47 workflow-run entities exist across 6 project roots and ZERO carry a fingerprint. Fix options: (a) hoist the three declarations to run-level fields outside fingerprint:, (b) give WorkflowRunEntity a separate declaration model and let fingerprint stay Optional and wholly derived. Prefer (b): declarations and observations are different kinds of thing, which is the umbrella's whole thesis.

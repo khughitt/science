@@ -400,8 +400,19 @@ consumer projects with zero entity edits.
 
 ### Spec 2 — Runs observe seeds
 
-Depends on Spec 0's `sci:executes` edge: `register-run` reaches the workflow
-through `WorkflowRunEntity.workflow`, then its steps through `sci:contains`.
+`register-run` reaches the workflow through `WorkflowRunEntity.workflow`, then
+its steps through a **source-layer reverse index** over `WorkflowStepEntity.workflow`.
+
+Not through `sci:contains`, as an earlier draft of this section claimed. Two
+things are wrong with that path. `WorkflowEntity` has no `steps` field, so a
+workflow never *declares* its steps — containment is authored bottom-up, by each
+step naming its workflow. And `sci:contains` is declared in `CORE_PROFILE`
+(`workflow → workflow-step`) but **never emitted by `materialize.py`**: three
+call sites in `cross_impact.py` and `freshness.py` read the predicate, nothing
+writes it. It is exactly the declared-and-inert surface this document's Findings
+section was written about. `register-run` operates on `load_project_sources`, not
+on the graph, so it needs no edge; materializing `sci:contains` is real work with
+real value and belongs to its own task, not to this one.
 
 - `RunFingerprint.step_seeds: dict[str, dict[str, int]]`, keyed by
   `workflow-step:` ref. This is the authoritative seed record.
@@ -409,16 +420,40 @@ through `WorkflowRunEntity.workflow`, then its steps through `sci:contains`.
   seeding `random_state` differently). `SeedPolicy` becomes `{kind, rationale}`.
   Move `t077`'s "`seeded` requires non-empty `seeds`" invariant up to
   `RunFingerprint`: `seed_policy.kind == "seeded"` requires non-empty
-  `step_seeds`. This is a breaking change to `t077`'s model, and safe: the
-  population is zero.
+  `step_seeds`. This is a breaking change to `t077`'s model, and safe — though
+  not for the reason first given. The run population is **not** zero: 15
+  `workflow` and 47 `workflow-run` entities live across 6 of 23 project roots.
+  What is zero is the **fingerprint** population: no run anywhere carries a
+  `fingerprint`, so no `SeedPolicy` has ever been persisted. The conclusion
+  stands; the noun was wrong.
 - `seed_policy` becomes **derived and captured** at `register-run` from the
   workflow's steps, their `seed_bindings`, and the realized values, per the table
   above. It is no longer authored.
-- A run whose workflow declares no steps **fails closed** at `register-run`: the
+- A run whose workflow has no steps **fails closed** at `register-run`: the
   policy cannot be derived, and defaulting it — to `deterministic`, to `seeded`,
   or to an "unknown but acceptable" value — would reintroduce the unverifiable
-  assertion this umbrella exists to remove. The empty entity population makes
-  this safe to impose from day one.
+  assertion this umbrella exists to remove. Zero `workflow-step` entities exist
+  in any of the 23 project roots, so this is safe to impose from day one.
+
+**A methodless step is an error on both surfaces** (ruled 2026-07-10; carried
+over from Spec 1, which left it unruled because it had no consumer until
+`seed_policy` was derived). A step with no `method:` ref contributes no
+stochasticity classification, so the derivation table above cannot read it:
+
+- `validate` reports `workflow-step.method-missing` as an **ERROR**, symmetric
+  with Spec 1's `workflow-step.method-stochasticity-missing`.
+- `register-run` fails closed on the same condition, and on a step whose method
+  is unclassified (`stochasticity is None`).
+
+The two rejected alternatives collapse into one another. Deriving `deterministic`
+from a methodless step asserts a reproducibility fact about code that was never
+named. *Skipping* methodless steps in the derivation reaches the same assertion
+by a quieter route: a workflow whose steps are all methodless yields an empty
+step set, and an empty set satisfies "every step's method is `deterministic`"
+vacuously. Same false claim, no rule fired. The cost of erroring is that a
+pure-I/O step (a file copy, a format conversion) must name a method — one entity
+per project, `stochasticity: deterministic` — which states out loud what was
+already being assumed.
 
   Adoption pressure is answered by **phasing and a legible error**, never by a
   soft fallback. The error must name the fix, not the invariant:
@@ -434,10 +469,23 @@ through `WorkflowRunEntity.workflow`, then its steps through `sci:contains`.
   would not be. Migration is: add one step, then tighten.
 
 **Done when:** `register-run` derives `seed_policy` and refuses to invent one;
-a zero-step workflow errors with the message above; two steps seeding the same
+a zero-step workflow errors with the message above; a methodless step errors at
+both `validate` and `register-run`; a step whose method is unclassified errors at
+`register-run` as it already does at `validate`; two steps seeding the same
 parameter name with different values round-trip without collision; `t077`'s
 fingerprint tests pass with `seed_policy` no longer hand-authored and
 `SeedPolicy.seeds` gone.
+
+**Corpus note.** `register-run` takes a run *id* and reads
+`entities/workflow-runs/<slug>.md`; the 37 run entities synthesized by the
+datapackage adapter are not its input and are out of scope here. Of the 11
+authored run files, 9 name their workflow correctly. Two do not, and one is this
+umbrella's own doing: `post-acute-infection` authors `workflow:
+"t035-cross-trigger-pathway-overlap"` — a bare slug, no `workflow:` prefix —
+which Spec 0 began auditing when it typed the field, so `science graph audit`
+fails in that project today. `natural-systems` leaves `workflow:` empty, which
+silently skips the `sci:executes` edge; that project has ~50 unresolved
+references already. Neither is fixed by this spec. Both are tracked separately.
 
 ### Spec 3 — Downstream transparency
 

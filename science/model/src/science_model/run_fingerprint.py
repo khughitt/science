@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 
 class ComponentProvenance(StrEnum):
@@ -70,29 +70,26 @@ class ArtifactLocality(StrEnum):
 
 
 class SeedPolicy(BaseModel):
-    """An assertion about how the code behaves — not an observation of a run."""
+    """How thoroughly this run's randomness was seed-controlled.
+
+    Derived by `register-run` from the workflow's steps, never authored. The
+    realized seed values live in `RunFingerprint.step_seeds`, not here: a
+    `dict[str, int]` keyed by parameter name cannot represent two steps that
+    both seed `random_state` with different values.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["seeded", "deterministic", "stochastic-unseeded"]
-    seeds: dict[str, int] | None = None
     rationale: str | None = None
 
     @model_validator(mode="after")
     def _validate_kind(self) -> "SeedPolicy":
-        if self.kind == "seeded":
-            if not self.seeds:
-                raise ValueError("seed_policy kind='seeded' requires a non-empty seeds mapping")
-            if self.rationale is not None:
-                raise ValueError("seed_policy kind='seeded' must not carry a rationale")
-        elif self.kind == "stochastic-unseeded":
+        if self.kind == "stochastic-unseeded":
             if not self.rationale:
                 raise ValueError("seed_policy kind='stochastic-unseeded' requires a rationale")
-            if self.seeds is not None:
-                raise ValueError("seed_policy kind='stochastic-unseeded' must not carry seeds")
-        else:  # deterministic
-            if self.seeds is not None or self.rationale is not None:
-                raise ValueError("seed_policy kind='deterministic' takes neither seeds nor rationale")
+        elif self.rationale is not None:
+            raise ValueError(f"seed_policy kind={self.kind!r} must not carry a rationale")
         return self
 
 
@@ -152,12 +149,26 @@ class RunFingerprint(BaseModel):
     output_manifest_ref: str | None = None
 
     seed_policy: SeedPolicy
+    step_seeds: dict[str, dict[str, StrictInt]] = Field(default_factory=dict)
 
     @field_validator("code_dirty")
     @classmethod
     def _dirty_token(cls, v: FingerprintComponent) -> FingerprintComponent:
         if v.value is not None and v.value not in ("true", "false"):
             raise ValueError(f'code_dirty.value must be "true" or "false", got {v.value!r}')
+        return v
+
+    @field_validator("step_seeds")
+    @classmethod
+    def _step_refs(cls, v: dict[str, dict[str, StrictInt]]) -> dict[str, dict[str, StrictInt]]:
+        for ref, seeds in v.items():
+            if not ref.startswith("workflow-step:"):
+                raise ValueError(f"step_seeds key must be a workflow-step: reference, got {ref!r}")
+            if not seeds:
+                raise ValueError(
+                    f"step_seeds[{ref!r}] is empty; a step that contributes no seeds must not "
+                    "appear in step_seeds"
+                )
         return v
 
     @model_validator(mode="after")
@@ -167,6 +178,15 @@ class RunFingerprint(BaseModel):
             raise ValueError("executor='commons' requires capture_origin")
         if not is_commons and self.capture_origin is not None:
             raise ValueError(f"capture_origin is only valid for executor='commons', not {self.executor.value!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _seed_policy_matches_step_seeds(self) -> "RunFingerprint":
+        kind = self.seed_policy.kind
+        if kind == "seeded" and not self.step_seeds:
+            raise ValueError("seed_policy kind='seeded' requires non-empty step_seeds")
+        if kind == "deterministic" and self.step_seeds:
+            raise ValueError("seed_policy kind='deterministic' requires empty step_seeds")
         return self
 
 

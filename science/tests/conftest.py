@@ -157,16 +157,18 @@ def build_entity_graph(project_root: Path, entities: list[dict], relations: list
 
 
 #: Splice this into a hand-authored `workflow-run` frontmatter block so
-#: `register-run`'s fail-loud fingerprint capture (Task 6b) has an authored
-#: executor/localities/seed_policy to work with. Pairs with `seed_git_repo`,
-#: which supplies the `config.yaml` this declares as `config_snapshot`.
+#: `register-run`'s fail-loud fingerprint capture has authored
+#: executor/localities to work with. `seed_policy`/`step_seeds` are NOT declared
+#: here — they are derived from the workflow's steps at register-run. Pairs with
+#: `seed_git_repo`, which supplies the `config.yaml` this declares as
+#: `config_snapshot`; the project must also carry a workflow/workflow-step/method
+#: trio for the derivation to resolve.
 REGISTER_RUN_FINGERPRINT_FRONTMATTER = (
     "config_snapshot: config.yaml\n"
     "fingerprint:\n"
     "  executor: local\n"
     "  input_artifact_locality: science-managed\n"
     "  output_artifact_locality: science-managed\n"
-    "  seed_policy: {kind: deterministic}\n"
 )
 
 

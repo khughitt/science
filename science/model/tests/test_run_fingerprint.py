@@ -53,13 +53,6 @@ def test_extra_fields_forbidden():
         FingerprintComponent(value="a", provenance=ComponentProvenance.CAPTURED, bogus=1)
 
 
-def test_seed_policy_seeded_requires_seeds():
-    ok = SeedPolicy(kind="seeded", seeds={"numpy": 7})
-    assert ok.seeds == {"numpy": 7}
-    with pytest.raises(ValidationError):
-        SeedPolicy(kind="seeded")
-
-
 def test_seed_policy_stochastic_unseeded_requires_rationale():
     ok = SeedPolicy(kind="stochastic-unseeded", rationale="vendor binary exposes no seed")
     assert ok.rationale
@@ -67,11 +60,11 @@ def test_seed_policy_stochastic_unseeded_requires_rationale():
         SeedPolicy(kind="stochastic-unseeded")
 
 
-def test_seed_policy_deterministic_takes_neither():
+def test_seed_policy_deterministic_takes_no_rationale():
     ok = SeedPolicy(kind="deterministic")
-    assert ok.seeds is None and ok.rationale is None
+    assert ok.rationale is None
     with pytest.raises(ValidationError):
-        SeedPolicy(kind="deterministic", seeds={"numpy": 1})
+        SeedPolicy(kind="deterministic", rationale="x")
 
 
 def test_capture_origin_requires_run_ref_prefix():
@@ -108,7 +101,7 @@ def _fp(**over) -> RunFingerprint:
         parameters_digest=_cap("sha256:params"),
         input_manifest_digest=_cap("sha256:in"),
         output_manifest_digest=_cap("sha256:out"),
-        seed_policy=SeedPolicy(kind="seeded", seeds={"numpy": 7}),
+        seed_policy=SeedPolicy(kind="deterministic"),
     )
     base.update(over)
     return RunFingerprint(**base)
@@ -209,3 +202,76 @@ def test_evidence_line_run_refs_default_empty():
 
     e = EvidenceLineEntity(**_minimal_evidence_line("evidence-line:e3"))
     assert e.run_refs == []
+
+
+def test_seeds_field_is_gone() -> None:
+    assert "seeds" not in SeedPolicy.model_fields
+    with pytest.raises(ValidationError):
+        SeedPolicy(kind="seeded", seeds={"random_state": 42})  # type: ignore[call-arg]
+
+
+def test_seeded_requires_non_empty_step_seeds() -> None:
+    with pytest.raises(ValidationError, match="step_seeds"):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={})
+
+
+def test_deterministic_requires_empty_step_seeds() -> None:
+    with pytest.raises(ValidationError, match="step_seeds"):
+        _fp(
+            seed_policy=SeedPolicy(kind="deterministic"),
+            step_seeds={"workflow-step:cluster": {"random_state": 1}},
+        )
+
+
+def test_stochastic_unseeded_may_carry_step_seeds() -> None:
+    # One step seeded, another nondeterministic: the seeds are real and must survive.
+    fp = _fp(
+        seed_policy=SeedPolicy(kind="stochastic-unseeded", rationale="workflow-step:embed is nondeterministic"),
+        step_seeds={"workflow-step:cluster": {"random_state": 1}},
+    )
+    assert fp.step_seeds["workflow-step:cluster"]["random_state"] == 1
+
+
+def test_two_steps_seed_the_same_param_with_different_values() -> None:
+    # The exact loss `SeedPolicy.seeds: dict[str, int]` could not represent.
+    fp = _fp(
+        seed_policy=SeedPolicy(kind="seeded"),
+        step_seeds={
+            "workflow-step:cluster": {"random_state": 1},
+            "workflow-step:embed": {"random_state": 2},
+        },
+    )
+    assert fp.step_seeds["workflow-step:cluster"]["random_state"] == 1
+    assert fp.step_seeds["workflow-step:embed"]["random_state"] == 2
+
+
+def test_step_seeds_key_must_be_a_workflow_step_ref() -> None:
+    with pytest.raises(ValidationError, match="workflow-step:"):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={"cluster": {"s": 1}})
+
+
+def test_step_seeds_defaults_to_empty() -> None:
+    assert _fp(seed_policy=SeedPolicy(kind="deterministic")).step_seeds == {}
+
+
+def test_step_seeds_rejects_empty_inner_mapping() -> None:
+    # A step key with no seeds inside it is truthy at the outer-dict level, so
+    # `_seed_policy_matches_step_seeds`'s `not self.step_seeds` check misses it.
+    # A step that contributes no seeds must not appear in step_seeds at all.
+    with pytest.raises(ValidationError, match="step_seeds"):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={"workflow-step:a": {}})
+
+
+def test_step_seeds_rejects_bool_value_because_bool_is_an_int_subclass() -> None:
+    # bool is a subclass of int, so pydantic's lax `int` accepts True and would
+    # silently record it as 1. StrictInt must reject it.
+    with pytest.raises(ValidationError):
+        _fp(seed_policy=SeedPolicy(kind="seeded"), step_seeds={"workflow-step:a": {"s": True}})
+
+
+def test_step_seeds_accepts_normal_int_value() -> None:
+    fp = _fp(
+        seed_policy=SeedPolicy(kind="seeded"),
+        step_seeds={"workflow-step:a": {"random_state": 1}},
+    )
+    assert fp.step_seeds["workflow-step:a"]["random_state"] == 1
