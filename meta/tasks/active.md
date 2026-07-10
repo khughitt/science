@@ -734,7 +734,7 @@ Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evide
 
 ## [t089] Downstream stochasticity transparency for derived datasets (umbrella Spec 3)
 - priority: P3
-- status: blocked
+- status: ready
 - parent: task:t075
 - aspects: [software-development]
 - related: [task:t075, question:0016-reproducibility-validation]
@@ -780,7 +780,7 @@ CORE_PROFILE declares RelationKind 'contains' (sci:contains) over workflow -> wo
 
 ## [t093] RunFingerprint cannot represent 'declared, not yet captured'
 - priority: P2
-- status: proposed
+- status: done
 - aspects: [software-development]
 - related: [task:t077]
 - group: reproducibility-validation
@@ -791,3 +791,4 @@ register-run REQUIRES fingerprint.executor / input_artifact_locality / output_ar
 ### Notes
 
 - 2026-07-10: Now BLOCKS t089 (umbrella Spec 3) -- Spec 3 traverses fingerprint.step_seeds and no run anywhere carries a fingerprint. Preferred shape: give WorkflowRunEntity a separate DECLARATION model (executor, input_artifact_locality, output_artifact_locality) and leave 'fingerprint: RunFingerprint | None' purely CAPTURED, written only by register-run. That is the same declaration/observation split the method-stochasticity umbrella enforces for seed_policy, applied one level up. Hoisting the three fields to bare run-level fields also works but scatters them. Once fixed, templates/workflow-run.md must drop the ORDERING CONSTRAINT warning added in t088.
+- 2026-07-10: 2026-07-10: FIXED. Merged as fix/t093-run-declaration (733ab5b4). Took option (b): new RunDeclaration model on WorkflowRunEntity.execution (executor, both localities, capture_origin); fingerprint stays RunFingerprint | None, written only by register-run. Second bug found and fixed as a consequence: capture_origin was required-iff-commons on RunFingerprint but nothing could supply it, so a commons run could never be registered -- proved by execution, now covered end to end. Two new guards close the fail-opens the split introduces: register-run refuses an unparseable authored fingerprint: (its own output round-trips the model, so anything that fails to parse was hand-written) and validate reports run.fingerprint-declaration-drift when execution: is edited after registering. Corpus needed no migration: 11 authored runs, 0 fingerprints. templates/workflow-run.md and its packaged mirror rewritten; ORDERING CONSTRAINT warning dropped as planned.

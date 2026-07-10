@@ -7,19 +7,27 @@ workflow: "workflow:<slug>"          # materializes the sci:executes edge
 manifest_path: "results/<workflow>/<slug>/datapackage.yaml"  # read by `science qa-audit`
 config_snapshot: "results/<workflow>/<slug>/config.yaml"  # required: parameters_digest is its sha256
 supersedes: []                       # ["workflow-run:<prior-slug>"] when re-run with changed params
-# Declarations, not observations — `science dataset register-run` captures the rest.
-# ORDERING CONSTRAINT: this block is a stub until `register-run` completes it, and
-# a stub does not satisfy the RunFingerprint schema. `science validate` and
-# `science graph build` will REJECT this run until you have registered it. Author
-# the run, run `science dataset register-run workflow-run:<slug>`, then validate.
-# (Tracked as task:t093 — the model cannot represent "declared, not yet captured".)
-fingerprint:
-  executor: "local"                          # local | commons | external
+# What you assert about how this run executed. Authored, and complete on its own:
+# a run validates before it has ever been registered.
+execution:
+  executor: "local"                            # local | commons | external
   input_artifact_locality: "science-managed"   # science-managed | external
   output_artifact_locality: "science-managed"
-# `seed_policy` and `step_seeds` are DERIVED at register-run from the workflow's
-# steps, their `seed_bindings`, and the realized values. Hand-authoring either is
-# an error. A workflow with no `workflow-step` cannot register a run at all.
+  # Required when — and only when — executor is `commons`: nothing local can
+  # observe where an imported fingerprint came from, so you declare it.
+  # capture_origin:
+  #   origin_project: "project:<slug>"
+  #   origin_run_ref: "workflow-run:<slug>"
+  #   captured_at: "<YYYY-MM-DD>T00:00:00Z"
+  #   captured_by: "science"
+  #   capture_policy: "science-run-fingerprint/v1"
+#
+# `fingerprint:` is NOT authored. `science dataset register-run workflow-run:<slug>`
+# captures it — code SHA, digests, and the `seed_policy` / `step_seeds` derived from
+# the workflow's steps and their `seed_bindings`. Do not hand-write it. Editing
+# `execution:` after registering makes the two disagree; `science validate` catches
+# that and tells you to re-register. A workflow with no `workflow-step` cannot
+# register a run at all.
 # Symmetric edges (populated by `science dataset register-run`).
 # `produces:` is the inverse of dataset.derivation.workflow_run (state invariant #9).
 # `inputs:` enumerates upstream datasets the run consumed; symmetric with each

@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from science_model.run_fingerprint import (
     FINGERPRINT_POLICY_V1, ArtifactLocality, CaptureOrigin, ComponentProvenance,
-    ExecutorKind, FingerprintComponent, RunFingerprint, SeedPolicy,
+    ExecutorKind, FingerprintComponent, RunDeclaration, RunFingerprint, SeedPolicy,
 )
 
 WHEN = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
@@ -275,3 +275,77 @@ def test_step_seeds_accepts_normal_int_value() -> None:
         step_seeds={"workflow-step:a": {"random_state": 1}},
     )
     assert fp.step_seeds["workflow-step:a"]["random_state"] == 1
+
+
+# --- t093: the declaration/observation split -------------------------------
+
+
+def _commons_origin() -> CaptureOrigin:
+    return CaptureOrigin(
+        origin_project="upstream", origin_run_ref="workflow-run:up", captured_at=WHEN,
+        captured_by="science", capture_policy=FINGERPRINT_POLICY_V1,
+    )
+
+
+def test_declaration_is_complete_the_moment_it_is_authored() -> None:
+    """The whole point of t093: a declaration validates with nothing captured."""
+    decl = RunDeclaration(
+        executor=ExecutorKind.LOCAL,
+        input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+        output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+    )
+    assert decl.executor is ExecutorKind.LOCAL
+    assert decl.capture_origin is None
+
+
+def test_declaration_forbids_captured_components() -> None:
+    with pytest.raises(ValidationError):
+        RunDeclaration(
+            executor=ExecutorKind.LOCAL,
+            input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            code_sha="abc",  # type: ignore[call-arg]
+        )
+
+
+def test_declaration_requires_capture_origin_iff_commons() -> None:
+    with pytest.raises(ValidationError, match="capture_origin"):
+        RunDeclaration(
+            executor=ExecutorKind.COMMONS,
+            input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+        )
+    with pytest.raises(ValidationError, match="capture_origin"):
+        RunDeclaration(
+            executor=ExecutorKind.LOCAL,
+            input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+            capture_origin=_commons_origin(),
+        )
+    ok = RunDeclaration(
+        executor=ExecutorKind.COMMONS,
+        input_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+        output_artifact_locality=ArtifactLocality.SCIENCE_MANAGED,
+        capture_origin=_commons_origin(),
+    )
+    assert ok.capture_origin is not None
+
+
+def test_run_entity_declaration_validates_with_no_fingerprint() -> None:
+    """The catch-22 t093 names: author a run, `science validate` must accept it."""
+    from science_model.entities import WorkflowRunEntity
+
+    run = WorkflowRunEntity(
+        id="workflow-run:demo", kind="workflow-run", title="Demo", status="complete",
+        project="p", ontology_terms=[], related=[], source_refs=[],
+        content_preview="", file_path="entities/workflow-runs/demo.md",
+        workflow="workflow:w",
+        execution={
+            "executor": "local",
+            "input_artifact_locality": "science-managed",
+            "output_artifact_locality": "science-managed",
+        },
+    )
+    assert run.fingerprint is None
+    assert run.execution is not None
+    assert run.execution.executor is ExecutorKind.LOCAL

@@ -118,8 +118,50 @@ class CaptureOrigin(BaseModel):
         return v
 
 
+def _check_capture_origin_iff_commons(executor: ExecutorKind, capture_origin: CaptureOrigin | None) -> None:
+    """`capture_origin` records an import; only a commons run has one to record."""
+    is_commons = executor is ExecutorKind.COMMONS
+    if is_commons and capture_origin is None:
+        raise ValueError("executor='commons' requires capture_origin")
+    if not is_commons and capture_origin is not None:
+        raise ValueError(f"capture_origin is only valid for executor='commons', not {executor.value!r}")
+
+
+class RunDeclaration(BaseModel):
+    """What a human asserts about a run, authored before anything is captured.
+
+    The declaration/observation split, applied to runs. Everything here is
+    written by hand onto the `workflow-run` entity; everything in
+    `RunFingerprint` is observed by `science dataset register-run`. A
+    declaration is *complete the moment it is authored*, which is what lets a
+    run pass `science validate` before it has ever been registered — the
+    catch-22 that `task:t093` removed.
+
+    `capture_origin` lives here, not on the fingerprint: for a `commons` run
+    nothing local can observe where the imported fingerprint came from, so the
+    consuming project declares it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    executor: ExecutorKind
+    input_artifact_locality: ArtifactLocality
+    output_artifact_locality: ArtifactLocality
+    capture_origin: CaptureOrigin | None = None
+
+    @model_validator(mode="after")
+    def _capture_origin_iff_commons(self) -> "RunDeclaration":
+        _check_capture_origin_iff_commons(self.executor, self.capture_origin)
+        return self
+
+
 class RunFingerprint(BaseModel):
     """A captured reproducibility fingerprint for one workflow run.
+
+    Written only by `science dataset register-run`, never authored: every field
+    is an observation. The declared inputs it was captured under are copied in
+    from the run's `RunDeclaration` so that a fingerprint is a self-contained
+    `science-run-fingerprint/v1` record — `validate` re-checks the two agree.
 
     Which components must be `captured` (vs. `attested`/`unknown`) is decided
     elsewhere, by a frozen obligation table keyed on the declared `executor`
@@ -173,11 +215,7 @@ class RunFingerprint(BaseModel):
 
     @model_validator(mode="after")
     def _capture_origin_iff_commons(self) -> "RunFingerprint":
-        is_commons = self.executor is ExecutorKind.COMMONS
-        if is_commons and self.capture_origin is None:
-            raise ValueError("executor='commons' requires capture_origin")
-        if not is_commons and self.capture_origin is not None:
-            raise ValueError(f"capture_origin is only valid for executor='commons', not {self.executor.value!r}")
+        _check_capture_origin_iff_commons(self.executor, self.capture_origin)
         return self
 
     @model_validator(mode="after")

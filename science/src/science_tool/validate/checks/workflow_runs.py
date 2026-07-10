@@ -12,9 +12,10 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from pydantic import ValidationError
-from science_model.run_fingerprint import ExecutorKind, RunFingerprint
+from science_model.run_fingerprint import ExecutorKind, RunDeclaration, RunFingerprint
 
 from science_tool.entities import resolve_path_policy
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.run_fingerprint_policy import RULE_AUTHORED_CAPTURABLE, evaluate_fingerprint
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -22,13 +23,29 @@ from science_tool.validate.result import Result, Severity
 
 RULE_ORIGIN_UNVERIFIED = "run.fingerprint-origin-unverified"
 RULE_MALFORMED = "run.fingerprint-malformed"
+RULE_EXECUTION_MALFORMED = "run.execution-malformed"
+RULE_DECLARATION_DRIFT = "run.fingerprint-declaration-drift"
+
+#: The fields a run declares and `register-run` copies into the fingerprint it
+#: captures. Held in both places so the fingerprint stands alone — which means
+#: they can drift, and drift is what this module's `_check_drift` refuses.
+_DECLARED_FIELDS: tuple[str, ...] = (
+    "executor",
+    "input_artifact_locality",
+    "output_artifact_locality",
+    "capture_origin",
+)
 
 
 def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
+    """Every workflow-run under the kind's root, at any depth.
+
+    Recursive, because entity discovery is: `load_project_sources` keys on the
+    frontmatter `kind`, not the directory, so a run in a subdirectory is a real,
+    loaded entity. Globbing one level deep would exempt it from every rule below.
+    """
     root = ctx.project_root / resolve_path_policy("workflow-run").root
-    if not root.is_dir():
-        return []
-    return [(p, ctx.frontmatter(p)) for p in sorted(root.glob("*.md"))]
+    return [(p, ctx.frontmatter(p)) for p in iter_entity_markdown(root)]
 
 
 def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Result | None:
@@ -67,14 +84,60 @@ def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Resu
     return None
 
 
+def _check_drift(path: Path, declaration: RunDeclaration | None, fp: RunFingerprint) -> Iterator[Result]:
+    """The captured fingerprint must still agree with what the run declares.
+
+    `register-run` copies the declaration into the fingerprint. Editing
+    `execution:` afterwards leaves a fingerprint asserting it was captured under
+    conditions that no longer hold — silently, since every digest still verifies.
+    """
+    if declaration is None:
+        yield Result(
+            severity=Severity.ERROR, path=path, line=None,
+            message=(
+                f"{path.name}: carries a captured fingerprint but declares no `execution:` "
+                "block; the fingerprint records conditions nothing asserts"
+            ),
+            rule=RULE_DECLARATION_DRIFT, task=None,
+        )
+        return
+    for field in _DECLARED_FIELDS:
+        declared, captured = getattr(declaration, field), getattr(fp, field)
+        if declared != captured:
+            yield Result(
+                severity=Severity.ERROR, path=path, line=None,
+                message=(
+                    f"{path.name}: execution.{field} is {declared!r} but the captured "
+                    f"fingerprint records {captured!r}; re-register the run"
+                ),
+                rule=RULE_DECLARATION_DRIFT, task=None,
+            )
+
+
 @Check(section="workflow runs", order=10)
 def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
-    """A workflow-run fingerprint must satisfy science-run-fingerprint/v1.
+    """A workflow-run's declaration and its captured fingerprint must both hold.
 
-    Capturable components may not be attested (ERROR). Missing required components
-    warn until the P4 flip. A run with no fingerprint block emits nothing.
+    `execution:` is authored and stands alone — a run that declares one and has
+    never been registered validates clean (t093). `fingerprint:` is captured:
+    capturable components may not be attested (ERROR), missing required components
+    warn until the P4 flip, and it must not have drifted from the declaration.
     """
     for path, fm in _runs(ctx):
+        raw_execution = fm.get("execution")
+        declaration: RunDeclaration | None = None
+        if raw_execution:
+            try:
+                declaration = RunDeclaration.model_validate(raw_execution)
+            except ValidationError as exc:
+                yield Result(
+                    severity=Severity.ERROR, path=path, line=None,
+                    message=f"{path.name}: malformed execution declaration: {exc.errors()[0]['msg']}",
+                    rule=RULE_EXECUTION_MALFORMED, task=None,
+                )
+                # An unparseable declaration cannot be compared against anything.
+                continue
+
         raw = fm.get("fingerprint")
         if not raw:
             continue
@@ -87,6 +150,8 @@ def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
                 rule=RULE_MALFORMED, task=None,
             )
             continue
+
+        yield from _check_drift(path, declaration, fingerprint)
 
         for finding in evaluate_fingerprint(fingerprint):
             severity = (
