@@ -732,22 +732,6 @@ Phase-2 follow-up. Audit whether each optional schema field is actually consumed
 
 Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evidence state and treat the continuous value as a calibrated decision/attention projection. Locate every ordinal-to-continuous conversion; define a single documented conversion point where the projection carries its own config identity (as the log-odds scalar already does) so consumers cannot mistake it for the ordinal truth. Tie projection calibration to benchmark outcomes (question:0017). Relates meta D-003 (continuous operational beliefs) and question:0009.
 
-## [t088] Runs observe seeds; derive seed_policy at register-run (umbrella Spec 2)
-- priority: P2
-- status: blocked
-- parent: task:t075
-- aspects: [software-development]
-- related: [task:t075, task:t077, question:0016-reproducibility-validation]
-- blocked-by: [task:t079]
-- group: reproducibility-validation
-- created: 2026-07-09
-
-Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. Add RunFingerprint.step_seeds: dict[str, dict[str, int]] keyed by workflow-step ref — the authoritative seed record. Remove SeedPolicy.seeds (dict[str,int] cannot hold two steps seeding random_state differently); SeedPolicy becomes {kind, rationale} and t077's 'seeded requires non-empty seeds' invariant moves up to RunFingerprint as 'seeded requires non-empty step_seeds'. Breaking change to t077's model, safe because the population is zero. seed_policy.kind becomes derived and captured at register-run from the workflow's steps, their seed_bindings, and the realized values — no longer hand-authored. A run whose workflow declares no steps fails closed: no defaulted policy. Error must name the fix, not the invariant. Minimum adoption unit is one step; Spec 1's seed-binding-missing stays warn-only so a bare step still registers and derives stochastic-unseeded. No new SeedPolicy.kind enum values.
-
-Carried over from Spec 1 (t079, merged 8268d86a), decide here: a workflow-step with NO method: ref emits no sci:applies edge and triggers no Spec 1 rule — neither error nor warning. So at graph-traversal time a methodless step is indistinguishable from a step whose method simply produced no edge, while the seed_policy derivation table implicitly assumes every step names a method. Spec 2 must decide whether a methodless step is deterministic, ignored, or a register-run hard error. Defaulting it silently would reintroduce exactly the unverifiable assertion this umbrella exists to remove — the same argument that makes a zero-step workflow fail closed. Spec 1 deliberately left this unruled: it has no consumer until seed_policy is derived.
-
-Also from Spec 1: MethodEntity.stochasticity is optional on the model (None = unclassified) and enforced at the point of use by workflow-step.method-stochasticity-missing (ERROR). register-run must fail closed on the same condition rather than assume a classification; the error should name the fix, as the validate check's does.
-
 ## [t089] Downstream stochasticity transparency for derived datasets (umbrella Spec 3)
 - priority: P3
 - status: blocked
