@@ -3,7 +3,7 @@ id: "workflow-run:<slug>"
 kind: "workflow-run"
 title: "<Run Description>"
 status: "complete"
-workflow: "<workflow-slug>"
+workflow: "workflow:<slug>"          # materializes the sci:executes edge
 # Symmetric edges (populated by `science dataset register-run`).
 # `produces:` is the inverse of dataset.derivation.workflow_run (state invariant #9).
 # `inputs:` enumerates upstream datasets the run consumed; symmetric with each
