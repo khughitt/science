@@ -1,7 +1,7 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Science Project Validation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Checks: 56 included, 0 skipped (profile: full)
+Checks: 58 included, 0 skipped (profile: full)
 ERROR validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md [validate.sidecar.legacy_removed]
 WARN 2 broken refs: namespace [references]
 WARN 2 [UNVERIFIED] marker(s) found in documents; examples: doc/overview.md:8, entities/reports/0001-overview.md:16 [unresolved_markers]
