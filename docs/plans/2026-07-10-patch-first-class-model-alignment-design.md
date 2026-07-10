@@ -65,14 +65,21 @@ into its conceptual superiors: `patch_membership` (`:18`), `run_resolution`
 modules do not import `store` back — but `store/` cannot host a base type while it
 depends on derivation modules.
 
+Note the distinction that Phase 1 turns on: `store/` *also* imports
+`graph/belief.py` and `graph/belief_weights.py` (`store/summary.py:12-13`,
+`store/validation.py:11`). Those two are **not** upward edges — both import nothing
+from `graph/` at all, so they are leaves that legitimately sit below `store/`.
+Only the three derivation imports are faults.
+
 ## A fourth fault, found while writing this doc
 
 The kernel-closure guard `tests/graph/test_durable_write_boundary.py` matches call
 sites **by function name** (`save_graph_dataset` / `_save_dataset`), and its own
 docstring is candid that an aliased or indirect call evades it.
 
-`model/patch.py:165` calls `ds.serialize(destination=out_path, format="trig")`.
-That is a durable TriG write the guard cannot see.
+`model/patch.py:165` and `model/federation.py:114` both call
+`ds.serialize(destination=out_path, format="trig")`. Those are durable TriG writes
+the guard cannot see.
 
 It is arguably legitimate — it writes a standalone patch file, not `graph.trig`, so
 it does not violate the source-of-truth boundary the kernel protects. But nothing
@@ -107,36 +114,72 @@ own docstring claims it already is.
 Prerequisite for everything else: nothing can be hosted below `store/` while
 `store/` depends upward.
 
-**Change.** `store/validation.py`'s three upward imports become injected
-dependencies. The validation functions take the membership/run-resolution/
+**Change.** `store/validation.py`'s three upward imports (`patch_membership:18`,
+`run_resolution:19`, lazily `dataset_independence:250`) become injected
+dependencies. The validation functions take the membership / run-resolution /
 independence facts they need as arguments rather than importing the modules that
 compute them. Callers (in `materialize`, which already sits above all four)
 supply them.
 
+`store/summary.py`'s and `store/validation.py`'s imports of `graph/belief.py` and
+`graph/belief_weights.py` are **left alone**. Both targets import nothing from
+`graph/`, so they are already below `store/` in the layering.
+
 **Guard.** Extend `tests/test_store_package_structure.py` with an import-direction
-assertion: no module under `graph/store/` may import from `graph/` outside
-`graph/io.py`, `graph/errors.py`, `graph/export_types.py`.
+assertion, expressed as two coupled checks so the allowlist cannot silently rot:
+
+1. No module under `graph/store/` may import from `graph/` outside the leaf set
+   `{io, errors, export_types, belief, belief_weights}`.
+2. Every module in that leaf set must itself import nothing from `graph/`.
+
+Check (2) is what makes (1) safe. Without it, someone adds a `graph/` import to
+`belief.py` and `store/` silently regains an upward edge through an allowlisted
+door. Run check (2) first so its failure message is the one the author sees.
 
 ---
 
-## Phase 2 — Break the `materialize ⇄ freshness` cycle
+## Phase 2 — Break *both* cycles through `freshness`
 
-**Change.** `freshness.py:420` needs `materialize._build_dataset_from_sources`,
-i.e. "build an in-memory Dataset from `ProjectSources`." That function is *not*
-materialization — it is dataset construction, and `materialize` is merely where it
-grew. Extract it to `graph/dataset_build.py`. Both `materialize` and `freshness`
-then import downward from it, and the function-local import at `freshness.py:420`
-becomes a module-level one.
+`freshness.py` defers four `graph/` imports into function bodies (`:420-421`,
+`:434-435`). They are not one problem but three, and only one is a cycle at all.
+An earlier draft of this doc proposed extracting `_build_dataset_from_sources` and
+declared the phase done; that would have left the guard red. All four must be
+resolved:
 
+| Deferred import | Why deferred | Fix |
+|---|---|---|
+| `materialize._build_dataset_from_sources` (`:420`) | real cycle — `materialize.py:56` imports `freshness` | extract to `graph/dataset_build.py` |
+| `source_snapshots.compute_source_snapshots` (`:434`) | real cycle — `source_snapshots.py:21` imports `_emit_bears_on_edge` **from `freshness`** | extract `_emit_bears_on_edge` to `graph/bears_on.py` |
+| `migrate.audit_project_sources` (`:421`) | **not a cycle** — `migrate` imports no `freshness`, no `materialize` | promote to a module-level import |
+| `store.DEFAULT_GRAPH_PATH` (`:435`) | **not a cycle** — `store` does not import `freshness` | promote to a module-level import |
+
+**Change 1 — `graph/dataset_build.py`.** `_build_dataset_from_sources` is not
+materialization; it is dataset construction, and `materialize` is merely where it
+grew. Both `materialize` and `freshness` then import downward from it.
 `build_dataset_from_sources` (`materialize.py:291`, the public name) stays
-re-exported from `materialize` for compatibility with `patch/cli.py:9` and
+re-exported from `materialize` for `patch/cli.py:9` and
 `validate/checks/graph.py:154`.
+
+**Change 2 — `graph/bears_on.py`.** This is the cycle the earlier draft missed.
+`_emit_bears_on_edge` (`freshness.py:48`) is a pure triple emitter with eleven
+call sites, ten of them inside `freshness` and one in `source_snapshots.py:134`.
+Because `source_snapshots` imports it at *module* level, `freshness` cannot import
+`source_snapshots` at module level — hence the deferral at `:434`, which the
+existing comment at `freshness.py:432-433` documents precisely. Moving
+`_emit_bears_on_edge` down to its own leaf module breaks the cycle at its actual
+edge. It loses its underscore on the way (`emit_bears_on_edge`) since it acquires
+a cross-module caller.
+
+**Changes 3 and 4.** Promote the `migrate` and `store` imports to module level.
+Verified cycle-free: `migrate.py` imports only `identity_table`,
+`reference_resolution`, `sources`, `store` — none of which reach `freshness`.
 
 **Guard.** `tests/test_graph_import_layering.py`: an AST check that no module
 under `graph/` contains a function-local `import` of another `graph/` module.
-Function-local imports of *third-party* modules stay allowed. This makes the next
-cycle visible at the moment it is introduced, which is the only time it is cheap
-to fix.
+Function-local imports of third-party modules stay allowed. The guard must be
+written *after* all four changes land, or it fails on the three it does not cover
+— which is exactly the trap the earlier draft set. A phase whose guard is broader
+than its migration lands red.
 
 ---
 
@@ -172,9 +215,14 @@ different modules, both of which now take a `Patch` and return their own result
 type. The type says "a patch is identified by these four facts and addressed at
 this IRI," which is precisely what was previously implicit in two places.
 
-Also moved: `DEPENDENCE_ROLES`, `VALIDATION_ROLE`, `OVERLAP_RANK`, `ROLE_RANK` from
-`graph/dataset_independence.py:19-24` → `science_model/independence.py`. Same
-argument, different vocabulary. `DIRECT_RELATION_PREDICATES`
+Also moved: the **entire** role/rank block from `graph/dataset_independence.py:19-27`
+→ `science_model/independence.py` — `DEPENDENCE_ROLES`, `VALIDATION_ROLE`,
+`CITED_ROLE`, `OVERLAP_RANK`, `ROLE_RANK`. Same argument, different vocabulary.
+Move the block wholesale rather than enumerating members: `CITED_ROLE` was omitted
+from an earlier draft of this list purely by oversight, and it is the same kind of
+constant (a semantic role name, also a key in `ROLE_RANK`). Leaving one role
+behind would recreate the exact two-definition-sites problem this phase exists to
+fix. `DIRECT_RELATION_PREDICATES`
 (`patch_membership.py:24`) stays in `graph/` — it is a tuple of `rdflib.URIRef`,
 i.e. emission mechanics, and `science_model` must not depend on rdflib.
 
@@ -209,18 +257,47 @@ anywhere outside `science_model/patch.py`.
 
 ## Phase 4 — Re-scope the durable-writer guard to the file, not the function
 
-**Change.** `tests/graph/test_durable_write_boundary.py` currently asks *which
-function is called*. Add a complementary check that asks *which file is written*:
-fail if any module outside the allowlist contains a call to `Dataset.serialize`,
-`Graph.serialize`, or `.write_text` whose destination expression mentions
-`graph.trig` or `knowledge/`.
+**Do not** implement this as a text match on the destination expression. A guard
+that greps the call site for `graph.trig` is defeated by the codebase's own idiom:
+`materialize.py:579` and `freshness.py:437` both write
+`project_root / DEFAULT_GRAPH_PATH`, where the constant lives in
+`graph/store/constants.py:24`. A new `ds.serialize(destination=graph_path)` with
+`graph_path = root / DEFAULT_GRAPH_PATH` mentions neither `graph.trig` nor
+`knowledge/` at the call site, yet is exactly the forbidden write. Matching text
+shape reproduces the blind spot this phase exists to close.
 
-`model/patch.py:165` passes — it serializes to a caller-supplied `out_path`. The
-point is to make that fact *checked* rather than incidental.
+A conservative ban is cheap here because the surface is tiny. There are exactly
+**four** `.serialize(` call sites in `src/`, none under `graph/`:
 
-**Also.** Document in `model/patch.py`'s docstring that `emit_patch_trig` writes a
-standalone patch artifact and must never target `knowledge/graph.trig`, which
-remains the compiler's sole output. Today nothing states this.
+- `distill/__init__.py:39,96` — Turtle, unrelated artifacts
+- `model/patch.py:165` — standalone patch TriG
+- `model/federation.py:114` — standalone federation TriG (also durable TriG, and
+  also invisible to the current name-based guard)
+
+**Change.** Two coupled rules, both structural rather than textual:
+
+1. **Rule A (capability).** A `.serialize(` call may appear only in the allowlist
+   `{distill/__init__.py, model/patch.py, model/federation.py}`. Any new
+   serialization site anywhere else fails, whatever its destination.
+2. **Rule B (reachability).** No allowlisted module may import or reference
+   `DEFAULT_GRAPH_PATH`, transitively or otherwise.
+
+Rule B is the substitute for dataflow analysis, and it is a genuine proof rather
+than a heuristic: a module that never names the constant, and never receives a
+path from a module that does, cannot address `knowledge/graph.trig` except by
+hard-coding the literal — which Rule A's allowlist review would catch, and which
+a trivial companion assertion (`"graph.trig" not in module_source`) rules out
+outright. Neither rule inspects the destination *expression*, so neither is
+defeated by aliasing a path into a variable.
+
+Together with the existing name-based check on `save_graph_dataset`, the boundary
+becomes: *`materialize` is the only module that can name the file, and it is the
+only module that can call the primitive that writes it.*
+
+**Also.** Document in `model/patch.py` and `model/federation.py` that
+`emit_patch_trig` / the federation emitter write standalone artifacts to a
+caller-supplied `out_path`, and must never target `knowledge/graph.trig`, which
+remains the compiler's sole output. Today nothing states this, in either module.
 
 ---
 

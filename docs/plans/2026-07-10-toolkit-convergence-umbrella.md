@@ -38,8 +38,19 @@ The kernel-closure work already established this repo's answer. It did not merel
 delete competing `graph.trig` writers; it added
 `tests/graph/test_durable_write_boundary.py`, an AST guard that fails when a new
 writer appears, and `tests/test_store_package_structure.py`, a structural guard.
-Both design docs below adopt that three-beat shape. **A phase without a guard is
-not done.**
+Both design docs below adopt that three-beat shape. **A phase that migrates call
+sites without landing its guard is not done.** The one exception is a pure
+deletion, which has no call site left to regrow — the convergence track's Phase 0
+ships an abandonment ledger instead, and is numbered 0 to mark it as outside the
+invariant.
+
+Two rules learned the hard way, both from review of this doc's first draft:
+
+- **Write the guard against the migrated tree, not against the design doc.** A
+  guard drafted from prose reliably out-scopes its migration and lands red.
+- **Guards must key on structure, not on text shape.** A guard that greps for
+  `graph.trig` misses `root / DEFAULT_GRAPH_PATH`; a guard that greps for
+  `json.dumps` misses `_json.dumps`. Both bypasses already exist in the tree.
 
 ## The two tracks
 
@@ -54,11 +65,12 @@ reviewers.
 - **[Patch as a first-class object](2026-07-10-patch-first-class-model-alignment-design.md)**
   — conceptual, low-volume. Gives the working model's central noun a single home
   in the schema layer, hoists domain vocabulary out of emission code, and repairs
-  two layering faults that currently make that impossible.
+  the layering faults that currently make that impossible.
 
-The convergence track's Phase 1 (canonical frontmatter reader/writer) is a
-prerequisite for nothing in the model track, and vice versa. They can run in
-either order or concurrently.
+The two tracks share no prerequisite in either direction. The convergence track's
+frontmatter work (its Phase 2) is needed by nothing in the model track, and the
+model track's layering repairs (its Phases 1–2) are needed by nothing in
+convergence. Run them in either order, or concurrently.
 
 ## What the audit did *not* find
 

@@ -31,7 +31,16 @@ require touching all of them again.
 
 ---
 
-## Phase 0 — Delete dead code
+## Phase 0 (pre-phase) — Delete dead code
+
+**This is the one phase with no guard**, and it is numbered 0 to say so. The
+umbrella's rule — *a phase that migrates call sites without landing its guard is
+not done* — governs exactly that: phases moving call sites onto a canonical form,
+because those can decay. A deletion
+cannot decay: there is no call site to regrow, and re-adding a deleted module
+would be a deliberate act, not a bypass. What it *can* do is get resurrected from
+the design docs that still describe the features as planned, so the ledger below
+substitutes for a guard.
 
 **Change.** Remove `src/science_tool/plan_gate.py` (196 lines),
 `src/science_tool/synthesis_payload.py` (324), and their test files.
@@ -47,9 +56,11 @@ either target, re-run the check rather than trusting this doc:
 rg -n 'plan_gate|synthesis_payload' src/ model/ ../scripts/ ../commands/ ../skills/
 ```
 
-**Guard.** None. Instead, add the two removed features to
-`docs/plans/2026-07-08-current-frontier.md` as explicitly-abandoned so the design
-docs that describe them are not read as a backlog.
+**Ledger, in place of a guard.** Add the two removed features to
+`docs/plans/2026-07-08-current-frontier.md` under an explicit *Abandoned* heading,
+naming the design docs that describe them, so those docs are not read as an open
+backlog by the next person who greps `docs/plans/`. This is the phase's
+deliverable and its acceptance criterion.
 
 ---
 
@@ -142,11 +153,41 @@ and belongs in `science_tool`.
 
 **Migration risk — the real one.** Byte-for-byte equivalence across six emitters
 that today differ subtly (quoting, key order, trailing newlines). Do not trust
-review. Before changing any caller, land a characterization test that, for a
-corpus of every entity file in `meta/entities/` and `fixtures/`, asserts
-`render_frontmatter(*parse_frontmatter(f)) == f.read_text()`. Any file that fails
-round-trip reveals a real emitter divergence; fix it deliberately and record it,
-or exclude it with a named reason. Only then migrate callers.
+review; characterize before migrating.
+
+**The obvious test does not work.** An earlier draft of this doc asserted
+`render_frontmatter(*parse_frontmatter(f)) == f.read_text()` over a corpus. That
+is unsatisfiable with `parse_frontmatter` "unchanged": it ends with
+`body = parts[2].strip()` (`science_model/frontmatter.py:52`). The parser is
+**lossy by design** — it discards leading/trailing body whitespace — so no writer
+can reconstruct the original bytes from its output. The test would fail on nearly
+every file for a reason that has nothing to do with emitter divergence, and the
+temptation would be to weaken it until it passed.
+
+Two tests, each measuring the thing it names:
+
+- **Test A — emitter equivalence (the actual risk).** For every entity file in
+  `meta/entities/` and `fixtures/`, harvest `(fields, body)` via
+  `parse_frontmatter`. Assert that each of the six legacy emitters, given that
+  input, produces output byte-identical to `render_frontmatter(fields, body)`.
+  A failure is a *real* divergence between two emitters — a quoting or key-order
+  difference that a caller migration would silently impose on a project's source
+  of truth. Fix it deliberately, or exclude that emitter with a named reason.
+  This test needs no round-trip and is unaffected by the `.strip()`.
+
+- **Test B — writer idempotence.** `render_frontmatter(*parse_frontmatter(p))`
+  applied twice yields a fixed point. This is the property `write_entity_file`
+  actually needs: re-writing an already-canonical file must not churn it.
+
+**Consequence for the reader/writer contract.** Because the canonical parser is
+lossy, `write_entity_file` is only safe on a file that has *already* been
+normalized, or on freshly-constructed content. Do not use the pair as a
+read-modify-write primitive on arbitrary user files without first landing a
+non-lossy `split_frontmatter(text) -> tuple[str, str]` that preserves the body
+verbatim. That is a small addition and belongs in this phase if any caller does
+read-modify-write. Audit the six emitters' call sites for that pattern before
+choosing; `dag/workbench_apply.py:251` and `commons/promote.py:2907` are the
+likely cases.
 
 **Guard.** Extend the Phase 1 AST guard: fail if any module outside
 `science_model/frontmatter.py` and `markdown_utils.py` contains the string
@@ -184,10 +225,35 @@ hand-written.
 `docs/conventions/cli-behavior.md` requires JSON-only on stdout; `emit` enforces
 it by construction (diagnostics cannot reach stdout through it).
 
-**Guard.** `tests/test_output_boundary.py`: fail if `json.dumps` is called on a
-value that is echoed to stdout outside `output.py`. Implemented as an AST check
-for `click.echo(json.dumps(...))`, which is the exact idiom, in any module other
-than `output.py`.
+**Guard.** `tests/test_output_boundary.py`. Matching the literal
+`click.echo(json.dumps(...))` is **not** sufficient — the codebase already evades
+it. `cli.py` uses a function-local `import json as _json` in seven places and then
+calls `click.echo(_json.dumps(...))` (`cli.py:4642,4653,4679`; also `:5064,5077`,
+`:5269,5287`, `:5354,5373`). A guard keyed to the name `json` would pass over the
+very sites this phase exists to migrate.
+
+A blanket ban on `json.dumps` is equally wrong: it has 159 call sites, and most
+are legitimate — writing artifact files (`archive.py:87`,
+`datasets_identity.py:204`), building stable hashes (`openalex.py:87`), producing
+strings that never reach stdout. The concern is *emission*, not serialization.
+
+**Rule.** Outside `output.py`, no function may contain both a call to
+`click.echo`/`print` and a call to any attribute named `dumps`.
+
+Keying on the *attribute* name rather than the module binding makes it alias-blind:
+`json.dumps`, `_json.dumps`, and any future alias all match. Scoping to the
+enclosing function permits the file-writing and hashing uses (which live in
+functions with no `echo`) while catching the one-hop assignment form
+(`payload = _json.dumps(...)` … `click.echo(payload)`) that a nested-call matcher
+would miss.
+
+**Known gap, stated rather than hidden.** A helper that returns a JSON string,
+echoed by a different function, evades this. So does `sys.stdout.write`. That is
+the same class of limit the durable-write guard documents candidly in its own
+docstring — a ratchet against accidental regrowth, not a sandbox. Add
+`sys.stdout.write` to the banned set; leave the cross-function case uncovered and
+say so in the test's docstring rather than implying a completeness the check does
+not have.
 
 ---
 
@@ -378,9 +444,15 @@ Two additions carry the real risk:
 - **Phases 3 and 4** must not change `--format json` stdout. Run the snapshot
   suite (`-m snapshot`, excluded by default) at each commit, not just at the end.
 
-Every phase adds exactly one guard test. The guards are the deliverable as much
-as the deletions are; a phase that migrates call sites without landing its guard
-has bought a temporary improvement at the cost of a permanent one.
+Every phase from 1 onward adds exactly one guard test; Phase 0 is a deletion and
+ships a ledger entry instead (see its heading). The guards are the deliverable as
+much as the migrations are: a phase that moves call sites without landing its
+guard has bought a temporary improvement at the cost of a permanent one.
+
+**Write each guard last, against the migrated tree.** A guard authored from this
+document rather than from the code will out-scope its migration and land red —
+Model-track Phase 2 originally made exactly that mistake, banning all
+function-local `graph/` imports while migrating only one of the four.
 
 ## Order and independence
 
