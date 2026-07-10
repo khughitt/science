@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from science_tool.bibliography import load_bib_author_surnames
+from science_tool.data_root import project_config_path
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
 from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 
@@ -38,7 +39,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
-    science_yaml = root / "science.yaml"
+    science_yaml = project_config_path(root)
     if science_yaml.is_file():
         config = load_project_config(root)
         if config.prose_lint is not None:

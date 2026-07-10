@@ -23,6 +23,7 @@ from science_tool.annotation.cross_paper_evidence import (
     build_cross_paper_evidence_report,
     proposition_source_refs_map,
 )
+from science_tool.data_root import project_config_path
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
@@ -470,7 +471,7 @@ def _text_matches(value: str | None, needles: object) -> bool:
 
 
 def _accepted_validation_entries(project_root: Path) -> list[dict[str, object]]:
-    manifest_path = project_root / "science.yaml"
+    manifest_path = project_config_path(project_root)
     try:
         manifest = _yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     except OSError:

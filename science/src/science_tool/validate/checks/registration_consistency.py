@@ -13,13 +13,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
 def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, Path("science.yaml"), None, message, "registration", None)
+    return Result(severity, Path(PROJECT_CONFIG_FILENAME), None, message, "registration", None)
 
 
 @Check(section="registration consistency...", order=2)

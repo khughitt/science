@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TypedDict
 
+from science_tool.data_root import project_config_path
 from science_tool.project_artifacts import default_registry
 from science_tool.project_artifacts.pin import read_pins
 from science_tool.project_artifacts.status import Status, classify_full
@@ -31,7 +32,7 @@ def health_findings(project_root: Path) -> list[ManagedArtifactFinding]:
     """One finding per registered managed artifact."""
     registry = default_registry()
     pins = []
-    if (project_root / "science.yaml").exists():
+    if project_config_path(project_root).exists():
         try:
             pins = read_pins(project_root)
         except Exception:  # malformed science.yaml is a separate concern

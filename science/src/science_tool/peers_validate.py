@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 import yaml
 
+from science_tool.data_root import project_config_path
 from science_tool.peers import resolve_peer_path
 from science_tool.project_config import PeerEntry
 
@@ -67,7 +68,7 @@ def validate_peers(project_root: Path) -> list[PeerIssue]:
     Reads science.yaml as raw YAML so duplicate-id, self-peer, and reserved-field
     issues surface as structured PeerIssues rather than schema-level errors.
     """
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     if not yaml_path.is_file():
         return []
 
@@ -163,7 +164,7 @@ def _validate_peer_path(
         )
         return
 
-    peer_yaml = resolved / "science.yaml"
+    peer_yaml = project_config_path(resolved)
     if not peer_yaml.is_file():
         issues.append(
             _issue(

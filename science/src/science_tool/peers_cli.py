@@ -9,6 +9,7 @@ from typing import TypedDict
 import click
 import yaml
 
+from science_tool.data_root import project_config_path
 from science_tool.peers import PeerNotFound, PeerUnresolved, make_local_resolver, resolve_peer_path
 from science_tool.peers_validate import PeerIssue, PeerIssueKind, validate_peers
 from science_tool.project_config import ProjectConfig, load_project_config
@@ -139,7 +140,7 @@ def _peer_rows(project_root: Path, cfg: ProjectConfig) -> list[PeerRow]:
 
 
 def _raw_peer_count(project_root: Path) -> int:
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     if not yaml_path.is_file():
         return 0
 

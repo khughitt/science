@@ -9,6 +9,7 @@ from typing import cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
+from science_model.frontmatter import project_config_path
 
 from science_tool.commons.config import CommonsSettings
 
@@ -111,7 +112,7 @@ def prune_missing_projects(config_path: Path | None = None) -> list[str]:
     kept: list[RegisteredProject] = []
     for project in cfg.projects:
         resolved = Path(project.path).expanduser().resolve()
-        if resolved.is_dir() and (resolved / "science.yaml").is_file():
+        if resolved.is_dir() and project_config_path(resolved).is_file():
             kept.append(project)
         else:
             pruned.append(project.path)

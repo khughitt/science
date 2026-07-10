@@ -6,6 +6,8 @@ from typing import Literal, TypeAlias
 
 import yaml
 
+from science_tool.data_root import project_config_path
+
 ProjectProfile: TypeAlias = Literal["research", "software"]
 
 _COMMON_DEFAULTS: dict[str, str] = {
@@ -51,7 +53,7 @@ class ProjectPaths:
 
 
 def _load_manifest(project_root: Path) -> dict:
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     if not yaml_path.is_file():
         return {}
     with open(yaml_path, encoding="utf-8") as handle:

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from science_model.entities import Entity
 from science_model.identity import EntityScope
 
+from science_tool.data_root import project_config_path
 from science_tool.graph.sources import ProjectSources, load_project_sources
 from science_tool.registry.index import (
     RegistryEntity,
@@ -38,7 +39,7 @@ def collect_all_project_sources(
     results: list[ProjectSources] = []
     for raw_path in project_paths:
         path = raw_path.expanduser().resolve()
-        if not path.is_dir() or not (path / "science.yaml").is_file():
+        if not path.is_dir() or not project_config_path(path).is_file():
             logger.warning("Skipping missing project at %s", path)
             continue
         try:

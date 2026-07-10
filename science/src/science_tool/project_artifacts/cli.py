@@ -90,6 +90,7 @@ def check_cmd(name: str, project_root: str, as_json: bool, output_format: str) -
     import json as _json
     from pathlib import Path
 
+    from science_tool.data_root import project_config_path
     from science_tool.project_artifacts.pin import read_pins
     from science_tool.project_artifacts.status import classify_full
 
@@ -100,7 +101,7 @@ def check_cmd(name: str, project_root: str, as_json: bool, output_format: str) -
 
     project = Path(project_root)
     target = project / art.install_target
-    pins = read_pins(project) if (project / "science.yaml").exists() else []
+    pins = read_pins(project) if project_config_path(project).exists() else []
     result = classify_full(target, art, pins)
 
     if as_json or output_format == "json":
@@ -300,6 +301,7 @@ def pin_cmd(
     import subprocess
     from pathlib import Path
 
+    from science_tool.data_root import PROJECT_CONFIG_FILENAME
     from science_tool.project_artifacts.hashing import body_hash
     from science_tool.project_artifacts.header import parse_header
     from science_tool.project_artifacts.pin import PinAlreadyExists, add_pin
@@ -327,7 +329,7 @@ def pin_cmd(
             raise click.ClickException(
                 "refusing to pin: dirty worktree (use --allow-dirty if science.yaml is the only conflict)"
             )
-        conflicts = paths_intersect(["science.yaml"], dirty_paths(project))
+        conflicts = paths_intersect([PROJECT_CONFIG_FILENAME], dirty_paths(project))
         if conflicts:
             raise click.ClickException("--allow-dirty path conflict on: science.yaml")
 
@@ -350,7 +352,7 @@ def pin_cmd(
         raise click.ClickException(str(exc)) from exc
 
     if not no_commit and in_git_repo(project):
-        subprocess.run(["git", "add", "science.yaml"], cwd=project, check=True)
+        subprocess.run(["git", "add", PROJECT_CONFIG_FILENAME], cwd=project, check=True)
         subprocess.run(
             [
                 "git",
@@ -381,6 +383,7 @@ def unpin_cmd(name: str, project_root: str, allow_dirty: bool, no_commit: bool) 
     import subprocess
     from pathlib import Path
 
+    from science_tool.data_root import PROJECT_CONFIG_FILENAME
     from science_tool.project_artifacts.pin import PinNotFound, remove_pin
     from science_tool.project_artifacts.worktree import (
         dirty_paths,
@@ -393,7 +396,7 @@ def unpin_cmd(name: str, project_root: str, allow_dirty: bool, no_commit: bool) 
     if in_git_repo(project) and not is_clean(project):
         if not allow_dirty:
             raise click.ClickException("refusing to unpin: dirty worktree")
-        conflicts = paths_intersect(["science.yaml"], dirty_paths(project))
+        conflicts = paths_intersect([PROJECT_CONFIG_FILENAME], dirty_paths(project))
         if conflicts:
             raise click.ClickException("--allow-dirty path conflict on: science.yaml")
 
@@ -403,7 +406,7 @@ def unpin_cmd(name: str, project_root: str, allow_dirty: bool, no_commit: bool) 
         raise click.ClickException(str(exc)) from exc
 
     if not no_commit and in_git_repo(project):
-        subprocess.run(["git", "add", "science.yaml"], cwd=project, check=True)
+        subprocess.run(["git", "add", PROJECT_CONFIG_FILENAME], cwd=project, check=True)
         subprocess.run(
             ["git", "commit", "-q", "-m", f"chore(artifacts): unpin {name}"],
             cwd=project,

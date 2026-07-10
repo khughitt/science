@@ -20,6 +20,7 @@ from science_model.packages.schema import (
 )
 
 from science_tool.benchmark_catalog import benchmark_sources
+from science_tool.data_root import project_config_path
 from science_tool.dataset_prioritize import readiness_for, readiness_weight
 from science_tool.datasets.semantics import DatasetClass, dataset_class_for, runtime_state_for
 from science_tool.entities import (
@@ -1660,7 +1661,7 @@ def _tokens_from_label(value: str) -> set[str]:
 
 
 def _project_identity_tokens(project_root: Path) -> set[str]:
-    manifest_path = project_root / "science.yaml"
+    manifest_path = project_config_path(project_root)
     if not manifest_path.is_file():
         return set()
     data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}

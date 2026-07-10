@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import yaml
 
+from science_tool.data_root import project_config_path
 from science_tool.paths import resolve_paths
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ class ValidateContext:
         include_all_checks: bool = False,
     ) -> "ValidateContext":
         root = project_root.resolve()
-        manifest_path = root / "science.yaml"
+        manifest_path = project_config_path(root)
         if not manifest_path.is_file():
             raise ValidateContextError(f"science.yaml not found at {manifest_path}")
 

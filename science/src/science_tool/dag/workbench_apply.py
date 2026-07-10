@@ -21,6 +21,7 @@ from science_tool.dag.workbench import (
     serialize_canonical,
     workbench_entity_body,
 )
+from science_tool.data_root import project_config_path
 from science_tool.entities import (
     EntityCommandError,
     local_part_conforms,
@@ -409,9 +410,9 @@ def _compile_in_scratch(project_root: Path, input_text: str, *, as_of: date) -> 
 
     with tempfile.TemporaryDirectory(prefix="science-workbench-apply-") as scratch_name:
         scratch_root = Path(scratch_name)
-        config_path = project_root / "science.yaml"
+        config_path = project_config_path(project_root)
         if config_path.is_file():
-            (scratch_root / "science.yaml").write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
+            project_config_path(scratch_root).write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
         try:
             result = compile_workbench(workbench, project_root=scratch_root, as_of=as_of)
         except (EntityCommandError, ValidationError, ValueError) as exc:

@@ -16,6 +16,7 @@ from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all
 from science_tool.dag.validate import ValidationFinding, ValidationReport, validate_project
+from science_tool.data_root import project_config_path
 
 
 @click.group("dag")
@@ -408,7 +409,7 @@ def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
     with tempfile.TemporaryDirectory() as scratch_str:
         scratch = Path(scratch_str)
         # Minimal science.yaml so the entity-layer writer resolves path policies.
-        (scratch / "science.yaml").write_text(
+        project_config_path(scratch).write_text(
             "name: workbench-check-scratch\nknowledge_profiles:\n  local: local\n",
             encoding="utf-8",
         )

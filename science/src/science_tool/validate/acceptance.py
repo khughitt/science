@@ -5,6 +5,7 @@ from typing import Any
 
 import yaml
 
+from science_tool.data_root import project_config_path
 from science_tool.validate.result import Result, Severity
 
 
@@ -16,7 +17,7 @@ def filter_accepted_warnings(project_root: Path, results: list[Result]) -> list[
 
 
 def _accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:
-    manifest_path = project_root / "science.yaml"
+    manifest_path = project_config_path(project_root)
     try:
         manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     except OSError:

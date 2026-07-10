@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from science_tool.data_root import project_config_path
 from science_tool.project_config import PeerEntry
 
 
@@ -138,7 +139,7 @@ class LocalPeerResolver:
                 f"peer {peer_id!r} declared with path {entry.path!r}, "
                 f"but resolved path {path} does not exist"
             )
-        if not (path / "science.yaml").is_file():
+        if not project_config_path(path).is_file():
             raise PeerUnresolved(
                 f"peer {peer_id!r} resolves to {path}, "
                 "but no science.yaml found there"

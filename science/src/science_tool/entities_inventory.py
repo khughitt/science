@@ -20,6 +20,7 @@ from science_model.entity_schema import MergePolicy, read_overlay_merge_policy
 from science_tool.commons.errors import OverlayValidationError
 from science_tool.commons.overlay import OverlayAdapter
 from science_tool.dag.inventory import load_dag_inventory_records
+from science_tool.data_root import project_config_path
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.sources import load_project_sources
 
@@ -120,7 +121,7 @@ def build_inventory(project_root: Path, schema_version: str = "2") -> inventory_
 
 
 def _read_project_metadata(project_root: Path) -> InventoryProjectMetadata:
-    config_path = project_root / "science.yaml"
+    config_path = project_config_path(project_root)
     last_activity = _latest_activity(project_root)
     if not config_path.exists():
         return InventoryProjectMetadata(
