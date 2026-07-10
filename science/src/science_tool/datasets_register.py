@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import ValidationError
 import yaml
+from science_model.entities import MethodEntity, WorkflowStepEntity
 from science_model.frontmatter import parse_frontmatter
 from science_model.packages.schema import IdentityContext, WorkflowOutput
 from science_model.run_fingerprint import (
@@ -26,8 +27,11 @@ from science_model.run_fingerprint import (
 )
 
 from science_tool.commons.identity_stamp import derive_stamp
+from science_tool.graph.reference_resolution import ReferenceResolver
+from science_tool.graph.sources import load_project_sources
 from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
 from science_tool.run_fingerprint_policy import COMPONENT_FIELDS
+from science_tool.seed_policy_derivation import SeedPolicyDerivationError, derive_seed_policy
 
 
 def _format_validation_error(exc: ValidationError) -> str:
@@ -919,11 +923,12 @@ class FingerprintCaptureError(Exception):
 
 
 #: The only `fingerprint.*` keys a human may write — declarations, not observations.
+#: `seed_policy` and `step_seeds` are NOT here: both are derived from the workflow's
+#: steps at register-run (Spec 2, t088), never authored.
 _AUTHORED_FINGERPRINT_FIELDS: tuple[str, ...] = (
     "executor",
     "input_artifact_locality",
     "output_artifact_locality",
-    "seed_policy",
 )
 
 
@@ -943,47 +948,46 @@ def capture_fingerprint(
     parameters_digest: str,
     input_manifest_digest: str,
     output_manifest_digest: str,
+    seed_policy: SeedPolicy,
+    step_seeds: dict[str, dict[str, int]],
 ) -> RunFingerprint:
-    """Build a captured fingerprint. Only `seed_policy` may be authored.
+    """Build a captured fingerprint from already-derived inputs.
 
-    Pure: takes already-computed digests as arguments. Does no git, no file
-    reads — that belongs to the caller (`persist_run_fingerprint`, Task 6b).
+    Pure: takes already-computed digests and the already-derived `seed_policy` /
+    `step_seeds` as arguments. Does no git, no file reads, and no seed-policy
+    derivation — those belong to the caller (`persist_run_fingerprint`).
+
+    Every captured component AND both derived fields (`seed_policy`, `step_seeds`)
+    are supplied by the caller; none may be hand-authored in the run frontmatter.
+    The guard below enforces that for callers that invoke `capture_fingerprint`
+    directly. On the `persist_run_fingerprint` path it can never fire, because
+    that function strips the frontmatter to `_AUTHORED_FINGERPRINT_FIELDS` before
+    calling here (and rejects an authored `seed_policy`/`step_seeds` itself, up
+    front) — see its docstring.
     """
     authored = run_fm.get("fingerprint") or {}
 
-    hand_authored = sorted(set(authored) & set(COMPONENT_FIELDS))
-    if hand_authored:
+    forbidden = sorted(set(authored) & (set(COMPONENT_FIELDS) | {"seed_policy", "step_seeds"}))
+    if forbidden:
         raise FingerprintCaptureError(
-            "these fingerprint components are captured by register-run and must not be "
-            f"hand-authored in the workflow-run frontmatter: {', '.join(hand_authored)}"
+            "these fingerprint components are derived by register-run and must not be "
+            f"hand-authored in the workflow-run frontmatter: {', '.join(forbidden)}"
         )
 
-    raw_seed = authored.get("seed_policy")
-    if not raw_seed:
-        raise FingerprintCaptureError(
-            "workflow-run frontmatter must declare fingerprint.seed_policy — it asserts how "
-            "the code behaves and is never inferred"
-        )
-
-    try:
-        seed_policy = SeedPolicy.model_validate(raw_seed)
-        return RunFingerprint(
-            fingerprint_policy=FINGERPRINT_POLICY_V1,
-            executor=executor,
-            input_artifact_locality=input_locality,
-            output_artifact_locality=output_locality,
-            code_sha=_captured(code_sha),
-            code_dirty=_captured("true" if code_dirty else "false"),
-            environment_digest=_captured(environment_digest),
-            parameters_digest=_captured(parameters_digest),
-            input_manifest_digest=_captured(input_manifest_digest),
-            output_manifest_digest=_captured(output_manifest_digest),
-            seed_policy=seed_policy,
-        )
-    except ValidationError as exc:
-        raise FingerprintCaptureError(
-            f"workflow-run frontmatter fingerprint.seed_policy is invalid: {exc}"
-        ) from exc
+    return RunFingerprint(
+        fingerprint_policy=FINGERPRINT_POLICY_V1,
+        executor=executor,
+        input_artifact_locality=input_locality,
+        output_artifact_locality=output_locality,
+        code_sha=_captured(code_sha),
+        code_dirty=_captured("true" if code_dirty else "false"),
+        environment_digest=_captured(environment_digest),
+        parameters_digest=_captured(parameters_digest),
+        input_manifest_digest=_captured(input_manifest_digest),
+        output_manifest_digest=_captured(output_manifest_digest),
+        seed_policy=seed_policy,
+        step_seeds=step_seeds,
+    )
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -1080,6 +1084,84 @@ def _rewrite_run_frontmatter(run_path: Path, frontmatter: dict[str, Any]) -> Non
     run_path.write_text(f"---\n{dumped}---\n{body}", encoding="utf-8")
 
 
+def _resolve_or_raise(resolver: ReferenceResolver, ref: str, run_path: Path) -> str:
+    """Resolve `ref` to a canonical id or fail loud with the run's name.
+
+    Uses the same resolver the compiler and `validate/checks/workflow_steps.py`
+    build, so register-run's seed_policy derivation cannot disagree with them.
+    """
+    resolution = resolver.resolve(ref)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise FingerprintCaptureError(
+            f"{run_path.name}: workflow reference {ref!r} does not resolve to a "
+            f"known entity ({resolution.status}); seed_policy cannot be derived."
+        )
+    return resolution.canonical_id
+
+
+def _derive_seed_policy_for_run(
+    project_root: Path,
+    run_path: Path,
+    run_fm: dict,
+    config_snapshot: str,
+    config_path: Path,
+) -> tuple[SeedPolicy, dict[str, dict[str, int]]]:
+    """Derive `(seed_policy, step_seeds)` for a run from its workflow's steps.
+
+    Loads the project through the compiler's `load_project_sources`, resolves the
+    run's declared workflow, gathers that workflow's steps and each step's method,
+    and hands them to the pure `derive_seed_policy`. Every failure mode
+    (unresolved workflow, no steps, methodless step, unclassified method, unbound
+    or unrealizable seed) surfaces as a `FingerprintCaptureError` that names the
+    fix — register-run never invents a policy.
+    """
+    workflow_ref = run_fm.get("workflow") or ""
+    if not workflow_ref:
+        raise FingerprintCaptureError(
+            f"{run_path.name}: declares no workflow, so seed_policy cannot be derived. "
+            f"Add `workflow: workflow:<slug>`."
+        )
+
+    # strict_core_schema=False: the run being registered legitimately carries an
+    # incomplete fingerprint (register-run is what completes it), so it fails
+    # RunFingerprint validation and would abort a strict load. Skipping it lets the
+    # workflow/steps/methods this derivation needs load; any genuinely-required
+    # step or method that goes missing is caught below by `derive_seed_policy`,
+    # which fails loud.
+    sources = load_project_sources(project_root, strict_core_schema=False)
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    workflow_id = _resolve_or_raise(resolver, workflow_ref, run_path)
+
+    steps = [
+        entity
+        for entity in sources.entities
+        if isinstance(entity, WorkflowStepEntity)
+        and entity.workflow
+        and resolver.resolve(entity.workflow).canonical_id == workflow_id
+    ]
+    method_for_step: dict[str, MethodEntity] = {}
+    by_id = {entity.id: entity for entity in sources.entities}
+    for step in steps:
+        if not step.method:
+            continue  # derive_seed_policy raises with the right message
+        resolution = resolver.resolve(step.method)
+        target = by_id.get(resolution.canonical_id) if resolution.canonical_id else None
+        if isinstance(target, MethodEntity):
+            method_for_step[step.id] = target
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    try:
+        return derive_seed_policy(
+            workflow_id=workflow_id,
+            steps=steps,
+            method_for_step=method_for_step,
+            config=config,
+            config_path=config_snapshot,
+        )
+    except SeedPolicyDerivationError as exc:
+        raise FingerprintCaptureError(str(exc)) from exc
+
+
 def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
     """Capture the fingerprint for `run_id` and write it into the run entity.
 
@@ -1094,13 +1176,21 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
     a prior call to this function, or hand-authored) is ignored and overwritten:
     every captured component is recomputed fresh on every call, and that fresh
     value is authoritative — `register-run` always recomputes, it never trusts
-    what is on disk. Because of this, `capture_fingerprint`'s hand-authored-component
-    guard can never fire on this path (see the `authored_only` filter below); it
-    protects only callers that invoke `capture_fingerprint` directly. There is no
-    way to both tolerate a fingerprint block this function previously wrote AND
-    reject one a human hand-authored, because nothing on disk distinguishes the
-    two shapes — this is an accepted, permanent limitation (see the design doc's
-    "Known limitation" discussion), not a gap to close later.
+    what is on disk. Because of this, `capture_fingerprint`'s guard can never fire
+    on this path (see the `authored_only` filter below); it protects only callers
+    that invoke `capture_fingerprint` directly. There is no way to both tolerate a
+    captured component this function previously wrote AND reject one a human
+    hand-authored, because nothing on disk distinguishes the two shapes — this is
+    an accepted, permanent limitation (see the design doc's "Known limitation"
+    discussion), not a gap to close later.
+
+    `seed_policy` and `step_seeds` are DERIVED here from the workflow's steps
+    (Spec 2, t088), never authored. They are rejected up front when a human writes
+    them onto a run that this function has not yet fingerprinted — recognizable
+    because such a run carries no captured components yet. Once a fingerprint has
+    been written, the derived `seed_policy`/`step_seeds` coexist with captured
+    components and are re-derived (not rejected) on every subsequent call, exactly
+    like the captured components above.
     """
     run_path, run_fm = _read_run(project_root, run_id)
     declared = run_fm.get("fingerprint") or {}
@@ -1110,6 +1200,19 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
             raise FingerprintCaptureError(
                 f"{run_path.name}: fingerprint.{key} must be declared before register-run "
                 f"(it is a declaration, not an observation)"
+            )
+
+    # `seed_policy`/`step_seeds` are derived, never authored. A run this function
+    # has already fingerprinted carries captured components alongside the derived
+    # fields (its own prior write) — those are re-derived below, not rejected. But
+    # a run with the derived fields and NO captured components was hand-authored:
+    # fail loud so the fix (delete them; they are derived) is named.
+    if not (set(declared) & set(COMPONENT_FIELDS)):
+        authored_derived = sorted(set(declared) & {"seed_policy", "step_seeds"})
+        if authored_derived:
+            raise FingerprintCaptureError(
+                "these fingerprint components are derived by register-run and must not be "
+                f"hand-authored in the workflow-run frontmatter: {', '.join(authored_derived)}"
             )
 
     try:
@@ -1123,12 +1226,23 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
     if not config_snapshot:
         raise FingerprintCaptureError(f"{run_path.name}: config_snapshot is required to capture parameters_digest")
 
+    config_path = project_root / config_snapshot
+    if not config_path.is_file():
+        raise FingerprintCaptureError(
+            f"{run_path.name}: config_snapshot {config_snapshot} does not exist; "
+            f"seed_policy derivation and parameters_digest both read it"
+        )
+
+    seed_policy, step_seeds = _derive_seed_policy_for_run(
+        project_root, run_path, run_fm, config_snapshot, config_path
+    )
+
     # A prior `persist_run_fingerprint` call already wrote captured components back
     # into `declared` (that's what makes it non-idempotent, per this function's own
     # docstring) — re-forwarding them to `capture_fingerprint` would trip its
-    # hand-authored guard on our own output. Forward only the fields a human may
-    # legitimately write; `capture_fingerprint` recomputes every captured component
-    # fresh regardless of what is currently on disk.
+    # guard on our own output. Forward only the fields a human may legitimately
+    # write; `capture_fingerprint` recomputes every captured component and takes
+    # the freshly derived `seed_policy`/`step_seeds` regardless of what is on disk.
     authored_only = {key: declared[key] for key in _AUTHORED_FINGERPRINT_FIELDS if key in declared}
     fingerprint = capture_fingerprint(
         run_fm={**run_fm, "fingerprint": authored_only},
@@ -1138,9 +1252,11 @@ def persist_run_fingerprint(project_root: Path, run_id: str) -> RunFingerprint:
         code_sha=_git(project_root, "rev-parse", "HEAD"),
         code_dirty=bool(_git(project_root, "status", "--porcelain")),
         environment_digest=_sha256_file(project_root / "uv.lock", "uv.lock"),
-        parameters_digest=_sha256_file(project_root / config_snapshot, "config_snapshot"),
+        parameters_digest=_sha256_file(config_path, "config_snapshot"),
         input_manifest_digest=_manifest_digest(_run_input_manifest(run_fm)),
         output_manifest_digest=_manifest_digest(_run_output_manifest(project_root, run_fm, run_id)),
+        seed_policy=seed_policy,
+        step_seeds=step_seeds,
     )
 
     manifest_ref = run_fm.get("manifest_path") or None

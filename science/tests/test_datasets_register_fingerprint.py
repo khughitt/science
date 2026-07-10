@@ -4,7 +4,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from science_model.run_fingerprint import ArtifactLocality, ComponentProvenance, ExecutorKind
+from science_model.frontmatter import parse_frontmatter
+from science_model.run_fingerprint import (
+    ArtifactLocality,
+    ComponentProvenance,
+    ExecutorKind,
+    SeedPolicy,
+)
 from science_tool.datasets_register import (
     FingerprintCaptureError,
     capture_fingerprint,
@@ -23,26 +29,42 @@ def _kwargs(**over):
         parameters_digest="sha256:params",
         input_manifest_digest="sha256:in",
         output_manifest_digest="sha256:out",
+        seed_policy=SeedPolicy(kind="deterministic"),
+        step_seeds={},
     )
     base.update(over)
     return base
 
 
 def test_capture_marks_every_component_captured():
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "deterministic"}}}
-    fp = capture_fingerprint(run_fm=run_fm, **_kwargs())
+    fp = capture_fingerprint(run_fm={}, **_kwargs())
     for name in ("code_sha", "code_dirty", "environment_digest",
                  "parameters_digest", "input_manifest_digest", "output_manifest_digest"):
         assert getattr(fp, name).provenance is ComponentProvenance.CAPTURED
     assert fp.code_dirty.value == "false"
     assert fp.container_digest is None
     assert fp.fingerprint_policy == "science-run-fingerprint/v1"
+    assert fp.seed_policy.kind == "deterministic"
+    assert fp.step_seeds == {}
 
 
 def test_capture_encodes_dirty_as_lowercase_token():
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "deterministic"}}}
-    fp = capture_fingerprint(run_fm=run_fm, **_kwargs(code_dirty=True))
+    fp = capture_fingerprint(run_fm={}, **_kwargs(code_dirty=True))
     assert fp.code_dirty.value == "true"
+
+
+def test_capture_carries_supplied_seed_policy_and_step_seeds():
+    """`seed_policy`/`step_seeds` are arguments now (derived by the caller), not
+    read from `run_fm`; `capture_fingerprint` places them on the fingerprint verbatim."""
+    fp = capture_fingerprint(
+        run_fm={},
+        **_kwargs(
+            seed_policy=SeedPolicy(kind="seeded"),
+            step_seeds={"workflow-step:cluster": {"random_state": 42}},
+        ),
+    )
+    assert fp.seed_policy.kind == "seeded"
+    assert fp.step_seeds == {"workflow-step:cluster": {"random_state": 42}}
 
 
 def test_hand_authored_capturable_component_is_rejected():
@@ -51,59 +73,119 @@ def test_hand_authored_capturable_component_is_rejected():
         capture_fingerprint(run_fm=run_fm, **_kwargs())
 
 
-def test_hand_authored_seed_policy_is_preserved():
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "seeded", "seeds": {"numpy": 7}}}}
-    fp = capture_fingerprint(run_fm=run_fm, **_kwargs())
-    assert fp.seed_policy.kind == "seeded" and fp.seed_policy.seeds == {"numpy": 7}
-
-
-def test_missing_seed_policy_defaults_to_stochastic_unseeded_is_rejected():
-    """Seed policy is authored, never invented. Absent => fail loud."""
-    with pytest.raises(FingerprintCaptureError, match="seed_policy"):
-        capture_fingerprint(run_fm={"fingerprint": {}}, **_kwargs())
+def test_hand_authored_seed_policy_is_rejected_by_direct_caller():
+    """A direct `capture_fingerprint` caller may not smuggle `seed_policy` in via
+    `run_fm` — it is derived, and the widened guard rejects it."""
+    run_fm = {"fingerprint": {"seed_policy": {"kind": "deterministic"}}}
+    with pytest.raises(FingerprintCaptureError, match="derived by register-run"):
+        capture_fingerprint(run_fm=run_fm, **_kwargs())
 
 
 def test_captured_fingerprint_evaluates_clean():
     from science_tool.run_fingerprint_policy import evaluate_fingerprint
 
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "deterministic"}}}
-    assert evaluate_fingerprint(capture_fingerprint(run_fm=run_fm, **_kwargs())) == []
-
-
-def test_invalid_seed_policy_surfaces_as_capture_error():
-    """An authored seed_policy that fails RunFingerprint/SeedPolicy validation must
-    surface as FingerprintCaptureError, not a bare pydantic ValidationError — the CLI
-    only catches the former."""
-    run_fm = {"fingerprint": {"seed_policy": {"kind": "not-a-real-kind"}}}
-    with pytest.raises(FingerprintCaptureError, match="seed_policy"):
-        capture_fingerprint(run_fm=run_fm, **_kwargs())
+    assert evaluate_fingerprint(capture_fingerprint(run_fm={}, **_kwargs())) == []
 
 
 @pytest.fixture
 def git_project(tmp_path: Path) -> Path:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     (tmp_path / "uv.lock").write_text("lock", encoding="utf-8")
-    (tmp_path / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")
-    runs = tmp_path / "entities" / "workflow-runs"
-    runs.mkdir(parents=True)
-    (runs / "r1.md").write_text(
-        "---\n"
-        "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
-        "config_snapshot: config.yaml\n"
-        "fingerprint:\n"
-        "  executor: local\n"
-        "  input_artifact_locality: science-managed\n"
-        "  output_artifact_locality: science-managed\n"
-        "  seed_policy: {kind: deterministic}\n"
-        "---\n",
-        encoding="utf-8",
+    (tmp_path / "config.yaml").write_text("alpha: 1\nseed: 42\n", encoding="utf-8")
+    (tmp_path / "science.yaml").write_text(
+        "name: fingerprint-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
     )
+    for sub, name, body in [
+        ("workflows", "w1", "id: workflow:w1\nkind: workflow\ntitle: W1\n"),
+        ("methods", "leiden",
+         "id: method:leiden\nkind: method\ntitle: Leiden\n"
+         "stochasticity: seedable\nseed_params: [random_state]\n"),
+        ("workflow-steps", "cluster",
+         "id: workflow-step:cluster\nkind: workflow-step\ntitle: Cluster\n"
+         "workflow: workflow:w1\nmethod: method:leiden\n"
+         'seed_bindings:\n  random_state: "config.seed"\n'),
+        ("workflow-runs", "r1",
+         "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+         "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
+         "fingerprint:\n"
+         "  executor: local\n"
+         "  input_artifact_locality: science-managed\n"
+         "  output_artifact_locality: science-managed\n"),
+    ]:
+        d = tmp_path / "entities" / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{name}.md").write_text(f"---\n{body}---\n", encoding="utf-8")
+    # The run declares `workflow: workflow:w1`, so output_manifest_digest capture
+    # reads the run-aggregate datapackage; an empty one yields the empty-manifest digest.
+    results = tmp_path / "results" / "w1" / "r1"
+    results.mkdir(parents=True)
+    (results / "datapackage.yaml").write_text(yaml.safe_dump({"resources": []}), encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
         cwd=tmp_path, check=True,
     )
     return tmp_path
+
+
+def test_persisted_fingerprint_carries_derived_policy_and_step_seeds(git_project):
+    fp = persist_run_fingerprint(git_project, "workflow-run:r1")
+    assert fp.seed_policy.kind == "seeded"
+    assert fp.seed_policy.rationale is None
+    assert fp.step_seeds == {"workflow-step:cluster": {"random_state": 42}}
+    written = parse_frontmatter(git_project / "entities" / "workflow-runs" / "r1.md")[0]
+    assert written["fingerprint"]["step_seeds"] == {"workflow-step:cluster": {"random_state": 42}}
+    assert "seeds" not in written["fingerprint"]["seed_policy"]
+
+
+def test_authored_seed_policy_is_rejected(git_project):
+    # Spec 2 inverts t077: seed_policy was the ONE authored fingerprint field.
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(
+        run.read_text(encoding="utf-8").replace(
+            "  output_artifact_locality: science-managed\n",
+            "  output_artifact_locality: science-managed\n  seed_policy: {kind: deterministic}\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(FingerprintCaptureError, match="derived by register-run"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_run_without_a_workflow_ref_fails_closed(git_project):
+    run = git_project / "entities" / "workflow-runs" / "r1.md"
+    run.write_text(run.read_text(encoding="utf-8").replace("workflow: workflow:w1\n", "", 1), encoding="utf-8")
+    with pytest.raises(FingerprintCaptureError, match="declares no workflow"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_workflow_with_no_steps_fails_closed(git_project):
+    (git_project / "entities" / "workflow-steps" / "cluster.md").unlink()
+    with pytest.raises(FingerprintCaptureError, match="Declare at least one step"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_methodless_step_fails_closed(git_project):
+    step = git_project / "entities" / "workflow-steps" / "cluster.md"
+    step.write_text(step.read_text(encoding="utf-8").replace("method: method:leiden\n", "", 1), encoding="utf-8")
+    with pytest.raises(FingerprintCaptureError, match="declares no method"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_unclassified_method_fails_closed(git_project):
+    m = git_project / "entities" / "methods" / "leiden.md"
+    m.write_text(m.read_text(encoding="utf-8").replace("stochasticity: seedable\n", "", 1), encoding="utf-8")
+    with pytest.raises(FingerprintCaptureError, match="has no stochasticity"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
+
+
+def test_derivation_error_surfaces_as_capture_error(git_project):
+    """A `SeedPolicyDerivationError` (here: a seed binding that names a config key
+    the snapshot lacks) must reach the caller as `FingerprintCaptureError` — the
+    CLI only catches the latter."""
+    (git_project / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")  # drop `seed`
+    with pytest.raises(FingerprintCaptureError, match="no key 'seed'"):
+        persist_run_fingerprint(git_project, "workflow-run:r1")
 
 
 def test_persist_writes_captured_components_into_frontmatter(git_project):
@@ -115,11 +197,13 @@ def test_persist_writes_captured_components_into_frontmatter(git_project):
         (git_project / "entities" / "workflow-runs" / "r1.md").read_text().split("---")[1]
     )
     assert written["fingerprint"]["code_sha"]["provenance"] == "captured"
-    assert written["fingerprint"]["seed_policy"]["kind"] == "deterministic"
+    # git_project's one step applies a seedable method, so the derived policy is seeded.
+    assert written["fingerprint"]["seed_policy"]["kind"] == "seeded"
 
 
 def test_dirty_worktree_is_captured_as_true(git_project):
-    (git_project / "config.yaml").write_text("alpha: 2\n", encoding="utf-8")
+    # Change alpha (dirties the tree) but keep `seed` so the derivation still resolves.
+    (git_project / "config.yaml").write_text("alpha: 2\nseed: 42\n", encoding="utf-8")
     assert persist_run_fingerprint(git_project, "workflow-run:r1").code_dirty.value == "true"
 
 
@@ -149,23 +233,33 @@ def test_missing_config_snapshot_file_fails_loud(git_project):
 
 
 def test_absent_git_repo_fails_loud(tmp_path: Path):
-    """No `.git` at all (never initialized) — `git rev-parse HEAD` fails loud."""
+    """No `.git` at all (never initialized) — `git rev-parse HEAD` fails loud.
+
+    The seed_policy derivation (loadable project, deterministic step) succeeds
+    first; the git capture is what fails, so the error still names git.
+    """
     (tmp_path / "uv.lock").write_text("lock", encoding="utf-8")
     (tmp_path / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")
-    runs = tmp_path / "entities" / "workflow-runs"
-    runs.mkdir(parents=True)
-    (runs / "r1.md").write_text(
-        "---\n"
-        "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
-        "config_snapshot: config.yaml\n"
-        "fingerprint:\n"
-        "  executor: local\n"
-        "  input_artifact_locality: science-managed\n"
-        "  output_artifact_locality: science-managed\n"
-        "  seed_policy: {kind: deterministic}\n"
-        "---\n",
-        encoding="utf-8",
+    (tmp_path / "science.yaml").write_text(
+        "name: fingerprint-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
     )
+    for sub, name, body in [
+        ("workflows", "w1", "id: workflow:w1\nkind: workflow\ntitle: W1\n"),
+        ("methods", "const", "id: method:const\nkind: method\ntitle: Const\nstochasticity: deterministic\n"),
+        ("workflow-steps", "s1",
+         "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\n"
+         "workflow: workflow:w1\nmethod: method:const\n"),
+        ("workflow-runs", "r1",
+         "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+         "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
+         "fingerprint:\n"
+         "  executor: local\n"
+         "  input_artifact_locality: science-managed\n"
+         "  output_artifact_locality: science-managed\n"),
+    ]:
+        d = tmp_path / "entities" / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{name}.md").write_text(f"---\n{body}---\n", encoding="utf-8")
     with pytest.raises(FingerprintCaptureError, match="git"):
         persist_run_fingerprint(tmp_path, "workflow-run:r1")
 
@@ -200,6 +294,19 @@ def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     (root / "uv.lock").write_text("lock", encoding="utf-8")
     (root / "config.yaml").write_text("alpha: 1\n", encoding="utf-8")
+    (root / "science.yaml").write_text(
+        "name: fingerprint-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
+    for sub, name, body in [
+        ("workflows", "wf", "id: workflow:wf\nkind: workflow\ntitle: WF\n"),
+        ("methods", "const", "id: method:const\nkind: method\ntitle: Const\nstochasticity: deterministic\n"),
+        ("workflow-steps", "s1",
+         "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\n"
+         "workflow: workflow:wf\nmethod: method:const\n"),
+    ]:
+        d = root / "entities" / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{name}.md").write_text(f"---\n{body}---\n", encoding="utf-8")
     runs = root / "entities" / "workflow-runs"
     runs.mkdir(parents=True)
     (runs / "r1.md").write_text(
@@ -211,7 +318,6 @@ def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
         "  executor: local\n"
         "  input_artifact_locality: science-managed\n"
         "  output_artifact_locality: science-managed\n"
-        "  seed_policy: {kind: deterministic}\n"
         "---\n",
         encoding="utf-8",
     )

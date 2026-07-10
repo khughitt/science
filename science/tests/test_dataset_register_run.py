@@ -45,12 +45,32 @@ def _seed_workflow_and_run(
             }
             for r in run_resources
         ]
+    # register-run derives seed_policy from the workflow's steps, so the project
+    # must be loadable (science.yaml) and carry a workflow/workflow-step/method
+    # trio. A deterministic method with no seed_params derives
+    # seed_policy.kind == "deterministic" and step_seeds == {}.
+    (root / "science.yaml").write_text(
+        "name: register-run-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
     wf_dir = root / "entities" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     outputs_yaml = yaml.safe_dump(workflow_outputs, sort_keys=False)
     outputs_yaml = "".join(f"  {line}" if line.strip() else line for line in outputs_yaml.splitlines(True))
     (wf_dir / "wf.md").write_text(
         f'---\nid: "workflow:wf"\nkind: "workflow"\ntitle: "WF"\noutputs:\n{outputs_yaml}---\n',
+        encoding="utf-8",
+    )
+    methods_dir = root / "entities" / "methods"
+    methods_dir.mkdir(parents=True, exist_ok=True)
+    (methods_dir / "const.md").write_text(
+        '---\nid: "method:const"\nkind: "method"\ntitle: "Const"\nstochasticity: "deterministic"\n---\n',
+        encoding="utf-8",
+    )
+    steps_dir = root / "entities" / "workflow-steps"
+    steps_dir.mkdir(parents=True, exist_ok=True)
+    (steps_dir / "s1.md").write_text(
+        '---\nid: "workflow-step:s1"\nkind: "workflow-step"\ntitle: "S1"\n'
+        'workflow: "workflow:wf"\nmethod: "method:const"\n---\n',
         encoding="utf-8",
     )
     runs_dir = root / "entities" / "workflow-runs"

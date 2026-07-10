@@ -12,11 +12,28 @@ from science_tool.cli import main as science_cli
 
 
 def _seed_full_pipeline(root: Path) -> None:
+    # register-run derives seed_policy from the workflow's steps; the project must
+    # be loadable and carry a workflow/workflow-step/method trio. A deterministic
+    # method derives seed_policy.kind == "deterministic", step_seeds == {}.
+    (root / "science.yaml").write_text(
+        "name: e2e-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
     (root / "entities" / "workflows").mkdir(parents=True, exist_ok=True)
     (root / "entities" / "workflows" / "toy.md").write_text(
         '---\nid: "workflow:toy"\nkind: "workflow"\ntitle: "Toy"\n'
         "outputs:\n"
         '  - slug: "result"\n    title: "Result"\n    resource_names: ["result"]\n    ontology_terms: []\n---\n',
+        encoding="utf-8",
+    )
+    (root / "entities" / "methods").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "methods" / "const.md").write_text(
+        '---\nid: "method:const"\nkind: "method"\ntitle: "Const"\nstochasticity: "deterministic"\n---\n',
+        encoding="utf-8",
+    )
+    (root / "entities" / "workflow-steps").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "workflow-steps" / "s1.md").write_text(
+        '---\nid: "workflow-step:s1"\nkind: "workflow-step"\ntitle: "S1"\n'
+        'workflow: "workflow:toy"\nmethod: "method:const"\n---\n',
         encoding="utf-8",
     )
     (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
