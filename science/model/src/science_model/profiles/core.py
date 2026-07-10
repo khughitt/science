@@ -659,6 +659,14 @@ CORE_PROFILE = ProfileManifest(
             description="A workflow run executes a specific workflow.",
         ),
         RelationKind(
+            name="applies",
+            predicate="sci:applies",
+            source_kinds=["workflow-step"],
+            target_kinds=["method"],
+            layer="layer/core",
+            description="A workflow step applies an analytical method.",
+        ),
+        RelationKind(
             name="supersedes",
             predicate="sci:supersedes",
             source_kinds=["workflow-run", *_CONCLUSION_KINDS],

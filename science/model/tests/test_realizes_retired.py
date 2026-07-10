@@ -17,8 +17,3 @@ def test_realizes_relation_kind_is_gone() -> None:
 
 def test_the_surviving_workflow_relations_are_untouched() -> None:
     assert {"contains", "executes", "feeds_into", "implements"} <= _NAMES
-
-
-def test_applies_is_not_added_yet() -> None:
-    """Spec 1 owns sci:applies; adding it here would be scope creep."""
-    assert "applies" not in _NAMES

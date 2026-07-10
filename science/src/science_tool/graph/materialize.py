@@ -13,7 +13,13 @@ from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
-from science_model.entities import Entity, EvidenceLineEntity, FalsificationEntity, WorkflowRunEntity
+from science_model.entities import (
+    Entity,
+    EvidenceLineEntity,
+    FalsificationEntity,
+    WorkflowRunEntity,
+    WorkflowStepEntity,
+)
 from science_model.identity import EntityClass, EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlock, WorkflowRecipeDerivationBlock
@@ -747,6 +753,15 @@ def _add_relations(
             knowledge=knowledge,
         )
 
+    if isinstance(entity, WorkflowStepEntity):
+        _add_applies_edge(
+            entity,
+            entity_uri,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+        )
+
     for raw_target in sorted(getattr(entity, "participants", []) or []):
         if is_metadata_reference(raw_target):
             continue
@@ -1107,6 +1122,37 @@ def _add_executes_edge(
             "non-workflow entity; a run's workflow must name a workflow."
         )
     knowledge.add((run_uri, SCI_NS.executes, _entity_uri(resolution.canonical_id)))
+
+
+def _add_applies_edge(
+    entity: WorkflowStepEntity,
+    step_uri: URIRef,
+    *,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+    knowledge,
+) -> None:
+    """Emit sci:applies for a step that names the method it applies.
+
+    A step that names no method emits no edge. A step that names one it cannot
+    resolve is a hard error: silently dropping the edge would delete the link
+    that Spec 2 traverses to derive a run's seed policy.
+    """
+    if not entity.method:
+        return
+    resolution = resolver.resolve(entity.method)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise ValueError(
+            f"{entity.canonical_id} applies {entity.method!r}, which does not resolve "
+            "to a known entity; a step's method must resolve to a method."
+        )
+    target = entity_index.get(resolution.canonical_id)
+    if target is None or target.kind != "method":
+        raise ValueError(
+            f"{entity.canonical_id} applies {resolution.canonical_id!r}, which resolved to a "
+            "non-method entity; a step's method must name a method."
+        )
+    knowledge.add((step_uri, SCI_NS.applies, _entity_uri(resolution.canonical_id)))
 
 
 def _add_run_ref_edges(

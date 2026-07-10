@@ -322,6 +322,12 @@ def _audit_entity(
     workflow_ref = getattr(entity, "workflow", "")
     if workflow_ref:
         rows.extend(_audit_reference(entity, "workflow", workflow_ref, resolver, ext_prefixes=ext_prefixes))
+    # `method` is declared only by WorkflowStepEntity; auditing it here is what
+    # makes `_add_applies_edge`'s unresolved-ref branch unreachable in the
+    # normal pipeline.
+    method_ref = getattr(entity, "method", "")
+    if method_ref:
+        rows.extend(_audit_reference(entity, "method", method_ref, resolver, ext_prefixes=ext_prefixes))
     for target in entity.source_refs:
         rows.extend(
             _audit_reference(
