@@ -738,11 +738,17 @@ Phase-2 follow-up. Keep the ordinal magnitude as durable, policy-versioned evide
 - parent: task:t075
 - aspects: [software-development]
 - related: [task:t075, question:0016-reproducibility-validation]
-- blocked-by: [task:t088]
+- blocked-by: [task:t093]
 - group: reproducibility-validation
 - created: 2026-07-09
 
-Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. The reader-facing payoff. Given dataset:X, traverse to its run, to fingerprint.step_seeds, to each workflow-step, to its method's stochasticity, and report: which steps were stochastic, what seeds the original run supplied, and which steps are nondeterministic and therefore not exactly reproducible. CLI surface over derived-dataset provenance. Depends on Specs 0-2.
+Umbrella: doc/plans/2026-07-09-method-stochasticity-umbrella-design.md. The reader-facing payoff. Given dataset:X, report which steps were stochastic, what seeds the original run supplied, and which steps are nondeterministic and therefore not exactly reproducible. Depends on Specs 0-2.
+
+BLOCKED BY t093, not t088. t088 is done, but Spec 3 traverses dataset -> run -> fingerprint.step_seeds, and NO run in any project carries a fingerprint, because register-run demands an authored fingerprint stub that strict loading (the default for validate and graph build) rejects. Spec 3 would be built against a surface nobody can populate. Fix t093 first; prefer a separate declaration model on WorkflowRunEntity with 'fingerprint: RunFingerprint | None' staying purely captured -- which is the same declaration/observation split this umbrella exists to enforce.
+
+Spec 3 CANNOT be a graph-only traversal as the design implies. materialize.py emits exactly ONE fingerprint fact: sci:fingerprintPolicy, a presence marker (materialize.py:1234). It emits no step_seeds, no method stochasticity, no seed_bindings. So the CLI must either (a) use the graph only to resolve dataset -> fingerprinted run, then source-load the run/steps/methods for the details, or (b) explicitly materialize a query surface for those fields. Prefer (a): it matches Spec 2's source-layer reverse index over WorkflowStepEntity.workflow, and it keeps t092 (sci:contains declared but never emitted) OFF the critical path. t092 only becomes blocking if workflow->step traversal is made graph-native.
+
+Decide explicitly whether the CLI reports the dataset's OWN producer run or provenance inherited through member_of. graph/run_resolution.py:51 keeps own_derivation_run and resolved_empirical_runs deliberately separate. The reader-facing command should probably use inherited resolution BUT display the chain, so it never implies a member dataset was directly run-produced.
 
 ## [t090] Guard the hand-copied template mirror (root vs packaged)
 - priority: P3
@@ -781,3 +787,7 @@ CORE_PROFILE declares RelationKind 'contains' (sci:contains) over workflow -> wo
 - created: 2026-07-10
 
 register-run REQUIRES fingerprint.executor / input_artifact_locality / output_artifact_locality to be authored on the workflow-run before it will capture anything (persist_run_fingerprint raises otherwise). But those three fields live INSIDE WorkflowRunEntity.fingerprint, typed as a full RunFingerprint, whose other components (fingerprint_policy, code_sha, code_dirty, environment_digest, parameters_digest, input/output_manifest_digest, seed_policy) are all required. So a run in the authored-but-not-yet-registered state fails schema validation, and load_project_sources(strict_core_schema=True) -- the DEFAULT, used by science validate and graph build -- raises on it. Catch-22: you cannot validate a run until you register it, and registering requires authoring the stub that breaks validation. Verified 2026-07-10 by authoring a run exactly as templates/workflow-run.md instructs and calling load_project_sources with defaults. Pre-existing since t077 (seed_policy was authored the same way); Spec 2 (t088) only made it visible by documenting the block in the template. Consistent with the corpus: 47 workflow-run entities exist across 6 project roots and ZERO carry a fingerprint. Fix options: (a) hoist the three declarations to run-level fields outside fingerprint:, (b) give WorkflowRunEntity a separate declaration model and let fingerprint stay Optional and wholly derived. Prefer (b): declarations and observations are different kinds of thing, which is the umbrella's whole thesis.
+
+### Notes
+
+- 2026-07-10: Now BLOCKS t089 (umbrella Spec 3) -- Spec 3 traverses fingerprint.step_seeds and no run anywhere carries a fingerprint. Preferred shape: give WorkflowRunEntity a separate DECLARATION model (executor, input_artifact_locality, output_artifact_locality) and leave 'fingerprint: RunFingerprint | None' purely CAPTURED, written only by register-run. That is the same declaration/observation split the method-stochasticity umbrella enforces for seed_policy, applied one level up. Hoisting the three fields to bare run-level fields also works but scatters them. Once fixed, templates/workflow-run.md must drop the ORDERING CONSTRAINT warning added in t088.

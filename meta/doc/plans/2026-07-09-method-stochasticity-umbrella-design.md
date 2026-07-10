@@ -489,14 +489,38 @@ references already. Neither is fixed by this spec. Both are tracked separately.
 
 ### Spec 3 — Downstream transparency
 
-The reader-facing payoff. Given `dataset:X`, traverse to its run, to
-`step_seeds`, to each step, to its method's `stochasticity`, and answer:
+The reader-facing payoff. Given `dataset:X`, reach its run, its `step_seeds`,
+each step, and that step's method `stochasticity`, and answer:
 
 > These two steps were stochastic. `cluster` used `random_state=42`.
 > `embed` was `nondeterministic` (GPU atomics) and cannot be reproduced exactly.
 
+**Blocked by `t093`, not by `t088`.** Spec 2 is done, but *no run in any project
+carries a `fingerprint`*, because `register-run` demands an authored fingerprint
+stub that strict loading — the default for `validate` and `graph build` — rejects.
+Spec 3 would be built against a surface nobody can populate. `t093` fixes that by
+splitting the run's **declarations** (executor, artifact localities) from its
+**captured** `fingerprint`, which is this umbrella's own thesis applied one level up.
+
+**Not a graph-only traversal.** `materialize.py` emits exactly one fingerprint
+fact — `sci:fingerprintPolicy`, a presence marker (`materialize.py:1234`). It
+emits no `step_seeds`, no method `stochasticity`, no `seed_bindings`. So the CLI
+uses the **graph** to resolve `dataset → fingerprinted run`, and the **source
+layer** for the fingerprint, steps, and methods — the same reverse index over
+`WorkflowStepEntity.workflow` that Spec 2's `register-run` uses. That split keeps
+`t092` (`sci:contains` declared but never emitted) off the critical path;
+materializing a query surface for these fields is a real alternative, and the
+thing that would make `t092` blocking.
+
+**Own run vs inherited provenance.** `graph/run_resolution.py:51` deliberately
+separates `own_derivation_run` from `resolved_empirical_runs`, which walks
+`member_of` to a parent. The reader-facing command should use *inherited*
+resolution — a member dataset's reproducibility really is its parent run's — but
+must **display the chain**, so it never implies the member was directly
+run-produced.
+
 **Done when:** a CLI surface reports the stochastic steps and realized seeds in
-any derived dataset's provenance.
+any derived dataset's provenance, and names the run it inherited them from.
 
 ## Consequences
 
