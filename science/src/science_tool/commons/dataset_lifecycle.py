@@ -31,7 +31,7 @@ from science_tool.identity_authoring import (
     IdentityAuthoringError,
     require_profile_identity,
 )
-from science_tool.markdown_utils import parse_frontmatter
+from science_tool.markdown_utils import frontmatter_span
 
 
 _DATASET_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
@@ -212,7 +212,7 @@ def validate_dataset_package(commons_root: Path, slug: str) -> DatasetPackageVal
         )
         frontmatter: dict[str, Any] = {}
     else:
-        frontmatter, _ = parse_frontmatter(paths.entity_path)
+        frontmatter, _ = frontmatter_span(paths.entity_path)
         _validate_entity_frontmatter(findings, paths, slug, frontmatter)
 
     if not paths.datapackage_path.is_file():

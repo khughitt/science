@@ -58,7 +58,7 @@ def _read_frontmatter_strict(path: Path) -> tuple[dict, int]:
 
     An absent or validly-empty block returns ``({}, ...)``; a present block that
     fails to parse or is not a mapping raises ``MalformedTopicError``. Unlike
-    ``markdown_utils.parse_frontmatter``, YAML errors are NOT swallowed.
+    ``markdown_utils.frontmatter_span``, YAML errors are NOT swallowed.
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0].strip() != "---":

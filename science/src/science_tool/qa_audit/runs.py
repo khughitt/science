@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from science_tool.markdown_utils import parse_frontmatter
+from science_tool.markdown_utils import frontmatter_span
 
 
 @dataclass
@@ -31,7 +31,7 @@ def load_runs(runs_dir: Path) -> list[RunRecord]:
     """
     records: list[RunRecord] = []
     for path in sorted(runs_dir.glob("*.md")):
-        fm, _ = parse_frontmatter(path)
+        fm, _ = frontmatter_span(path)
         run_id = str(fm.get("id", path.stem))
         workflow = fm.get("workflow")
         manifest_path = fm.get("manifest_path")

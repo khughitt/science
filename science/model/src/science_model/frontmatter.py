@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+import os
+from collections.abc import Mapping
+from datetime import date, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -64,6 +66,29 @@ def nearest_project_root(start: Path) -> Path | None:
     return None
 
 
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically via a temp file + ``os.replace``.
+
+    The single sanctioned atomic-write dance for entity/frontmatter files. It
+    absorbs the duplicated temp-file logic formerly in
+    ``science_tool.entities._atomic_replace_text`` and
+    ``science_tool.datasets_identity._atomic_write``. Same-filesystem
+    ``os.replace`` only (no ``fsync``); on failure the temp file is removed and
+    the exception re-raised.
+    """
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
 def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
     """Parse YAML frontmatter and body from a markdown file.
 
@@ -83,6 +108,96 @@ def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
     fm = yaml.safe_load(parts[1]) or {}
     body = parts[2].strip()
     return fm, body
+
+
+def split_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse frontmatter and return the body **verbatim** (non-lossy).
+
+    Unlike :func:`parse_frontmatter`, this does not ``.strip()`` the body and
+    does not translate line endings, so it is safe for read-modify-write on
+    hand-authored files. Callers must read the file with ``newline=""`` so the
+    platform does not rewrite ``\\r\\n`` before this sees it.
+
+    Returns ``({}, text)`` when there is no parseable frontmatter block, and
+    ``({}, body)`` when the block is present but not a mapping.
+    """
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
+        return ({}, text)
+    after_opening_marker = text[len("---" + newline) :]
+    closing_marker = f"{newline}---{newline}"
+    closing_marker_index = after_opening_marker.find(closing_marker)
+    if closing_marker_index == -1:
+        return ({}, text)
+    frontmatter_text = after_opening_marker[:closing_marker_index]
+    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        return ({}, body)
+    return (frontmatter, body)
+
+
+_FRONTMATTER_DATE_KEYS: frozenset[str] = frozenset({"created", "updated"})
+# Scalar keys emitted as double-quoted strings regardless of how pyyaml
+# serialises them (version strings look numeric to YAML).
+_FRONTMATTER_FORCE_QUOTED_KEYS: frozenset[str] = _FRONTMATTER_DATE_KEYS | frozenset(
+    {"version", "pin_version"}
+)
+
+
+def _coerce_frontmatter_date(value: Any) -> str:
+    """``date``/``datetime``/``str`` → ISO-8601 string; other types via ``str``."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def render_frontmatter_block(fields: Mapping[str, Any]) -> str:
+    """Render the canonical YAML frontmatter block (no ``---`` fences).
+
+    The canonical emission for new or explicitly-migrated writers. Reproduces
+    the renderer formerly in ``commons/promote.py``: ``created``/``updated``
+    coerced to ISO strings and force-double-quoted together with
+    ``version``/``pin_version``; ``safe_dump(sort_keys=False,
+    allow_unicode=True, default_flow_style=False, width=10_000)``; trailing
+    newline. It is deliberately **not** retrofitted onto the divergent legacy
+    emitters — see the Phase 2 plan's reframing note.
+    """
+    out: dict = {}
+    for key, value in fields.items():
+        if key in _FRONTMATTER_DATE_KEYS:
+            out[key] = _coerce_frontmatter_date(value)
+        else:
+            out[key] = value
+    dumped = yaml.safe_dump(
+        out,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=10_000,
+    )
+    lines = []
+    for line in dumped.splitlines():
+        for k in _FRONTMATTER_FORCE_QUOTED_KEYS:
+            prefix = f"{k}:"
+            if line.startswith(prefix):
+                raw = line[len(prefix) :].strip()
+                if len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
+                    raw = raw[1:-1]
+                if raw and raw != "null":
+                    line = f'{k}: "{raw}"'
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def render_frontmatter(fields: Mapping[str, Any], body: str) -> str:
+    """Render a full frontmatter document: ``---\\n{block}---\\n{body}``."""
+    return f"---\n{render_frontmatter_block(fields)}---\n{body}"
 
 
 def _coerce_date(val: str | date | None) -> date | None:

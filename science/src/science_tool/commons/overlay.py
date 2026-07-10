@@ -36,7 +36,7 @@ from science_tool.commons.errors import (
     ProjectDirectoryMissingError,
 )
 from science_tool.commons.query import CommonsQuery
-from science_tool.markdown_utils import parse_frontmatter
+from science_tool.markdown_utils import frontmatter_span
 
 _TYPE_TO_DIR = {
     "dataset": "datasets",
@@ -49,7 +49,7 @@ _OVERLAYS_ROOT = "overlays"
 
 def _read_markdown_body(path: Path) -> str:
     """Return the markdown body of `path`: everything after the frontmatter."""
-    _, body_start = parse_frontmatter(path)
+    _, body_start = frontmatter_span(path)
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     return "".join(lines[body_start - 1 :])
 
@@ -110,7 +110,7 @@ class OverlayAdapter:
             for child in sorted(subdir.iterdir()):
                 if child.suffix != ".md" or not child.is_file():
                     continue
-                frontmatter, _ = parse_frontmatter(child)
+                frontmatter, _ = frontmatter_span(child)
                 if "overlay_of" not in frontmatter:
                     continue
                 canonical_id = f"{type_name}:{child.stem}"
@@ -157,7 +157,7 @@ class OverlayAdapter:
     def _build(self, canonical_id: str, overlay_path: Path) -> OverlayRecord:
         type_name, slug = canonical_id.split(":", 1)
         try:
-            frontmatter, _ = parse_frontmatter(overlay_path)
+            frontmatter, _ = frontmatter_span(overlay_path)
             if not frontmatter:
                 raise EntityValidationError(f"{overlay_path} has no parseable frontmatter")
             self._validator.validate_overlay(frontmatter)

@@ -18,7 +18,7 @@ from typing import Callable
 
 from science_tool.markdown_utils import (
     is_fence_line,
-    parse_frontmatter,
+    frontmatter_span,
     strip_inline_code,
 )
 
@@ -265,7 +265,7 @@ def detect_bare_author_year(
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    _, body_start = parse_frontmatter(path)
+    _, body_start = frontmatter_span(path)
     lines = text.splitlines()
     issues: list[LintIssue] = []
     in_fence = False
@@ -330,7 +330,7 @@ def detect_short_form_ids(
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    _, body_start = parse_frontmatter(path)
+    _, body_start = frontmatter_span(path)
     lines = text.splitlines()
     issues: list[LintIssue] = []
     in_fence = False
@@ -391,7 +391,7 @@ def detect_frontmatter_inline_gaps(
     lets the body satisfy a `related:` entry via any equivalent spelling — a
     project shorthand like `mm30` counts as a mention of `multiple-myeloma`.
     """
-    data, body_start = parse_frontmatter(path)
+    data, body_start = frontmatter_span(path)
     related = data.get("related") if isinstance(data, dict) else None
     if not isinstance(related, list) or not related:
         return []
@@ -514,7 +514,7 @@ def detect_numeric_anchor(
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    data, body_start = parse_frontmatter(path)
+    data, body_start = frontmatter_span(path)
     if _paper_note_has_source_context(path, data) or _interpretation_has_artifact_context(data):
         return []
     lines = text.splitlines()
@@ -613,7 +613,7 @@ def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> l
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return []
-    _, body_start = parse_frontmatter(path)
+    _, body_start = frontmatter_span(path)
     issues: list[LintIssue] = []
     in_fence = False
     for lineno_zero, raw_line in enumerate(lines):

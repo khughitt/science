@@ -21,7 +21,7 @@ from science_tool.project_package.core import content_version, file_resource
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
-from science_tool.markdown_utils import parse_frontmatter, strip_html_comments_preserving_code
+from science_tool.markdown_utils import frontmatter_span, strip_html_comments_preserving_code
 from science_tool.project_config import load_project_config
 from science_tool.references import (
     MarkdownPayload,
@@ -787,7 +787,7 @@ def _discover_entities(
     restricted_ids: set[str] = set()
     seen: set[str] = set()
     for path in iter_entity_markdown(entity_root):
-        frontmatter, body_start_line = parse_frontmatter(path)
+        frontmatter, body_start_line = frontmatter_span(path)
         body = _read_markdown_body(path, body_start_line)
         entity_id = frontmatter.get("id")
         if not isinstance(entity_id, str) or not entity_id:

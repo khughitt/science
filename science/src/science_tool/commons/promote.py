@@ -37,6 +37,7 @@ from science_model.entity_schema import (
 )
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
+from science_model.frontmatter import render_frontmatter
 
 from science_tool.commons.config import check_override_conflict, registry_root_for_id
 from science_tool.commons.datapackage import (
@@ -2917,7 +2918,7 @@ def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> 
             slug=None,
         )
     parsed.update(updates)
-    return f"---\n{_render_frontmatter(parsed)}---\n{body}"
+    return render_frontmatter(parsed, body)
 
 
 def _dataset_recipe_source_hint(canonical_fields: Mapping[str, Any]) -> str | None:
@@ -3032,58 +3033,6 @@ def _pick_canonical_bibkey_case(
 # Renderer helpers (Task 13)                                                   #
 # --------------------------------------------------------------------------- #
 
-_DATE_KEYS: frozenset[str] = frozenset({"created", "updated"})
-# Scalar keys whose values must be emitted as double-quoted strings regardless
-# of how pyyaml chooses to serialise them (version strings look numeric to YAML).
-_FORCE_QUOTED_KEYS: frozenset[str] = _DATE_KEYS | frozenset({"version", "pin_version"})
-
-
-def _coerce_date_for_yaml(value: Any) -> str:
-    """`datetime.date` / `datetime.datetime` / `str` → ISO-8601 string. Other
-    types are returned as-is via `str(value)`."""
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)
-
-
-def _render_frontmatter(fields: dict) -> str:
-    """Render an ordered, deterministic YAML frontmatter block.
-
-    Date fields go through `_coerce_date_for_yaml` and are quoted; version /
-    pin_version scalars are also force-quoted (pyyaml treats "1.0.0" as a
-    plain float-like scalar).  Lists are block style.
-    """
-    out: dict = {}
-    for key, value in fields.items():
-        if key in _DATE_KEYS:
-            out[key] = _coerce_date_for_yaml(value)
-        else:
-            out[key] = value
-    dumped = yaml.safe_dump(
-        out,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-        width=10_000,
-    )
-    # Force double-quoting of scalars in _FORCE_QUOTED_KEYS — pyyaml may emit
-    # unquoted or single-quoted forms that would round-trip incorrectly.
-    lines = []
-    for line in dumped.splitlines():
-        for k in _FORCE_QUOTED_KEYS:
-            prefix = f"{k}:"
-            if line.startswith(prefix):
-                raw = line[len(prefix) :].strip()
-                # Strip surrounding single- or double-quotes pyyaml may add
-                if len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
-                    raw = raw[1:-1]
-                if raw and raw != "null":
-                    line = f'{k}: "{raw}"'
-        lines.append(line)
-    return "\n".join(lines) + "\n"
-
 
 def _render_body(sections: dict[str, str]) -> str:
     """Render `{heading: content}` back to markdown. Empty heading "" goes first
@@ -3136,8 +3085,8 @@ def _render_canonical(
         "kind": kind.kind,
         "title": canonical_fields.get("title", ""),
         "version": decision.canonical_version,
-        "created": _coerce_date_for_yaml(created),
-        "updated": _coerce_date_for_yaml(updated),
+        "created": created,
+        "updated": updated,
     }
     if kind.kind == "paper":
         head["bibkey"] = decision.slug
@@ -3149,9 +3098,8 @@ def _render_canonical(
             continue
         head[k] = v
 
-    fm = _render_frontmatter(head)
     body = _render_body(canonical_body)
-    return f"---\n{fm}---\n{body}"
+    return render_frontmatter(head, body)
 
 
 def _render_overlay(
@@ -3179,9 +3127,8 @@ def _render_overlay(
             continue
         head[k] = v
 
-    fm = _render_frontmatter(head)
     body = _render_body(project_only_body)
-    return f"---\n{fm}---\n{body}"
+    return render_frontmatter(head, body)
 
 
 # --------------------------------------------------------------------------- #
