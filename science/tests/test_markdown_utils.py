@@ -52,8 +52,8 @@ def test_frontmatter_line_numbers_unterminated(tmp_path: Path) -> None:
     assert frontmatter_line_numbers(p) == set()
 
 
-def test_parse_frontmatter_returns_data_and_body_start(tmp_path):
-    from science_tool.markdown_utils import parse_frontmatter
+def test_frontmatter_span_returns_data_and_body_start(tmp_path):
+    from science_tool.markdown_utils import frontmatter_span
 
     path = tmp_path / "doc.md"
     path.write_text(
@@ -65,26 +65,26 @@ def test_parse_frontmatter_returns_data_and_body_start(tmp_path):
         "# Body\n"
         "Text here.\n"
     )
-    data, body_start = parse_frontmatter(path)
+    data, body_start = frontmatter_span(path)
     assert data == {"id": "question:q01-foo", "related": ["task:t050"]}
     assert body_start == 6  # 1-based line number of first body line
 
 
-def test_parse_frontmatter_returns_empty_when_absent(tmp_path):
-    from science_tool.markdown_utils import parse_frontmatter
+def test_frontmatter_span_returns_empty_when_absent(tmp_path):
+    from science_tool.markdown_utils import frontmatter_span
 
     path = tmp_path / "doc.md"
     path.write_text("# Just body\n")
-    data, body_start = parse_frontmatter(path)
+    data, body_start = frontmatter_span(path)
     assert data == {}
     assert body_start == 1
 
 
-def test_parse_frontmatter_returns_empty_when_unterminated(tmp_path):
-    from science_tool.markdown_utils import parse_frontmatter
+def test_frontmatter_span_returns_empty_when_unterminated(tmp_path):
+    from science_tool.markdown_utils import frontmatter_span
 
     path = tmp_path / "doc.md"
     path.write_text("---\nid: question:q01-foo\n# Forgot to close\n")
-    data, body_start = parse_frontmatter(path)
+    data, body_start = frontmatter_span(path)
     assert data == {}
     assert body_start == 1

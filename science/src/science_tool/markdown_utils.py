@@ -202,7 +202,7 @@ def frontmatter_line_numbers(path: Path) -> set[int]:
     return set()
 
 
-def parse_frontmatter(path: Path) -> tuple[dict, int]:
+def frontmatter_span(path: Path) -> tuple[dict, int]:
     """Return ``(frontmatter_data, body_start_line)`` for a markdown file.
 
     `body_start_line` is the 1-based line number of the first body line

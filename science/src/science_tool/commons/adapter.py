@@ -17,7 +17,7 @@ from typing import Any
 from science_model.entity_schema import EntityValidationError, EntityValidator
 
 from science_tool.commons.errors import CommonsEntityError, CommonsLayoutError
-from science_tool.markdown_utils import parse_frontmatter
+from science_tool.markdown_utils import frontmatter_span
 
 _TYPE_DIRS = ("datasets", "papers", "topics", "themes")
 _SKIP_NAMES = frozenset({".git", ".migrations", "__pycache__", "registry.sqlite"})
@@ -33,7 +33,7 @@ _TYPE_DIR_TO_TYPE = {
 def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path | None:
     dataset_dir = root / "datasets" / slug
     default_dp_path = dataset_dir / "datapackage.yaml"
-    frontmatter, _ = parse_frontmatter(entity_path)
+    frontmatter, _ = frontmatter_span(entity_path)
     dataset_class = frontmatter.get("dataset_class")
     datapackage = frontmatter.get("datapackage")
 
@@ -164,7 +164,7 @@ class CommonsEntityAdapter:
         type_name = _TYPE_DIR_TO_TYPE[type_dir]
         canonical_id = f"{type_name}:{slug}"
         try:
-            frontmatter, _ = parse_frontmatter(body_path)
+            frontmatter, _ = frontmatter_span(body_path)
             if not frontmatter:
                 raise EntityValidationError(f"{body_path} has no parseable frontmatter")
             self._validator.validate(frontmatter)
