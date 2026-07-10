@@ -165,9 +165,9 @@ def test_nondeterministic_method_does_not_warn_about_unbound_params(tmp_path: Pa
     assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
 
 
-def test_method_resolved_through_same_as_is_checked(tmp_path: Path) -> None:
-    # Pins Finding 1: the check must resolve a step's `method:` ref through the
-    # same `ReferenceResolver` machinery the compiler uses -- including project
+def test_method_resolved_through_manual_alias_is_checked(tmp_path: Path) -> None:
+    # Pins the resolver contract: the check must resolve a step's `method:` ref through
+    # the same `ReferenceResolver` machinery the compiler uses -- including project
     # `manual_aliases` (knowledge/sources/<profile>/mappings.yaml), which an
     # entity's own `canonical_id`/`aliases:` frontmatter can never satisfy. (Not
     # `same_as`: the compiler's `_add_applies_edge` calls `resolver.resolve(entity.method)`
