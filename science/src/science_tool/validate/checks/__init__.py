@@ -70,6 +70,8 @@ CANONICAL_CHECK_MODULES = (
     "origins",
     "lens_views",
     "workflow_runs",
+    "workflow_steps",
+    "methods",
 )
 
 

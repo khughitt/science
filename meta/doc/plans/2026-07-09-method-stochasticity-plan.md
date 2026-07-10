@@ -215,10 +215,17 @@ from science_model.entities import WorkflowStepEntity
 
 
 def _step(**kwargs) -> WorkflowStepEntity:
+    # project / ontology_terms / related / source_refs are REQUIRED on base
+    # `Entity` (no defaults). Markdown fixtures get them from the loader's
+    # `_fill_derived_defaults`; a direct constructor call must pass them.
     return WorkflowStepEntity(
         id="workflow-step:cluster",
         kind="workflow-step",
         title="Cluster",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
         content_preview="",
         file_path="entities/workflow-steps/cluster.md",
         **kwargs,

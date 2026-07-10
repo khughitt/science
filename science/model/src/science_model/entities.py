@@ -917,26 +917,83 @@ class WorkflowEntity(ProjectEntity):
     outputs: list[WorkflowOutput] = Field(default_factory=list)
 
 
+class Stochasticity(StrEnum):
+    """How thoroughly a method's randomness is controlled by its seeds.
+
+    A seed-control classification, NOT a reproducibility verdict — that verdict
+    is `task:t080`'s question. `nondeterministic` therefore means "not fully
+    seed-controlled", which is deliberately wider than "cannot be seeded": a CUDA
+    method that accepts a `random_state` but retains residual nondeterminism
+    (parallel float reduction order, `atomicAdd`) classifies honestly here.
+    """
+
+    DETERMINISTIC = "deterministic"
+    SEEDABLE = "seedable"
+    NONDETERMINISTIC = "nondeterministic"
+
+
 class MethodEntity(ProjectEntity):
     """Analytical method or computational approach.
 
-    Carries no fields beyond ProjectEntity today: `templates/method.md`'s only
-    non-base key is `datasets`, which base Entity already declares. Spec 1 adds
-    `stochasticity` and `seed_params` here — the class exists now so that the
-    kind is bound to a real schema rather than to bare ProjectEntity.
+    `stochasticity` is optional here and required at the point of use: a
+    `workflow-step` that applies an unclassified method is a validate ERROR
+    (`workflow-step.method-stochasticity-missing`), and Spec 2's `register-run`
+    fails closed on the same condition. `None` means *unclassified* and is
+    distinguishable from every classification, so nothing fails open.
+
+    Requiring it here instead would hard-fail the graph build in four live
+    projects: 46 of the 51 authored `method` entities are glossary terms or
+    design documents rather than computational procedures, and asking whether
+    `method:chip-seq` is seed-controlled is a category error.
+
+    `seedable` does not imply a non-empty `seed_params` — a method may be known
+    to be seedable before its parameter is identified. `method.seed-params-missing`
+    reports that as a warning.
     """
+
+    stochasticity: Stochasticity | None = None
+    seed_params: list[str] = Field(default_factory=list)
+
+
+# `\Z`, not `$`: Python's `$` also matches just before a trailing newline, so
+# `$` would accept "literal:42\n" as a legal binding source.
+_CONFIG_BINDING_SOURCE = re.compile(r"^config\.[A-Za-z0-9_][A-Za-z0-9_.-]*\Z")
+_LITERAL_BINDING_SOURCE = re.compile(r"^literal:-?\d+\Z")
 
 
 class WorkflowStepEntity(ProjectEntity):
     """One step of a workflow *definition* (not of a run).
 
-    `workflow` names the owning workflow; `rule_name` names the snakemake rule
-    that executes the step. Both were declared by the template and silently
-    dropped at load until this class existed.
+    `workflow` names the owning workflow; `method` names the method the step
+    applies (materialized as `sci:applies`); `rule_name` names the snakemake rule
+    that executes the step.
+
+    `seed_bindings` maps one of the method's `seed_params` to the SOURCE that
+    supplies it — never to a value. A realized seed value is an observation of a
+    run, and belongs to Spec 2's `RunFingerprint.step_seeds`.
+
+    `rationale` explains why a step applying a `nondeterministic` method is
+    acceptable; `workflow-step.rationale-missing` warns when it is absent.
     """
 
     workflow: str = ""
+    method: str = ""
     rule_name: str = ""
+    seed_bindings: dict[str, str] = Field(default_factory=dict)
+    rationale: str = ""
+
+    @field_validator("seed_bindings")
+    @classmethod
+    def _validate_binding_sources(cls, value: dict[str, str]) -> dict[str, str]:
+        for param, source in value.items():
+            if not param:
+                raise ValueError("seed_bindings parameter name must not be empty")
+            if not (_CONFIG_BINDING_SOURCE.match(source) or _LITERAL_BINDING_SOURCE.match(source)):
+                raise ValueError(
+                    f"seed_bindings[{param!r}] = {source!r} is not a valid binding source; "
+                    "use 'config.<key>' or 'literal:<int>'"
+                )
+        return value
 
 
 class ResearchPackageEntity(ProjectEntity):

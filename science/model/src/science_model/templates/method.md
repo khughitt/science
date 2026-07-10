@@ -15,6 +15,8 @@ _template:
     kind: { default: "method" }
     title: { from: title }
     status: { from: status }
+    stochasticity: { omit: true }
+    seed_params: { omit: true }
     ontology_terms: { default: [] }
     datasets: { default: [] }
     source_refs: { from: source_refs }
