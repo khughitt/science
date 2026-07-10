@@ -59,17 +59,34 @@ dependency. This vocabulary belongs there. It is schema, not emission mechanics.
 `migrate`, `source_snapshots`, `store`) from inside a function body. A
 function-local import is a cycle, deferred.
 
-**3. `store/` is not a clean bottom layer.** `store/validation.py` reaches *up*
-into its conceptual superiors: `patch_membership` (`:18`), `run_resolution`
-(`:19`), and lazily `dataset_independence` (`:250`). No hard cycle results — those
-modules do not import `store` back — but `store/` cannot host a base type while it
-depends on derivation modules.
+**3. `store/validation.py` reaches into the orchestration layer.** It imports
+`patch_membership` (`:18`), whose own imports reach `inquiry_compile` (`:19`) —
+i.e. `store`, the persistence substrate, transitively depends on a derivation
+module that sits well above it. No hard cycle results (`patch_membership` does not
+import `store` back), but the substrate calling up into a derivation module is a
+genuine layering inversion.
 
-Note the distinction that Phase 1 turns on: `store/` *also* imports
-`graph/belief.py` and `graph/belief_weights.py` (`store/summary.py:12-13`,
-`store/validation.py:11`). Those two are **not** upward edges — both import nothing
-from `graph/` at all, so they are leaves that legitimately sit below `store/`.
-Only the three derivation imports are faults.
+**A correction to an earlier draft of this doc.** That draft claimed `store/`'s
+other imports — `belief` and `belief_weights` — were leaves importing "nothing
+from `graph/`," and proposed a guard allowlisting them as such. Both claims are
+false, and the guard would have landed red:
+
+- `belief_weights` is a true leaf. `belief` is **not**: it imports
+  `belief_policy`, `belief_weights`, and `dataset_independence` (`belief.py:11-14`,
+  relative imports the earlier grep missed).
+- Therefore `store/summary.py → belief → dataset_independence` is a real
+  dependency, and `store/` cannot be a "clean bottom layer": `summary` legitimately
+  needs `aggregate_belief` to compute belief summaries, `belief` legitimately needs
+  independence primitives. That chain is correct, not a fault.
+
+The honest layering is not "leaf vs. non-leaf" but **computational core vs.
+orchestration**. A closed core — `{io, errors, export_types, belief_weights,
+belief_policy, belief, dataset_independence, run_resolution}` — imports only itself
+and the three base leaves; every member's transitive imports stay inside the set
+(verified: `belief→{belief_policy, belief_weights, dataset_independence, io}`,
+`dataset_independence→{io}`, `run_resolution→{io}`). `store/` may depend on that
+core freely. The single fault is the one edge that escapes it: `store →
+patch_membership`, because `patch_membership → inquiry_compile` is orchestration.
 
 ## A fourth fault, found while writing this doc
 
@@ -99,7 +116,7 @@ into `graph/` would break external consumers to satisfy an internal tidiness urg
 
 **Document the split, change nothing.** Cheapest, and defensible: neither module is
 broken. Rejected because it leaves the model's central noun undefined in the layer
-that already owns "what an entity is," and leaves the four faults above in place.
+that already owns "what an entity is," and leaves the faults above in place.
 
 **Name the concept once in `science_model`.** *(chosen)* Both modules keep their
 distinct jobs; both consume one shared definition. The patch becomes a first-class
@@ -109,32 +126,47 @@ own docstring claims it already is.
 
 ---
 
-## Phase 1 — Make `store/` a clean bottom layer
+## Phase 1 — Cut `store/` off from the orchestration layer
 
-Prerequisite for everything else: nothing can be hosted below `store/` while
-`store/` depends upward.
+**Not a prerequisite for anything else.** An earlier draft called this "make
+`store/` a clean bottom layer" and "prerequisite for everything." Both are wrong.
+`store/` cannot be a bottom layer — it computes belief summaries and legitimately
+depends on the belief/independence core (above). And it is a prerequisite for
+nothing: Phase 3 puts `Patch` in `science_model`, which imports **no**
+`science_tool` code at all (verified: zero `from science_tool` / `import
+science_tool` statements in `model/src/science_model/`). Phase 1 is a standalone
+coherence fix worth doing on its own merits, and can land in any order relative to
+the rest.
 
-**Change.** `store/validation.py`'s three upward imports (`patch_membership:18`,
-`run_resolution:19`, lazily `dataset_independence:250`) become injected
-dependencies. The validation functions take the membership / run-resolution /
-independence facts they need as arguments rather than importing the modules that
-compute them. Callers (in `materialize`, which already sits above all four)
-supply them.
+**Change.** Cut the single orchestration edge: `store/validation.py:18`'s import
+of `patch_membership.validate_patch_membership_convenience`. The convenience
+validator becomes injected — `validation.py` receives the membership facts it needs
+as an argument, and its one caller (in `materialize`, which sits above both)
+supplies them.
 
-`store/summary.py`'s and `store/validation.py`'s imports of `graph/belief.py` and
-`graph/belief_weights.py` are **left alone**. Both targets import nothing from
-`graph/`, so they are already below `store/` in the layering.
+Leave the rest alone, because they are the computational core, not faults:
+`store/summary.py:12`'s `belief`, `store/validation.py:11`'s `belief_weights`,
+`:19`'s `run_resolution`, and `:250`'s lazy `dataset_independence`. All four are
+inside the closed core defined above; `run_resolution` and `dataset_independence`
+import only `io`. Injecting them would be churn in service of a "bottom layer" goal
+that does not exist.
 
-**Guard.** Extend `tests/test_store_package_structure.py` with an import-direction
-assertion, expressed as two coupled checks so the allowlist cannot silently rot:
+**Guard.** Extend `tests/test_store_package_structure.py` with a
+*core-containment* assertion, in two coupled parts:
 
-1. No module under `graph/store/` may import from `graph/` outside the leaf set
-   `{io, errors, export_types, belief, belief_weights}`.
-2. Every module in that leaf set must itself import nothing from `graph/`.
+1. Every `graph/` module that a `store/` module imports must be a member of the
+   core set `C = {io, errors, export_types, belief_weights, belief_policy, belief,
+   dataset_independence, run_resolution}`.
+2. `C` is closed: every member's own `graph/` imports land inside `C`. (This holds
+   today — see the core derivation above — and check 2 is what keeps it holding.)
 
-Check (2) is what makes (1) safe. Without it, someone adds a `graph/` import to
-`belief.py` and `store/` silently regains an upward edge through an allowlisted
-door. Run check (2) first so its failure message is the one the author sees.
+Part 2 is the substitute for "belief is a leaf." It does not assert `belief`
+imports nothing; it asserts the whole permitted set reaches nothing *outside
+itself*, so `store/` can never touch orchestration through a permitted door. Run
+part 2 first so a violation names the core member that broke closure rather than
+the innocent `store/` module that imported it. `patch_membership ∉ C`, so the guard
+turns green exactly when the one change above lands, and red the moment `store/`
+reacquires an orchestration import.
 
 ---
 
@@ -249,9 +281,25 @@ change, then update the consumer in the same session, and record the break in
 rg -n 'emit_patch_trig|PatchNode|PatchEdge' ~/d/pan-disease ~/d/science-commons
 ```
 
-**Guard.** `tests/test_patch_vocabulary_single_source.py`: fail if `LadderLevel`,
-`MemberRole`, `DerivationReason`, or `PATCH_MEMBERSHIP_POLICY_VERSION` is defined
-anywhere outside `science_model/patch.py`.
+**Guard.** `tests/test_patch_vocabulary_single_source.py`. The guard must cover
+**every** name this phase relocates, not just the patch names — an earlier draft's
+guard protected `LadderLevel` / `MemberRole` / `DerivationReason` /
+`PATCH_MEMBERSHIP_POLICY_VERSION` but left the five independence constants
+unguarded, so `ROLE_RANK` and friends could be redefined in a second place with the
+test still green, recreating the exact duplication this phase removes.
+
+Fail if any of these is bound (assigned or annotated) outside its single sanctioned
+module:
+
+- in `science_model/patch.py`: `LadderLevel`, `MemberRole`, `DerivationReason`,
+  `ProvenanceRoute`, `PATCH_MEMBERSHIP_POLICY_VERSION`;
+- in `science_model/independence.py`: `DEPENDENCE_ROLES`, `VALIDATION_ROLE`,
+  `CITED_ROLE`, `OVERLAP_RANK`, `ROLE_RANK`.
+
+Drive it from a `{name: owning_module}` table so adding a relocated constant is a
+one-line change and no name can be dropped by omission. A re-import
+(`from science_model.independence import ROLE_RANK`) is not a binding and must pass;
+only a fresh assignment fails.
 
 ---
 
@@ -357,8 +405,15 @@ guard is sufficient.
 
 ## Dependency order
 
-Phase 1 → Phase 2 → Phase 3. Phase 4 and Phase 5 are independent of all others and
-of each other; either can land first as a standalone improvement.
+**All five phases are independent.** An earlier draft asserted `Phase 1 → Phase 2
+→ Phase 3`, on the premise that `store/` had to become a clean bottom layer before
+`Patch` could be hosted. That premise was false: `Patch` lands in `science_model`,
+which imports no `science_tool` code, so it needs neither the `store/` cleanup
+(Phase 1) nor the `freshness` de-cycling (Phase 2). The five phases touch a few
+files in common — `materialize.py` in Phases 2 and 3, `patch_membership.py` in
+Phases 1 and 3 — but never in conflicting ways, and none establishes a
+precondition for another. Sequence them by appetite, not by dependency; each is a
+standalone improvement.
 
 This track is independent of the
 [convergence track](2026-07-10-half-applied-pattern-convergence-design.md) and can

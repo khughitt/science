@@ -101,10 +101,29 @@ read a sub-key the typed config does not model, extend the Pydantic model rather
 than keep the raw read — that is the point.
 
 **Guard.** `tests/test_project_root_boundary.py`, an AST guard in the shape of
-`tests/graph/test_durable_write_boundary.py`: fail if any module outside
-`data_root.py` / `project_config.py` / `science_model/frontmatter.py` contains a
-`yaml.safe_load` whose argument path mentions `science.yaml`, or a `while` loop
-testing `(_ / "science.yaml").exists()`.
+`tests/graph/test_durable_write_boundary.py`. It must **not** key on the call
+argument mentioning `science.yaml` — that idiom is already evaded in the tree:
+`graph/io.py:353-357` binds `config_path = project_root / "science.yaml"` and then
+calls `yaml.safe_load(config_path.read_text(...))`, whose argument names neither
+the file nor the string. A call-argument matcher passes it straight through.
+
+Two structural rules instead:
+
+1. **The string is the tell.** Outside `data_root.py` / `project_config.py` /
+   `science_model/frontmatter.py`, no module may contain the string literal
+   `"science.yaml"` at all. Constructing the path is the thing being centralized;
+   whoever needs it calls `data_root.project_config_path(root)`. This catches the
+   aliased read (`io.py:353`), the raw builds in all ~44 files, and the walk-up
+   loops in one rule, because every one of them must name the file somewhere.
+2. **The loader is the tell.** No module outside those three may call
+   `yaml.safe_load`/`yaml.load` on the result of a `.read_text()` whose receiver
+   was assigned from an expression containing `"science.yaml"` — a one-hop
+   backstop for any future config read that obtains the path from elsewhere.
+
+Rule 1 does the real work and is trivially checkable (a literal-string scan, not
+dataflow). Rule 2 exists only because rule 1 could in principle be dodged by
+importing the path from a fourth module; state that limit in the docstring rather
+than implying completeness.
 
 ---
 
@@ -118,15 +137,38 @@ tuple[dict, str] | None` is canonical (12 importing modules). But
 `markdown_utils.py:205` defines `parse_frontmatter(path) -> tuple[dict, int]` —
 same name, *different return type* (body text vs. body start line). An author who
 imports the wrong one gets a type error at best and a silent bug at worst. Beyond
-the two canonical modules, 16 non-test modules touch `"---"` directly across 31
-sites.
+the two canonical modules, 28 non-test modules touch the `"---"`/`"---\n"`
+delimiter directly across 70 sites (see the writer subsection for how that count
+was corrected upward from an earlier "16 / 31").
 
-**Current — writer.** No canonical form exists. Six re-emitters:
-`entities.py:405 render_entity_text`, `entities.py:1356 _render_markdown`,
-`datasets_identity.py:31 _render_entity`, `datasets_catalog.py:192
-_render_entity`, `commons/promote.py:3051 _render_frontmatter`,
-`dag/workbench_apply.py:260 _render_entity_text_from_frontmatter`,
-`commons/reference_graph_promotion.py:121 _render_entity`.
+**Current — writer.** No canonical form exists, and **the set is larger than any
+hand-list this doc drafted.** Three successive counts here said six, then seven,
+then eight emitters — each undercounted, because each keyed on one delimiter
+spelling (`"---"`) and missed the `"---\n"` form. Enumerated structurally instead —
+*a module containing `yaml.safe_dump` adjacent to a `"---"` or `"---\n"` literal* —
+there are **12 emitting modules** (and more functions, since `entities.py` alone
+has two):
+
+```
+entities.py · datasets_identity.py · datasets_catalog.py · datasets_register.py
+commons/promote.py · commons/reference_graph_promotion.py · commons/dataset_lifecycle.py
+dag/workbench_apply.py · annotation/source_text.py · graph/decision_log.py
+cli.py · model/templates.py
+```
+
+Do **not** migrate from this list. Regenerate the set with that structural query at
+implementation time and migrate whatever it returns; a list transcribed into a plan
+goes stale and re-undercounts. The list above is the count, not the worklist.
+
+`model/templates.py` is the one to migrate **first**: it lives *inside*
+`science_model`, the same package the canonical `render_frontmatter` will, and its
+`Renderer` emits the most general case (arbitrary templated entities). If
+`render_frontmatter` cannot serve it, the helper is underspecified. It is a
+first-class caller, never an exclusion to carve around.
+
+Separately, the delimiter is touched — read or write — by **28 non-test modules
+across 70 sites** (both spellings; the umbrella's earlier "16 / 31" counted only
+`"---"`). Every one spot-checked is real frontmatter handling, not markdown rules.
 
 **Target.** `science_model/frontmatter.py` owns both directions:
 
@@ -146,12 +188,12 @@ Rename `markdown_utils.parse_frontmatter` → `frontmatter_span(path) ->
 tuple[dict, int]`, which says what it returns. It has a legitimate distinct
 purpose (line-accurate lint anchoring); it just must not share a name.
 
-The six re-emitters become one-line delegations. `entities.py` keeps
+The emitters become one-line delegations. `entities.py` keeps
 `render_entity_text` as its public name but implements it over
 `render_frontmatter` — it adds entity-specific field ordering, which is policy
 and belongs in `science_tool`.
 
-**Migration risk — the real one.** Byte-for-byte equivalence across six emitters
+**Migration risk — the real one.** Byte-for-byte equivalence across a dozen emitters
 that today differ subtly (quoting, key order, trailing newlines). Do not trust
 review; characterize before migrating.
 
@@ -168,8 +210,9 @@ Two tests, each measuring the thing it names:
 
 - **Test A — emitter equivalence (the actual risk).** For every entity file in
   `meta/entities/` and `fixtures/`, harvest `(fields, body)` via
-  `parse_frontmatter`. Assert that each of the six legacy emitters, given that
-  input, produces output byte-identical to `render_frontmatter(fields, body)`.
+  `parse_frontmatter`. Assert that each legacy emitter in the structurally-derived
+  set, given that input, produces output byte-identical to
+  `render_frontmatter(fields, body)`.
   A failure is a *real* divergence between two emitters — a quoting or key-order
   difference that a caller migration would silently impose on a project's source
   of truth. Fix it deliberately, or exclude that emitter with a named reason.
@@ -185,14 +228,18 @@ normalized, or on freshly-constructed content. Do not use the pair as a
 read-modify-write primitive on arbitrary user files without first landing a
 non-lossy `split_frontmatter(text) -> tuple[str, str]` that preserves the body
 verbatim. That is a small addition and belongs in this phase if any caller does
-read-modify-write. Audit the six emitters' call sites for that pattern before
+read-modify-write. Audit the emitters' call sites for that pattern before
 choosing; `dag/workbench_apply.py:251` and `commons/promote.py:2907` are the
 likely cases.
 
 **Guard.** Extend the Phase 1 AST guard: fail if any module outside
 `science_model/frontmatter.py` and `markdown_utils.py` contains the string
 literal `"---"` in a context adjacent to `yaml.safe_dump`, or defines a function
-whose name matches `_?render_(entity|frontmatter)`.
+whose name matches `_?render_(entity|frontmatter)`. Note the allowlist is exactly
+those two modules: after migration `model/templates.py`'s `Renderer` calls
+`render_frontmatter` and no longer emits the sandwich itself, so it is **not**
+allowlisted — if the guard would still flag it, the migration is incomplete. That
+is the guard doing its job, not a carve-out to add.
 
 ---
 

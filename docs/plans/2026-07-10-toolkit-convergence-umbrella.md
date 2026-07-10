@@ -15,16 +15,20 @@ and is bypassed in the hard ones:
 | Canonical thing that exists | Adoption | Bypass |
 |---|---|---|
 | `output.emit_query_rows` | 55 call sites | 89 inline `== "json"` branches across 23 files; 37 hand-built `Table(` in `cli.py` |
-| `science_model.frontmatter.parse_frontmatter` | 12 importing modules | 16 other non-test modules touch the `"---"` delimiter directly (31 sites); a namesake in `markdown_utils.py:205` returns a *different type* |
+| `science_model.frontmatter.parse_frontmatter` | 12 importing modules | 28 other non-test modules touch the `"---"`/`"---\n"` delimiter directly (70 sites); a namesake in `markdown_utils.py:205` returns a *different type* |
 | `data_root.discover_project_root` | 1 call site | 4 other root-finders; 44 files reference `science.yaml` directly |
 | `graph.health.HEALTH_CHECKS` registry | 16 checks | all 16 bodies inline in one 1,976-line file, vs 50 files under `validate/checks/` |
 | `<domain>/cli.py` + `main.add_command` | 24 groups | 22 groups still inline in `cli.py` (7,386 lines) |
 
-There is one place with **no** canonical form at all: entity **writing**. Six
-modules independently re-emit the `---`/`yaml.safe_dump`/`---`/body sandwich
-(`entities.py:405`, `entities.py:1356`, `datasets_identity.py:31`,
-`datasets_catalog.py:192`, `commons/promote.py:3051`,
-`dag/workbench_apply.py:260`, `commons/reference_graph_promotion.py:121`).
+There is one place with **no** canonical form at all: entity **writing**. Twelve
+modules independently re-emit the `---`/`yaml.safe_dump`/`---`/body sandwich —
+enumerated structurally (`yaml.safe_dump` adjacent to a `---` literal), because
+every hand-list drafted for the convergence spec undercounted by keying on one
+delimiter spelling. `entities.py`, `datasets_identity.py`, `datasets_catalog.py`,
+`datasets_register.py`, `commons/promote.py`,
+`commons/reference_graph_promotion.py`, `commons/dataset_lifecycle.py`,
+`dag/workbench_apply.py`, `annotation/source_text.py`, `graph/decision_log.py`,
+`cli.py`, and `model/templates.py`.
 
 ## Why the patterns decayed
 
