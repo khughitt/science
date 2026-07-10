@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `science_tool/data_root.py` the single source for constructing the `science.yaml` path, so no other module hard-codes the filename, and enforce it with a structural guard test.
+**Goal:** Make `science_model/frontmatter.py` the single site of the `science.yaml` filename literal, so no other module hard-codes it, and enforce it with a structural guard test.
 
-**Architecture:** Introduce `data_root.project_config_path(root)`. Route every `project_root / "science.yaml"` construction and every inline "walk up to find science.yaml" loop through it (or through `discover_project_root`). Rename two registry lookups and one namesake parser so nothing *reads like* a competing resolver. Land an AST guard that fails if the `"science.yaml"` string literal appears outside three sanctioned modules.
+**Architecture:** Introduce `PROJECT_CONFIG_FILENAME` and `project_config_path(root)` in `science_model/frontmatter.py` (re-exported from `data_root`). Route every `project_root / "science.yaml"` construction and every inline "walk up to find science.yaml" loop through them — including inside `data_root.py` and `project_config.py` themselves, so the literal genuinely lives in one place. Rename two registry lookups so nothing *reads like* a competing resolver. Land an AST guard that fails if the `"science.yaml"` literal appears anywhere but that one module.
 
 **Tech Stack:** Python 3, Click, Pydantic, PyYAML, ruamel.yaml, pytest. Package under `science/` (run `uv run --frozen` from `science/`).
 
@@ -15,7 +15,7 @@
 - `science_model` (`model/src/science_model/`) MUST NOT import `science_tool`. The dependency runs one way only.
 - No behavior change: every command and function must produce identical output and side effects before and after. This is a pure refactor.
 - No AI-attribution trailers on commits.
-- The guard's three sanctioned modules — where the `"science.yaml"` literal is permitted — are exactly: `src/science_tool/data_root.py`, `src/science_tool/project_config.py`, `model/src/science_model/frontmatter.py`.
+- The guard's **one** sanctioned module — the sole place the `"science.yaml"` literal is permitted — is `model/src/science_model/frontmatter.py` (where `PROJECT_CONFIG_FILENAME` is defined). `data_root.py` and `project_config.py` consume the constant/function like everyone else; they are **not** exempt.
 - Behave under `explicit over defensive` / `fail early`: do not add silent fallbacks when migrating a raw config read.
 
 ---
@@ -31,11 +31,12 @@ defeat the guard's "one place" premise.
 
 **Files:**
 - Modify: `model/src/science_model/frontmatter.py`
-- Modify: `src/science_tool/data_root.py`
+- Modify: `src/science_tool/data_root.py` (add the re-export **and** migrate its own two `"science.yaml"` literals at `:26,:56`)
+- Modify: `src/science_tool/project_config.py` (migrate its own literal at `:235`)
 - Test: `model/tests/test_frontmatter.py`, `tests/test_data_root.py`
 
 **The two shapes the literal takes.** A fresh scan finds 43 `"science.yaml"`
-literals across the tree (outside the three sanctioned modules): **33** are path
+literals across the tree (outside the one sanctioned module): **33** are path
 constructions `root / "science.yaml"` (want an absolute path), and **10** are
 *relative filename tokens* — `["git", "add", "science.yaml"]`,
 `("README.md", "science.yaml", ...)` inventory tuples, `if "science.yaml" not in
@@ -104,7 +105,7 @@ def project_config_path(root: Path) -> Path:
     return root / PROJECT_CONFIG_FILENAME
 ```
 
-- [ ] **Step 4: Re-export from `data_root` and add its test**
+- [ ] **Step 4: Re-export from `data_root` and migrate its own two literals**
 
 In `src/science_tool/data_root.py`, add to the top-level imports:
 
@@ -112,7 +113,12 @@ In `src/science_tool/data_root.py`, add to the top-level imports:
 from science_model.frontmatter import PROJECT_CONFIG_FILENAME, project_config_path
 ```
 
-(`data_root` has no `__all__`; the import alone makes both available as `data_root.PROJECT_CONFIG_FILENAME` / `data_root.project_config_path`.) Add to `tests/test_data_root.py`:
+(`data_root` has no `__all__`; the import alone makes both available as `data_root.PROJECT_CONFIG_FILENAME` / `data_root.project_config_path`.) Then replace this module's own two hand-built literals so `data_root.py` holds none:
+
+- `discover_project_root` `:26`: `if project_config_path(root).is_file():`
+- `_load_project_config_if_present` `:56`: `if not project_config_path(project_root).is_file():`
+
+Add to `tests/test_data_root.py`:
 
 ```python
 from pathlib import Path
@@ -124,17 +130,28 @@ def test_project_config_path_reexported():
     assert project_config_path(Path("/x/y")) == Path("/x/y/science.yaml")
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Migrate `project_config.py`'s own literal**
+
+`project_config.py:235` (`yaml_path = project_root / "science.yaml"`) is the typed loader itself; it must not be exempt from the "one place" rule. It already imports from `science_model.frontmatter` (`parse_frontmatter`), so extend that import and use it — no cycle (`science_model.frontmatter` imports no `science_tool`):
+
+```python
+from science_model.frontmatter import parse_frontmatter, project_config_path
+...
+    yaml_path = project_config_path(project_root)
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run (from `science/model/`): `uv run --frozen pytest tests/test_frontmatter.py -v`
 Run (from `science/`): `uv run --frozen pytest tests/test_data_root.py -v`
+Then confirm nothing broke in the two touched loaders: `uv run --frozen pytest tests/ -k 'project_config or data_root' -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add science/model/src/science_model/frontmatter.py science/model/tests/test_frontmatter.py science/src/science_tool/data_root.py science/tests/test_data_root.py
-git commit -m "feat: PROJECT_CONFIG_FILENAME + project_config_path in science_model, re-exported from data_root"
+git add model/src/science_model/frontmatter.py model/tests/test_frontmatter.py src/science_tool/data_root.py src/science_tool/project_config.py tests/test_data_root.py
+git commit -m "feat: PROJECT_CONFIG_FILENAME + project_config_path (sole literal site) in science_model"
 ```
 
 ---
@@ -235,7 +252,7 @@ Expected: PASS. Also run the existing frontmatter suite to confirm no behavior c
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/model/src/science_model/frontmatter.py science/model/tests/test_frontmatter.py science/src/science_tool/data_root.py science/tests/test_data_root.py
+git add model/src/science_model/frontmatter.py model/tests/test_frontmatter.py src/science_tool/data_root.py tests/test_data_root.py
 git commit -m "feat(frontmatter): extract nearest_project_root primitive, re-export from data_root"
 ```
 
@@ -306,7 +323,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/feedback.py science/tests/test_feedback.py
+git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "refactor(feedback): route detect_project through nearest_project_root"
 ```
 
@@ -339,30 +356,45 @@ In `commons/config.py`: rename `def resolve_project_root` → `def registry_root
 - `commons/overlay.py:30` import and `:323,:351` call sites → `registry_root_for_name`.
 - `commons/promote.py:41` import and `:533` call site → `registry_root_for_id`.
 - `commons/__init__.py:26-27` imports and `:182-183` `__all__` entries → new names.
-- Any test importing the old names → new names (from Step 1's list).
 
-- [ ] **Step 4: Verify no old name remains**
+- [ ] **Step 4: Update the tests — three shapes, not just imports**
+
+Step 1's list includes tests that reference the names three different ways; a rename that only fixes `import` statements leaves a large red surface. Handle all three:
+
+1. **Direct imports/calls** in tests → new names.
+2. **Monkeypatch string targets.** Several tests patch the name as a *string* attribute on the module that imported it, e.g. `monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", ...)` in `test_commons_promote_overlay_plan.py:87`, `test_commons_promote_dataset_integration.py:54`, `test_commons_promote_topic_discovery.py:12`, `test_commons_cli_promote.py:40,74,103`. After the rename `promote.resolve_project_by_id` no longer exists — each string must become `...promote.registry_root_for_id`. `rg` for these: `rg -n '"science_tool\.[^"]*resolve_project' tests/`.
+3. **Test function names** like `test_resolve_project_by_id_*` in `test_commons_config.py:638,657,676,695` — rename for clarity (cosmetic, but leaving them is misleading).
+
+- [ ] **Step 5: Verify no old name remains anywhere**
 
 Run: `rg -n 'resolve_project_root|resolve_project_by_id' src/ tests/`
-Expected: no matches.
+Expected: no matches (this catches string targets and function names too, which is why it is the acceptance check).
 
-- [ ] **Step 5: Run the commons suite**
+- [ ] **Step 6: Run the commons suite**
 
 Run: `uv run --frozen pytest tests/ -k 'commons or overlay or promote' -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/commons/ science/tests/
+git add src/science_tool/commons/ tests/
 git commit -m "refactor(commons): rename resolve_project_{root,by_id} -> registry_root_for_{name,id}"
 ```
 
 ---
 
-## Task 5: Migrate the six raw config reads onto `project_config_path` (and typed loader where possible)
+## Task 5: Route the six raw config reads through `project_config_path` (path only)
 
-Six sites `yaml.safe_load` a hand-built `science.yaml` path. Route each path through `project_config_path`; upgrade to `load_project_config` where the read wants typed fields; keep raw/round-trip loaders where they legitimately need them.
+Six sites `yaml.safe_load` a hand-built `science.yaml` path. This task centralizes the **path** and leaves the raw loads in place.
+
+**Scope decision (narrows the design doc).** The design doc's Phase 1 also called for migrating these raw reads to `load_project_config` and extending `ProjectConfig` with typed fields for the keys they read (`dag`, `layout_version`, `graph.revision_manifest_excludes`, `last_modified`/`version`). This plan **defers** that, for three concrete reasons:
+
+1. **Not a correctness problem.** `ProjectConfig` is declared `model_config = ConfigDict(extra="allow")`, so `load_project_config` already parses and preserves these extra keys today. The raw reads are a tidiness issue, not a bug.
+2. **It breaks this plan's invariant.** Adding typed fields changes how config is parsed and validated — a behavior change, which this plan's Global Constraints forbid ("pure refactor"). Typed-schema work belongs in its own plan with its own before/after fixtures.
+3. **One read wants the whole dict.** `labnote_export.py:578` returns the *entire* raw mapping; there is no single typed field to migrate it to.
+
+The typed-config-accessor consolidation is recorded as a follow-on in the design doc's Phase 1. This task does only the path centralization the guard actually requires.
 
 **Files:**
 - Modify: `src/science_tool/project_package/serialize.py:92`, `src/science_tool/labnote_export.py:578`, `src/science_tool/dag/paths.py:26`, `src/science_tool/project_artifacts/pin.py:25`, `src/science_tool/cli.py:437`, `src/science_tool/graph/io.py:354`
@@ -408,7 +440,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/
+git add src/science_tool/
 git commit -m "refactor: route the six raw science.yaml reads through project_config_path"
 ```
 
@@ -433,15 +465,13 @@ Run:
 
 ```bash
 # path-join shape -> project_config_path
-rg -n '/ ?"science\.yaml"' src model/src | grep -v test \
-  | grep -vE 'data_root\.py|project_config\.py|science_model/frontmatter\.py'
+rg -n '/ ?"science\.yaml"' src model/src | grep -v test | grep -v 'frontmatter\.py'
 # everything else that names the file -> filename token
-rg -n '"science\.yaml"' src model/src | grep -v test \
-  | grep -vE 'data_root\.py|project_config\.py|science_model/frontmatter\.py' \
+rg -n '"science\.yaml"' src model/src | grep -v test | grep -v 'frontmatter\.py' \
   | grep -vE '/ ?"science\.yaml"'
 ```
 
-At authoring time: 33 path-join occurrences, 10 filename-token occurrences. Regenerate rather than assume.
+Only `frontmatter.py` is excluded now: `data_root.py` and `project_config.py` were migrated in Task 1 and are no longer exempt, so any `"science.yaml"` they still contain is a real miss the sweep must catch. At authoring time (before Task 1): 33 path-join occurrences, 10 filename-token occurrences across the tree. Regenerate rather than assume.
 
 - [ ] **Step 2: Migrate the path-join shape**
 
@@ -480,7 +510,7 @@ Expected: clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src science/model/src
+git add src model/src
 git commit -m "refactor: route remaining science.yaml literals through project_config_path / PROJECT_CONFIG_FILENAME"
 ```
 
@@ -507,11 +537,12 @@ Static ratchet: the ``"science.yaml"`` filename is constructed in exactly one
 place, ``data_root.project_config_path``. Every other module must call it. This
 guards against the filename regrowing across the tree.
 
-Rule 1 (the real check) is a literal-string scan: no sanctioned exception can be
-dodged by aliasing the path into a variable, because every builder must name the
-file *somewhere*. Rule 2 is a one-hop backstop for a config read that obtains the
-path from a fourth module; it is NOT complete (a helper returning the path, or a
-non-yaml reader, evades it) and does not claim to be.
+This is a literal-string scan: no exception can be dodged by aliasing the path
+into a variable, because every builder must name the file *somewhere*. The literal
+is permitted in exactly ONE module — `science_model/frontmatter.py`, which defines
+`PROJECT_CONFIG_FILENAME`. `data_root.py` and `project_config.py` are deliberately
+NOT exempt (they consume the constant like everyone else), so "one place" is
+literally true rather than "three places we trust."
 """
 
 from __future__ import annotations
@@ -522,10 +553,8 @@ from pathlib import Path
 _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 _MODEL_SRC = Path(__file__).resolve().parents[1] / "model" / "src" / "science_model"
 
-# The only modules permitted to name the manifest file.
+# The single module permitted to name the manifest file: where the constant lives.
 _ALLOWED = {
-    _SCIENCE_SRC / "data_root.py",
-    _SCIENCE_SRC / "project_config.py",
     _MODEL_SRC / "frontmatter.py",
 }
 
@@ -571,7 +600,7 @@ Temporarily add `_ = "science.yaml"` to any non-allowlisted module (e.g. `src/sc
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science/tests/test_project_root_boundary.py
+git add tests/test_project_root_boundary.py
 git commit -m "test: guard the science.yaml path against decentralization (convergence Phase 1)"
 ```
 
@@ -606,7 +635,7 @@ Expected: PASS.
 
 ## Self-Review Notes
 
-- **Spec coverage.** This plan implements the design doc's Phase 1 in full: the filename constant + `project_config_path` (Task 1); the `science_model` walk-up primitive + re-export and both walk-up replacements (Tasks 2-3); the two registry renames (Task 4); the six raw-load migrations incl. the `pin.py` round-trip exception (Task 5); the full literal sweep in both shapes (Task 6); the structural guard with rule 1 as the real check and the documented rule-2 limitation (Task 7). Phase 0 is retracted in the design doc (deletes nothing) and is intentionally absent here. Phases 2-6 are separate plans.
+- **Spec coverage — and one deliberate narrowing.** This plan implements the design doc's Phase 1 filename-centralization in full: the constant + `project_config_path` as the sole literal site incl. `data_root`/`project_config`'s own migration (Task 1); the `science_model` walk-up primitive + re-export and both walk-up replacements (Tasks 2-3); the two registry renames with monkeypatch-string handling (Task 4); the six raw-read **path** migrations incl. the `pin.py` round-trip exception (Task 5); the full literal sweep in both shapes (Task 6); the structural guard (Task 7). **Narrowed:** the design's "one config accessor" clause (migrate raw reads to a typed `load_project_config` + extend `ProjectConfig`) is deferred to a follow-on — see Task 5's scope decision and the design doc's annotated Phase 1. It is a behavior-changing schema refactor and does not belong in this behavior-neutral plan. Phase 0 is retracted in the design doc (deletes nothing) and is intentionally absent here. Phases 2-6 are separate plans.
 - **A refinement to the design doc's Rule 1.** The doc's guard said "no module may contain the string literal `"science.yaml"`" and assumed every use is a path build. Implementation found 10 of 43 uses are relative *filename tokens* (git args, inventory tuples, membership tests, display paths) where an absolute `project_config_path(root)` is the wrong type. The plan resolves this with a single `PROJECT_CONFIG_FILENAME` constant that both the path function and the token sites consume, so "the literal lives in one place" holds honestly and the guard stays exactly as strong. The design doc's Phase 1 is annotated with this.
 - **The guard is written last, against the migrated tree** (Task 7 after Tasks 5-6), per the review lesson that a guard authored from the doc out-scopes its migration and lands red.
 - **Rule 2 of the guard** (the `.read_text()`-of-aliased-path backstop) from the design doc is intentionally *not* implemented as a test here: rule 1 (literal scan) already catches every current site including the `io.py:353` alias, because the alias still contains the literal. Adding rule 2 now would be dead code guarding a hole that does not exist in the tree. Its absence is noted in the guard docstring rather than pretended complete.

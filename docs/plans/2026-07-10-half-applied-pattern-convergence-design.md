@@ -72,15 +72,26 @@ it with a raw `yaml.safe_load` outside the typed loader
 (`project_package/serialize.py:92`, `labnote_export.py:578`, `dag/paths.py:26`,
 `project_artifacts/pin.py:25`, `cli.py:437`, `graph/io.py:354`).
 
-**Target.** `science_tool/data_root.py` becomes the single entry point:
+**Target.** The `science.yaml` filename becomes a single constant, and the path
+constructor is built on it. Both live in `science_model/frontmatter.py` (a
+`science_model` module needs them and `science_model` must not import
+`science_tool`), re-exported from `data_root` so `science_tool` callers reach them
+there:
 
 ```python
+# science_model/frontmatter.py — the one place the literal appears
+PROJECT_CONFIG_FILENAME = "science.yaml"
+def project_config_path(root: Path) -> Path: return root / PROJECT_CONFIG_FILENAME
+
+# data_root.py
+from science_model.frontmatter import PROJECT_CONFIG_FILENAME, project_config_path  # re-export
 def discover_project_root(start: Path | None = None) -> Path: ...   # existing, unchanged
-def project_config_path(root: Path) -> Path: ...                    # new: root / "science.yaml"
 ```
 
-`project_config.load_project_config(root)` stays the sole typed reader (15 call
-sites already). The two *registry*-keyed functions in `commons/config.py` are
+`data_root.py` and `project_config.py` are **not** exempt from the guard — they
+consume `project_config_path` like everyone else, so the literal is genuinely in
+one module, not three. `project_config.load_project_config(root)` stays the sole
+typed reader (15 call sites already). The two *registry*-keyed functions in `commons/config.py` are
 **not** merged — they resolve a root from a project *name*, a different question;
 they are renamed `registry_root_for_name` / `registry_root_for_id` to stop them
 reading as competing filesystem walk-ups. `graph/io.py:386` is likewise a
@@ -93,9 +104,20 @@ walk-up *into* `science_model` (it is schema-adjacent — it locates the file th
 schema describes) and having `science_tool.data_root` re-export it. That inverts
 the dependency correctly and is the only import-direction change in this phase.
 
-The six raw `yaml.safe_load` sites migrate to `load_project_config`. Where they
-read a sub-key the typed config does not model, extend the Pydantic model rather
-than keep the raw read — that is the point.
+The six raw `yaml.safe_load` sites have their **path** centralized through
+`project_config_path`, but their raw loads stay. An earlier draft of this phase
+also required migrating them to `load_project_config` and extending `ProjectConfig`
+with typed fields for the keys they read. That is **split out as a follow-on**, for
+a concrete reason found during planning: `ProjectConfig` is `extra="allow"`, so
+`load_project_config` already preserves those keys — the raw reads are a tidiness
+issue, not a correctness one, and converting them to typed fields *changes config
+parsing behavior*, which does not belong in a phase whose whole warrant is being
+behavior-neutral. (One of the six, `labnote_export.py:578`, reads the entire raw
+mapping and has no single field to migrate to at all.) The typed-config-accessor
+consolidation — extend the schema for `dag` / `layout_version` /
+`graph.revision_manifest_excludes` / manifest `last_modified`, then retire the raw
+reads — is its own follow-on with its own before/after fixtures. This phase does
+only the filename centralization the guard enforces.
 
 **Guard.** `tests/test_project_root_boundary.py`, an AST guard in the shape of
 `tests/graph/test_durable_write_boundary.py`. It must **not** key on the call
@@ -106,9 +128,11 @@ the file nor the string. A call-argument matcher passes it straight through.
 
 Two structural rules instead:
 
-1. **The string is the tell.** Outside `data_root.py` / `project_config.py` /
-   `science_model/frontmatter.py`, no module may contain the string literal
-   `"science.yaml"` at all. This catches the aliased read (`io.py:353`), the raw
+1. **The string is the tell.** Outside `science_model/frontmatter.py` — the one
+   module that defines `PROJECT_CONFIG_FILENAME` — no module may contain the string
+   literal `"science.yaml"` at all. `data_root.py` and `project_config.py` are
+   deliberately *not* exempt: they consume the constant/function too, so the literal
+   is in one place, not three. This catches the aliased read (`io.py:353`), the raw
    builds, and the walk-up loops in one rule, because every one of them must name
    the file somewhere. **Two sanctioned forms absorb every real use** (the
    implementation plan found ~43 sites split between them): a *filename constant*
@@ -119,15 +143,17 @@ Two structural rules instead:
    appears only in the constant's definition. This corrects an over-simplification
    in an earlier draft of this rule, which assumed every use was a path build and
    would have had no correct target for the token sites.
-2. **The loader is the tell.** No module outside those three may call
-   `yaml.safe_load`/`yaml.load` on the result of a `.read_text()` whose receiver
-   was assigned from an expression containing `"science.yaml"` — a one-hop
-   backstop for any future config read that obtains the path from elsewhere.
+2. **The loader is the tell (optional backstop).** No module outside the one
+   sanctioned module may call `yaml.safe_load`/`yaml.load` on a `.read_text()`
+   whose receiver was assigned from an expression containing `"science.yaml"` — a
+   one-hop backstop for a config read that obtains the path from a *second* module.
 
 Rule 1 does the real work and is trivially checkable (a literal-string scan, not
-dataflow). Rule 2 exists only because rule 1 could in principle be dodged by
-importing the path from a fourth module; state that limit in the docstring rather
-than implying completeness.
+dataflow). Because rule 1 now permits the literal in only one module, it already
+catches every current site — including the `io.py:353` alias, whose assignment
+still contains the literal. The implementation plan therefore ships rule 1 alone
+and documents rule 2's absence rather than implementing a check for a hole that
+does not exist in the tree.
 
 ---
 
@@ -495,8 +521,8 @@ Two additions carry the real risk:
 - **Phases 3 and 4** must not change `--format json` stdout. Run the snapshot
   suite (`-m snapshot`, excluded by default) at each commit, not just at the end.
 
-Every phase from 1 onward adds exactly one guard test; Phase 0 is a deletion and
-ships a ledger entry instead (see its heading). The guards are the deliverable as
+Every phase from 1 onward adds exactly one guard test; Phase 0 is retracted and
+ships no code at all (see its heading). The guards are the deliverable as
 much as the migrations are: a phase that moves call sites without landing its
 guard has bought a temporary improvement at the cost of a permanent one.
 
