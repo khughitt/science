@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from collections.abc import Mapping
+from datetime import date, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -137,6 +138,66 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
     if not isinstance(frontmatter, dict):
         return ({}, body)
     return (frontmatter, body)
+
+
+_FRONTMATTER_DATE_KEYS: frozenset[str] = frozenset({"created", "updated"})
+# Scalar keys emitted as double-quoted strings regardless of how pyyaml
+# serialises them (version strings look numeric to YAML).
+_FRONTMATTER_FORCE_QUOTED_KEYS: frozenset[str] = _FRONTMATTER_DATE_KEYS | frozenset(
+    {"version", "pin_version"}
+)
+
+
+def _coerce_frontmatter_date(value: Any) -> str:
+    """``date``/``datetime``/``str`` → ISO-8601 string; other types via ``str``."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def render_frontmatter_block(fields: Mapping[str, Any]) -> str:
+    """Render the canonical YAML frontmatter block (no ``---`` fences).
+
+    The canonical emission for new or explicitly-migrated writers. Reproduces
+    the renderer formerly in ``commons/promote.py``: ``created``/``updated``
+    coerced to ISO strings and force-double-quoted together with
+    ``version``/``pin_version``; ``safe_dump(sort_keys=False,
+    allow_unicode=True, default_flow_style=False, width=10_000)``; trailing
+    newline. It is deliberately **not** retrofitted onto the divergent legacy
+    emitters — see the Phase 2 plan's reframing note.
+    """
+    out: dict = {}
+    for key, value in fields.items():
+        if key in _FRONTMATTER_DATE_KEYS:
+            out[key] = _coerce_frontmatter_date(value)
+        else:
+            out[key] = value
+    dumped = yaml.safe_dump(
+        out,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=10_000,
+    )
+    lines = []
+    for line in dumped.splitlines():
+        for k in _FRONTMATTER_FORCE_QUOTED_KEYS:
+            prefix = f"{k}:"
+            if line.startswith(prefix):
+                raw = line[len(prefix) :].strip()
+                if len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
+                    raw = raw[1:-1]
+                if raw and raw != "null":
+                    line = f'{k}: "{raw}"'
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def render_frontmatter(fields: Mapping[str, Any], body: str) -> str:
+    """Render a full frontmatter document: ``---\\n{block}---\\n{body}``."""
+    return f"---\n{render_frontmatter_block(fields)}---\n{body}"
 
 
 def _coerce_date(val: str | date | None) -> date | None:
