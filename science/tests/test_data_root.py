@@ -119,3 +119,10 @@ def test_discover_project_root_walks_up(tmp_path: Path) -> None:
 
 def test_discover_project_root_falls_back_without_science_yaml(tmp_path: Path) -> None:
     assert discover_project_root(tmp_path) == tmp_path.resolve()
+
+
+def test_project_config_path_reexported():
+    from science_tool.data_root import PROJECT_CONFIG_FILENAME, project_config_path
+
+    assert PROJECT_CONFIG_FILENAME == "science.yaml"
+    assert project_config_path(Path("/x/y")) == Path("/x/y/science.yaml")

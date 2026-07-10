@@ -10,7 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
-from science_model.frontmatter import parse_frontmatter
+from science_model.frontmatter import parse_frontmatter, project_config_path
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
 
@@ -232,7 +232,7 @@ class ProjectConfig(BaseModel):
 
 def load_project_config(project_root: Path) -> ProjectConfig:
     """Load and validate science.yaml at ``project_root``. Defaults id to dirname."""
-    yaml_path = project_root / "science.yaml"
+    yaml_path = project_config_path(project_root)
     raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     if "id" not in raw or raw["id"] is None:
         raw["id"] = project_root.resolve().name

@@ -4,9 +4,24 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.entities import EntityType, EvidenceLineEntity, MechanismEntity
-from science_model.frontmatter import parse_entity_file, parse_frontmatter
+from science_model.frontmatter import PROJECT_CONFIG_FILENAME, parse_entity_file, parse_frontmatter, project_config_path
 from science_model.identity import EntityScope, ExternalId
 from science_model.reasoning import DisputeScope, EvidenceRole, EvidenceStance, EvidenceStrength, IndependenceTag
+
+
+def test_project_config_filename_value():
+    assert PROJECT_CONFIG_FILENAME == "science.yaml"
+
+
+def test_project_config_path_appends_filename():
+    root = Path("/tmp/some/project")
+    assert project_config_path(root) == root / "science.yaml"
+
+
+def test_project_config_path_is_a_pure_join():
+    # No expanduser, no resolve, no filesystem access.
+    root = Path("~/rel/proj")
+    assert project_config_path(root) == root / "science.yaml"
 
 
 def test_parse_frontmatter_basic(tmp_path: Path):
