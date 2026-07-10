@@ -137,8 +137,23 @@ def test_unresolvable_method_ref_is_skipped(tmp_path: Path) -> None:
     assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
 
 
-def test_step_without_a_method_is_skipped(tmp_path: Path) -> None:
+def test_step_without_a_method_is_an_error(tmp_path: Path) -> None:
+    # Ruled 2026-07-10: a methodless step contributes no stochasticity
+    # classification, so `seed_policy` cannot be derived from it. Skipping it in
+    # the derivation would let an all-methodless workflow satisfy "every step is
+    # deterministic" vacuously.
     root = _project(tmp_path, method_frontmatter="", step_frontmatter="")
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+    assert _rules(results) == [("workflow-step.method-missing", Severity.ERROR)]
+    assert "workflow-step:cluster" in results[0].message
+
+
+def test_step_with_a_method_does_not_report_method_missing(tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: deterministic\n",
+        step_frontmatter="method: method:leiden\n",
+    )
     assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
 
 
