@@ -533,6 +533,20 @@ run-produced.
 **Done when:** a CLI surface reports the stochastic steps and realized seeds in
 any derived dataset's provenance, and names the run it inherited them from.
 
+*Shipped 2026-07-10 (merge `af207e56`, local main, not pushed).* `science dataset
+stochasticity <dataset-ref>` (with `--format json`): the graph resolves
+`dataset → fingerprinted run` and the `member_of` chain; the source layer supplies
+`step_seeds`, the workflow's steps, and each step's method `stochasticity`. Two
+behaviour-preserving refactors underpin it — `resolve_run_chain` returns the run
+*and* the chain (with `resolved_empirical_runs` delegating), and a shared
+`workflow_steps_index` reverse index reused by `register-run`. Inherited resolution
+is used but the chain is displayed (`child <- member_of <- parent`), so a member
+dataset never looks directly run-produced. An unresolved run is a valid report
+(recipe-only, run-unfingerprinted, …); only a bad ref or unbuilt graph errors. A
+skipped `workflow-step`/`method` fails loud, mirroring `register-run`'s guard, so
+stochasticity is never silently underreported. **The umbrella is complete** — all
+of Spec 0–3 plus `t093` are shipped.
+
 ## Consequences
 
 - Stochasticity becomes a first-class, queryable property rather than tribal
