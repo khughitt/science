@@ -5,7 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from science_model.frontmatter import PROJECT_CONFIG_FILENAME, project_config_path  # noqa: F401
+from science_model.frontmatter import (  # noqa: F401
+    PROJECT_CONFIG_FILENAME,
+    nearest_project_root,
+    project_config_path,
+)
 from science_tool.project_config import ProjectConfig, load_project_config
 from science_tool.registry.config import load_global_config
 

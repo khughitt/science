@@ -50,6 +50,20 @@ def project_config_path(root: Path) -> Path:
     return root / PROJECT_CONFIG_FILENAME
 
 
+def nearest_project_root(start: Path) -> Path | None:
+    """Nearest ancestor of ``start`` (inclusive) containing the project manifest.
+
+    Lives here — not in ``science_tool`` — because ``science_model`` must not
+    import ``science_tool`` and this locates the file the schema describes.
+    ``science_tool.data_root`` re-exports it and composes the env-var layer.
+    """
+    candidate = start if start.is_dir() else start.parent
+    for root in (candidate, *candidate.parents):
+        if project_config_path(root).is_file():
+            return root
+    return None
+
+
 def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
     """Parse YAML frontmatter and body from a markdown file.
 
@@ -371,11 +385,9 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     entity_type = core_entity_type_for_kind(kind)
 
     rel_path = str(path)
-    # Try to make relative to project root
-    for parent in path.parents:
-        if (parent / "science.yaml").exists():
-            rel_path = str(path.relative_to(parent))
-            break
+    project_root = nearest_project_root(path)
+    if project_root is not None:
+        rel_path = str(path.relative_to(project_root))
 
     entity_kwargs = {
         "id": fm.get("id", f"{kind}:{path.stem}"),

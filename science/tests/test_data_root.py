@@ -22,6 +22,13 @@ def _write_project(root: Path, extra: dict | None = None) -> None:
     (root / "science.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
 
 
+def test_nearest_project_root_reexported(tmp_path: Path) -> None:
+    from science_tool.data_root import nearest_project_root
+
+    (tmp_path / "science.yaml").write_text("id: p\n", encoding="utf-8")
+    assert nearest_project_root(tmp_path) == tmp_path
+
+
 def test_default_root_is_project_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _write_project(tmp_path)
     cfg = tmp_path / "cfg"

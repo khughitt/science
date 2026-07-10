@@ -4,9 +4,28 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.entities import EntityType, EvidenceLineEntity, MechanismEntity
-from science_model.frontmatter import PROJECT_CONFIG_FILENAME, parse_entity_file, parse_frontmatter, project_config_path
+from science_model.frontmatter import (
+    PROJECT_CONFIG_FILENAME,
+    nearest_project_root,
+    parse_entity_file,
+    parse_frontmatter,
+    project_config_path,
+)
 from science_model.identity import EntityScope, ExternalId
 from science_model.reasoning import DisputeScope, EvidenceRole, EvidenceStance, EvidenceStrength, IndependenceTag
+
+
+def test_nearest_project_root_finds_ancestor(tmp_path: Path):
+    (tmp_path / "science.yaml").write_text("id: p\n", encoding="utf-8")
+    nested = tmp_path / "entities" / "hypotheses"
+    nested.mkdir(parents=True)
+    assert nearest_project_root(nested) == tmp_path
+
+
+def test_nearest_project_root_returns_none_when_absent(tmp_path: Path):
+    nested = tmp_path / "a" / "b"
+    nested.mkdir(parents=True)
+    assert nearest_project_root(nested) is None
 
 
 def test_project_config_filename_value():
