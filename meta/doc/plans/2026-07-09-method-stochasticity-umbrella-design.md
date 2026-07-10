@@ -81,13 +81,23 @@ Four defects in the current representation, all in scope:
    `entity_id`. Rendering `method` yields `id: method:leiden`. The literal line
    is inert illustration; only its wording misleads.
 
-4. **A `workflow-run` cannot reach its `workflow`.** `WorkflowRunEntity` carries
-   only `manifest_path`, `resources`, and `fingerprint` — there is no `workflow`
-   field. The `sci:executes` relation (`workflow-run` → `workflow`) is declared in
-   the core profile and materialized **nowhere**. Derived datasets *can* reach
-   both (`DerivationBlock` names `workflow` and `workflow_run`), but the run
-   itself cannot name what it ran. Any derivation of `seed_policy` from a
-   workflow's steps requires this edge to exist first.
+4. **A `workflow-run`'s `workflow` is authored but never retained.** The
+   convention already exists: `templates/workflow-run.md` declares
+   `workflow: "<workflow-slug>"`, and `qa_audit/runs.py` errors with
+   `missing 'workflow'` when a run omits it. What is missing is everything
+   downstream of authoring. `WorkflowRunEntity` carries only `manifest_path`,
+   `resources`, and `fingerprint`, so — because `Entity` does not set
+   `extra="forbid"` — the authored key is silently dropped on parse. The
+   `sci:executes` relation (`workflow-run` → `workflow`) is declared in the core
+   profile and materialized **nowhere**; the template's comment claiming it
+   "materializes the executes link the audit walks" is false today. Derived
+   datasets *can* reach both (`DerivationBlock` names `workflow` and
+   `workflow_run`), but the run itself cannot name what it ran.
+
+   So the defect is narrower than "add a field": the three missing pieces are
+   **typed retention** on `WorkflowRunEntity`, **audit and materialization** of
+   the edge, and **canonical template syntax** for the ref. Any derivation of
+   `seed_policy` from a workflow's steps requires this edge to exist first.
 
    A note for implementers on where **not** to look: `validate/checks/id_prefixes.py`
    opens with a raw docstring containing a `PREFIX_RULES` dict — a fossil of the
@@ -294,10 +304,22 @@ Representation hygiene. **No new behavior**; nothing about stochasticity yet.
   move to `science-commons` requires. Do **not** touch `id_prefixes.py`: the live
   `prefix_rules()` already covers these kinds. Making the `template_ready=False`
   workflow kinds generator-rendered is a plausible follow-up, not required here.
-- Add `WorkflowRunEntity.workflow` (a `workflow:` ref) and materialize the
-  already-declared `sci:executes` edge (defect 4), with a graph-validate check
-  that the target resolves to a `workflow`. Without this edge, Spec 2 cannot
-  traverse run → workflow → steps at all.
+- Retain the already-authored `workflow:` ref as a typed
+  `WorkflowRunEntity.workflow` field, audit it, and materialize the
+  already-declared `sci:executes` edge (defect 4). Without this edge, Spec 2
+  cannot traverse run → workflow → steps at all.
+
+  The field is **optional** (`str = ""`) in this spec. Spec 0 is behavior-neutral:
+  it preserves existing fixtures and already-authored runs, while a value that is
+  present but unresolvable fails loudly. Requiring the field belongs to Spec 2,
+  where deriving `seed_policy` actually depends on run → workflow → steps.
+
+  The resolution guard lives in the **compiler** — the boundary where an authored
+  ref becomes graph structure — and nowhere else. A post-hoc check in
+  `graph/store/validation.py` would re-read `graph.trig` to assert what the
+  compiler had just refused to emit; under kernel closure that only guards against
+  out-of-band mutation of `graph.trig`, which does not justify a second validation
+  surface.
 - Retire `sci:realizes`; delete the inert `method:` field from
   `templates/workflow.md` (defect 2).
 

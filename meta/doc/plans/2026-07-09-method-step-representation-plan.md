@@ -27,15 +27,13 @@
 - Docs and code comments use `~/d/…` paths, never `/home/keith/…` or `/mnt/ssd/Dropbox/…`.
 - Full suite, run from `science/`: `uv run --frozen pytest`. Expected baseline before you start: **7728 passed**. `addopts` already contains `-q`; do **not** pass another `-q` (`-q -q` suppresses the summary line).
 
-## Deviations from the spec — read before Task 4
+## Two rulings that bind Task 4 — read before implementing it
 
-The spec's Spec 0 bullet says: *"Add `WorkflowRunEntity.workflow` … and materialize the already-declared `sci:executes` edge (defect 4), **with a graph-validate check that the target resolves to a `workflow`**."*
+Both were raised against the spec and **decided by the human partner**. They are settled. Do not reopen either, and do not "restore" what the spec's older wording asked for. The umbrella design was amended to match (`2026-07-09-method-stochasticity-umbrella-design.md`).
 
-This plan implements the guard in the **materializer** (a hard `ValueError`, exactly like `_add_falsification_relations`) and does **not** add a second check in `graph/store/validation.py`. Reason: under kernel closure the source compiler is the only durable writer of `graph.trig`, so a post-hoc check that re-reads `graph.trig` to assert what the compiler just refused to emit is a defensive duplicate layer, which the project conventions forbid. The materializer guard fails earlier and with a better message.
+**1. The `sci:executes` resolution guard lives in the compiler only.** It is a hard `ValueError` in the materializer, exactly like `_add_falsification_relations`. Do **not** add a second check in `graph/store/validation.py`. The compiler is the boundary where an authored ref becomes graph structure, so that is the contract point. A post-hoc graph check would re-read `graph.trig` to assert what the compiler had just refused to emit; it would only protect against out-of-band mutation of `graph.trig`, which does not justify a second validation surface.
 
-If the reviewer or human partner disagrees, the addition is small: mirror `empirical_run_resolution` in `science/src/science_tool/graph/store/validation.py:162-185`. **Do not add it unilaterally** — raise it.
-
-Second deviation: **`WorkflowRunEntity.workflow` is optional (`str = ""`), not required.** Making it required is new behavior (it would reject a run that omits it, which is Spec 2's fail-closed job) and it would immediately break the shared `materialized_knowledge_for_run` fixture at `science/tests/conftest.py:342-350`, which writes a run with no `workflow:`. Spec 0 is behavior-neutral; Spec 2 imposes the gate.
+**2. `WorkflowRunEntity.workflow` is optional (`str = ""`), not required.** `str = ""` is the neutral shape: it preserves the existing `materialized_knowledge_for_run` fixture (`science/tests/conftest.py:342-350`, which writes a run with no `workflow:`) and already-authored runs, while a value that is *present but unresolvable* fails loudly at materialization and audit. Requiring the field belongs to Spec 2's `register-run`, where deriving `seed_policy` actually depends on run → workflow → steps. Spec 0 is behavior-neutral.
 
 ## Facts established by reading the code (do not re-derive)
 
