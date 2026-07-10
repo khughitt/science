@@ -17,3 +17,13 @@ def test_realizes_relation_kind_is_gone() -> None:
 
 def test_the_surviving_workflow_relations_are_untouched() -> None:
     assert {"contains", "executes", "feeds_into", "implements"} <= _NAMES
+
+
+def test_applies_replaces_realizes() -> None:
+    """Spec 1 (task:t079) adds what Spec 0 retired `realizes` to make room for."""
+    assert "applies" in _NAMES
+    assert "sci:applies" in _PREDICATES
+
+    applies = next(rk for rk in CORE_PROFILE.relation_kinds if rk.name == "applies")
+    assert applies.source_kinds == ["workflow-step"]
+    assert applies.target_kinds == ["method"]
