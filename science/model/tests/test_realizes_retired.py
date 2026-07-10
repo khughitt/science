@@ -16,7 +16,7 @@ def test_realizes_relation_kind_is_gone() -> None:
 
 
 def test_the_surviving_workflow_relations_are_untouched() -> None:
-    assert {"contains", "executes", "feeds_into", "implements"} <= _NAMES
+    assert {"executes", "feeds_into", "implements"} <= _NAMES
 
 
 def test_applies_replaces_realizes() -> None:

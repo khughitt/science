@@ -65,13 +65,6 @@ def test_grounded_by_inverse_emits_bears_on():
     assert (str(_u("workflow-run/wfr1")), str(_u("finding/f1"))) in _bears_on_pairs(ds)
 
 
-def test_contains_inverse_emits_bears_on_when_container_is_epistemic():
-    """interpretation sci:contains finding -> finding bears_on interpretation."""
-    ds = _make_dataset_with([(_u("interpretation/i1"), SCI_NS.contains, _u("finding/f1"))])
-    derive_bears_on_from_typed_edges(ds, kind_class={})
-    assert (str(_u("finding/f1")), str(_u("interpretation/i1"))) in _bears_on_pairs(ds)
-
-
 def test_synthesizes_inverse_emits_bears_on():
     """story sci:synthesizes interpretation -> interpretation bears_on story."""
     ds = _make_dataset_with([(_u("story/s1"), SCI_NS.synthesizes, _u("interpretation/i1"))])

@@ -85,7 +85,6 @@ def derive_bears_on_from_typed_edges(
       ?s cito:disputes       ?t  -> ?s bears_on ?t
       ?s sci:grounds         ?t  -> ?s bears_on ?t
       ?f sci:groundedBy      ?s  -> ?s bears_on ?f                       (inverse)
-      ?c sci:contains        ?m  -> ?m bears_on ?c                       (inverse)
       ?s sci:synthesizes     ?t  -> ?t bears_on ?s                       (inverse)
       ?m sci:hasProposition  ?p  -> ?p bears_on ?m                       (inverse)
       ?m sci:hasParticipant  ?p  -> ?p bears_on ?m  iff p is epistemic   (inverse, filtered)
@@ -100,7 +99,6 @@ def derive_bears_on_from_typed_edges(
     ]
     inverse_predicates: list[URIRef] = [
         SCI_NS.groundedBy,
-        SCI_NS.contains,
         SCI_NS.synthesizes,
         SCI_NS.hasProposition,
     ]

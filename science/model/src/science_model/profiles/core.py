@@ -643,14 +643,6 @@ CORE_PROFILE = ProfileManifest(
             description="A question is addressed by a proposition.",
         ),
         RelationKind(
-            name="contains",
-            predicate="sci:contains",
-            source_kinds=["workflow", "finding", "interpretation", "discussion"],
-            target_kinds=["workflow-step", "proposition", "observation", "finding"],
-            layer="layer/core",
-            description="A container entity includes its components: workflow→steps, finding→propositions/observations, interpretation/discussion→findings/propositions.",
-        ),
-        RelationKind(
             name="executes",
             predicate="sci:executes",
             source_kinds=["workflow-run"],
