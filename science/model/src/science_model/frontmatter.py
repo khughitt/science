@@ -109,6 +109,36 @@ def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
     return fm, body
 
 
+def split_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse frontmatter and return the body **verbatim** (non-lossy).
+
+    Unlike :func:`parse_frontmatter`, this does not ``.strip()`` the body and
+    does not translate line endings, so it is safe for read-modify-write on
+    hand-authored files. Callers must read the file with ``newline=""`` so the
+    platform does not rewrite ``\\r\\n`` before this sees it.
+
+    Returns ``({}, text)`` when there is no parseable frontmatter block, and
+    ``({}, body)`` when the block is present but not a mapping.
+    """
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
+        return ({}, text)
+    after_opening_marker = text[len("---" + newline) :]
+    closing_marker = f"{newline}---{newline}"
+    closing_marker_index = after_opening_marker.find(closing_marker)
+    if closing_marker_index == -1:
+        return ({}, text)
+    frontmatter_text = after_opening_marker[:closing_marker_index]
+    body = after_opening_marker[closing_marker_index + len(closing_marker) :]
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        return ({}, body)
+    return (frontmatter, body)
+
+
 def _coerce_date(val: str | date | None) -> date | None:
     if val is None:
         return None
