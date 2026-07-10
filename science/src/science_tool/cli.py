@@ -7336,6 +7336,44 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
     click.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
 
 
+@dataset_group.command("stochasticity")
+@click.argument("ref")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+@click.option("--format", "output_format", type=click.Choice(["human", "json"]), default="human")
+def dataset_stochasticity(ref: str, project_root: Path | None, output_format: str) -> None:
+    """Report which steps in a derived dataset's provenance were stochastic.
+
+    Names the fingerprinted run the dataset inherited its provenance from, the
+    seeds that run realized, and which steps are nondeterministic and therefore
+    not exactly reproducible.
+    """
+    import json as _json
+
+    from science_tool.datasets_stochasticity import (
+        DatasetStochasticityError,
+        report_dataset_stochasticity,
+    )
+    from science_tool.datasets_stochasticity_format import render_human, render_json
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        report = report_dataset_stochasticity(root, ref)
+    except DatasetStochasticityError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+
+    if output_format == "json":
+        click.echo(_json.dumps(render_json(report), indent=2))
+    else:
+        for line in render_human(report):
+            click.echo(line)
+
+
 @dataset_group.command("reconcile")
 @click.argument("slug")
 @click.option(

@@ -658,3 +658,154 @@ def line_with_produced_by_dataset_and_fingerprinted_run_ref_trig():
     knowledge.add((line, SCI_NS.runRef, run))
     knowledge.add((run, SCI_NS.fingerprintPolicy, Literal("science-run-fingerprint/v1")))
     return ds.serialize(format="trig")
+
+
+def _seed_stochastic_pipeline(root: Path) -> str:
+    """Scaffold a registrable run whose workflow mixes a seedable, a
+    nondeterministic, and a deterministic step, then run register-run and build
+    the graph. Returns the derived dataset id.
+
+    Order matters: register-run (writes the captured `fingerprint:` and the
+    derived dataset) MUST precede `graph build`, or the graph carries neither
+    the `sci:fingerprintPolicy` marker nor the derived dataset's derivation edge.
+    register-run reads the source layer, not the graph, so it needs no prior build.
+    """
+    import yaml
+    from click.testing import CliRunner
+
+    from science_tool.cli import main as science_cli
+
+    (root / "science.yaml").write_text(
+        "name: stoch-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
+    wf = root / "entities" / "workflows"
+    wf.mkdir(parents=True, exist_ok=True)
+    (wf / "pipe.md").write_text(
+        '---\nid: "workflow:pipe"\nkind: "workflow"\ntitle: "Pipe"\n'
+        "outputs:\n"
+        '  - slug: "clusters"\n    title: "Clusters"\n    resource_names: ["clusters"]\n    ontology_terms: []\n---\n',
+        encoding="utf-8",
+    )
+    methods = root / "entities" / "methods"
+    methods.mkdir(parents=True, exist_ok=True)
+    (methods / "embed.md").write_text(
+        '---\nid: "method:embed"\nkind: "method"\ntitle: "Embed"\nstochasticity: "nondeterministic"\n---\n',
+        encoding="utf-8",
+    )
+    (methods / "cluster.md").write_text(
+        '---\nid: "method:cluster"\nkind: "method"\ntitle: "Cluster"\n'
+        'stochasticity: "seedable"\nseed_params: ["random_state"]\n---\n',
+        encoding="utf-8",
+    )
+    (methods / "normalize.md").write_text(
+        '---\nid: "method:normalize"\nkind: "method"\ntitle: "Normalize"\nstochasticity: "deterministic"\n---\n',
+        encoding="utf-8",
+    )
+    steps = root / "entities" / "workflow-steps"
+    steps.mkdir(parents=True, exist_ok=True)
+    (steps / "embed.md").write_text(
+        '---\nid: "workflow-step:embed"\nkind: "workflow-step"\ntitle: "Embed"\n'
+        'workflow: "workflow:pipe"\nmethod: "method:embed"\n'
+        'rationale: "GPU atomics; residual nondeterminism accepted"\n---\n',
+        encoding="utf-8",
+    )
+    (steps / "cluster.md").write_text(
+        '---\nid: "workflow-step:cluster"\nkind: "workflow-step"\ntitle: "Cluster"\n'
+        'workflow: "workflow:pipe"\nmethod: "method:cluster"\n'
+        'seed_bindings:\n  random_state: "literal:42"\n---\n',
+        encoding="utf-8",
+    )
+    (steps / "normalize.md").write_text(
+        '---\nid: "workflow-step:normalize"\nkind: "workflow-step"\ntitle: "Normalize"\n'
+        'workflow: "workflow:pipe"\nmethod: "method:normalize"\n---\n',
+        encoding="utf-8",
+    )
+    datasets = root / "entities" / "datasets"
+    datasets.mkdir(parents=True, exist_ok=True)
+    (datasets / "src.md").write_text(
+        '---\nid: "dataset:src"\nkind: "dataset"\ntitle: "Src"\norigin: "external"\n'
+        'datapackage: "data/src/datapackage.yaml"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", '
+        'last_reviewed: "2026-04-19", source_url: "https://s"}\n---\n',
+        encoding="utf-8",
+    )
+    runs = root / "entities" / "workflow-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "pipe-r1.md").write_text(
+        '---\nid: "workflow-run:pipe-r1"\nkind: "workflow-run"\ntitle: "Pipe r1"\n'
+        'workflow: "workflow:pipe"\nproduces: []\ninputs: ["dataset:src"]\n'
+        'git_commit: "abc"\nlast_run: "2026-04-19T12:00:00Z"\n'
+        f"{REGISTER_RUN_EXECUTION_FRONTMATTER}"
+        "---\n",
+        encoding="utf-8",
+    )
+    rundir = root / "results" / "pipe" / "r1"
+    rundir.mkdir(parents=True)
+    (rundir / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-runtime-1.0"],
+                "name": "pipe-r1",
+                "resources": [
+                    {"name": "clusters", "path": "clusters.csv", "format": "csv", "hash": "sha256:clusters"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (rundir / "clusters.csv").write_text("col\nval\n", encoding="utf-8")
+    seed_git_repo(root)
+
+    runner = CliRunner()
+    env = {"SCIENCE_PROJECT_ROOT": str(root)}
+    reg = runner.invoke(
+        science_cli, ["dataset", "register-run", "workflow-run:pipe-r1"],
+        env=env, catch_exceptions=False,
+    )
+    assert reg.exit_code == 0, reg.output
+    build = runner.invoke(
+        science_cli, ["graph", "build", "--project-root", str(root)],
+        env=env, catch_exceptions=False,
+    )
+    assert build.exit_code == 0, build.output
+
+    derived = list(datasets.glob("pipe-*-clusters.md"))
+    assert len(derived) == 1, f"expected 1 derived dataset, got {[p.name for p in derived]}"
+    return f"dataset:{derived[0].stem}"
+
+
+@pytest.fixture
+def registrable_run_project(tmp_path: Path) -> tuple[Path, str]:
+    """A project with a registered run + built graph; returns (root, dataset_id)."""
+    dataset_id = _seed_stochastic_pipeline(tmp_path)
+    return tmp_path, dataset_id
+
+
+@pytest.fixture
+def registrable_member_project(tmp_path: Path) -> tuple[Path, str, str]:
+    """A member dataset joined by `member_of` to the run-produced parent.
+
+    Returns (root, member_dataset_id, run_id). Reporting on the member must
+    resolve the parent's run and mark it inherited.
+    """
+    from click.testing import CliRunner
+
+    from science_tool.cli import main as science_cli
+
+    parent_id = _seed_stochastic_pipeline(tmp_path)
+    member = tmp_path / "entities" / "datasets" / "clusters-subset.md"
+    member.write_text(
+        '---\nid: "dataset:clusters-subset"\nkind: "dataset"\ntitle: "Clusters subset"\n'
+        'origin: "derived"\n'
+        "derivation:\n"
+        '  kind: "member_of"\n'
+        f'  parent_dataset: "{parent_id}"\n'
+        '  member_key: "subset-a"\n---\n',
+        encoding="utf-8",
+    )
+    build = CliRunner().invoke(
+        science_cli, ["graph", "build", "--project-root", str(tmp_path)],
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False,
+    )
+    assert build.exit_code == 0, build.output
+    return tmp_path, "dataset:clusters-subset", "workflow-run:pipe-r1"

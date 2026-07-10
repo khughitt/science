@@ -3,7 +3,7 @@ from rdflib import Graph, Literal, URIRef
 
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.run_resolution import (
-    MemberOfCycleError, NoRunReason, own_derivation_run, resolved_empirical_runs,
+    MemberOfCycleError, NoRunReason, own_derivation_run, resolve_run_chain, resolved_empirical_runs,
 )
 
 DS = lambda n: URIRef(f"http://example.org/dataset/{n}")   # noqa: E731
@@ -102,3 +102,44 @@ def test_unknown_derivation_kind_fails_loud():
     g.add((DS("x"), SCI_NS.derivationKind, Literal("teleportation")))
     with pytest.raises(ValueError, match="teleportation"):
         resolved_empirical_runs(g, DS("x"), ALL_FINGERPRINTED)
+
+
+def test_resolve_run_chain_direct_run_is_the_dataset_itself():
+    g = Graph()
+    _run_derived(g, DS(1), RUN(1))
+    res = resolve_run_chain(g, DS(1), ALL_FINGERPRINTED)
+    assert res.run == RUN(1)
+    assert res.named_run == RUN(1)
+    assert res.chain == [DS(1)]
+    assert res.reasons == []
+
+
+def test_resolve_run_chain_lists_child_then_parent_when_inherited():
+    g = Graph()
+    _member_of(g, DS(1), DS(2))
+    _run_derived(g, DS(2), RUN(1))
+    res = resolve_run_chain(g, DS(1), ALL_FINGERPRINTED)
+    assert res.run == RUN(1)
+    assert res.chain == [DS(1), DS(2)]
+    assert res.reasons == []
+
+
+def test_resolve_run_chain_keeps_named_run_when_unfingerprinted():
+    g = Graph()
+    _run_derived(g, DS(1), RUN(1))
+    res = resolve_run_chain(g, DS(1), NONE_FINGERPRINTED)
+    assert res.run is None
+    assert res.named_run == RUN(1)  # the CLI can still name it
+    assert res.reasons == [NoRunReason.RUN_UNFINGERPRINTED]
+
+
+def test_resolved_empirical_runs_still_matches_chain_resolution():
+    g = Graph()
+    _member_of(g, DS(1), DS(2))
+    _run_derived(g, DS(2), RUN(1))
+    runs, reasons = resolved_empirical_runs(g, DS(1), ALL_FINGERPRINTED)
+    assert runs == [RUN(1)]
+    assert reasons == []
+    runs2, reasons2 = resolved_empirical_runs(g, DS(1), NONE_FINGERPRINTED)
+    assert runs2 == []
+    assert reasons2 == [NoRunReason.RUN_UNFINGERPRINTED]
