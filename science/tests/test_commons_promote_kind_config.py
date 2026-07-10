@@ -511,7 +511,7 @@ def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, mon
         ],
         check=True,
     )
-    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
+    monkeypatch.setattr("science_tool.commons.promote.registry_root_for_id", lambda s: proj)
     from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
 
     discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)

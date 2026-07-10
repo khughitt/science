@@ -63,7 +63,7 @@ def test_topic_apply_commons_tag_uses_topic_prefix(tmp_path, monkeypatch) -> Non
     proj = _copy_fixture(tmp_path, "proj-alpha")
     commons = _init_commons(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 

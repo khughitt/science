@@ -71,7 +71,7 @@ def test_theme_apply_happy_path_creates_theme_tag(tmp_path, monkeypatch) -> None
     )
     commons = _init_commons(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 

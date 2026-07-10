@@ -157,7 +157,7 @@ def test_plan_promote_with_mixin_extensions_emits_extended_schema_profile(
 
     proj = _project_tree_with_rnaseq(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda _slug: proj,
     )
 
@@ -205,7 +205,7 @@ def test_plan_promote_enforces_stacking_for_direct_callers(
 
     proj = _project_tree_with_rnaseq(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda _slug: proj,
     )
 
@@ -246,7 +246,7 @@ def test_plan_promote_with_unknown_explicit_mixin_raises_resolution_error(
 
     proj = _project_tree_with_rnaseq(tmp_path)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda _slug: proj,
     )
 

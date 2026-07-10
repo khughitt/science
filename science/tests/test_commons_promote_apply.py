@@ -279,7 +279,7 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\n---\n\n## Key Findings\n\nfoo\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj}[slug],
     )
 
@@ -330,7 +330,7 @@ def test_audit_log_records_canonical_paths_per_decision(tmp_path, monkeypatch) -
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\n---\n\n## Key Findings\n\nfoo\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj}[slug],
     )
 
@@ -585,7 +585,7 @@ def test_apply_promote_preflight_rejects_dirty_commons(tmp_path, monkeypatch) ->
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -621,7 +621,7 @@ def test_apply_promote_preflight_rejects_dirty_target_project_file(tmp_path, mon
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -654,7 +654,7 @@ def test_apply_promote_preflight_allows_dirty_non_target_project_file(tmp_path, 
     (proj / "other.md").write_text("dirty\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -684,7 +684,7 @@ def test_apply_promote_idempotent_skips_already_overlayed(tmp_path, monkeypatch)
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery1 = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -751,7 +751,7 @@ def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, 
         {"huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
     )
 
@@ -805,7 +805,7 @@ def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch) -> None:
     subprocess.run(["git", "-C", str(proj_b), "add", "."], check=True)
     subprocess.run(["git", "-C", str(proj_b), "commit", "-q", "-m", "stale"], check=True)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
     )
 
@@ -848,7 +848,7 @@ def test_plan_routes_existing_tag_to_overlay_existing(tmp_path, monkeypatch) -> 
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -951,7 +951,7 @@ def test_apply_promote_all_overlay_existing_writes_no_commit_no_tag(tmp_path, mo
         {"Foo.md": "---\nid: paper:Foo\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1027,7 +1027,7 @@ def test_apply_promote_all_overlay_existing_audit_log_has_no_revert_guidance(tmp
         {"Foo.md": "---\nid: paper:Foo\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1073,7 +1073,7 @@ def test_apply_promote_mixed_batch_mints_new_overlays_existing(tmp_path, monkeyp
         },
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1129,7 +1129,7 @@ def test_apply_promote_step4_os_error_converts_to_promote_write_error(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1182,7 +1182,7 @@ def test_apply_promote_failure_before_commit_unlinks_first_promote_canonical(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1242,7 +1242,7 @@ def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1312,7 +1312,7 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
     (proj / "other.txt").write_text("dirty WIP\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
 
@@ -1366,7 +1366,7 @@ def test_apply_promote_reports_project_rollback_checkout_failure(
         },
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1445,7 +1445,7 @@ def test_apply_promote_preflight_failure_audit_omits_projects_touched(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1492,7 +1492,7 @@ def test_apply_promote_audit_write_failure_attaches_yaml_to_exception(
             {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
         )
         monkeypatch.setattr(
-            "science_tool.commons.promote.resolve_project_by_id",
+            "science_tool.commons.promote.registry_root_for_id",
             lambda slug: proj,
         )
         discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1579,7 +1579,7 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1650,7 +1650,7 @@ def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
         {"huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
     )
     discovery = discover_candidates(["proj-a", "proj-b"], PROMOTE_KIND_PAPER)
@@ -1708,7 +1708,7 @@ def test_apply_promote_failure_commits_audit_log_path_limited(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1775,7 +1775,7 @@ def test_apply_promote_failure_leaves_clean_tree_and_unblocks_retry(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1822,7 +1822,7 @@ def test_apply_promote_failure_leaves_clean_tree_and_unblocks_retry(
         {"Brown2025.md": "---\nid: paper:Brown2025\ntitle: B\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj2,
     )
     discovery2 = discover_candidates(["proj-b"], PROMOTE_KIND_PAPER)
@@ -1862,7 +1862,7 @@ def test_apply_promote_failed_audit_commit_does_not_mask_original_error(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1926,7 +1926,7 @@ def test_apply_promote_failure_audit_records_post_commit_failure_stage(
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
@@ -1973,7 +1973,7 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: proj,
     )
     commons = tmp_path / "commons"

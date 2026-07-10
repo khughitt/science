@@ -84,7 +84,7 @@ def _plan_for(monkeypatch, commons: Path, projects: dict[str, Path], from_order,
     )
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: projects[slug],
     )
     discovery = discover_candidates(list(projects), PROMOTE_KIND_PAPER)

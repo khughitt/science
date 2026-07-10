@@ -27,7 +27,7 @@ from science_model.entity_schema import (
 )
 
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
-from science_tool.commons.config import resolve_commons_root, resolve_project_root
+from science_tool.commons.config import resolve_commons_root, registry_root_for_name
 from science_tool.commons.errors import (
     CommonsEntityError,
     CommonsRootNotFoundError,
@@ -320,7 +320,7 @@ def resolve_entity(canonical_id: str, project: str | None = None) -> MergedEntit
     if project is None:
         return merge_entity(record, None, policy)
 
-    project_root = resolve_project_root(project)
+    project_root = registry_root_for_name(project)
     if not project_root.is_dir():
         raise ProjectDirectoryMissingError(project, project_root)
 
@@ -348,7 +348,7 @@ def validate_project_overlays(project: str) -> OverlayValidationReport:
     if not root.is_dir():
         raise CommonsRootNotFoundError(root)
 
-    project_root = resolve_project_root(project)
+    project_root = registry_root_for_name(project)
     if not project_root.is_dir():
         raise ProjectDirectoryMissingError(project, project_root)
 

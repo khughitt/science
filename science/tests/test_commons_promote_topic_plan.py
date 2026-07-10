@@ -11,7 +11,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "promote"
 
 def _resolver(monkeypatch) -> None:
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: FIXTURES / slug,
     )
 

@@ -300,7 +300,7 @@ def _plan_one(tmp_path, monkeypatch):
     commons.mkdir()
     subprocess.run(["git", "init", "-q", str(commons)], check=True)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.promote import (
@@ -346,7 +346,7 @@ def _copy_dataset_projects(tmp_path, monkeypatch):
     commons = tmp_path / "commons"
     commons.mkdir()
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: projects[s],
     )
     return projects, commons
@@ -428,7 +428,7 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     commons = tmp_path / "commons"
     commons.mkdir()
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
     from science_tool.commons.promote import (
@@ -499,7 +499,7 @@ def test_plan_promote_dataset_accepts_symlinked_project_root(tmp_path, monkeypat
     commons.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: symlink_proj,
     )
 
@@ -557,7 +557,7 @@ def test_plan_dataset_raises_override_conflict(tmp_path, monkeypatch):
     (cfg_dir / "data.yaml").write_text("fixture-ds: /wrong/path\n", encoding="utf-8")
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
 
@@ -606,7 +606,7 @@ def test_plan_dataset_wraps_resource_read_failure(tmp_path, monkeypatch):
     commons = tmp_path / "commons"
     commons.mkdir()
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda s: proj,
     )
 

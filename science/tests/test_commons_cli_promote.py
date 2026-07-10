@@ -37,7 +37,7 @@ def test_promote_paper_bulk_dry_run_summary(tmp_path, monkeypatch, runner) -> No
     beta = _bare_project_from_fixture(tmp_path, "proj-beta", "proj-beta")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-alpha": alpha, "proj-beta": beta}[slug],
     )
     monkeypatch.setattr(
@@ -71,7 +71,7 @@ def test_promote_paper_limit_zero_reports_full_count_and_stops(tmp_path, monkeyp
     beta = _bare_project_from_fixture(tmp_path, "proj-beta", "proj-beta")
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-alpha": alpha, "proj-beta": beta}[slug],
     )
     monkeypatch.setattr(
@@ -100,7 +100,7 @@ def test_promote_paper_apply_writes_and_tags(tmp_path, monkeypatch, runner) -> N
     _init_commons(tmp_path / "commons")
     alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: alpha,
     )
     monkeypatch.setattr(
@@ -131,7 +131,7 @@ def test_promote_paper_null_id_exits_nonzero(tmp_path, monkeypatch, runner) -> N
 
     _init_commons(tmp_path / "commons")
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: (_ for _ in ()).throw(CommonsError(f"{slug!r} has id: null")),
     )
     monkeypatch.setattr(
@@ -169,7 +169,7 @@ def test_promote_paper_single_entity_form(tmp_path, monkeypatch, runner) -> None
     _init_commons(tmp_path / "commons")
     alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: alpha,
     )
     monkeypatch.setattr(
@@ -195,7 +195,7 @@ def test_promote_paper_apply_reindexes_registry(tmp_path, monkeypatch, runner) -
     _init_commons(commons_root)
     alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: alpha,
     )
     monkeypatch.setattr(
@@ -258,7 +258,7 @@ def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
     _init_proj(proj_b)
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
     )
     monkeypatch.setattr(

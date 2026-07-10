@@ -44,7 +44,7 @@ def test_public_api_exports() -> None:
         "merge_entity",
         "resolve_entity",
         "validate_project_overlays",
-        "resolve_project_root",
+        "registry_root_for_name",
         "ProjectNotRegisteredError",
         "ProjectDirectoryMissingError",
         "OverlayValidationError",

@@ -274,7 +274,7 @@ def test_plan_promote_aggregates_skip_verdict(tmp_path, monkeypatch):
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.delenv("OUTPUT_ROOT", raising=False)  # token unexpandable → off-host
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-dataset": proj}[slug],
     )
 
@@ -300,7 +300,7 @@ def test_plan_promote_no_verify_has_empty_verifications(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-dataset": proj}[slug],
     )
 
@@ -345,7 +345,7 @@ def test_sourced_dataset_promotes_end_to_end_without_streaming(tmp_path, monkeyp
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-dataset": proj}[slug],
     )
 

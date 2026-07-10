@@ -51,7 +51,7 @@ def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
-        "science_tool.commons.promote.resolve_project_by_id",
+        "science_tool.commons.promote.registry_root_for_id",
         lambda slug: {"proj-dataset": proj}[slug],
     )
 

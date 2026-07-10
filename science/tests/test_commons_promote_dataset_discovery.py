@@ -31,7 +31,7 @@ def _copy_dataset_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pa
         ],
         check=True,
     )
-    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda _slug: proj)
+    monkeypatch.setattr("science_tool.commons.promote.registry_root_for_id", lambda _slug: proj)
     return proj
 
 
