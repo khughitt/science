@@ -533,9 +533,10 @@ Create `tests/test_project_root_boundary.py`:
 ```python
 """Project-config path boundary guard (convergence Phase 1).
 
-Static ratchet: the ``"science.yaml"`` filename is constructed in exactly one
-place, ``data_root.project_config_path``. Every other module must call it. This
-guards against the filename regrowing across the tree.
+Static ratchet: the ``"science.yaml"`` filename is defined in exactly one
+place, ``science_model/frontmatter.py``'s ``PROJECT_CONFIG_FILENAME``. Every
+other module must reach the path via that constant or ``project_config_path``.
+This guards against the filename regrowing across the tree.
 
 This is a literal-string scan: no exception can be dodged by aliasing the path
 into a variable, because every builder must name the file *somewhere*. The literal
@@ -581,9 +582,10 @@ def _literal_offenders() -> list[str]:
 def test_science_yaml_literal_is_centralized() -> None:
     offenders = _literal_offenders()
     assert not offenders, (
-        'the "science.yaml" literal must appear only in data_root.py / '
-        "project_config.py / science_model/frontmatter.py; call "
-        "data_root.project_config_path(root) instead. Offenders: "
+        'the "science.yaml" literal is permitted only in '
+        "science_model/frontmatter.py (where PROJECT_CONFIG_FILENAME is "
+        "defined); every other module must use PROJECT_CONFIG_FILENAME or "
+        "call project_config_path(root). Offenders: "
         f"{sorted(offenders)}"
     )
 ```
