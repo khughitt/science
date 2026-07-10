@@ -1,9 +1,9 @@
-"""Test A (emitter equivalence): the canonical render_frontmatter_block must
-reproduce commons/promote._render_frontmatter byte-for-byte over a corpus of
-realistic frontmatter dicts. Landed BEFORE the migration deletes the local
-copy, so the deletion is provably byte-neutral. After Step 4 deletes
-promote._render_frontmatter this test is updated to compare against the
-harvested golden strings instead (see Step 5)."""
+"""Test A (emitter equivalence): a permanent regression oracle pinning
+render_frontmatter_block's output byte-for-byte over a corpus of realistic
+frontmatter dicts. The golden strings were harvested from the former
+commons/promote._render_frontmatter (now deleted, folded into the canonical
+renderer) at migration time, so this test proves the canonical renderer still
+reproduces promote's historical bytes exactly."""
 
 from datetime import date
 
