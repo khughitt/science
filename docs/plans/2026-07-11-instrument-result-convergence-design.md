@@ -446,3 +446,23 @@ silently dropped:
   component availability, behaviour for mixed stamped/unstamped candidates, and
   what retirement does to question re-homing and attention weight. Neither is a
   return-shape change and neither belongs here.
+
+- **The validator payload.** `validate_graph`, `validate_graph_dataset`, and
+  `validate_empirical_run_resolution` return `tuple[list[...], bool]`. They have the
+  disease — `validate_graph` catches a load exception and returns rows + `True`
+  (`graph/store/validation.py:35`), and a graph that fails to load must not read as
+  "clean" — but they **cannot** be expressed as an `InstrumentResult`.
+
+  The reason is worth stating, because it bounds this type's applicability. Their
+  `bool` is `has_failures`, computed as `any(row["status"] == "fail" ...)` (`:187`);
+  rows carry mixed severities, so it is **not** `bool(rows)` — `:272` returns
+  non-empty rows with `False`. And `InstrumentResult.status` cannot carry it: for a
+  validator, `ok` means *rows were found*, which means *problems were found*. That is
+  **orthogonal** to pass/fail, not a synonym for it. Forcing a validator through this
+  type would silently reinterpret a pass/fail signal as a row-count signal — a fresh
+  instance of exactly the bug this design exists to kill.
+
+  A payload carrying rows **and** `has_failures` **and** an unwired state is a real
+  design. It gets its own. The tuple detector in the guard is therefore narrowed to
+  the *documented* precursor (`tuple[list[T], str | None]`) so these three do not get
+  swept in by accident.

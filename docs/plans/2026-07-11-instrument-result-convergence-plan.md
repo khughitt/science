@@ -316,16 +316,35 @@ def _annotation_root(node: ast.expr) -> str | None:
     return None
 
 
+def _is_str_or_none(node: ast.expr) -> bool:
+    """Match ``str | None`` (and ``Optional[str]``)."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        sides = {ast.unparse(node.left), ast.unparse(node.right)}
+        return sides == {"str", "None"}
+    if isinstance(node, ast.Subscript) and _annotation_root(node) == "Optional":
+        return ast.unparse(node.slice) == "str"
+    return False
+
+
 def _is_tuple_precursor(node: ast.expr) -> bool:
-    """Match ``tuple[list[T], ...]`` — the ad-hoc reason channel."""
+    """Match ``tuple[list[T], str | None]`` — the ad-hoc REASON channel, precisely.
+
+    Deliberately NOT ``tuple[list[T], ...]``. The validator family returns
+    ``tuple[list[...], bool]``, where the bool is ``has_failures`` — an independent
+    pass/fail channel, not a reason string (validation.py:187 computes it as
+    ``any(row["status"] == "fail" ...)``, so it is NOT ``bool(rows)``). Sweeping
+    those in would force them through a type whose ``status`` cannot carry them:
+    for a validator, ``ok`` means "found rows", i.e. found PROBLEMS — orthogonal to
+    pass/fail, not a synonym for it. See "Deferred: the validator payload" below.
+    """
     if not isinstance(node, ast.Subscript):
         return False
     if _annotation_root(node) != "tuple":
         return False
     inner = node.slice
-    if not isinstance(inner, ast.Tuple) or not inner.elts:
+    if not isinstance(inner, ast.Tuple) or len(inner.elts) != 2:
         return False
-    return _annotation_root(inner.elts[0]) == "list"
+    return _annotation_root(inner.elts[0]) == "list" and _is_str_or_none(inner.elts[1])
 
 
 def _violations(module_rel: str) -> list[str]:
@@ -1439,7 +1458,15 @@ Expected: FAIL — `AttributeError: 'list' object has no attribute 'status'`
 
 For each, change the return annotation to `InstrumentResult[...]` and wrap the final `return rows` as `return InstrumentResult.from_rows(rows)`.
 
-The `validate_*` helpers migrate too, and they are the ones most likely to have a real `unwired` state — a validator that returns `[]` because it could not load or parse the graph has **not** found zero problems. Give each one a precondition.
+**`validate_inquiry` / `validate_inquiry_dataset` migrate and have a real `unwired` state:** an unresolvable `slug` means the check never ran, exactly as an unresolvable `center` does for `query_gaps`. Returning `[]` for a slug that does not exist is "no problems found" about a thing that was never looked at. Give them `code="inquiry_not_found"`.
+
+#### Deferred: the validator payload (`validate_graph*`, `validate_empirical_run_resolution`)
+
+These three return `tuple[list[...], bool]` and are **deliberately out of scope**. The narrowed tuple detector (Task 2) does not flag them, so they will not appear in the seed and need no carve-out.
+
+The reason is semantic, not convenience. Their `bool` is `has_failures`, computed as `any(row["status"] == "fail" ...)` (`validation.py:187`) — rows carry mixed severities, so **it is not `bool(rows)`**; `validation.py:272` returns non-empty rows with `False`. `InstrumentResult.status` cannot absorb it: for a validator, `ok` means *rows were found*, which means *problems were found* — orthogonal to pass/fail, not a synonym. Forcing them through this type would silently reinterpret a pass/fail signal as a row-count signal, which is a new instance of the very bug this design exists to kill.
+
+They do still have the underlying disease (`validate_graph` catches an exception and returns rows + `True` at `:35`; a graph that fails to load must not read as "clean"). Designing a payload that carries rows **and** `has_failures` **and** an unwired state is real work. It is recorded in the design's *Follow-on work*, not smuggled in here.
 
 `query_gaps` (`summary.py:754`) additionally guards its center. `_resolve_center_entity` currently raises or returns a URI; make the non-resolution path explicit:
 
@@ -1575,17 +1602,24 @@ A health check that could not scan its input has not found zero problems."
 > and has its own design. **This task migrates the return shape and nothing else.**
 > If you find yourself editing the `weight = (...)` expression, stop.
 
-**This is NOT a final-return-only edit — it propagates.** `compute_attention_candidates` is consumed by `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, and `tests/test_wander_context.py`, all of which expect a `Sequence[AttentionCandidate]`. Wrapping the return **breaks every one of them**. Propagation semantics must be explicit.
+**Task 2b decides whether `compute_attention_candidates` is an instrument. Do not pre-decide it here.** It is the *internal* producer feeding the two user-facing query helpers, and it is consumed by `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, and `tests/test_wander_context.py` — all expecting a `Sequence[AttentionCandidate]`. Wrapping it breaks every one of them, so the wrapper must **buy** something.
+
+Apply Task 2b's bar: *is there an input whose absence makes an empty return meaningless?*
+
+- **If yes** (e.g. a graph with no freshness layer means the computation did not run): it is an instrument. Define and **test** that precondition, return `unwired`, and do the propagation in Step 2 below.
+- **If no** (an empty graph genuinely means no candidates): classify it `_NOT_INSTRUMENTS`, **leave its `Sequence[AttentionCandidate]` contract intact**, and migrate only `query_attention_sample` / `query_attention_ranked`. The wander propagation then largely disappears.
+
+A `from_rows`-only wrapper — `ok`/`empty` with no reachable `unwired` — is the worst of both: it adds **no** safety and buys the whole wander blast radius. If that is where you land, the honest answer is `_NOT_INSTRUMENTS`.
 
 - [ ] **Step 1: Map the consumers before editing anything**
 
 Run: `cd science && grep -rn "compute_attention_candidates\|query_attention_sample\|query_attention_ranked" src/ tests/`
 
-Expected: hits in `graph/attention.py`, `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, `tests/test_wander_context.py`. Every one is in this task's blast radius.
+Expected: hits in `graph/attention.py`, `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, `tests/test_wander_context.py`. These are in the blast radius **only if Task 2b classified `compute_attention_candidates` as an instrument.**
 
-- [ ] **Step 2: Define the propagation rule**
+- [ ] **Step 2: Define the propagation rule — ONLY if it is an instrument**
 
-`compute_attention_candidates` returns `InstrumentResult[AttentionCandidate]`. Its two in-module consumers (`query_attention_sample`, `query_attention_ranked`) must **branch, not unwrap blindly**:
+If Task 2b ruled it an instrument, it returns `InstrumentResult[AttentionCandidate]` and its two in-module consumers must **branch, not unwrap blindly**:
 
 ```python
 def query_attention_sample(...) -> InstrumentResult[dict[str, Any]]:
@@ -1717,7 +1751,11 @@ def test_allowlist_is_empty() -> None:
 ```bash
 cd science && uv run --frozen pytest && uv run ruff check && uv run pyright
 cd science/model && uv run --frozen pytest
-cd science && grep -rn "count_research_orphans" src/ tests/ ../commands/ ../skills/ ../agents/
+
+# Same expression as Task 4 Step 6 -- a BARE grep for the name can never come back
+# clean, because it matches the deliberate-absence test.
+cd science && grep -rnE "(def |import |\.)count_research_orphans|count_research_orphans\(" \
+  src/ tests/ ../commands/ ../skills/ ../agents/ | grep -v "test_count_research_orphans_is_gone"
 ```
 
 Expected: all tests pass; the `grep` returns **no matches**.
