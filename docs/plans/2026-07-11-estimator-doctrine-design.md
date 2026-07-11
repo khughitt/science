@@ -311,12 +311,38 @@ and collapsing them loses the point:
 #### One error budget, and a third decision outcome
 
 Two independent gates with two independent tolerances can **both pass while the decision still
-flips**: bias `0.4c` and spread `0.4c` each clear a 50%-of-`c` gate, but together they move the
-statistic by `0.8c`. Certification must therefore combine them:
+flips**: a bias and a spread that each clear a generous gate can, together, move the statistic
+across its threshold. Certification must therefore combine them into **one** budget:
 
 > **E := |b̂| + k·s** (k ≈ 2–3, so the reproducibility term is an upper-tail bound, not a median),
 > where `b̂` is measured bias against the independent reference and `s` the replicate spread.
-> **Certification passes iff E ≤ α·c.**
+>
+> **Certification passes iff `E ≤ ρ · σ_null(T)`, with `ρ = 0.1` by default.**
+
+**`ρ` — the instrument-error fraction — is dimensionless, and it is measured against the sampling
+SD of the decision statistic under its declared null.** Not against the critical value. Two
+reasons, and the naming one is not cosmetic:
+
+- **Never call this `α`.** In likelihood testing `α` is the **test size**, and this document itself
+  uses it that way in §2.3 (`Pr(T > c | H₀) = α`). A constant named `α` sitting next to a
+  likelihood-ratio threshold *will* be read as a significance level. It is not one.
+- **A percentage of the critical value does not generalise.** It is a property of the *declared
+  null*, not a universal constant. For a 5%-size LR test:
+
+  | Null | `σ_null = √(2·df)` | `c` (5%) | `ρ·σ_null` at ρ=0.1 | …as % of `c` |
+  |---|---|---|---|---|
+  | χ²₁ | 1.414 | 3.841 | 0.141 | **3.7%** |
+  | χ²₂ | 2.000 | 5.991 | 0.200 | **3.3%** |
+  | χ²₃ | 2.449 | 7.815 | 0.245 | **3.1%** |
+  | χ²₅ | 3.162 | 11.070 | 0.316 | **2.9%** |
+
+  The percentage **drifts with the degrees of freedom**, and it degenerates entirely for statistics
+  whose null is not `χ²`, or where `c → 0`. So the rule is stated in `σ_null`, and any
+  threshold-relative percentage is **derived for the declared null** — never carried over from
+  someone else's.
+
+The `ρ = 0.1` default is what makes the instrument an immaterial contributor to the variance of the
+quantity being decided.
 
 And a global green light does **not** license every individual verdict. Even a certified estimator
 has residual error `E > 0`; any unit whose statistic sits within `E` of `c` is **unresolvable by
@@ -614,9 +640,10 @@ so, rather than implying an enforcement that does not exist.
 | 0. Well-posedness | <structural + practical identifiability; are the profile CIs closed?> | <design-only; no data> |
 | 1. Forward-map accuracy | <tolerance on the DECISION STATISTIC, propagated> | <INDEPENDENT mechanism: different scheme family, or adaptive solver 2-3 orders tighter. NOT a refinement of the same scheme.> |
 | 2. Reproducibility | <max over R >= 5 replicates, not the median> | <perturb every inferentially irrelevant DOF: start point, ordering, threads, seeds. If deterministic, INJECT jitter.> |
-| 3. Threshold calibration | <null distribution of the statistic> | <simulated under the restricted model -- not assumed from Wilks> |
-| Error budget | E = \|b\| + k*s <= alpha * c, k in [2,3] | <alpha; see the leaf for the sigma_null derivation> |
-| Indeterminate band | units with \|T - c\| <= E are INDETERMINATE | <not silently decided> |
+| 3. Threshold calibration | <EXECUTED, or CONDITIONAL> | <if CONDITIONAL: cost, trigger, invalidation clause, AND the decisions that may not depend on it until it completes> |
+| Outer optimiser | <method, and why it is valid for this profile's smoothness/discontinuity structure> | <gradient/FD-based methods PROHIBITED unless smoothness is demonstrated> |
+| Error budget | E = \|b\| + k*s <= rho * sigma_null(T), k in [2,3] | <rho = 0.1 default; state it. NOT a % of the critical value -- that drifts with df. Never call it alpha.> |
+| Indeterminate band | units with \|T - c\| <= E are INDETERMINATE | <report the count; not silently decided> |
 | Compute budget | <cost> | <certified \| CONDITIONAL on ...> |
 | Invalidation | <what re-opens this certificate> | <estimator, forward model, tolerances, hardware, libraries> |
 ```
@@ -817,42 +844,72 @@ doctrine's thesis operating on the doctrine:
 | "The threshold was not wrong" | **Unearned.** Nobody checked its calibration, and 136 nuisance parameters over ~17 patients is incidental-parameter territory where the profile LR is not `χ²₁`. | §1.2, §2.3 |
 | "Unfalsifiable" | Wrong word. Falsifiability is a property of a hypothesis; **resolution** is a property of an instrument. | §1.1 |
 
-## 10. Resolved: the `α` in `E ≤ α·c`
+## 10. Resolved: the instrument-error fraction `ρ`
 
-An earlier draft left this open and declined to invent a default, on the grounds that no evidence
-supported one. **There is now a derivation, so the doctrine ships a default.**
+An earlier draft left this open, declined a default, and — worse — called the constant **`α`**,
+which in likelihood testing means the **test size**. A constant named `α` sitting beside a
+likelihood-ratio threshold *will* be misread as a significance level. **The name is retired.**
 
-The correct denominator is not the critical value `c` but the **sampling SD of the statistic under
-the null**. The instrument must not be a material contributor to the variance of the quantity being
-decided:
+> The constant is **`ρ`, the instrument-error fraction**: `E ≤ ρ · σ_null(T)`, **default `ρ = 0.1`**.
+> Dimensionless. Measured against the **sampling SD of the decision statistic under its declared
+> null** — never against the critical value.
 
-> **σ_instrument ≤ ρ · σ_null(T)**, with **ρ ≈ 0.1**.
+Why not a percentage of the critical value: **it does not generalise.** It depends on the degrees of
+freedom and on the test size, so it is a property of one particular null and not a rule (see the
+drift table in §2.5: 3.7% → 2.9% across χ²₁…χ²₅ at 5%). Any threshold-relative percentage must be
+**derived for the declared null**, and stating one as *the* default would bake a χ²₁-at-5% special
+case into a general doctrine.
 
-For an LR test, `T | H₀ ~ χ²₁`, so `σ_null = √2 ≈ 1.414` and `c = 3.84`. Then `ρ = 0.1` gives
-`σ_instrument ≤ 0.14 nll` ≈ **3.7% of the critical value**, inflating `Var(T)` by
-`(0.14/1.414)² ≈ 1%` — negligible under any usual convention.
+The author may override `ρ`, but must **state it and justify it**. It is never allowed to go
+unstated: nothing validates this section (§7.1), so a blank `ρ` is unrecoverable — a template that
+lets it go unfilled has changed nothing.
 
-> **Default: `α = 0.05`** (5% of `c`; variance inflation ≲ 2%). `α = 0.10` is the defensible loose
-> end. **`α ≥ 0.25` is indefensible.** For reference: **t078 measured 171%.**
+For scale: `ρ = 0.1` inflates `Var(T)` by ~1%. **t078's instrument error was 171% of its critical
+value.**
+
+## 11. Disposed: the two remaining questions
+
+Neither is answered by *prescribing* a universal answer — there isn't one. Both are answered by
+requiring the author to **declare**, which is what a pre-registration is for.
+
+### 11.1 The outer optimiser over a discontinuous profile
+
+A fixed-multistart profile restores functionhood but is **discontinuous** in ψ (the winning start
+switches basins). Running a gradient- or FD-based outer optimiser over a piecewise surface is a
+second-order version of the very bug the multistart pool was adopted to fix.
+
+The doctrine does not name one admissible optimiser. It requires:
+
+> **Declare why the outer optimiser is valid for the profile's smoothness / discontinuity
+> structure.**
 >
-> The author may override `α`, but must **state it and justify it**. It is never allowed to go
-> unstated: nothing validates this section (§7.1), so an unstated `α` is unrecoverable — a template
-> that lets `X` go blank has changed nothing.
+> **Gradient-based and finite-difference-based outer methods are PROHIBITED unless smoothness is
+> demonstrated** — not assumed, not asserted. A fixed-multistart profile is discontinuous *by
+> construction*, so the default position for one is: prohibited.
+>
+> Absent a smoothness demonstration, use a derivative-free outer method, or a dense grid with local
+> refinement.
 
-Expressing the bound against `c` is a convenience. `σ_null` is the correct denominator, and the leaf
-must carry it, because "% of the critical value" **degenerates** for statistics whose null is not
-`χ²` and for boundary cases where `c → 0`.
+### 11.2 Axis 3 when simulating the null is unaffordable
 
-## 11. Open questions
+Simulating a null distribution is genuinely expensive and will not always be affordable. The
+doctrine does not require it unconditionally. It requires that Axis 3 be **either executed or
+explicitly CONDITIONAL** — and a `CONDITIONAL` is not a shrug; it carries four obligations:
 
-- **How far to push Axis 3.** Simulating a null distribution is genuinely expensive and will not
-  always be affordable. Is the minimum bar "verify the null", or "state that you did not, and what
-  that costs you"? The doctrine currently implies the former and should probably permit the latter,
-  named.
-- **Which outer optimisers are admissible over a fixed-multistart profile**, which is functionhood-
-  restoring but **discontinuous** (§2.6). Running an FD-gradient outer optimiser over a piecewise
-  surface is a second-order version of the bug the multistart pool was adopted to fix. The leaf must
-  answer this; this design does not yet.
+> A `CONDITIONAL` Axis 3 must state:
+>
+> 1. **Cost** — what executing it would take.
+> 2. **Trigger** — what would cause it to be executed.
+> 3. **Invalidation clause** — what would void the deferral.
+> 4. **The decisions that MAY NOT depend on it until it completes.**
+>
+> (4) is the one with teeth. Deferring Axis 3 does not merely add a caveat — it **removes decisions
+> from the table.** Any verdict resting on `Pr(T > c | H₀) = α` is unavailable while the null is
+> unverified, and the pre-registration must say which verdicts those are, by name, before the
+> analysis runs.
+
+An uncalibrated threshold is not a slightly-weaker threshold. It is a threshold whose error rate is
+unknown, and a decision rule with an unknown error rate is not a decision rule.
 
 ## 12. Landing hazard (mechanical, not conceptual)
 

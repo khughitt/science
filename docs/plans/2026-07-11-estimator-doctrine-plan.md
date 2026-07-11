@@ -250,8 +250,26 @@ perfect integrator can still produce a badly miscalibrated test.
 > hierarchical/random-effects treatment — and check the empirical LR distribution against `χ²₁`
 > **before** any threshold is pre-registered.
 
-Note the trap: the reproducibility criterion below uses the **critical value as its denominator**.
-If Axis 3 was skipped, that denominator is itself unverified.
+Note the trap: the error budget below is scaled by `σ_null(T)`. **If Axis 3 was skipped, that scale
+is itself unverified** — you are calibrating your instrument against a ruler you have not checked.
+
+### When simulating the null is unaffordable
+
+It often is. This axis is **not** unconditionally required — but it may not be silently skipped
+either. It must be **either EXECUTED or explicitly CONDITIONAL**, and a `CONDITIONAL` carries four
+obligations:
+
+> 1. **Cost.** What executing it would take.
+> 2. **Trigger.** What would cause it to be executed.
+> 3. **Invalidation clause.** What voids the deferral.
+> 4. **The decisions that MAY NOT depend on it until it completes.**
+>
+> (4) is the one with teeth. Deferring Axis 3 does not add a caveat — it **removes decisions from
+> the table.** Any verdict resting on `Pr(T > c | H₀) = α` is unavailable while the null is
+> unverified, and you must name those verdicts **before the analysis runs**.
+
+**An uncalibrated threshold is not a slightly-weaker threshold.** It is a threshold whose error rate
+is unknown, and a decision rule with an unknown error rate is not a decision rule.
 
 ## Profiling
 
@@ -280,10 +298,27 @@ path lands in, so at a basin boundary it sits on the wrong branch. **Fixing the 
 path-dependence bug into a reproducible bias** — which, per the smoothing gradient above, is the
 most dangerous state an estimator can be in.
 
-**Caveat on the multistart pool:** its profile is a **discontinuous** function of ψ (the winning
-start switches basins). Functionhood is restored; smoothness is not. Do not run a gradient- or
-FD-based *outer* optimiser over a piecewise surface — that is a second-order version of the bug
-you just fixed. Use a derivative-free outer method, or a dense grid with local refinement.
+### The outer optimiser must be justified against the profile's smoothness
+
+A fixed-multistart profile is a **discontinuous** function of ψ — the winning start switches basins.
+Functionhood is restored; **smoothness is not.** Running a gradient- or FD-based *outer* optimiser
+over a piecewise surface is a second-order version of the bug the multistart pool was adopted to fix.
+
+There is no universally correct outer optimiser, so this skill does not name one. It requires a
+declaration:
+
+> **Declare why the outer optimiser is valid for this profile's smoothness / discontinuity
+> structure.**
+>
+> **Gradient-based and finite-difference-based outer methods are PROHIBITED unless smoothness is
+> demonstrated** — demonstrated, not assumed and not asserted. A fixed-multistart profile is
+> discontinuous *by construction*, so for one the default position is: **prohibited**.
+>
+> Absent a smoothness demonstration: use a derivative-free outer method, or a dense grid with local
+> refinement.
+
+A gradient step on a surface with basin-switch cliffs will happily report convergence at a cliff
+edge. That is the same failure as warm-starting, one level up.
 
 ### The inner tolerance is derivable
 
@@ -314,23 +349,37 @@ bias `0.4c` and spread `0.4c` each clear a 50%-of-`c` gate, but together they mo
 
 > **E := |b̂| + k·s**, with `k ≈ 2–3` (so the reproducibility term is an upper-tail bound, not a
 > median), where `b̂` is measured bias against the independent reference and `s` the replicate
-> spread. **Certification passes iff `E ≤ α·c`.**
+> spread.
+>
+> **Certification passes iff `E ≤ ρ · σ_null(T)`, with `ρ = 0.1` by default.**
 
-### Choosing α
+### ρ, the instrument-error fraction — and why it is not called α
 
-The correct denominator is not the critical value but the **sampling SD of the statistic under the
-null**: the instrument must not materially inflate the variance of the quantity you are deciding on.
+`ρ` is **dimensionless** and is measured against `σ_null(T)`, the sampling SD of the decision
+statistic under its **declared null**.
 
-> **σ_instrument ≤ ρ · σ_null(T)**, with **ρ ≈ 0.1**.
+> **Never call this `α`.** In likelihood testing `α` is the **test size** — the thing in
+> `Pr(T > c | H₀) = α`. A constant named `α` sitting beside a likelihood-ratio threshold will be
+> read as a significance level. It is not one. It is the fraction of the statistic's own null
+> variability that the *instrument* is permitted to contribute.
 
-For an LR test, `T | H₀ ~ χ²₁`, so `σ_null = √2 ≈ 1.414` and `c = 3.84`; `ρ = 0.1` gives
-`σ_instrument ≤ 0.14 nll` ≈ **3.7% of the critical value**, inflating `Var(T)` by ~1%.
+**Do not state the bound as a percentage of the critical value.** That percentage is a property of
+one particular null, not a rule — it drifts with the degrees of freedom and degenerates entirely
+for non-`χ²` nulls and for `c → 0`. At a 5% test size:
 
-> **Default `α = 0.05`.** `α = 0.10` is the defensible loose end. **`α ≥ 0.25` is indefensible.**
-> Override if you can justify it — but **α is never allowed to go unstated.**
+| Null | `σ_null = √(2·df)` | `c` | `ρ·σ_null` at ρ=0.1 | …as % of `c` |
+|---|---|---|---|---|
+| χ²₁ | 1.414 | 3.841 | 0.141 | **3.7%** |
+| χ²₂ | 2.000 | 5.991 | 0.200 | **3.3%** |
+| χ²₃ | 2.449 | 7.815 | 0.245 | **3.1%** |
+| χ²₅ | 3.162 | 11.070 | 0.316 | **2.9%** |
 
-Express the bound against `σ_null`, not `c`, whenever the null is not `χ²` or the critical value
-approaches zero — "% of the critical value" degenerates there.
+If you want a threshold-relative number, **derive it for your declared null.** Do not carry one
+over.
+
+> **Default `ρ = 0.1`** — the instrument then inflates `Var(T)` by ~1%, which is immaterial under
+> any usual convention. Override it if you can justify it, but **`ρ` is never allowed to go
+> unstated.**
 
 ### The third outcome
 
@@ -436,7 +485,7 @@ certification of the estimator, and conflating them is how "we can't check it" g
 
 - The objective is not a function of its own arguments (warm-started inner fits). **Stop.** Nothing
   downstream is interpretable.
-- Replicate spread exceeds the error budget (`E > α·c`). The threshold is finer than the
+- The error budget exceeds its bound (`E > ρ·σ_null`). The threshold is finer than the
   instrument's resolution. **Do not report reject/do-not-reject** — report INDETERMINATE, and
   either certify a better estimator or widen the threshold.
 - Structural non-identifiability. No estimator fixes this; change the design.
@@ -445,7 +494,9 @@ certification of the estimator, and conflating them is how "we can't check it" g
 
 State: the four axes and how each was established; the independent reference and **why its error
 mechanism differs**; `R`, and the **max** (not median) spread over replicates and units; `b̂`, `s`,
-`k`, `α`, and the resulting `E`; the number of units falling in the **INDETERMINATE** band; and the
+`k`, `ρ`, and the resulting `E`; the outer optimiser and **why it is valid for the profile's
+smoothness structure**; whether Axis 3 was EXECUTED or CONDITIONAL (and if CONDITIONAL, the decisions
+it removes from the table); the number of units falling in the **INDETERMINATE** band; and the
 **invalidation clause** — re-certify whenever the estimator, forward model, tolerances, hardware, or
 library stack changes. Where certification ran at reduced scale, state the **scaling law** carrying
 it to full scale (per-unit does not carry to pooled).
@@ -662,7 +713,9 @@ trailing a run of omitted ones):
 | 1. Forward-map accuracy | <tolerance, on the DECISION STATISTIC, propagated> | <INDEPENDENT mechanism: a different scheme family, or an adaptive solver 2-3 orders tighter. NOT a finer step of the same scheme.> |
 | 2. Reproducibility | <MAX over R >= 5 replicates -- not the median> | <perturb every inferentially irrelevant DOF: start point, ordering, threads, seeds. If the estimator is deterministic, INJECT jitter.> |
 | 3. Threshold calibration | <null distribution of the statistic> | <simulated under the restricted model -- not assumed from Wilks> |
-| Error budget | E = \|b\| + k*s <= alpha * c, k in [2,3]; **alpha = 0.05 default, and never unstated** | <justify any override; >= 0.25 is indefensible> |
+| 3. Threshold calibration | <EXECUTED, or CONDITIONAL> | <if CONDITIONAL: cost, trigger, invalidation clause, AND the decisions that may not depend on it until it completes> |
+| Outer optimiser | <method; why it is valid for this profile's smoothness/discontinuity structure> | <gradient/FD-based methods PROHIBITED unless smoothness is DEMONSTRATED> |
+| Error budget | E = \|b\| + k*s <= rho * sigma_null(T), k in [2,3] | <rho = 0.1 default, and NEVER unstated. Dimensionless, against the null's sampling SD -- NOT a % of the critical value, which drifts with df. Do not call it alpha; alpha is the test size.> |
 | Indeterminate band | units with \|T - c\| <= E are INDETERMINATE, not silently decided | <report the count> |
 | Compute budget | <cost> | <certified \| CONDITIONAL on ...> |
 | Invalidation | <what re-opens this certificate> | <estimator, forward model, tolerances, hardware, libraries> |
@@ -731,8 +784,13 @@ Add an **Estimator Certification Gate**. It must commit, before any gate is eval
   ordering, threads, seeds. If the estimator is deterministic, jitter must be **injected**; a check
   that cannot fail is not a check.
 - **Threshold calibration**: the null distribution of the statistic, simulated — not assumed.
-- The **error budget** `E = |b| + k·s ≤ α·c` (default `α = 0.05`, never unstated), and the
-  **INDETERMINATE** band of units the instrument cannot resolve.
+- The **error budget** `E = |b| + k·s ≤ ρ·σ_null(T)` — `ρ` is the dimensionless
+  **instrument-error fraction** (default `0.1`, never unstated), measured against the null's
+  sampling SD, **not** as a percentage of the critical value, which drifts with the degrees of
+  freedom. Do not call it `α`; `α` is the test size.
+- The **outer optimiser**, and why it is valid for the profile's smoothness structure —
+  gradient/FD-based methods are **prohibited unless smoothness is demonstrated**.
+- The **INDETERMINATE** band of units the instrument cannot resolve.
 
 **Order: certify the estimator, then price the design, then commit the budget.** A budget priced
 on an uncertified estimator is a consequence of an untested assumption, not a constraint — it can
@@ -991,7 +1049,7 @@ git commit -m "chore(codex-skills): regenerate for the estimator-doctrine comman
 |---|---|
 | §6.1 new leaf (+4-place registration, skills lint) | 1 |
 | §6.2 correct `likelihood-model-comparison` | 2 |
-| §6.3 gate section, **both** template copies, `α` default | 3 |
+| §6.3 gate section, **both** template copies, `ρ` default | 3 |
 | §6.4 `pre-register` new sub-axis + 4b mirror | 4 |
 | §6.5 `plan-analysis` rubric + body section + workflow | 1 (rubric), 5 |
 | §6.6 aspect hook | 6 |
@@ -1015,17 +1073,29 @@ git commit -m "chore(codex-skills): regenerate for the estimator-doctrine comman
 4. *"No independent reference exists"* — Task 1 answers it rather than deferring: MMS,
    order-of-accuracy verification, analytic limits, invariants, a gold-standard optimiser,
    autodiff-vs-FD, and free self-consistency assertions. **Uncertifiable ≠ unaffordable.**
-5. *"within X%" project-defined unless evidence supports a default* — evidence now does
-   (`σ_instrument ≤ ρ·σ_null`, ρ≈0.1 → ~3.7% of `c`, ~1% variance inflation). So: **default
-   `α = 0.05`, overridable with justification, never unstated.** The last clause matters — nothing
-   validates the section, so a blank `X` is unrecoverable.
+5. *"within X%" project-defined unless evidence supports a default* — evidence supports the
+   **dimensionless** criterion, and only that: **`E ≤ ρ·σ_null(T)`, default `ρ = 0.1`, never
+   unstated.** The constant is deliberately **not** called `α` (that is the test size) and is
+   deliberately **not** expressed as a percentage of the critical value — that percentage drifts
+   with the degrees of freedom (3.7% → 2.9% across χ²₁…χ²₅ at 5%) and degenerates for non-`χ²`
+   nulls, so shipping it as *the* default would bake a χ²₁-at-5% special case into a general
+   doctrine. Any threshold-relative number is **derived for the declared null**.
+
+**Both former open questions are now disposed** — not by prescribing a universal answer (there
+isn't one) but by requiring a **declaration**, which is what a pre-registration is for:
+
+- **Outer optimiser** (Task 1, *The outer optimiser must be justified against the profile's
+  smoothness*; Task 3 template row): the author declares why it is valid for the profile's
+  smoothness/discontinuity structure. **Gradient- and FD-based outer methods are prohibited unless
+  smoothness is demonstrated** — and a fixed-multistart profile is discontinuous *by construction*,
+  so for one the default position is prohibited.
+- **Axis 3** (Task 1, *When simulating the null is unaffordable*; Task 3 template row): **EXECUTED
+  or explicitly CONDITIONAL.** A `CONDITIONAL` must state cost, trigger, invalidation clause, and —
+  the clause with teeth — **the decisions that may not depend on it until it completes.** Deferring
+  Axis 3 does not add a caveat; it removes decisions from the table.
 
 **Known gaps, stated rather than hidden:**
 
-- Design §11's open question — *which outer optimisers are admissible over a discontinuous
-  fixed-multistart profile* — is answered only partially in the leaf ("derivative-free, or a dense
-  grid with local refinement"). If that is too thin, it needs a statistician, not a plan.
-- Design §11's other question — how hard to push Axis 3 when simulating a null is unaffordable —
-  the leaf currently implies "verify it" with no escape hatch. Consider permitting "state that you
-  did not, and what that costs you."
 - Nothing here is validator-enforced. That is the design's §7.1, and it is deliberate.
+- The `k` in `E = |b̂| + k·s` is given as a range (2–3) rather than a value. Unlike `ρ`, no
+  derivation pins it; it is a tail-coverage choice. The author states it, as with `ρ`.
