@@ -451,6 +451,17 @@ For each entry the guard printed, decide **instrument** or **not-instrument**, a
 
 The bar for **not-instrument** is high and specific: *there is no input whose absence would make an empty return meaningless.* "It probably always works" does not clear that bar. When in doubt, classify as an instrument — a needless `ok`/`empty` result is harmless; a missed `unwired` is the bug this whole design exists to stop.
 
+#### `InstrumentResult` is ROW-shaped. It cannot carry a mapping.
+
+`rows` is `list[RowT]`. Two flagged helpers return a `dict`, and **neither can be wrapped as-is** — `InstrumentResult.from_rows(some_dict)` is meaningless. Rule on each explicitly; do **not** paper over it:
+
+- **`graph/attention.py::format_attention_candidate -> dict[str, Any]`** — a formatter for **one** candidate. It is not a collection at all, and it cannot be unwired. → `_NOT_INSTRUMENTS`. (It is flagged only because `dict` is in `_BARE_COLLECTIONS`; that is the detector being coarse, not a finding.)
+- **`benchmark_catalog.py::coverage_summary -> dict[str, dict[str, int]]`** — a genuine mapping-shaped *summary*, and it can plausibly be unwired (a summary over zero resolvable benchmarks is not "zero coverage"). It needs a real ruling, and there are only two honest options:
+  1. **Reshape to rows** — return `InstrumentResult[CoverageRow]` where the mapping's keys become a field on each row. This is an API change; its consumers must be updated. Prefer this if the consumers are few.
+  2. **Defer** — as with the validator payload, record that mapping-shaped instruments are not expressible in this type and leave `coverage_summary` alone, moving it to `_NOT_INSTRUMENTS` **only** with a note saying it is deferred, not exonerated.
+
+  Decide with the code in front of you. What you may **not** do is `from_rows(list(summary.items()))` or any similar reshaping smuggled in without updating the consumers — that is a silent API change.
+
 - [ ] **Step 2: Move the non-instruments**
 
 Move those entries from `_ALLOWLIST` to `_NOT_INSTRUMENTS`, each with its justification as a trailing comment:
@@ -766,12 +777,18 @@ resolved-vs-nothing: no declared demand is still a TRUE empty."
 
 ---
 
-### Task 4: Delete `count_research_orphans`, add `list_research_orphans`
+### Task 4: `big_picture/validator.py` — delete the counter, migrate the module
+
+**Scope: every `_ALLOWLIST` entry for `big_picture/validator.py`.** That is the counter **and** `validate_synthesis_file` / `validate_rollup_file` (both `-> list[ValidationIssue]`). Read the allowlist; do not work from the function names in this plan.
+
+The two `validate_*` helpers are instruments with a real `unwired` state: they take a **path**, and a file that does not exist or does not parse has not "passed validation" — it was never read. Give them `code="file_not_readable"`. (They return a bare `list`, so unlike `validate_graph` they carry no `has_failures` channel and migrate cleanly — see *Deferred: the validator payload* in Task 7 for why that distinction matters.)
 
 **Files:**
-- Modify: `science/src/science_tool/big_picture/validator.py:116-136` (delete), `:146` (caller)
+- Modify: `science/src/science_tool/big_picture/validator.py` — `count_research_orphans` (delete, `:116-136`), its caller (`:146`), `validate_synthesis_file`, `validate_rollup_file`
 - Modify: `science/tests/test_big_picture_validator.py:190-197`
 - Modify: `commands/big-picture.md:206`
+
+Note the internal chain: `validate_rollup_file` **calls** `count_research_orphans` (`:146`). It becomes `len(list_research_orphans(...).rows)` — and since `validate_rollup_file` is itself migrating, make sure its own `unwired` path is distinct from the orphan-count path.
 
 **Interfaces:**
 - Consumes: `InstrumentResult` (Task 1).
@@ -1460,6 +1477,26 @@ For each, change the return annotation to `InstrumentResult[...]` and wrap the f
 
 **`validate_inquiry` / `validate_inquiry_dataset` migrate and have a real `unwired` state:** an unresolvable `slug` means the check never ran, exactly as an unresolvable `center` does for `query_gaps`. Returning `[]` for a slug that does not exist is "no problems found" about a thing that was never looked at. Give them `code="inquiry_not_found"`.
 
+#### Thin wrappers must propagate the result VERBATIM
+
+Three helpers are thin wrappers that load a dataset and delegate:
+
+```
+list_inquiries      -> list_inquiries_dataset
+validate_inquiry    -> validate_inquiry_dataset
+diff_graph_inputs   -> diff_graph_inputs_dataset      (Task 5)
+```
+
+**Return the inner `InstrumentResult` unchanged:**
+
+```python
+def list_inquiries(graph_path: Path) -> InstrumentResult[dict[str, str]]:
+    dataset = _load_dataset(graph_path)
+    return list_inquiries_dataset(dataset)          # <- verbatim
+```
+
+**Never** re-wrap: `return InstrumentResult.from_rows(list_inquiries_dataset(ds).rows)` **silently downgrades `unwired` to `empty`** — it throws away the status, the code, and the reason, and hands the caller a clean empty result from an instrument that did not run. That is this design's bug, reintroduced at the wrapper, and it would pass the AST guard (the annotation is right) and every row-count test. Watch for it in review.
+
 #### Deferred: the validator payload (`validate_graph*`, `validate_empirical_run_resolution`)
 
 These three return `tuple[list[...], bool]` and are **deliberately out of scope**. The narrowed tuple detector (Task 2) does not flag them, so they will not appear in the seed and need no carve-out.
@@ -1675,17 +1712,23 @@ unstamped entities dominate the ranking. Separate design."
 
 ---
 
-### Task 10: The tuple precursors and `curate/inventory.py`
+### Task 10: The catalog modules and `curate/inventory.py`
+
+**Scope: every `_ALLOWLIST` entry for `benchmark_catalog.py` and `datasets_catalog.py`.** Read the allowlist. It is **not** just the two tuple precursors — it also includes `benchmark_sources`, `coverage_summary`, `reconcile_dataset_links`, `format_show`, and `consumers_of`. An earlier draft of this task named only `list_benchmarks` and `list_datasets`, which would have left five helpers stranded and Task 11's empty-allowlist assertion failing.
 
 **Files:**
-- Modify: `science/src/science_tool/benchmark_catalog.py` (`list_benchmarks`), `datasets_catalog.py` (`list_datasets`), `curate/inventory.py`
+- Modify: `science/src/science_tool/benchmark_catalog.py`, `datasets_catalog.py`, `curate/inventory.py`
+- Modify: **`science/src/science_tool/benchmark_opportunities.py`** — an external consumer of `benchmark_sources`, outside the instrument namespace and easy to miss.
+- Modify: `science/src/science_tool/cli.py` (consumes `list_benchmarks`, `list_datasets`)
 
 **Interfaces:**
-- Produces: `list_benchmarks -> InstrumentResult[BenchmarkRow]`, `list_datasets -> InstrumentResult[dict]`.
+- Produces: `list_benchmarks -> InstrumentResult[BenchmarkRow]`, `list_datasets -> InstrumentResult[dict]`, `benchmark_sources -> InstrumentResult[BenchmarkSource]`, and per Task 2b's ruling for the rest.
 
-These two independently grew `tuple[list[T], str | None]` — an ad-hoc reason channel, invented twice, before this type existed. That second element **is** `InstrumentResult.reason`. Converge them.
+**Triage first.** `format_show -> list[str]` and `consumers_of -> list[str]` are likely pure/total (`_NOT_INSTRUMENTS`); `coverage_summary` is the mapping-shaped case Task 2b must rule on. Apply Task 2b's decisions here — do not re-litigate them.
 
-- [ ] **Step 1: Migrate the two catalogs**
+Three helpers carry the `tuple[list[T], str | None]` precursor (`benchmark_sources`, `list_benchmarks`, `list_datasets`) — an ad-hoc reason channel, invented independently before this type existed. That second element **is** `InstrumentResult.reason`. Converge them.
+
+- [ ] **Step 1: Migrate the catalog allowlist entries**
 
 ```python
 def list_benchmarks(...) -> InstrumentResult[BenchmarkRow]:
@@ -1778,6 +1821,8 @@ git commit -m "test(instruments): lock the allowlist empty; the convergence is c
 
 **Spec coverage.** Design §1 (the type + enforced invariant) → Task 1. §1 renderer contract → Task 3 Step 5. §2 structural query → Task 2 (`INSTRUMENT_MODULES`, imported by the guard so the two cannot drift). §2 four-state precondition → Task 3. §2 partial-resolution caveat channel → Task 1 (`ok` may carry `reason`) + Task 3. §2 scalar counters prohibited → Task 4. §2 attention out-of-scope → Task 9's scope fence. §2 tuple precursors → Task 10. §3 guard + additive ratchet + known gaps → Task 2. §4 walk-side (graph diff, envelope, v1-as-unwired) → Task 5. §4 authoring-side (`supersedes:` lint) → Task 6. Bulk namespace → Tasks 7–10. Acceptance criteria → Task 11 Step 2.
 
+**Task scope is a MODULE, never a function list.** Every migration task (4, 5, 7, 8, 9, 10) owns *every `_ALLOWLIST` entry for its module*. Two separate review rounds found helpers stranded because a task named specific functions instead: first `query_predicates`, then `validate_synthesis_file`, `validate_rollup_file`, `benchmark_sources`, `coverage_summary`, `reconcile_dataset_links`, `format_show`, `consumers_of`. The failure mode is identical to the list-vs-query one below — an enumeration in prose drifts from the code. **The allowlist is the work order.** Task 11's empty-allowlist assertion is the backstop that catches an under-drained module, but it catches it *late*; owning the module up front catches it early.
+
 **The list-vs-query lesson, learned the hard way.** The first draft of this plan
 hand-transcribed the guard's allowlist — 24 entries, against a tree that actually has
 49 — while the design doc it implements says, in as many words, *"Do not migrate from
@@ -1820,4 +1865,19 @@ they are corrected above and listed so a reader can re-check them cheaply):
 
 5. **Task 9 propagates further than "attention".** `compute_attention_candidates` feeds `wander/sampling.py` and `wander/cli.py`. Wrapping its return breaks the `wander` command, so Task 9 owns those consumers and their tests. The scope fence is on the *scoring model*, not on the call graph — those are different things and conflating them would strand `wander` broken.
 
-6. **The quadratic scan in `compute_topic_gaps` is NOT fixed.** `_compute_demand` still re-globs every question once per topic. Task 3 hoists a separate single-pass scan for the precondition and leaves the existing demand loop alone. A first draft of this plan claimed the task removed the quadratic scan; it does not, and the claim has been withdrawn rather than the scope enlarged.
+6. **`InstrumentResult` cannot express two shapes in the namespace.** It is row-shaped
+   (`rows: list[RowT]`), so it cannot carry (a) a **mapping** — `coverage_summary ->
+   dict[str, dict[str, int]]`, ruled on in Task 2b — or (b) a **second semantic
+   channel** — the `validate_graph*` family's `has_failures`, deferred in Task 7.
+   Both are recorded, neither is smuggled. The type's applicability has a boundary and
+   this plan states where it is.
+
+7. **The wrapper-downgrade trap.** `list_inquiries`, `validate_inquiry`, and
+   `diff_graph_inputs` are thin wrappers over `*_dataset` twins. Re-wrapping
+   (`from_rows(inner(...).rows)`) instead of returning the inner result verbatim
+   silently downgrades `unwired` to `empty` — and it would pass the AST guard *and*
+   every row-count test, because the annotation is correct and the rows match. It is
+   the design's own bug, reachable through the migration meant to fix it. Task 7 calls
+   it out; **review for it explicitly.**
+
+8. **The quadratic scan in `compute_topic_gaps` is NOT fixed.** `_compute_demand` still re-globs every question once per topic. Task 3 hoists a separate single-pass scan for the precondition and leaves the existing demand loop alone. A first draft of this plan claimed the task removed the quadratic scan; it does not, and the claim has been withdrawn rather than the scope enlarged.
