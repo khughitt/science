@@ -148,8 +148,23 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 ```python
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
 
-all_gaps = compute_topic_gaps(project_root, resolved_questions, included_question_ids)
+result = compute_topic_gaps(project_root, resolved_questions, included_question_ids)
+
+if result.status == "unwired":
+    # The instrument did NOT run: included questions declare topic: refs, and none
+    # of them resolve to a topic entity. STOP and report this. Do NOT proceed as if
+    # there were no gaps -- an empty gap list here would tell the reader their topic
+    # coverage is complete, when in fact it was never measured.
+    raise RuntimeError(f"topic gaps did not run ({result.code}): {result.reason}")
+
+all_gaps = result.rows
+if result.reason:
+    # A caveat on a SUCCESSFUL run: some declared topic refs dangle and were dropped
+    # from demand. Surface it in the report -- do not silently discard it.
+    ...
 ```
+
+`result.status` is `empty` when no included question declares a topic ref at all — that is a **true** zero-gap finding, and you should report it as such. It is `unwired` only when refs were declared and none resolved. Those are different facts and must not be rendered the same way.
 
 Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` list includes this hypothesis's ID. Pass the filtered list to the hypothesis-synthesizer agent as `topic_gaps`.
 
@@ -277,7 +292,7 @@ git hash-object entities/synthesis/<emergent-threads>.md
 
 **Orphan-question counting**:
 
-- Compute via `count_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. The count excludes questions whose resolved aspects are only `[software-development]`; these are out of scope for research synthesis. The orchestrator does not re-derive this count manually — delegate to the helper so the rollup and validator agree on the definition.
+- Compute via `list_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. `orphan_question_count` is `len(result.rows)` and `orphan_ids` is `result.rows` — **the same call**, so the count and the ID list cannot disagree. (They did: a rollup once reported 40 orphans beside a hand-derived list of 31.) The predicate excludes questions whose resolved aspects are only `[software-development]`; these are out of scope for research synthesis. Do not re-derive either value by hand. There is deliberately no `count_research_orphans`.
 
 **Citation inheritance**: the rollup inherits the citation and grounding requirements from the per-hypothesis files. Every factual claim traces back to a specific per-hypothesis file's content. No new unsupported claims are introduced at the rollup level.
 
