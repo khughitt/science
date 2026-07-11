@@ -151,6 +151,7 @@ reason.
 | Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `data-embeddings-manifold-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `data-protein-sequence-structure-qa`; add `data-embeddings-manifold-qa` when embeddings/manifolds are analyzed |
 | Manual/LLM annotation, claim extraction, taxonomy labels | `research-annotation-curation-qa`, `research-methodology` |
+| Profile likelihood, nuisance parameters, optimiser choice, ODE / numerical integration, parameter recovery, synthetic-recovery gate | `statistics-estimator-certification` |
 
 ## Workflow
 
@@ -158,7 +159,7 @@ reason.
 2. Load the minimum relevant leaves from `skills/INDEX.md`.
 3. Identify required input inspection and preprocessing/normalization checks.
 4. Build a **Per-Input Data Profile** with one row per input artifact or dataset. Include encoding / file format, row grain, join cardinality, missing-value sentinels, provenance / source version, checksum or immutable identifier, and identity declaration status for identity-bearing inputs.
-5. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules.
+5. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules. If the analysis fits parameters numerically, also state the estimator certification plan (the four axes) and, for each validation probe, what result would make that probe fail.
 6. Decide exactly one readiness state: `ready`, `ready-with-caveats`, or `not-ready`.
 7. Save the analysis plan by default.
 8. If graph tooling is available, link the saved plan to referenced hypothesis, inquiry, and task entities.
@@ -221,6 +222,7 @@ The body must include:
 - Independent Unit and Denominator
 - Estimand and Primary Metric
 - Model / Test Assumptions
+- Estimator and Probe Design
 - Power Floor or Resolution Limit
 - Bias vs Variance Risks
 - Sensitivity Arbitration
@@ -228,6 +230,19 @@ The body must include:
 - Aspect-contributed Sections
 - Readiness Decision
 - Feedback Reflection
+
+**Estimator and Probe Design.** Include this section when the analysis fits parameters numerically —
+an optimiser, a profile likelihood, an ODE or any other discretisation in the inferential path. Name
+the estimator, and state how each certification axis will be established: well-posedness (is the
+parameter estimable at all?), forward-map accuracy against a reference with a *different
+error-generating mechanism*, reproducibility under perturbation of every inferentially irrelevant
+choice, and calibration of the decision rule's null. Name the outer optimiser and why it is valid for
+the profile's smoothness structure.
+
+For **every validation probe** you plan, write the answer to: *what result would make this probe
+fail?* A probe with no such answer is evidence-shaped ceremony — it will discharge the obligation
+without ever having tested it. See
+[`statistics-estimator-certification`](../skills/statistics/estimator-certification.md).
 
 In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
 

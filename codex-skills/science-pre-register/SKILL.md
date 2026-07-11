@@ -158,6 +158,45 @@ The gate must name exactly which fields may be inspected to set the threshold: m
 Use this instead of pretending a separate pilot or baseline artifact exists when the defensible
 calibration source is the current run's marginal structure.
 
+#### Sub-axis: can the instrument resolve the threshold?
+
+If the analysis estimates parameters numerically — an optimiser, a profile likelihood, an ODE or any
+other discretisation in the inferential path — then a pre-registered threshold is a claim about an
+**instrument** as much as about the world. A threshold finer than its instrument's resolution is not
+conservative: it is noise-driven, and the noise has a sign.
+
+Add an **Estimator Certification Gate**. It must commit, before any gate is evaluated:
+
+- **Well-posedness** (free, design-only): is the parameter estimable at all? Skipping this makes the
+  reproducibility criterion adversarial — it will "fix" a flat ridge by selecting a biased optimiser,
+  because any operation that smooths the objective buys low variance with bias.
+- **Forward-map accuracy** against a reference with a **different error-generating mechanism**. A
+  finer step of the same scheme shares its truncation term and its stability boundary; that is a
+  convergence check, not a reference.
+- **Reproducibility** under perturbation of every inferentially irrelevant choice — start point,
+  ordering, threads, seeds. If the estimator is deterministic, jitter must be **injected**: a check
+  that cannot fail is not a check. Two replicates falsify an estimator; they cannot certify one.
+- **Threshold calibration**: the null distribution of the statistic, simulated — not assumed. Either
+  **EXECUTED** or explicitly **CONDITIONAL**, and a CONDITIONAL must state cost, trigger,
+  invalidation clause, and **the decisions that may not depend on it until it completes**. Deferring
+  it does not add a caveat; it removes decisions from the table.
+- The **outer optimiser**, and why it is valid for the profile's smoothness/discontinuity structure.
+  Gradient- and finite-difference-based outer methods are **prohibited unless smoothness is
+  demonstrated**.
+- The **error budget** `E = |b| + k*s <= rho * sigma_null(T)`. `rho` is the dimensionless
+  **instrument-error fraction** (default `0.1`, never unstated), measured against the null's sampling
+  SD — **not** as a percentage of the critical value, which drifts with the degrees of freedom. Do
+  not call it `alpha`; `alpha` is the test size.
+- The **INDETERMINATE** band: units whose statistic sits within `E` of the critical value are
+  unresolvable by this instrument and must not be silently decided.
+
+**Order: establish well-posedness, certify the estimator, price the design, then commit the budget.**
+A budget priced on an uncertified estimator is a consequence of an untested assumption, not a
+constraint — it can be wrong by orders of magnitude. If the budget must be committed first, mark it
+**CONDITIONAL** and name what invalidates it.
+
+See [`skills/statistics/estimator-certification.md`](../skills/statistics/estimator-certification.md).
+
 #### Sub-axis: multi-analysis coverage
 
 When one pre-registration covers multiple analyses, add an **Analysis Registry** before the
@@ -249,6 +288,11 @@ Frame decision criteria according to the target class identified in § 0.
 - What would "too good to be true" look like? (e.g., AUC > 0.95, perfect accuracy)
 - What inflators could produce misleading results? (data leakage, confounds, overfitting)
 - What checks would you run before accepting an unexpectedly strong result?
+- The mirror image, for any **validation probe**: an unexpectedly *interesting* result from a probe
+  is a probe-defect signature, not a finding. A broken probe does not announce itself by returning
+  nothing — it returns something worth writing up. Before interpreting it, check the probe is not
+  confounded with the thing it validates (e.g. a probe that grids the very parameter whose true
+  values vary across its own cells).
 
 Skip this if the analysis type doesn't have a meaningful "too good" threshold.
 
