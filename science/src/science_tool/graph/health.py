@@ -287,6 +287,14 @@ class TaskArchiveLag(TypedDict):
     missing_completed: int
 
 
+def archive_lag_total(archive_lag: TaskArchiveLag) -> int:
+    return (
+        archive_lag["done_in_active"]
+        + archive_lag["retired_in_active"]
+        + archive_lag["missing_completed"]
+    )
+
+
 class ToolingScaffoldFinding(TypedDict):
     code: str  # pyproject_missing | science_tool_dep_missing | env_missing | env_path_missing
     detail: str  # human-readable description
@@ -349,7 +357,6 @@ class HealthReport(TypedDict):
     dataset_anomalies: list[dict]
     schema_invalid: list[SchemaInvalidFinding]
     archive_lag: TaskArchiveLag
-    archive_lag_total: int
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     validation: list[ValidationFinding]
@@ -788,9 +795,7 @@ def build_health_report(
         if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
             coverage_gaps += 1
 
-    archive_lag_total = (
-        archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
-    )
+    lag_total = archive_lag_total(archive_lag)
 
     total_issues = (
         len(unresolved_refs)
@@ -803,7 +808,7 @@ def build_health_report(
         + coverage_gaps
         + len(dataset_anomalies)
         + len(schema_invalid)
-        + (1 if archive_lag_total else 0)
+        + (1 if lag_total else 0)
         + sum(1 for f in managed_artifacts if f["counts_as_issue"])
         + len(tooling_scaffold)
         + len(validation)
@@ -830,7 +835,6 @@ def build_health_report(
         "dataset_anomalies": dataset_anomalies,
         "schema_invalid": schema_invalid,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
-        "archive_lag_total": archive_lag_total,
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
         "validation": validation,

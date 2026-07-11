@@ -1058,17 +1058,25 @@ Proposed.
         }
 
     def test_archive_lag_total_and_total_issues_match_cli_recomputation(self, tmp_path: Path) -> None:
-        """Characterization test (t-phase4 Task 6).
+        """Characterization test (t-phase4 Task 6, fixed up per owner ruling).
 
-        Before this task, `health_command` in cli.py redundantly recomputed
-        `archive_lag_total` and `total_issues` from report fields instead of
-        reading them off `build_health_report`'s return. This test pins the
-        CLI's OLD inline formulas (copied verbatim below) and proves they agree
-        with what the service already computes/returns, so surfacing
-        `archive_lag_total` on the report and deleting the CLI's
-        recomputation is value-preserving de-duplication, not new behavior.
+        Before Task 6, `health_command` in cli.py redundantly recomputed the
+        archive-lag tally and `total_issues` from report fields instead of
+        sharing that logic with the service. Task 6 initially "fixed" this by
+        adding `archive_lag_total` as a new key on the report dict — but that
+        changed the `--format json` payload shape, violating the phase's
+        byte-identity constraint. The owner ruled byte-identity governs: the
+        report dict must keep its pre-Task-6 shape, and the shared tally lives
+        instead in the public `archive_lag_total()` helper, called by both the
+        service (internally) and the CLI (on `report["archive_lag"]`).
+
+        This test pins the CLI's OLD inline formulas (copied verbatim below)
+        and proves they agree with what the shared helper computes, so
+        routing both callers through `archive_lag_total()` is value-preserving
+        de-duplication, not new behavior — and that the report dict does NOT
+        carry a redundant `archive_lag_total` key.
         """
-        from science_tool.graph.health import build_health_report
+        from science_tool.graph.health import archive_lag_total, build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         tasks_dir = tmp_path / "tasks"
@@ -1164,7 +1172,8 @@ Retired.
         )
         # --- end verbatim copy ---
 
-        assert report["archive_lag_total"] == old_archive_lag_total == 2
+        assert "archive_lag_total" not in report
+        assert archive_lag_total(report["archive_lag"]) == old_archive_lag_total == 2
         assert report["total_issues"] == old_total_issues
 
 
@@ -1212,6 +1221,51 @@ class TestHealthCLI:
         report = json.loads(result.output)
         assert "unresolved_refs" in report
         assert report["unresolved_refs"][0]["target"] == "topic:missing"
+
+    def test_json_output_key_set_is_byte_identical_to_pre_task6_shape(self, tmp_path: Path) -> None:
+        """Regression for t-phase4 Task 6 finding.
+
+        Task 6 originally added `archive_lag_total` as a new key on the
+        report dict, which changed `science health --format json` output —
+        a violation of this phase's byte-identity constraint (JSON output
+        must stay byte-for-byte identical). The fix moved the shared tally
+        into a standalone `archive_lag_total()` helper instead of a report
+        field, so the report dict's key set must exactly match what it was
+        before Task 6 (see `HealthReport` in graph/health.py).
+        """
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert "archive_lag_total" not in report
+        assert set(report.keys()) == {
+            "unresolved_refs",
+            "unregistered_ref_kinds",
+            "lingering_tags_lines",
+            "agent_context",
+            "identity_policy",
+            "entity_identity",
+            "layered_claims",
+            "cross_paper_evidence",
+            "legacy_task_type",
+            "invalid_entity_aspects",
+            "dataset_anomalies",
+            "schema_invalid",
+            "archive_lag",
+            "managed_artifacts",
+            "tooling_scaffold",
+            "validation",
+            "accepted_validation",
+            "prose_epistemics",
+            "total_issues",
+        }
 
     def test_json_output_with_timings_includes_meta(self, tmp_path: Path) -> None:
         from click.testing import CliRunner

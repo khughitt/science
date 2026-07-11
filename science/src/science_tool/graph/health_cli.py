@@ -63,7 +63,7 @@ def health_command(
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
     from rich.table import Table
 
-    from science_tool.graph.health import build_health_report, list_health_checks
+    from science_tool.graph.health import archive_lag_total, build_health_report, list_health_checks
     from science_tool.styles import get_console
 
     project_root = project_root.resolve()
@@ -109,7 +109,7 @@ def health_command(
 
         layered_claims = report["layered_claims"]
         archive_lag = report["archive_lag"]
-        archive_lag_total = report["archive_lag_total"]
+        lag_total = archive_lag_total(archive_lag)
 
         managed_artifacts = report.get("managed_artifacts") or []
         tooling_scaffold = report.get("tooling_scaffold") or []
@@ -143,7 +143,7 @@ def health_command(
 
         console = get_console()
 
-        if archive_lag_total:
+        if lag_total:
             lag_table = Table(title="Tasks Archive Lag")
             lag_table.add_column("Metric", style="bold")
             lag_table.add_column("Count", justify="right")
