@@ -553,11 +553,18 @@ Registry id `statistics-estimator-certification`.
 ## Companion Skills
 ```
 
-Registration is three-place per the skills convention (`skills/INDEX.md`;
-`skills/statistics/SKILL.md` Leaves table + Principles; `commands/plan-analysis.md` Leaf Selection
-Rubric), then regenerate `codex-skills/` — a generated mirror, never hand-edited. *(The exact,
-verified file list is being confirmed by a separate toolkit-fit review and lands in the
-implementation plan.)*
+**The leaf skeleton above is not a whole file.** `science skills lint` **machine-enforces** three
+things a prose skeleton silently omits, and it exits 1 without them:
+
+- YAML frontmatter with **`name`** (`statistics-estimator-certification`) and **`description`**;
+- a **`## Companion Skills`** section (mandatory for *all* skills, not a convention);
+- an entry in **`skills/INDEX.md`**.
+
+Registration is therefore **four-place**, not three (`skills/INDEX.md`; the `## Leaves` table
+*and* `## Principles` list in `skills/statistics/SKILL.md`; `commands/plan-analysis.md`'s Leaf
+Selection Rubric), and one of those places is enforced by a linter rather than by convention.
+`skills/statistics/*` leaves are **not** mirrored into `codex-skills/` — only the three *command*
+edits propagate there. Exact anchors are in the implementation plan.
 
 ### 6.2 Correct `likelihood-model-comparison.md`
 
@@ -614,12 +621,47 @@ so, rather than implying an enforcement that does not exist.
 | Invalidation | <what re-opens this certificate> | <estimator, forward model, tolerances, hardware, libraries> |
 ```
 
-Add the corresponding `_template.sections` row with `required: true`.
+#### Two templates, not one — and the registry row is mandatory in a harder sense than stated
+
+There are **two** pre-registration templates, currently byte-identical, and a test
+(`science/model/tests/test_templates.py`) asserts they stay that way:
+
+- `templates/pre-registration.md` — what `commands/pre-register.md` tells the agent to read;
+- `science/model/src/science_model/templates/pre-registration.md` — the **packaged** copy, which is
+  what `Renderer` actually reads by default.
+
+Editing only the root copy turns that test **red** *and* leaves `science entity create
+pre-registration` scaffolding the **old** section list — the edit would "succeed" while changing
+nothing an author sees. **Both files change, identically.**
+
+And an earlier draft of this document claimed a body section without a registry row is "invisible
+to the tooling." **False.** `_render_body` does an unguarded `metadata_by_name[parsed.name]`, so a
+body heading with no registry row is a **KeyError crash on every render of that kind**. The
+registry `name:` must match the `## ` heading text **exactly**. Registry *order* is free — body
+heading order controls render order.
+
+Registry row:
+
+```yaml
+- { key: estimator-certification-gate, name: "Estimator Certification Gate", required: true }
+```
+
+**Body placement**, which the design must specify because body order *is* render order: the three
+existing gates sit at EOF but are all `required: false`, so they vanish from a default scaffold and
+the rendered doc ends at `## Total Comparison Count`. Append the new `required: true` gate
+**immediately after `## Total Comparison Count`**, so a default scaffold reads contiguously rather
+than trailing a lone gate after a run of omitted ones.
 
 ### 6.4 `commands/pre-register.md`
 
 - Add the **well-posedness → certify → price → commit** ordering and the Estimator Certification
-  Gate to the gate vocabulary, where the other three gates are chosen.
+  Gate to the gate vocabulary.
+
+  **Not** under `#### Sub-axis: execution timing`, as an earlier draft said — only two of the three
+  gates live there (Execution-Readiness, Vehicle-Admissibility); the Calibration Gate already has
+  its **own** sub-axis. Estimator certification is not an execution-timing question at all: it asks
+  whether the instrument can resolve the threshold, which is orthogonal to *when* the analysis runs.
+  It gets a **new `#### Sub-axis:`** of its own, matching how Calibration is handled.
 - Extend `### 4b. Suspicious/Unexpected Results` — currently "what would *too good to be true* look
   like?" — with its mirror, which is `fb-...-011`'s lesson:
 
@@ -643,6 +685,21 @@ The aspect contributes nothing to `plan-analysis`, though `plan-analysis` reserv
 `Aspect-contributed Sections` slot. Add `### Additional section: Numerical Accuracy`, asking for an
 independent reference **and** an order-of-accuracy check **and** a stability-region assertion
 whenever the workflow integrates an ODE or otherwise discretises — `fb-...-008`'s explicit request.
+
+Format matters: the convention puts the anchor on **its own line, blank-separated**, not inline —
+
+```
+### Additional section: Numerical Accuracy
+
+(insert after: Model / Test Assumptions)
+
+<body>
+```
+
+Aspect files are **agent-prose only**: no code parses them, and nothing validates or tests their
+content (only aspect *names* are checked, against `KNOWN_ASPECTS`). This edit trips nothing — and
+correspondingly, nothing will catch it if the format is wrong, which is why the format is stated
+here.
 
 ### 6.7 `commands/post-mortem.md` — three edits
 
@@ -760,18 +817,50 @@ doctrine's thesis operating on the doctrine:
 | "The threshold was not wrong" | **Unearned.** Nobody checked its calibration, and 136 nuisance parameters over ~17 patients is incidental-parameter territory where the profile LR is not `χ²₁`. | §1.2, §2.3 |
 | "Unfalsifiable" | Wrong word. Falsifiability is a property of a hypothesis; **resolution** is a property of an instrument. | §1.1 |
 
-## 10. Open questions
+## 10. Resolved: the `α` in `E ≤ α·c`
 
-- **The `α` in `E ≤ α·c`.** §2.5 fixes the *form*; the constant is author-chosen but **mandatory to
-  state**. The leaf should ship the derivation and a default: the correct denominator is not `c` but
-  the **sampling SD of the statistic under the null**, `σ_instrument ≤ ρ·σ_null(T)` with `ρ ≈ 0.1`.
-  For an LR test `T|H₀ ~ χ²₁`, `σ_null = √2 ≈ 1.414` and `c = 3.84`, giving `σ_instrument ≤ 0.14
-  nll` ≈ **3.7% of the critical value** and a variance inflation of ~1%. So **α ≈ 0.05** is the
-  principled default; `α = 0.10` is the defensible loose end; `α ≥ 0.25` is indefensible.
-  **t078 measured 171%.** Expressing it against `c` is a convenience — `σ_null` is the correct
-  denominator and generalises to non-`χ²` nulls and to boundary cases where `c → 0`.
-  *Decision needed: ship `α = 0.05` as a default, or require the author to state it with the
-  derivation in front of them?*
+An earlier draft left this open and declined to invent a default, on the grounds that no evidence
+supported one. **There is now a derivation, so the doctrine ships a default.**
+
+The correct denominator is not the critical value `c` but the **sampling SD of the statistic under
+the null**. The instrument must not be a material contributor to the variance of the quantity being
+decided:
+
+> **σ_instrument ≤ ρ · σ_null(T)**, with **ρ ≈ 0.1**.
+
+For an LR test, `T | H₀ ~ χ²₁`, so `σ_null = √2 ≈ 1.414` and `c = 3.84`. Then `ρ = 0.1` gives
+`σ_instrument ≤ 0.14 nll` ≈ **3.7% of the critical value**, inflating `Var(T)` by
+`(0.14/1.414)² ≈ 1%` — negligible under any usual convention.
+
+> **Default: `α = 0.05`** (5% of `c`; variance inflation ≲ 2%). `α = 0.10` is the defensible loose
+> end. **`α ≥ 0.25` is indefensible.** For reference: **t078 measured 171%.**
+>
+> The author may override `α`, but must **state it and justify it**. It is never allowed to go
+> unstated: nothing validates this section (§7.1), so an unstated `α` is unrecoverable — a template
+> that lets `X` go blank has changed nothing.
+
+Expressing the bound against `c` is a convenience. `σ_null` is the correct denominator, and the leaf
+must carry it, because "% of the critical value" **degenerates** for statistics whose null is not
+`χ²` and for boundary cases where `c → 0`.
+
+## 11. Open questions
+
 - **How far to push Axis 3.** Simulating a null distribution is genuinely expensive and will not
-  always be affordable. Is the minimum bar "verify the null" or "state that you did not, and what
-  that costs you"?
+  always be affordable. Is the minimum bar "verify the null", or "state that you did not, and what
+  that costs you"? The doctrine currently implies the former and should probably permit the latter,
+  named.
+- **Which outer optimisers are admissible over a fixed-multistart profile**, which is functionhood-
+  restoring but **discontinuous** (§2.6). Running an FD-gradient outer optimiser over a piecewise
+  surface is a second-order version of the bug the multistart pool was adopted to fix. The leaf must
+  answer this; this design does not yet.
+
+## 12. Landing hazard (mechanical, not conceptual)
+
+`codex-skills/` is a generated mirror and is **already drifted on this branch**:
+`codex-skills/science-big-picture/SKILL.md` is stale against `commands/big-picture.md`, which the
+InstrumentResult work edited. **No test catches this** — every codex test asserts substring
+presence only, and there is no committed-vs-generated drift test.
+
+So whoever regenerates the mirror for this design will sweep an unrelated `InstrumentResult` diff
+into their commit. **Regenerate and commit that drift separately, first**, so this design's diff
+contains only this design.
