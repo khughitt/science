@@ -349,6 +349,7 @@ class HealthReport(TypedDict):
     dataset_anomalies: list[dict]
     schema_invalid: list[SchemaInvalidFinding]
     archive_lag: TaskArchiveLag
+    archive_lag_total: int
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     validation: list[ValidationFinding]
@@ -829,6 +830,7 @@ def build_health_report(
         "dataset_anomalies": dataset_anomalies,
         "schema_invalid": schema_invalid,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
+        "archive_lag_total": archive_lag_total,
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
         "validation": validation,

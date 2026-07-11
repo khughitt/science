@@ -120,6 +120,8 @@ def _health_report_with_archive_lag() -> dict:
             "retired_in_active": 0,
             "missing_completed": 0,
         },
+        "archive_lag_total": 1,
+        "total_issues": 1,
         "managed_artifacts": [],
         "tooling_scaffold": [],
         "unregistered_ref_kinds": [],

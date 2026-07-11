@@ -1057,6 +1057,116 @@ Proposed.
             "missing_completed": 0,
         }
 
+    def test_archive_lag_total_and_total_issues_match_cli_recomputation(self, tmp_path: Path) -> None:
+        """Characterization test (t-phase4 Task 6).
+
+        Before this task, `health_command` in cli.py redundantly recomputed
+        `archive_lag_total` and `total_issues` from report fields instead of
+        reading them off `build_health_report`'s return. This test pins the
+        CLI's OLD inline formulas (copied verbatim below) and proves they agree
+        with what the service already computes/returns, so surfacing
+        `archive_lag_total` on the report and deleting the CLI's
+        recomputation is value-preserving de-duplication, not new behavior.
+        """
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir(parents=True)
+        (tasks_dir / "active.md").write_text(
+            """\
+## [t001] Done task
+- priority: P1
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-15
+
+Done.
+
+## [t002] Retired task
+- priority: P2
+- status: retired
+- created: 2026-03-20
+- completed: 2026-04-02
+
+Retired.
+"""
+        )
+        spec = tmp_path / "entities" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\nrelated: [topic:missing]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+
+        report = build_health_report(tmp_path)
+
+        # --- verbatim copy of the pre-extraction cli.py `health_command` formula ---
+        layered_claims = report["layered_claims"]
+        layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
+            layered_claims["rival_model_packets_missing_discriminating_predictions"]
+        )
+        coverage_gaps = 0
+        for metric in (
+            layered_claims["proposition_claim_layer_coverage"],
+            layered_claims["causal_leaning_identification_coverage"],
+        ):
+            if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+                coverage_gaps += 1
+
+        archive_lag = report["archive_lag"]
+        old_archive_lag_total = (
+            archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
+        )
+
+        managed_artifacts = report.get("managed_artifacts") or []
+        managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
+
+        tooling_scaffold = report.get("tooling_scaffold") or []
+        agent_context = report.get("agent_context") or []
+        unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
+        entity_identity = report.get("entity_identity") or []
+        schema_invalid = report.get("schema_invalid") or []
+        validation = report.get("validation") or []
+        prose_epistemics = report.get("prose_epistemics") or {}
+        raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
+        prose_epistemics_findings = (
+            [row for row in raw_prose_epistemics_findings if isinstance(row, dict)]
+            if isinstance(raw_prose_epistemics_findings, list)
+            else []
+        )
+        cross_paper_evidence = report.get("cross_paper_evidence") or {}
+        raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
+        cross_paper_findings = (
+            [row for row in raw_cross_paper_findings if isinstance(row, dict)]
+            if isinstance(raw_cross_paper_findings, list)
+            else []
+        )
+
+        old_total_issues = (
+            len(report["unresolved_refs"])
+            + len(unregistered_ref_kinds)
+            + len(report["lingering_tags_lines"])
+            + len(report["identity_policy"])
+            + len(entity_identity)
+            + layered_claim_issue_count
+            + coverage_gaps
+            + len(report.get("dataset_anomalies") or [])
+            + len(schema_invalid)
+            + (1 if old_archive_lag_total else 0)
+            + managed_artifacts_issue_count
+            + len(tooling_scaffold)
+            + len(agent_context)
+            + len(validation)
+            + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
+            + len(cross_paper_findings)
+        )
+        # --- end verbatim copy ---
+
+        assert report["archive_lag_total"] == old_archive_lag_total == 2
+        assert report["total_issues"] == old_total_issues
+
 
 class TestHealthCLI:
     def test_table_output_default(self, tmp_path: Path) -> None:
