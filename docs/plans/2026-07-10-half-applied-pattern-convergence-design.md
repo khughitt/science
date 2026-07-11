@@ -365,6 +365,14 @@ This phase does **not** rename them (that is a CLI-contract change, out of
 scope); it records the collision as a follow-up and places them in modules whose
 names disambiguate.
 
+**Follow-up (deferred, out of scope for this phase).** Post-migration, `dataset`
+lifecycle lives in `datasets/cli.py` and `datasets` discovery lives in
+`datasets_discovery_cli.py` — the module names disambiguate, but the CLI
+surface still exposes two colliding command names, `science dataset …` vs
+`science datasets …`. Renaming either is a user-facing CLI-contract change and
+was intentionally left out of Phase 4's scope. It is recorded here as a
+separate decision to be made later, not as unfinished Phase 4 work.
+
 **Business logic that must move, not relocate.** Five commands hold domain logic
 in the CLI layer; extracting them verbatim would enshrine that. Each gets its
 logic pushed down as part of its commit:
