@@ -18,6 +18,11 @@ def _is_group_or_command_decorator(dec: ast.expr) -> bool:
     """True for @X.group(...)/@X.command(...) and @click.group(...)/@click.command(...),
     for ANY owner X — decorator-owner-blind on purpose. A guard keyed on `main.*`
     alone would let a future inline subcommand on an *imported* group slip through.
+
+    Boundary: this matches attribute decorators only. A command rebound to a bare
+    name (`from click import command`) or registered without a decorator
+    (`main.command("x")(fn)`) is not detected. Both are unnatural authoring styles;
+    the pattern a contributor actually reaches for is `@owner.command(...)`.
     """
     target = dec.func if isinstance(dec, ast.Call) else dec
     return isinstance(target, ast.Attribute) and target.attr in {"group", "command"}
@@ -53,5 +58,5 @@ def test_cli_within_line_budget():
     hundreds of lines per group). If this trips, extract the offending logic
     into a <domain>_cli.py module rather than raising the budget.
     """
-    lines = _CLI.read_text(encoding="utf-8").count("\n") + 1
+    lines = len(_CLI.read_text(encoding="utf-8").splitlines())
     assert lines <= 300, f"cli.py is {lines} lines; extract inline logic (budget 300)"
