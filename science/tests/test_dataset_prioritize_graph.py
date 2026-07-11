@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_tool.graph.materialize import materialize_graph
-from science_tool.graph.store.dataset import _load_dataset
-from science_tool.graph.store.identity import _graph_uri
+from science_tool.graph.store.dataset import _load_dataset, load_dataset
+from science_tool.graph.store.identity import _graph_uri, graph_uri
 from science_tool.dataset_prioritize import usage_reach, merged_reach
 from science_tool.dataset_prioritize import leverage_tilt
 from science_tool.dataset_prioritize import prioritize
@@ -229,3 +229,23 @@ def test_usage_reach_follows_multihop_bearson_closure(tmp_path: Path) -> None:
     # the pre-upgrade direct-edge-only walk returned set() for dataset:d.
     reach = usage_reach(knowledge, provenance, ["dataset:d"])
     assert reach["dataset:d"] == {"hypothesis:h2"}
+
+
+def test_public_load_dataset_and_graph_uri_match_private(tmp_path: Path) -> None:
+    """`load_dataset`/`graph_uri` are one-line delegations to `_load_dataset`/`_graph_uri`.
+
+    dataset_prioritize (cli.py) must depend on these public names, never the
+    `_`-private store internals, across the CLI/store module boundary.
+    """
+    _seed_graph_project(tmp_path)
+    graph_path = materialize_graph(tmp_path)
+
+    assert graph_uri("graph/knowledge") == _graph_uri("graph/knowledge")
+    assert graph_uri("graph/provenance") == _graph_uri("graph/provenance")
+
+    ds_public = load_dataset(graph_path)
+    ds_private = _load_dataset(graph_path)
+    knowledge_public = ds_public.graph(graph_uri("graph/knowledge"))
+    knowledge_private = ds_private.graph(_graph_uri("graph/knowledge"))
+    assert set(knowledge_public) == set(knowledge_private)
+    assert set(knowledge_public) != set()  # sanity: fixture actually populated this layer
