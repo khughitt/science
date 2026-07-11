@@ -53,6 +53,7 @@ progressive disclosure.
 - `statistics-prereg-defensive-instrumentation`: `skills/statistics/prereg-defensive-instrumentation.md`
 - `statistics-likelihood-model-comparison`: `skills/statistics/likelihood-model-comparison.md`
 - `statistics-population-genetics-likelihood`: `skills/statistics/population-genetics-likelihood.md`
+- `statistics-estimator-certification`: `skills/statistics/estimator-certification.md`
 
 ## Curation and Evidence
 

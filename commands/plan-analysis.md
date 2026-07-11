@@ -77,6 +77,7 @@ reason.
 | Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `data-embeddings-manifold-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `data-protein-sequence-structure-qa`; add `data-embeddings-manifold-qa` when embeddings/manifolds are analyzed |
 | Manual/LLM annotation, claim extraction, taxonomy labels | `research-annotation-curation-qa`, `research-methodology` |
+| Profile likelihood, nuisance parameters, optimiser choice, ODE / numerical integration, parameter recovery, synthetic-recovery gate | `statistics-estimator-certification` |
 
 ## Workflow
 

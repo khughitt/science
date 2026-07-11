@@ -28,6 +28,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`time-series-and-longitudinal-models.md`](./time-series-and-longitudinal-models.md) | Repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal models |
 | [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap selection stability |
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
+| [`estimator-certification.md`](./estimator-certification.md) | An analysis fits parameters numerically — an optimiser, a profile likelihood, an ODE — and a threshold, budget, or gate is about to depend on the fit |
 
 ## Principles
 
@@ -103,6 +104,13 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     time origin, cadence, lag/window, missingness, and within-unit dependence
     rules before interpretation. See
     [`time-series-and-longitudinal-models`](./time-series-and-longitudinal-models.md).
+
+12. **An estimator's self-report is not evidence about the estimator.** "Converged"
+    is a claim the optimiser makes about itself, and a converged, multi-start optimum
+    can be reproducibly wrong. Before a threshold, budget, or gate depends on a
+    numeric fit, certify well-posedness, forward-map accuracy, reproducibility, and
+    threshold calibration — in that order, cheapest first. See
+    [`estimator-certification`](./estimator-certification.md).
 
 ## When to invoke
 
