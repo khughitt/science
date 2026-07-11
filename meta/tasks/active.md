@@ -768,3 +768,57 @@ register-run REQUIRES fingerprint.executor / input_artifact_locality / output_ar
 
 - 2026-07-10: Now BLOCKS t089 (umbrella Spec 3) -- Spec 3 traverses fingerprint.step_seeds and no run anywhere carries a fingerprint. Preferred shape: give WorkflowRunEntity a separate DECLARATION model (executor, input_artifact_locality, output_artifact_locality) and leave 'fingerprint: RunFingerprint | None' purely CAPTURED, written only by register-run. That is the same declaration/observation split the method-stochasticity umbrella enforces for seed_policy, applied one level up. Hoisting the three fields to bare run-level fields also works but scatters them. Once fixed, templates/workflow-run.md must drop the ORDERING CONSTRAINT warning added in t088.
 - 2026-07-10: 2026-07-10: FIXED. Merged as fix/t093-run-declaration (733ab5b4). Took option (b): new RunDeclaration model on WorkflowRunEntity.execution (executor, both localities, capture_origin); fingerprint stays RunFingerprint | None, written only by register-run. Second bug found and fixed as a consequence: capture_origin was required-iff-commons on RunFingerprint but nothing could supply it, so a commons run could never be registered -- proved by execution, now covered end to end. Two new guards close the fail-opens the split introduces: register-run refuses an unparseable authored fingerprint: (its own output round-trips the model, so anything that fails to parse was hand-written) and validate reports run.fingerprint-declaration-drift when execution: is edited after registering. Corpus needed no migration: 11 authored runs, 0 fingerprints. templates/workflow-run.md and its packaged mirror rewritten; ORDERING CONSTRAINT warning dropped as planned.
+
+## [t094] Intake Cartwright (1999) The Dappled World — keystone missing text deferred to by Mumford/Frigg/Gaspar/Cornelissen
+- priority: P1
+- status: proposed
+- aspects: []
+- related: [hypothesis:0007-working-model]
+- created: 2026-07-10
+
+
+
+## [t095] Add purpose (Giere P) + model-system-vs-target-system claim-layer to the patch/evidence schema
+- priority: P1
+- status: proposed
+- aspects: []
+- related: [hypothesis:0007-working-model, question:0027-patch-purpose-annotation, question:0030-model-system-vs-target-system-claims]
+- created: 2026-07-10
+
+
+
+## [t096] Extend causal-estimand guardrail with structural-identity + proxy-identifiability fields (identification_status, structural_only, proxy vars, modularity-failure code)
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- created: 2026-07-10
+
+
+
+## [t097] Operationalize CKA as the latent_common_axis patch-similarity metric (+STRUCTURE geometry-preservation; per-domain calibration; guard p>=n pathology)
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [hypothesis:0007-working-model, question:0033-cka-as-patch-federation-similarity-metric]
+- created: 2026-07-10
+
+
+
+## [t098] IOED-guard for agent-authored explanatory claims (functional_relation_only tag + IOED reason codes; Rozenblit-Keil probe as agent calibration check)
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, question:0021-ioed-in-agent-authoring]
+- created: 2026-07-10
+
+
+
+## [t099] Intake Molnar (2003) Powers + Ellis (2001) Scientific Essentialism (dispositionalist realism behind powers-vs-laws edge ontology)
+- priority: P3
+- status: proposed
+- aspects: []
+- related: [question:0019-powers-vs-laws-causal-edge-ontology]
+- created: 2026-07-10
+
+

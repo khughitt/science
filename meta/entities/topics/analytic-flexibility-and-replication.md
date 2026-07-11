@@ -3,13 +3,16 @@ kind: topic
 title: Analytic Flexibility and the Replication Crisis
 status: active
 created: '2026-04-24'
-updated: '2026-05-06'
+updated: '2026-07-10'
 id: topic:analytic-flexibility-and-replication
 ontology_terms: []
 source_refs:
 - cite:Freiesleben2023
 - cite:Heyard2025
 - cite:Banzi2026
+- paper:Findley2021
+- paper:Besharatifard2024
+- paper:Kornblith2019
 related:
 - question:0013-robustness-reproducibility-evaluation
 ---
@@ -100,6 +103,8 @@ This topic supplies the motivating premises on which several of `science-meta`'s
 3. The population-dynamics framing [@McElreath2015] supports the tooling premise that replication behaviour is *modellable*, not merely lamentable — a premise that enables simulation-testable hypotheses (for example, H-stochastic-revisit: whether stochastic revisiting of down-weighted claims improves convergence to ground truth vs. hard gating at equal evidence budget).
 4. Field-scale dynamics [@Chu2021] motivate the longer-range bet about forkable, shareable project packages: if the sheer volume of published work slows consensus, tooling that makes evidence composable across researchers targets a plausible mechanism rather than a speculative one.
 5. Robustness/reproducibility evaluation semantics [@Freiesleben2023; @Heyard2025; @Banzi2026] provide concrete fields for Science's calibration and attention layers: evaluation target, modifier or replication design, metric family, success tolerance, checklist state, and lifecycle stage.
+6. External-validity vocabulary makes analyst- and context-dependence precise. Findley et al. extend UTOS into **M-STOUT** (adding Mechanisms and Time), distinguish generalizability (S ⊆ P, PATE) from transportability (S ⊄ P_target, TATE), and decompose external-validity bias into sample-selection and variable-selection components [@Findley2021] — the vocabulary Science needs to say *why* a robustness check does or does not transport, not just that it varied.
+7. Benchmark discipline is a replication problem in miniature. Besharatifard and Vafaee show across 25 GNN drug-synergy models that with no shared dataset and inconsistent metrics/thresholds/splits, cross-study comparison becomes uninformative — the same forking-paths pathology at the evaluation layer, motivating Science's benchmark tooling to enforce fixed splits, logged preprocessing, and metric provenance [@Besharatifard2024]. Kornblith et al. supply the positive counterpart: a *principled* similarity index (CKA) can reliably identify correspondences across initializations, widths, and architectures where ad-hoc CCA-family methods fail, showing that reproducible comparison is achievable when the comparison metric itself has known invariances and a known `p ≥ n` pathology [@Kornblith2019].
 
 A caveat to record: the evidence base skews heavily toward psychology, preclinical biomedicine, and neuroimaging.
 Translation to genomics or bioinformatics — the background of the project's primary user — is itself an open question worth making explicit as a separate document under `doc/questions/`.
