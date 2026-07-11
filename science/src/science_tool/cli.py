@@ -9,8 +9,6 @@ from typing import Any, cast
 
 import click
 import yaml
-from pydantic import ValidationError
-from rich.text import Text
 
 from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
@@ -43,7 +41,6 @@ from science_tool.entities import (
     find_entity,
     graph_is_stale,
     list_entities,
-    parse_origin_spec,
     plan_entity_removal,
     remove_entity,
 )
@@ -105,15 +102,18 @@ from science_tool.skills_lint import skills_group
 from science_tool.styles import (
     COLOR_POLICY_CHOICES,
     entity_table_renderers,
-    get_console,
-    render_entity_kind,
-    render_entity_ref,
-    render_entity_status,
-    render_muted,
     resolve_color_policy,
     set_color_policy,
 )
 from science_tool.telemetry_cli import telemetry_group
+from science_tool.typed_entity_cli import (
+    build_origin_frontmatter,
+    create_typed_entity,
+    emit_entity_show,
+    emit_entity_warnings,
+    list_typed_entities,
+    show_typed_entity,
+)
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.wander.cli import wander_command
@@ -530,7 +530,7 @@ def entity_create(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    _emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings)
 
 
 @entity_group.command("show")
@@ -543,7 +543,7 @@ def entity_show(ref: str, output_format: str) -> None:
         location = find_entity(Path.cwd(), ref)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
-    _emit_entity_show(location, output_format)
+    emit_entity_show(location, output_format)
 
 
 @entity_group.command("edit")
@@ -576,7 +576,7 @@ def entity_edit(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Updated {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    _emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings)
 
 
 @entity_group.command("note")
@@ -595,7 +595,7 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
         raise click.ClickException(str(exc)) from exc
     display_date = (date_value or _date.today()).isoformat()
     click.echo(f"Added note to {result.entity_id} ({display_date})")
-    _emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings)
 
 
 @entity_group.command("remove")
@@ -872,7 +872,7 @@ def proposition_create(
 ) -> None:
     """Create a source-authored proposition."""
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="proposition",
         title=title,
         entity_id=entity_id,
@@ -891,7 +891,7 @@ def proposition_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def proposition_show(ref: str, output_format: str) -> None:
     """Show a source-authored proposition."""
-    _show_typed_entity("proposition", ref, output_format)
+    show_typed_entity("proposition", ref, output_format)
 
 
 @proposition_group.command("list")
@@ -900,7 +900,7 @@ def proposition_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def proposition_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored propositions."""
-    _list_typed_entities("proposition", status, related, output_format)
+    list_typed_entities("proposition", status, related, output_format)
 
 
 @main.group("evidence-lines")
@@ -1002,7 +1002,7 @@ def evidence_line_create(
     if evidence_role:
         extra_frontmatter["evidence_role"] = evidence_role
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="evidence-line",
         title=title,
         entity_id=entity_id,
@@ -1022,7 +1022,7 @@ def evidence_line_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def evidence_line_show(ref: str, output_format: str) -> None:
     """Show a source-authored evidence line."""
-    _show_typed_entity("evidence-line", ref, output_format)
+    show_typed_entity("evidence-line", ref, output_format)
 
 
 @evidence_line_group.command("list")
@@ -1031,7 +1031,7 @@ def evidence_line_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def evidence_line_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored evidence lines."""
-    _list_typed_entities("evidence-line", status, related, output_format)
+    list_typed_entities("evidence-line", status, related, output_format)
 
 
 @main.group("hypotheses")
@@ -1083,9 +1083,9 @@ def hypothesis_create(
     if phase == "candidate" and "promotion-criteria" not in sections:
         sections.append("promotion-criteria")
 
-    extra = _build_origin_frontmatter(origins, added_by)
+    extra = build_origin_frontmatter(origins, added_by)
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="hypothesis",
         title=title,
         entity_id=entity_id,
@@ -1106,7 +1106,7 @@ def hypothesis_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def hypothesis_show(ref: str, output_format: str) -> None:
     """Show a source-authored hypothesis."""
-    _show_typed_entity("hypothesis", ref, output_format)
+    show_typed_entity("hypothesis", ref, output_format)
 
 
 @hypothesis_group.command("list")
@@ -1115,7 +1115,7 @@ def hypothesis_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def hypothesis_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored hypotheses."""
-    _list_typed_entities("hypothesis", status, related, output_format)
+    list_typed_entities("hypothesis", status, related, output_format)
 
 
 @main.group("discussions")
@@ -1146,7 +1146,7 @@ def discussion_create(
 ) -> None:
     """Create a source-authored discussion."""
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="discussion",
         title=title,
         entity_id=entity_id,
@@ -1165,7 +1165,7 @@ def discussion_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def discussion_show(ref: str, output_format: str) -> None:
     """Show a source-authored discussion."""
-    _show_typed_entity("discussion", ref, output_format)
+    show_typed_entity("discussion", ref, output_format)
 
 
 @discussion_group.command("list")
@@ -1174,7 +1174,7 @@ def discussion_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def discussion_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored discussions."""
-    _list_typed_entities("discussion", status, related, output_format)
+    list_typed_entities("discussion", status, related, output_format)
 
 
 @main.group("interpretations")
@@ -1205,7 +1205,7 @@ def interpretation_create(
 ) -> None:
     """Create a source-authored interpretation."""
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="interpretation",
         title=title,
         entity_id=entity_id,
@@ -1224,7 +1224,7 @@ def interpretation_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def interpretation_show(ref: str, output_format: str) -> None:
     """Show a source-authored interpretation."""
-    _show_typed_entity("interpretation", ref, output_format)
+    show_typed_entity("interpretation", ref, output_format)
 
 
 @interpretation_group.command("list")
@@ -1233,7 +1233,7 @@ def interpretation_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def interpretation_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored interpretations."""
-    _list_typed_entities("interpretation", status, related, output_format)
+    list_typed_entities("interpretation", status, related, output_format)
 
 
 @main.group("explore-ideas")
@@ -1299,7 +1299,7 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
         for candidate_id, error in result.failures:
             click.echo(f"  FAILED {candidate_id}: {error}")
         for created in result.created:
-            _emit_entity_warnings(created.warnings)
+            emit_entity_warnings(created.warnings)
 
     emit(output_format=output_format, payload=result.to_dict(), render_text=_render_result)
 
@@ -1395,127 +1395,6 @@ def explore_ideas_backfill_lens_views(from_value: str) -> None:
     click.echo(f"backfilled {sum(n for _, n in touched)} view(s) across {len(touched)} entit(ies)")
 
 
-def _build_origin_frontmatter(origins: tuple[str, ...], added_by: str | None) -> dict[str, object]:
-    """Parse `--origin`/`--added-by` CLI inputs into an `extra_frontmatter` dict.
-
-    Raises `click.BadParameter` (nonzero exit, no file written) on a
-    malformed `--origin` spec — validation happens here, before
-    `create_entity` performs any write.
-    """
-    extra: dict[str, object] = {}
-    try:
-        if origins:
-            extra["origins"] = [parse_origin_spec(spec) for spec in origins]
-    except ValidationError as exc:
-        raise click.BadParameter(f"invalid --origin: {exc}") from exc
-    if added_by:
-        extra["added_by"] = added_by
-    return extra
-
-
-def _create_typed_entity(
-    *,
-    kind: str,
-    title: str,
-    entity_id: str | None,
-    slug: str | None,
-    status: str | None,
-    related: list[str],
-    source_refs: list[str],
-    phase: str | None = None,
-    with_sections: list[str] | None = None,
-    without_sections: list[str] | None = None,
-    no_hints: bool = False,
-    extra_frontmatter: dict[str, object] | None = None,
-) -> None:
-    try:
-        result = create_entity(
-            project_root=Path.cwd(),
-            kind=kind,
-            title=title,
-            entity_id=entity_id,
-            slug=slug,
-            status=status,
-            related=related,
-            source_refs=source_refs,
-            phase=phase,
-            with_sections=with_sections,
-            without_sections=without_sections,
-            no_hints=no_hints,
-            extra_frontmatter=extra_frontmatter,
-        )
-    except EntityCommandError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    _emit_entity_warnings(result.warnings)
-
-
-def _show_typed_entity(kind: str, ref: str, output_format: str) -> None:
-    try:
-        location = find_entity(Path.cwd(), ref)
-    except EntityCommandError as exc:
-        raise click.ClickException(str(exc)) from exc
-    if location.kind != kind:
-        raise click.ClickException(f"Expected {kind} entity, got {location.entity_id}")
-    _emit_entity_show(location, output_format)
-
-
-def _list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None:
-    try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
-    except EntityCommandError as exc:
-        raise click.ClickException(str(exc)) from exc
-    emit_query_rows(
-        output_format=output_format,
-        title=_ENTITY_LIST_TITLES.get(kind, kind.replace("-", " ").title() + "s"),
-        columns=[("id", "ID"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
-        rows=rows,
-        renderers=entity_table_renderers(),
-    )
-
-
-_ENTITY_LIST_TITLES = {
-    "discussion": "Discussions",
-    "evidence-line": "Evidence Lines",
-    "hypothesis": "Hypotheses",
-    "interpretation": "Interpretations",
-    "proposition": "Propositions",
-    "question": "Questions",
-}
-
-
-def _entity_show_payload(location: Any) -> dict[str, object]:
-    return {
-        "id": location.entity_id,
-        "kind": location.kind,
-        "title": location.title,
-        "status": location.status,
-        "path": location.rel_path,
-        "related": _frontmatter_string_list(location.frontmatter.get("related")),
-        "source_refs": _frontmatter_string_list(location.frontmatter.get("source_refs")),
-        "body": location.body,
-    }
-
-
-def _emit_entity_show(location: Any, output_format: str) -> None:
-    payload = _entity_show_payload(location)
-
-    def _render() -> None:
-        console = get_console(file=click.get_text_stream("stdout"))
-        _print_entity_field(console, "id", render_entity_ref(str(payload["id"])))
-        _print_entity_field(console, "type", render_entity_kind(str(payload["kind"])))
-        _print_entity_field(console, "title", Text(str(payload["title"])))
-        _print_entity_field(console, "status", render_entity_status(str(payload["status"])))
-        _print_entity_field(console, "path", render_muted(payload["path"]))
-        _print_entity_refs_field(console, "related", payload["related"])
-        _print_entity_refs_field(console, "source_refs", payload["source_refs"])
-        if location.body:
-            click.echo()
-            console.print(Text(location.body.rstrip("\n")))
-
-    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
-
-
 def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:
     action = "Removed" if applied else "DRY RUN"
     click.echo(f"{action} {plan.entity_id}")
@@ -1534,33 +1413,6 @@ def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None
         click.echo("- manual references: none")
     if not applied:
         click.echo("Run with --apply to delete the entity and rewrite safe structured references.")
-
-
-def _print_entity_field(console: Any, label: str, value: Text) -> None:
-    line = Text(f"{label}: ")
-    line.append_text(value)
-    console.print(line)
-
-
-def _print_entity_refs_field(console: Any, label: str, refs: object) -> None:
-    line = Text(f"{label}: ")
-    if isinstance(refs, list):
-        for index, ref in enumerate(refs):
-            if index:
-                line.append(", ")
-            line.append_text(render_entity_ref(str(ref)))
-    console.print(line)
-
-
-def _emit_entity_warnings(warnings: list[str]) -> None:
-    for warning in warnings:
-        click.echo(f"WARNING: {warning}")
-
-
-def _frontmatter_string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value]
 
 
 def _parse_entity_date(value: str) -> Any:
@@ -5161,9 +5013,9 @@ def question_create(
 ) -> None:
     """Create a source-authored question."""
 
-    extra = _build_origin_frontmatter(origins, added_by)
+    extra = build_origin_frontmatter(origins, added_by)
 
-    _create_typed_entity(
+    create_typed_entity(
         kind="question",
         title=title,
         entity_id=entity_id,
@@ -5183,7 +5035,7 @@ def question_create(
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def question_show(ref: str, output_format: str) -> None:
     """Show a source-authored question."""
-    _show_typed_entity("question", ref, output_format)
+    show_typed_entity("question", ref, output_format)
 
 
 @question.command("list")
@@ -5192,7 +5044,7 @@ def question_show(ref: str, output_format: str) -> None:
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def question_list(status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored questions."""
-    _list_typed_entities("question", status, related, output_format)
+    list_typed_entities("question", status, related, output_format)
 
 
 def _split_csv(value: str | None) -> list[str]:
