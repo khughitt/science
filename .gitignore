@@ -13,3 +13,7 @@ meta/doc/meta/next-steps-*.md
 doc/plans/*-plan-review.md
 docs/plans/*-plan-review.md
 meta/doc/plans/*-plan-review.md
+
+# bib-add lockfile (never commit)
+meta/papers/.references.bib.lock
+**/.references.bib.lock

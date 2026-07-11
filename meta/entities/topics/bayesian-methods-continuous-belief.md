@@ -3,10 +3,11 @@ kind: topic
 title: Bayesian Methods and the Continuous-Belief Representation of Evidence
 status: active
 created: '2026-04-24'
-updated: '2026-04-24'
+updated: '2026-07-10'
 id: topic:bayesian-methods-continuous-belief
 ontology_terms: []
-source_refs: []
+source_refs:
+- paper:Hoefer2023
 related:
 - hypothesis:0001-stochastic-revisiting
 - topic:analytic-flexibility-and-replication
@@ -114,9 +115,20 @@ Three direct implications for `science-meta` and a fourth for H01 specifically.
    The Beta-Bernoulli conjugate update in `doc/plans/historical/2026-04-24-h01-simulator-spec.md` is the simplest possible instance of the framework described here; uncertainty-scaled revisiting via Thompson sampling is a direct Bayesian-bandit rule.
    Simulator results interpret more cleanly when the simulator is a clean Bayesian-bandit instance — which it is — rather than an ad-hoc scoring rule.
 
+5. **Continuous belief strictly in (0,1) is licensed even under determinism.**
+   Hoefer's SEP analysis of causal determinism shows that non-trivial objective
+   chances strictly in (0,1) are compatible with a deterministic world under a
+   Humean best-systems account, and that a finite embedded agent cannot even
+   distinguish deterministic chaos from genuine stochasticity [@Hoefer2023].
+   This over-determines the project's D-003: the continuous-belief representation
+   is warranted under both anti-Humean and Humean readings, so hard-gating a
+   low-evidence claim to 0 or 1 is never justified by an appeal to underlying
+   determinism.
+
 ## Key References
 
 - van de Schoot et al. (2021) — *Nature Reviews Methods Primers* introduction to modern applied Bayesian practice [@vandeSchoot2021]
 - Gelman & Shalizi (2013) — philosophical reframing of Bayesian statistics as hypothetico-deductive model-checking [@Gelman2013]
 - Ioannidis (2005) — Bayesian-style PPV reasoning applied to the published-findings corpus [@Ioannidis2005]
 - McElreath & Smaldino (2015) — population-dynamics treatment of evolving belief across many claims [@McElreath2015]
+- Hoefer (2023) — SEP *Causal Determinism*; objective chances in (0,1) compatible with determinism [@Hoefer2023]

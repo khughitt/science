@@ -4,10 +4,12 @@ title: 'Structured Representations of Scientific Knowledge: Nanopublications and
   Knowledge Graphs'
 status: active
 created: '2026-04-24'
-updated: '2026-04-24'
+updated: '2026-07-10'
 id: topic:structured-scientific-knowledge
 ontology_terms: []
-source_refs: []
+source_refs:
+- paper:Frigg2025
+- paper:Ghins2011
 related:
 - topic:analytic-flexibility-and-replication
 ---
@@ -77,6 +79,20 @@ Nanopublications address part of this through provenance graphs, but the express
 **Relationship to large language models.**
 LLMs can now produce structured summaries of papers on demand.
 Whether this makes curated RKGs redundant, or instead makes them more valuable as training and validation substrate, is actively debated and not settled.
+
+**What a structured claim can and cannot carry — the philosophy-of-models view.**
+The expressiveness-ceiling worry has a direct grounding in philosophy of science.
+Frigg and Hartmann's account of models as autonomous mediators with ineliminable
+idealization implies a principled ceiling on what any atomised assertion can
+capture: the idealisations, purpose-relativity, and target-vs-representation split
+are part of the claim's meaning, not disposable context [@Frigg2025].
+Ghins sharpens the flip side — a structured node makes genuine contact with reality
+only when it encodes an *ontic judgement* (a predicative act attributing a property
+to a real target), and that contact is earned through the *variety and concordance
+of independent measurements*, not the mere existence of a triple [@Ghins2011].
+Both motivate treating multi-source corroboration and explicit provenance as
+first-class in any structured-knowledge serialisation Science exports, rather than
+assuming the assertion graph alone carries the epistemic weight.
 
 ## Relevance to This Project
 
