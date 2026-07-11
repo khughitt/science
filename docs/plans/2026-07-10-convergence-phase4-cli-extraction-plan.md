@@ -55,11 +55,12 @@ The 24 groups already extracted register at `cli.py:249-272`. The 22 inline grou
 | paper-fetch | `paper_fetch` @5018 | (`@main.command`) | ~53 | `paper_cli.py` (joins `paper`) | `paper_fetch_command` |
 
 **Shared CLI adapter layer (Task 1 moves this first, out of band) → a new CLI-support module `science_tool/typed_entity_cli.py`.** The full set:
-- `_create_typed_entity`, `_show_typed_entity`, `_list_typed_entities`, `_ENTITY_LIST_TITLES` (`cli.py:1416-1484`);
-- the show-path emit closure `_emit_entity_show` and everything it transitively calls that is exclusive to this cluster: `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list` (`cli.py:1487`+), plus `_emit_entity_warnings`;
+- `_create_typed_entity`, `_show_typed_entity`, `_list_typed_entities`, `_ENTITY_LIST_TITLES` (`cli.py:1416-1484`) — the per-kind adapters, used by the six entity-kind groups;
+- the two shared emit adapters `_emit_entity_show` and `_emit_entity_warnings` → **public** `emit_entity_show` / `emit_entity_warnings` (drop the `_`): they are consumed *beyond* the typed cluster — `emit_entity_warnings` by `entity create` (`cli.py:533`) and `explore-ideas apply` (`cli.py:1302`), `emit_entity_show` by `entity show` (`cli.py:1500`+) — so they must be a public part of this module's API;
+- the show-path private sub-helpers `emit_entity_show` calls (all `cli.py`-only, used nowhere else): `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list` (`cli.py:1487`+) — move with `emit_entity_show`, stay `_`-prefixed;
 - `_build_origin_frontmatter` (`cli.py:1398`) → public `build_origin_frontmatter`. It is **not** domain-pure: it catches `ValidationError` and raises `click.BadParameter` on a malformed `--origin`, so it is a CLI adapter and belongs here, next to the others — **not** in `entities.py`.
 
-These are all CLI adapters (raise `click.ClickException`/`click.BadParameter`, write stdout, call `emit_query_rows`/Rich), so they must NOT land in a domain module — polluting `entities.py` with `click` would be the same defect Phase 6's domain-purity guard bans. Consumed by `entity`, `entities`, `propositions`, `evidence-lines`, `hypotheses`, `discussions`, `interpretations`, `questions` (and `build_origin_frontmatter` by `hypotheses`/`questions`) — so `typed_entity_cli.py` must land before those groups move, or each new module would import them back from `cli.py`. Any adapter still needed by a command that *remains* in `cli.py` is imported from `typed_entity_cli.py` (`cli.py → typed_entity_cli.py` is the intended edge; the forbidden one is the reverse).
+These are all CLI adapters (raise `click.ClickException`/`click.BadParameter`, write stdout, call `emit_query_rows`/Rich), so they must NOT land in a domain module — polluting `entities.py` with `click` would be the same defect Phase 6's domain-purity guard bans. Consumers span most of the extracted groups: the per-kind adapters by `propositions`/`evidence-lines`/`hypotheses`/`discussions`/`interpretations`/`questions`; `emit_entity_show`/`emit_entity_warnings` by `entity`/`entities` and `emit_entity_warnings` by `explore-ideas`; `build_origin_frontmatter` by `hypotheses`/`questions`. So `typed_entity_cli.py` must land before those groups move, or each new module would import them back from `cli.py`. Any adapter still needed by a command that *remains* in `cli.py` is imported from `typed_entity_cli.py` (`cli.py → typed_entity_cli.py` is the intended edge; the forbidden one is the reverse).
 
 **Registration site:** all new `main.add_command(...)` lines join the existing block at `cli.py:249-272`. The `@main.command("health")` and `@main.command("paper-fetch")` decorators auto-register today; after extraction they need explicit `main.add_command(health_command)` / `main.add_command(paper_fetch_command)`.
 
@@ -142,15 +143,16 @@ One CLI-support module receives the whole shared typed-entity adapter cluster (p
 - Modify: `science/src/science_tool/cli.py` (delete the moved defs; import them back)
 - Test: `science/tests/test_typed_entity_cli.py` (new)
 
-**Interfaces — produced by `science_tool.typed_entity_cli`, moved verbatim, leading `_` dropped on the public four; the rest keep their names:**
+**Interfaces — produced by `science_tool.typed_entity_cli` (public names drop the leading `_`; private sub-helpers keep it):**
 - `create_typed_entity(*, kind: str, title: str, entity_id: str | None, slug: str | None, status: str | None, related: list[str], source_refs: list[str], phase: str | None = None, with_sections: list[str] | None = None, without_sections: list[str] | None = None, no_hints: bool = False, extra_frontmatter: dict[str, object] | None = None) -> None`
 - `show_typed_entity(kind: str, ref: str, output_format: str) -> None`
 - `list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None`
 - `ENTITY_LIST_TITLES: dict[str, str]`
 - `build_origin_frontmatter(origins: tuple[str, ...], added_by: str | None) -> dict[str, object]` (was `_build_origin_frontmatter`, `cli.py:1398` — **CLI adapter**: catches `ValidationError`, raises `click.BadParameter`; needs `parse_origin_spec` + `ValidationError` imports moved with it)
+- `emit_entity_show(location: Any, output_format: str) -> None` (was `_emit_entity_show`) — **shared** by `entity show` (Task 2)
+- `emit_entity_warnings(warnings: list[str]) -> None` (was `_emit_entity_warnings`, `cli.py:1555`) — **shared** by `entity create` (Task 2) and `explore-ideas apply` (Task 8)
 
-**Full helper closure to move (all `cli.py`-only today — confirmed by grep, so all cluster-exclusive):**
-`_emit_entity_show` and its transitive callees `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list`, plus `_emit_entity_warnings` (`cli.py:1487`+). Move the whole set into `typed_entity_cli.py`. Before moving each, re-grep its callers: if one is also used by a command that *stays* in `cli.py`, still move it here and import it back into `cli.py` from `typed_entity_cli.py` (that direction is allowed). The adapters also call `create_entity`, `find_entity`, `list_entities`, `emit_query_rows`, `entity_table_renderers` — import those from their existing homes, never from `cli.py`.
+**Private sub-helpers that move with `emit_entity_show` (all `cli.py`-only today — confirmed by grep; keep `_`-prefixed):** `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list` (`cli.py:1487`+). The adapters also call `create_entity`, `find_entity`, `list_entities`, `emit_query_rows`, `entity_table_renderers` — import those from their existing homes, never from `cli.py`.
 
 - [ ] **Step 1: Write the characterization test**
 
@@ -162,7 +164,8 @@ from science_tool import entities as ent
 
 def test_typed_entity_adapters_present():
     for name in ("create_typed_entity", "show_typed_entity", "list_typed_entities",
-                 "ENTITY_LIST_TITLES", "build_origin_frontmatter"):
+                 "ENTITY_LIST_TITLES", "build_origin_frontmatter",
+                 "emit_entity_show", "emit_entity_warnings"):
         assert hasattr(tec, name), name
     assert tec.ENTITY_LIST_TITLES["hypothesis"] == "Hypotheses"
 
@@ -175,7 +178,7 @@ def test_entities_domain_module_stays_click_free():
 
 Run: `cd science && uv run --frozen pytest tests/test_typed_entity_cli.py -q`
 
-- [ ] **Step 3: Move the code.** Cut the four public adapters, `build_origin_frontmatter`, and the full emit closure (`_emit_entity_show`, `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list`, `_emit_entity_warnings`) and `_ENTITY_LIST_TITLES` from `cli.py` into the new `typed_entity_cli.py`; drop the leading `_` on the five public names (`create_typed_entity`, `show_typed_entity`, `list_typed_entities`, `ENTITY_LIST_TITLES`, `build_origin_frontmatter`); keep the private-emit helpers `_`-prefixed. Move the imports they need (including `parse_origin_spec`, `ValidationError`). `typed_entity_cli.py` may `import click`; it must NOT import `cli.py`. In `cli.py`, add `from science_tool.typed_entity_cli import create_typed_entity, show_typed_entity, list_typed_entities, ENTITY_LIST_TITLES, build_origin_frontmatter` (plus any private helper a remaining command still calls), and rewrite the call sites (`_create_typed_entity(`→`create_typed_entity(`, the two `_build_origin_frontmatter(` at `:1086`/`:5164`, etc.).
+- [ ] **Step 3: Move the code.** Cut into the new `typed_entity_cli.py`: the three per-kind adapters (`_create_typed_entity`/`_show_typed_entity`/`_list_typed_entities`), `_ENTITY_LIST_TITLES`, `_build_origin_frontmatter`, the two shared emit adapters (`_emit_entity_show`, `_emit_entity_warnings`), and the four private sub-helpers (`_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list`). Drop the leading `_` on the seven public names (`create_typed_entity`, `show_typed_entity`, `list_typed_entities`, `ENTITY_LIST_TITLES`, `build_origin_frontmatter`, `emit_entity_show`, `emit_entity_warnings`); keep the four sub-helpers `_`-prefixed. Move the imports they need (including `parse_origin_spec`, `ValidationError`). `typed_entity_cli.py` may `import click`; it must NOT import `cli.py`. In `cli.py`, add `from science_tool.typed_entity_cli import create_typed_entity, show_typed_entity, list_typed_entities, ENTITY_LIST_TITLES, build_origin_frontmatter, emit_entity_show, emit_entity_warnings` and rewrite every call site (`_create_typed_entity(`→`create_typed_entity(`, `_emit_entity_warnings(`→`emit_entity_warnings(` at `:533`/`:579`/`:598`/`:1302`, `_emit_entity_show(`→`emit_entity_show(`, the two `_build_origin_frontmatter(` at `:1086`/`:5164`, etc.).
 
 - [ ] **Step 4: Run the test + full suite — expect PASS/green.**
 
@@ -203,7 +206,7 @@ First extraction — the worked example of the recipe. Depends on Task 1 (the gr
 - Modify: `science/src/science_tool/cli.py` (delete block @483-846; add import + `main.add_command`)
 
 **Interfaces:**
-- Consumes: `create_typed_entity`, `show_typed_entity`, `list_typed_entities`, `ENTITY_LIST_TITLES` from `science_tool.typed_entity_cli` (Task 1).
+- Consumes: `create_entity`, `find_entity`, `list_entities`, `EntityCommandError` from `science_tool.entities` (already public), and the shared emit adapters `emit_entity_show`, `emit_entity_warnings` from `science_tool.typed_entity_cli` (Task 1). The `entity create/show/list` commands call `create_entity`/`find_entity`/`list_entities` **directly** (`cli.py:515`+) — they do **not** use the per-kind `create_typed_entity`/`show_typed_entity`/`list_typed_entities` adapters (those are for the entity-*kind* groups in Task 9). If `entity list` renders via `emit_query_rows` + `entity_table_renderers`, import those from their existing homes too.
 - Produces: `entity_group` (a `click.Group` named `"entity"`) importable from `science_tool.entities_cli`.
 
 - [ ] **Step 1: Apply the recipe** to the `entity` group (`cli.py:483-846`). New module docstring, `from __future__ import annotations`, `import click`, the group's import closure, `@click.group("entity")` on `entity_group`, all `@entity_group.command(...)` bodies verbatim. Delete the block from `cli.py`.
@@ -355,6 +358,8 @@ Pure relocation via the recipe (rename `def tasks` → `tasks_group`, `@click.gr
 
 Pure relocation via the recipe. `explore_ideas_group` already has the target name; `@click.group("explore-ideas")`.
 
+**Consumes:** `explore-ideas apply` calls `_emit_entity_warnings` (`cli.py:1302`) — import it as public `emit_entity_warnings` from `science_tool.typed_entity_cli` (Task 1), never from `cli.py`.
+
 - [ ] **Step 1:** Apply the recipe to `explore-ideas` (`cli.py:1239-1574`).
 - [ ] **Step 2:** Register (`main.add_command(explore_ideas_group)`).
 - [ ] **Step 3:** Verify (recipe block) + `explore-ideas --help` unchanged.
@@ -414,11 +419,11 @@ The `paper` group (@5071-5126) and the standalone `paper-fetch` command (@5018-5
 - Create: `science/tests/test_cli_is_registration_only.py`
 - Modify: `docs/plans/2026-07-10-half-applied-pattern-convergence-design.md` (or a follow-ups doc) — record the `dataset`/`datasets` naming collision as a deferred rename.
 
-**Write the guard LAST, against the migrated `cli.py`.** Model it on `tests/test_store_package_structure.py`. The guard parses `cli.py` and fails if it regrows an inline command.
+**Write the guard LAST, against the migrated `cli.py`.** Model it on `tests/test_store_package_structure.py`. The guard parses `cli.py` and fails if it defines **any** command or group other than the root `main`.
 
-- [ ] **Step 1: Write the guard.** Parse `science_tool/cli.py` with `ast`. Fail if:
-  - any `@main.group`/`@main.command`-decorated function body exceeds a small line budget (a group/command decorator applied to a `def` whose body is more than N statements — pick N from the migrated tree, e.g. the largest surviving inline body + margin; if zero inline commands survive, ban them outright), OR
-  - the module exceeds a line budget (`~400`; set the ceiling from the actual post-migration line count + margin, and record the number).
+**The guard must be decorator-owner-blind.** Inline subcommands today are decorated by many owners — `@main.group`, `@main.command`, `@entity_group.command`, `@graph.command`, `@graph_add.command`, `@datasets.command`, `@inquiry.command`, `@tasks.command`, … (verified by an AST census of the current tree). A guard keyed on `main.*` alone would let a future inline subcommand on an *imported* group slip through. So: flag every function whose decorator is a `*.group(...)`/`*.command(...)` attribute call **or** a `click.group(...)`/`click.command(...)` call — regardless of the owner name — and allow exactly one: the root group `main` (declared `@click.group(cls=TelemetryGroup)` at `cli.py:230`). Exempt it by function name (`main`), not by matching its exact decorator.
+
+- [ ] **Step 1: Write the guard.** Parse `science_tool/cli.py` with `ast`.
 
 ```python
 # tests/test_cli_is_registration_only.py (shape — finalize against the migrated tree)
@@ -426,27 +431,29 @@ import ast
 from pathlib import Path
 
 _CLI = Path(__file__).resolve().parents[1] / "src" / "science_tool" / "cli.py"
+_ROOT_GROUP = "main"  # the one allowed group/command definition (the Click root)
 
-def _inline_command_defs(tree: ast.Module) -> list[str]:
-    offenders = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for dec in node.decorator_list:
-                # match @main.group(...) / @main.command(...)
-                target = dec.func if isinstance(dec, ast.Call) else dec
-                if (isinstance(target, ast.Attribute)
-                        and isinstance(target.value, ast.Name)
-                        and target.value.id == "main"
-                        and target.attr in {"group", "command"}):
-                    offenders.append(node.name)
-    return offenders
+def _is_group_or_command_decorator(dec: ast.expr) -> bool:
+    """True for @X.group(...)/@X.command(...) and @click.group(...)/@click.command(...),
+    for ANY owner X — decorator-owner-blind on purpose."""
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    return isinstance(target, ast.Attribute) and target.attr in {"group", "command"}
 
-def test_cli_defines_no_inline_commands():
+def _command_defs(tree: ast.Module) -> list[str]:
+    return [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(_is_group_or_command_decorator(d) for d in node.decorator_list)
+    ]
+
+def test_cli_defines_only_the_root_group():
     tree = ast.parse(_CLI.read_text(encoding="utf-8"))
-    offenders = _inline_command_defs(tree)
+    offenders = [name for name in _command_defs(tree) if name != _ROOT_GROUP]
     assert not offenders, (
-        "cli.py must be registration-only: every command group lives in a "
-        f"<domain>_cli.py and is registered via main.add_command. Inline: {offenders}"
+        "cli.py must be registration-only: the only command/group definition allowed "
+        f"is the root '{_ROOT_GROUP}'. Every other group/command lives in a <domain>_cli.py "
+        f"registered via main.add_command. Inline definitions found: {offenders}"
     )
 
 def test_cli_within_line_budget():
@@ -454,7 +461,7 @@ def test_cli_within_line_budget():
     assert lines <= 900, f"cli.py is {lines} lines; extract inline logic (budget 900)"
 ```
 
-- [ ] **Step 2: Run it — expect PASS** against the fully-migrated tree. If it fails, the migration is incomplete (a group was missed) — fix the migration, not the budget. Set the line budget from the real post-migration count (`wc -l cli.py`) plus a small margin; record the chosen number in the test docstring.
+- [ ] **Step 2: Run it — expect PASS** against the fully-migrated tree. If `test_cli_defines_only_the_root_group` fails, the migration is incomplete (a group or subcommand was missed) — fix the migration, not the guard. If a legitimately-inline top-level command survives that you did not extract, do not add owner-name exceptions; extract it. Set the line budget from the real post-migration count (`wc -l cli.py`) plus a small margin; record the chosen number in the test docstring.
 - [ ] **Step 3: Record the `dataset`/`datasets` collision** as a follow-up (a short note in the design doc's Phase 4 section or a `docs/plans/` follow-ups list): the two groups are placed in disambiguating modules but keep colliding CLI names; a rename is a separate CLI-contract change.
 - [ ] **Step 4: Full verification** — `pytest -q && pytest -m snapshot -q && ruff check && pyright`, all green.
 - [ ] **Step 5: Commit**
