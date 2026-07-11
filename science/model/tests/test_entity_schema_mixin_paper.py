@@ -5,11 +5,18 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
-from science_model.entity_schema import MergePolicy, parse_profile, read_merge_policy
+from science_model.entity_schema import (
+    MergePolicy,
+    parse_profile,
+    read_merge_policy,
+    read_overlay_merge_policy,
+)
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
 
 _SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
+_TEMPLATES = Path(__file__).resolve().parents[1] / "src" / "science_model" / "templates"
 
 
 @pytest.fixture
@@ -87,6 +94,35 @@ def test_mixin_paper_2_0_schema_loads():
     assert "venue" in schema["properties"]
     assert "journal" not in schema["properties"]
     assert "datasets" not in schema["properties"]
+
+
+def test_paper_template_fields_are_all_routable():
+    """Every field the shipped paper template emits must be declared by the paper
+    profile or the overlay schema.
+
+    `science commons promote paper` splits a paper's frontmatter into canonical
+    fields (the profile's merge policy) and a project overlay, and the overlay
+    schema is closed (`additionalProperties: false`). A template field in neither
+    set therefore lands in the overlay and fails validation, making every paper
+    written from the template unpromotable.
+    """
+    template = _TEMPLATES / "paper.md"
+    frontmatter = yaml.safe_load(template.read_text(encoding="utf-8").split("---")[1])
+    emitted = set(frontmatter) - {"_template"}
+
+    routable = set(read_merge_policy(parse_profile("science-entity-base/1.0+paper/2.0")))
+    routable |= set(read_overlay_merge_policy())
+
+    assert emitted <= routable, f"paper template emits unroutable fields: {sorted(emitted - routable)}"
+
+
+def test_mixin_paper_2_0_declares_paper_kind_canonical():
+    """paper_kind (review / survey / synthesis / ...) describes the document itself,
+    so it is canonical -- the same in every project that cites the paper -- rather
+    than a per-project overlay field."""
+    profile = parse_profile("science-entity-base/1.0+paper/2.0")
+    assert read_merge_policy(profile)["paper_kind"] is MergePolicy.REPLACE
+    assert "paper_kind" not in read_overlay_merge_policy()
 
 
 def test_mixin_paper_2_0_bibkey_regex_permits_hyphens():

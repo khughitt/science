@@ -16,6 +16,7 @@
     "id": {"type": "string", "pattern": "^paper:[A-Za-z][A-Za-z0-9-]{1,63}$"},
     "kind": {"const": "paper"},
     "bibkey": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{1,63}$"},
+    "paper_kind": {"type": "string"},
     "authors": {"type": "array", "items": {"type": "string"}},
     "year": {"type": "integer", "minimum": 1800, "maximum": 2200},
     "venue": {"type": "string"},
