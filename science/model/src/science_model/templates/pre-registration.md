@@ -31,6 +31,7 @@ _template:
     - { key: metric-selection-rationale, name: "Metric Selection Rationale", required: true }
     - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
     - { key: total-comparison-count, name: "Total Comparison Count", required: true }
+    - { key: estimator-certification-gate, name: "Estimator Certification Gate", required: true }
     - { key: execution-readiness-gate, name: "Execution-Readiness Gate (runnable-now mode)", required: false }
     - { key: vehicle-admissibility-gate, name: "Vehicle-Admissibility Gate (data-gated mode)", required: false }
 ---
@@ -139,6 +140,35 @@ If the count is high (>10), specify the correction method
 | Exploratory tests | N | method or "none (exploratory)" |
 | **Total** | **N** | |
 -->
+
+
+## Estimator Certification Gate
+
+<!-- Applies when the analysis estimates parameters numerically -- any optimiser, profile, or
+     ODE/discretisation in the inferential path. If it does not, DELETE this section.
+
+     Nothing validates this section. Its force is that a threshold finer than its instrument's
+     resolution is not conservative -- it is noise-driven, and the noise has a SIGN: optimiser
+     error in a likelihood ratio is a difference of two one-sided biases, and the larger model
+     is systematically the harder one to fit.
+
+     Order: well-posedness -> certify the estimator -> price the design -> commit the budget.
+     A budget priced on an uncertified estimator is a consequence of an untested assumption,
+     not a constraint on the analysis.
+
+     See skills/statistics/estimator-certification.md. -->
+
+| Axis / commitment | Value | Reference / domain |
+|---|---|---|
+| 0. Well-posedness | <structural + practical identifiability; are the profile CIs closed?> | <design-only; no data needed> |
+| 1. Forward-map accuracy | <tolerance, on the DECISION STATISTIC, propagated> | <INDEPENDENT mechanism: a different scheme family, or an adaptive solver 2-3 orders tighter. A finer step of the SAME scheme is a convergence check, not a reference.> |
+| 2. Reproducibility | <MAX over R >= 5 replicates -- not the median> | <perturb every inferentially irrelevant DOF: start point, ordering, threads, seeds. If the estimator is deterministic, INJECT jitter -- a check that cannot fail is not a check.> |
+| 3. Threshold calibration | <EXECUTED, or CONDITIONAL> | <if CONDITIONAL: cost, trigger, invalidation clause, AND the decisions that may not depend on it until it completes> |
+| Outer optimiser | <method> | <why it is valid for this profile's smoothness/discontinuity structure. Gradient- and FD-based methods are PROHIBITED unless smoothness is DEMONSTRATED.> |
+| Error budget | E = |b| + k*s <= rho * sigma_null(T), k in [2,3] | <rho = 0.1 default, and NEVER unstated. Dimensionless, against the null's sampling SD -- NOT a % of the critical value, which drifts with the degrees of freedom. Do not call it alpha; alpha is the test size.> |
+| Indeterminate band | units with |T - c| <= E are INDETERMINATE | <report the count; they are not silently decided> |
+| Compute budget | <cost> | <certified | CONDITIONAL on ...> |
+| Invalidation | <what re-opens this certificate> | <estimator, forward model, tolerances, hardware, libraries> |
 
 ## Execution-Readiness Gate (runnable-now mode)
 

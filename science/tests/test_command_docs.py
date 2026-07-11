@@ -1247,6 +1247,30 @@ def test_pre_registration_templates_include_multi_analysis_registry() -> None:
         assert "link to that analysis's Execution-Readiness Gate or Vehicle-Admissibility Gate" in text
 
 
+def test_pre_registration_templates_include_estimator_certification_gate() -> None:
+    """Both copies carry the gate. The PACKAGED copy is the one Renderer reads by default,
+    so editing only the root would leave `science entity create` scaffolding the old
+    section list while the edit appeared to succeed."""
+    for path in (
+        "templates/pre-registration.md",
+        "science/model/src/science_model/templates/pre-registration.md",
+    ):
+        text = _read(path)
+        assert "## Estimator Certification Gate" in text
+        assert "{ key: estimator-certification-gate," in text
+        assert 'name: "Estimator Certification Gate", required: true }' in text
+        # The four axes, in cost order.
+        assert "0. Well-posedness" in text
+        assert "3. Threshold calibration" in text
+        # The gate must NOT imply an enforcement it does not have: nothing validates
+        # pre-registration sections, and the template says so rather than pretending.
+        assert "Nothing validates this section" in text
+        # rho, not alpha -- alpha is the test size, and a constant named alpha beside a
+        # likelihood-ratio threshold reads as a significance level.
+        assert "rho * sigma_null(T)" in text
+        assert "alpha is the test size" in text
+
+
 def test_pre_registration_templates_include_calibration_gate() -> None:
     for path in (
         "templates/pre-registration.md",
