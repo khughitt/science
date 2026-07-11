@@ -34,22 +34,16 @@ _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("benchmark_catalog.py", "benchmark_sources"),
-        ("benchmark_catalog.py", "coverage_summary"),
         ("benchmark_catalog.py", "list_benchmarks"),
         ("big_picture/knowledge_gaps.py", "compute_topic_gaps"),
         ("big_picture/validator.py", "count_research_orphans"),
         ("big_picture/validator.py", "validate_rollup_file"),
         ("big_picture/validator.py", "validate_synthesis_file"),
-        ("datasets_catalog.py", "consumers_of"),
-        ("datasets_catalog.py", "format_show"),
         ("datasets_catalog.py", "list_datasets"),
         ("datasets_catalog.py", "reconcile_dataset_links"),
         ("graph/attention.py", "compute_attention_candidates"),
-        ("graph/attention.py", "format_attention_candidate"),
         ("graph/attention.py", "query_attention_ranked"),
         ("graph/attention.py", "query_attention_sample"),
-        ("graph/attention.py", "reason_aware_sample_candidates"),
-        ("graph/attention.py", "weighted_sample_without_replacement"),
         ("graph/health.py", "check_dataset_anomalies"),
         ("graph/health.py", "collect_agent_context_findings"),
         ("graph/health.py", "collect_identity_policy_findings"),
@@ -60,7 +54,6 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("graph/health.py", "collect_unregistered_ref_kinds"),
         ("graph/health.py", "collect_unresolved_refs"),
         ("graph/health.py", "collect_validation_findings"),
-        ("graph/health.py", "list_health_checks"),
         ("graph/store/inquiry.py", "list_inquiries"),
         ("graph/store/inquiry.py", "list_inquiries_dataset"),
         ("graph/store/inquiry.py", "validate_inquiry"),
@@ -78,25 +71,62 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("graph/store/summary.py", "query_uncertainty"),
         ("graph/store/validation.py", "diff_graph_inputs"),
         ("graph/store/validation.py", "diff_graph_inputs_dataset"),
+    }
+)
+
+# Pure/total helpers that live in the namespace but are NOT instruments. PERMANENT.
+#
+# The test, applied by reading all 46 bodies (docs/plans/2026-07-11-instrument-triage.md):
+# does the helper do I/O, or resolve a user-supplied identifier? If NO -- it is a pure
+# function of already-loaded arguments -- then an empty return is a fact about its INPUT,
+# not a claim about the world, and a status surface would be ceremony without safety
+# (the design's Non-goals).
+#
+# An entry here is a CLAIM that the function cannot be unwired. It is not a parking lot.
+# If the claim is false, the entry is a bug -- not a carve-out. A deferred instrument goes
+# in _DEFERRED_INSTRUMENTS, which blocks the closeout; it does NOT go here.
+_NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # Pure aggregation over rows the CALLER already fetched. Zero I/O. Always
+        # returns all 6 facet keys (tasks is pre-seeded), so it is never even empty.
+        # Its caller already holds the InstrumentResult from list_benchmarks.
+        ("benchmark_catalog.py", "coverage_summary"),
+        # Reads one key of a caller-supplied frontmatter dict. The dataset ref is
+        # resolved LOUDLY upstream (cli.py:7245 exits 2 on a typo), so [] genuinely
+        # means "this dataset records no consumers".
+        ("datasets_catalog.py", "consumers_of"),
+        # A RENDERER: its list is display *lines*, not findings. Always >= 6 lines.
+        ("datasets_catalog.py", "format_show"),
+        # Formats ONE candidate to a dict. Pure. Not a collection at all -- flagged
+        # only because `dict` is in _BARE_COLLECTIONS, i.e. the detector being coarse.
+        ("graph/attention.py", "format_attention_candidate"),
+        # Pure sampler over a caller-supplied Sequence. No I/O. [] iff limit == 0 or
+        # the input was empty -- a fact about the argument, not about the world.
+        ("graph/attention.py", "reason_aware_sample_candidates"),
+        ("graph/attention.py", "weighted_sample_without_replacement"),
+        # Takes NO ARGUMENTS. A projection over the module constant HEALTH_CHECKS.
+        # It has no input that could be absent, and its return is never empty.
+        ("graph/health.py", "list_health_checks"),
+        # `return list(PREDICATE_REGISTRY)`. Same: a module constant, no input to lack.
         ("graph/store/validation.py", "query_predicates"),
     }
 )
 
-# Pure/total helpers that live in the namespace but are NOT instruments: they
-# cannot fail to run, so a status surface would be ceremony without safety (see
-# the design's Non-goals). PERMANENT. Every entry carries a justification.
-# An entry here is a claim that the function cannot be unwired. If that is false,
-# the entry is a bug, not a carve-out.
-_NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset()
-
-# Helpers that ARE instruments but are NOT migrated by this pass -- because the type
-# cannot express their shape (a mapping) or their payload (a second semantic channel).
+# Helpers that ARE instruments but are NOT migrated -- because the row-shaped type cannot
+# express their shape or their payload.
 #
-# This set exists so that "deferred" can never be spelled "_NOT_INSTRUMENTS". An entry
-# here is an ADMISSION OF INCOMPLETENESS, not an exoneration: the defect is still live.
-# test_migration_is_complete asserts this set is EMPTY, so a deferral cannot be parked
-# here quietly -- it must be paid off, or the design's completion criteria must be
-# explicitly amended to bless it. Silence is not an option the guard offers.
+# This set exists so that "deferred" can never be spelled "_NOT_INSTRUMENTS". That set's
+# entries CLAIM a helper cannot be unwired; filing a known-broken instrument there would be
+# a false statement in this guard's own vocabulary, and it would let test_migration_is_complete
+# certify a completion it did not earn -- the exact bug this design exists to stop, committed
+# by the mechanism built to prevent it. So an entry here is an ADMISSION OF INCOMPLETENESS,
+# not an exoneration, and test_migration_is_complete asserts this set is EMPTY: a deferral
+# BLOCKS the closeout until it is paid off or the design's completion criteria are explicitly
+# amended. Silence is not an option the guard offers.
+#
+# It is empty today. The one candidate the plan anticipated -- benchmark_catalog.coverage_summary,
+# a mapping the row-shaped type cannot carry -- turned out on reading to be PURE (it folds rows
+# the caller already fetched), so it was never an instrument. See the triage doc.
 _DEFERRED_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset()
 
 _BARE_COLLECTIONS = {"list", "dict", "int", "set"}
