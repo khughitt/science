@@ -1,11 +1,8 @@
 ---
 id: paper:Besharatifard2024
-kind: paper
-title: A review on graph neural networks for predicting synergistic drug combinations
+overlay_of: paper:Besharatifard2024
+pin_version: "1.0.0"
 status: active
-paper_kind: review
-ontology_terms: []
-dataset_usage: []
 source_refs:
 - cite:Besharatifard2024
 related:
@@ -13,8 +10,8 @@ related:
 - hypothesis:0005-sequential-evidence-improves-attention
 - question:0035-benchmark-evaluation-discipline
 - question:0039-heterogeneous-graph-edge-typing
-created: '2026-07-10'
-updated: '2026-07-10'
+created: "2026-07-10"
+updated: "2026-07-10"
 ---
 # A review on graph neural networks for predicting synergistic drug combinations
 
@@ -36,25 +33,6 @@ The science/meta relevance is methodological: the review documents both the desi
 The review is a systematic literature survey covering PubMed, Google Scholar, and Web of Science up to July 2023 using keywords "graph", "drug combination", and "synergy".
 The authors organized 25 GNN studies into four sections: (1) in vitro classification methods, (2) in vitro regression methods, (3) clinical-data classification methods, and (4) comparative evaluation.
 For each model, the review tabulates: GNN architecture, input feature types (drug molecular graphs, fingerprints, PPI networks, gene expression, knowledge graphs), dataset(s) used, prediction task type (classification vs. regression), synergy metric (Loewe, Bliss, ZIP, HSA), train/test split strategy, performance metrics (AUC, AUPR, F1, RMSE), and code availability.
-
-## Key Findings
-
-**GNN architecture taxonomy.** The 25 models split into three major architecture families:
-- GCN (graph convolutional network): most common; used for molecular graph feature extraction and biological network embedding.
-- GAT (graph attention network): second most common; assigns learned attention weights to neighbor nodes, enabling selective aggregation; used in both drug-structure graphs and knowledge graphs.
-- GAE (graph autoencoder): encodes drug-drug synergy networks into latent space and reconstructs the adjacency matrix to infer novel synergistic relationships.
-
-**Feature landscape.** Two orthogonal axes structure how models represent drugs and cell lines: (a) representation type — molecular graph (2D/3D structure via SMILES) vs. fingerprint vs. knowledge graph node, and (b) entity scope — drug only vs. drug + cell line vs. drug + cell line + biological network (PPI, pathway, gene expression).
-Models incorporating richer, multi-modal heterogeneous features consistently outperform single-feature baselines; e.g., the Hu et al. (2023) model's use of drug + protein + disease heterogeneous graph with pre-trained embeddings outperformed DeepDDS which used drug structure only (AUC 0.84 vs. 0.66 on AstraZeneca) [@Besharatifard2024].
-
-**Benchmark fragmentation.** No shared benchmark exists.
-Studies differ in: dataset (Merck/O'Neil, DrugComb, AstraZeneca, ALMANAC, CLOUD, FORCINA), synergy metric (Loewe, Bliss, ZIP, HSA), thresholding strategy (arbitrary fixed cutoffs, quartile splits, averaging of multiple metrics), and cross-validation scheme (3-, 5-, or 10-fold; hold-out; leave-one-drug-out; leave-one-cell-line-out).
-The authors conclude that direct performance comparison across models is unreliable, and call for a benchmarking study with controlled confounders [@Besharatifard2024].
-
-**Class imbalance and metric choice.** Synergistic combinations are rare relative to non-synergistic ones; AUC-ROC is insensitive to this imbalance.
-AUPR (area under the precision-recall curve) is the recommended metric for drug synergy classification tasks.
-
-**GNN limitations.** Four recurring failure modes: (1) high computational cost + data hunger given a sparse experimental landscape; (2) overfitting risk under limited labeled pairs; (3) interpretability gaps — predictions cannot be mechanistically explained; (4) expressivity limits of standard GCNs on heterophilic graphs (nodes of different types connected by diverse edge semantics).
 
 ## Relevance
 
@@ -80,13 +58,6 @@ The review documents that varying thresholds, metrics, and data splits render mo
 | Thresholding strategy | Belief boundary / discretization | Arbitrary thresholding is a validity threat; Science should prefer continuous beliefs (D-003) |
 | Benchmark fragmentation | Evaluation discipline | Science's benchmark module should enforce experimental controls to avoid analogous fragmentation |
 | Leave-one-drug-out vs. leave-one-cell-line-out | Generalization target | Distinction between generalizing to new entities vs. new contexts maps to Science's entity-vs-context generalization |
-
-## Limitations
-
-The review does not compare GNNs against the strongest non-GNN baselines (e.g., MatchMaker, DeepSynergy, DTF) in a controlled head-to-head study; this gap is acknowledged but deferred to future work.
-Performance comparisons across the reviewed models are confounded by dataset selection, synergy metric, and threshold choices — the authors acknowledge this but do not resolve it.
-The review ends at July 2023; methods published after (including transformer-heavy and large language model-augmented approaches) are not covered.
-For science/meta purposes, the drug biology claims (which cell-line features matter, which synergy metric is most predictive) are domain-specific and should not be imported into toolkit design reasoning without a domain-transfer justification.
 
 ## Model / Tool Availability
 

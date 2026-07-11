@@ -1,12 +1,10 @@
 ---
-kind: paper
-title: 'Causal Determinism (Stanford Encyclopedia of Philosophy)'
-status: active
-paper_kind: review
-created: '2026-07-10'
-updated: '2026-07-10'
 id: paper:Hoefer2023
-ontology_terms: []
+overlay_of: paper:Hoefer2023
+pin_version: "1.0.0"
+status: active
+created: "2026-07-10"
+updated: "2026-07-10"
 source_refs:
 - cite:Hoefer2023
 related:
@@ -16,7 +14,6 @@ related:
 - question:0003-causal-synthesis-guardrails
 - question:0025-causal-edge-modal-typing
 ---
-
 # Causal Determinism (Stanford Encyclopedia of Philosophy)
 
 - **Authors:** Carl Hoefer
@@ -36,24 +33,6 @@ The entry distinguishes determinism sharply from fatalism and from predictabilit
 
 Conceptual and philosophical analysis; authoritative survey of the literature from Leibniz and Laplace through 20th-century physics and analytic philosophy of science.
 Covers classical mechanics, special relativity, general relativity, and quantum mechanics in turn; examines epistemological challenges (chaos, metaphysical argument); and reviews major law-theoretic positions: Humean Best Systems Analysis (BSA), "pushy explainers," and anti-fundamentalism (Cartwright, van Fraassen, Dupré).
-
-## Key Findings
-
-1. **Formal structure of determinism.** Three components are required: (a) a well-defined world state at each time, (b) laws of nature that are true at all places and times, and (c) logical entailment from (a)+(b) to the state at all other times (§2.5). The modality behind "determination" is logical entailment, not merely nomological necessity.
-
-2. **Determinism is not predictability.** Laplace's demon conflates epistemic access with ontological necessity; no finite embedded agent can have such access. Determinism can hold without predictability and predictability can hold without determinism (§1, §3).
-
-3. **Classical mechanics has multiple determinism breakdowns.** "Space invaders" (time-reverse of escape-to-infinity), supertasks, and Norton's dome (a ball at a frictionless apex that may spontaneously start moving, with no violation of Newton's laws) all produce models where a well-defined initial state does not fix the future (§4.1).
-
-4. **Chaos makes the deterministic/stochastic distinction epistemically inaccessible.** Suppes (1993) proved that some systems can equally well be modeled as deterministic classical processes or as indeterministic semi-Markov processes, regardless of how many observations are made (§3.3). A finite embedded observer cannot decide between the two hypotheses. Deterministic chaos displays sensitive dependence on initial conditions (SDIC) and generates behavior indistinguishable from genuine stochasticity.
-
-5. **QM is interpretation-dependent.** Standard Copenhagen posits irreducibly stochastic wavefunction collapse; Everettian (many-worlds) QM is fully deterministic; Bohmian QM is deterministic and empirically equivalent to Copenhagen for all standard predictions (§4.4).
-
-6. **GR fails determinism frequently.** The hole argument (Earman & Norton 1987) shows manifold substantivalism induces unconstrained indeterminism; naked singularities threaten determinism; cosmic censorship hypotheses remain unproven (§4.3).
-
-7. **Objective chance and determinism are compatible under Humean accounts.** Non-trivial probabilities — those strictly between 0 and 1 — can coexist with deterministic laws if the law-theoretic view is Humean; Hoefer defends this at length in subsequent work cited in [@Hoefer2023]. Determinism does not force all chances to collapse to 0 or 1 unless one adopts a "pushy explainers" view of laws (§5).
-
-8. **Time-symmetric determinism challenges the causal asymmetry intuition.** Fundamental physical theories are bi-directionally deterministic; the asymmetry of causation (past → future) is pragmatic and perspectival, not ontological (§6).
 
 ## Relevance
 
@@ -77,13 +56,6 @@ This entry is directly relevant to three load-bearing choices in the Science too
 | Deterministic chaos / SDIC | Epistemic uncertainty from finite observation | An embedded agent cannot distinguish chaos from genuine stochasticity; evidence tagging should not assert determinism on the basis of finite observation alone |
 | Ceteris paribus clause on sufficient cause | Estimand + covariate coverage + transport assumptions | H04 guardrail; Hoefer/Russell show that every event-level causal claim hides an open-ended exclusion list that the toolkit must make explicit |
 | Bi-directional determination | Causal direction as a modeling choice | Physical determination is time-symmetric; causal asymmetry in the toolkit reflects a modeling assumption, not an ontological fact |
-
-## Limitations
-
-1. The entry covers philosophical and physical-theory perspectives only; it does not address computational causal discovery, structural causal models (Pearl-style), or Bayesian networks.
-2. The discussion of chance is primarily about fundamental physics (radioactive decay, QM); direct translation to probabilistic graphical models over observational data requires additional work.
-3. The entry provides no operational criteria for typing edges in a research-grade causal graph as deterministic, probabilistic, or chaotic — that gap is a design question for the toolkit.
-4. The free-will discussion (§6) is of philosophical interest but has no direct bearing on the toolkit's causal inference layer.
 
 ## Model / Tool Availability
 

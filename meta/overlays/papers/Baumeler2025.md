@@ -1,11 +1,10 @@
 ---
-kind: paper
-title: Flow of dynamical causal structures with application to correlations
-status: active
-created: '2026-07-10'
-updated: '2026-07-10'
 id: paper:Baumeler2025
-ontology_terms: []
+overlay_of: paper:Baumeler2025
+pin_version: "1.0.0"
+status: active
+created: "2026-07-10"
+updated: "2026-07-10"
 source_refs:
 - cite:Baumeler2025
 related:
@@ -14,7 +13,6 @@ related:
 - question:0010-causal-graph-construction-pipeline
 - question:0025-causal-edge-modal-typing
 ---
-
 # Flow of dynamical causal structures with application to correlations
 
 - **Authors:** Ämin Baumeler and Stefan Wolf
@@ -67,27 +65,6 @@ The quantum generalization is discussed but identified as currently intractable,
 because partial tracing in the quantum case does not factorise the way functional
 substitution does in the classical case.
 
-## Key Findings
-
-1. The flow graph makes the dynamical aspect of cyclic causal structures explicit:
-   directed cycles in a causal model represent *potential* information paths, not
-   actual causal loops; the flow "unravels" which paths are realised under each
-   sequence of interventions.
-2. The superflow is a purely qualitative object — its construction requires only
-   the causal structure (digraph), not the numerical or functional parameters.
-   Qualitative causal-order questions can therefore be answered at the
-   structural level alone.
-3. **Theorem 3 (Causal correlations):** If every leaf of a flow F is a trivial
-   (single-vertex) graph, then the process produces only causal correlations, i.e.,
-   correlations that decompose as a convex mixture in which each term fixes a
-   definite causal order among the agents.
-4. The theorem also holds for superflows (since a superflow is a supergraph of
-   the flow), making it applicable without model parameters.
-5. There exist causal structures with chordal directed cycles that, by Theorem 3,
-   still produce only causal correlations — filling a gap left by the prior
-   chordless-cycles sufficient condition.
-6. The companion C implementation of Algorithm 2 is openly available [Ref 29].
-
 ## Relevance
 
 This paper bears on two live areas of the Science toolkit.
@@ -129,17 +106,6 @@ curation resumes.
 | Trivial leaf | Fully observed / no cyclic dependency remaining | A state where every agent has been assigned a definite causal position; analogous to a fully identified causal model. |
 | Causal correlations | Causal edge with definite directional support | A correlation that decomposes causally maps onto a toolkit edge whose belief has been updated with valid causal direction evidence. |
 | Siblings-on-cycles constraint | Admissibility rule for cyclic causal graphs | If the toolkit ever accepts cyclic causal structures (e.g., feedback loops), this constraint should be enforced as a validation rule. |
-
-## Limitations
-
-The paper is restricted to classical-deterministic models; the authors explicitly
-defer the quantum case.
-Algorithms are exponential in the number of agents, limiting practical
-applicability to small causal structures.
-The results concern *possible* correlations, not their statistical
-estimation — the paper is a theoretical contribution with no empirical component.
-The practical operationalisation for software tooling (e.g., how to index or
-store flows in a graph database) is not addressed.
 
 ## Model / Tool Availability
 

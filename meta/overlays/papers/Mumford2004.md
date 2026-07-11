@@ -1,20 +1,16 @@
 ---
-kind: paper
-title: Laws in Nature
-status: active
-created: '2026-07-10'
-updated: '2026-07-10'
 id: paper:Mumford2004
-paper_kind: ''
-ontology_terms: []
-dataset_usage: []
+overlay_of: paper:Mumford2004
+pin_version: "1.0.0"
+status: active
+created: "2026-07-10"
+updated: "2026-07-10"
 source_refs:
 - cite:Mumford2004
 related:
 - hypothesis:0007-working-model
 - hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
 ---
-
 # Laws in Nature
 
 - **Authors:** Stephen Mumford
@@ -67,31 +63,6 @@ This is a work of analytic metaphysics. Mumford proceeds by:
 
 No empirical data or computational methods are employed; argument is
 purely conceptual.
-
-## Key Findings
-
-Key theses (from Chapter 1, preface, and §1.6 chapter summaries):
-
-- **Humean lawlessness** accepts no necessary connections, leaving laws as
-  regularities or best-system axioms; Mumford finds this internally consistent but
-  argues it fails to deliver enough — it cannot justify modal talk in science.
-- **Nomological realism** (DTA theory and essentialism) tries to add governing
-  entities; Mumford argues neither theory shows *how* such laws actually determine
-  their instances or earns its place in our ontology.
-- **Realist lawlessness** (Mumford's own stance): natural laws are not a natural
-  kind (Chapter 8 [INACCESSIBLE]); the "Central Dilemma" shows no nomological
-  realist can specify how a law governs; powers and modal properties supply all the
-  work that laws were invoked to do.
-- **The three metaphysics** (Figure 1.1 in Chapter 1):
-  - (A) Humean lawlessness: no necessary connections, no laws.
-  - (B) Nomological realism: discrete non-modal properties + added laws to animate them.
-  - (C) Realist lawlessness: all properties are modal, so laws are superfluous.
-- **Relationship to Cartwright**: Mumford's stance is closest to Cartwright's
-  (1983, 1989, 1999) dappled/patchwork view but argues for a directly
-  *metaphysical* (not epistemological/scientific) ground for lawlessness.
-- **Chapter 12 conclusion**: law-talk is a metaphor — and a *harmful* one, because
-  it carries Humean presuppositions about inert particulars that Mumford rejects.
-  [INACCESSIBLE — detail beyond §1.6 summary]
 
 ## Relevance
 
@@ -146,25 +117,6 @@ Key theses (from Chapter 1, preface, and §1.6 chapter summaries):
 | Central Dilemma (external vs. internal laws) | Estimand-mechanism gap | Guardrail question: how does the evidence determine the proposition? |
 | Natural kinds of laws | Evidence type vocabulary | "Laws are not a natural kind" parallels the need for explicit evidence-type tags |
 | Harmless/harmful metaphor | Misleading edge label | Law-as-metaphor → causal-as-metaphor if not grounded; label discipline matters |
-
-## Limitations
-
-- **Preview only**: Chapters 2–12 are [INACCESSIBLE]; the detailed arguments for
-  the Central Dilemma, the positive account of modal properties, and all
-  objection-and-reply material (Chapter 11) cannot be verified from this preview.
-- The book is a work of pure metaphysics (2004); it predates the computational
-  turn in causal inference and does not address algorithmic or statistical
-  operationalization of powers/dispositions.
-- Mumford's positive account (properties as clusters of relations, following
-  Shoemaker) is acknowledged as controversial; the objections chapter (Chapter 11)
-  includes relativity, epiphenomena, and Meinongianism challenges, but their
-  resolutions are [INACCESSIBLE].
-- The Cartwright comparison in the preface flags a divergence: Mumford argues
-  metaphysically; Cartwright argues scientifically. For a toolkit grounded partly
-  in scientific practice (like Science), Cartwright's route may carry additional
-  weight not addressed here.
-- No quantitative claims are made; applicability to computational causal modeling
-  requires bridging work.
 
 ## Model / Tool Availability
 
