@@ -50,6 +50,7 @@ from science_tool.styles import (
     resolve_color_policy,
     set_color_policy,
 )
+from science_tool.sync_cli import sync_group
 from science_tool.tasks_cli import tasks_group
 from science_tool.telemetry_cli import telemetry_group
 from science_tool.validate.cli import validate_cmd
@@ -227,6 +228,7 @@ main.add_command(inquiry_group)
 main.add_command(datasets_group)
 main.add_command(project_group)
 main.add_command(bib_group)
+main.add_command(sync_group)
 
 
 @main.command("paper-fetch")
@@ -336,125 +338,6 @@ def persist_source_cmd(
     except SourceTextError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Wrote {out}")
-
-
-@main.group()
-def sync() -> None:
-    """Cross-project sync commands."""
-
-
-@sync.command("run")
-@click.option("--config", "config_path", type=click.Path(), default=None)
-@click.option("--dry-run", is_flag=True, help="Preview without writing changes")
-def sync_run(config_path: str | None, dry_run: bool) -> None:
-    """Run cross-project sync."""
-    from science_tool.registry.config import get_default_config_path, load_global_config
-    from science_tool.registry.index import get_default_registry_dir
-    from science_tool.registry.state import get_default_state_path
-    from science_tool.registry.sync import run_sync as do_sync
-
-    cfg_path = Path(config_path) if config_path else get_default_config_path()
-    config = load_global_config(cfg_path)
-    if not config.projects:
-        click.echo("No registered projects. Run science commands in project directories first.")
-        return
-
-    registry_dir = get_default_registry_dir()
-    state_path = get_default_state_path()
-    report = do_sync(
-        project_paths=[Path(p.path) for p in config.projects],
-        registry_dir=registry_dir,
-        state_path=state_path,
-        dry_run=dry_run,
-    )
-    prefix = "[dry run] " if dry_run else ""
-    click.echo(f"{prefix}Sync complete.")
-    click.echo(f"  Entities: {report.entities_total} (+{report.entities_new} new)")
-    click.echo(f"  Relations: {report.relations_total}")
-    if report.drift_warnings:
-        click.echo("  Drift warnings:")
-        for warning in report.drift_warnings:
-            click.echo(f"    {warning}")
-
-
-@sync.command("status")
-@click.option("--config", "config_path", type=click.Path(), default=None)
-def sync_status(config_path: str | None) -> None:
-    """Show sync status and staleness."""
-    from datetime import datetime
-
-    from science_tool.registry.config import get_default_config_path, load_global_config
-    from science_tool.registry.state import load_sync_state
-
-    cfg_path = Path(config_path) if config_path else get_default_config_path()
-    config = load_global_config(cfg_path)
-    state_path = cfg_path.parent / "sync_state.yaml"
-    state = load_sync_state(state_path)
-
-    if state.last_sync is None:
-        click.echo("No sync has been performed yet.")
-        if config.projects:
-            click.echo(f"  {len(config.projects)} registered project(s). Run `science sync run`.")
-        return
-
-    days = (datetime.now() - state.last_sync).days
-    click.echo(f"Last sync: {state.last_sync.isoformat()} ({days} days ago)")
-    stale_threshold = config.sync.stale_after_days
-    if days > stale_threshold:
-        click.echo(f"  Sync is stale (threshold: {stale_threshold} days). Run `science sync run`.")
-    for name, pstate in state.projects.items():
-        click.echo(f"  {name}: {pstate.entity_count} entities (hash: {pstate.entity_hash[:8]})")
-
-
-@sync.command("projects")
-@click.option("--config", "config_path", type=click.Path(), default=None)
-def sync_projects(config_path: str | None) -> None:
-    """List registered projects."""
-    from science_tool.registry.config import get_default_config_path, load_global_config
-
-    cfg_path = Path(config_path) if config_path else get_default_config_path()
-    config = load_global_config(cfg_path)
-    if not config.projects:
-        click.echo("No registered projects.")
-        return
-    for p in config.projects:
-        click.echo(f"  {p.name}: {p.path} (registered {p.registered})")
-
-
-@sync.command("rebuild")
-@click.option("--config", "config_path", type=click.Path(), default=None)
-def sync_rebuild(config_path: str | None) -> None:
-    """Rebuild registry from scratch by scanning all projects."""
-    import shutil
-
-    from science_tool.registry.config import get_default_config_path, load_global_config, prune_missing_projects
-    from science_tool.registry.index import get_default_registry_dir
-    from science_tool.registry.state import get_default_state_path
-    from science_tool.registry.sync import run_sync as do_sync
-
-    cfg_path = Path(config_path) if config_path else get_default_config_path()
-    registry_dir = get_default_registry_dir()
-    state_path = get_default_state_path()
-
-    pruned = prune_missing_projects(cfg_path)
-    for path in pruned:
-        click.echo(f"Pruned missing project: {path}")
-
-    config = load_global_config(cfg_path)
-    if not config.projects:
-        click.echo("No registered projects.")
-        return
-
-    if registry_dir.is_dir():
-        shutil.rmtree(registry_dir)
-    click.echo("Registry cleared. Rebuilding...")
-
-    report = do_sync(
-        project_paths=[Path(p.path) for p in config.projects],
-        registry_dir=registry_dir,
-        state_path=state_path,
-    )
-    click.echo(f"Rebuild complete. {report.entities_total} entities, {report.relations_total} relations.")
 
 
 if __name__ == "__main__":
