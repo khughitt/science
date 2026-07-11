@@ -304,6 +304,17 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
 # the entry is a bug, not a carve-out.
 _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset()
 
+# Helpers that ARE instruments but are NOT migrated by this pass -- because the type
+# cannot express their shape (see coverage_summary, Task 2b) or their payload (see the
+# validator has_failures channel, Task 7).
+#
+# This set exists so that "deferred" can never be spelled "_NOT_INSTRUMENTS". An entry
+# here is an ADMISSION OF INCOMPLETENESS, not an exoneration: the defect is still live.
+# test_migration_is_complete (Task 11) asserts this set is EMPTY, so a deferral cannot
+# be parked here quietly -- it must be paid off, or the design's completion criteria
+# must be explicitly amended to bless it. Silence is not an option the guard offers.
+_DEFERRED_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset()
+
 _BARE_COLLECTIONS = {"list", "dict", "int", "set"}
 
 
@@ -364,7 +375,7 @@ def _violations(module_rel: str) -> list[str]:
 
 
 def _known(module_rel: str, fn: str) -> bool:
-    return (module_rel, fn) in _ALLOWLIST or (module_rel, fn) in _NOT_INSTRUMENTS
+    return (module_rel, fn) in _ALLOWLIST | _NOT_INSTRUMENTS | _DEFERRED_INSTRUMENTS
 
 
 def test_instrument_namespace_returns_instrument_result() -> None:
@@ -383,19 +394,33 @@ def test_instrument_namespace_returns_instrument_result() -> None:
 
 
 def test_allowlist_has_no_stale_entries() -> None:
-    """An allowlisted helper that no longer violates must be REMOVED from the allowlist.
+    """A listed helper that no longer violates must be REMOVED from its set.
 
     This is what forces the ratchet to drain instead of rotting.
     """
     stale = [
         f"{module_rel}::{fn}"
-        for (module_rel, fn) in _ALLOWLIST | _NOT_INSTRUMENTS
+        for (module_rel, fn) in _ALLOWLIST | _NOT_INSTRUMENTS | _DEFERRED_INSTRUMENTS
         if fn not in _violations(module_rel)
     ]
     assert not stale, (
         "These helpers are listed but no longer violate the boundary. "
         "Delete them:\n  " + "\n  ".join(sorted(stale))
     )
+
+
+def test_sets_are_disjoint() -> None:
+    """A helper is an instrument, or it is not. It cannot be filed as both.
+
+    _NOT_INSTRUMENTS asserts "cannot be unwired". _DEFERRED_INSTRUMENTS asserts
+    "can be unwired, and still is". An entry in both is a contradiction on its face.
+    """
+    for a, b, names in (
+        (_ALLOWLIST, _NOT_INSTRUMENTS, "_ALLOWLIST/_NOT_INSTRUMENTS"),
+        (_ALLOWLIST, _DEFERRED_INSTRUMENTS, "_ALLOWLIST/_DEFERRED_INSTRUMENTS"),
+        (_NOT_INSTRUMENTS, _DEFERRED_INSTRUMENTS, "_NOT_INSTRUMENTS/_DEFERRED_INSTRUMENTS"),
+    ):
+        assert not (a & b), f"{names} overlap: {sorted(a & b)}"
 ```
 
 - [ ] **Step 2: GENERATE the seed — do not transcribe it**
@@ -456,9 +481,11 @@ The bar for **not-instrument** is high and specific: *there is no input whose ab
 `rows` is `list[RowT]`. Two flagged helpers return a `dict`, and **neither can be wrapped as-is** — `InstrumentResult.from_rows(some_dict)` is meaningless. Rule on each explicitly; do **not** paper over it:
 
 - **`graph/attention.py::format_attention_candidate -> dict[str, Any]`** — a formatter for **one** candidate. It is not a collection at all, and it cannot be unwired. → `_NOT_INSTRUMENTS`. (It is flagged only because `dict` is in `_BARE_COLLECTIONS`; that is the detector being coarse, not a finding.)
-- **`benchmark_catalog.py::coverage_summary -> dict[str, dict[str, int]]`** — a genuine mapping-shaped *summary*, and it can plausibly be unwired (a summary over zero resolvable benchmarks is not "zero coverage"). It needs a real ruling, and there are only two honest options:
-  1. **Reshape to rows** — return `InstrumentResult[CoverageRow]` where the mapping's keys become a field on each row. This is an API change; its consumers must be updated. Prefer this if the consumers are few.
-  2. **Defer** — as with the validator payload, record that mapping-shaped instruments are not expressible in this type and leave `coverage_summary` alone, moving it to `_NOT_INSTRUMENTS` **only** with a note saying it is deferred, not exonerated.
+- **`benchmark_catalog.py::coverage_summary -> dict[str, dict[str, int]]`** — a genuine mapping-shaped *summary*, and it can plausibly be unwired (a summary over zero resolvable benchmarks is not "zero coverage"). It needs a real ruling, and there are exactly two honest options:
+  1. **Reshape to rows** (preferred) — return `InstrumentResult[CoverageRow]` where the mapping's key becomes a field on each row. This is an API change; its consumers must be updated. Take this option unless the consumer count makes it a separate project.
+  2. **Defer explicitly** — put it in **`_DEFERRED_INSTRUMENTS`**, never `_NOT_INSTRUMENTS`.
+
+  **The distinction is load-bearing, and an earlier draft of this plan got it wrong.** `_NOT_INSTRUMENTS` means *"cannot be unwired"* — filing a known instrument there is a **false statement in the guard's own vocabulary**, and it would let Task 11's empty-`_ALLOWLIST` assertion report the migration complete while the defect is still live. That is this design's exact failure — an instrument reporting a clean result it did not earn — committed by the guard built to prevent it. `_DEFERRED_INSTRUMENTS` exists precisely so "deferred" cannot be spelled "not an instrument": Task 11 asserts it is **empty**, so choosing option 2 **blocks the closeout** until either the helper is migrated or the design's completion criteria are explicitly amended to bless the carve-out. That is the intended friction. Do not route around it.
 
   Decide with the code in front of you. What you may **not** do is `from_rows(list(summary.items()))` or any similar reshaping smuggled in without updating the consumers — that is a silent API change.
 
@@ -480,7 +507,15 @@ _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
 - [ ] **Step 3: Confirm the guard still passes and the drain list is now real**
 
 Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -v`
-Expected: PASS. `_ALLOWLIST` now contains **only** things that genuinely must migrate — that set, not any number written in this plan, is the work Tasks 3–10 drain.
+Expected: PASS, including `test_sets_are_disjoint`. Every seeded entry now sits in exactly one of three sets, and each set is a **claim**:
+
+| Set | The claim it makes | Task 11 |
+|---|---|---|
+| `_ALLOWLIST` | "An instrument. Not migrated **yet**." | must be **empty** |
+| `_NOT_INSTRUMENTS` | "**Cannot** be unwired." (permanent, justified per entry) | may be non-empty |
+| `_DEFERRED_INSTRUMENTS` | "An instrument. **Still broken.** The type cannot express it." | must be **empty** |
+
+`_ALLOWLIST` now contains **only** things that genuinely must migrate — that set, not any number written in this plan, is the work Tasks 3–10 drain.
 
 - [ ] **Step 4: Commit**
 
@@ -781,7 +816,20 @@ resolved-vs-nothing: no declared demand is still a TRUE empty."
 
 **Scope: every `_ALLOWLIST` entry for `big_picture/validator.py`.** That is the counter **and** `validate_synthesis_file` / `validate_rollup_file` (both `-> list[ValidationIssue]`). Read the allowlist; do not work from the function names in this plan.
 
-The two `validate_*` helpers are instruments with a real `unwired` state: they take a **path**, and a file that does not exist or does not parse has not "passed validation" — it was never read. Give them `code="file_not_readable"`. (They return a bare `list`, so unlike `validate_graph` they carry no `has_failures` channel and migrate cleanly — see *Deferred: the validator payload* in Task 7 for why that distinction matters.)
+The two `validate_*` helpers are instruments with real, **verified** `unwired` states — and one of them has a worse bug than a silent empty. They return a bare `list`, so unlike `validate_graph` they carry no `has_failures` channel and migrate cleanly (see *Deferred: the validator payload* in Task 7 for why that distinction matters).
+
+**`validate_synthesis_file` (`:38`) — the unwired state emits confident garbage, not a clean empty.** It checks every `kind:id` reference in the text against `_collect_project_ids(project_root)` (`:74`), which scans `entities/` and `tasks/`. If **neither** directory yields a single ID, `known_ids` is empty — and then the loop at `:44-54` flags **every reference in the file** as `nonexistent_reference`. The check did not run, and instead of returning `[]` it returns a full sheet of false positives. Same disease, opposite symptom: an instrument reporting findings it did not earn. → `unwired`, `code="no_project_ids"`, when `known_ids` is empty.
+
+**`validate_rollup_file` (`:138`) — a silent `or {}` swallow.** Line `:141` is `fm = read_frontmatter(path) or {}`. A rollup whose frontmatter is **missing or unparseable** yields `fm = {}` → `claimed is None` → the orphan-count check is skipped → the function returns `[]`, which the CLI renders as *validated clean*. A rollup that could not be parsed has not passed validation. Two distinct states hide behind that `or {}`:
+
+| Condition | Status |
+|---|---|
+| `read_frontmatter(path)` returns `None` (absent/unparseable) | `unwired`, `code="frontmatter_unreadable"` |
+| Frontmatter parses; no `orphan_question_count` key | `empty`, `code="no_orphan_claim"` — the check ran and there was nothing claimed to contradict |
+| Frontmatter parses; count present and matches | `empty` — a TRUE clean bill |
+| Count present and mismatched | `ok` — one `orphan_count_mismatch` row |
+
+Delete the `or {}` fallback. It is exactly the "silent fallback" the repo's conventions forbid.
 
 **Files:**
 - Modify: `science/src/science_tool/big_picture/validator.py` — `count_research_orphans` (delete, `:116-136`), its caller (`:146`), `validate_synthesis_file`, `validate_rollup_file`
@@ -792,7 +840,11 @@ Note the internal chain: `validate_rollup_file` **calls** `count_research_orphan
 
 **Interfaces:**
 - Consumes: `InstrumentResult` (Task 1).
-- Produces: `list_research_orphans(resolved, project_root) -> InstrumentResult[str]` — rows are orphan question IDs, sorted. **`count_research_orphans` no longer exists.**
+- Produces:
+  - `list_research_orphans(resolved, project_root) -> InstrumentResult[str]` — rows are orphan question IDs, sorted. **`count_research_orphans` no longer exists.**
+  - `validate_synthesis_file(path, project_root) -> InstrumentResult[ValidationIssue]`
+  - `validate_rollup_file(path, project_root) -> InstrumentResult[ValidationIssue]`
+- Consumer: `big_picture/cli.py:68-81` (`validate_cmd`) — the **only** production caller of both validators.
 
 **The ruling (design §2):** the scalar counter is *prohibited*, not wrapped. fb-2026-07-11-014 reported the count and a hand-derived ID list disagreeing (40 vs 31). The surest way for two functions not to disagree is for there to be one function. Callers take `len(result.rows)`.
 
@@ -824,10 +876,63 @@ def test_count_research_orphans_is_gone() -> None:
     assert not hasattr(validator, "count_research_orphans")
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+And the two validator preconditions — **add these, do not skip them**; they are the reason this task owns the module and not just the counter:
 
-Run: `cd science && uv run --frozen pytest tests/test_big_picture_validator.py -v -k orphan`
-Expected: FAIL — `ImportError: cannot import name 'list_research_orphans'`
+```python
+def test_synthesis_validation_is_unwired_when_no_project_ids(tmp_path: Path) -> None:
+    """No entities/ and no tasks/ means the reference check has no corpus.
+
+    Without this, known_ids is empty and EVERY reference in the file is reported
+    as nonexistent -- a full sheet of false positives from a check that never ran.
+    """
+    synth = _write(
+        tmp_path,
+        "h1.md",
+        """---
+id: "synthesis:h1"
+---
+
+## Arc
+
+Work in task:t082 and question:q01 showed a result.
+""",
+    )
+    result = validate_synthesis_file(synth, project_root=tmp_path)
+
+    assert result.status == "unwired"
+    assert result.code == "no_project_ids"
+    # The point of the ruling: it must NOT invent findings it did not earn.
+    assert result.rows == []
+
+
+def test_rollup_validation_is_unwired_when_frontmatter_unreadable(tmp_path: Path) -> None:
+    """`fm = read_frontmatter(path) or {}` rendered an unparseable rollup as clean."""
+    rollup = tmp_path / "synthesis.md"
+    rollup.write_text("no frontmatter here at all\n", encoding="utf-8")
+
+    result = validate_rollup_file(rollup, project_root=tmp_path)
+
+    assert result.status == "unwired"
+    assert result.code == "frontmatter_unreadable"
+
+
+def test_rollup_with_no_orphan_claim_is_empty_not_unwired(tmp_path: Path) -> None:
+    """A parseable rollup that claims no count HAS been checked -- there was
+    simply nothing to contradict. That is `empty`, not `unwired`."""
+    rollup = _write(tmp_path, "synthesis.md", '---\nid: "synthesis:rollup"\n---\n\nBody.\n')
+
+    result = validate_rollup_file(rollup, project_root=tmp_path)
+
+    assert result.status == "empty"
+    assert result.code == "no_orphan_claim"
+```
+
+Update the five existing call sites (`:36`, `:55`, `:70`, `:87`, `:111`, `:130`, `:181`) to read `.rows` — e.g. `issues = validate_synthesis_file(synth, project_root=FIXTURE).rows`. That is a mechanical change and expected, not a regression.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_big_picture_validator.py -v`
+Expected: FAIL — `ImportError: cannot import name 'list_research_orphans'`, and the three new precondition tests fail on `AttributeError: 'list' object has no attribute 'status'`.
 
 - [ ] **Step 3: Implement**
 
@@ -861,18 +966,133 @@ def list_research_orphans(
 
 Add `from science_tool.instruments import InstrumentResult` to the imports.
 
-Update the caller at `:146`:
+- [ ] **Step 4: Migrate `validate_synthesis_file` (`:38`)**
+
+Change the annotation to `-> InstrumentResult[ValidationIssue]`, and gate the reference
+loop on a corpus actually existing:
 
 ```python
-        actual = len(list_research_orphans(resolved, project_root).rows)
+def validate_synthesis_file(path: Path, project_root: Path) -> InstrumentResult[ValidationIssue]:
+    """Return structural issues with a generated synthesis file.
+
+    ``unwired`` when the project yields no IDs at all: the reference check has no
+    corpus, and reporting every reference as nonexistent would be a sheet of false
+    positives from a check that never ran.
+    """
+    issues: list[ValidationIssue] = []
+    text = path.read_text(encoding="utf-8")
+
+    known_ids = _collect_project_ids(project_root)
+    if not known_ids:
+        return InstrumentResult.unwired(
+            code="no_project_ids",
+            reason=(
+                f"No entity or task IDs found under {project_root}. Reference "
+                "validation cannot run; every reference would be flagged nonexistent."
+            ),
+        )
+
+    for match in REFERENCE_PATTERN.finditer(text):
+        ...  # unchanged
+
+    fm = read_frontmatter(path) or {}
+    if fm.get("provenance_coverage") == "thin":
+        ...  # unchanged
+
+    return InstrumentResult.from_rows(issues)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+The `or {}` on the `provenance_coverage` read stays: a synthesis file with no
+frontmatter is not *unvalidatable* — the reference check, which is the bulk of this
+function, still ran. Only the rollup's `or {}` (Step 5) hides a real failure.
+
+- [ ] **Step 5: Migrate `validate_rollup_file` (`:138`) — delete the silent `or {}`**
+
+```python
+def validate_rollup_file(path: Path, project_root: Path) -> InstrumentResult[ValidationIssue]:
+    """Return structural issues with a generated rollup (synthesis.md).
+
+    ``unwired`` when the frontmatter cannot be read: a rollup that did not parse has
+    not passed validation. It previously returned [] here -- rendered as a clean bill.
+    """
+    fm = read_frontmatter(path)
+    if fm is None:
+        return InstrumentResult.unwired(
+            code="frontmatter_unreadable",
+            reason=f"{path.name} has no readable frontmatter; nothing could be checked.",
+        )
+
+    claimed = fm.get("orphan_question_count")
+    if claimed is None:
+        return InstrumentResult.from_rows(
+            [],
+            code="no_orphan_claim",
+            reason=f"{path.name} claims no orphan_question_count; nothing to reconcile.",
+        )
+
+    resolved = resolve_questions(project_root)
+    orphans = list_research_orphans(resolved, project_root)
+    if orphans.status == "unwired":
+        # Propagate: we cannot contradict a claim we could not compute.
+        return InstrumentResult.unwired(code=orphans.code, reason=orphans.reason)
+
+    actual = len(orphans.rows)
+    issues: list[ValidationIssue] = []
+    if int(claimed) != actual:
+        issues.append(
+            ValidationIssue(
+                kind="orphan_count_mismatch",
+                message=f"Rollup claims {claimed} orphans but resolver expected {actual}.",
+                path=path,
+            )
+        )
+    return InstrumentResult.from_rows(issues)
+```
+
+Note the propagation branch: this is the **wrapper-downgrade trap** (Self-Review §7) in
+miniature. `len(list_research_orphans(...).rows)` alone would turn an unwired orphan
+computation into `actual = 0` and then *report a mismatch against it* — a fabricated
+finding. Branch first.
+
+- [ ] **Step 6: Update the CLI consumer (`big_picture/cli.py:68-81`)**
+
+`validate_cmd` is the only production caller. It must surface `unwired` as a **failure
+to check**, distinct from both "clean" and "found issues" — today an unwired validator
+contributes nothing to `issues` and the command exits 0:
+
+```python
+    issues: list[ValidationIssue] = []
+    unchecked: list[tuple[Path, str]] = []
+    if synthesis_dir.is_dir():
+        for path in sorted(synthesis_dir.glob("*.md")):
+            fm = read_frontmatter(path) or {}
+            if fm.get("report_kind") == "synthesis-rollup":
+                result = validate_rollup_file(path, project_root=project_root)
+            else:
+                result = validate_synthesis_file(path, project_root=project_root)
+            if result.status == "unwired":
+                unchecked.append((path, result.reason or result.code or "unknown"))
+            else:
+                issues.extend(result.rows)
+
+    for issue in issues:
+        click.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
+    for path, reason in unchecked:
+        click.echo(f"[not-checked] {path.name}: {reason}", err=True)
+
+    if issues or unchecked:
+        raise click.exceptions.Exit(code=1)
+```
+
+**A file that could not be checked exits non-zero.** Silence here would mean `science
+big-picture validate` passing green over a rollup it never read.
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_big_picture_validator.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Update the command doc**
+- [ ] **Step 8: Update the command doc**
 
 In `commands/big-picture.md:206`, replace the `count_research_orphans(...)` reference with:
 
@@ -880,7 +1100,7 @@ In `commands/big-picture.md:206`, replace the `count_research_orphans(...)` refe
 - Compute via `list_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. `orphan_question_count` is `len(result.rows)` and `orphan_ids` is `result.rows` — **the same call**, so the count and the ID list cannot disagree. The predicate excludes questions whose resolved aspects are only `[software-development]`. Do not re-derive either value by hand.
 ```
 
-- [ ] **Step 6: Verify nothing still *references* the deleted function**
+- [ ] **Step 9: Verify nothing still *references* the deleted function**
 
 A bare `grep count_research_orphans` can never come back clean — it matches the
 deliberate-absence test `test_count_research_orphans_is_gone` written in Step 1.
@@ -893,25 +1113,42 @@ cd science && grep -rnE "(def |import |\.)count_research_orphans|count_research_
 ```
 Expected: **no matches.**
 
-- [ ] **Step 7: Drain the allowlist, full suite**
+- [ ] **Step 10: Drain EVERY `big_picture/validator.py` entry, full suite**
 
-Remove `("big_picture/validator.py", "count_research_orphans")` from `_ALLOWLIST`.
+Remove **every** `("big_picture/validator.py", ...)` entry from `_ALLOWLIST` — not just
+the counter. At the time of writing that is the counter plus `validate_synthesis_file`
+and `validate_rollup_file`, but **read the allowlist, not this sentence**:
+
+```bash
+cd science && grep -n 'big_picture/validator.py' tests/test_instrument_boundary.py
+```
+
+Every line that prints must be gone before you commit. `test_allowlist_has_no_stale_entries`
+catches a leftover, and `test_instrument_namespace_returns_instrument_result` catches a
+helper you migrated the annotation of but forgot to drain — between them the module is
+either fully done or the suite is red. There is no in-between state to ship.
 
 Run: `cd science && uv run --frozen pytest && uv run ruff check && uv run pyright`
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add science/src/science_tool/big_picture/validator.py \
+        science/src/science_tool/big_picture/cli.py \
         science/tests/test_big_picture_validator.py \
         science/tests/test_instrument_boundary.py \
         commands/big-picture.md
-git commit -m "refactor(big-picture): replace count_research_orphans with list_research_orphans
+git commit -m "refactor(big-picture): migrate validator.py to InstrumentResult
 
-The count and a hand-derived orphan_ids list disagreed downstream (40 vs 31).
-The count is now len(rows) of the same call, so there is no second definition
-of the predicate to drift from."
+Replaces count_research_orphans with list_research_orphans: the count and a
+hand-derived orphan_ids list disagreed downstream (40 vs 31), and the count is
+now len(rows) of the same call, so there is no second definition to drift from.
+
+Both validators gain a real unwired state. validate_synthesis_file with no
+project IDs was flagging EVERY reference as nonexistent -- false findings from
+a check that never ran. validate_rollup_file swallowed unreadable frontmatter
+via 'or {}' and reported a clean bill on a file it never parsed."
 ```
 
 ---
@@ -1575,15 +1812,24 @@ only -- a spurious unwired is as dishonest as a spurious empty."
 
 **Interfaces:**
 - Consumes: `InstrumentResult` (Task 1).
-- Produces: each `collect_*` returns `InstrumentResult[<its existing row type>]` — e.g. `collect_unresolved_refs -> InstrumentResult[UnresolvedRef]`. **Row types are unchanged.**
+- Produces: **each allowlisted helper in this module** — whatever its name prefix — returns `InstrumentResult[<its existing row type>]`, e.g. `collect_unresolved_refs -> InstrumentResult[UnresolvedRef]`, `list_health_checks -> InstrumentResult[<its row type>]`. **Row types are unchanged.**
 
-**Precondition analysis (do this before writing code).** These are the health instruments, and they are the ones most likely to have a real `unwired` state — a check that scans a directory that does not exist has not "found no problems", it has not run. For each of the 10, ask: *is there an input whose absence makes an empty result meaningless?* A directory that does not exist, a graph layer that is missing, a registry that failed to load — those are `unwired`. A directory that exists and is clean is `empty`.
+**Precondition analysis (do this before writing code).** These are the health instruments, and they are the ones most likely to have a real `unwired` state — a check that scans a directory that does not exist has not "found no problems", it has not run. For **each entry the allowlist names for this module**, ask: *is there an input whose absence makes an empty result meaningless?* A directory that does not exist, a graph layer that is missing, a registry that failed to load — those are `unwired`. A directory that exists and is clean is `empty`.
 
-- [ ] **Step 1: Enumerate the helpers and their preconditions**
+- [ ] **Step 1: Enumerate the helpers from the ALLOWLIST — not from a name prefix**
 
-Run: `cd science && grep -n "^def collect_" src/science_tool/graph/health.py`
+```bash
+cd science && grep -n 'graph/health.py' tests/test_instrument_boundary.py
+```
 
-For each, write one line in a scratch note: helper → precondition (or "none — cannot be unwired"). This is the actual intellectual work of the task; the code that follows is mechanical.
+**That output is the work list.** Do **not** use `grep "^def collect_"` — an earlier draft
+of this plan did exactly that, and the `collect_` prefix silently excludes real instruments
+in this module such as `list_health_checks` and `check_dataset_anomalies`. This is the same
+list-vs-query error the design warns about (Self-Review, "the list-vs-query lesson"), and it
+is worth naming twice because it has now been made twice: **a naming convention is not a
+boundary.** The allowlist is generated from the code; a prefix is a guess about the code.
+
+For each entry, write one line in a scratch note: helper → precondition (or "none — cannot be unwired"). This is the actual intellectual work of the task; the code that follows is mechanical.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1596,11 +1842,21 @@ Expected: FAIL
 
 Change each return annotation to `InstrumentResult[...]`; return `InstrumentResult.unwired(code=..., reason=...)` on an absent precondition and `InstrumentResult.from_rows(rows)` otherwise.
 
-- [ ] **Step 4: Update consumers**
+- [ ] **Step 4: Update consumers — search for EVERY migrated helper, generated from the allowlist**
 
-Run: `cd science && grep -rn "collect_unresolved_refs\|collect_unregistered_ref_kinds\|collect_lingering_tags\|collect_validation_findings" src/`
+Build the pattern from the allowlist entries you enumerated in Step 1, not from a
+hand-typed list of four names (an earlier draft hard-coded exactly that, and it missed
+the helpers the `collect_` prefix had already dropped):
 
-The `science health` renderer must surface `unwired` distinctly — this is the command that fb-2026-07-10-021 says currently "spams skip warnings", so an unwired health check must read as a *failure to check*, not a clean bill.
+```bash
+cd science
+FNS=$(grep 'graph/health.py' tests/test_instrument_boundary.py \
+      | sed -E 's/.*, *"([a-zA-Z_]+)".*/\1/' | paste -sd'|')
+grep -rnE "\b(${FNS})\b" src/ tests/
+```
+
+Every hit outside `health.py` itself is a consumer that must take `.rows` or branch on
+`unwired`. The `science health` renderer must surface `unwired` distinctly — this is the command that fb-2026-07-10-021 says currently "spams skip warnings", so an unwired health check must read as a *failure to check*, not a clean bill.
 
 - [ ] **Step 5: Run tests, drain allowlist, full suite**
 
@@ -1622,11 +1878,23 @@ A health check that could not scan its input has not found zero problems."
 
 ### Task 9: `graph/attention.py` — return shape ONLY
 
-**Files:**
-- Modify: `science/src/science_tool/graph/attention.py` (3 helpers)
+**This task has two possible shapes. Task 2b decides which one you execute — read its
+recorded ruling for `compute_attention_candidates` in `docs/plans/2026-07-11-instrument-triage.md`
+BEFORE touching any file.** Everything below is written twice, once per branch, because
+pre-deciding it is exactly the mistake this plan keeps catching itself making.
+
+**Files (branch A — `compute_attention_candidates` ruled an INSTRUMENT):**
+- Modify: `science/src/science_tool/graph/attention.py` (all three allowlisted helpers)
+- Modify: `science/src/science_tool/wander/sampling.py`, `science/src/science_tool/wander/cli.py`
+- Modify: `science/tests/test_attention_sampling.py`, `science/tests/test_wander_context.py`
+
+**Files (branch B — ruled `_NOT_INSTRUMENTS`):**
+- Modify: `science/src/science_tool/graph/attention.py` (the two `query_*` helpers **only**)
+- The `wander` consumers and their tests are **untouched** — that is the whole point of branch B.
 
 **Interfaces:**
-- Produces: `compute_attention_candidates -> InstrumentResult[AttentionCandidate]`, `query_attention_sample -> InstrumentResult[dict[str, Any]]`, `query_attention_ranked -> InstrumentResult[dict[str, Any]]`.
+- Produces (both branches): `query_attention_sample -> InstrumentResult[dict[str, Any]]`, `query_attention_ranked -> InstrumentResult[dict[str, Any]]`.
+- Produces (**branch A only**): `compute_attention_candidates -> InstrumentResult[AttentionCandidate]`. Under branch B it **keeps** its `Sequence[AttentionCandidate]` contract and moves to `_NOT_INSTRUMENTS`.
 
 > **SCOPE FENCE — read this before touching the file.**
 > **Do NOT change the scoring model.** `days_since_last_review` is a *multiplicative*
@@ -1673,9 +1941,14 @@ The same shape for `query_attention_ranked`. The rule: **`unwired` propagates; t
 
 Sampling/ranking helpers (`weighted_sample_without_replacement`, `reason_aware_sample_candidates`) keep taking `Sequence[AttentionCandidate]` — they are pure, and Task 2b should have classified them `_NOT_INSTRUMENTS`. **Do not wrap them.**
 
-- [ ] **Step 3: Update the `wander` consumers**
+- [ ] **Step 3: Update the `wander` consumers — BRANCH A ONLY**
 
-`wander/sampling.py` and `wander/cli.py` call into these. Pass `.rows` at the boundary, and surface `unwired` in the wander CLI rather than presenting an empty walk as a completed one.
+**Under branch B, skip this step entirely.** `compute_attention_candidates` still returns
+`Sequence[AttentionCandidate]`, so `wander/sampling.py` and `wander/cli.py` compile and
+pass unchanged — and *not touching them* is precisely the payoff of that ruling. Do not
+"tidy" them into `.rows` anyway; there would be no `.rows` to take.
+
+Under branch A: `wander/sampling.py` and `wander/cli.py` call into these. Pass `.rows` at the boundary, and surface `unwired` in the wander CLI rather than presenting an empty walk as a completed one.
 
 - [ ] **Step 4: Verify the scoring is untouched**
 
@@ -1685,21 +1958,42 @@ Expected: **no output.** Any hit means the scope fence was crossed — revert th
 - [ ] **Step 5: Run tests**
 
 Run: `cd science && uv run --frozen pytest -k "attention or wander" -v`
-Expected: PASS. `tests/test_attention_sampling.py` and `tests/test_wander_context.py` will need updating to `.rows` — that is expected, not a regression.
+Expected: PASS.
+
+- Branch A: `tests/test_attention_sampling.py` and `tests/test_wander_context.py` need updating to `.rows` — expected, not a regression.
+- Branch B: **both test files should pass untouched.** If either needs editing, you have crossed into branch A by accident — stop and re-read the Task 2b ruling.
 
 - [ ] **Step 6: Drain allowlist, full suite, commit**
 
-Remove every `graph/attention.py` entry from `_ALLOWLIST` that this task migrated (the pure helpers stay in `_NOT_INSTRUMENTS`).
+Remove from `_ALLOWLIST` every `graph/attention.py` entry **that this task migrated**. Under
+branch B, `compute_attention_candidates` is not one of them — it belongs in `_NOT_INSTRUMENTS`
+(moved there by Task 2b), and the pure helpers stay there too.
 
 ```bash
 cd science && uv run --frozen pytest && uv run ruff check && uv run pyright
+```
+
+Stage the files for **your branch** — under branch B the four `wander`/test paths are not
+in the diff at all:
+
+```bash
+# Branch A:
 git add science/src/science_tool/graph/attention.py \
         science/src/science_tool/wander/sampling.py \
         science/src/science_tool/wander/cli.py \
         science/tests/test_attention_sampling.py \
         science/tests/test_wander_context.py \
         science/tests/test_instrument_boundary.py
-git commit -m "refactor(attention): migrate return shape to InstrumentResult
+
+# Branch B:
+git add science/src/science_tool/graph/attention.py \
+        science/tests/test_instrument_boundary.py
+```
+
+Commit message — **branch A**:
+
+```
+refactor(attention): migrate return shape to InstrumentResult
 
 Return shape only -- but it propagates: wander/sampling and wander/cli consume
 these candidates, so unwired now propagates through sampling instead of
@@ -1707,7 +2001,21 @@ presenting an empty walk as a completed one.
 
 The days_since_last_review scoring defect is deliberately NOT fixed here. It is
 multiplicative, so the 365 constant is inert -- and the naive repair would make
-unstamped entities dominate the ranking. Separate design."
+unstamped entities dominate the ranking. Separate design.
+```
+
+Commit message — **branch B**:
+
+```
+refactor(attention): migrate the query helpers to InstrumentResult
+
+query_attention_sample and query_attention_ranked are the user-facing surfaces
+and gain a status. compute_attention_candidates is NOT an instrument: <the Task 2b
+justification, in one line>. It keeps its Sequence contract, so wander is untouched.
+
+The days_since_last_review scoring defect is deliberately NOT fixed here. It is
+multiplicative, so the 365 constant is inert -- and the naive repair would make
+unstamped entities dominate the ranking. Separate design.
 ```
 
 ---
@@ -1769,25 +2077,42 @@ tuple[list, str|None] reason channel. That second element was InstrumentResult
 ### Task 11: Close out — the guard is the definition of done
 
 **Files:**
-- Modify: `science/tests/test_instrument_boundary.py` (assert the allowlist is empty)
+- Modify: `science/tests/test_instrument_boundary.py` (assert `_ALLOWLIST` **and** `_DEFERRED_INSTRUMENTS` are both empty)
 - Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (Status → Implemented)
 
-- [ ] **Step 1: Make the empty allowlist permanent**
+- [ ] **Step 1: Make the completion permanent — BOTH sets**
 
 Add to the guard:
 
 ```python
-def test_allowlist_is_empty() -> None:
-    """The migration is complete. A new entry here is a regression, not a carve-out.
+def test_migration_is_complete() -> None:
+    """The migration is complete. A new entry in EITHER set is a regression.
 
     Per the convergence design: an allowlist entry the guard would still flag means
     the migration is incomplete -- NOT a carve-out to add.
+
+    _DEFERRED_INSTRUMENTS is asserted empty for the same reason, and it is the more
+    important of the two: a deferred entry is a KNOWN instrument that still lies to
+    its callers. Draining _ALLOWLIST while _DEFERRED_INSTRUMENTS quietly holds one
+    would let this guard certify a completion it did not earn -- which is precisely
+    the failure the whole design exists to stop.
     """
     assert _ALLOWLIST == frozenset(), (
         "The instrument-result migration is finished. Do not re-open the allowlist; "
         "migrate the helper instead."
     )
+    assert _DEFERRED_INSTRUMENTS == frozenset(), (
+        "A known instrument is still unmigrated. This test is the intended blocker: "
+        "either migrate it, or amend the design's completion criteria to bless the "
+        "carve-out explicitly. Moving it to _NOT_INSTRUMENTS is NOT the fix -- that "
+        "set means 'cannot be unwired', which is a false claim about this helper."
+    )
 ```
+
+**If `_DEFERRED_INSTRUMENTS` is non-empty when you reach this step** (the live candidate is `coverage_summary`, ruled on in Task 2b), you have exactly two ways forward and neither is silent:
+
+1. **Migrate it** — reshape to rows, update consumers, drain the entry. Preferred.
+2. **Amend the design** — add a *Deferred* subsection to `docs/plans/2026-07-11-instrument-result-convergence-design.md` naming the helper, why the type cannot express it, and what would resolve it; then relax this assertion to permit **exactly** that entry, by name, citing the design section. A bare `assert True` or a quiet deletion of the assertion is a plan violation.
 
 - [ ] **Step 2: Run the full acceptance set from the design**
 
@@ -1881,3 +2206,30 @@ they are corrected above and listed so a reader can re-check them cheaply):
    it out; **review for it explicitly.**
 
 8. **The quadratic scan in `compute_topic_gaps` is NOT fixed.** `_compute_demand` still re-globs every question once per topic. Task 3 hoists a separate single-pass scan for the precondition and leaves the existing demand loop alone. A first draft of this plan claimed the task removed the quadratic scan; it does not, and the claim has been withdrawn rather than the scope enlarged.
+
+9. **"Deferred" cannot be spelled "not an instrument."** An earlier draft let Task 2b park
+   `coverage_summary` in `_NOT_INSTRUMENTS` with a comment saying it was deferred. But that
+   set's entries are *claims* — "this helper cannot be unwired" — so filing a known instrument
+   there is a **false statement in the guard's own vocabulary**, and it would let Task 11's
+   empty-`_ALLOWLIST` assertion certify the migration complete while the defect stayed live.
+   The guard would have reported a clean result it did not earn: **this design's exact bug,
+   committed by the guard built to prevent it** — the same shape as the wrapper-downgrade trap
+   (§7) and the transcribed allowlist. Hence a third set, `_DEFERRED_INSTRUMENTS`, which Task 11
+   asserts is **empty**: a deferral now *blocks the closeout* until it is paid off or the design's
+   completion criteria are explicitly amended. Three sets, three distinct claims, no silent
+   third state. `test_sets_are_disjoint` keeps them from being blurred.
+
+10. **A naming convention is not a boundary.** Task 8 owned its whole module in the header but
+    then enumerated `def collect_` in its steps — which silently drops `list_health_checks` and
+    `check_dataset_anomalies`. That is the list-vs-query error above in miniature, made *after*
+    the lesson was written down, inside the very task the lesson was written for. Every
+    enumeration step in every migration task now greps `_ALLOWLIST` for its module. If you find
+    yourself typing a function name into a `grep` while executing this plan, stop: **the
+    allowlist is the work order**, and anything else is a guess about the code rather than a
+    query against it.
+
+11. **Task 9 has two shapes and the plan does not pick one.** Whether
+    `compute_attention_candidates` is an instrument decides whether `wander/` is in the blast
+    radius at all. Task 2b rules; Task 9 is written as branch A / branch B throughout — files,
+    steps, tests, staged paths, and commit message. An earlier draft delegated the *decision*
+    while its metadata quietly assumed the *outcome*, which is a decision made by accident.

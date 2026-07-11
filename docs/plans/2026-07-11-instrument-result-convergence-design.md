@@ -306,6 +306,27 @@ as they migrate**. Per the convergence design (its line 271): an allowlist entry
 the guard would still flag means the migration is incomplete — *not* a carve-out
 to add.
 
+**Three sets, three distinct claims.** A flagged helper lands in exactly one, and
+each is an assertion the guard holds you to:
+
+| Set | Claim | At closeout |
+|---|---|---|
+| `_ALLOWLIST` | "An instrument. Not migrated **yet**." | must be **empty** |
+| `_NOT_INSTRUMENTS` | "**Cannot** be unwired." Permanent; justified per entry. | may be non-empty |
+| `_DEFERRED_INSTRUMENTS` | "An instrument. **Still broken.** The type cannot express its shape." | must be **empty** |
+
+The third set exists because the type is row-shaped and two helpers in the namespace
+are not (`coverage_summary`'s mapping; the `validate_graph*` family's `has_failures`
+channel). Without it, the only place to park such a helper is `_NOT_INSTRUMENTS` —
+whose entries *claim the helper cannot be unwired*. Filing a known instrument there
+would be a false statement in the guard's own vocabulary, and it would let the
+empty-`_ALLOWLIST` check certify the migration complete while the defect stayed live:
+**a guard reporting a clean result it did not earn — this design's exact bug, committed
+by the mechanism built to prevent it.** So deferral is given its own name, and the
+closeout asserts that name is empty. A deferral therefore *blocks* completion until it
+is paid off or this design's completion criteria are amended to bless it explicitly.
+Silence is not one of the options.
+
 Known gap, stated rather than hidden: the guard checks the return **annotation**,
 so an un-annotated helper, or one annotated `Any`, evades it. This is a ratchet
 against the bare-collection return that recurred across the tree, not a sandbox —
@@ -410,7 +431,9 @@ cd science/model && uv run --frozen pytest
 
 Acceptance:
 
-- `test_instrument_boundary.py` passes with an **empty** allowlist.
+- `test_instrument_boundary.py` passes with **both** `_ALLOWLIST` and
+  `_DEFERRED_INSTRUMENTS` empty. Draining the first while the second holds a known
+  instrument is not completion — it is the guard certifying a result it did not earn.
 - `InstrumentResult` **rejects** each invalid construction: `ok` with no rows,
   `empty` with rows, `unwired` with rows, and `unwired` without a `code`. These are
   unit tests on the validator, not conventions in a docstring.
