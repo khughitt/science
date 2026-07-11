@@ -66,18 +66,27 @@ def validate_cmd(project_root: Path) -> None:
     synthesis_dir = entity_dir(project_root, "synthesis")
 
     issues = []
+    unchecked: list[tuple[Path, str]] = []
     if synthesis_dir.is_dir():
         for path in sorted(synthesis_dir.glob("*.md")):
             fm = read_frontmatter(path) or {}
             if fm.get("report_kind") == "synthesis-rollup":
-                issues.extend(validate_rollup_file(path, project_root=project_root))
+                result = validate_rollup_file(path, project_root=project_root)
             else:
-                issues.extend(validate_synthesis_file(path, project_root=project_root))
+                result = validate_synthesis_file(path, project_root=project_root)
+            if result.status == "unwired":
+                unchecked.append((path, result.reason or result.code or "unknown"))
+            else:
+                issues.extend(result.rows)
 
     for issue in issues:
         click.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
+    for path, reason in unchecked:
+        click.echo(f"[not-checked] {path.name}: {reason}", err=True)
 
-    if issues:
+    # A file that could NOT be checked exits non-zero. Silence here would mean this
+    # command passing green over a rollup it never read.
+    if issues or unchecked:
         raise click.exceptions.Exit(code=1)
 
 

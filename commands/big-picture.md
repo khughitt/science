@@ -218,7 +218,7 @@ git hash-object entities/synthesis/<emergent-threads>.md
 
 **Orphan-question counting**:
 
-- Compute via `count_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. The count excludes questions whose resolved aspects are only `[software-development]`; these are out of scope for research synthesis. The orchestrator does not re-derive this count manually — delegate to the helper so the rollup and validator agree on the definition.
+- Compute via `list_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. `orphan_question_count` is `len(result.rows)` and `orphan_ids` is `result.rows` — **the same call**, so the count and the ID list cannot disagree. (They did: a rollup once reported 40 orphans beside a hand-derived list of 31.) The predicate excludes questions whose resolved aspects are only `[software-development]`; these are out of scope for research synthesis. Do not re-derive either value by hand. There is deliberately no `count_research_orphans`.
 
 **Citation inheritance**: the rollup inherits the citation and grounding requirements from the per-hypothesis files. Every factual claim traces back to a specific per-hypothesis file's content. No new unsupported claims are introduced at the rollup level.
 
