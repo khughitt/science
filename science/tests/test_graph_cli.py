@@ -272,7 +272,7 @@ def test_graph_build_local_only_leaves_existing_composite_untouched() -> None:
             return graph_path
 
         with (
-            patch("science_tool.cli.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.graph.build.materialize_graph", side_effect=fake_materialize),
             patch("science_tool.registry.config.ensure_registered"),
             patch("science_tool.graph.composite.assemble_composite_graph") as assemble,
             patch("science_tool.graph.sources.load_project_sources", return_value=None),
@@ -316,7 +316,7 @@ def test_graph_build_default_refreshes_composite_when_peers_exist() -> None:
             return out
 
         with (
-            patch("science_tool.cli.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.graph.build.materialize_graph", side_effect=fake_materialize),
             patch("science_tool.registry.config.ensure_registered"),
             patch("science_tool.graph.composite.assemble_composite_graph", side_effect=fake_assemble) as assemble,
             patch("science_tool.graph.sources.load_project_sources", return_value=None),
