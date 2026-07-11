@@ -23,6 +23,8 @@ Every task's requirements implicitly include this section. Values copied verbati
 - **The 95 `raise click.ClickException(str(exc))` wrappers stay as-is.** They are the correct CLI-layer job (domain error → exit code); do not factor them into a decorator.
 - **No AI-attribution trailers** on commits (no `Co-Authored-By`, no `🤖 Generated with…`). No `Unified` prefix on new symbols. No "legacy"/"compatibility" shims. Composition over inheritance; explicit over defensive; fail early.
 
+**Sanctioned behavior delta (owner-accepted, 6th, recorded post-hoc).** `graph build` (Task 4) now calls `build_project_graph(...)` inside the pre-existing `except ValueError` → `click.ClickException` wrapper in `graph/cli.py` (~lines 82-85). Because `build_project_graph` bundles config-loading and pydantic's `ValidationError` subclasses `ValueError`, a malformed `science.yaml` now surfaces as a clean `Error: 1 validation error for ProjectConfig…` `ClickException` message plus a `command_error` telemetry event, instead of a raw pydantic traceback. The exit code is unchanged (1); only the stderr text and the added telemetry write differ. The owner reviewed this and accepted it as strictly better UX, consistent with the project's own convention that CLI-layer `ClickException(str(exc))` wrapping is correct — recorded here rather than left as unnoticed drift.
+
 ---
 
 ## File Structure
