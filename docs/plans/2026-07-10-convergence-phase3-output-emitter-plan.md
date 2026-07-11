@@ -57,7 +57,7 @@ def some_cmd(..., output_format: str) -> None:
 |---|---|
 | `json.dumps(payload, indent=2)` | *(none — `indent=2` is the default)* |
 | `json.dumps(payload, indent=2, sort_keys=True)` *(very common — `datasets_qa`, `_emit_entity_show`, `graph_cross_impact`, `graph_export_json`, `tasks_show`, `project_verify`, `search_command`, `qa_audit_command`, …)* | `sort_keys=True` |
-| `json.dumps(payload)` *(no indent — e.g. `bib_add`, `stats_cmd`, `search`)* | `indent=None` |
+| `json.dumps(payload)` *(no indent — e.g. `bib_add`, `stats_cmd`)* | `indent=None` |
 | `json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)` *(`verdict/cli.py:_emit_json`)* | `sort_keys=True, ensure_ascii=False` |
 | `json.dumps(info, indent=2, default=str)` *(`inquiry_show`)* | `default=str` |
 | `_json.dumps(report, indent=2)` *(function-local `import json as _json`)* | *(none)* — and delete the now-unused `import json as _json` |
@@ -210,7 +210,8 @@ def emit_query_rows(
     meta: Mapping[str, Any] | None = None,
     renderers: Mapping[str, Callable[[Any, Mapping[str, Any]], Any]] | None = None,
 ) -> None:
-    payload: dict[str, Any] = {"format": "json", "rows": list(rows)}
+    rows_list = list(rows)
+    payload: dict[str, Any] = {"format": "json", "rows": rows_list}
     if meta is not None:
         payload["meta"] = dict(meta)
 
@@ -222,7 +223,7 @@ def emit_query_rows(
             table.add_column(label, **col_kwargs)
 
         cell_renderers = renderers or {}
-        for row in rows:
+        for row in rows_list:
             cells: list[Any] = []
             for key, *_ in columns:
                 value = row.get(key, "")
