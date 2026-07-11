@@ -60,12 +60,12 @@ def test_gaps_contested_is_belief_derived_not_count_based(tmp_path: Path):
 
     # Circular dispute: support_count>0 and dispute_count>0 under the old rule, but belief
     # excludes the circular line, so query_gaps must NOT flag contested.
-    circ_rows = query_gaps(graph_path=graph_path, center=str(CIRC), hops=1, limit=50)
+    circ_rows = query_gaps(graph_path=graph_path, center=str(CIRC), hops=1, limit=50).rows
     circ_row = next((r for r in circ_rows if r["entity"] == str(CIRC)), None)
     if circ_row is not None:
         assert "evidential_fragility(contested)" not in circ_row["issues"]
 
     # Independent dispute: belief keeps it, so query_gaps flags contested.
-    real_rows = query_gaps(graph_path=graph_path, center=str(REAL), hops=1, limit=50)
+    real_rows = query_gaps(graph_path=graph_path, center=str(REAL), hops=1, limit=50).rows
     real_row = next(r for r in real_rows if r["entity"] == str(REAL))
     assert "evidential_fragility(contested)" in real_row["issues"]

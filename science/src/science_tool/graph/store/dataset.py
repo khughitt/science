@@ -25,6 +25,11 @@ def init_graph_file(graph_path: Path) -> None:
     graph_path.parent.mkdir(parents=True, exist_ok=True)
     graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
 
+    # NOTE: no revision manifest is written here, deliberately. An initialized graph has
+    # never been materialized from inputs, so it HAS no baseline -- and `graph diff` is
+    # correctly `unwired` against it rather than claiming "all inputs up to date".
+    # (Round-tripping through save_graph_dataset to mint an empty baseline would drop the
+    # template's empty named-graph layer declarations, which the file must keep.)
     project_root = _project_root_from_graph_path(graph_path)
     _copy_viz_notebook(project_root / "code" / "notebooks")
 

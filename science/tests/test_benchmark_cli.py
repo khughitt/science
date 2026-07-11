@@ -12,6 +12,21 @@ from click.testing import CliRunner
 from science_tool.cli import main as science_cli
 
 
+def _scaffold(root: Path) -> None:
+    """Give the project the dataset-catalog directory a scaffolded project has.
+
+    A project WITHOUT ``entities/datasets/`` is ``unwired`` for the benchmark catalog
+    (``benchmark_catalog.benchmark_sources``): the scan never ran, so its zero rows say
+    nothing, and the benchmark reports refuse rather than render "no opportunities" /
+    "every entity is a gap" from a catalog they could not read. That behavior is owned by
+    tests/test_catalog_preconditions.py.
+
+    The projects here have zero *benchmark* datasets, which is a different thing — a real,
+    scanned zero. So they get the directory.
+    """
+    (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+
+
 def _write_dataset(root: Path, slug: str, frontmatter: str) -> None:
     path = root / "entities" / "datasets" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -19,6 +34,7 @@ def _write_dataset(root: Path, slug: str, frontmatter: str) -> None:
 
 
 def _write_entity(root: Path, folder: str, slug: str, frontmatter: str, *, body: str) -> None:
+    _scaffold(root)
     path = root / "entities" / folder / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"---\n{frontmatter}---\n{body}\n", encoding="utf-8")
@@ -289,6 +305,15 @@ benchmark:
 
 
 def test_coverage_summary_json_omits_rows_when_no_rows_match(tmp_path: Path) -> None:
+    """A FILTER miss on a scanned catalog — the only kind of zero this may assert.
+
+    It used to get its zero from a project with no ``entities/datasets/`` at all, i.e.
+    from a scan that never ran; that empty summary was the silent-instrument bug, not a
+    finding. The project is now scaffolded, so the catalog is genuinely scanned and
+    genuinely empty of ``no-such-domain``. The missing-directory case is a refusal, and
+    lives in tests/test_catalog_preconditions.py.
+    """
+    _scaffold(tmp_path)
     result = _invoke(tmp_path, "--domain", "no-such-domain", "--coverage-summary", "--format", "json")
 
     assert result.exit_code == 0
@@ -322,7 +347,9 @@ benchmark:
     payload = json.loads(result.stdout)
     assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
     assert payload["commons_notice"]
-    assert "notice: commons benchmarks unavailable" in result.stderr
+    # `benchmark list` returns an InstrumentResult, so its caveat goes out through the
+    # one CLI unwrap point (output.unwrap_instrument) — an ok/empty result with a reason.
+    assert "notice (commons_unavailable):" in result.stderr
 
 
 def test_benchmark_list_commons_corrupt_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
@@ -347,7 +374,9 @@ benchmark:
     payload = json.loads(result.stdout)
     assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
     assert payload["commons_notice"]
-    assert "notice: commons benchmarks unavailable" in result.stderr
+    # `benchmark list` returns an InstrumentResult, so its caveat goes out through the
+    # one CLI unwrap point (output.unwrap_instrument) — an ok/empty result with a reason.
+    assert "notice (commons_unavailable):" in result.stderr
 
 
 def test_benchmark_list_commons_non_object_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
@@ -372,10 +401,14 @@ benchmark:
     payload = json.loads(result.stdout)
     assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
     assert payload["commons_notice"]
-    assert "notice: commons benchmarks unavailable" in result.stderr
+    # `benchmark list` returns an InstrumentResult, so its caveat goes out through the
+    # one CLI unwrap point (output.unwrap_instrument) — an ok/empty result with a reason.
+    assert "notice (commons_unavailable):" in result.stderr
 
 
 def test_coverage_summary_table_renders_when_no_rows_match(tmp_path: Path) -> None:
+    """Same inversion as the JSON case: the zero must come from a FILTER, not a missing dir."""
+    _scaffold(tmp_path)
     result = _invoke(tmp_path, "--domain", "biology", "--coverage-summary")
 
     assert result.exit_code == 0
@@ -863,6 +896,7 @@ title: Cytogenetic project model
 
 
 def test_benchmark_hint_candidates_cli_include_existing_json(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     result = _invoke_hint_candidates(tmp_path, "--include-existing", "--format", "json")
 
     assert result.exit_code == 0
@@ -1001,6 +1035,7 @@ title: Cytogenetic benchmark gap
 
 
 def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     output_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
     output_path.parent.mkdir(parents=True)
@@ -1021,6 +1056,7 @@ def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Pa
 def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_root(
     tmp_path: Path, monkeypatch
 ) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
 
     result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", "../outside.yaml")
@@ -1033,6 +1069,7 @@ def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_r
 def test_benchmark_hint_candidates_cli_rejects_absolute_output_outside_project_root(
     tmp_path: Path, monkeypatch
 ) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     outside_path = tmp_path.parent / "outside-absolute.yaml"
 
@@ -1044,6 +1081,7 @@ def test_benchmark_hint_candidates_cli_rejects_absolute_output_outside_project_r
 
 
 def test_benchmark_hint_candidates_cli_table_empty_state(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     result = _invoke_hint_candidates(tmp_path)
 
     assert result.exit_code == 0
@@ -1659,6 +1697,7 @@ benchmark:
 
 
 def test_benchmark_tests_cli_invalid_entity_and_facet_errors(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     entity_result = _invoke_tests(tmp_path, "--entity", "hypothesis:missing")
     assert entity_result.exit_code != 0
     assert "Entity not found" in entity_result.output
@@ -2600,6 +2639,7 @@ benchmark:
 
 
 def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     result = _invoke_test_triage(
@@ -2622,6 +2662,7 @@ def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tm
 
 
 def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
     output_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / "custom.yaml"
     output_path.parent.mkdir(parents=True)
@@ -2640,6 +2681,7 @@ def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, 
 
 
 def test_benchmark_test_triage_cli_rejects_output_outside_project_root(tmp_path: Path, monkeypatch) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     relative_result = _invoke_test_triage(tmp_path, "--write-review-file", "--output", "../outside.yaml")
@@ -2655,6 +2697,7 @@ def test_benchmark_test_triage_cli_rejects_output_outside_project_root(tmp_path:
 
 
 def test_benchmark_test_triage_cli_json_and_commons_notice(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     result = _invoke_test_triage(tmp_path, "--commons", "--format", "json")
 
     assert result.exit_code == 0

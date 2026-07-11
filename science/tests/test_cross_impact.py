@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, Literal, Namespace, URIRef
@@ -206,3 +207,19 @@ def test_cross_impact_query_stays_under_five_seconds_on_large_fixture(
     assert elapsed < 5.0
     assert payload["scope"] == "project-wide"
     assert len(payload["rows"]) == 800
+
+
+def test_cross_impact_rejects_a_nonexistent_target(runner: CliRunner, graph_path: Path) -> None:
+    """A typo'd target must NOT yield an empty impact set rendered as "no impact".
+
+    `_resolve_center_entity` mints a well-formed URIRef from any string without
+    consulting the graph -- the root cause behind query_gaps' fabricated fragility row
+    and query_evidence's fabricated "no evidence" claim. This asserts cross_impact does
+    NOT share that fate: it must fail loudly rather than report a confident zero.
+    """
+    _build_local_graph(graph_path)
+
+    with pytest.raises(click.ClickException) as exc:
+        query_cross_impact(graph_path=graph_path, target_ref="proposition/does-not-exist", limit=10)
+
+    assert "not found" in str(exc.value)

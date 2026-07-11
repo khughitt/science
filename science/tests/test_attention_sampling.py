@@ -169,7 +169,7 @@ def test_open_question_debt_counts_related_and_theme_comembers() -> None:
 
 
 def test_open_question_debt_raises_weight_and_emits_reason() -> None:
-    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     indebted = by_id["hypothesis:h_scope"]   # debt 2
@@ -194,7 +194,7 @@ def test_open_question_debt_raises_weight_and_emits_reason() -> None:
 
 
 def test_zero_debt_emits_no_debt_reason() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
     for candidate in by_id.values():
         assert all(r.code != "open_question_debt" for r in candidate.reasons)
@@ -202,7 +202,7 @@ def test_zero_debt_emits_no_debt_reason() -> None:
 
 
 def test_format_attention_candidate_exposes_open_question_debt() -> None:
-    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
     row = format_attention_candidate(by_id["hypothesis:h_scope"])
     assert row["open_question_debt"] == "2"
@@ -216,18 +216,18 @@ def test_query_attention_ranked_is_deterministic_by_weight(tmp_path: Path) -> No
     graph_path = tmp_path / "graph.trig"
     save_canonical_graph_dataset(_debt_fixture(), graph_path)
 
-    rows = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+    rows = query_attention_ranked(graph_path, today=date(2026, 5, 1)).rows
     ids = [row["id"] for row in rows]
     # h_scope (debt 2) outranks h_other (debt 1); both carry the debt field.
     assert ids.index("hypothesis:h_scope") < ids.index("hypothesis:h_other")
     assert rows[0]["open_question_debt"] == "2"
 
-    top1 = query_attention_ranked(graph_path, today=date(2026, 5, 1), limit=1)
+    top1 = query_attention_ranked(graph_path, today=date(2026, 5, 1), limit=1).rows
     assert [row["id"] for row in top1] == ["hypothesis:h_scope"]
 
 
 def test_attention_weight_uses_observable_graph_features() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     contested = by_id["hypothesis:h1"]
@@ -248,7 +248,7 @@ def test_attention_weight_uses_observable_graph_features() -> None:
 
 
 def test_phase1_reason_derivation_is_proposition_scoped() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     assert by_id["proposition:unscaffolded"].reasons == [
@@ -298,7 +298,7 @@ def test_phase1_reason_derivation_is_proposition_scoped() -> None:
 
 
 def test_format_attention_candidate_includes_reasons_for_json_ready_rows() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     row = format_attention_candidate(by_id["proposition:unscaffolded"])
@@ -318,7 +318,7 @@ def test_format_attention_candidate_includes_reasons_for_json_ready_rows() -> No
 
 
 def test_format_attention_candidate_uses_empty_reasons_list_when_no_reason_qualifies() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     row = format_attention_candidate(by_id["hypothesis:not_reason_scoped"])
@@ -327,7 +327,7 @@ def test_format_attention_candidate_uses_empty_reasons_list_when_no_reason_quali
 
 
 def test_weighted_sampling_is_seeded_and_without_replacement() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
 
     first = weighted_sample_without_replacement(candidates, limit=2, seed=17)
     second = weighted_sample_without_replacement(candidates, limit=2, seed=17)
@@ -337,7 +337,7 @@ def test_weighted_sampling_is_seeded_and_without_replacement() -> None:
 
 
 def test_epsilon_floor_keeps_quiet_candidates_sampleable() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
 
     sample = weighted_sample_without_replacement(candidates, limit=10, seed=5)
 
@@ -350,7 +350,7 @@ def test_epsilon_floor_keeps_quiet_candidates_sampleable() -> None:
 
 
 def test_reason_aware_sample_promotes_uncertainty_but_caps_review_routing() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
 
     sampled = reason_aware_sample_candidates(candidates, limit=5, seed=17)
 
@@ -363,7 +363,7 @@ def test_reason_aware_sample_promotes_uncertainty_but_caps_review_routing() -> N
 
 
 def test_reason_aware_sample_does_not_promote_counterevidence_or_unscaffolded_first() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
 
     sampled = reason_aware_sample_candidates(candidates, limit=2, seed=17)
 

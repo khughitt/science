@@ -40,7 +40,7 @@ def _sample_for_walk_from_dataset(dataset: Dataset):
         weighted_sample_without_replacement,
     )
 
-    candidates = compute_attention_candidates(dataset, today=date(2026, 5, 9))
+    candidates = compute_attention_candidates(dataset, today=date(2026, 5, 9)).rows
     return weighted_sample_without_replacement(candidates, limit=len(candidates), seed=0)
 
 

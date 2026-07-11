@@ -32,7 +32,7 @@ from science_tool.graph.store import (
     read_graph_stats,
     validate_graph,
 )
-from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
+from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_instrument
 from science_tool.prose import scan_prose
 
 
@@ -250,7 +250,7 @@ def graph_validate(output_format: str, graph_path: Path) -> None:
 def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
     """Show files that are stale relative to graph revision metadata."""
 
-    rows = diff_graph_inputs(graph_path=graph_path, mode=mode)
+    rows = unwrap_instrument(diff_graph_inputs(graph_path=graph_path, mode=mode), what="graph diff")
     emit_query_rows(
         output_format=output_format,
         title="Graph Diff",
@@ -297,12 +297,15 @@ def graph_neighborhood(
 ) -> None:
     """Return neighborhood edges around a center entity."""
 
-    rows = query_neighborhood(
-        graph_path=graph_path,
-        center=center,
-        hops=hops,
-        graph_layer=graph_layer,
-        limit=limit,
+    rows = unwrap_instrument(
+        query_neighborhood(
+            graph_path=graph_path,
+            center=center,
+            hops=hops,
+            graph_layer=graph_layer,
+            limit=limit,
+        ),
+        what="graph neighborhood",
     )
     emit_query_rows(
         output_format=output_format,
@@ -322,7 +325,7 @@ def graph_neighborhood(
 def graph_claims(about: str, limit: int, output_format: str, graph_path: Path) -> None:
     """Return claims mentioning a term/entity."""
 
-    rows = query_claims(graph_path=graph_path, about=about, limit=limit)
+    rows = unwrap_instrument(query_claims(graph_path=graph_path, about=about, limit=limit), what="graph claims")
     emit_query_rows(
         output_format=output_format,
         title="Graph Claims",
@@ -341,7 +344,9 @@ def graph_claims(about: str, limit: int, output_format: str, graph_path: Path) -
 def graph_evidence(target_ref: str, limit: int, output_format: str, graph_path: Path) -> None:
     """Return support/dispute evidence for a claim, or aggregate claim-backed evidence for a hypothesis."""
 
-    rows = query_evidence(graph_path=graph_path, target_ref=target_ref, limit=limit)
+    rows = unwrap_instrument(
+        query_evidence(graph_path=graph_path, target_ref=target_ref, limit=limit), what="graph evidence"
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Evidence",
@@ -390,7 +395,7 @@ def graph_cross_impact(target_ref: str, limit: int, output_format: str, graph_pa
 def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
     """Show variables with/without dataset links and observedness status."""
 
-    rows = query_coverage(graph_path=graph_path, limit=limit)
+    rows = unwrap_instrument(query_coverage(graph_path=graph_path, limit=limit), what="graph coverage")
     emit_query_rows(
         output_format=output_format,
         title="Graph Coverage",
@@ -410,7 +415,9 @@ def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
 def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path) -> None:
     """Show structural and evidential fragility in a neighborhood around a graph target."""
 
-    rows = query_gaps(graph_path=graph_path, center=center, hops=hops, limit=limit)
+    rows = unwrap_instrument(
+        query_gaps(graph_path=graph_path, center=center, hops=hops, limit=limit), what="graph gaps"
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Gaps",
@@ -428,7 +435,7 @@ def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_pat
 def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
     """Show claims and hypotheses ranked by derived uncertainty signals from support/dispute structure."""
 
-    rows = query_uncertainty(graph_path=graph_path, top=top)
+    rows = unwrap_instrument(query_uncertainty(graph_path=graph_path, top=top), what="graph uncertainty")
     emit_query_rows(
         output_format=output_format,
         title="Graph Uncertainty",
@@ -452,7 +459,7 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
 def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> None:
     """Show claim-centric dashboard summaries for evidence mix, empirical support, and risk."""
 
-    rows = query_dashboard_summary(graph_path=graph_path, top=top)
+    rows = unwrap_instrument(query_dashboard_summary(graph_path=graph_path, top=top), what="graph dashboard")
     emit_query_rows(
         output_format=output_format,
         title="Graph Dashboard Summary",
@@ -491,7 +498,9 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
 def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_path: Path) -> None:
     """Show claim-centered neighborhood risk summaries for local uncertainty prioritization."""
 
-    rows = query_neighborhood_summary(graph_path=graph_path, top=top, hops=hops)
+    rows = unwrap_instrument(
+        query_neighborhood_summary(graph_path=graph_path, top=top, hops=hops), what="graph neighborhood-summary"
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Neighborhood Summary",
@@ -519,7 +528,7 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
 def graph_question_summary(top: int | None, output_format: str, graph_path: Path) -> None:
     """Show question-level rollups derived from claim and neighborhood summaries."""
 
-    rows = query_question_summary(graph_path=graph_path, top=top)
+    rows = unwrap_instrument(query_question_summary(graph_path=graph_path, top=top), what="graph question-summary")
     emit_query_rows(
         output_format=output_format,
         title="Graph Question Summary",
@@ -547,7 +556,7 @@ def graph_question_summary(top: int | None, output_format: str, graph_path: Path
 def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> None:
     """Show inquiry-level rollups derived from explicit claim backing and claim summaries."""
 
-    rows = query_inquiry_summary(graph_path=graph_path, top=top)
+    rows = unwrap_instrument(query_inquiry_summary(graph_path=graph_path, top=top), what="graph inquiry-summary")
     emit_query_rows(
         output_format=output_format,
         title="Graph Inquiry Summary",
@@ -601,7 +610,7 @@ def graph_attention_sample(
         raise click.ClickException("--limit must be >= 0")
     sample_date: date | None = today.date() if today is not None else None
     try:
-        rows = query_attention_sample(
+        result = query_attention_sample(
             graph_path=graph_path,
             limit=limit,
             seed=seed,
@@ -612,6 +621,7 @@ def graph_attention_sample(
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
+    rows = unwrap_instrument(result, what="graph attention-sample")
     table_rows = rows
     if output_format == "table":
         table_rows = [
@@ -663,12 +673,15 @@ def graph_attention_rank(
     if limit is not None and limit < 0:
         raise click.ClickException("--limit must be >= 0")
     rank_date: date | None = today.date() if today is not None else None
-    rows = query_attention_ranked(
-        graph_path=graph_path,
-        limit=limit,
-        today=rank_date,
-        kinds=set(kinds) if kinds else None,
-        epsilon=epsilon,
+    rows = unwrap_instrument(
+        query_attention_ranked(
+            graph_path=graph_path,
+            limit=limit,
+            today=rank_date,
+            kinds=set(kinds) if kinds else None,
+            epsilon=epsilon,
+        ),
+        what="graph attention-rank",
     )
     emit_query_rows(
         output_format=output_format,
@@ -693,7 +706,7 @@ def graph_project_summary(output_format: str, graph_path: Path) -> None:
     """Show a research-project rollup derived from lower-level reasoning summaries."""
 
     try:
-        rows = query_project_summary(graph_path=graph_path)
+        rows = unwrap_instrument(query_project_summary(graph_path=graph_path), what="graph project-summary")
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 

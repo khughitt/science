@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import click
 
-from science_tool.output import emit
+from science_tool.output import emit, unwrap_instrument
 
 
 def _project_root_from_env() -> Path:
@@ -61,17 +61,19 @@ def benchmark_list(
     from science_tool.benchmark_catalog import coverage_summary, list_benchmarks
 
     root = project_root.resolve() if project_root else _project_root_from_env()
-    rows, notice = list_benchmarks(
+    result = list_benchmarks(
         root,
         domain=domain,
         benchmark_kind=benchmark_kind,
         belief_ref_text=belief_ref_text,
         include_commons=include_commons,
     )
+    rows = unwrap_instrument(result, what="benchmark list")
+    # Only the COMMONS caveat may fill commons_notice. `reason` is a generic channel and
+    # also carries e.g. "this project catalogues no datasets"; piping it here wholesale
+    # would report an uncatalogued project as a commons outage.
+    notice = result.reason if result.code == "commons_unavailable" else None
     summary = coverage_summary(rows)
-
-    if notice:
-        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
     def _render() -> None:
         if coverage_summary_flag:

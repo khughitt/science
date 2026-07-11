@@ -16,6 +16,7 @@ from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.layout import entity_dir
 from science_tool.big_picture.resolver import ResolverOutput
 from science_tool.entities import is_default_visible
+from science_tool.instruments import InstrumentResult
 
 _logger = logging.getLogger(__name__)
 
@@ -204,14 +205,53 @@ def _compute_demand(
     return len(demanders), sorted(demanders)
 
 
+def _scan_question_topic_refs(
+    project_root: Path,
+    included_question_ids: set[str],
+) -> list[str]:
+    """Every ``topic:`` ref DECLARED by an included question. One pass, hoisted.
+
+    This exists to answer the precondition question -- did anyone ask about a topic
+    at all? -- which cannot be derived from the gap rows, because a question whose
+    topic ref does not resolve contributes no row at all.
+    """
+    questions_dir = entity_dir(project_root, "question")
+    if not questions_dir.is_dir():
+        return []
+    refs: list[str] = []
+    for md in sorted(questions_dir.glob("*.md")):
+        fm = read_frontmatter(md) or {}
+        qid = fm.get("id")
+        if not qid or qid not in included_question_ids:
+            continue
+        for ref in fm.get("related", []) or []:
+            if isinstance(ref, str) and ref.startswith("topic:"):
+                refs.append(ref)
+    return refs
+
+
 def compute_topic_gaps(
     project_root: Path,
     resolved_questions: dict[str, ResolverOutput],
     included_question_ids: set[str],
-) -> list[TopicGap]:
+) -> InstrumentResult[TopicGap]:
     """Return all legacy topic docs with demand > 0 and coverage < demand.
 
     Sorted by ``gap_score`` descending; ties broken by ``topic_id`` ascending.
+
+    The precondition is on the DECLARED-vs-RESOLVED axis, not resolved-vs-nothing.
+    An empty row list means one of three different things, and the caller must be
+    able to tell them apart:
+
+    - Included questions declare ``topic:`` refs and NONE resolve to a topic entity
+      -> ``unwired``. Every ref is dangling, or there are no topic entities at all.
+      Reporting "no gaps" here is the silent-instrument bug: the instrument could
+      not run, and said the project was fully covered.
+    - Included questions declare NO topic refs (or no question survives the aspect
+      filter) -> ``empty``. Nobody asked about a topic; zero gaps is TRUE.
+    - Some refs resolve and some do not -> ``ok``/``empty`` carrying
+      ``code="partial_topic_resolution"``. The run succeeded but silently dropped
+      part of its input, and the renderer must surface that caveat.
 
     The caller (typically the Opus orchestrator) is responsible for computing
     ``included_question_ids`` via the big-picture aspect filter before
@@ -221,6 +261,33 @@ def compute_topic_gaps(
     """
     topics = _load_topics(project_root)
     papers = _load_papers(project_root)
+
+    declared = _scan_question_topic_refs(project_root, included_question_ids)
+    if not declared:
+        # Nobody asked about a topic. Zero gaps is a TRUE finding, not a failure --
+        # and NOT a caveat either, so it carries no `reason`: nothing was dropped.
+        return InstrumentResult.empty(code="no_topic_demand")
+
+    unresolved = sorted({ref for ref in declared if ref not in topics})
+    if len(unresolved) == len({*declared}):
+        # Every declared ref dangles. The gap computation had nothing to run against.
+        return InstrumentResult.unwired(
+            code="no_topic_entities" if not topics else "no_resolvable_topics",
+            reason=(
+                f"{len(declared)} topic reference(s) declared by included questions, "
+                f"but none resolve to a topic entity"
+                + (" (no topic entities exist)" if not topics else "")
+                + f": {', '.join(unresolved)}"
+            ),
+        )
+
+    caveat_code = "partial_topic_resolution" if unresolved else None
+    caveat_reason = (
+        f"{len(unresolved)} declared topic reference(s) do not resolve and were "
+        f"excluded from demand: {', '.join(unresolved)}"
+        if unresolved
+        else None
+    )
 
     gaps: list[TopicGap] = []
     for topic_id in topics:
@@ -248,7 +315,7 @@ def compute_topic_gaps(
         )
 
     gaps.sort(key=lambda g: (-g.gap_score, g.topic_id))
-    return gaps
+    return InstrumentResult.from_rows(gaps, code=caveat_code, reason=caveat_reason)
 
 
 def _hypotheses_for(

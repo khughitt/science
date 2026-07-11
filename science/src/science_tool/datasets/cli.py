@@ -8,7 +8,7 @@ from typing import cast
 import click
 
 from science_tool.datasets_identity import identity_group as dataset_identity_group
-from science_tool.output import emit
+from science_tool.output import emit, unwrap_instrument
 
 
 def _project_root_from_env() -> Path:
@@ -71,18 +71,19 @@ def dataset_list(
     if candidate:
         status = "candidate"
 
-    rows, notice = list_datasets(
-        root,
-        origin=origin,
-        status=status,
-        tier=tier,
-        unverified=unverified,
-        level=level,
-        include_gated=include_gated,
-        include_commons=include_commons,
+    rows = unwrap_instrument(
+        list_datasets(
+            root,
+            origin=origin,
+            status=status,
+            tier=tier,
+            unverified=unverified,
+            level=level,
+            include_gated=include_gated,
+            include_commons=include_commons,
+        ),
+        what="dataset list",
     )
-    if notice:
-        click.echo(f"notice: commons datasets unavailable ({notice})", err=True)
 
     if not rows:
         click.echo("No matching dataset entities.")
@@ -488,7 +489,7 @@ def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | 
     from science_tool.datasets_catalog import reconcile_dataset_links
 
     root = project_root.resolve() if project_root else _project_root_from_env()
-    rows = reconcile_dataset_links(root, fix=fix)
+    rows = unwrap_instrument(reconcile_dataset_links(root, fix=fix), what="dataset reconcile-links")
 
     def _render() -> None:
         if rows:

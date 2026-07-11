@@ -6,10 +6,17 @@ from pathlib import Path
 from rdflib import URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
+from ...instruments import InstrumentResult
 from .constants import CITO_NS, SCHEMA_NS, SCI_NS
 from .dataset import _load_dataset
 from .evidence_signals import _linked_claims_for_hypothesis, _source_strings
-from .identity import _about_tokens, _graph_uri, _resolve_center_entity, _short_name
+from .identity import (
+    _about_tokens,
+    _graph_uri,
+    _resolve_center_entity,
+    _short_name,
+    entity_in_graph,
+)
 
 
 def query_neighborhood(
@@ -18,11 +25,23 @@ def query_neighborhood(
     hops: int,
     graph_layer: str,
     limit: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
+    """Neighbours of ``center`` within ``hops``.
+
+    ``unwired`` when ``center`` is not in the layer. ``_resolve_center_entity`` mints
+    a URIRef from any string without consulting the graph, so a typo previously
+    produced an empty neighbourhood -- reported as "this entity is isolated".
+    """
     dataset = _load_dataset(graph_path)
     layer = dataset.graph(_graph_uri(graph_layer))
 
     center_uri = _resolve_center_entity(center)
+    if not entity_in_graph(center_uri, layer):
+        return InstrumentResult.unwired(
+            code="center_not_in_graph",
+            reason=f"{center!r} does not exist in graph layer {graph_layer!r}.",
+        )
+
     adjacency: dict[URIRef, set[URIRef]] = {}
     triples: list[tuple[URIRef, URIRef, URIRef]] = []
 
@@ -55,10 +74,16 @@ def query_neighborhood(
                     "object": str(obj),
                 }
             )
-    return rows[:limit]
+    return InstrumentResult.from_rows(rows[:limit])
 
 
-def query_claims(graph_path: Path, about: str, limit: int) -> list[dict[str, str]]:
+def query_claims(graph_path: Path, about: str, limit: int) -> InstrumentResult[dict[str, str]]:
+    """Claims whose text matches ``about``.
+
+    No unwired state: ``about`` is a free-text SEARCH TERM, not an identifier, so
+    "no match" is a real answer. Inventing an unwired here would be as dishonest
+    as the spurious empty this migration exists to remove.
+    """
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -81,19 +106,32 @@ def query_claims(graph_path: Path, about: str, limit: int) -> list[dict[str, str
                 "sources": "; ".join(sources),
             }
         )
-    return rows[:limit]
+    return InstrumentResult.from_rows(rows[:limit])
 
 
 def query_evidence(
     graph_path: Path,
     target_ref: str,
     limit: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
+    """Evidence for/against ``target_ref``.
+
+    ``unwired`` when the target is not in the graph. Previously a typo'd claim id
+    resolved to a valid-looking URI, matched nothing, and the command reported that
+    the claim had NO SUPPORTING OR DISPUTING EVIDENCE -- an affirmative statement
+    about the literature, manufactured from a misspelling.
+    """
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
     target_uri = _resolve_center_entity(target_ref)
+    if not entity_in_graph(target_uri, knowledge):
+        return InstrumentResult.unwired(
+            code="target_not_in_graph",
+            reason=f"{target_ref!r} does not exist in the knowledge graph.",
+        )
+
     rows: list[dict[str, str]] = []
     seen: dict[tuple[str, str], dict[str, str]] = {}
 
@@ -122,7 +160,7 @@ def query_evidence(
             target_uri=target_uri,
         )
 
-    return rows[:limit]
+    return InstrumentResult.from_rows(rows[:limit])
 
 
 def _append_evidence_rows(

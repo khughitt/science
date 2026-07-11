@@ -134,14 +134,38 @@ def health_command(
             else []
         )
 
+        unwired_checks = report.get("unwired_checks") or []
+
+        console = get_console()
+
+        # An unwired check DID NOT RUN. Print it before anything else and never let a
+        # report that contains one claim the project is clean: zero findings from a
+        # check that never looked is not a clean bill of health.
+        if unwired_checks:
+            uw_table = Table(title=f"Checks that COULD NOT RUN ({len(unwired_checks)})")
+            uw_table.add_column("Check", style="bold")
+            uw_table.add_column("Code")
+            uw_table.add_column("Why it did not run", overflow="fold")
+            for row in unwired_checks:
+                uw_table.add_row(row["check"], row["code"], row.get("reason") or "")
+            console.print(uw_table)
+            console.print(
+                "\n[bold]These checks found nothing because they did not run — not because "
+                "the project is clean.[/bold] Their input is missing; supply it, then rerun."
+            )
+
         total_issues = report["total_issues"]
         if total_issues == 0:
-            click.echo("Project is clean — no issues found.")
+            if unwired_checks:
+                click.echo(
+                    f"No issues found by the checks that ran — but {len(unwired_checks)} check(s) "
+                    "could not run (see above). This is NOT a clean bill of health."
+                )
+            else:
+                click.echo("Project is clean — no issues found.")
             if accepted_validation:
                 click.echo(f"Accepted validation warnings: {len(accepted_validation)}")
             return
-
-        console = get_console()
 
         if lag_total:
             lag_table = Table(title="Tasks Archive Lag")

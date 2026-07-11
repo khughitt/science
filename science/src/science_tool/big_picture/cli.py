@@ -66,18 +66,27 @@ def validate_cmd(project_root: Path) -> None:
     synthesis_dir = entity_dir(project_root, "synthesis")
 
     issues = []
+    unchecked: list[tuple[Path, str]] = []
     if synthesis_dir.is_dir():
         for path in sorted(synthesis_dir.glob("*.md")):
             fm = read_frontmatter(path) or {}
             if fm.get("report_kind") == "synthesis-rollup":
-                issues.extend(validate_rollup_file(path, project_root=project_root))
+                result = validate_rollup_file(path, project_root=project_root)
             else:
-                issues.extend(validate_synthesis_file(path, project_root=project_root))
+                result = validate_synthesis_file(path, project_root=project_root)
+            if result.status == "unwired":
+                unchecked.append((path, result.reason or result.code or "unknown"))
+            else:
+                issues.extend(result.rows)
 
     for issue in issues:
         click.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
+    for path, reason in unchecked:
+        click.echo(f"[not-checked] {path.name}: {reason}", err=True)
 
-    if issues:
+    # A file that could NOT be checked exits non-zero. Silence here would mean this
+    # command passing green over a rollup it never read.
+    if issues or unchecked:
         raise click.exceptions.Exit(code=1)
 
 
@@ -115,7 +124,17 @@ def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
     else:
         # No non-software project aspects declared → include everything.
         included = set(resolved)
-    gaps = compute_topic_gaps(project_root, resolved, included)
+    result = compute_topic_gaps(project_root, resolved, included)
+    if result.status == "unwired":
+        # The instrument did not run. Emitting [] here would report FULL topic
+        # coverage on a project whose topic refs all dangle -- the silent-instrument
+        # bug. Fail loudly instead; an empty list on stdout must always mean "no gaps".
+        raise click.ClickException(f"knowledge-gaps did not run ({result.code}): {result.reason}")
+    if result.reason:
+        # A caveat rides along on a SUCCESSFUL run: part of the input was silently
+        # dropped. It goes to stderr so stdout stays a parseable list of gaps.
+        click.echo(f"notice ({result.code}): {result.reason}", err=True)
+    gaps = result.rows
     if limit is not None:
         gaps = gaps[:limit]
     emit(output_format="json", payload=[asdict(g) for g in gaps], render_text=lambda: None, sort_keys=True)

@@ -6,7 +6,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, TypedDict
 
 import yaml
 from rdflib import BNode, Dataset, Graph, Literal, Namespace, URIRef
@@ -255,11 +255,46 @@ def _graph_uri(layer: str) -> URIRef:
     return URIRef(PROJECT_NS[layer])
 
 
-def _revision_timestamp_from_manifest(manifest: dict[str, dict[str, int | str]]) -> str:
+#: Envelope version. v1 was a FLAT ``{path: {sha256, mtime_ns}}`` mapping, which could
+#: not distinguish "this directory was walked and is empty" from "this directory was
+#: never walked". v2 records the walk-set explicitly.
+REVISION_MANIFEST_SCHEMA = 2
+
+
+class RevisionManifest(TypedDict):
+    """The graph-revision input manifest.
+
+    ``walked`` is the point of the envelope. A flat file mapping cannot answer the
+    question the diff actually asks -- *did we look?* -- so a directory that was never
+    walked (because it was omitted from ``include_dirs``, as ``entities/`` was) looked
+    exactly like a directory containing no files. Every file under it was silently
+    exempt from staleness. Recording the walk-set makes "we did not look here" a
+    representable, checkable fact.
+    """
+
+    schema: int
+    walked: list[str]
+    files: dict[str, dict[str, int | str]]
+
+
+#: Schema of a manifest that is absent or unparseable. Distinct from a v2 manifest that
+#: honestly recorded an EMPTY walk-set: "we never looked" and "we looked and there was
+#: nothing there" are different facts, and collapsing them is the bug this envelope fixes.
+REVISION_MANIFEST_SCHEMA_ABSENT = 0
+#: v1: a flat {path: metadata} mapping. Carried no walk-set, so it cannot say what it
+#: looked at -- which is why a v1 baseline reads as unwired rather than as "no changes".
+REVISION_MANIFEST_SCHEMA_V1 = 1
+
+
+def _empty_manifest() -> RevisionManifest:
+    return RevisionManifest(schema=REVISION_MANIFEST_SCHEMA_ABSENT, walked=[], files={})
+
+
+def _revision_timestamp_from_manifest(manifest: RevisionManifest) -> str:
     latest_mtime_ns = max(
         (
             int(metadata["mtime_ns"])
-            for metadata in manifest.values()
+            for metadata in manifest["files"].values()
             if isinstance(metadata, dict) and isinstance(metadata.get("mtime_ns"), int)
         ),
         default=0,
@@ -268,21 +303,42 @@ def _revision_timestamp_from_manifest(manifest: dict[str, dict[str, int | str]])
     return revision_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def read_revision_manifest(dataset: Dataset) -> dict[str, dict[str, int | str]]:
+def read_revision_manifest(dataset: Dataset) -> RevisionManifest:
+    """Read the stored manifest.
+
+    A v1 (flat, un-versioned) manifest is returned with an EMPTY ``walked`` list, which
+    the diff reads as "never walked" -- i.e. unwired. That is deliberate: a v1 manifest
+    genuinely does not know which directories were walked, and guessing would reintroduce
+    the exact silence this envelope exists to remove.
+    """
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     manifest_literal = next(provenance.objects(REVISION_URI, SCHEMA_NS.text), None)
     if manifest_literal is None:
-        return {}
+        return _empty_manifest()
 
     try:
         loaded = json.loads(str(manifest_literal))
     except json.JSONDecodeError:
-        return {}
+        return _empty_manifest()
     if not isinstance(loaded, dict):
-        return {}
+        return _empty_manifest()
 
-    manifest: dict[str, dict[str, int | str]] = {}
-    for key, value in loaded.items():
+    if loaded.get("schema") == REVISION_MANIFEST_SCHEMA:
+        raw_files = loaded.get("files")
+        raw_walked = loaded.get("walked")
+        files_src = raw_files if isinstance(raw_files, dict) else {}
+        walked = [entry for entry in raw_walked if isinstance(entry, str)] if isinstance(raw_walked, list) else []
+        schema = REVISION_MANIFEST_SCHEMA
+    else:
+        # v1: a flat path -> metadata mapping. No walk-set was recorded, and none can be
+        # inferred -- so it stays empty and the schema stays 1. A v1 baseline cannot say
+        # what it looked at, which is precisely why the diff must not trust its silence.
+        files_src = loaded
+        walked = []
+        schema = REVISION_MANIFEST_SCHEMA_V1
+
+    files: dict[str, dict[str, int | str]] = {}
+    for key, value in files_src.items():
         if not isinstance(key, str) or not isinstance(value, dict):
             continue
         sha = value.get("sha256")
@@ -291,30 +347,34 @@ def read_revision_manifest(dataset: Dataset) -> dict[str, dict[str, int | str]]:
             continue
         if not isinstance(mtime, int):
             continue
-        manifest[key] = {"sha256": sha, "mtime_ns": mtime}
-    return manifest
+        files[key] = {"sha256": sha, "mtime_ns": mtime}
+    return RevisionManifest(schema=schema, walked=sorted(walked), files=files)
 
 
-def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
+def build_input_manifest(graph_path: Path) -> RevisionManifest:
+    """Walk the project's graph inputs and record BOTH the files and the walk-set.
+
+    ``entities/`` is walked. It was previously omitted from ``include_dirs`` entirely,
+    so every entity file -- the bulk of a project's authored content -- was invisible to
+    ``science graph diff``: edit a hypothesis, and the graph reported itself up to date.
+    """
     project_root = project_root_from_graph_path(graph_path)
 
-    try:
-        from science_tool.paths import resolve_paths
+    from science_tool.paths import resolve_paths
 
-        pp = resolve_paths(project_root)
-        include_dirs: list[Path] = [
-            pp.doc_dir,
-            pp.specs_dir,
-            pp.papers_dir / "summaries",
-            pp.code_dir,
-            pp.tasks_dir,
-            pp.knowledge_dir / "sources",
-        ]
-        notes_dir = project_root / "notes"
-        if notes_dir.is_dir():
-            include_dirs.append(notes_dir)
-    except Exception:
-        include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "code")]
+    pp = resolve_paths(project_root)
+    include_dirs: list[Path] = [
+        pp.entities_dir,
+        pp.doc_dir,
+        pp.specs_dir,
+        pp.papers_dir / "summaries",
+        pp.code_dir,
+        pp.tasks_dir,
+        pp.knowledge_dir / "sources",
+    ]
+    notes_dir = project_root / "notes"
+    if notes_dir.is_dir():
+        include_dirs.append(notes_dir)
 
     include_files = ("README.md", PROJECT_CONFIG_FILENAME, "CLAUDE.md", "AGENTS.md")
 
@@ -324,15 +384,19 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
         if candidate.is_file():
             files.add(candidate)
 
+    walked: list[str] = []
     for base in include_dirs:
         if not base.is_dir():
             continue
+        # Record it as walked BEFORE the rglob: a directory that exists and holds no
+        # files is walked-and-empty, which is a different fact from never-walked.
+        walked.append(base.relative_to(project_root).as_posix())
         for candidate in base.rglob("*"):
             if candidate.is_file():
                 files.add(candidate)
 
     exclude_patterns = _revision_manifest_excludes(project_root)
-    manifest: dict[str, dict[str, int | str]] = {}
+    manifest_files: dict[str, dict[str, int | str]] = {}
     for file_path in sorted(files):
         rel_path = file_path.relative_to(project_root).as_posix()
         if _is_generated_python_cache(rel_path):
@@ -340,11 +404,11 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
         if _matches_revision_manifest_exclude(rel_path, exclude_patterns):
             continue
         stat = file_path.stat()
-        manifest[rel_path] = {
+        manifest_files[rel_path] = {
             "mtime_ns": int(stat.st_mtime_ns),
             "sha256": _sha256_file(file_path),
         }
-    return manifest
+    return RevisionManifest(schema=REVISION_MANIFEST_SCHEMA, walked=sorted(walked), files=manifest_files)
 
 
 def _is_generated_python_cache(rel_path: str) -> bool:

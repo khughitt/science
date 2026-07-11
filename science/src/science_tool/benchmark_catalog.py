@@ -11,6 +11,7 @@ from typing import Any, TypedDict
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.datasets.semantics import dataset_class_for
+from science_tool.instruments import InstrumentResult
 
 _BELIEF_TOKEN_RE = re.compile(r"[A-Za-z0-9:_-]+")
 
@@ -147,7 +148,34 @@ def _commons_sources() -> list[BenchmarkSource]:
     return sources
 
 
-def benchmark_sources(project_root: Path, *, include_commons: bool = False) -> tuple[list[BenchmarkSource], str | None]:
+def benchmark_sources(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+) -> InstrumentResult[BenchmarkSource]:
+    """Benchmark-capable dataset sources, local (+ optionally commons).
+
+    ``unwired`` when ``entities/datasets/`` does not exist: the scan never ran, and
+    reporting its zero rows as "no benchmark datasets" would be a finding about the
+    caller's ``project_root``, not about the project.
+
+    A commons registry that cannot be read is NOT unwired — the local scan ran and
+    its rows are real. That degradation rides as ``code=commons_unavailable`` +
+    ``reason`` on the ok/empty result.
+    """
+    if not (project_root / "entities" / "datasets").is_dir():
+        # NOT unwired. `entities/datasets/` is DOCUMENTED optional
+        # (commands/catalog-benchmarks.md: "entities/datasets/, if present"), so its
+        # absence is a legitimate project state meaning "this project catalogues no
+        # datasets" -- a TRUE zero, not a failure to run. A spurious unwired is as
+        # dishonest as a spurious empty, and it would hard-fail every benchmark report
+        # on a project that simply has not catalogued anything yet. The code rides along
+        # as a caveat so a caller that cares can still tell the two apart.
+        return InstrumentResult.empty(
+            code="no_datasets_dir",
+            reason=f"no entities/datasets/ directory under {project_root}; nothing catalogued",
+        )
+
     sources = _local_sources(project_root)
     notice: str | None = None
     if include_commons:
@@ -155,33 +183,11 @@ def benchmark_sources(project_root: Path, *, include_commons: bool = False) -> t
             sources.extend(_commons_sources())
         except CommonsUnavailable as exc:
             notice = str(exc)
-    return sources, notice
-
-
-def _local_rows(project_root: Path) -> list[BenchmarkRow]:
-    rows: list[BenchmarkRow] = []
-    for source in _local_sources(project_root):
-        row = _row_from_frontmatter(
-            source["frontmatter"],
-            fallback_id=source["fallback_id"],
-            scope=source["scope"],
-        )
-        if row is not None:
-            rows.append(row)
-    return rows
-
-
-def _commons_rows() -> list[BenchmarkRow]:
-    rows: list[BenchmarkRow] = []
-    for source in _commons_sources():
-        row = _row_from_frontmatter(
-            source["frontmatter"],
-            fallback_id=source["fallback_id"],
-            scope=source["scope"],
-        )
-        if row is not None:
-            rows.append(row)
-    return rows
+    return InstrumentResult.from_rows(
+        sources,
+        code="commons_unavailable" if notice else None,
+        reason=notice,
+    )
 
 
 def _has_belief_token(row: BenchmarkRow, query: str) -> bool:
@@ -219,21 +225,44 @@ def list_benchmarks(
     benchmark_kind: str | None = None,
     belief_ref_text: str | None = None,
     include_commons: bool = False,
-) -> tuple[list[BenchmarkRow], str | None]:
-    rows = _local_rows(project_root)
-    notice: str | None = None
-    if include_commons:
-        try:
-            rows.extend(_commons_rows())
-        except CommonsUnavailable as exc:
-            notice = str(exc)
+) -> InstrumentResult[BenchmarkRow]:
+    """Benchmark rows, filtered. Same preconditions as ``benchmark_sources``.
 
+    An unwired scan is propagated VERBATIM. Re-wrapping its (empty) rows through
+    ``from_rows`` would silently downgrade ``unwired`` to ``empty`` — turning "could
+    not run" into "found nothing", the exact substitution this type exists to stop.
+    """
+    sources = benchmark_sources(project_root, include_commons=include_commons)
+    if sources.status == "unwired":
+        return InstrumentResult[BenchmarkRow](
+            status="unwired",
+            rows=[],
+            code=sources.code,
+            reason=sources.reason,
+        )
+
+    rows = [
+        row
+        for source in sources.rows
+        if (
+            row := _row_from_frontmatter(
+                source["frontmatter"],
+                fallback_id=source["fallback_id"],
+                scope=source["scope"],
+            )
+        )
+        is not None
+    ]
     filtered = [
         row
         for row in rows
         if _matches(row, domain=domain, benchmark_kind=benchmark_kind, belief_ref_text=belief_ref_text)
     ]
-    return sorted(filtered, key=lambda row: (row["scope"], row["id"])), notice
+    return InstrumentResult.from_rows(
+        sorted(filtered, key=lambda row: (row["scope"], row["id"])),
+        code=sources.code,
+        reason=sources.reason,
+    )
 
 
 def coverage_summary(rows: list[BenchmarkRow]) -> dict[str, dict[str, int]]:

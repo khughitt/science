@@ -37,7 +37,7 @@ def _write_graph(tmp_path: Path) -> Path:
 
 def test_contested_signal_is_belief_derived_not_count_based(tmp_path: Path):
     graph_path = _write_graph(tmp_path)
-    rows = query_uncertainty(graph_path=graph_path, top=10)
+    rows = query_uncertainty(graph_path=graph_path, top=10).rows
     row = next(r for r in rows if r["entity"] == str(PROP))
     # A circular dispute must NOT make the claim contested (belief excludes circular lines),
     # even though support_count>0 and dispute_count>0 under the old count-based rule.

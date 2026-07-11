@@ -276,7 +276,7 @@ class TestCollectUnresolvedRefs:
             'created: "2026-04-13"\n---\nBody.\n'
         )
 
-        unresolved = collect_unresolved_refs(tmp_path)
+        unresolved = collect_unresolved_refs(tmp_path).rows
 
         # Sorted by mention count desc
         assert unresolved[0]["target"] == "topic:foo"
@@ -298,7 +298,7 @@ class TestCollectUnresolvedRefs:
             'created: "2026-04-13"\n---\nBody.\n'
         )
 
-        unresolved = collect_unresolved_refs(tmp_path)
+        unresolved = collect_unresolved_refs(tmp_path).rows
         assert unresolved == []
 
     def test_looks_like_heuristic_for_task_ids(self, tmp_path: Path) -> None:
@@ -313,7 +313,7 @@ class TestCollectUnresolvedRefs:
             'created: "2026-04-13"\n---\nBody.\n'
         )
 
-        unresolved = collect_unresolved_refs(tmp_path)
+        unresolved = collect_unresolved_refs(tmp_path).rows
         assert unresolved[0]["target"] == "topic:t143"
         assert unresolved[0]["looks_like"] == "task"
 
@@ -329,7 +329,7 @@ class TestCollectUnresolvedRefs:
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
-        unresolved = collect_unresolved_refs(tmp_path)
+        unresolved = collect_unresolved_refs(tmp_path).rows
         by_target = {row["target"]: row["looks_like"] for row in unresolved}
         assert by_target["topic:q05-foo"] == "question"
         assert by_target["topic:h99-bar"] == "hypothesis"
@@ -354,7 +354,7 @@ class TestCollectLingeringTags:
             'created: "2026-04-13"\n---\nBody.\n'
         )
 
-        results = collect_lingering_tags(tmp_path)
+        results = collect_lingering_tags(tmp_path).rows
 
         assert len(results) == 1
         assert results[0]["file"].endswith("h01.md")
@@ -376,7 +376,7 @@ class TestCollectLingeringTags:
             "\nDesc.\n"
         )
 
-        results = collect_lingering_tags(tmp_path)
+        results = collect_lingering_tags(tmp_path).rows
 
         assert len(results) == 1
         assert results[0]["file"].endswith("active.md")
@@ -1003,7 +1003,7 @@ health:
             encoding="utf-8",
         )
 
-        rows = collect_unregistered_ref_kinds(tmp_path)
+        rows = collect_unregistered_ref_kinds(tmp_path).rows
 
         assert rows == []
 
@@ -1222,16 +1222,29 @@ class TestHealthCLI:
         assert "unresolved_refs" in report
         assert report["unresolved_refs"][0]["target"] == "topic:missing"
 
-    def test_json_output_key_set_is_byte_identical_to_pre_task6_shape(self, tmp_path: Path) -> None:
-        """Regression for t-phase4 Task 6 finding.
+    def test_json_output_key_set_is_pinned(self, tmp_path: Path) -> None:
+        """The report payload's key set is pinned; a new key must be a DELIBERATE act.
 
-        Task 6 originally added `archive_lag_total` as a new key on the
-        report dict, which changed `science health --format json` output —
-        a violation of this phase's byte-identity constraint (JSON output
-        must stay byte-for-byte identical). The fix moved the shared tally
-        into a standalone `archive_lag_total()` helper instead of a report
-        field, so the report dict's key set must exactly match what it was
-        before Task 6 (see `HealthReport` in graph/health.py).
+        Two claims, from two different changes, live in this one assertion:
+
+        1. t-phase4 Task 6 (refactor neutrality). Task 6 originally added
+           `archive_lag_total` as a report key, which changed `science health
+           --format json` output — a violation of that phase's byte-identity
+           constraint, since a pure CLI extraction must not alter the payload.
+           The fix moved the tally into a standalone `archive_lag_total()`
+           helper. It must never come back as a field.
+
+        2. The InstrumentResult convergence (deliberate addition). `unwired_checks`
+           IS a new key, and is meant to be: a check that could not run must be
+           representable in the payload, or `science health --format json` goes on
+           reporting "no findings" for checks that never looked. This is a behavior
+           change, not a refactor, so it is allowed to move the key set — once,
+           on the record, here.
+
+        The test was renamed from `..._is_byte_identical_to_pre_task6_shape`: after
+        claim 2 the shape is no longer byte-identical to the pre-Task 6 one, and a
+        guard whose name misdescribes what it guards is the very defect the
+        convergence exists to remove.
         """
         from click.testing import CliRunner
 
@@ -1265,6 +1278,9 @@ class TestHealthCLI:
             "accepted_validation",
             "prose_epistemics",
             "total_issues",
+            # Deliberate addition (claim 2 above). NOT folded into total_issues: a check
+            # that could not run is not an issue found, and must not be counted as one.
+            "unwired_checks",
         }
 
     def test_json_output_with_timings_includes_meta(self, tmp_path: Path) -> None:
@@ -1600,9 +1616,19 @@ class TestHealthCLI:
         assert "packet:p01" in result.output
 
     def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
+        """A project that is clean BECAUSE EVERY CHECK RAN AND FOUND NOTHING.
+
+        The old fixture was a bare directory with a science.yaml, a pyproject and a
+        .env: no entities/, no tasks/, no agent-context file, no entities/datasets/.
+        Eight checks had no input to scan, and the report called that "clean" — the
+        silent-instrument bug, asserted as the expected behaviour. The fixture now
+        supplies the inputs, so this exercises the real clean path; the unscannable
+        case is pinned to `unwired` in test_health_preconditions.py.
+        """
         from click.testing import CliRunner
 
         from science_tool.cli import main
+        from science_tool.curate.agents_md import BEGIN_MARKER, END_MARKER
         from science_tool.project_artifacts import canonical_path
 
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -1611,6 +1637,16 @@ class TestHealthCLI:
             '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n'
         )
         (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n")
+        # Inputs the checks scan. Without these they cannot run, and a report of a
+        # sweep in which nothing ran is not a clean bill of health.
+        (tmp_path / "tasks").mkdir()
+        (tmp_path / "entities" / "datasets").mkdir(parents=True)
+        (tmp_path / "AGENTS.md").write_text(f"# Agents\n\n{BEGIN_MARKER}\n{END_MARKER}\n")
+        (tmp_path / "entities" / "questions").mkdir(parents=True)
+        (tmp_path / "entities" / "questions" / "q01.md").write_text(
+            '---\nid: "question:q01"\nkind: "question"\ntitle: "Q1"\nstatus: "open"\n'
+            'created: "2026-04-13"\nupdated: "2026-04-13"\n---\nWhat?\n'
+        )
         # Install canonical managed artifacts so the project is genuinely clean.
         target = tmp_path / "validate.sh"
         target.write_bytes(canonical_path("validate.sh").read_bytes())
@@ -1618,8 +1654,9 @@ class TestHealthCLI:
         runner = CliRunner()
         result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--skip", "validate"])
 
-        assert result.exit_code == 0
-        assert "no issues" in result.output.lower() or "clean" in result.output.lower()
+        assert result.exit_code == 0, result.output
+        assert "Project is clean" in result.output
+        assert "COULD NOT RUN" not in result.output
 
     def test_tooling_scaffold_skips_unreadable_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from science_tool.graph.health import collect_tooling_scaffold_findings
@@ -1639,7 +1676,7 @@ class TestHealthCLI:
 
         monkeypatch.setattr(Path, "read_text", fake_read_text)
 
-        findings = collect_tooling_scaffold_findings(tmp_path)
+        findings = collect_tooling_scaffold_findings(tmp_path).rows
 
         assert findings == []
 
@@ -1701,7 +1738,7 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     (project_root / "tasks" / "active.md").write_text(
         "## [t001] Legacy\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
-    findings = collect_legacy_task_type(project_root)
+    findings = collect_legacy_task_type(project_root).rows
     assert len(findings) == 1
     assert findings[0]["task_id"] == "t001"
     assert findings[0]["legacy_type"] == "research"
@@ -1718,7 +1755,7 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     (project_root / "entities" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
-    findings = collect_invalid_entity_aspects(project_root)
+    findings = collect_invalid_entity_aspects(project_root).rows
     assert len(findings) == 1
     assert "not-declared" in findings[0]["message"]
 
@@ -1803,7 +1840,7 @@ def test_external_with_derivation_flagged(tmp_path: Path) -> None:
             'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:w-r1", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}'
         ),
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     codes = {i["code"] for i in issues}
     assert "dataset_origin_block_mismatch" in codes
 
@@ -1818,7 +1855,7 @@ def test_derived_with_access_flagged(tmp_path: Path) -> None:
             'access: {level: "public", verified: true}'
         ),
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     codes = {i["code"] for i in issues}
     assert "dataset_origin_block_mismatch" in codes
 
@@ -1830,7 +1867,7 @@ def test_external_consumed_unverified_flagged(tmp_path: Path) -> None:
         origin="external",
         body='access: {level: "public", verified: false}\nconsumed_by: ["plan:p1"]',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
 
 
@@ -1842,7 +1879,7 @@ def test_external_scalar_access_flagged_as_malformed(tmp_path: Path) -> None:
         body='access: "public"\nconsumed_by: ["plan:p1"]',
     )
 
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
 
     assert any(i["code"] == "dataset_access_invalid" for i in issues)
     assert not any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
@@ -1855,7 +1892,7 @@ def test_external_stale_review_flagged(tmp_path: Path) -> None:
         origin="external",
         body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2024-01-01", source_url: "https://x"}',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_stale_review" for i in issues)
 
 
@@ -1866,7 +1903,7 @@ def test_external_verified_no_source_url_flagged(tmp_path: Path) -> None:
         origin="external",
         body='access: {level: "public", verified: true, verification_method: "credential-confirmed", last_reviewed: "2026-04-19"}',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_missing_source_url" for i in issues)
 
 
@@ -1895,21 +1932,21 @@ def _derived_dataset_body(workflow_run: str, inputs: list[str]) -> str:
 
 def test_derived_missing_workflow_run_flagged(tmp_path: Path) -> None:
     _write_dataset(tmp_path, "d1", origin="derived", body=_derived_dataset_body("workflow-run:does-not-exist", []))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_derived_missing_workflow_run" for i in issues)
 
 
 def test_derived_asymmetric_edge_flagged(tmp_path: Path) -> None:
     _write_workflow_run(tmp_path, "w-r1", produces=[], inputs=[])  # missing dataset:d2 in produces
     _write_dataset(tmp_path, "d2", origin="derived", body=_derived_dataset_body("workflow-run:w-r1", []))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_derived_asymmetric_edge" for i in issues)
 
 
 def test_derived_symmetric_edge_no_flag(tmp_path: Path) -> None:
     _write_workflow_run(tmp_path, "w-r2", produces=["dataset:d3"], inputs=[])
     _write_dataset(tmp_path, "d3", origin="derived", body=_derived_dataset_body("workflow-run:w-r2", []))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert not any(
         i["code"] in {"dataset_derived_missing_workflow_run", "dataset_derived_asymmetric_edge"} for i in issues
     )
@@ -1924,7 +1961,7 @@ def test_derived_input_chain_unverified_external_flagged(tmp_path: Path) -> None
     _write_dataset(tmp_path, "u_ext", origin="external", body='access: {level: "public", verified: false}')
     _write_workflow_run(tmp_path, "w-r3", produces=["dataset:d4"], inputs=["dataset:u_ext"])
     _write_dataset(tmp_path, "d4", origin="derived", body=_derived_dataset_body("workflow-run:w-r3", ["dataset:u_ext"]))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
 
 
@@ -1933,7 +1970,7 @@ def test_derived_cycle_detected(tmp_path: Path) -> None:
     _write_workflow_run(tmp_path, "w-r5", produces=["dataset:d6"], inputs=["dataset:d5"])
     _write_dataset(tmp_path, "d5", origin="derived", body=_derived_dataset_body("workflow-run:w-r4", ["dataset:d6"]))
     _write_dataset(tmp_path, "d6", origin="derived", body=_derived_dataset_body("workflow-run:w-r5", ["dataset:d5"]))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
 
 
@@ -1962,7 +1999,7 @@ def test_derived_shared_upstream_not_false_cycle(tmp_path: Path) -> None:
         origin="derived",
         body=_derived_dataset_body("workflow-run:w-r-merge", ["dataset:branch_a", "dataset:branch_b"]),
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     chain_issues = [i for i in issues if i["code"] == "dataset_derived_input_chain_broken"]
     assert chain_issues == [], f"shared upstream wrongly flagged as cycle: {chain_issues}"
 
@@ -1979,7 +2016,7 @@ def test_verified_no_datapackage_no_localpath_flagged(tmp_path: Path) -> None:
         origin="external",
         body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
 
@@ -1993,7 +2030,7 @@ def test_verified_with_local_path_no_flag(tmp_path: Path) -> None:
     )
     (tmp_path / "data" / "ls").mkdir(parents=True)
     (tmp_path / "data" / "ls" / "file.csv").write_text("col\n", encoding="utf-8")
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
 
@@ -2007,7 +2044,7 @@ def test_verified_unstageable_suppressed_for_track_tier(tmp_path: Path) -> None:
         body='tier: "track"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
 
@@ -2020,7 +2057,7 @@ def test_verified_unstageable_still_flags_use_now_tier(tmp_path: Path) -> None:
         body='tier: "use-now"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     stageability_issues = [i for i in issues if i["code"] == "dataset_verified_but_unstageable"]
     assert stageability_issues
     assert "not staged" in stageability_issues[0]["message"]
@@ -2036,7 +2073,7 @@ def test_verified_reference_class_is_exempt_from_unstageable_warning(tmp_path: P
         'access: {level: "public", verified: true, verification_method: "landing-confirmed", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
 
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
 
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
@@ -2051,7 +2088,7 @@ def test_verified_pointer_class_is_exempt_from_unstageable_warning(tmp_path: Pat
         'access: {level: "public", verified: true, verification_method: "metadata-confirmed", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
 
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
 
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
@@ -2074,7 +2111,7 @@ def test_rp_displays_dataset_missing_consumed_by_flagged(tmp_path: Path) -> None
     _write_research_package(tmp_path, "rp1", displays=["dataset:dr1"])
     _write_workflow_run(tmp_path, "w-r6", produces=["dataset:dr1"], inputs=[])
     _write_dataset(tmp_path, "dr1", origin="derived", body=_derived_dataset_body("workflow-run:w-r6", []))
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
 
 
@@ -2083,19 +2120,29 @@ def test_dataset_consumed_by_rp_missing_displays_flagged(tmp_path: Path) -> None
     _write_workflow_run(tmp_path, "w-r7", produces=["dataset:dr2"], inputs=[])
     body = _derived_dataset_body("workflow-run:w-r7", []) + '\nconsumed_by: ["research-package:rp2"]'
     _write_dataset(tmp_path, "dr2", origin="derived", body=body)
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
 
 
 def test_doc_data_package_files_are_not_dataset_anomalies(tmp_path: Path) -> None:
+    """A legacy doc/data-packages/*.md is not scanned as a dataset entity.
+
+    The old fixture created ONLY that doc file — no entities/datasets/ — so the check
+    was unwired and the assertion was vacuous: it passed because nothing was scanned,
+    which is precisely the failure mode this migration exists to expose. The fixture
+    now gives the check a datasets directory (and a real dataset), so the absence of a
+    doc-file anomaly is a fact about a scan that actually ran.
+    """
+    _write_dataset(tmp_path, "real", origin="external", body='access: {level: "public", verified: false}')
     f = tmp_path / "doc" / "data-packages" / "old.md"
     f.parent.mkdir(parents=True)
     f.write_text(
         '---\nid: "data-package:old"\ntype: "data-package"\ntitle: "Legacy"\nstatus: "active"\n---\n',
         encoding="utf-8",
     )
-    issues = check_dataset_anomalies(tmp_path)
-    assert not any(i["code"] == "data_package_unmigrated" for i in issues)
+    result = check_dataset_anomalies(tmp_path)
+    assert result.status != "unwired"
+    assert not any(i["entity_id"] == "data-package:old" for i in result.rows)
 
 
 # ---------------------------------------------------------------------------
@@ -2128,7 +2175,7 @@ def test_umbrella_in_consumed_by_flagged(tmp_path: Path) -> None:
         'consumed_by: ["dataset:umb"]\n---\n',
         encoding="utf-8",
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_invariant_violation" and "umbrella" in i["message"].lower() for i in issues)
 
 
@@ -2139,7 +2186,7 @@ def test_lineage_drift_flagged(tmp_path: Path) -> None:
     _write_dataset(
         tmp_path, "c2", origin="external", body='access: {level: "public", verified: false}\nparent_dataset: ""'
     )
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     assert any(i["code"] == "dataset_invariant_violation" and "lineage" in i["message"].lower() for i in issues)
 
 
@@ -2175,16 +2222,22 @@ def test_cached_field_drift_flagged(tmp_path: Path) -> None:
     )
     # Also seed the resource file so unstageable doesn't fire
     (tmp_path / "data" / "drift" / "x.csv").write_text("col\n")
-    issues = check_dataset_anomalies(tmp_path)
+    issues = check_dataset_anomalies(tmp_path).rows
     drift_msgs = [i["message"] for i in issues if i["code"] == "dataset_cached_field_drift"]
     assert any("license" in m for m in drift_msgs)
     assert any("ontology_terms" in m for m in drift_msgs)
 
 
 def test_cached_field_drift_skips_datapackage_directory_entities(tmp_path: Path) -> None:
-    """Promoted datasets (provider=datapackage-directory) have no two surfaces to drift between."""
+    """Promoted datasets (provider=datapackage-directory) have no two surfaces to drift between.
+
+    The old fixture created only data/myset/datapackage.yaml and no entities/datasets/,
+    so the check was unwired and `drift_issues == []` was vacuous. It now also writes a
+    dataset entity, so the scan runs and the absence of drift is a real result.
+    """
     import yaml
 
+    _write_dataset(tmp_path, "other", origin="external", body='access: {level: "public", verified: false}')
     dp_dir = tmp_path / "data" / "myset"
     dp_dir.mkdir(parents=True)
     (dp_dir / "datapackage.yaml").write_text(
@@ -2202,8 +2255,9 @@ def test_cached_field_drift_skips_datapackage_directory_entities(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    issues = check_dataset_anomalies(tmp_path)
-    drift_issues = [i for i in issues if i["code"] == "dataset_cached_field_drift"]
+    result = check_dataset_anomalies(tmp_path)
+    assert result.status != "unwired"
+    drift_issues = [i for i in result.rows if i["code"] == "dataset_cached_field_drift"]
     assert drift_issues == [], f"unexpected drift on promoted dataset: {drift_issues}"
 
 

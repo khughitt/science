@@ -9,6 +9,7 @@ from rdflib.namespace import PROV, RDF, SKOS
 from science_model.reasoning import EvidenceType
 
 from science_tool.graph.belief_weights import normalize_evidence_type
+from science_tool.graph.io import REVISION_MANIFEST_SCHEMA
 from science_tool.graph.io import (
     build_input_manifest as _build_input_manifest,
 )
@@ -18,13 +19,18 @@ from science_tool.graph.io import (
 from science_tool.graph.patch_membership import validate_patch_membership_convenience
 from science_tool.graph.run_resolution import MemberOfCycleError, NoRunReason, resolved_empirical_runs
 
+from ...instruments import InstrumentResult
 from .constants import PREDICATE_REGISTRY, SCHEMA_NS, SCI_NS, SCIC_NS
 from .dataset import _load_dataset
 from .graphutil import _has_cycle
 from .identity import _graph_uri
 
+#: The diff modes `diff_graph_inputs_dataset` understands.
+_DIFF_MODES = frozenset({"mtime", "hash", "hybrid"})
+
 
 def query_predicates() -> list[dict[str, str]]:
+    """The predicate registry. NOT an instrument: a module constant, no input to lack."""
     return list(PREDICATE_REGISTRY)
 
 
@@ -282,19 +288,62 @@ def _parse_failure_rows(exc: Exception) -> list[dict[str, str]]:
     ]
 
 
-def diff_graph_inputs(graph_path: Path, mode: str) -> list[dict[str, str]]:
+def diff_graph_inputs(graph_path: Path, mode: str) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
+    # Return the inner result VERBATIM. Re-wrapping would downgrade `unwired` to `empty`
+    # -- and an empty diff renders as "all inputs up to date", the exact lie.
     return diff_graph_inputs_dataset(dataset, graph_path=graph_path, mode=mode)
 
 
-def diff_graph_inputs_dataset(dataset: Dataset, *, graph_path: Path, mode: str) -> list[dict[str, str]]:
+def diff_graph_inputs_dataset(
+    dataset: Dataset, *, graph_path: Path, mode: str
+) -> InstrumentResult[dict[str, str]]:
+    """Which graph inputs are stale relative to the stored revision manifest.
+
+    ``unwired`` when the comparison could not be made, because an empty row list here
+    renders as **"all inputs up to date"** -- the most confident possible statement,
+    produced by a check that never ran:
+
+    - The stored manifest is absent, unparseable, or v1 (no walk-set recorded).
+    - The current walk found no directories at all.
+
+    Neither case is "nothing changed". Both are "we did not look".
+    """
+    if mode not in _DIFF_MODES:
+        # Hoisted out of the row loop, where it was UNREACHABLE whenever the walk was
+        # empty -- an invalid mode silently returned "up to date".
+        raise click.ClickException(f"Unsupported diff mode: {mode}")
+
     baseline = _read_revision_manifest(dataset)
     current = _build_input_manifest(graph_path=graph_path)
 
+    if baseline["schema"] < REVISION_MANIFEST_SCHEMA:
+        return InstrumentResult.unwired(
+            code="no_baseline_walk_set",
+            reason=(
+                "The stored revision manifest is absent, unparseable, or predates the "
+                "walk-set (schema v1). It cannot say WHICH directories it looked at, so its "
+                "silence about a file is not evidence the file is unchanged. Rebuild the graph."
+            ),
+        )
+    # An EMPTY walk-set is NOT itself unwired. A project with no input directories honestly
+    # walks nothing, and `rows == []` then genuinely means "no inputs, none stale". The
+    # unwired case is a baseline that CANNOT SAY what it walked -- not one that walked
+    # nothing and says so.
+    if baseline["walked"] and not current["walked"]:
+        return InstrumentResult.unwired(
+            code="no_current_walk_set",
+            reason=(
+                f"The baseline walked {len(baseline['walked'])} director(ies), but the current "
+                f"scan found none. The walk collapsed -- most likely the wrong project root. "
+                "Nothing was scanned, so nothing can be reported stale."
+            ),
+        )
+
     rows: list[dict[str, str]] = []
 
-    for rel_path, current_meta in current.items():
-        baseline_meta = baseline.get(rel_path)
+    for rel_path, current_meta in current["files"].items():
+        baseline_meta = baseline["files"].get(rel_path)
         if baseline_meta is None:
             rows.append({"path": rel_path, "status": "stale", "reason": "new_file"})
             continue
@@ -314,14 +363,12 @@ def diff_graph_inputs_dataset(dataset: Dataset, *, graph_path: Path, mode: str) 
                 reason = "hash_changed"
             elif mtime_changed:
                 reason = "mtime_changed"
-        else:
-            raise click.ClickException(f"Unsupported diff mode: {mode}")
 
         if reason is not None:
             rows.append({"path": rel_path, "status": "stale", "reason": reason})
 
-    for removed in sorted(set(baseline.keys()) - set(current.keys())):
+    for removed in sorted(set(baseline["files"].keys()) - set(current["files"].keys())):
         rows.append({"path": removed, "status": "stale", "reason": "removed_file"})
 
     rows.sort(key=lambda row: row["path"])
-    return rows
+    return InstrumentResult.from_rows(rows)

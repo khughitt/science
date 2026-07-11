@@ -171,7 +171,7 @@ class TestInquiryTypeDisplay:
             graph_path, slug="causal-1", profile="causal", treatment="concept:x", outcome="concept:y"
         )
         _build_compiled_inquiry_graph(graph_path, slug="general-1", profile="investigation")
-        rows = list_inquiries(graph_path)
+        rows = list_inquiries(graph_path).rows
         causal_row = next(r for r in rows if r["slug"] == "causal_1")
         general_row = next(r for r in rows if r["slug"] == "general_1")
         assert causal_row["inquiry_type"] == "causal"
@@ -234,7 +234,7 @@ class TestCausalValidation:
                 _causal_relation("concept:z", "scic:causes", "concept:y"),
             ],
         )
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
         assert acyclicity["status"] == "pass"
 
@@ -247,7 +247,7 @@ class TestCausalValidation:
                 _causal_relation("concept:y", "scic:causes", "concept:x"),
             ],
         )
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
         assert acyclicity["status"] == "fail"
 
@@ -255,7 +255,7 @@ class TestCausalValidation:
         """General inquiries don't get causal validation checks."""
         _author_entities(graph_path, [_hypothesis("test_hyp")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
-        results = validate_inquiry(graph_path, "gen")
+        results = validate_inquiry(graph_path, "gen").rows
         check_names = [r["check"] for r in results]
         assert "causal_acyclicity" not in check_names
 
@@ -804,7 +804,7 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        results = validate_inquiry(graph_path, "conf-ok")
+        results = validate_inquiry(graph_path, "conf-ok").rows
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
         assert conf_check["status"] == "pass"
@@ -832,7 +832,7 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        results = validate_inquiry(graph_path, "conf-warn")
+        results = validate_inquiry(graph_path, "conf-warn").rows
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
         assert conf_check["status"] == "warn"
@@ -855,7 +855,7 @@ class TestConfoundersDeclared:
             treatment="concept:x",
             outcome="concept:y",
         )
-        results = validate_inquiry(graph_path, "no-conf")
+        results = validate_inquiry(graph_path, "no-conf").rows
         conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
         assert conf_check is not None
         assert conf_check["status"] == "pass"
@@ -864,7 +864,7 @@ class TestConfoundersDeclared:
         """General inquiries don't get confounders_declared check."""
         _author_entities(graph_path, [_hypothesis("h1", "Test")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
-        results = validate_inquiry(graph_path, "gen")
+        results = validate_inquiry(graph_path, "gen").rows
         check_names = [r["check"] for r in results]
         assert "confounders_declared" not in check_names
 
@@ -900,14 +900,14 @@ class TestIdentifiabilityCheck:
     def test_identifiability_check_present(self, graph_path: Path) -> None:
         """Causal inquiry validation includes identifiability check."""
         slug = self._build_identifiable_dag(graph_path)
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         check_names = [r["check"] for r in results]
         assert "identifiability" in check_names
 
     def test_adjustment_sets_check_present(self, graph_path: Path) -> None:
         """Causal inquiry validation includes adjustment_sets check."""
         slug = self._build_identifiable_dag(graph_path)
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         check_names = [r["check"] for r in results]
         assert "adjustment_sets" in check_names
 
@@ -915,7 +915,7 @@ class TestIdentifiabilityCheck:
     def test_identifiable_dag_passes(self, graph_path: Path) -> None:
         """With pgmpy installed, identifiable DAG passes identifiability check."""
         slug = self._build_identifiable_dag(graph_path)
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         ident_check = next(r for r in results if r["check"] == "identifiability")
         assert ident_check["status"] == "pass"
 
@@ -923,7 +923,7 @@ class TestIdentifiabilityCheck:
     def test_adjustment_sets_reported(self, graph_path: Path) -> None:
         """With pgmpy, adjustment sets are reported as info."""
         slug = self._build_identifiable_dag(graph_path)
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         adj_check = next(r for r in results if r["check"] == "adjustment_sets")
         assert adj_check["status"] == "info"
         assert "z" in adj_check["message"].lower()
@@ -932,7 +932,7 @@ class TestIdentifiabilityCheck:
     def test_skip_when_pgmpy_not_installed(self, graph_path: Path) -> None:
         """Without pgmpy, checks have skip status."""
         slug = self._build_identifiable_dag(graph_path)
-        results = validate_inquiry(graph_path, slug)
+        results = validate_inquiry(graph_path, slug).rows
         ident_check = next(r for r in results if r["check"] == "identifiability")
         assert ident_check["status"] == "skip"
 
@@ -947,7 +947,7 @@ class TestIdentifiabilityCheck:
         """General inquiries don't get identifiability or adjustment_sets checks."""
         _author_entities(graph_path, [_hypothesis("h1", "Test")])
         _build_compiled_inquiry_graph(graph_path, slug="gen", profile="investigation")
-        results = validate_inquiry(graph_path, "gen")
+        results = validate_inquiry(graph_path, "gen").rows
         check_names = [r["check"] for r in results]
         assert "identifiability" not in check_names
         assert "adjustment_sets" not in check_names

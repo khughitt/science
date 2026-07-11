@@ -14,7 +14,7 @@ from science_tool.graph.store import (
     shorten_uri,
     validate_inquiry,
 )
-from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
+from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_instrument
 
 
 @click.group("inquiry")
@@ -262,7 +262,7 @@ def inquiry_set_estimand(slug: str, treatment: str, outcome: str, graph_path: Pa
 )
 def inquiry_list(output_format: str, graph_path: Path) -> None:
     """List all inquiries."""
-    rows = list_inquiries(graph_path)
+    rows = unwrap_instrument(list_inquiries(graph_path), what="inquiry list")
     if not rows:
         if output_format == "json":
             click.echo("[]")
@@ -337,10 +337,7 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
 )
 def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
     """Validate an inquiry subgraph."""
-    try:
-        results = validate_inquiry(graph_path, slug)
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    results = unwrap_instrument(validate_inquiry(graph_path, slug), what="inquiry validate")
 
     def _render() -> None:
         for r in results:

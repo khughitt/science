@@ -174,16 +174,16 @@ def dashboard_summary_data(graph_path_input):
         )
 
     try:
-        _dashboard_rows = query_dashboard_summary(graph_path=_graph_path, top=25)
-        _neighborhood_rows = query_neighborhood_summary(graph_path=_graph_path, top=15, hops=1)
-        _question_rows = query_question_summary(graph_path=_graph_path, top=10)
-        _inquiry_rows = query_inquiry_summary(graph_path=_graph_path, top=10)
+        _dashboard_rows = query_dashboard_summary(graph_path=_graph_path, top=25).rows
+        _neighborhood_rows = query_neighborhood_summary(graph_path=_graph_path, top=15, hops=1).rows
+        _question_rows = query_question_summary(graph_path=_graph_path, top=10).rows
+        _inquiry_rows = query_inquiry_summary(graph_path=_graph_path, top=10).rows
     except Exception as exc:
         _summary_error = str(exc)
 
     if not _summary_error:
         try:
-            _project_rows = query_project_summary(graph_path=_graph_path)
+            _project_rows = query_project_summary(graph_path=_graph_path).rows
         except Exception as exc:
             _project_summary_error = str(exc)
 

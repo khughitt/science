@@ -20,7 +20,7 @@ from science_tool.entities import (
     remove_entity,
 )
 from science_tool.graph.store import DEFAULT_GRAPH_PATH, query_neighborhood
-from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.output import OUTPUT_FORMATS, emit_query_rows, unwrap_instrument
 from science_tool.styles import entity_table_renderers
 from science_tool.typed_entity_cli import emit_entity_show, emit_entity_warnings
 
@@ -325,12 +325,15 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
         raise click.ClickException(str(exc)) from exc
     if graph_is_stale(Path.cwd(), DEFAULT_GRAPH_PATH):
         click.echo("WARNING: graph materialization may be stale; results below could miss recent edits.", err=True)
-    rows = query_neighborhood(
-        graph_path=DEFAULT_GRAPH_PATH,
-        center=location.entity_id,
-        hops=hops,
-        graph_layer="graph/knowledge",
-        limit=200,
+    rows = unwrap_instrument(
+        query_neighborhood(
+            graph_path=DEFAULT_GRAPH_PATH,
+            center=location.entity_id,
+            hops=hops,
+            graph_layer="graph/knowledge",
+            limit=200,
+        ),
+        what="entity neighbors",
     )
     emit_query_rows(
         output_format=output_format,

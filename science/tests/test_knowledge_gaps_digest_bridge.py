@@ -25,7 +25,7 @@ def test_topic_gap_hypotheses_include_a_digest_bridged_hypothesis(tmp_path) -> N
 
     resolved = resolve_questions(tmp_path)
     assert resolved["question:q01"].primary_hypothesis == "hypothesis:h01"
-    gaps = compute_topic_gaps(tmp_path, resolved, included_question_ids=set(resolved))
+    gaps = compute_topic_gaps(tmp_path, resolved, included_question_ids=set(resolved)).rows
     t01 = next(g for g in gaps if g.topic_id == "topic:t01")
     assert t01.demand >= 1 and t01.gap_score >= 1
     assert "hypothesis:h01" in t01.hypotheses  # inherited from the resolver's digest bridge

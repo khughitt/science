@@ -8,6 +8,7 @@ from typing import Any
 from rdflib import Dataset, Graph, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
+from ...instruments import InstrumentResult
 from .constants import DCTERMS_NS, PROJECT_NS, SCI_NS, SCIC_NS
 from .dataset import _load_dataset
 from .graphutil import _has_cycle
@@ -53,14 +54,26 @@ def _discover_inquiries(dataset: Dataset) -> dict[str, tuple[URIRef, Graph]]:
     return found
 
 
-def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
+def list_inquiries(graph_path: Path) -> InstrumentResult[dict[str, str]]:
     """List all inquiries in the dataset, returning a list of summary dicts."""
     dataset = _load_dataset(graph_path)
+    # Return the inner result VERBATIM -- never `from_rows(inner(...).rows)`, which
+    # would downgrade `unwired` to `empty` while passing every row-count test.
     return list_inquiries_dataset(dataset)
 
 
-def list_inquiries_dataset(dataset: Dataset) -> list[dict[str, str]]:
-    """List all inquiries from a parsed dataset, returning summary dicts."""
+def list_inquiries_dataset(dataset: Dataset) -> InstrumentResult[dict[str, str]]:
+    """List all inquiries from a parsed dataset, returning summary dicts.
+
+    ``unwired`` when the dataset carries no triples at all: an empty dataset has not
+    been searched for inquiries, it simply was not built. A dataset that WAS built and
+    contains no inquiries is a true ``empty``.
+    """
+    if not any(len(graph) for graph in dataset.graphs()):
+        return InstrumentResult.unwired(
+            code="empty_dataset",
+            reason="The dataset contains no triples; it was never materialized.",
+        )
     results: list[dict[str, str]] = []
     for slug, (inquiry_uri, _home) in _discover_inquiries(dataset).items():
         results.append(
@@ -73,7 +86,7 @@ def list_inquiries_dataset(dataset: Dataset) -> list[dict[str, str]]:
                 "created": _inquiry_property(dataset, inquiry_uri, DCTERMS_NS.created),
             }
         )
-    return results
+    return InstrumentResult.from_rows(results)
 
 
 def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
@@ -399,18 +412,38 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
     return "\n".join(lines)
 
 
-def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
+def validate_inquiry(graph_path: Path, slug: str) -> InstrumentResult[dict]:
     """Validate an inquiry graph, returning a list of check-result dicts.
 
     Each result has keys: check (str), status ("pass"/"fail"/"warn"), message (str),
     and optionally details (list).
     """
     dataset = _load_dataset(graph_path)
+    # Return the inner result VERBATIM. Re-wrapping via `from_rows(inner(...).rows)`
+    # would silently downgrade `unwired` to `empty` -- and it would pass both the AST
+    # guard and every row-count test, because the annotation is right and the rows match.
     return validate_inquiry_dataset(dataset, slug)
 
 
-def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
-    """Validate an inquiry using an already parsed graph dataset."""
+def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[dict]:
+    """Validate an inquiry using an already parsed graph dataset.
+
+    ``unwired`` in two cases, both of which previously produced a reassuring answer
+    the validator had not earned:
+
+    - **The inquiry does not exist.** (Was: ``ValueError``.)
+    - **The inquiry has no boundary/flow subgraph.** This is the important one. The
+      subgraph is emitted by ``inquiry_compile.emit_inquiry_views`` into a DEDICATED
+      named graph whose identifier is the inquiry URI. If the inquiry was only ever
+      emitted as an entity in the shared ``graph/knowledge`` layer, that dedicated
+      graph does not exist -- and the previous code substituted a brand-new empty
+      ``Graph()``. Every structural check then ran over ZERO triples and reported
+      ``pass``: boundary_reachability (no BoundaryOut to be unreachable), no_cycles
+      (no edges to form a cycle), orphaned_interior (no interior nodes). **A
+      structurally broken inquiry validated green because the validator was looking
+      at nothing.** An empty subgraph is not evidence of validity; it is evidence
+      that the check could not run.
+    """
     inquiries = _discover_inquiries(dataset)
 
     requested = slug
@@ -423,13 +456,26 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
         normalized = _slug(requested)
         match = next((value for cand, value in inquiries.items() if _slug(cand) == normalized), None)
     if match is None:
-        raise ValueError(f"Inquiry 'inquiry/{requested}' does not exist")
+        return InstrumentResult.unwired(
+            code="inquiry_not_found",
+            reason=f"Inquiry 'inquiry/{requested}' does not exist.",
+        )
 
-    inquiry_uri, home_graph = match
-    # Materialized inquiries live in the shared knowledge graph. Their metadata
-    # should validate, but the shared graph must not be treated as their private
-    # boundary/edge subgraph.
-    inquiry_graph = home_graph if str(home_graph.identifier) == str(inquiry_uri) else Graph()
+    inquiry_uri, _home_graph = match
+    # The AUTHORITATIVE layer for boundary/flow is the dedicated named graph whose
+    # identifier is the inquiry URI -- not whichever graph the type triple happened
+    # to be discovered in. `dataset.graph()` mints an empty graph when absent, so an
+    # empty result here means the subgraph was never compiled.
+    inquiry_graph = dataset.graph(inquiry_uri)
+    if len(inquiry_graph) == 0:
+        return InstrumentResult.unwired(
+            code="no_inquiry_subgraph",
+            reason=(
+                f"Inquiry 'inquiry/{requested}' has no compiled boundary/flow subgraph "
+                f"(no named graph {inquiry_uri}). Its structural checks cannot run; "
+                "reporting them as passing would validate an inquiry nobody inspected."
+            ),
+        )
 
     status = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus) or "sketch"
     target = next((o for graph in dataset.graphs() for o in graph.objects(inquiry_uri, SCI_NS.target)), None)
@@ -838,4 +884,4 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
                 }
             )
 
-    return results
+    return InstrumentResult.from_rows(results)
