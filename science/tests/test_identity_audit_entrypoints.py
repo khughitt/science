@@ -35,7 +35,7 @@ def test_materialization_audit_reports_collision_without_crashing(tmp_path: Path
 
 def test_collect_unresolved_refs_excludes_identity_collision(tmp_path: Path) -> None:
     _duplicate_owner(tmp_path)
-    refs = collect_unresolved_refs(tmp_path)  # must not raise
+    refs = collect_unresolved_refs(tmp_path).rows  # must not raise
     # the collision is NOT mislabeled as an unresolved reference (e.g. to "proj")
     # `collect_unresolved_refs` returns a list of `UnresolvedRef` TypedDicts.
     assert all(ref["target"] != "proj" for ref in refs)

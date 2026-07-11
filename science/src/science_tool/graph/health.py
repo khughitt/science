@@ -40,6 +40,14 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
+from science_tool.instruments import InstrumentResult
+
+#: An unscannable project does not raise — ``load_project_sources`` simply returns zero
+#: entities, and every entity-driven check then "finds" nothing. That is the silent
+#: instrument this code exists to stop, so the three checks that walk ``sources.entities``
+#: share one precondition and one code.
+_PROJECT_SOURCES_EMPTY = "project_sources_empty"
+_NO_ENTITIES_REASON = "project sources loaded zero entities; nothing was scanned"
 
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_consumed_but_unverified",
@@ -100,14 +108,21 @@ def _classify(target: str) -> str:
     return "unknown"
 
 
-def collect_unresolved_refs(project_root: Path, *, sources: ProjectSources | None = None) -> list[UnresolvedRef]:
+def collect_unresolved_refs(
+    project_root: Path, *, sources: ProjectSources | None = None
+) -> InstrumentResult[UnresolvedRef]:
     """Walk a project, run the audit, group unresolved refs by target.
 
-    Returns a list sorted by mention count (descending), then target (asc).
+    Rows are sorted by mention count (descending), then target (asc).
     Meta: refs are excluded (they're intentional metadata, not unresolved).
+
+    ``unwired`` when the load produced no entities: an audit of nothing yields no
+    dangling refs, which says nothing about the project's references.
     """
     if sources is None:
         sources = load_project_sources(project_root.resolve(), strict_identity=False)
+    if not sources.entities:
+        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
     rows, _ = audit_project_sources(sources)
 
     # Group fail rows by target
@@ -134,15 +149,20 @@ def collect_unresolved_refs(project_root: Path, *, sources: ProjectSources | Non
         for target, sources_list in by_target.items()
     ]
     result.sort(key=lambda r: (-r["mention_count"], r["target"]))
-    return result
+    return InstrumentResult.from_rows(result)
 
 
 def collect_unregistered_ref_kinds(
     project_root: Path, *, sources: ProjectSources | None = None
-) -> list[UnregisteredRefKind]:
-    """Report identity refs whose CURIE prefix is not a registered entity kind."""
+) -> InstrumentResult[UnregisteredRefKind]:
+    """Report identity refs whose CURIE prefix is not a registered entity kind.
+
+    ``unwired`` when the load produced no entities — there were no refs to inspect.
+    """
     if sources is None:
         sources = load_project_sources(project_root.resolve())
+    if not sources.entities:
+        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
     external = external_prefixes(sources.ontology_catalogs)
     peer_ids = sources.peer_ids
     grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
@@ -185,7 +205,7 @@ def collect_unregistered_ref_kinds(
                 "sources": sorted(bucket["sources"]),
             }
         )
-    return sorted(rows, key=lambda row: (row["kind"], row["field"]))
+    return InstrumentResult.from_rows(sorted(rows, key=lambda row: (row["kind"], row["field"])))
 
 
 def _is_registered_peer_address(raw: str, peer_ids: frozenset[str]) -> bool:
@@ -238,9 +258,22 @@ def _parse_list_body(body: str) -> list[str]:
     return cleaned
 
 
-def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
-    """Find any files still containing `tags:` lines (frontmatter or task)."""
+_LINGERING_TAGS_SCAN_DIRS = ("doc", "entities", "tasks")
+
+
+def collect_lingering_tags(project_root: Path) -> InstrumentResult[LingeringTagsRecord]:
+    """Find any files still containing `tags:` lines (frontmatter or task).
+
+    Each scan directory is skipped when absent. ``unwired`` when NONE of them exists:
+    the scan then visits no file, and "no lingering tags" is a statement about an
+    empty search, not about the project.
+    """
     project_root = project_root.resolve()
+    if not any((project_root / scan_dir).is_dir() for scan_dir in _LINGERING_TAGS_SCAN_DIRS):
+        return InstrumentResult.unwired(
+            code="scan_dirs_missing",
+            reason=f"none of {', '.join(f'{name}/' for name in _LINGERING_TAGS_SCAN_DIRS)} exists; nothing was scanned",
+        )
     results: list[LingeringTagsRecord] = []
 
     for scan_dir in ["doc", "entities"]:
@@ -278,7 +311,7 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
                 }
             )
 
-    return results
+    return InstrumentResult.from_rows(results)
 
 
 class TaskArchiveLag(TypedDict):
@@ -335,6 +368,20 @@ class SchemaInvalidFinding(TypedDict):
     message: str
 
 
+class UnwiredCheck(TypedDict):
+    """A check that COULD NOT RUN. Its rows are meaningless and are not reported.
+
+    This is deliberately NOT folded into ``total_issues``. An unwired check is not a
+    finding about the project — it is a HOLE IN THE DIAGNOSTIC, and burying it in a
+    count would re-hide exactly what it exists to expose. It gets its own list, and
+    the renderer must refuse to call the project clean while this list is non-empty.
+    """
+
+    check: str
+    code: str
+    reason: str | None
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     unregistered_ref_kinds: list[UnregisteredRefKind]
@@ -354,6 +401,7 @@ class HealthReport(TypedDict):
     validation: list[ValidationFinding]
     accepted_validation: list[AcceptedValidationFinding]
     prose_epistemics: dict[str, object]
+    unwired_checks: list[UnwiredCheck]
     total_issues: int
     _meta: NotRequired["HealthMeta"]
 
@@ -410,6 +458,32 @@ def _run_health_checks(context: HealthContext) -> dict[str, object]:
     return results
 
 
+def _drain_instrument_results(
+    results: dict[str, object],
+) -> tuple[dict[str, object], list[UnwiredCheck]]:
+    """Unpack every ``InstrumentResult`` into rows, diverting the unwired ones.
+
+    An unwired check contributes NO rows to the report — they are meaningless by the
+    type's own invariant — and instead surfaces as an ``UnwiredCheck``. Checks that do
+    not (yet) return an ``InstrumentResult`` pass through untouched.
+    """
+    rows: dict[str, object] = {}
+    unwired: list[UnwiredCheck] = []
+    for name, value in results.items():
+        if not isinstance(value, InstrumentResult):
+            rows[name] = value
+            continue
+        if value.status == "unwired":
+            if value.code is None:  # pragma: no cover — the model validator forbids it
+                raise RuntimeError(f"health check {name!r} returned unwired without a code")
+            unwired.append({"check": name, "code": value.code, "reason": value.reason})
+            rows[name] = []
+            continue
+        rows[name] = value.rows
+    unwired.sort(key=lambda row: row["check"])
+    return rows, unwired
+
+
 def _entity_identity_finding(warning: InventoryWarning) -> EntityIdentityFinding:
     return {
         "code": warning.code,
@@ -428,7 +502,13 @@ def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFindi
     ]
 
 
-def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
+def collect_validation_findings(project_root: Path) -> InstrumentResult[ValidationFinding]:
+    """Run canonical validation and return its warnings/errors as findings.
+
+    This check has NO unwired state. A ``ValidateContextError`` — the one way it can
+    fail to reach the validators — is already a RESULT: it is reported as an error
+    finding, not laundered into "could not run".
+    """
     from science_tool.validate import runner as validate_runner
     from science_tool.validate.context import ValidateContextError
     from science_tool.validate.result import Severity
@@ -436,17 +516,19 @@ def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
     try:
         run_result = validate_runner.run(project_root, strict=False, verbose=False, enable_python_sidecar=False)
     except ValidateContextError as exc:
-        return [
-            {
-                "severity": "error",
-                "path": None,
-                "line": None,
-                "message": str(exc),
-                "rule": "validate.context",
-                "task": None,
-            }
-        ]
-    return [
+        return InstrumentResult.ok(
+            [
+                {
+                    "severity": "error",
+                    "path": None,
+                    "line": None,
+                    "message": str(exc),
+                    "rule": "validate.context",
+                    "task": None,
+                }
+            ]
+        )
+    findings: list[ValidationFinding] = [
         {
             "severity": _validation_health_severity(result.severity),
             "path": str(result.path) if result.path is not None else None,
@@ -458,6 +540,7 @@ def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
         for result in run_result.results
         if result.severity is not Severity.INFO
     ]
+    return InstrumentResult.from_rows(findings)
 
 
 def _text_matches(value: str | None, needles: object) -> bool:
@@ -693,7 +776,8 @@ def build_health_report(
             lambda: load_project_sources(project_root, strict_core_schema=False, strict_identity=False),
         )
     check_results = _empty_check_results(project_root)
-    check_results.update(_run_health_checks(context))
+    check_rows, unwired_checks = _drain_instrument_results(_run_health_checks(context))
+    check_results.update(check_rows)
     identity_policy_findings = cast("list[IdentityPolicyFinding]", check_results["identity_policy"])
     entity_identity = cast("list[EntityIdentityFinding]", check_results.get("entity_identity", []))
     layered_claims_enabled = "layered_claim_migration" in {check.name for check in selected_checks}
@@ -834,6 +918,7 @@ def build_health_report(
         "validation": validation,
         "accepted_validation": accepted_validation,
         "prose_epistemics": prose_epistemics,
+        "unwired_checks": unwired_checks,
         "total_issues": total_issues,
     }
     if collect_timings:
@@ -848,11 +933,24 @@ OVERVIEW_LINE_BUDGET = 150
 OVERVIEW_WORD_BUDGET = 1200
 
 
-def collect_agent_context_findings(project_root: Path) -> list[AgentContextFinding]:
-    """Return drift that makes session-start agent context too large or fragmented."""
+_AGENT_CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md", "core/overview.md")
+
+
+def collect_agent_context_findings(project_root: Path) -> InstrumentResult[AgentContextFinding]:
+    """Return drift that makes session-start agent context too large or fragmented.
+
+    ``unwired`` when none of the files it inspects exists: every branch below is
+    guarded on a file being present, so an absent set yields zero findings without
+    the check ever having looked at anything.
+    """
     from science_tool.curate.agents_md import collect_agents_md_state
 
     project_root = project_root.resolve()
+    if not any((project_root / name).is_file() for name in _AGENT_CONTEXT_FILES):
+        return InstrumentResult.unwired(
+            code="agent_context_files_absent",
+            reason=f"none of {', '.join(_AGENT_CONTEXT_FILES)} exists; no agent context was inspected",
+        )
     state = collect_agents_md_state(project_root)
     findings: list[AgentContextFinding] = []
 
@@ -913,7 +1011,7 @@ def collect_agent_context_findings(project_root: Path) -> list[AgentContextFindi
                 }
             )
 
-    return findings
+    return InstrumentResult.from_rows(findings)
 
 
 def _claude_md_is_minimal(path: Path) -> bool:
@@ -923,7 +1021,7 @@ def _claude_md_is_minimal(path: Path) -> bool:
     return lines == ["@AGENTS.md"]
 
 
-def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffoldFinding]:
+def collect_tooling_scaffold_findings(project_root: Path) -> InstrumentResult[ToolingScaffoldFinding]:
     """Check the project has the canonical science invocation scaffold.
 
     A compliant project has:
@@ -934,6 +1032,10 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
     Without these, the documented `uv run science <cmd>` shorthand cannot
     work; users fall back to verbose `uv run --project ...` or `uv run --with ...`
     forms. See `commands/create-project.md` (pyproject.toml section).
+
+    This check has NO unwired state. The ABSENCE of those files IS its finding — a
+    bare directory yields two findings, not silence — so an empty return is
+    unambiguous: the scaffold is present and compliant.
     """
     findings: list[ToolingScaffoldFinding] = []
 
@@ -1003,7 +1105,7 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
                 }
             )
 
-    return findings
+    return InstrumentResult.from_rows(findings)
 
 
 def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
@@ -1021,12 +1123,22 @@ class LegacyTaskTypeFinding(TypedDict):
     source_file: str
 
 
-def collect_legacy_task_type(project_root: Path) -> list[LegacyTaskTypeFinding]:
-    """Return a list of tasks still carrying the legacy `type:` field."""
+def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskTypeFinding]:
+    """Return the tasks still carrying the legacy `type:` field.
+
+    ``unwired`` when there is no ``tasks/`` directory: no task file was read, so
+    "no legacy task types" is a claim about a backlog that was never opened.
+    """
     from science_tool.tasks import parse_tasks
 
-    findings: list[LegacyTaskTypeFinding] = []
     tasks_dir = project_root / "tasks"
+    if not tasks_dir.is_dir():
+        return InstrumentResult.unwired(
+            code="tasks_dir_missing",
+            reason=f"{tasks_dir.name}/ does not exist; no task file was read",
+        )
+
+    findings: list[LegacyTaskTypeFinding] = []
     candidates = [tasks_dir / "active.md"]
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
@@ -1043,7 +1155,7 @@ def collect_legacy_task_type(project_root: Path) -> list[LegacyTaskTypeFinding]:
                         source_file=str(path.relative_to(project_root)),
                     )
                 )
-    return findings
+    return InstrumentResult.from_rows(findings)
 
 
 class InvalidEntityAspectsFinding(TypedDict):
@@ -1108,10 +1220,15 @@ def _coerce_external_curie(raw: object) -> str | None:
 
 def collect_identity_policy_findings(
     project_root: Path, *, sources: ProjectSources | None = None
-) -> list[IdentityPolicyFinding]:
-    """Return identity-policy issues surfaced from loaded entities and relations."""
+) -> InstrumentResult[IdentityPolicyFinding]:
+    """Return identity-policy issues surfaced from loaded entities and relations.
+
+    ``unwired`` when the load produced no entities — no identity was inspected.
+    """
     if sources is None:
         sources = load_project_sources(project_root.resolve())
+    if not sources.entities:
+        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
     findings: list[IdentityPolicyFinding] = []
 
     primary_claims: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -1159,7 +1276,7 @@ def collect_identity_policy_findings(
                 )
 
     findings.sort(key=lambda row: (row["check"], row["entity_id"], row["source_file"]))
-    return findings
+    return InstrumentResult.from_rows(findings)
 
 
 def _collect_entity_identity_findings(
@@ -1228,8 +1345,16 @@ def _collect_entity_identity_findings(
             )
 
 
-def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspectsFinding]:
-    """Return a list of entity files carrying invalid explicit `aspects:` values."""
+def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[InvalidEntityAspectsFinding]:
+    """Return the entity files carrying invalid explicit `aspects:` values.
+
+    Two preconditions, both previously silent:
+
+    - ``aspect_catalog_missing`` — ``load_project_aspects`` raises ``FileNotFoundError``
+      when science.yaml is absent. The catalog this check validates AGAINST failed to
+      load; it used to swallow that and answer "no invalid aspects".
+    - ``entities_dir_missing`` — no ``entities/`` directory, so no entity was read.
+    """
     from science_model.aspects import (
         AspectValidationError,
         load_project_aspects,
@@ -1239,42 +1364,50 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
 
     try:
         project_aspects = load_project_aspects(project_root)
-    except FileNotFoundError:
-        return []
+    except FileNotFoundError as exc:
+        return InstrumentResult.unwired(
+            code="aspect_catalog_missing",
+            reason=f"the aspect catalog could not be loaded, so no aspect could be validated: {exc}",
+        )
+
+    entities_root = project_root / "entities"
+    if not entities_root.is_dir():
+        return InstrumentResult.unwired(
+            code="entities_dir_missing",
+            reason="entities/ does not exist; no entity aspects were read",
+        )
+
+    from science_tool.entity_scan import iter_entity_markdown
 
     findings: list[InvalidEntityAspectsFinding] = []
-    entities_root = project_root / "entities"
-    if entities_root.is_dir():
-        from science_tool.entity_scan import iter_entity_markdown
-
-        for path in iter_entity_markdown(entities_root):
-            result = parse_frontmatter(path)
-            if result is None:
-                continue
-            fm, _ = result
-            if "aspects" not in fm:
-                continue
-            raw = fm.get("aspects")
-            if not isinstance(raw, list):
-                findings.append(
-                    InvalidEntityAspectsFinding(
-                        entity_id=str(fm.get("id", path.stem)),
-                        source_file=str(path.relative_to(project_root)),
-                        message="aspects must be a list",
-                    )
+    for path in iter_entity_markdown(entities_root):
+        result = parse_frontmatter(path)
+        if result is None:
+            continue
+        fm, _ = result
+        if "aspects" not in fm:
+            continue
+        raw = fm.get("aspects")
+        if not isinstance(raw, list):
+            findings.append(
+                InvalidEntityAspectsFinding(
+                    entity_id=str(fm.get("id", path.stem)),
+                    source_file=str(path.relative_to(project_root)),
+                    message="aspects must be a list",
                 )
-                continue
-            try:
-                validate_entity_aspects([str(a) for a in raw], project_aspects)
-            except AspectValidationError as exc:
-                findings.append(
-                    InvalidEntityAspectsFinding(
-                        entity_id=str(fm.get("id", path.stem)),
-                        source_file=str(path.relative_to(project_root)),
-                        message=str(exc),
-                    )
+            )
+            continue
+        try:
+            validate_entity_aspects([str(a) for a in raw], project_aspects)
+        except AspectValidationError as exc:
+            findings.append(
+                InvalidEntityAspectsFinding(
+                    entity_id=str(fm.get("id", path.stem)),
+                    source_file=str(path.relative_to(project_root)),
+                    message=str(exc),
                 )
-    return findings
+            )
+    return InstrumentResult.from_rows(findings)
 
 
 def _passes_gate(
@@ -1354,298 +1487,306 @@ def _load_runtime_pkg(project_root: Path, datapackage_path: str) -> dict | None:
         return None
 
 
-def check_dataset_anomalies(project_root: Path) -> list[dict]:
+def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
     """Run dataset-related health checks and return found anomalies.
 
     Each anomaly dict has: code, severity, entity_id, file_path, message.
 
     Uses raw frontmatter dicts (not the Pydantic model) so that invariant
     violations — which cause model_validator to raise — can still be flagged.
+
+    ``unwired`` when there is no ``entities/datasets/`` directory: every check below
+    is anchored on a dataset entity, and the research-package symmetry check would
+    otherwise flag every display as a missing dataset on the strength of a directory
+    it never opened.
     """
     from science_model.frontmatter import parse_frontmatter
+
+    datasets_dir = project_root / "entities" / "datasets"
+    if not datasets_dir.is_dir():
+        return InstrumentResult.unwired(
+            code="datasets_dir_missing",
+            reason="entities/datasets/ does not exist; no dataset entity was read",
+        )
 
     issues: list[dict] = []
     workflow_runs = _load_workflow_runs(project_root)
 
-    datasets_dir = project_root / "entities" / "datasets"
-
     # Build datasets_by_id for transitive gate walk (task 6.5)
     datasets_by_id: dict[str, dict] = {}
-    if datasets_dir.exists():
-        for md in datasets_dir.rglob("*.md"):
-            result = parse_frontmatter(md)
-            if not result:
-                continue
-            fm, _ = result
-            if fm.get("kind") == "dataset" and fm.get("id"):
-                datasets_by_id[str(fm["id"])] = fm
+    for md in datasets_dir.rglob("*.md"):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("kind") == "dataset" and fm.get("id"):
+            datasets_by_id[str(fm["id"])] = fm
     gate_memo: dict[str, tuple[bool, str]] = {}
 
     # Load research packages for symmetry check (task 6.7)
     research_packages = _load_research_packages(project_root)
 
-    if datasets_dir.exists():
-        for md in datasets_dir.rglob("*.md"):
-            result = parse_frontmatter(md)
-            if not result:
-                continue
-            fm, _ = result
-            if fm.get("kind") != "dataset":
-                continue
-            entity_id = str(fm.get("id", md.stem))
-            origin = fm.get("origin", "external")  # legacy default
+    for md in datasets_dir.rglob("*.md"):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("kind") != "dataset":
+            continue
+        entity_id = str(fm.get("id", md.stem))
+        origin = fm.get("origin", "external")  # legacy default
 
-            # Invariant #7: external must not carry derivation:
-            if origin == "external" and "derivation" in fm:
+        # Invariant #7: external must not carry derivation:
+        if origin == "external" and "derivation" in fm:
+            issues.append(
+                {
+                    "code": "dataset_origin_block_mismatch",
+                    "severity": "error",
+                    "entity_id": entity_id,
+                    "file_path": str(md),
+                    "message": "origin: external entity carries a derivation: block (invariant #7)",
+                }
+            )
+
+        # Invariant #8: derived must not carry access:, accessions:, or local_path:
+        if origin == "derived":
+            forbidden = []
+            if "access" in fm:
+                forbidden.append("access")
+            if fm.get("accessions"):
+                forbidden.append("accessions")
+            if fm.get("local_path"):
+                forbidden.append("local_path")
+            if forbidden:
                 issues.append(
                     {
                         "code": "dataset_origin_block_mismatch",
                         "severity": "error",
                         "entity_id": entity_id,
                         "file_path": str(md),
-                        "message": "origin: external entity carries a derivation: block (invariant #7)",
+                        "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
                     }
                 )
 
-            # Invariant #8: derived must not carry access:, accessions:, or local_path:
-            if origin == "derived":
-                forbidden = []
-                if "access" in fm:
-                    forbidden.append("access")
-                if fm.get("accessions"):
-                    forbidden.append("accessions")
-                if fm.get("local_path"):
-                    forbidden.append("local_path")
-                if forbidden:
-                    issues.append(
-                        {
-                            "code": "dataset_origin_block_mismatch",
-                            "severity": "error",
-                            "entity_id": entity_id,
-                            "file_path": str(md),
-                            "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
-                        }
-                    )
+        # External-access anomalies
+        if origin == "external":
+            access = fm.get("access") or {}
+            if not isinstance(access, dict):
+                issues.append(
+                    {
+                        "code": "dataset_access_invalid",
+                        "severity": "error",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": "origin: external entity access must be a mapping",
+                    }
+                )
+                continue
+            verified = bool(access.get("verified", False))
+            exception_mode = (access.get("exception") or {}).get("mode", "")
+            consumed_by = list(fm.get("consumed_by") or [])
 
-            # External-access anomalies
-            if origin == "external":
-                access = fm.get("access") or {}
-                if not isinstance(access, dict):
-                    issues.append(
-                        {
-                            "code": "dataset_access_invalid",
-                            "severity": "error",
-                            "entity_id": entity_id,
-                            "file_path": str(md),
-                            "message": "origin: external entity access must be a mapping",
-                        }
-                    )
-                    continue
-                verified = bool(access.get("verified", False))
-                exception_mode = (access.get("exception") or {}).get("mode", "")
-                consumed_by = list(fm.get("consumed_by") or [])
+            # Consumed but unverified (with no exception)
+            if consumed_by and not verified and not exception_mode:
+                issues.append(
+                    {
+                        "code": "dataset_consumed_but_unverified",
+                        "severity": "error",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
+                    }
+                )
 
-                # Consumed but unverified (with no exception)
-                if consumed_by and not verified and not exception_mode:
-                    issues.append(
-                        {
-                            "code": "dataset_consumed_but_unverified",
-                            "severity": "error",
-                            "entity_id": entity_id,
-                            "file_path": str(md),
-                            "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
-                        }
-                    )
+            # Stale review (verified + last_reviewed > 365 days ago)
+            last_reviewed = access.get("last_reviewed", "")
+            if verified and last_reviewed:
+                from datetime import date
 
-                # Stale review (verified + last_reviewed > 365 days ago)
-                last_reviewed = access.get("last_reviewed", "")
-                if verified and last_reviewed:
-                    from datetime import date
-
-                    try:
-                        reviewed = date.fromisoformat(last_reviewed)
-                        if (date.today() - reviewed).days > 365:
-                            issues.append(
-                                {
-                                    "code": "dataset_stale_review",
-                                    "severity": "warning",
-                                    "entity_id": entity_id,
-                                    "file_path": str(md),
-                                    "message": f"last_reviewed {last_reviewed} is older than 12 months",
-                                }
-                            )
-                    except ValueError:
-                        pass
-
-                # Missing source_url on verified entity
-                if verified and not access.get("source_url"):
-                    issues.append(
-                        {
-                            "code": "dataset_missing_source_url",
-                            "severity": "warning",
-                            "entity_id": entity_id,
-                            "file_path": str(md),
-                            "message": "access.verified is true but source_url is empty",
-                        }
-                    )
-
-                # Task 6.6: verified but unstageable
-                datapackage = fm.get("datapackage", "")
-                local_path = fm.get("local_path", "")
-                stageable_path = datapackage or local_path
                 try:
-                    dataset_class = dataset_class_for(fm)
-                    runtime_state = runtime_state_for(fm)
+                    reviewed = date.fromisoformat(last_reviewed)
+                    if (date.today() - reviewed).days > 365:
+                        issues.append(
+                            {
+                                "code": "dataset_stale_review",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"last_reviewed {last_reviewed} is older than 12 months",
+                            }
+                        )
                 except ValueError:
-                    dataset_class = "deposit"
-                    runtime_state = "blocked-access"
-                # evaluate-next / track are not-yet-staged triage tiers, where a
-                # verified dataset means "confirmed reachable", not "staged" — so
-                # absence of datapackage/local_path is expected, not an anomaly.
-                not_yet_staged = (fm.get("tier") or "").strip() in ("evaluate-next", "track")
-                if (
-                    dataset_class == "deposit"
-                    and runtime_state == "unstaged-deposit"
-                    and (verified or exception_mode)
-                    and not stageable_path
-                    and not not_yet_staged
-                ):
+                    pass
+
+            # Missing source_url on verified entity
+            if verified and not access.get("source_url"):
+                issues.append(
+                    {
+                        "code": "dataset_missing_source_url",
+                        "severity": "warning",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": "access.verified is true but source_url is empty",
+                    }
+                )
+
+            # Task 6.6: verified but unstageable
+            datapackage = fm.get("datapackage", "")
+            local_path = fm.get("local_path", "")
+            stageable_path = datapackage or local_path
+            try:
+                dataset_class = dataset_class_for(fm)
+                runtime_state = runtime_state_for(fm)
+            except ValueError:
+                dataset_class = "deposit"
+                runtime_state = "blocked-access"
+            # evaluate-next / track are not-yet-staged triage tiers, where a
+            # verified dataset means "confirmed reachable", not "staged" — so
+            # absence of datapackage/local_path is expected, not an anomaly.
+            not_yet_staged = (fm.get("tier") or "").strip() in ("evaluate-next", "track")
+            if (
+                dataset_class == "deposit"
+                and runtime_state == "unstaged-deposit"
+                and (verified or exception_mode)
+                and not stageable_path
+                and not not_yet_staged
+            ):
+                issues.append(
+                    {
+                        "code": "dataset_verified_but_unstageable",
+                        "severity": "warning",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": (
+                            "access is verified but runtime files are not staged; add "
+                            "datapackage:/local_path: or move the dataset out of use-now"
+                        ),
+                    }
+                )
+            elif dataset_class == "deposit" and stageable_path:
+                full = project_root / stageable_path
+                if not full.exists():
                     issues.append(
                         {
                             "code": "dataset_verified_but_unstageable",
                             "severity": "warning",
                             "entity_id": entity_id,
                             "file_path": str(md),
-                            "message": (
-                                "access is verified but runtime files are not staged; add "
-                                "datapackage:/local_path: or move the dataset out of use-now"
-                            ),
+                            "message": f"runtime path {stageable_path} does not exist on disk",
                         }
                     )
-                elif dataset_class == "deposit" and stageable_path:
-                    full = project_root / stageable_path
-                    if not full.exists():
-                        issues.append(
-                            {
-                                "code": "dataset_verified_but_unstageable",
-                                "severity": "warning",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"runtime path {stageable_path} does not exist on disk",
-                            }
-                        )
 
-            # Derived workflow-run checks (invariant #9)
-            if origin == "derived":
-                derivation = fm.get("derivation") or {}
-                wf_run_id = str(derivation.get("workflow_run", ""))
-                if wf_run_id:
-                    run_fm = workflow_runs.get(wf_run_id)
-                    if run_fm is None:
+        # Derived workflow-run checks (invariant #9)
+        if origin == "derived":
+            derivation = fm.get("derivation") or {}
+            wf_run_id = str(derivation.get("workflow_run", ""))
+            if wf_run_id:
+                run_fm = workflow_runs.get(wf_run_id)
+                if run_fm is None:
+                    issues.append(
+                        {
+                            "code": "dataset_derived_missing_workflow_run",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
+                        }
+                    )
+                else:
+                    produces = list(run_fm.get("produces") or [])
+                    if entity_id not in produces:
                         issues.append(
                             {
-                                "code": "dataset_derived_missing_workflow_run",
+                                "code": "dataset_derived_asymmetric_edge",
                                 "severity": "error",
                                 "entity_id": entity_id,
                                 "file_path": str(md),
-                                "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
-                            }
-                        )
-                    else:
-                        produces = list(run_fm.get("produces") or [])
-                        if entity_id not in produces:
-                            issues.append(
-                                {
-                                    "code": "dataset_derived_asymmetric_edge",
-                                    "severity": "error",
-                                    "entity_id": entity_id,
-                                    "file_path": str(md),
-                                    "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
-                                }
-                            )
-
-                # Task 6.5: transitive input chain (cycle-safe)
-                for inp in list(derivation.get("inputs") or []):
-                    ok, msg = _passes_gate(str(inp), datasets_by_id, in_progress=frozenset({entity_id}), memo=gate_memo)
-                    if not ok:
-                        issues.append(
-                            {
-                                "code": "dataset_derived_input_chain_broken",
-                                "severity": "error",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"input chain broken: {msg}",
-                            }
-                        )
-                        break  # one error per entity is enough
-
-            # Task 6.7: research-package symmetry (forward: dataset.consumed_by -> rp.displays)
-            consumed_by_list = list(fm.get("consumed_by") or [])
-            for cons in consumed_by_list:
-                if str(cons).startswith("research-package:"):
-                    rp_displays = research_packages.get(str(cons))
-                    if rp_displays is None:
-                        issues.append(
-                            {
-                                "code": "dataset_research_package_asymmetric",
-                                "severity": "error",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"consumed_by lists {cons} but it doesn't resolve to a research-package",
-                            }
-                        )
-                    elif entity_id not in rp_displays:
-                        issues.append(
-                            {
-                                "code": "dataset_research_package_asymmetric",
-                                "severity": "error",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
+                                "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
                             }
                         )
 
-            # Task 6.10: cached-field drift (datapackage YAML vs entity frontmatter)
-            datapackage_path = fm.get("datapackage", "")
-            if datapackage_path:
-                rt = _load_runtime_pkg(project_root, datapackage_path)
-                if rt is not None:
-                    fm_license = fm.get("license", "")
-                    rt_license = rt.get("license", "")
-                    if fm_license and rt_license and fm_license != rt_license:
-                        issues.append(
-                            {
-                                "code": "dataset_cached_field_drift",
-                                "severity": "warning",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"license drift: entity={fm_license!r} runtime={rt_license!r}",
-                            }
-                        )
-                    fm_ot = sorted(list(fm.get("ontology_terms") or []))
-                    rt_ot = sorted(list(rt.get("ontology_terms") or []))
-                    if fm_ot and rt_ot and fm_ot != rt_ot:
-                        issues.append(
-                            {
-                                "code": "dataset_cached_field_drift",
-                                "severity": "warning",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"ontology_terms drift: entity={fm_ot} runtime={rt_ot}",
-                            }
-                        )
-                    fm_uc = fm.get("update_cadence", "")
-                    rt_uc = rt.get("update_cadence", "")
-                    if fm_uc and rt_uc and fm_uc != rt_uc:
-                        issues.append(
-                            {
-                                "code": "dataset_cached_field_drift",
-                                "severity": "warning",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"update_cadence drift: entity={fm_uc!r} runtime={rt_uc!r}",
-                            }
-                        )
+            # Task 6.5: transitive input chain (cycle-safe)
+            for inp in list(derivation.get("inputs") or []):
+                ok, msg = _passes_gate(str(inp), datasets_by_id, in_progress=frozenset({entity_id}), memo=gate_memo)
+                if not ok:
+                    issues.append(
+                        {
+                            "code": "dataset_derived_input_chain_broken",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"input chain broken: {msg}",
+                        }
+                    )
+                    break  # one error per entity is enough
+
+        # Task 6.7: research-package symmetry (forward: dataset.consumed_by -> rp.displays)
+        consumed_by_list = list(fm.get("consumed_by") or [])
+        for cons in consumed_by_list:
+            if str(cons).startswith("research-package:"):
+                rp_displays = research_packages.get(str(cons))
+                if rp_displays is None:
+                    issues.append(
+                        {
+                            "code": "dataset_research_package_asymmetric",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"consumed_by lists {cons} but it doesn't resolve to a research-package",
+                        }
+                    )
+                elif entity_id not in rp_displays:
+                    issues.append(
+                        {
+                            "code": "dataset_research_package_asymmetric",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
+                        }
+                    )
+
+        # Task 6.10: cached-field drift (datapackage YAML vs entity frontmatter)
+        datapackage_path = fm.get("datapackage", "")
+        if datapackage_path:
+            rt = _load_runtime_pkg(project_root, datapackage_path)
+            if rt is not None:
+                fm_license = fm.get("license", "")
+                rt_license = rt.get("license", "")
+                if fm_license and rt_license and fm_license != rt_license:
+                    issues.append(
+                        {
+                            "code": "dataset_cached_field_drift",
+                            "severity": "warning",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"license drift: entity={fm_license!r} runtime={rt_license!r}",
+                        }
+                    )
+                fm_ot = sorted(list(fm.get("ontology_terms") or []))
+                rt_ot = sorted(list(rt.get("ontology_terms") or []))
+                if fm_ot and rt_ot and fm_ot != rt_ot:
+                    issues.append(
+                        {
+                            "code": "dataset_cached_field_drift",
+                            "severity": "warning",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"ontology_terms drift: entity={fm_ot} runtime={rt_ot}",
+                        }
+                    )
+                fm_uc = fm.get("update_cadence", "")
+                rt_uc = rt.get("update_cadence", "")
+                if fm_uc and rt_uc and fm_uc != rt_uc:
+                    issues.append(
+                        {
+                            "code": "dataset_cached_field_drift",
+                            "severity": "warning",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"update_cadence drift: entity={fm_uc!r} runtime={rt_uc!r}",
+                        }
+                    )
 
     # Task 6.9: umbrella + lineage invariants (cross-entity, done after per-entity loop)
     # #1: an umbrella entity (has siblings:) must not appear in any other entity's consumed_by
@@ -1709,7 +1850,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                     }
                 )
 
-    return issues
+    return InstrumentResult.from_rows(issues)
 
 
 def _load_workflow_runs(project_root: Path) -> dict[str, dict]:

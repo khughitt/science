@@ -40,16 +40,6 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("graph/attention.py", "compute_attention_candidates"),
         ("graph/attention.py", "query_attention_ranked"),
         ("graph/attention.py", "query_attention_sample"),
-        ("graph/health.py", "check_dataset_anomalies"),
-        ("graph/health.py", "collect_agent_context_findings"),
-        ("graph/health.py", "collect_identity_policy_findings"),
-        ("graph/health.py", "collect_invalid_entity_aspects"),
-        ("graph/health.py", "collect_legacy_task_type"),
-        ("graph/health.py", "collect_lingering_tags"),
-        ("graph/health.py", "collect_tooling_scaffold_findings"),
-        ("graph/health.py", "collect_unregistered_ref_kinds"),
-        ("graph/health.py", "collect_unresolved_refs"),
-        ("graph/health.py", "collect_validation_findings"),
     }
 )
 
