@@ -1314,7 +1314,7 @@ def test_cli_apply_translates_writeback_error_to_click_error(
     def _boom(*args, **kwargs):
         raise ApplyWriteBackError("boom")
 
-    monkeypatch.setattr("science_tool.cli.apply_report", _boom)
+    monkeypatch.setattr("science_tool.explore_ideas_cli.apply_report", _boom)
     result = CliRunner().invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
     assert result.exit_code != 0
     assert "boom" in result.output

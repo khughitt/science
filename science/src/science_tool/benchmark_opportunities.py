@@ -7,6 +7,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict, cast
 
@@ -4238,3 +4239,113 @@ def benchmark_hint_candidates_report(
         "review_file": review_file,
         "commons_notice": gap_payload["commons_notice"],
     }
+
+
+def _display_project_path(path: Path) -> str:
+    resolved = path.resolve()
+    home = Path.home().resolve()
+    try:
+        return "~/" + str(resolved.relative_to(home))
+    except ValueError:
+        return str(resolved)
+
+
+def default_hint_candidates_review_path(project_root: Path, generated: date) -> Path:
+    from science_tool.paths import resolve_paths
+
+    doc_dir = resolve_paths(project_root).doc_dir
+    return doc_dir / "audits" / "benchmark-hint-candidates" / f"{generated.isoformat()}-{project_root.name}.yaml"
+
+
+def _resolve_hint_candidates_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    root = project_root.resolve()
+    if output_path is None:
+        return default_hint_candidates_review_path(root, generated)
+
+    path = output_path if output_path.is_absolute() else root / output_path
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"--output must stay under project root: {output_path}") from exc
+    return resolved
+
+
+def write_hint_candidates_review_file(
+    *,
+    payload: Mapping[str, Any],
+    project_root: Path,
+    output_path: Path | None,
+    generated: date,
+    source_command: str,
+) -> Path:
+    path = _resolve_hint_candidates_output_path(project_root, output_path, generated)
+    if path.exists():
+        raise ValueError(f"review file already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "project": project_root.name,
+        "project_root": _display_project_path(project_root),
+        "generated_at": generated.isoformat(),
+        "source_command": source_command,
+        "summary": payload["summary"],
+        "candidates": [
+            {
+                **row,
+                "decision": "pending",
+                "reviewer_notes": "",
+            }
+            for row in payload["hint_candidates"]
+        ],
+    }
+    path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def default_test_triage_review_path(project_root: Path, generated: date) -> Path:
+    from science_tool.paths import resolve_paths
+
+    doc_dir = resolve_paths(project_root).doc_dir
+    return doc_dir / "audits" / "benchmark-test-triage" / f"{generated.isoformat()}-{project_root.name}.yaml"
+
+
+def _resolve_test_triage_output_path(project_root: Path, output_path: Path | None, generated: date) -> Path:
+    root = project_root.resolve()
+    if output_path is None:
+        return default_test_triage_review_path(root, generated)
+
+    path = output_path if output_path.is_absolute() else root / output_path
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"--output must stay under project root: {output_path}") from exc
+    return resolved
+
+
+def write_test_triage_review_file(
+    *,
+    payload: Mapping[str, Any],
+    project_root: Path,
+    output_path: Path | None,
+    generated: date,
+    source_command: str,
+) -> Path:
+    path = _resolve_test_triage_output_path(project_root, output_path, generated)
+    if path.exists():
+        raise ValueError(f"review file already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "project": project_root.name,
+        "project_root": _display_project_path(project_root),
+        "generated_at": generated.isoformat(),
+        "review_file": str(path),
+        "source_command": source_command,
+        "filters": payload["filters"],
+        "summary": payload["summary"],
+        "buckets": payload["buckets"],
+        "fallback_diagnostics": payload["fallback_diagnostics"],
+        "commons_notice": payload["commons_notice"],
+    }
+    path.write_text(yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path

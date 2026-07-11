@@ -48,6 +48,11 @@ def _load_dataset(graph_path: Path) -> Dataset:
     return dataset
 
 
+def load_dataset(graph_path: Path) -> Dataset:
+    """Public accessor for `_load_dataset` — the store-package boundary for callers outside the package."""
+    return _load_dataset(graph_path)
+
+
 def _save_dataset(dataset: Dataset, graph_path: Path) -> None:
     save_graph_dataset(dataset, graph_path)
 

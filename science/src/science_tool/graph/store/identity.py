@@ -60,6 +60,11 @@ def _graph_uri(layer: str) -> URIRef:
     return URIRef(PROJECT_NS[layer])
 
 
+def graph_uri(layer: str) -> URIRef:
+    """Public accessor for `_graph_uri` — the store-package boundary for callers outside the package."""
+    return _graph_uri(layer)
+
+
 def _derive_relation_claim_text(subject_uri: URIRef, predicate_uri: URIRef, object_uri: URIRef) -> str:
     return (
         f"{_relation_claim_label(subject_uri)} "

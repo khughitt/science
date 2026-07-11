@@ -54,7 +54,7 @@ def _write_datapackage(root: Path) -> None:
 def test_download_default_uses_project_data_raw(monkeypatch, tmp_path: Path) -> None:
     _write_project(tmp_path)
     adapter = _Adapter()
-    monkeypatch.setattr("science_tool.cli.get_adapter", lambda source: adapter)
+    monkeypatch.setattr("science_tool.datasets_discovery_cli.get_adapter", lambda source: adapter)
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     result = CliRunner().invoke(
         main,
@@ -69,7 +69,7 @@ def test_download_default_uses_configured_project_root(monkeypatch, tmp_path: Pa
     bulk = tmp_path / "bulk"
     _write_project(tmp_path, {"data": {"root": str(bulk)}})
     adapter = _Adapter()
-    monkeypatch.setattr("science_tool.cli.get_adapter", lambda source: adapter)
+    monkeypatch.setattr("science_tool.datasets_discovery_cli.get_adapter", lambda source: adapter)
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     result = CliRunner().invoke(
         main,
@@ -85,7 +85,7 @@ def test_download_from_subdirectory_discovers_project_root(monkeypatch, tmp_path
     nested.mkdir(parents=True)
     _write_project(tmp_path)
     adapter = _Adapter()
-    monkeypatch.setattr("science_tool.cli.get_adapter", lambda source: adapter)
+    monkeypatch.setattr("science_tool.datasets_discovery_cli.get_adapter", lambda source: adapter)
     monkeypatch.chdir(nested)
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     result = CliRunner().invoke(main, ["datasets", "download", "zenodo:abc"], catch_exceptions=False)
@@ -97,7 +97,7 @@ def test_download_explicit_dest_is_used_verbatim(monkeypatch, tmp_path: Path) ->
     _write_project(tmp_path, {"data": {"root": str(tmp_path / "bulk")}})
     explicit = tmp_path / "chosen"
     adapter = _Adapter()
-    monkeypatch.setattr("science_tool.cli.get_adapter", lambda source: adapter)
+    monkeypatch.setattr("science_tool.datasets_discovery_cli.get_adapter", lambda source: adapter)
     result = CliRunner().invoke(
         main,
         ["datasets", "download", "--project-root", str(tmp_path), "--dest", str(explicit), "zenodo:abc"],

@@ -638,7 +638,7 @@ benchmark:
 
 
 def test_format_gap_candidates_renders_mixed_fallback_without_raising() -> None:
-    from science_tool.cli import _format_gap_candidates_for_table
+    from science_tool.benchmark_cli import _format_gap_candidates_for_table
 
     row = {
         "candidate_mode": "fallback-only",
@@ -667,7 +667,7 @@ def test_format_gap_candidates_renders_mixed_fallback_without_raising() -> None:
 
 
 def test_format_gap_candidates_rejects_entity_specific_and_fallback_mix() -> None:
-    from science_tool.cli import _format_gap_candidates_for_table
+    from science_tool.benchmark_cli import _format_gap_candidates_for_table
 
     row = {
         "candidate_mode": "entity-specific",
@@ -884,7 +884,7 @@ def test_benchmark_hint_candidates_cli_output_requires_write_flag(tmp_path: Path
 
 
 def test_benchmark_hint_candidates_cli_writes_default_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -917,7 +917,7 @@ title: Cytogenetic benchmark gap
 def test_benchmark_hint_candidates_cli_default_review_file_always_uses_canonical_doc_dir(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     (tmp_path / "doc").mkdir()
     (tmp_path / "docs").mkdir()
     _write_entity(
@@ -947,7 +947,7 @@ title: Cytogenetic benchmark gap
 def test_benchmark_hint_candidates_cli_default_review_file_creates_doc_for_docs_only_project(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     (tmp_path / "docs").mkdir()
     _write_entity(
         tmp_path,
@@ -974,7 +974,7 @@ title: Cytogenetic benchmark gap
 
 
 def test_benchmark_hint_candidates_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -1001,7 +1001,7 @@ title: Cytogenetic benchmark gap
 
 
 def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     output_path = tmp_path / "docs" / "audits" / "benchmark-hint-candidates" / "custom.yaml"
     output_path.parent.mkdir(parents=True)
     output_path.write_text("existing: true\n", encoding="utf-8")
@@ -1021,7 +1021,7 @@ def test_benchmark_hint_candidates_cli_refuses_existing_review_file(tmp_path: Pa
 def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_root(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
 
     result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", "../outside.yaml")
 
@@ -1033,7 +1033,7 @@ def test_benchmark_hint_candidates_cli_rejects_relative_output_outside_project_r
 def test_benchmark_hint_candidates_cli_rejects_absolute_output_outside_project_root(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_hint_candidates_today", lambda: date(2026, 6, 30))
     outside_path = tmp_path.parent / "outside-absolute.yaml"
 
     result = _invoke_hint_candidates(tmp_path, "--write-review-file", "--output", str(outside_path))
@@ -2366,7 +2366,7 @@ def test_benchmark_test_triage_cli_runnable_only_conflicts_with_other_readiness(
 
 
 def test_benchmark_test_triage_cli_writes_default_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -2471,7 +2471,7 @@ def test_benchmark_test_triage_review_file_includes_visible_fallback_rollups(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -2532,7 +2532,7 @@ benchmark:
 
 
 def test_benchmark_test_triage_review_file_includes_suppression_diagnostics(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 3))
     _write_entity(
         tmp_path,
         "hypotheses",
@@ -2600,7 +2600,7 @@ benchmark:
 
 
 def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     result = _invoke_test_triage(
         tmp_path,
@@ -2622,7 +2622,7 @@ def test_benchmark_test_triage_cli_writes_custom_project_relative_review_file(tm
 
 
 def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
     output_path = tmp_path / "doc" / "audits" / "benchmark-test-triage" / "custom.yaml"
     output_path.parent.mkdir(parents=True)
     output_path.write_text("existing: true\n", encoding="utf-8")
@@ -2640,7 +2640,7 @@ def test_benchmark_test_triage_cli_refuses_existing_review_file(tmp_path: Path, 
 
 
 def test_benchmark_test_triage_cli_rejects_output_outside_project_root(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("science_tool.cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
+    monkeypatch.setattr("science_tool.benchmark_cli._benchmark_test_triage_today", lambda: date(2026, 7, 1))
 
     relative_result = _invoke_test_triage(tmp_path, "--write-review-file", "--output", "../outside.yaml")
     assert relative_result.exit_code != 0
