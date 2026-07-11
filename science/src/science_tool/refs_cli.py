@@ -8,7 +8,7 @@ from typing import TypedDict
 
 import click
 
-from science_tool.output import OUTPUT_FORMATS
+from science_tool.output import OUTPUT_FORMATS, emit
 from science_tool.peers import PeerUnresolved
 from science_tool.refs import RefIssue, check_refs
 
@@ -115,41 +115,33 @@ def check(
 
     summary = _refs_summary(broken, markers, by_value=by_value)
 
-    if output_format == "json":
-        import json
-
-        json_summary: dict[str, object] = {
-            "broken": summary["broken"],
-            "markers": summary["markers"],
-            "by_type": summary["by_type"],
-        }
-        if by_value:
-            json_summary["by_value"] = summary["by_value"]
-        payload: dict[str, object] = {"summary": json_summary}
-        if not summary_only:
-            payload.update(
-                {
-                    "broken": [
-                        {
-                            "file": i.file,
-                            "line": i.line,
-                            "type": i.ref_type,
-                            "value": i.ref_value,
-                            "message": i.message,
-                            "suggestion": i.suggestion,
-                        }
-                        for i in broken
-                    ],
-                    "markers": [{"file": i.file, "line": i.line, "value": i.ref_value} for i in markers],
-                }
-            )
-        click.echo(
-            json.dumps(
-                payload,
-                indent=2,
-            )
+    json_summary: dict[str, object] = {
+        "broken": summary["broken"],
+        "markers": summary["markers"],
+        "by_type": summary["by_type"],
+    }
+    if by_value:
+        json_summary["by_value"] = summary["by_value"]
+    payload: dict[str, object] = {"summary": json_summary}
+    if not summary_only:
+        payload.update(
+            {
+                "broken": [
+                    {
+                        "file": i.file,
+                        "line": i.line,
+                        "type": i.ref_type,
+                        "value": i.ref_value,
+                        "message": i.message,
+                        "suggestion": i.suggestion,
+                    }
+                    for i in broken
+                ],
+                "markers": [{"file": i.file, "line": i.line, "value": i.ref_value} for i in markers],
+            }
         )
-    else:
+
+    def _render_human() -> None:
         if broken:
             click.echo(f"refs check: {len(broken)} broken, {len(markers)} unresolved markers\n")
             click.echo("By type:")
@@ -176,6 +168,8 @@ def check(
 
         if markers:
             _render_marker_summary(markers, include_locations=not summary_only)
+
+    emit(output_format=output_format, payload=payload, render_text=_render_human)
 
     if broken:
         raise click.exceptions.Exit(1)

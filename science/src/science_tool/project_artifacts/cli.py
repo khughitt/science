@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from science_tool.output import OUTPUT_FORMATS
+from science_tool.output import OUTPUT_FORMATS, emit
 from science_tool.project_artifacts import default_registry
 
 
@@ -87,7 +87,6 @@ def port_validate_sidecar_cmd(project_root: str, force: bool) -> None:
 )
 def check_cmd(name: str, project_root: str, as_json: bool, output_format: str) -> None:
     """Check the installed status of NAME against PROJECT_ROOT."""
-    import json as _json
     from pathlib import Path
 
     from science_tool.data_root import project_config_path
@@ -104,23 +103,25 @@ def check_cmd(name: str, project_root: str, as_json: bool, output_format: str) -
     pins = read_pins(project) if project_config_path(project).exists() else []
     result = classify_full(target, art, pins)
 
-    if as_json or output_format == "json":
-        click.echo(
-            _json.dumps(
-                {
-                    "name": art.name,
-                    "version": art.version,
-                    "install_target": str(target),
-                    "status": result.status.value,
-                    "detail": result.detail,
-                    "versions_behind": result.versions_behind,
-                }
-            )
-        )
-    else:
+    def _render() -> None:
         click.echo(f"{art.name}: {result.status.value}")
         if result.detail:
             click.echo(f"  {result.detail}")
+
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(
+        output_format=effective_format,
+        payload={
+            "name": art.name,
+            "version": art.version,
+            "install_target": str(target),
+            "status": result.status.value,
+            "detail": result.detail,
+            "versions_behind": result.versions_behind,
+        },
+        render_text=_render,
+        indent=None,
+    )
 
 
 @artifacts_group.command("diff")

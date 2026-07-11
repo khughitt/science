@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from pathlib import Path
 
 import click
 
 from science_tool.markers import scan_markers
+from science_tool.output import emit
 
 
 @click.group("markers")
@@ -59,34 +59,34 @@ def scan(
         hits = _filter_lifted(hits)
     counts = Counter(h.token for h in hits)
 
-    if output_format == "json":
-        payload = {
-            "counts": dict(counts),
-            "hits": [
-                {
-                    "file": str(h.file.relative_to(root)),
-                    "line": h.line,
-                    "token": h.token,
-                    "severity": h.severity,
-                    "in_documentation": h.in_documentation,
-                }
-                for h in hits
-            ],
-        }
-        click.echo(json.dumps(payload, indent=2))
-        return
+    payload = {
+        "counts": dict(counts),
+        "hits": [
+            {
+                "file": str(h.file.relative_to(root)),
+                "line": h.line,
+                "token": h.token,
+                "severity": h.severity,
+                "in_documentation": h.in_documentation,
+            }
+            for h in hits
+        ],
+    }
 
-    if not hits:
-        click.echo("markers scan: no annotation tokens found")
-        return
+    def _render() -> None:
+        if not hits:
+            click.echo("markers scan: no annotation tokens found")
+            return
 
-    click.echo("Counts by token:")
-    for token, count in sorted(counts.items()):
-        click.echo(f"  {token}: {count}")
-    click.echo()
-    for h in hits:
-        rel = h.file.relative_to(root)
-        click.echo(f"  {rel}:{h.line}  [{h.token}]  {h.severity}")
+        click.echo("Counts by token:")
+        for token, count in sorted(counts.items()):
+            click.echo(f"  {token}: {count}")
+        click.echo()
+        for h in hits:
+            rel = h.file.relative_to(root)
+            click.echo(f"  {rel}:{h.line}  [{h.token}]  {h.severity}")
+
+    emit(output_format=output_format, payload=payload, render_text=_render)
 
 
 def _filter_lifted(hits: list) -> list:

@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from science_model.packages.validation import check_freshness, validate_package
 
-from science_tool.output import OUTPUT_FORMATS
+from science_tool.output import OUTPUT_FORMATS, emit
 
 from .build_package import build_research_package
 from .init_package import init_research_package
@@ -95,9 +95,7 @@ def validate_cmd(
         if not result.ok:
             has_errors = True
 
-    if as_json or output_format == "json":
-        click.echo(json.dumps([r.to_dict() for r in results], indent=2))
-    else:
+    def _render() -> None:
         for result in results:
             pkg_name = Path(result.package_dir).name
             if result.ok and not result.warnings:
@@ -108,6 +106,13 @@ def validate_cmd(
             else:
                 for e in result.errors:
                     click.echo(f"  \u2717 {pkg_name}: {e}")
+
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(
+        output_format=effective_format,
+        payload=[r.to_dict() for r in results],
+        render_text=_render,
+    )
 
     raise SystemExit(1 if has_errors else 0)
 

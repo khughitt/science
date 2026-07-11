@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import click
 
+from science_tool.output import emit
 from science_tool.qa_audit.audit import audit_workflows, render_markdown
 
 
@@ -38,11 +38,13 @@ def qa_audit_command(
     if not runs_dir.exists():
         raise click.ClickException(f"runs dir not found: {runs_dir}")
     rows = audit_workflows(runs_dir=runs_dir, repo_root=repo_root)
-    if as_json or output_format == "json":
-        click.echo(json.dumps(rows, indent=2, sort_keys=True))
-        return
-    md = render_markdown(rows)
-    click.echo(md, nl=False)
-    if out_path is not None:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(md, encoding="utf-8")
+
+    def _render() -> None:
+        md = render_markdown(rows)
+        click.echo(md, nl=False)
+        if out_path is not None:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(md, encoding="utf-8")
+
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(output_format=effective_format, payload=rows, render_text=_render, sort_keys=True)

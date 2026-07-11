@@ -1,8 +1,8 @@
-import json
 from pathlib import Path
 
 import click
 
+from science_tool.output import emit
 from science_tool.skills_lint.lint import SkillIssue, check_skills
 
 
@@ -17,11 +17,16 @@ def skills_group() -> None:
 def lint_cmd(root: str, fmt: str) -> None:
     """Lint the skills/ tree for structural conformance."""
     issues = check_skills(Path(root))
-    if fmt == "json":
-        click.echo(json.dumps({"issues": [issue.to_json() for issue in issues]}, indent=2))
-    else:
+
+    def _render() -> None:
         for issue in issues:
             click.echo(_format_text_issue(issue))
+
+    emit(
+        output_format=fmt,
+        payload={"issues": [issue.to_json() for issue in issues]},
+        render_text=_render,
+    )
     if issues:
         raise click.exceptions.Exit(1)
 

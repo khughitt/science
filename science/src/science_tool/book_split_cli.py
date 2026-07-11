@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import click
+
+from science_tool.output import emit
 
 
 @click.command("book-split")
@@ -31,9 +32,11 @@ def book_split_command(pdf: Path, output_format: str, as_json: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
     payload = [c.to_dict() for c in chapters]
-    if as_json or output_format == "json":
-        click.echo(json.dumps(payload, indent=2))
-    else:
+
+    def _render() -> None:
         for c in chapters:
             part = f"  [{c.part}]" if c.part else ""
             click.echo(f"{c.n:>3}. {c.title}  (pp. {c.start_page}-{c.end_page}){part}")
+
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(output_format=effective_format, payload=payload, render_text=_render)
