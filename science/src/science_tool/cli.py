@@ -53,6 +53,7 @@ from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
 from science_tool.patch.cli import patch_group
 from science_tool.peers_cli import peers_group
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
+from science_tool.propositions_cli import proposition_group
 from science_tool.prose_lint_cli import prose_group
 from science_tool.qa_audit.cli import qa_audit_command
 from science_tool.refs_cli import refs_group
@@ -235,6 +236,7 @@ main.add_command(health_command)
 main.add_command(dataset_group)
 main.add_command(tasks_group)
 main.add_command(explore_ideas_group)
+main.add_command(proposition_group)
 
 
 @main.group("entities")
@@ -443,65 +445,6 @@ def entities_register_kind_command(kind: str, entity_class: str, project_path: P
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"{kind}: {result}")
-
-
-@main.group("propositions")
-def proposition_group() -> None:
-    """Proposition source commands."""
-
-
-@proposition_group.command("create")
-@click.argument("title")
-@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
-@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
-@click.option("--id", "entity_id")
-@click.option("--slug")
-@click.option("--status")
-@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
-@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
-@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
-def proposition_create(
-    title: str,
-    related_refs: tuple[str, ...],
-    source_refs: tuple[str, ...],
-    entity_id: str | None,
-    slug: str | None,
-    status: str | None,
-    with_sections: tuple[str, ...],
-    without_sections: tuple[str, ...],
-    no_hints: bool,
-) -> None:
-    """Create a source-authored proposition."""
-
-    create_typed_entity(
-        kind="proposition",
-        title=title,
-        entity_id=entity_id,
-        slug=slug,
-        status=status,
-        related=list(related_refs),
-        source_refs=list(source_refs),
-        with_sections=list(with_sections),
-        without_sections=list(without_sections),
-        no_hints=no_hints,
-    )
-
-
-@proposition_group.command("show")
-@click.argument("ref")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def proposition_show(ref: str, output_format: str) -> None:
-    """Show a source-authored proposition."""
-    show_typed_entity("proposition", ref, output_format)
-
-
-@proposition_group.command("list")
-@click.option("--status")
-@click.option("--related")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def proposition_list(status: str | None, related: str | None, output_format: str) -> None:
-    """List source-authored propositions."""
-    list_typed_entities("proposition", status, related, output_format)
 
 
 @main.group("evidence-lines")
