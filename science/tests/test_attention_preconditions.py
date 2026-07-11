@@ -1,0 +1,213 @@
+"""Preconditions for the ``graph/attention.py`` instruments (silent-instrument ruling).
+
+``compute_attention_candidates`` reads exactly one layer — ``graph/knowledge`` —
+and gates candidacy on exactly one predicate: ``sci:freshnessState``. rdflib's
+``Dataset.graph()`` CREATES an empty graph when the layer is absent, so a project
+whose graph lacks the knowledge layer, and a project whose freshness pass never
+ran, both used to yield ``[]`` — indistinguishable from "nothing deserves
+attention". Reporting zero candidates there tells the user everything is
+attended-to, which is the exact silent-instrument failure.
+
+Pinned here:
+
+- ``unwired`` (``freshness_state_absent``) — no ``sci:freshnessState`` triple
+  exists at all, so no entity has been assessed for attention.
+- ``empty``   — the instrument RAN over freshness-bearing entities and the
+  caller's own filter (e.g. a ``kinds`` typo) selected none of them. A true zero.
+- The samplers PROPAGATE the unwired: a sample of an instrument that did not run
+  is not a sample.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+from rdflib import Dataset, Literal, URIRef
+from rdflib.namespace import RDF, SKOS
+
+from science_tool.cli import main
+from science_tool.graph.attention import (
+    compute_attention_candidates,
+    query_attention_ranked,
+    query_attention_sample,
+)
+from science_tool.graph.io import PROJECT_NS, SCI_NS, save_canonical_graph_dataset
+from science_tool.wander.sampling import WanderSamplerError, sample_for_walk
+
+FRESHNESS_STATE_ABSENT = "freshness_state_absent"
+
+
+def _u(path: str) -> URIRef:
+    return URIRef(PROJECT_NS[path])
+
+
+def _dataset_without_freshness() -> Dataset:
+    """Entities exist and are labelled — but the freshness pass never stamped them."""
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for slug, label in (("h1", "First"), ("h2", "Second")):
+        uri = _u(f"hypothesis/{slug}")
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+    return dataset
+
+
+def _dataset_with_freshness() -> Dataset:
+    dataset = _dataset_without_freshness()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for slug in ("h1", "h2"):
+        knowledge.add((_u(f"hypothesis/{slug}"), SCI_NS.freshnessState, Literal("fresh")))
+    return dataset
+
+
+def _write(tmp_path: Path, dataset: Dataset) -> Path:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    save_canonical_graph_dataset(dataset, graph_path, preferred_graph_order=[PROJECT_NS["graph/knowledge"]])
+    return graph_path
+
+
+# --------------------------------------------------------------------------
+# unwired: the instrument could not run
+# --------------------------------------------------------------------------
+
+
+def test_candidates_unwired_when_no_freshness_state_exists() -> None:
+    result = compute_attention_candidates(_dataset_without_freshness(), today=date(2026, 5, 1))
+
+    assert result.status == "unwired"
+    assert result.code == FRESHNESS_STATE_ABSENT
+    assert result.rows == []
+
+
+def test_candidates_unwired_when_knowledge_layer_is_absent() -> None:
+    """``Dataset.graph()`` fabricates the missing layer, so the absent-layer case is
+    indistinguishable from the never-stamped case — and must fail the same way."""
+    result = compute_attention_candidates(Dataset(), today=date(2026, 5, 1))
+
+    assert result.status == "unwired"
+    assert result.code == FRESHNESS_STATE_ABSENT
+
+
+# --------------------------------------------------------------------------
+# The positive control: the guard must not simply refuse everything
+# --------------------------------------------------------------------------
+
+
+def test_candidates_ok_when_freshness_state_is_present() -> None:
+    result = compute_attention_candidates(_dataset_with_freshness(), today=date(2026, 5, 1))
+
+    assert result.status == "ok"
+    assert {candidate.entity_id for candidate in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
+
+
+def test_kinds_filter_matching_nothing_is_empty_not_unwired() -> None:
+    """A ``kinds`` filter that selects none of the freshness-bearing entities is a
+    TRUE zero: the instrument ran, and the caller asked about a kind it does not have."""
+    result = compute_attention_candidates(
+        _dataset_with_freshness(), today=date(2026, 5, 1), kinds={"nosuchkind"}
+    )
+
+    assert result.status == "empty"
+    assert result.code is None
+    assert result.rows == []
+
+
+# --------------------------------------------------------------------------
+# Propagation: a sample of an instrument that did not run is not a sample
+# --------------------------------------------------------------------------
+
+
+def test_query_attention_sample_propagates_unwired(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    result = query_attention_sample(graph_path, limit=3, seed=7, today=date(2026, 5, 1))
+
+    assert result.status == "unwired"
+    assert result.code == FRESHNESS_STATE_ABSENT
+    assert result.rows == []
+
+
+def test_query_attention_ranked_propagates_unwired(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    result = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+
+    assert result.status == "unwired"
+    assert result.code == FRESHNESS_STATE_ABSENT
+    assert result.rows == []
+
+
+def test_query_attention_sample_returns_rows_on_a_freshness_bearing_graph(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_with_freshness())
+
+    result = query_attention_sample(graph_path, limit=2, seed=7, today=date(2026, 5, 1))
+
+    assert result.status == "ok"
+    assert {row["id"] for row in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
+
+
+def test_query_attention_ranked_returns_rows_on_a_freshness_bearing_graph(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_with_freshness())
+
+    result = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+
+    assert result.status == "ok"
+    assert {row["id"] for row in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
+
+
+def test_query_attention_ranked_empty_on_a_kinds_filter_that_matches_nothing(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_with_freshness())
+
+    result = query_attention_ranked(graph_path, today=date(2026, 5, 1), kinds={"nosuchkind"})
+
+    assert result.status == "empty"
+
+
+# --------------------------------------------------------------------------
+# The renderers must refuse to present a walk/table that never ran
+# --------------------------------------------------------------------------
+
+
+def test_attention_rank_cli_refuses_to_render_an_unwired_graph(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    result = CliRunner().invoke(main, ["graph", "attention-rank", "--path", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert FRESHNESS_STATE_ABSENT in result.output
+
+
+def test_attention_sample_cli_refuses_to_render_an_unwired_graph(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    result = CliRunner().invoke(main, ["graph", "attention-sample", "--path", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert FRESHNESS_STATE_ABSENT in result.output
+
+
+def test_wander_cli_refuses_to_present_an_empty_walk_as_a_completed_one(tmp_path: Path) -> None:
+    """The whole point for wander: a graph with no freshness state used to produce a
+    walk report with zero entities — a completed-looking walk over an unassessed graph."""
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    result = CliRunner().invoke(
+        main,
+        ["wander", "--n", "2", "--graph-path", str(graph_path), "--format", "json", "--today", "2026-05-01"],
+    )
+
+    assert result.exit_code != 0
+    assert FRESHNESS_STATE_ABSENT in result.output
+
+
+def test_sample_for_walk_raises_when_attention_is_unwired(tmp_path: Path) -> None:
+    graph_path = _write(tmp_path, _dataset_without_freshness())
+
+    with pytest.raises(WanderSamplerError) as excinfo:
+        sample_for_walk(graph_path=graph_path, n=2, seed=7, today=date(2026, 5, 1))
+
+    assert FRESHNESS_STATE_ABSENT in str(excinfo.value)

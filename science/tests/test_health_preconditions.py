@@ -179,13 +179,21 @@ def test_invalid_entity_aspects_unwired_when_entities_dir_missing(tmp_path: Path
     assert result.code == "entities_dir_missing"
 
 
-def test_dataset_anomalies_unwired_when_datasets_dir_missing(tmp_path: Path) -> None:
+def test_dataset_anomalies_empty_not_unwired_when_datasets_dir_missing(tmp_path: Path) -> None:
+    """A missing entities/datasets/ is a TRUE zero, not a failure to run.
+
+    entities/datasets/ is optional (commands/catalog-benchmarks.md: "if present"), so a
+    project that catalogues no datasets genuinely has no dataset anomalies. Calling this
+    `unwired` would print a COULD-NOT-RUN row on every uncatalogued project -- amplifying
+    exactly the skip-warning spam fb-2026-07-10-021 complains about. A spurious unwired
+    is as dishonest as a spurious empty.
+    """
     _seed_manifest(tmp_path)
 
     result = check_dataset_anomalies(tmp_path)
 
-    assert result.status == "unwired"
-    assert result.code == "datasets_dir_missing"
+    assert result.status == "empty"
+    assert result.code == "no_datasets_dir"
 
 
 def test_dataset_anomalies_empty_when_datasets_dir_is_empty(tmp_path: Path) -> None:
@@ -254,10 +262,10 @@ def test_report_surfaces_unwired_checks_distinctly(tmp_path: Path) -> None:
     unwired = {row["check"]: row["code"] for row in report["unwired_checks"]}
     assert unwired["unresolved_refs"] == "project_sources_empty"
     assert unwired["legacy_task_type"] == "tasks_dir_missing"
-    assert unwired["dataset_anomalies"] == "datasets_dir_missing"
+    # dataset_anomalies is NOT here: a missing entities/datasets/ is a true zero.
+    assert "dataset_anomalies" not in unwired
     # ... and the rows of an unwired check are NOT presented as findings.
     assert report["unresolved_refs"] == []
-    assert report["dataset_anomalies"] == []
 
 
 def test_report_has_no_unwired_checks_when_every_check_can_run(tmp_path: Path) -> None:
@@ -279,13 +287,12 @@ def test_health_renderer_refuses_to_call_an_unscannable_project_clean(tmp_path: 
 
     result = CliRunner().invoke(
         main,
-        ["health", "--project-root", str(tmp_path), "--check", "dataset_anomalies"],
+        ["health", "--project-root", str(tmp_path), "--check", "unresolved_refs"],
     )
 
     assert result.exit_code == 0, result.output
     assert "Project is clean" not in result.output
     assert "COULD NOT RUN" in result.output
-    assert "datasets_dir_missing" in result.output
 
 
 def test_health_json_output_carries_unwired_checks(tmp_path: Path) -> None:

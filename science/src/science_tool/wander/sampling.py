@@ -29,6 +29,10 @@ def sample_for_walk(
 
     Wraps the existing attention machinery but preserves URI and raw
     weight components for downstream context-bundle assembly.
+
+    Raises ``WanderSamplerError`` when the attention instrument could not run (no
+    ``sci:freshnessState`` in the graph). Returning an empty walk there would present
+    an unassessed graph as one with nothing worth wandering to.
     """
     if not graph_path.exists():
         raise WanderSamplerError(f"Graph file not found at {graph_path}. Run `science graph build` first.")
@@ -36,4 +40,6 @@ def sample_for_walk(
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
-    return weighted_sample_without_replacement(candidates, limit=n, seed=seed)
+    if candidates.status == "unwired":
+        raise WanderSamplerError(f"Attention sampling did not run ({candidates.code}): {candidates.reason}")
+    return weighted_sample_without_replacement(candidates.rows, limit=n, seed=seed)

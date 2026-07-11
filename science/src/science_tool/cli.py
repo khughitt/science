@@ -2158,7 +2158,7 @@ def graph_attention_sample(
         raise click.ClickException("--limit must be >= 0")
     sample_date: date | None = today.date() if today is not None else None
     try:
-        rows = query_attention_sample(
+        result = query_attention_sample(
             graph_path=graph_path,
             limit=limit,
             seed=seed,
@@ -2169,6 +2169,7 @@ def graph_attention_sample(
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
+    rows = unwrap_instrument(result, what="graph attention-sample")
     table_rows = rows
     if output_format == "table":
         table_rows = [
@@ -2220,12 +2221,15 @@ def graph_attention_rank(
     if limit is not None and limit < 0:
         raise click.ClickException("--limit must be >= 0")
     rank_date: date | None = today.date() if today is not None else None
-    rows = query_attention_ranked(
-        graph_path=graph_path,
-        limit=limit,
-        today=rank_date,
-        kinds=set(kinds) if kinds else None,
-        epsilon=epsilon,
+    rows = unwrap_instrument(
+        query_attention_ranked(
+            graph_path=graph_path,
+            limit=limit,
+            today=rank_date,
+            kinds=set(kinds) if kinds else None,
+            epsilon=epsilon,
+        ),
+        what="graph attention-rank",
     )
     emit_query_rows(
         output_format=output_format,
@@ -5569,17 +5573,19 @@ def benchmark_list(
     from science_tool.benchmark_catalog import coverage_summary, list_benchmarks
 
     root = project_root.resolve() if project_root else _project_root_from_env()
-    rows, notice = list_benchmarks(
+    result = list_benchmarks(
         root,
         domain=domain,
         benchmark_kind=benchmark_kind,
         belief_ref_text=belief_ref_text,
         include_commons=include_commons,
     )
+    rows = unwrap_instrument(result, what="benchmark list")
+    # Only the COMMONS caveat may fill commons_notice. `reason` is a generic channel and
+    # also carries e.g. "this project catalogues no datasets"; piping it here wholesale
+    # would report an uncatalogued project as a commons outage.
+    notice = result.reason if result.code == "commons_unavailable" else None
     summary = coverage_summary(rows)
-
-    if notice:
-        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
     def _render() -> None:
         if coverage_summary_flag:
@@ -6839,18 +6845,19 @@ def dataset_list(
     if candidate:
         status = "candidate"
 
-    rows, notice = list_datasets(
-        root,
-        origin=origin,
-        status=status,
-        tier=tier,
-        unverified=unverified,
-        level=level,
-        include_gated=include_gated,
-        include_commons=include_commons,
+    rows = unwrap_instrument(
+        list_datasets(
+            root,
+            origin=origin,
+            status=status,
+            tier=tier,
+            unverified=unverified,
+            level=level,
+            include_gated=include_gated,
+            include_commons=include_commons,
+        ),
+        what="dataset list",
     )
-    if notice:
-        click.echo(f"notice: commons datasets unavailable ({notice})", err=True)
 
     if not rows:
         click.echo("No matching dataset entities.")
@@ -7256,7 +7263,7 @@ def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | 
     from science_tool.datasets_catalog import reconcile_dataset_links
 
     root = project_root.resolve() if project_root else _project_root_from_env()
-    rows = reconcile_dataset_links(root, fix=fix)
+    rows = unwrap_instrument(reconcile_dataset_links(root, fix=fix), what="dataset reconcile-links")
 
     def _render() -> None:
         if rows:

@@ -83,7 +83,12 @@ def wander_command(
         candidates = compute_attention_candidates(
             dataset, today=walk_date, kinds=set(kinds) if kinds else None, epsilon=epsilon
         )
-        sample = weighted_sample_without_replacement(candidates, limit=n, seed=seed)
+        if candidates.status == "unwired":
+            # A walk over a graph that was never assessed for attention is not a walk that
+            # found nothing — it is a walk that never happened. Refuse rather than emit an
+            # empty skeleton the reader would take for a completed pass.
+            raise click.ClickException(f"wander did not run ({candidates.code}): {candidates.reason}")
+        sample = weighted_sample_without_replacement(candidates.rows, limit=n, seed=seed)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 

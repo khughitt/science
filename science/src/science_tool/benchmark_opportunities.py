@@ -29,6 +29,7 @@ from science_tool.entities import (
     parse_markdown_entity_file,
     shortform_for_kind,
 )
+from science_tool.instruments import InstrumentResult
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9:_-]+")
 _SYNONYMS = {
@@ -1057,14 +1058,45 @@ def _dataset_from_source(source: Mapping[str, object]) -> OpportunityDataset | N
     )
 
 
+class BenchmarkCatalogUnavailable(ValueError):
+    """The benchmark catalog could not be READ, so no report can be built over it.
+
+    Every report in this module is a comparison of project entities against the
+    benchmark catalog. If the catalog scan never ran, the comparison is vacuous:
+    zero benchmarks makes every entity look like a coverage gap and every query
+    look like "no candidate benchmark opportunities" — a finding manufactured out
+    of an instrument that did not run.
+
+    It subclasses ``ValueError`` because that is already this module's refusal
+    channel for a report that cannot be built (see ``min_count``), and every CLI
+    report site maps ``ValueError`` to a ``ClickException``.
+    """
+
+
 def load_opportunity_datasets(
     project_root: Path,
     *,
     include_commons: bool,
-) -> tuple[list[OpportunityDataset], str | None]:
-    sources, notice = benchmark_sources(project_root, include_commons=include_commons)
-    datasets = [dataset for source in sources if (dataset := _dataset_from_source(source)) is not None]
-    return sorted(datasets, key=lambda row: (row.scope, row.id)), notice
+) -> InstrumentResult[OpportunityDataset]:
+    """``benchmark_sources`` one layer up: the same instrument, richer rows.
+
+    So it carries the same status. An unwired scan is propagated VERBATIM rather
+    than re-wrapped, which would turn "could not run" into "found nothing".
+    """
+    sources = benchmark_sources(project_root, include_commons=include_commons)
+    if sources.status == "unwired":
+        return InstrumentResult[OpportunityDataset](
+            status="unwired",
+            rows=[],
+            code=sources.code,
+            reason=sources.reason,
+        )
+    datasets = [dataset for source in sources.rows if (dataset := _dataset_from_source(source)) is not None]
+    return InstrumentResult.from_rows(
+        sorted(datasets, key=lambda row: (row.scope, row.id)),
+        code=sources.code,
+        reason=sources.reason,
+    )
 
 
 def _task_completeness(dataset: OpportunityDataset) -> int:
@@ -3858,7 +3890,20 @@ def _opportunity_analysis(
     entities = load_project_entities(project_root)
     if entity_id is not None:
         entities = [entity for entity in entities if entity.id == entity_id]
-    datasets, notice = load_opportunity_datasets(project_root, include_commons=include_commons)
+    catalog = load_opportunity_datasets(project_root, include_commons=include_commons)
+    if catalog.status == "unwired":
+        # REFUSE, do not report. Every report below compares entities against
+        # `datasets`; with an unread catalog that comparison would silently
+        # manufacture "no opportunities" / "everything is a gap".
+        raise BenchmarkCatalogUnavailable(
+            f"benchmark catalog did not load ({catalog.code}): {catalog.reason}"
+        )
+    datasets = catalog.rows
+    # `commons_notice` means one specific thing -- the COMMONS registry could not be read
+    # -- so only the commons caveat may fill it. The `reason` channel is generic (it also
+    # carries e.g. "this project catalogues no datasets"), and piping it here wholesale
+    # would report an uncatalogued project as a commons outage.
+    notice = catalog.reason if catalog.code == "commons_unavailable" else None
     if domain is not None:
         datasets = [dataset for dataset in datasets if domain in dataset.domains]
     should_include_prose = calibration_report if include_prose_tokens is None else include_prose_tokens

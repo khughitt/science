@@ -15,6 +15,7 @@ from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
+from science_tool.instruments import InstrumentResult
 
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
@@ -24,6 +25,16 @@ OPEN_QUESTION_DEBT_WEIGHT = 0.5
 # Canonical question debt statuses (science_model entities.py); resolved
 # states (answered/retired) are deliberately excluded — they are not debt.
 DEBT_QUESTION_STATUSES = frozenset({"active", "partially-answered", "deferred"})
+
+#: The single precondition of the attention instrument. Candidacy is gated on
+#: ``sci:freshnessState``; with no such triple in ``graph/knowledge``, NO entity has
+#: been assessed for attention and the ranking is not a ranking of anything.
+FRESHNESS_STATE_ABSENT = "freshness_state_absent"
+_FRESHNESS_STATE_ABSENT_REASON = (
+    "graph/knowledge carries no sci:freshnessState triples — the freshness pass has not run "
+    "(or the layer is missing from this graph), so no entity has been assessed for attention. "
+    "Run `science graph build` to emit freshness state."
+)
 
 
 @dataclass(frozen=True)
@@ -73,21 +84,35 @@ def compute_attention_candidates(
     today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
-) -> list[AttentionCandidate]:
+) -> InstrumentResult[AttentionCandidate]:
     """Compute attention weights for epistemic entities in a materialized graph.
 
     Candidates are entities carrying ``sci:freshnessState``. That keeps the
     surface tied to Phase 1's epistemic freshness emission and avoids guessing
     classification from labels or LLM judgement.
+
+    That single predicate is also the instrument's single precondition. ``Dataset.graph()``
+    CREATES an empty graph when ``graph/knowledge`` is absent, so a graph missing the layer
+    and a project whose freshness pass never ran both look like "zero candidates" — which
+    would be rendered as "nothing deserves attention". They are ``unwired`` instead.
+    A ``kinds`` filter that selects none of the freshness-bearing entities is NOT unwired:
+    the instrument ran, and zero is the honest answer to what the caller asked.
     """
     if epsilon <= 0:
         raise ValueError("epsilon must be > 0")
 
     current_date = today or date.today()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    state_triples = sorted(knowledge.triples((None, SCI_NS.freshnessState, None)), key=str)
+    if not state_triples:
+        return InstrumentResult.unwired(
+            code=FRESHNESS_STATE_ABSENT,
+            reason=_FRESHNESS_STATE_ABSENT_REASON,
+        )
+
     candidates: list[AttentionCandidate] = []
 
-    for entity_uri, _, state_literal in sorted(knowledge.triples((None, SCI_NS.freshnessState, None)), key=str):
+    for entity_uri, _, state_literal in state_triples:
         if not isinstance(entity_uri, URIRef):
             continue
         entity_id = canonical_id_from_entity_uri(str(entity_uri))
@@ -143,7 +168,7 @@ def compute_attention_candidates(
         )
 
     candidates.sort(key=lambda candidate: candidate.entity_id)
-    return candidates
+    return InstrumentResult.from_rows(candidates)
 
 
 def reason_aware_sample_candidates(
@@ -239,16 +264,27 @@ def query_attention_sample(
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
     reason_aware: bool = False,
-) -> list[dict[str, Any]]:
-    """Load a materialized graph and return sampled attention rows."""
+) -> InstrumentResult[dict[str, Any]]:
+    """Load a materialized graph and return sampled attention rows.
+
+    Propagates an ``unwired`` candidate set rather than sampling it: a sample drawn from
+    an instrument that never ran is not a sample, and an empty one would read as "these
+    are the entities that came up".
+    """
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    if candidates.status == "unwired":
+        return InstrumentResult.unwired(
+            code=candidates.code or FRESHNESS_STATE_ABSENT, reason=candidates.reason
+        )
     if reason_aware:
-        sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
+        sample = reason_aware_sample_candidates(candidates.rows, limit=limit, seed=seed)
     else:
-        sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
-    return _rows_with_belief(graph_path, dataset, sample)
+        sample = weighted_sample_without_replacement(candidates.rows, limit=limit, seed=seed)
+    return InstrumentResult.from_rows(
+        _rows_with_belief(graph_path, dataset, sample), code=candidates.code, reason=candidates.reason
+    )
 
 
 def query_attention_ranked(
@@ -258,20 +294,27 @@ def query_attention_ranked(
     today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
-) -> list[dict[str, Any]]:
+) -> InstrumentResult[dict[str, Any]]:
     """Load a materialized graph and return all candidates ranked by weight desc.
 
     Deterministic (no sampling): ties break by entity_id. This is the review-queue
     surface — `graph attention-rank` — distinct from the weighted-random
-    `attention-sample`.
+    `attention-sample`. An ``unwired`` candidate set propagates: an empty review queue
+    over an unassessed graph would say "nothing needs review".
     """
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
-    ranked = sorted(candidates, key=lambda candidate: (-candidate.weight, candidate.entity_id))
+    if candidates.status == "unwired":
+        return InstrumentResult.unwired(
+            code=candidates.code or FRESHNESS_STATE_ABSENT, reason=candidates.reason
+        )
+    ranked = sorted(candidates.rows, key=lambda candidate: (-candidate.weight, candidate.entity_id))
     if limit is not None:
         ranked = ranked[:limit]
-    return _rows_with_belief(graph_path, dataset, ranked)
+    return InstrumentResult.from_rows(
+        _rows_with_belief(graph_path, dataset, ranked), code=candidates.code, reason=candidates.reason
+    )
 
 
 def _rows_with_belief(

@@ -1504,9 +1504,14 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
 
     datasets_dir = project_root / "entities" / "datasets"
     if not datasets_dir.is_dir():
-        return InstrumentResult.unwired(
-            code="datasets_dir_missing",
-            reason="entities/datasets/ does not exist; no dataset entity was read",
+        # NOT unwired: entities/datasets/ is optional, so its absence means the project
+        # catalogues no datasets -- and a project with no datasets genuinely has no
+        # dataset anomalies. Making this unwired would print a "COULD NOT RUN" row on
+        # every project that has not catalogued anything, which is precisely the
+        # skip-warning spam fb-2026-07-10-021 already complains about.
+        return InstrumentResult.empty(
+            code="no_datasets_dir",
+            reason="entities/datasets/ does not exist; this project catalogues no datasets",
         )
 
     issues: list[dict] = []

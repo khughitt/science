@@ -11,7 +11,23 @@ from click.testing import CliRunner
 from science_tool.cli import main as science_cli
 
 
+def _scaffold(root: Path) -> None:
+    """Give the project the dataset-catalog directory a scaffolded project has.
+
+    A project WITHOUT ``entities/datasets/`` is ``unwired`` for the benchmark catalog
+    (``benchmark_catalog.benchmark_sources``): the scan never ran, so its zero rows say
+    nothing, and the reports below refuse rather than render "no opportunities" / "every
+    entity is a gap" from a catalog they could not read. That behavior is owned by
+    tests/test_catalog_preconditions.py.
+
+    The projects here have zero *benchmark* datasets, which is a different thing — a real,
+    scanned zero. So they get the directory.
+    """
+    (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+
+
 def _write_entity(root: Path, kind_dir: str, slug: str, frontmatter: str, body: str = "body") -> None:
+    _scaffold(root)
     path = root / "entities" / kind_dir / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"---\n{frontmatter}---\n{body}\n", encoding="utf-8")
@@ -120,9 +136,11 @@ benchmark:
 """,
     )
 
-    sources, notice = benchmark_sources(tmp_path)
+    result = benchmark_sources(tmp_path)
 
-    assert notice is None
+    assert result.status == "ok"
+    assert result.reason is None
+    sources = result.rows
     assert len(sources) == 1
     source = sources[0]
     assert source["fallback_id"] == "dataset:sciplex3"
@@ -189,9 +207,11 @@ benchmark:
 """,
     )
 
-    rows, notice = load_opportunity_datasets(tmp_path, include_commons=False)
+    result = load_opportunity_datasets(tmp_path, include_commons=False)
 
-    assert notice is None
+    assert result.status == "ok"
+    assert result.reason is None
+    rows = result.rows
     assert [row.id for row in rows] == ["dataset:cptac", "dataset:hca-spatial"]
     assert rows[0].tasks[0].canonical_task_id == "dataset:cptac#subtype-transfer"
     assert rows[1].tasks == []
@@ -228,7 +248,7 @@ benchmark:
 """,
     )
 
-    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False).rows[0]
     score = baseline_score(dataset)
 
     assert score.total == sum(score.components.values())
@@ -994,6 +1014,7 @@ def test_benchmark_tests_report_rejects_unknown_context_fit_filter(tmp_path: Pat
 
 
 def test_benchmark_tests_report_filters_payload_includes_existing_filters(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
     payload = benchmark_tests_report(
@@ -1023,6 +1044,7 @@ def test_benchmark_tests_report_filters_payload_includes_existing_filters(tmp_pa
 
 
 def test_benchmark_tests_report_filters_payload_dedupes_context_fit(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     from science_tool.benchmark_opportunities import benchmark_tests_report
 
     payload = benchmark_tests_report(tmp_path, context_fit=("direct-fit", "method-fit", "direct-fit"))
@@ -1943,7 +1965,7 @@ benchmark:
 """,
     )
 
-    datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
+    datasets = load_opportunity_datasets(tmp_path, include_commons=False).rows
     context = _dataset_context(datasets[0], include_prose_tokens=False)
 
     assert _matched_facets_for_context(context, extra={"perturbation"}) == ["bulk-rna-seq"]
@@ -2530,7 +2552,7 @@ benchmark:
 {tasks}""",
         )
 
-    datasets, _notice = load_opportunity_datasets(tmp_path, include_commons=False)
+    datasets = load_opportunity_datasets(tmp_path, include_commons=False).rows
     labels = {
         dataset.id: _readiness_label(
             _dataset_context(dataset, include_prose_tokens=False), has_task=bool(dataset.tasks)
@@ -5420,6 +5442,7 @@ title: Local proteomics term
 
 
 def test_hint_candidates_report_existing_hints_are_directly_enumerated_when_requested(tmp_path: Path) -> None:
+    _scaffold(tmp_path)  # scanned-but-empty catalog, not a missing one
     from science_tool.benchmark_opportunities import FACET_HINT_TERMS, benchmark_hint_candidates_report
 
     payload = benchmark_hint_candidates_report(tmp_path, include_existing=True, min_count=99)
@@ -6144,7 +6167,7 @@ benchmark:
 """,
     )
 
-    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False).rows[0]
     context = _dataset_context(dataset, include_prose_tokens=False)
     score = _candidate_score(context, missing_facets=set(), hint_facets=set())
 
@@ -6173,7 +6196,7 @@ benchmark:
 """,
     )
 
-    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False).rows[0]
     context = _dataset_context(dataset, include_prose_tokens=False)
     score = _candidate_score(
         context,

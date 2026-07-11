@@ -31,17 +31,7 @@ _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 # Instruments not yet migrated. DRAINED TO EMPTY by the migration; test_migration_is_complete
 # locks it there. An entry the guard would still flag means the migration is incomplete --
 # NOT a carve-out to add.
-_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("benchmark_catalog.py", "benchmark_sources"),
-        ("benchmark_catalog.py", "list_benchmarks"),
-        ("datasets_catalog.py", "list_datasets"),
-        ("datasets_catalog.py", "reconcile_dataset_links"),
-        ("graph/attention.py", "compute_attention_candidates"),
-        ("graph/attention.py", "query_attention_ranked"),
-        ("graph/attention.py", "query_attention_sample"),
-    }
-)
+_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
 
 # Pure/total helpers that live in the namespace but are NOT instruments. PERMANENT.
 #

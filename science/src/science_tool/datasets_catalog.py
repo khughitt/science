@@ -25,6 +25,7 @@ from science_tool.identity_authoring import (
     IdentityAuthoringError,
     require_profile_identity,
 )
+from science_tool.instruments import InstrumentResult
 
 # access.level values that put a dataset behind registration, application, or
 # purchase — i.e. not something you can just download. `list`/`prioritize` hide
@@ -247,8 +248,20 @@ def _dataset_resolution_index(project_root: Path) -> dict[str, tuple[str, str] |
     return index
 
 
-def reconcile_dataset_links(project_root: Path, *, fix: bool = False) -> list[dict[str, str]]:
-    """Find Q/H free-text ``datasets:`` entries that resolve to local datasets."""
+def reconcile_dataset_links(project_root: Path, *, fix: bool = False) -> InstrumentResult[dict[str, str]]:
+    """Find Q/H free-text ``datasets:`` entries that resolve to local datasets.
+
+    ``unwired`` when ``entities/`` does not exist. ``_iter_local_entities`` globs that
+    directory, and ``Path.glob`` on a missing directory yields nothing WITHOUT raising —
+    so a wrong ``project_root`` used to look exactly like a clean project with no
+    unresolved links.
+    """
+    if not (project_root / "entities").is_dir():
+        return InstrumentResult.unwired(
+            code="entities_dir_missing",
+            reason=f"no entities/ directory under {project_root}",
+        )
+
     index = _dataset_resolution_index(project_root)
     rows: list[dict[str, str]] = []
     rewrites: list[tuple[Path, dict, str]] = []
@@ -296,7 +309,7 @@ def reconcile_dataset_links(project_root: Path, *, fix: bool = False) -> list[di
         finally:
             if tmp.exists():
                 tmp.unlink()
-    return rows
+    return InstrumentResult.from_rows(rows)
 
 
 def link_dataset_to_target(project_root: Path, dataset_ref: str, target_ref: str) -> tuple[str, str, Path, bool]:
@@ -548,13 +561,32 @@ def list_datasets(
     level: str | None = None,
     include_gated: bool = False,
     include_commons: bool = False,
-) -> tuple[list[dict], str | None]:
-    """Return (filtered rows, commons-unavailable notice). Local rows are always
-    returned; if `include_commons` and the commons registry can't be read, the
-    notice is set and local rows still come back (graceful degradation).
+) -> InstrumentResult[dict]:
+    """Filtered dataset rows.
+
+    ``unwired`` when `entities/datasets/` does not exist — the scan never ran, so its
+    zero rows say nothing about the project.
+
+    Local rows are always returned once the scan ran; if `include_commons` and the
+    commons registry can't be read, the local rows still come back (graceful
+    degradation) and the notice rides as `code=commons_unavailable` + `reason` — a
+    CAVEAT on a successful run, not an unwired result.
 
     Gated datasets (`access.level` in GATED_LEVELS) are excluded unless
     `include_gated` is set or a specific `level` is requested."""
+    if not (project_root / "entities" / "datasets").is_dir():
+        # NOT unwired. `entities/datasets/` is DOCUMENTED optional
+        # (commands/catalog-benchmarks.md: "entities/datasets/, if present"), so its
+        # absence is a legitimate project state meaning "this project catalogues no
+        # datasets" -- a TRUE zero, not a failure to run. A spurious unwired is as
+        # dishonest as a spurious empty, and it would hard-fail every benchmark report
+        # on a project that simply has not catalogued anything yet. The code rides along
+        # as a caveat so a caller that cares can still tell the two apart.
+        return InstrumentResult.empty(
+            code="no_datasets_dir",
+            reason=f"no entities/datasets/ directory under {project_root}; nothing catalogued",
+        )
+
     rows = _local_rows(project_root)
     notice: str | None = None
     if include_commons:
@@ -570,7 +602,11 @@ def list_datasets(
             unverified=unverified, level=level, include_gated=include_gated,
         )
     ]
-    return filtered, notice
+    return InstrumentResult.from_rows(
+        filtered,
+        code="commons_unavailable" if notice else None,
+        reason=notice,
+    )
 
 
 def _commons_rows() -> list[dict]:
