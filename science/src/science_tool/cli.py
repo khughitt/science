@@ -91,7 +91,7 @@ from science_tool.graph.store import (
 )
 from science_tool.labnote_cli import labnote_group
 from science_tool.markers_cli import markers_group
-from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
 from science_tool.patch.cli import patch_group
 from science_tool.peers_cli import peers_group
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
@@ -312,7 +312,7 @@ def entities_inventory_command(
     help="Project root to audit (legacy alias; default: current working directory).",
 )
 def entities_audit_identifiers_command(project_path: Path) -> None:
-    click.echo(json.dumps(audit_identifiers(project_path), indent=2))
+    emit(output_format="json", payload=audit_identifiers(project_path), render_text=lambda: None)
 
 
 @entities_group.command("mark-superseded")
@@ -328,7 +328,7 @@ def entities_mark_superseded_command(project_root: Path, apply_changes: bool) ->
     from science_tool.consolidation import mark_superseded
 
     report = mark_superseded(project_root, apply=apply_changes)
-    click.echo(json.dumps(report, indent=2))
+    emit(output_format="json", payload=report, render_text=lambda: None)
 
 
 @entities_group.command("archive")
@@ -349,7 +349,7 @@ def entities_archive_command(project_root: Path, statuses: tuple[str, ...], appl
     status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = archive_entities(project_root, statuses=status_set, apply=apply_changes, now=now)
-    click.echo(json.dumps(report, indent=2))
+    emit(output_format="json", payload=report, render_text=lambda: None)
 
 
 @entities_group.command("unarchive")
@@ -369,7 +369,7 @@ def entities_unarchive_command(ids: tuple[str, ...], project_root: Path, apply_c
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = unarchive_entities(project_root, list(ids), apply=apply_changes, now=now)
-    click.echo(json.dumps(report, indent=2))
+    emit(output_format="json", payload=report, render_text=lambda: None)
 
 
 @entities_group.group("consolidate")
@@ -398,7 +398,7 @@ def entities_consolidate_scaffold_command(project_root: Path, digest_id: str, me
 
     member_ids = [m.strip() for m in members.split(",") if m.strip()]
     report = scaffold_digest(project_root, digest_id=digest_id, member_ids=member_ids, title=title or digest_id)
-    click.echo(json.dumps(report, indent=2))
+    emit(output_format="json", payload=report, render_text=lambda: None)
 
 
 @entities_consolidate_group.command("apply")
@@ -418,7 +418,7 @@ def entities_consolidate_apply_command(digest_id: str, project_root: Path, apply
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = apply_consolidation(project_root, digest_id, apply=apply_changes, now=now)
-    click.echo(json.dumps(report, indent=2))
+    emit(output_format="json", payload=report, render_text=lambda: None)
 
 
 @entities_group.command("generate-decisions")
@@ -1257,9 +1257,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
     try:
         if check_only:
             check_result = check_report(Path.cwd(), from_value, model_id)
-            if output_format == "json":
-                click.echo(json.dumps(check_result.to_dict(), indent=2))
-            else:
+
+            def _render_check() -> None:
                 click.echo(
                     f"{len(check_result.to_create)} would create, "
                     f"{len(check_result.skipped_applied)} already applied, "
@@ -1274,14 +1273,14 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
                     click.echo(f"  skipped drop/defer: {candidate_id}")
                 for candidate_id, kind in check_result.manual:
                     click.echo(f"  apply manually ({kind}): {candidate_id}")
+
+            emit(output_format=output_format, payload=check_result.to_dict(), render_text=_render_check)
             return
         result = apply_report(Path.cwd(), from_value, model_id, date.today())
     except (ApplyValidationError, ApplyWriteBackError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(result.to_dict(), indent=2))
-    else:
+    def _render_result() -> None:
         click.echo(
             f"{len(result.created)} created, "
             f"{len(result.skipped_applied)} already applied, "
@@ -1301,6 +1300,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
             click.echo(f"  FAILED {candidate_id}: {error}")
         for created in result.created:
             _emit_entity_warnings(created.warnings)
+
+    emit(output_format=output_format, payload=result.to_dict(), render_text=_render_result)
 
     if result.failures:
         raise SystemExit(1)
@@ -1340,10 +1341,7 @@ def explore_ideas_gaps(from_value: str, output_format: str) -> None:
     except ApplyValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(result.to_dict(), indent=2))
-    else:
-        _render_gap_result_text(result)
+    emit(output_format=output_format, payload=result.to_dict(), render_text=lambda: _render_gap_result_text(result))
 
 
 @explore_ideas_group.command("resolve-anchors")
@@ -1362,27 +1360,26 @@ def explore_ideas_resolve_anchors(from_value: str, output_format: str) -> None:
     except ApplyValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(result.to_dict(), indent=2))
-        return
+    def _render() -> None:
+        counts = result.counts
+        click.echo(
+            f"{counts['resolved']} resolved, "
+            f"{counts['already_resolved']} already resolved, "
+            f"{counts['ambiguous']} ambiguous, "
+            f"{counts['unresolved']} unresolved"
+        )
+        for row in result.anchors:
+            label = f"{row.candidate_id}[{row.anchor_index}]"
+            if row.status == "resolved":
+                click.echo(f"  {label} -> {row.resolved} ({row.match_kind})")
+            elif row.status == "already-resolved":
+                click.echo(f"  {label} already resolved: {row.resolved}")
+            elif row.status == "ambiguous":
+                click.echo(f"  {label} ambiguous {row.match_kind}: {', '.join(row.candidates)}")
+            else:
+                click.echo(f"  {label} unresolved: {row.query}")
 
-    counts = result.counts
-    click.echo(
-        f"{counts['resolved']} resolved, "
-        f"{counts['already_resolved']} already resolved, "
-        f"{counts['ambiguous']} ambiguous, "
-        f"{counts['unresolved']} unresolved"
-    )
-    for row in result.anchors:
-        label = f"{row.candidate_id}[{row.anchor_index}]"
-        if row.status == "resolved":
-            click.echo(f"  {label} -> {row.resolved} ({row.match_kind})")
-        elif row.status == "already-resolved":
-            click.echo(f"  {label} already resolved: {row.resolved}")
-        elif row.status == "ambiguous":
-            click.echo(f"  {label} ambiguous {row.match_kind}: {', '.join(row.candidates)}")
-        else:
-            click.echo(f"  {label} unresolved: {row.query}")
+    emit(output_format=output_format, payload=result.to_dict(), render_text=_render)
 
 
 @explore_ideas_group.command("backfill-lens-views")
@@ -1502,21 +1499,21 @@ def _entity_show_payload(location: Any) -> dict[str, object]:
 
 def _emit_entity_show(location: Any, output_format: str) -> None:
     payload = _entity_show_payload(location)
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    console = get_console(file=click.get_text_stream("stdout"))
-    _print_entity_field(console, "id", render_entity_ref(str(payload["id"])))
-    _print_entity_field(console, "type", render_entity_kind(str(payload["kind"])))
-    _print_entity_field(console, "title", Text(str(payload["title"])))
-    _print_entity_field(console, "status", render_entity_status(str(payload["status"])))
-    _print_entity_field(console, "path", render_muted(payload["path"]))
-    _print_entity_refs_field(console, "related", payload["related"])
-    _print_entity_refs_field(console, "source_refs", payload["source_refs"])
-    if location.body:
-        click.echo()
-        console.print(Text(location.body.rstrip("\n")))
+    def _render() -> None:
+        console = get_console(file=click.get_text_stream("stdout"))
+        _print_entity_field(console, "id", render_entity_ref(str(payload["id"])))
+        _print_entity_field(console, "type", render_entity_kind(str(payload["kind"])))
+        _print_entity_field(console, "title", Text(str(payload["title"])))
+        _print_entity_field(console, "status", render_entity_status(str(payload["status"])))
+        _print_entity_field(console, "path", render_muted(payload["path"]))
+        _print_entity_refs_field(console, "related", payload["related"])
+        _print_entity_refs_field(console, "source_refs", payload["source_refs"])
+        if location.body:
+            click.echo()
+            console.print(Text(location.body.rstrip("\n")))
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:
@@ -1909,24 +1906,24 @@ def graph_cross_impact(target_ref: str, limit: int, output_format: str, graph_pa
     """Show conservative cross-impact for a proposition or evidence line."""
 
     payload = query_cross_impact(graph_path=graph_path, target_ref=target_ref, limit=limit)
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    emit_query_rows(
-        output_format=output_format,
-        title=f"Cross Impact: {payload['target']} ({payload['scope']})",
-        columns=[
-            ("dependent_proposition", "Dependent Proposition"),
-            ("dependent_text", "Text"),
-            ("relation", "Relation"),
-            ("hypotheses", "Hypotheses"),
-            ("questions", "Questions"),
-            ("scope", "Scope"),
-            ("scope_reason", "Reason"),
-        ],
-        rows=payload["rows"],
-    )
+    def _render() -> None:
+        emit_query_rows(
+            output_format=output_format,
+            title=f"Cross Impact: {payload['target']} ({payload['scope']})",
+            columns=[
+                ("dependent_proposition", "Dependent Proposition"),
+                ("dependent_text", "Text"),
+                ("relation", "Relation"),
+                ("hypotheses", "Hypotheses"),
+                ("questions", "Questions"),
+                ("scope", "Scope"),
+                ("scope_reason", "Reason"),
+            ],
+            rows=payload["rows"],
+        )
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @graph.command("coverage")
@@ -2309,7 +2306,7 @@ def graph_export_json(overlays: tuple[str, ...], graph_path: Path) -> None:
     """Export the graph payload as JSON."""
 
     payload = export_graph_payload(graph_path, overlays=list(overlays) if overlays else None)
-    click.echo(json.dumps(payload.model_dump(mode="json"), indent=2, sort_keys=True))
+    emit(output_format="json", payload=payload.model_dump(mode="json"), render_text=lambda: None, sort_keys=True)
 
 
 @graph.command("import")
@@ -3141,11 +3138,8 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
         info = get_inquiry(graph_path, slug)
     except ValueError as e:
         raise click.ClickException(str(e))
-    if output_format == "json":
-        import json
 
-        click.echo(json.dumps(info, indent=2, default=str))
-    else:
+    def _render() -> None:
         click.echo(f"Inquiry: {info['label']}")
         click.echo(f"  Slug: {info['slug']}")
         click.echo(f"  Type: {info['inquiry_type']}")
@@ -3174,6 +3168,8 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
                 line = f"{line} [{claims}]"
             click.echo(line)
 
+    emit(output_format=output_format, payload=info, render_text=_render, default=str)
+
 
 @inquiry.command("validate")
 @click.argument("slug")
@@ -3188,14 +3184,12 @@ def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
     except ValueError as e:
         raise click.ClickException(str(e))
 
-    if output_format == "json":
-        import json
-
-        click.echo(json.dumps(results, indent=2))
-    else:
+    def _render() -> None:
         for r in results:
             icon = "PASS" if r["status"] == "pass" else "FAIL" if r["status"] == "fail" else "WARN"
             click.echo(f"  [{icon}] {r['check']}: {r['message']}")
+
+    emit(output_format=output_format, payload=results, render_text=_render)
 
     if any(r["status"] == "fail" for r in results):
         raise click.exceptions.Exit(1)
@@ -3820,17 +3814,16 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
             }
         )
 
-    if fmt == "json":
-        click.echo(json.dumps({"task_id": task.id, "blockers": rows}, indent=2))
-        return
+    def _render() -> None:
+        click.echo(f"Blockers for [{task.id}] {task.title}:")
+        for row in rows:
+            marker = "✓" if row["ready"] else "·"
+            line = f"  {marker} {row['ref']:40s}  {row['state']}"
+            if row["detail"]:
+                line += f"  ({row['detail']})"
+            click.echo(line)
 
-    click.echo(f"Blockers for [{task.id}] {task.title}:")
-    for row in rows:
-        marker = "✓" if row["ready"] else "·"
-        line = f"  {marker} {row['ref']:40s}  {row['state']}"
-        if row["detail"]:
-            line += f"  ({row['detail']})"
-        click.echo(line)
+    emit(output_format=fmt, payload={"task_id": task.id, "blockers": rows}, render_text=_render)
 
 
 @tasks.command("fix-blockers")
@@ -4247,25 +4240,25 @@ def tasks_show(task_id: str, output_format: str) -> None:
                 }
             )
 
-    if output_format == "json":
-        payload = task.model_dump(mode="json")
-        payload["blocked_by_readiness"] = readiness_rows
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    payload = task.model_dump(mode="json")
+    payload["blocked_by_readiness"] = readiness_rows
 
-    click.echo(render_task(task))
+    def _render() -> None:
+        click.echo(render_task(task))
 
-    # Append a resolver-enriched readiness section. render_task() already
-    # emitted the raw blocked-by line; suppression would require coupling
-    # render_task to a resolver, but render_task is also the on-disk
-    # serializer and must stay pure.
-    if task.blocked_by:
-        click.echo("\nBlocker readiness:")
-        for readiness in readiness_rows:
-            line = f"  - {readiness['ref']:40s}  {readiness['state']}"
-            if readiness["detail"]:
-                line += f"  ({readiness['detail']})"
-            click.echo(line)
+        # Append a resolver-enriched readiness section. render_task() already
+        # emitted the raw blocked-by line; suppression would require coupling
+        # render_task to a resolver, but render_task is also the on-disk
+        # serializer and must stay pure.
+        if task.blocked_by:
+            click.echo("\nBlocker readiness:")
+            for readiness in readiness_rows:
+                line = f"  - {readiness['ref']:40s}  {readiness['state']}"
+                if readiness["detail"]:
+                    line += f"  ({readiness['detail']})"
+                click.echo(line)
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @tasks.command("summary")
@@ -4278,12 +4271,11 @@ def tasks_summary(output_format: str) -> None:
 
     active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
-        if output_format == "json":
-            click.echo(
-                json.dumps({"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}, indent=2)
-            )
-            return
-        click.echo("No active tasks.")
+        emit(
+            output_format=output_format,
+            payload={"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}},
+            render_text=lambda: click.echo("No active tasks."),
+        )
         return
 
     warn_invalid_statuses(active)
@@ -4293,28 +4285,26 @@ def tasks_summary(output_format: str) -> None:
     by_priority = Counter(t.priority for t in active)
     by_group = Counter(t.group for t in active if t.group)
 
-    if output_format == "json":
-        click.echo(
-            json.dumps(
-                {
-                    "total": len(active),
-                    "by_status": dict(sorted(by_status.items())),
-                    "by_type": dict(sorted(by_type.items())),
-                    "by_priority": dict(sorted(by_priority.items())),
-                    "by_group": dict(sorted(by_group.items())),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        return
+    def _render() -> None:
+        click.echo(f"Total: {len(active)}")
+        click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
+        click.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
+        click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
+        if by_group:
+            click.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_group.items())))
 
-    click.echo(f"Total: {len(active)}")
-    click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
-    click.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
-    click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
-    if by_group:
-        click.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_group.items())))
+    emit(
+        output_format=output_format,
+        payload={
+            "total": len(active),
+            "by_status": dict(sorted(by_status.items())),
+            "by_type": dict(sorted(by_type.items())),
+            "by_priority": dict(sorted(by_priority.items())),
+            "by_group": dict(sorted(by_group.items())),
+        },
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @main.group()
@@ -4350,21 +4340,21 @@ def project_topic_coverage(project_root: Path, output_format: str) -> None:
     except MalformedTopicError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(cov.to_dict(), indent=2))
-        return
-    if cov.n_topics == 0:
-        click.echo("topics: 0 (no topics)")
-        return
-    warn = "  ⚠ stub-dominated" if cov.stub_dominated else ""
-    click.echo(
-        f"topics: {cov.n_topics} (substantive {cov.n_substantive}, "
-        f"stubs {cov.n_topics - cov.n_substantive}) — stub_ratio {cov.stub_ratio:.2f}{warn}"
-    )
-    if cov.stub_dominated:
-        for r in cov.topics:
-            if not r.substantive:
-                click.echo(f"  stub: {r.id}")
+    def _render() -> None:
+        if cov.n_topics == 0:
+            click.echo("topics: 0 (no topics)")
+            return
+        warn = "  ⚠ stub-dominated" if cov.stub_dominated else ""
+        click.echo(
+            f"topics: {cov.n_topics} (substantive {cov.n_substantive}, "
+            f"stubs {cov.n_topics - cov.n_substantive}) — stub_ratio {cov.stub_ratio:.2f}{warn}"
+        )
+        if cov.stub_dominated:
+            for r in cov.topics:
+                if not r.substantive:
+                    click.echo(f"  stub: {r.id}")
+
+    emit(output_format=output_format, payload=cov.to_dict(), render_text=_render)
 
 
 @project.command("resolve-refs")
@@ -4397,16 +4387,16 @@ def project_resolve_refs(project_root: Path, queries: tuple[str, ...], output_fo
     index = build_ref_index(load_index_rows(project_root))
     results = [index.resolve(q) for q in queries]
 
-    if output_format == "json":
-        click.echo(json.dumps([r.to_dict() for r in results], indent=2))
-        return
-    for r in results:
-        if r.resolved is not None:
-            click.echo(f"{r.query} -> {r.resolved} ({r.match_kind})")
-        elif r.candidates:
-            click.echo(f"{r.query} -> {r.match_kind}: {', '.join(r.candidates)}")
-        else:
-            click.echo(f"{r.query} -> unresolved")
+    def _render() -> None:
+        for r in results:
+            if r.resolved is not None:
+                click.echo(f"{r.query} -> {r.resolved} ({r.match_kind})")
+            elif r.candidates:
+                click.echo(f"{r.query} -> {r.match_kind}: {', '.join(r.candidates)}")
+            else:
+                click.echo(f"{r.query} -> unresolved")
+
+    emit(output_format=output_format, payload=[r.to_dict() for r in results], render_text=_render)
 
 
 @project.command("serialize")
@@ -4501,26 +4491,27 @@ def project_verify(
         _emit_verify_error(emit_json, exit_code=4, status="operational", message=str(exc))
         ctx.exit(4)
 
-    if emit_json:
-        click.echo(json.dumps(verdict_json(result), indent=2, sort_keys=True))
-    else:
+    def _render() -> None:
         _render_verify_human(result)
         for warning in result.warnings:
             click.echo(f"warning: {warning}", err=True)
+
+    emit(
+        output_format="json" if emit_json else output_format,
+        payload=verdict_json(result),
+        render_text=_render,
+        sort_keys=True,
+    )
     ctx.exit(result.exit_code)
 
 
 def _emit_verify_error(as_json: bool, *, exit_code: int, status: str, message: str) -> None:
-    if as_json:
-        click.echo(
-            json.dumps(
-                {"version": 1, "exit_code": exit_code, "status": status, "error": message},
-                indent=2,
-                sort_keys=True,
-            )
-        )
-    else:
-        click.echo(f"error: {message}", err=True)
+    emit(
+        output_format="json" if as_json else "text",
+        payload={"version": 1, "exit_code": exit_code, "status": status, "error": message},
+        render_text=lambda: click.echo(f"error: {message}", err=True),
+        sort_keys=True,
+    )
 
 
 def _render_verify_human(result: Any) -> None:
