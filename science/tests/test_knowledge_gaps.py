@@ -170,7 +170,7 @@ def test_compute_topic_gaps_end_to_end_on_fixture() -> None:
 
     resolved = resolve_questions(FIXTURE)
     included = set(resolved.keys())
-    gaps = compute_topic_gaps(FIXTURE, resolved, included)
+    gaps = compute_topic_gaps(FIXTURE, resolved, included).rows
 
     # Only t02-thin has demand > coverage in the seeded fixture.
     assert [g.topic_id for g in gaps] == ["topic:t02-thin"]
@@ -188,7 +188,7 @@ def test_compute_topic_gaps_excludes_zero_demand() -> None:
     from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
 
     resolved = resolve_questions(FIXTURE)
-    gaps = compute_topic_gaps(FIXTURE, resolved, set(resolved))
+    gaps = compute_topic_gaps(FIXTURE, resolved, set(resolved)).rows
     # No gap entry for t03 (bibtex-covered, demand=coverage), t01, t04.
     assert all(g.topic_id != "topic:t01-covered" for g in gaps)
     assert all(g.topic_id != "topic:t03-bibtex-covered" for g in gaps)
@@ -225,7 +225,7 @@ def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(
         '---\nid: "question:q99-extra"\nkind: "question"\nrelated:\n  - "topic:t05-also-thin"\n---\nExtra.\n'
     )
     resolved = resolve_questions(project)
-    gaps = compute_topic_gaps(project, resolved, set(resolved))
+    gaps = compute_topic_gaps(project, resolved, set(resolved)).rows
     # t02-thin: gap_score=2; t05-also-thin: gap_score=1. t02 first.
     ordered = [g.topic_id for g in gaps]
     assert ordered == ["topic:t02-thin", "topic:t05-also-thin"]
@@ -250,7 +250,7 @@ def test_dangling_topic_ref_logs_warning(tmp_path: Path, caplog) -> None:  # typ
 
     resolved = resolve_questions(project)
     with caplog.at_level("WARNING", logger="science_tool.big_picture.knowledge_gaps"):
-        gaps = compute_topic_gaps(project, resolved, set(resolved))
+        gaps = compute_topic_gaps(project, resolved, set(resolved)).rows
     assert any("does-not-exist" in r.getMessage() for r in caplog.records)
     # Does not raise; does not count toward any topic's demand.
     assert all(g.topic_id != "topic:does-not-exist" for g in gaps)
@@ -273,3 +273,92 @@ def test_malformed_source_refs_logs_warning(tmp_path: Path, caplog) -> None:  # 
     with caplog.at_level("WARNING", logger="science_tool.big_picture.knowledge_gaps"):
         compute_topic_gaps(project, resolved, set(resolved))
     assert any("not-a-cite-entry" in r.getMessage() for r in caplog.records)
+
+
+# The four-state precondition (instrument-result convergence, design §2).
+#
+# The axis is DECLARED-vs-RESOLVED, not resolved-vs-nothing. An empty row list means
+# three different things and the caller must be able to tell them apart.
+
+
+def test_declared_but_unresolvable_topics_is_unwired(tmp_path: Path) -> None:
+    """Questions ask about topics; NONE resolve. Reporting "no gaps" would claim
+    full topic coverage on a project whose every topic ref dangles."""
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Delete every topic entity, leaving the questions' topic: refs dangling.
+    for md in (project / "entities" / "topics").glob("*.md"):
+        md.unlink()
+
+    resolved = resolve_questions(project)
+    result = compute_topic_gaps(project, resolved, set(resolved))
+
+    assert result.status == "unwired"
+    assert result.code == "no_topic_entities"
+    assert result.rows == []
+
+
+def test_no_declared_topic_refs_is_a_true_empty(tmp_path: Path) -> None:
+    """Nobody asked about a topic. Zero gaps is TRUE, not a failure to run.
+
+    This is the case the naive fix collapses into `unwired` -- inverting the
+    misclassification instead of removing it.
+    """
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Strip every topic: ref from the questions, but KEEP the topic entities.
+    for md in (project / "entities" / "questions").glob("*.md"):
+        text = md.read_text()
+        md.write_text(
+            "\n".join(line for line in text.splitlines() if "topic:" not in line) + "\n"
+        )
+
+    resolved = resolve_questions(project)
+    result = compute_topic_gaps(project, resolved, set(resolved))
+
+    assert result.status == "empty"
+    assert result.code == "no_topic_demand"
+
+
+def test_no_included_questions_is_a_true_empty() -> None:
+    """Nothing survived the aspect filter. Nothing was asked -- so nothing is missing."""
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    resolved = resolve_questions(FIXTURE)
+    result = compute_topic_gaps(FIXTURE, resolved, set())
+
+    assert result.status == "empty"
+    assert result.code == "no_topic_demand"
+
+
+def test_partial_resolution_carries_a_caveat_on_a_successful_run(tmp_path: Path) -> None:
+    """Some refs resolve, some dangle: the run SUCCEEDED but silently dropped input.
+
+    reason/code are NOT exclusive to unwired -- this is the caveat channel.
+    """
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    q01 = project / "entities" / "questions" / "q01-direct-to-h1.md"
+    q01.write_text(
+        q01.read_text().replace(
+            '  - "topic:t02-thin"',
+            '  - "topic:t02-thin"\n  - "topic:t99-does-not-exist"',
+        )
+    )
+
+    resolved = resolve_questions(project)
+    result = compute_topic_gaps(project, resolved, set(resolved))
+
+    # It RAN -- the resolvable topics still produced their gap rows.
+    assert result.status == "ok"
+    assert [g.topic_id for g in result.rows] == ["topic:t02-thin"]
+    # ...and it says so.
+    assert result.code == "partial_topic_resolution"
+    assert result.reason is not None
+    assert "topic:t99-does-not-exist" in result.reason

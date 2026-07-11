@@ -115,7 +115,17 @@ def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
     else:
         # No non-software project aspects declared → include everything.
         included = set(resolved)
-    gaps = compute_topic_gaps(project_root, resolved, included)
+    result = compute_topic_gaps(project_root, resolved, included)
+    if result.status == "unwired":
+        # The instrument did not run. Emitting [] here would report FULL topic
+        # coverage on a project whose topic refs all dangle -- the silent-instrument
+        # bug. Fail loudly instead; an empty list on stdout must always mean "no gaps".
+        raise click.ClickException(f"knowledge-gaps did not run ({result.code}): {result.reason}")
+    if result.reason:
+        # A caveat rides along on a SUCCESSFUL run: part of the input was silently
+        # dropped. It goes to stderr so stdout stays a parseable list of gaps.
+        click.echo(f"notice ({result.code}): {result.reason}", err=True)
+    gaps = result.rows
     if limit is not None:
         gaps = gaps[:limit]
     emit(output_format="json", payload=[asdict(g) for g in gaps], render_text=lambda: None, sort_keys=True)

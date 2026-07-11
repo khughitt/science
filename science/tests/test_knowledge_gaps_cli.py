@@ -47,3 +47,25 @@ def test_knowledge_gaps_cli_empty_project(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     assert json.loads(result.output) == []
+
+
+def test_knowledge_gaps_cli_fails_loudly_when_unwired(tmp_path: Path) -> None:
+    """A project whose topic refs ALL dangle must not print [] and exit 0.
+
+    That output is indistinguishable from "your topics are fully covered" -- the
+    silent-instrument bug this command's instrument was migrated to stop.
+    """
+    (tmp_path / "science.yaml").write_text("name: dangling\naspects: []\n")
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "q01.md").write_text(
+        '---\nid: "question:q01"\nkind: "question"\nrelated:\n  - "topic:t99-nonexistent"\n---\nQ.\n'
+    )
+
+    result = CliRunner().invoke(
+        big_picture_group,
+        ["knowledge-gaps", "--project-root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "did not run" in result.output
+    assert "no_topic_entities" in result.output

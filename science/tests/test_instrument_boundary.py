@@ -35,7 +35,6 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("benchmark_catalog.py", "benchmark_sources"),
         ("benchmark_catalog.py", "list_benchmarks"),
-        ("big_picture/knowledge_gaps.py", "compute_topic_gaps"),
         ("big_picture/validator.py", "count_research_orphans"),
         ("big_picture/validator.py", "validate_rollup_file"),
         ("big_picture/validator.py", "validate_synthesis_file"),
