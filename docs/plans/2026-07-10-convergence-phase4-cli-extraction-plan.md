@@ -17,7 +17,7 @@ Every task's requirements implicitly include this section. Values copied verbati
 - **JSON-only on stdout.** Human diagnostics go to stderr (`err=True`); `docs/conventions/cli-behavior.md` governs. Do not move an `err=True` to stdout or vice-versa.
 - **No import back from `cli.py`.** An extracted module MUST NOT `from science_tool.cli import ...`. `cli.py` imports the group from the module; the reverse edge is a circular import. Group-exclusive helpers move *with* the group; genuinely shared helpers are imported from their non-`cli` home (or promoted to one).
 - **`science_model` must not import `science_tool`.** Unchanged by this phase; do not introduce such an edge.
-- **Business logic moves down; CLI adapters consolidate sideways.** Tasks 3 (benchmark review-file), 4 (graph-build registration), 5 (dataset store reaches), and 6 (health rollup) relocate genuine domain logic into the service/store layer, not verbatim into the new CLI module. Task 1 is different: the typed-entity helpers are CLI *adapters* — they consolidate into one CLI-support module (`typed_entity_cli.py`), and only the one pure helper (`build_origin_frontmatter`) descends into the domain module (`entities.py`). Do not push `click`/output code into `entities.py`.
+- **Business logic moves down; CLI adapters consolidate sideways.** Tasks 3 (benchmark review-file), 4 (graph-build registration), 5 (dataset store reaches), and 6 (health rollup) relocate genuine domain logic into the service/store layer, not verbatim into the new CLI module. Task 1 is different: the typed-entity helpers — including `build_origin_frontmatter`, which raises `click.BadParameter` on a bad `--origin` — are CLI *adapters*; they all consolidate into one CLI-support module (`typed_entity_cli.py`). Task 1 does **not** touch `entities.py`; do not push `click`/output code into any domain module.
 - **Do NOT rename `dataset` vs `datasets`.** The two sibling groups keep their CLI-invocation names (`science dataset …`, `science datasets …`) — renaming is a CLI-contract change, out of scope. Disambiguate only by *module* name and record the collision as a follow-up (Task 12).
 - **Guard is written LAST, against the migrated tree** (Task 12), keyed on AST structure, not text. A guard authored from this document rather than from the migrated code will out-scope the migration and land red.
 - **The 95 `raise click.ClickException(str(exc))` wrappers stay as-is.** They are the correct CLI-layer job (domain error → exit code); do not factor them into a decorator.
@@ -54,9 +54,12 @@ The 24 groups already extracted register at `cli.py:249-272`. The 22 inline grou
 | paper | `paper` @5071 | `paper` | ~56 | `paper_cli.py` (new flat) | `paper_group` |
 | paper-fetch | `paper_fetch` @5018 | (`@main.command`) | ~53 | `paper_cli.py` (joins `paper`) | `paper_fetch_command` |
 
-**Shared CLI adapter layer (Task 1 moves this first, out of band):** `_create_typed_entity`, `_show_typed_entity`, `_list_typed_entities`, `_ENTITY_LIST_TITLES` (`cli.py:1416-1484`), plus the emit helpers they call (`_emit_entity_show`, `_emit_entity_warnings`) → a **new CLI-support module `science_tool/typed_entity_cli.py`**. These are *not* domain logic — they raise `click.ClickException`, write stdout, and call `emit_query_rows`/Rich — so they must NOT land in `entities.py` (a clean domain module with no `click` import; polluting it would be the same defect Phase 6's domain-purity guard bans). Consumed by `entity`, `entities`, `propositions`, `evidence-lines`, `hypotheses`, `discussions`, `interpretations`, `questions` — so `typed_entity_cli.py` must land before those groups move, or each new module would import them back from `cli.py`.
+**Shared CLI adapter layer (Task 1 moves this first, out of band) → a new CLI-support module `science_tool/typed_entity_cli.py`.** The full set:
+- `_create_typed_entity`, `_show_typed_entity`, `_list_typed_entities`, `_ENTITY_LIST_TITLES` (`cli.py:1416-1484`);
+- the show-path emit closure `_emit_entity_show` and everything it transitively calls that is exclusive to this cluster: `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list` (`cli.py:1487`+), plus `_emit_entity_warnings`;
+- `_build_origin_frontmatter` (`cli.py:1398`) → public `build_origin_frontmatter`. It is **not** domain-pure: it catches `ValidationError` and raises `click.BadParameter` on a malformed `--origin`, so it is a CLI adapter and belongs here, next to the others — **not** in `entities.py`.
 
-**Pure helper `_build_origin_frontmatter` (`cli.py:1398`)** → `science_tool/entities.py` as public `build_origin_frontmatter`. It is genuine domain logic (builds an origins/added_by frontmatter dict, no `click`), shared by `hypotheses` (`cli.py:1086`) and `questions` (`cli.py:5164`); it needs a neutral home before either of those groups moves. `entities.py` is that home (it stays `click`-free).
+These are all CLI adapters (raise `click.ClickException`/`click.BadParameter`, write stdout, call `emit_query_rows`/Rich), so they must NOT land in a domain module — polluting `entities.py` with `click` would be the same defect Phase 6's domain-purity guard bans. Consumed by `entity`, `entities`, `propositions`, `evidence-lines`, `hypotheses`, `discussions`, `interpretations`, `questions` (and `build_origin_frontmatter` by `hypotheses`/`questions`) — so `typed_entity_cli.py` must land before those groups move, or each new module would import them back from `cli.py`. Any adapter still needed by a command that *remains* in `cli.py` is imported from `typed_entity_cli.py` (`cli.py → typed_entity_cli.py` is the intended edge; the forbidden one is the reverse).
 
 **Registration site:** all new `main.add_command(...)` lines join the existing block at `cli.py:249-272`. The `@main.command("health")` and `@main.command("paper-fetch")` decorators auto-register today; after extraction they need explicit `main.add_command(health_command)` / `main.add_command(paper_fetch_command)`.
 
@@ -130,55 +133,51 @@ Expected: full suite green (same count as before the task), snapshot green, ruff
 
 ---
 
-### Task 1: Consolidate the typed-entity CLI adapters + land `build_origin_frontmatter`
+### Task 1: Consolidate the typed-entity CLI adapters into `typed_entity_cli.py`
 
-Two moves, one task (both are prerequisites the entity-kind groups consume). **Neither pushes CLI code into a domain module.**
+One CLI-support module receives the whole shared typed-entity adapter cluster (prerequisite for the `entity`/`entities` groups and the six entity-kind groups). **This task does not touch `entities.py` — every helper here is CLI-layer.**
 
 **Files:**
-- Create: `science/src/science_tool/typed_entity_cli.py` (the shared CLI adapters)
-- Modify: `science/src/science_tool/entities.py` (receive the one pure helper)
+- Create: `science/src/science_tool/typed_entity_cli.py`
 - Modify: `science/src/science_tool/cli.py` (delete the moved defs; import them back)
-- Test: `science/tests/test_typed_entity_cli.py` (new) + `science/tests/test_entities.py` (append)
+- Test: `science/tests/test_typed_entity_cli.py` (new)
 
-**Interfaces:**
-- Produces (importable from `science_tool.typed_entity_cli`) — CLI adapters, moved verbatim, leading `_` dropped:
-  - `create_typed_entity(*, kind: str, title: str, entity_id: str | None, slug: str | None, status: str | None, related: list[str], source_refs: list[str], phase: str | None = None, with_sections: list[str] | None = None, without_sections: list[str] | None = None, no_hints: bool = False, extra_frontmatter: dict[str, object] | None = None) -> None`
-  - `show_typed_entity(kind: str, ref: str, output_format: str) -> None`
-  - `list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None`
-  - `ENTITY_LIST_TITLES: dict[str, str]`
-- Produces (importable from `science_tool.entities`) — pure domain helper:
-  - `build_origin_frontmatter(origins: tuple[str, ...], added_by: str | None) -> dict[str, object]`
-- These currently live in `cli.py` as `_create_typed_entity`/`_show_typed_entity`/`_list_typed_entities`/`_ENTITY_LIST_TITLES` (`:1416-1484`) and `_build_origin_frontmatter` (`:1398`). The adapters call `create_entity`, `find_entity`, `list_entities`, `emit_query_rows`, `entity_table_renderers`, `_emit_entity_show`, `_emit_entity_warnings` — move `_emit_entity_show`/`_emit_entity_warnings` into `typed_entity_cli.py` too if they are exclusive to this cluster (audit their other callers first; a shared one gets imported from its real home, never from `cli.py`).
+**Interfaces — produced by `science_tool.typed_entity_cli`, moved verbatim, leading `_` dropped on the public four; the rest keep their names:**
+- `create_typed_entity(*, kind: str, title: str, entity_id: str | None, slug: str | None, status: str | None, related: list[str], source_refs: list[str], phase: str | None = None, with_sections: list[str] | None = None, without_sections: list[str] | None = None, no_hints: bool = False, extra_frontmatter: dict[str, object] | None = None) -> None`
+- `show_typed_entity(kind: str, ref: str, output_format: str) -> None`
+- `list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None`
+- `ENTITY_LIST_TITLES: dict[str, str]`
+- `build_origin_frontmatter(origins: tuple[str, ...], added_by: str | None) -> dict[str, object]` (was `_build_origin_frontmatter`, `cli.py:1398` — **CLI adapter**: catches `ValidationError`, raises `click.BadParameter`; needs `parse_origin_spec` + `ValidationError` imports moved with it)
 
-- [ ] **Step 1: Write the characterization tests**
+**Full helper closure to move (all `cli.py`-only today — confirmed by grep, so all cluster-exclusive):**
+`_emit_entity_show` and its transitive callees `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list`, plus `_emit_entity_warnings` (`cli.py:1487`+). Move the whole set into `typed_entity_cli.py`. Before moving each, re-grep its callers: if one is also used by a command that *stays* in `cli.py`, still move it here and import it back into `cli.py` from `typed_entity_cli.py` (that direction is allowed). The adapters also call `create_entity`, `find_entity`, `list_entities`, `emit_query_rows`, `entity_table_renderers` — import those from their existing homes, never from `cli.py`.
+
+- [ ] **Step 1: Write the characterization test**
 
 ```python
 # tests/test_typed_entity_cli.py (new)
+import inspect
 from science_tool import typed_entity_cli as tec
+from science_tool import entities as ent
 
 def test_typed_entity_adapters_present():
-    for name in ("create_typed_entity", "show_typed_entity", "list_typed_entities", "ENTITY_LIST_TITLES"):
+    for name in ("create_typed_entity", "show_typed_entity", "list_typed_entities",
+                 "ENTITY_LIST_TITLES", "build_origin_frontmatter"):
         assert hasattr(tec, name), name
     assert tec.ENTITY_LIST_TITLES["hypothesis"] == "Hypotheses"
 
-# tests/test_entities.py (append)
-def test_build_origin_frontmatter_is_domain_and_click_free():
-    import science_tool.entities as ent
-    import inspect
-    assert hasattr(ent, "build_origin_frontmatter")
-    assert "click" not in inspect.getsource(ent)  # entities.py stays a clean domain module
+def test_entities_domain_module_stays_click_free():
+    # Task 1 must not push CLI code into the domain module.
+    assert "import click" not in inspect.getsource(ent)
 ```
 
-- [ ] **Step 2: Run them — expect FAIL** (module/attr absent; and `entities.py` must remain click-free after the move).
+- [ ] **Step 2: Run it — expect FAIL** (`typed_entity_cli` module / attrs absent).
 
-Run: `cd science && uv run --frozen pytest tests/test_typed_entity_cli.py tests/test_entities.py::test_build_origin_frontmatter_is_domain_and_click_free -q`
+Run: `cd science && uv run --frozen pytest tests/test_typed_entity_cli.py -q`
 
-- [ ] **Step 3: Move the code.**
-  - Cut the four adapters (`_create_typed_entity`/`_show_typed_entity`/`_list_typed_entities`/`_ENTITY_LIST_TITLES`) and any cluster-exclusive emit helper (`_emit_entity_show`, `_emit_entity_warnings`) from `cli.py` into the new `typed_entity_cli.py`, dropping the leading `_` on the four public names. Add the imports they need. `typed_entity_cli.py` may `import click`; it must NOT import `cli.py`.
-  - Cut `_build_origin_frontmatter` from `cli.py` into `entities.py` as public `build_origin_frontmatter`. Confirm it needs no `click` (it returns a dict); if it does, it is not domain-pure and must go to `typed_entity_cli.py` instead — but per the source it does not.
-  - In `cli.py`: `from science_tool.typed_entity_cli import create_typed_entity, show_typed_entity, list_typed_entities, ENTITY_LIST_TITLES` and `from science_tool.entities import build_origin_frontmatter`; rewrite the ~8 adapter call sites and the two `_build_origin_frontmatter(` calls (`:1086`, `:5164`).
+- [ ] **Step 3: Move the code.** Cut the four public adapters, `build_origin_frontmatter`, and the full emit closure (`_emit_entity_show`, `_entity_show_payload`, `_print_entity_field`, `_print_entity_refs_field`, `_frontmatter_string_list`, `_emit_entity_warnings`) and `_ENTITY_LIST_TITLES` from `cli.py` into the new `typed_entity_cli.py`; drop the leading `_` on the five public names (`create_typed_entity`, `show_typed_entity`, `list_typed_entities`, `ENTITY_LIST_TITLES`, `build_origin_frontmatter`); keep the private-emit helpers `_`-prefixed. Move the imports they need (including `parse_origin_spec`, `ValidationError`). `typed_entity_cli.py` may `import click`; it must NOT import `cli.py`. In `cli.py`, add `from science_tool.typed_entity_cli import create_typed_entity, show_typed_entity, list_typed_entities, ENTITY_LIST_TITLES, build_origin_frontmatter` (plus any private helper a remaining command still calls), and rewrite the call sites (`_create_typed_entity(`→`create_typed_entity(`, the two `_build_origin_frontmatter(` at `:1086`/`:5164`, etc.).
 
-- [ ] **Step 4: Run the tests + full suite — expect PASS/green.**
+- [ ] **Step 4: Run the test + full suite — expect PASS/green.**
 
 Run: `cd science && uv run --frozen pytest -q && uv run ruff check && uv run pyright`
 Expected: same pass count as pre-task, ruff+pyright clean.
@@ -187,12 +186,10 @@ Expected: same pass count as pre-task, ruff+pyright clean.
 
 ```bash
 git add science/src/science_tool/typed_entity_cli.py \
-        science/src/science_tool/entities.py \
         science/src/science_tool/cli.py \
-        science/tests/test_typed_entity_cli.py \
-        science/tests/test_entities.py
-git status --short   # confirm every new file is staged before committing
-git commit -m "Consolidate typed-entity CLI adapters into typed_entity_cli.py; move build_origin_frontmatter to entities.py (t-phase4)"
+        science/tests/test_typed_entity_cli.py
+git status --short   # confirm typed_entity_cli.py (new) is staged
+git commit -m "Consolidate the typed-entity CLI adapter cluster into typed_entity_cli.py (t-phase4)"
 ```
 
 ---
@@ -269,14 +266,14 @@ git commit -m "Extract benchmark group to benchmark_cli.py; push review-file wri
 
 **Interfaces:**
 - Produces: `graph_group` (`click.Group` `"graph"`) from `science_tool.graph.cli`.
-- Produces: `build_project_graph(project_root: Path, *, local_only: bool) -> <same return type as materialize_graph>` from `science_tool.graph.build`.
+- Produces: `build_project_graph(project_root: Path) -> LocalGraphBuild` from `science_tool.graph.build`, where `LocalGraphBuild` is a small dataclass `(local_path: Path, config: ProjectConfig | None)`. **Narrow contract on purpose:** it resolves the project root, loads config if `science.yaml` exists, runs `ensure_registered`, calls `materialize_graph`, and returns the local graph path plus the loaded config. It does **not** take `local_only` and does **not** touch composite graphs.
 
-**Push-down — do NOT widen `materialize_graph`.** `graph_build` (`cli.py:1608`) calls `ensure_registered` (`cli.py:1613-1620`) *and then* `materialize_graph()` (`cli.py:1629`). `materialize_graph` (`graph/materialize.py:601`) is a broad programmatic API with **non-CLI callers** (`annotation/proposition_archive.py`, `graph/source_snapshots.py`, `graph/freshness.py`, `graph/store/inquiry.py`, `graph/__init__.py`). Putting `ensure_registered` *inside* `materialize_graph` would make every library/test materialization mutate the registry — a behavior change. Instead add a **CLI-facing wrapper** `build_project_graph` in a new `graph/build.py` that performs `ensure_registered` (same guard as `cli.py:1613-1620`) then delegates to `materialize_graph`. Only the `graph build` command calls the wrapper; `materialize_graph` is untouched.
+**Push-down — extract ONLY the registration policy; do NOT widen `materialize_graph`, and do NOT swallow the rest of the command.** `graph_build` (`cli.py:1608`) today does five things: (1) resolve root + load config, (2) `ensure_registered` (`cli.py:1613-1620`), (3) `materialize_graph` (`cli.py:1629`), (4) composite refresh / stale-`composite.trig` deletion gated on `local_only` and `_cfg.peers` (`cli.py:1634`+), (5) non-blocking ontology suggestions. Only (1)–(3) move into the service; **(4) and (5) stay in the command** (they are user-facing orchestration with `click.echo`s and `--local-only` semantics that `tests/test_graph_cli.py:252` covers). Putting `ensure_registered` *inside* `materialize_graph` is forbidden: `materialize_graph` (`graph/materialize.py:601`) has **non-CLI callers** (`annotation/proposition_archive.py`, `graph/source_snapshots.py`, `graph/freshness.py`, `graph/store/inquiry.py`, `graph/__init__.py`) and would then mutate the registry for every library/test build.
 
-- [ ] **Step 1:** Create `graph/build.py` with `build_project_graph(project_root, *, local_only)` = the exact `ensure_registered(...)` call from `cli.py:1620` (guarded identically) followed by `return materialize_graph(...)` with the same args the command passes today. Characterization test: `build_project_graph` on an unregistered fixture project registers it (assert the registry side-effect) AND returns the same result as a direct `materialize_graph`; a **direct** `materialize_graph` call on an unregistered project does **not** register it (locks in that the wrapper, not the API, owns registration).
-- [ ] **Step 2:** Apply the extraction recipe to the `graph` group (rename `def graph` → `graph_group`, `@click.group("graph")`); the moved `graph_build` command calls `build_project_graph` (no inline `ensure_registered`, no direct `materialize_graph`).
+- [ ] **Step 1:** Create `graph/build.py` with the `LocalGraphBuild` dataclass and `build_project_graph(project_root)` performing exactly steps (1)–(3): resolve `_project_root`, load config via `load_project_config` iff `project_config_path(...).is_file()`, `ensure_registered(...)` with the identical args at `cli.py:1614-1620`, then `local_path = materialize_graph(_project_root)`, returning `LocalGraphBuild(local_path, _cfg)`. Let `materialize_graph`'s `ValueError` propagate (the command keeps its `except ValueError → ClickException` wrapper). Characterization test: on an unregistered fixture project, `build_project_graph` registers it (assert the registry side-effect) and returns a `LocalGraphBuild` with the materialized path + config; a **direct** `materialize_graph` on an unregistered project does **not** register it (locks in that the wrapper, not the API, owns registration).
+- [ ] **Step 2:** Apply the extraction recipe to the `graph` group (rename `def graph` → `graph_group`, `@click.group("graph")`). Rewrite `graph_build` to: `result = build_project_graph(_project_root)` inside the existing `try/except ValueError`, `click.echo(f"Materialized local graph at {result.local_path}")`, then keep the composite-refresh block (4) and ontology-suggestions block (5) verbatim, reading `_cfg` from `result.config`. No inline `ensure_registered`, no direct `materialize_graph`.
 - [ ] **Step 3: Register** (`main.add_command(graph_group)`).
-- [ ] **Step 4: Verify** (recipe block) + `graph --help` unchanged + snapshot green.
+- [ ] **Step 4: Verify** (recipe block) + `graph --help` unchanged + snapshot green + `tests/test_graph_cli.py` green (it pins the composite/`--local-only` behavior that stays in the command).
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -367,7 +364,7 @@ Pure relocation via the recipe. `explore_ideas_group` already has the target nam
 
 ### Task 9: Extract the entity-kind groups → per-kind modules (batch A)
 
-Six pure relocations, **one commit each**. All consume the Task-1 adapters (`create_typed_entity`/`show_typed_entity`/`list_typed_entities`/`ENTITY_LIST_TITLES` from `science_tool.typed_entity_cli`). **`hypotheses` and `questions` additionally consume `build_origin_frontmatter` from `science_tool.entities`** (Task 1) — import it there, never from `cli.py`. Apply the recipe per group; each becomes its own module. Reviewer reviews the batch together (identical mechanical shape) but each is a separate commit so a single bad move is revertible.
+Six pure relocations, **one commit each**. All consume the Task-1 adapters (`create_typed_entity`/`show_typed_entity`/`list_typed_entities`/`ENTITY_LIST_TITLES` from `science_tool.typed_entity_cli`). **`hypotheses` and `questions` additionally consume `build_origin_frontmatter` from `science_tool.typed_entity_cli`** (Task 1) — import it there, never from `cli.py`. Apply the recipe per group; each becomes its own module. Reviewer reviews the batch together (identical mechanical shape) but each is a separate commit so a single bad move is revertible.
 
 Groups (source span → module → exposed symbol):
 - `propositions` (@847-905) → `propositions_cli.py` → `proposition_group`
