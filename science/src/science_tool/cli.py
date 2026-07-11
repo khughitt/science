@@ -3484,14 +3484,14 @@ def datasets_qa(
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(2) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(package_report_dict(result), indent=2, sort_keys=True))
-    else:
+    def _render() -> None:
         for outcome in result.outcomes:
             if outcome.status == "not-applicable":
                 continue
             click.echo(_qa.render_resource_line(outcome))
         click.echo(_qa.render_package_summary(result))
+
+    emit(output_format=output_format, payload=package_report_dict(result), render_text=_render, sort_keys=True)
 
     if code:
         raise click.exceptions.Exit(code)
@@ -4633,8 +4633,6 @@ def health_command(
     list_checks: bool,
 ) -> None:
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
-    import json as _json
-
     from rich.table import Table
 
     from science_tool.graph.health import build_health_report, list_health_checks
@@ -4643,16 +4641,17 @@ def health_command(
     project_root = project_root.resolve()
     if list_checks:
         available_checks = list_health_checks()
-        if output_format == "json":
-            click.echo(_json.dumps({"checks": available_checks}, indent=2))
-            return
-        table = Table(title="Health checks")
-        table.add_column("Name", style="bold")
-        table.add_column("Requires sources")
-        table.add_column("Description")
-        for row in available_checks:
-            table.add_row(str(row["name"]), "yes" if row["requires_sources"] else "no", str(row["description"]))
-        get_console().print(table)
+
+        def _render_checks() -> None:
+            table = Table(title="Health checks")
+            table.add_column("Name", style="bold")
+            table.add_column("Requires sources")
+            table.add_column("Description")
+            for row in available_checks:
+                table.add_row(str(row["name"]), "yes" if row["requires_sources"] else "no", str(row["description"]))
+            get_console().print(table)
+
+        emit(output_format=output_format, payload={"checks": available_checks}, render_text=_render_checks)
         return
 
     try:
@@ -4669,352 +4668,351 @@ def health_command(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(_json.dumps(report, indent=2))
-        return
+    def _render_report() -> None:
+        if timings:
+            meta = report.get("_meta") or {}
+            timing_rows = meta.get("timings") or []
+            total_duration = meta.get("total_duration_seconds")
+            click.echo("Health timings:", err=True)
+            for row in timing_rows:
+                click.echo(f"  {row['name']}: {row['duration_seconds']:.3f}s", err=True)
+            if isinstance(total_duration, int | float):
+                click.echo(f"  total: {total_duration:.3f}s", err=True)
 
-    if timings:
-        meta = report.get("_meta") or {}
-        timing_rows = meta.get("timings") or []
-        total_duration = meta.get("total_duration_seconds")
-        click.echo("Health timings:", err=True)
-        for row in timing_rows:
-            click.echo(f"  {row['name']}: {row['duration_seconds']:.3f}s", err=True)
-        if isinstance(total_duration, int | float):
-            click.echo(f"  total: {total_duration:.3f}s", err=True)
+        layered_claims = report["layered_claims"]
+        layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
+            layered_claims["rival_model_packets_missing_discriminating_predictions"]
+        )
+        coverage_gaps = 0
+        for metric in (
+            layered_claims["proposition_claim_layer_coverage"],
+            layered_claims["causal_leaning_identification_coverage"],
+        ):
+            if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+                coverage_gaps += 1
 
-    layered_claims = report["layered_claims"]
-    layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
-        layered_claims["rival_model_packets_missing_discriminating_predictions"]
-    )
-    coverage_gaps = 0
-    for metric in (
-        layered_claims["proposition_claim_layer_coverage"],
-        layered_claims["causal_leaning_identification_coverage"],
-    ):
-        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
-            coverage_gaps += 1
-
-    archive_lag = report["archive_lag"]
-    archive_lag_total = (
-        archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
-    )
-
-    managed_artifacts = report.get("managed_artifacts") or []
-    managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
-
-    tooling_scaffold = report.get("tooling_scaffold") or []
-    agent_context = report.get("agent_context") or []
-    unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
-    entity_identity = report.get("entity_identity") or []
-    schema_invalid = report.get("schema_invalid") or []
-    validation = report.get("validation") or []
-    accepted_validation = report.get("accepted_validation") or []
-    prose_epistemics = report.get("prose_epistemics") or {}
-    raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
-    prose_epistemics_findings: list[dict[str, object]] = (
-        [cast("dict[str, object]", row) for row in raw_prose_epistemics_findings if isinstance(row, dict)]
-        if isinstance(raw_prose_epistemics_findings, list)
-        else []
-    )
-    cross_paper_evidence = report.get("cross_paper_evidence") or {}
-    raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
-    cross_paper_findings: list[dict[str, object]] = (
-        [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
-        if isinstance(raw_cross_paper_findings, list)
-        else []
-    )
-
-    total_issues = (
-        len(report["unresolved_refs"])
-        + len(unregistered_ref_kinds)
-        + len(report["lingering_tags_lines"])
-        + len(report["identity_policy"])
-        + len(entity_identity)
-        + layered_claim_issue_count
-        + coverage_gaps
-        + len(report.get("dataset_anomalies") or [])
-        + len(schema_invalid)
-        + (1 if archive_lag_total else 0)
-        + managed_artifacts_issue_count
-        + len(tooling_scaffold)
-        + len(agent_context)
-        + len(validation)
-        + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
-        + len(cross_paper_findings)
-    )
-    if total_issues == 0:
-        click.echo("Project is clean — no issues found.")
-        if accepted_validation:
-            click.echo(f"Accepted validation warnings: {len(accepted_validation)}")
-        return
-
-    console = get_console()
-
-    if archive_lag_total:
-        lag_table = Table(title="Tasks Archive Lag")
-        lag_table.add_column("Metric", style="bold")
-        lag_table.add_column("Count", justify="right")
-        for key in ("done_in_active", "retired_in_active", "missing_completed"):
-            lag_table.add_row(key, str(archive_lag[key]))
-        console.print(lag_table)
-        console.print(
-            "\n[bold]Next:[/bold] run [cyan]science tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
+        archive_lag = report["archive_lag"]
+        archive_lag_total = (
+            archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
         )
 
-    flagged_managed_artifacts = [f for f in managed_artifacts if f.get("counts_as_issue")]
-    if flagged_managed_artifacts:
-        ma_table = Table(title=f"Managed artifacts ({len(flagged_managed_artifacts)})")
-        ma_table.add_column("Name", style="bold")
-        ma_table.add_column("Status")
-        ma_table.add_column("Detail")
-        for row in flagged_managed_artifacts:
-            ma_table.add_row(row["name"], row["status"], row["detail"])
-        console.print(ma_table)
-        console.print(
-            "\n[bold]Next:[/bold] run "
-            "[cyan]science project artifacts check[/cyan] / "
-            "[cyan]update[/cyan] / [cyan]install[/cyan] per status."
+        managed_artifacts = report.get("managed_artifacts") or []
+        managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
+
+        tooling_scaffold = report.get("tooling_scaffold") or []
+        agent_context = report.get("agent_context") or []
+        unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
+        entity_identity = report.get("entity_identity") or []
+        schema_invalid = report.get("schema_invalid") or []
+        validation = report.get("validation") or []
+        accepted_validation = report.get("accepted_validation") or []
+        prose_epistemics = report.get("prose_epistemics") or {}
+        raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
+        prose_epistemics_findings: list[dict[str, object]] = (
+            [cast("dict[str, object]", row) for row in raw_prose_epistemics_findings if isinstance(row, dict)]
+            if isinstance(raw_prose_epistemics_findings, list)
+            else []
+        )
+        cross_paper_evidence = report.get("cross_paper_evidence") or {}
+        raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
+        cross_paper_findings: list[dict[str, object]] = (
+            [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
+            if isinstance(raw_cross_paper_findings, list)
+            else []
         )
 
-    if tooling_scaffold:
-        ts_table = Table(title=f"Tooling scaffold ({len(tooling_scaffold)})")
-        ts_table.add_column("Code", style="bold")
-        ts_table.add_column("Detail")
-        ts_table.add_column("Fix")
-        for row in tooling_scaffold:
-            ts_table.add_row(row["code"], row["detail"], row["fix"])
-        console.print(ts_table)
-        console.print(
-            "\n[bold]Next:[/bold] follow the suggested fix for each row — "
-            "see [cyan]commands/create-project.md[/cyan] for the canonical scaffold."
+        total_issues = (
+            len(report["unresolved_refs"])
+            + len(unregistered_ref_kinds)
+            + len(report["lingering_tags_lines"])
+            + len(report["identity_policy"])
+            + len(entity_identity)
+            + layered_claim_issue_count
+            + coverage_gaps
+            + len(report.get("dataset_anomalies") or [])
+            + len(schema_invalid)
+            + (1 if archive_lag_total else 0)
+            + managed_artifacts_issue_count
+            + len(tooling_scaffold)
+            + len(agent_context)
+            + len(validation)
+            + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
+            + len(cross_paper_findings)
         )
+        if total_issues == 0:
+            click.echo("Project is clean — no issues found.")
+            if accepted_validation:
+                click.echo(f"Accepted validation warnings: {len(accepted_validation)}")
+            return
 
-    if agent_context:
-        ac_table = Table(title=f"Agent context ({len(agent_context)})")
-        ac_table.add_column("Code", style="bold")
-        ac_table.add_column("File")
-        ac_table.add_column("Detail")
-        ac_table.add_column("Fix")
-        for row in agent_context:
-            ac_table.add_row(row["code"], row["source_file"], row["detail"], row["fix"])
-        console.print(ac_table)
-        console.print(
-            "\n[bold]Next:[/bold] keep [cyan]CLAUDE.md[/cyan] minimal, remove [cyan]@core/*[/cyan] "
-            "includes, and keep [cyan]core/overview.md[/cyan] as concise boot context."
-        )
+        console = get_console()
 
-    if schema_invalid:
-        si_table = Table(title=f"Schema-invalid entities ({len(schema_invalid)})")
-        si_table.add_column("Kind", style="bold")
-        si_table.add_column("Path")
-        si_table.add_column("Detail")
-        for row in schema_invalid:
-            si_table.add_row(row["kind"], row["path"], row["message"])
-        console.print(si_table)
-        console.print(
-            "\n[bold]Next:[/bold] fix each entity's frontmatter to satisfy its schema "
-            "(these are excluded from the graph until repaired); rerun "
-            "[cyan]science validate[/cyan] for the authoritative error."
-        )
-
-    if prose_epistemics_findings:
-        prose_epistemics_next = "science annotate build-prose-health --write"
-        pe_table = Table(title=f"Prose Epistemics ({len(prose_epistemics_findings)})")
-        pe_table.add_column("Code", style="bold")
-        pe_table.add_column("Source")
-        pe_table.add_column("Detail")
-        for row in prose_epistemics_findings:
-            pe_table.add_row(
-                str(row.get("code", "")),
-                str(row.get("source_ref") or ""),
-                f"{row.get('message', '')}\nNext action: {prose_epistemics_next}",
+        if archive_lag_total:
+            lag_table = Table(title="Tasks Archive Lag")
+            lag_table.add_column("Metric", style="bold")
+            lag_table.add_column("Count", justify="right")
+            for key in ("done_in_active", "retired_in_active", "missing_completed"):
+                lag_table.add_row(key, str(archive_lag[key]))
+            console.print(lag_table)
+            console.print(
+                "\n[bold]Next:[/bold] run [cyan]science tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
             )
-        console.print(pe_table)
-        console.print(f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan].")
 
-    if cross_paper_findings:
-        cpe_table = Table(title=f"Cross-paper evidence ({len(cross_paper_findings)})")
-        cpe_table.add_column("Reason", style="bold", no_wrap=True)
-        cpe_table.add_column("Sidecar", overflow="fold")
-        cpe_table.add_column("Annotation", no_wrap=True)
-        cpe_table.add_column("Detail", overflow="fold")
-        for row in cross_paper_findings:
-            sidecar = str(row.get("sidecar", ""))
-            if sidecar:
-                try:
-                    sidecar = str(Path(sidecar).resolve().relative_to(project_root))
-                except ValueError:
-                    pass
-            reason = str(row.get("reason", ""))
-            annotation = str(row.get("annotation", ""))
-            detail = str(row.get("detail", ""))
-            cpe_table.add_row(
-                reason,
-                sidecar,
-                annotation,
-                detail,
+        flagged_managed_artifacts = [f for f in managed_artifacts if f.get("counts_as_issue")]
+        if flagged_managed_artifacts:
+            ma_table = Table(title=f"Managed artifacts ({len(flagged_managed_artifacts)})")
+            ma_table.add_column("Name", style="bold")
+            ma_table.add_column("Status")
+            ma_table.add_column("Detail")
+            for row in flagged_managed_artifacts:
+                ma_table.add_row(row["name"], row["status"], row["detail"])
+            console.print(ma_table)
+            console.print(
+                "\n[bold]Next:[/bold] run "
+                "[cyan]science project artifacts check[/cyan] / "
+                "[cyan]update[/cyan] / [cyan]install[/cyan] per status."
             )
-        console.print(cpe_table)
-        console.print("\n[bold]Next:[/bold] fix stale promoted_to refs or proposition source_refs, then rerun health.")
 
-    if report["unresolved_refs"]:
-        table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
-        table.add_column("Target", style="bold")
-        table.add_column("Mentions", justify="right")
-        table.add_column("Suggested triage")
-        table.add_column("Sources (first 3)")
-        for row in report["unresolved_refs"]:
-            srcs = ", ".join(row["sources"][:3])
-            if len(row["sources"]) > 3:
-                srcs += f", … (+{len(row['sources']) - 3})"
-            table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
-        console.print(table)
+        if tooling_scaffold:
+            ts_table = Table(title=f"Tooling scaffold ({len(tooling_scaffold)})")
+            ts_table.add_column("Code", style="bold")
+            ts_table.add_column("Detail")
+            ts_table.add_column("Fix")
+            for row in tooling_scaffold:
+                ts_table.add_row(row["code"], row["detail"], row["fix"])
+            console.print(ts_table)
+            console.print(
+                "\n[bold]Next:[/bold] follow the suggested fix for each row — "
+                "see [cyan]commands/create-project.md[/cyan] for the canonical scaffold."
+            )
 
-    if unregistered_ref_kinds:
-        table = Table(title=f"Unregistered reference kinds ({len(unregistered_ref_kinds)})")
-        table.add_column("Kind", style="bold")
-        table.add_column("Field")
-        table.add_column("Mentions", justify="right")
-        table.add_column("Refs (first 3)")
-        table.add_column("Sources (first 3)")
-        for row in unregistered_ref_kinds:
-            refs = ", ".join(row["refs"][:3])
-            if len(row["refs"]) > 3:
-                refs += f", … (+{len(row['refs']) - 3})"
-            srcs = ", ".join(row["sources"][:3])
-            if len(row["sources"]) > 3:
-                srcs += f", … (+{len(row['sources']) - 3})"
-            table.add_row(row["kind"], row["field"], str(row["mention_count"]), refs, srcs)
-        console.print(table)
-        console.print(
-            "\n[bold]Next:[/bold] register these entity kinds in a profile, migrate the refs to "
-            "registered kinds, or move non-entity annotations to [cyan]meta:*[/cyan]."
-        )
+        if agent_context:
+            ac_table = Table(title=f"Agent context ({len(agent_context)})")
+            ac_table.add_column("Code", style="bold")
+            ac_table.add_column("File")
+            ac_table.add_column("Detail")
+            ac_table.add_column("Fix")
+            for row in agent_context:
+                ac_table.add_row(row["code"], row["source_file"], row["detail"], row["fix"])
+            console.print(ac_table)
+            console.print(
+                "\n[bold]Next:[/bold] keep [cyan]CLAUDE.md[/cyan] minimal, remove [cyan]@core/*[/cyan] "
+                "includes, and keep [cyan]core/overview.md[/cyan] as concise boot context."
+            )
 
-    if report["lingering_tags_lines"]:
-        with_values = [r for r in report["lingering_tags_lines"] if r["values"]]
-        empty_count = len(report["lingering_tags_lines"]) - len(with_values)
+        if schema_invalid:
+            si_table = Table(title=f"Schema-invalid entities ({len(schema_invalid)})")
+            si_table.add_column("Kind", style="bold")
+            si_table.add_column("Path")
+            si_table.add_column("Detail")
+            for row in schema_invalid:
+                si_table.add_row(row["kind"], row["path"], row["message"])
+            console.print(si_table)
+            console.print(
+                "\n[bold]Next:[/bold] fix each entity's frontmatter to satisfy its schema "
+                "(these are excluded from the graph until repaired); rerun "
+                "[cyan]science validate[/cyan] for the authoritative error."
+            )
 
-        if with_values:
-            title = f"Legacy `tags:` fields to migrate ({len(with_values)})"
-            table = Table(title=title)
-            table.add_column("File", style="bold")
-            table.add_column("Values")
-            for row in with_values:
-                table.add_row(row["file"], ", ".join(row["values"]))
+        if prose_epistemics_findings:
+            prose_epistemics_next = "science annotate build-prose-health --write"
+            pe_table = Table(title=f"Prose Epistemics ({len(prose_epistemics_findings)})")
+            pe_table.add_column("Code", style="bold")
+            pe_table.add_column("Source")
+            pe_table.add_column("Detail")
+            for row in prose_epistemics_findings:
+                pe_table.add_row(
+                    str(row.get("code", "")),
+                    str(row.get("source_ref") or ""),
+                    f"{row.get('message', '')}\nNext action: {prose_epistemics_next}",
+                )
+            console.print(pe_table)
+            console.print(f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan].")
+
+        if cross_paper_findings:
+            cpe_table = Table(title=f"Cross-paper evidence ({len(cross_paper_findings)})")
+            cpe_table.add_column("Reason", style="bold", no_wrap=True)
+            cpe_table.add_column("Sidecar", overflow="fold")
+            cpe_table.add_column("Annotation", no_wrap=True)
+            cpe_table.add_column("Detail", overflow="fold")
+            for row in cross_paper_findings:
+                sidecar = str(row.get("sidecar", ""))
+                if sidecar:
+                    try:
+                        sidecar = str(Path(sidecar).resolve().relative_to(project_root))
+                    except ValueError:
+                        pass
+                reason = str(row.get("reason", ""))
+                annotation = str(row.get("annotation", ""))
+                detail = str(row.get("detail", ""))
+                cpe_table.add_row(
+                    reason,
+                    sidecar,
+                    annotation,
+                    detail,
+                )
+            console.print(cpe_table)
+            console.print("\n[bold]Next:[/bold] fix stale promoted_to refs or proposition source_refs, then rerun health.")
+
+        if report["unresolved_refs"]:
+            table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
+            table.add_column("Target", style="bold")
+            table.add_column("Mentions", justify="right")
+            table.add_column("Suggested triage")
+            table.add_column("Sources (first 3)")
+            for row in report["unresolved_refs"]:
+                srcs = ", ".join(row["sources"][:3])
+                if len(row["sources"]) > 3:
+                    srcs += f", … (+{len(row['sources']) - 3})"
+                table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
             console.print(table)
 
-        if empty_count:
-            console.print(f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]")
-
-    if report["identity_policy"]:
-        table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
-        table.add_column("Check", style="bold")
-        table.add_column("Entity")
-        table.add_column("File")
-        table.add_column("Message")
-        for row in report["identity_policy"]:
-            table.add_row(row["check"], row["entity_id"], row["source_file"], row["message"])
-        console.print(table)
-
-    if entity_identity:
-        table = Table(title=f"Entity Identity ({len(entity_identity)})")
-        table.add_column("Code", style="bold", no_wrap=True, min_width=26)
-        table.add_column("Severity")
-        table.add_column("Path", overflow="fold")
-        table.add_column("Canonical ID", overflow="fold")
-        table.add_column("Message", overflow="fold")
-        for row in entity_identity:
-            table.add_row(
-                row["code"],
-                row["severity"],
-                row.get("path") or "",
-                row.get("canonical_id") or "",
-                row["message"],
+        if unregistered_ref_kinds:
+            table = Table(title=f"Unregistered reference kinds ({len(unregistered_ref_kinds)})")
+            table.add_column("Kind", style="bold")
+            table.add_column("Field")
+            table.add_column("Mentions", justify="right")
+            table.add_column("Refs (first 3)")
+            table.add_column("Sources (first 3)")
+            for row in unregistered_ref_kinds:
+                refs = ", ".join(row["refs"][:3])
+                if len(row["refs"]) > 3:
+                    refs += f", … (+{len(row['refs']) - 3})"
+                srcs = ", ".join(row["sources"][:3])
+                if len(row["sources"]) > 3:
+                    srcs += f", … (+{len(row['sources']) - 3})"
+                table.add_row(row["kind"], row["field"], str(row["mention_count"]), refs, srcs)
+            console.print(table)
+            console.print(
+                "\n[bold]Next:[/bold] register these entity kinds in a profile, migrate the refs to "
+                "registered kinds, or move non-entity annotations to [cyan]meta:*[/cyan]."
             )
-        console.print(table)
 
-    if validation:
-        table = Table(title=f"Validation ({len(validation)})")
-        table.add_column("Severity", style="bold")
-        table.add_column("Path", overflow="fold")
-        table.add_column("Rule")
-        table.add_column("Task")
-        table.add_column("Message", overflow="fold")
-        for row in validation:
-            path = row.get("path") or ""
-            line = row.get("line")
-            if line is not None:
-                path = f"{path}:{line}" if path else str(line)
-            table.add_row(
-                row.get("severity", ""),
-                path,
-                row.get("rule") or "",
-                row.get("task") or "",
-                row.get("message", ""),
+        if report["lingering_tags_lines"]:
+            with_values = [r for r in report["lingering_tags_lines"] if r["values"]]
+            empty_count = len(report["lingering_tags_lines"]) - len(with_values)
+
+            if with_values:
+                title = f"Legacy `tags:` fields to migrate ({len(with_values)})"
+                table = Table(title=title)
+                table.add_column("File", style="bold")
+                table.add_column("Values")
+                for row in with_values:
+                    table.add_row(row["file"], ", ".join(row["values"]))
+                console.print(table)
+
+            if empty_count:
+                console.print(f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]")
+
+        if report["identity_policy"]:
+            table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
+            table.add_column("Check", style="bold")
+            table.add_column("Entity")
+            table.add_column("File")
+            table.add_column("Message")
+            for row in report["identity_policy"]:
+                table.add_row(row["check"], row["entity_id"], row["source_file"], row["message"])
+            console.print(table)
+
+        if entity_identity:
+            table = Table(title=f"Entity Identity ({len(entity_identity)})")
+            table.add_column("Code", style="bold", no_wrap=True, min_width=26)
+            table.add_column("Severity")
+            table.add_column("Path", overflow="fold")
+            table.add_column("Canonical ID", overflow="fold")
+            table.add_column("Message", overflow="fold")
+            for row in entity_identity:
+                table.add_row(
+                    row["code"],
+                    row["severity"],
+                    row.get("path") or "",
+                    row.get("canonical_id") or "",
+                    row["message"],
+                )
+            console.print(table)
+
+        if validation:
+            table = Table(title=f"Validation ({len(validation)})")
+            table.add_column("Severity", style="bold")
+            table.add_column("Path", overflow="fold")
+            table.add_column("Rule")
+            table.add_column("Task")
+            table.add_column("Message", overflow="fold")
+            for row in validation:
+                path = row.get("path") or ""
+                line = row.get("line")
+                if line is not None:
+                    path = f"{path}:{line}" if path else str(line)
+                table.add_row(
+                    row.get("severity", ""),
+                    path,
+                    row.get("rule") or "",
+                    row.get("task") or "",
+                    row.get("message", ""),
+                )
+            console.print(table)
+
+        adoption_table = Table(title="Layered-Claim Adoption")
+        adoption_table.add_column("Check", style="bold")
+        adoption_table.add_column("Coverage", justify="right")
+        adoption_table.add_column("Fraction", justify="right")
+        for label, metric in (
+            ("Propositions with authored claim_layer", layered_claims["proposition_claim_layer_coverage"]),
+            (
+                "Causal-leaning propositions with authored identification_strength",
+                layered_claims["causal_leaning_identification_coverage"],
+            ),
+        ):
+            adoption_table.add_row(
+                label,
+                f"{metric['numerator']}/{metric['denominator']}",
+                f"{metric['fraction']:.2f}",
             )
-        console.print(table)
+        console.print(adoption_table)
 
-    adoption_table = Table(title="Layered-Claim Adoption")
-    adoption_table.add_column("Check", style="bold")
-    adoption_table.add_column("Coverage", justify="right")
-    adoption_table.add_column("Fraction", justify="right")
-    for label, metric in (
-        ("Propositions with authored claim_layer", layered_claims["proposition_claim_layer_coverage"]),
-        (
-            "Causal-leaning propositions with authored identification_strength",
-            layered_claims["causal_leaning_identification_coverage"],
-        ),
-    ):
-        adoption_table.add_row(
-            label,
-            f"{metric['numerator']}/{metric['denominator']}",
-            f"{metric['fraction']:.2f}",
-        )
-    console.print(adoption_table)
+        if layered_claims["migration_issues"]:
+            issue_table = Table(title=f"Layered-Claim Migration Issues ({len(layered_claims['migration_issues'])})")
+            issue_table.add_column("Proposition", style="bold")
+            issue_table.add_column("Warnings")
+            issue_table.add_column("TODOs")
+            for row in layered_claims["migration_issues"]:
+                issue_table.add_row(
+                    row["proposition"],
+                    "; ".join(row["warnings"]) or "-",
+                    "; ".join(row["todos"]) or "-",
+                )
+            console.print(issue_table)
 
-    if layered_claims["migration_issues"]:
-        issue_table = Table(title=f"Layered-Claim Migration Issues ({len(layered_claims['migration_issues'])})")
-        issue_table.add_column("Proposition", style="bold")
-        issue_table.add_column("Warnings")
-        issue_table.add_column("TODOs")
-        for row in layered_claims["migration_issues"]:
-            issue_table.add_row(
-                row["proposition"],
-                "; ".join(row["warnings"]) or "-",
-                "; ".join(row["todos"]) or "-",
+        if layered_claims["rival_model_packets_missing_discriminating_predictions"]:
+            rival_table = Table(
+                title=(
+                    "Rival-model packets missing discriminating predictions "
+                    f"({len(layered_claims['rival_model_packets_missing_discriminating_predictions'])})"
+                )
             )
-        console.print(issue_table)
+            rival_table.add_column("Proposition", style="bold")
+            rival_table.add_column("Packet")
+            for row in layered_claims["rival_model_packets_missing_discriminating_predictions"]:
+                rival_table.add_row(row["proposition"], row["packet_id"])
+            console.print(rival_table)
 
-    if layered_claims["rival_model_packets_missing_discriminating_predictions"]:
-        rival_table = Table(
-            title=(
-                "Rival-model packets missing discriminating predictions "
-                f"({len(layered_claims['rival_model_packets_missing_discriminating_predictions'])})"
-            )
-        )
-        rival_table.add_column("Proposition", style="bold")
-        rival_table.add_column("Packet")
-        for row in layered_claims["rival_model_packets_missing_discriminating_predictions"]:
-            rival_table.add_row(row["proposition"], row["packet_id"])
-        console.print(rival_table)
+        dataset_anomalies = report.get("dataset_anomalies") or []
+        if dataset_anomalies:
+            ds_table = Table(title=f"Dataset Anomalies ({len(dataset_anomalies)})")
+            ds_table.add_column("Code", style="bold")
+            ds_table.add_column("Severity")
+            ds_table.add_column("Entity")
+            ds_table.add_column("Message")
+            for row in dataset_anomalies:
+                ds_table.add_row(
+                    row.get("code", ""),
+                    row.get("severity", ""),
+                    row.get("entity_id", ""),
+                    row.get("message", ""),
+                )
+            console.print(ds_table)
 
-    dataset_anomalies = report.get("dataset_anomalies") or []
-    if dataset_anomalies:
-        ds_table = Table(title=f"Dataset Anomalies ({len(dataset_anomalies)})")
-        ds_table.add_column("Code", style="bold")
-        ds_table.add_column("Severity")
-        ds_table.add_column("Entity")
-        ds_table.add_column("Message")
-        for row in dataset_anomalies:
-            ds_table.add_row(
-                row.get("code", ""),
-                row.get("severity", ""),
-                row.get("entity_id", ""),
-                row.get("message", ""),
-            )
-        console.print(ds_table)
+    emit(output_format=output_format, payload=report, render_text=_render_report)
 
 
 @main.command("paper-fetch")
@@ -5055,7 +5053,6 @@ def paper_fetch_cmd(
     should ask the user for a PDF rather than scavenge the web. A status of
     error indicates conflicting identifiers — see ``metadata.reason``.
     """
-    import json as _json
     import os as _os
 
     from science_tool.paper_fetch import FetchConfig, fetch_paper
@@ -5068,7 +5065,7 @@ def paper_fetch_cmd(
         cfg_kwargs["cache_dir"] = cache_dir
     cfg = FetchConfig(**cfg_kwargs)
     result = fetch_paper(doi=doi, url=url, pmid=pmid, pmcid=pmcid, arxiv=arxiv, cfg=cfg)
-    click.echo(_json.dumps(result.to_dict(), indent=2))
+    emit(output_format="json", payload=result.to_dict(), render_text=lambda: None)
 
 
 @main.group("paper")
@@ -5260,8 +5257,6 @@ def question_reserve_cmd(
     collide on a number. Returns the assigned path so the caller can write
     the body without re-querying the directory.
     """
-    import json as _json
-
     from science_tool.questions import reserve_question
 
     template_body = template.read_text(encoding="utf-8") if template else None
@@ -5276,22 +5271,23 @@ def question_reserve_cmd(
         template_body=template_body,
         questions_dir=questions_dir,
     )
-    if as_json or output_format == "json":
-        click.echo(
-            _json.dumps(
-                {
-                    "id": reservation.id,
-                    "number": reservation.number,
-                    "padded": reservation.padded,
-                    "slug": reservation.slug,
-                    "path": str(reservation.path),
-                },
-                indent=2,
-            )
-        )
-    else:
+
+    def _render() -> None:
         click.echo(f"Reserved {reservation.id}")
         click.echo(f"  path: {reservation.path}")
+
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(
+        output_format=effective_format,
+        payload={
+            "id": reservation.id,
+            "number": reservation.number,
+            "padded": reservation.padded,
+            "slug": reservation.slug,
+            "path": str(reservation.path),
+        },
+        render_text=_render,
+    )
 
 
 @main.group()
@@ -5345,8 +5341,6 @@ def bib_add(
         @article{Smith2024, title={...}, author={...}, year={2024}}
         EOF
     """
-    import json as _json
-
     from science_tool.bibliography import add_bib_entry
 
     if entry is not None:
@@ -5363,10 +5357,13 @@ def bib_add(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if as_json or output_format == "json":
-        click.echo(_json.dumps({"key": result.key, "action": result.action, "path": str(result.path)}))
-    else:
-        click.echo(f"{result.action}: {result.key} ({result.path})")
+    effective_format = "json" if (as_json or output_format == "json") else output_format
+    emit(
+        output_format=effective_format,
+        payload={"key": result.key, "action": result.action, "path": str(result.path)},
+        render_text=lambda: click.echo(f"{result.action}: {result.key} ({result.path})"),
+        indent=None,
+    )
 
 
 @main.group()
@@ -5551,44 +5548,43 @@ def benchmark_list(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
-    if output_format == "json":
+    def _render() -> None:
         if coverage_summary_flag:
-            payload = {"summary": summary, "commons_notice": notice}
-        else:
-            payload = {"rows": rows, "summary": summary, "commons_notice": notice}
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+            table = Table(show_header=True, header_style="bold")
+            for col in ("facet", "value", "count"):
+                table.add_column(col, overflow="fold", no_wrap=False)
+            for facet, counts in summary.items():
+                for value, count in counts.items():
+                    table.add_row(facet, value, str(count))
+            Console(width=200).print(table)
+            return
+
+        if not rows:
+            click.echo("No matching benchmark dataset entities.")
+            return
+
+        table = Table(show_header=True, header_style="bold")
+        for col in ("id", "title", "scope", "class", "domains", "modalities", "signal_types", "kinds", "tasks"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            table.add_row(
+                row["id"],
+                row["title"],
+                row["scope"],
+                row["dataset_class"],
+                ", ".join(row["domains"]),
+                ", ".join(row["modalities"]),
+                ", ".join(row["signal_types"]),
+                ", ".join(row["benchmark_kinds"]),
+                ", ".join(row["task_ids"]),
+            )
+        Console(width=200).print(table)
 
     if coverage_summary_flag:
-        table = Table(show_header=True, header_style="bold")
-        for col in ("facet", "value", "count"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        for facet, counts in summary.items():
-            for value, count in counts.items():
-                table.add_row(facet, value, str(count))
-        Console(width=200).print(table)
-        return
-
-    if not rows:
-        click.echo("No matching benchmark dataset entities.")
-        return
-
-    table = Table(show_header=True, header_style="bold")
-    for col in ("id", "title", "scope", "class", "domains", "modalities", "signal_types", "kinds", "tasks"):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for row in rows:
-        table.add_row(
-            row["id"],
-            row["title"],
-            row["scope"],
-            row["dataset_class"],
-            ", ".join(row["domains"]),
-            ", ".join(row["modalities"]),
-            ", ".join(row["signal_types"]),
-            ", ".join(row["benchmark_kinds"]),
-            ", ".join(row["task_ids"]),
-        )
-    Console(width=200).print(table)
+        payload = {"summary": summary, "commons_notice": notice}
+    else:
+        payload = {"rows": rows, "summary": summary, "commons_notice": notice}
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @benchmark_group.command("opportunities")
@@ -5646,35 +5642,34 @@ def benchmark_opportunities(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        rows = payload["matched_opportunities"]
+        if not rows:
+            click.echo("No candidate benchmark opportunities.")
+        else:
+            table = Table(title="Candidate Opportunities", show_header=True, header_style="bold")
+            for col in ("entity", "benchmark", "task", "relative", "baseline", "reasons"):
+                table.add_column(col, overflow="fold", no_wrap=False)
+            for row in rows:
+                table.add_row(
+                    row["entity_id"],
+                    row["benchmark_id"],
+                    row["task_id"] or "-",
+                    str(row["relative_score"]),
+                    str(row["baseline_score"]),
+                    ", ".join(row["match_reasons"]),
+                )
+            Console(width=200).print(table)
 
-    rows = payload["matched_opportunities"]
-    if not rows:
-        click.echo("No candidate benchmark opportunities.")
-    else:
-        table = Table(title="Candidate Opportunities", show_header=True, header_style="bold")
-        for col in ("entity", "benchmark", "task", "relative", "baseline", "reasons"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        for row in rows:
-            table.add_row(
-                row["entity_id"],
-                row["benchmark_id"],
-                row["task_id"] or "-",
-                str(row["relative_score"]),
-                str(row["baseline_score"]),
-                ", ".join(row["match_reasons"]),
-            )
-        Console(width=200).print(table)
+        if calibration_report:
+            calibration_table = Table(title="Calibration", show_header=True, header_style="bold")
+            calibration_table.add_column("field", overflow="fold", no_wrap=False)
+            calibration_table.add_column("value", overflow="fold", no_wrap=False)
+            for field, value in payload["calibration"].items():
+                calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+            Console(width=200).print(calibration_table)
 
-    if calibration_report:
-        calibration_table = Table(title="Calibration", show_header=True, header_style="bold")
-        calibration_table.add_column("field", overflow="fold", no_wrap=False)
-        calibration_table.add_column("value", overflow="fold", no_wrap=False)
-        for field, value in payload["calibration"].items():
-            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
-        Console(width=200).print(calibration_table)
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path]]:
@@ -5747,81 +5742,80 @@ def benchmark_gap_calibration(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        from rich.console import Console
+        from rich.table import Table
 
-    from rich.console import Console
-    from rich.table import Table
+        table = Table(title="Benchmark Gap Calibration", show_header=True, header_style="bold")
+        for col in (
+            "project",
+            "gap rows",
+            "entity candidates",
+            "fallback candidates",
+            "fallback ratio",
+            "suggested facets",
+            "matched facets",
+            "fallback benchmarks",
+        ):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for project in payload["projects"]:
+            summary = project["calibration_summary"]
+            ratio = "-"
+            if summary["candidate_rows"]:
+                ratio = f"{summary['fallback_candidate_rows'] / summary['candidate_rows']:.3f}"
+            table.add_row(
+                project["label"],
+                str(summary["gap_rows"]),
+                str(summary["entity_specific_candidate_rows"]),
+                str(summary["fallback_candidate_rows"]),
+                ratio,
+                _format_count_rows(summary["top_suggested_facets"], key="facet"),
+                _format_count_rows(summary["top_matched_hint_facets"], key="facet"),
+                _format_count_rows(summary["top_fallback_benchmarks"], key="benchmark_id"),
+            )
+        Console(width=200).print(table)
 
-    table = Table(title="Benchmark Gap Calibration", show_header=True, header_style="bold")
-    for col in (
-        "project",
-        "gap rows",
-        "entity candidates",
-        "fallback candidates",
-        "fallback ratio",
-        "suggested facets",
-        "matched facets",
-        "fallback benchmarks",
-    ):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for project in payload["projects"]:
-        summary = project["calibration_summary"]
-        ratio = "-"
-        if summary["candidate_rows"]:
-            ratio = f"{summary['fallback_candidate_rows'] / summary['candidate_rows']:.3f}"
-        table.add_row(
-            project["label"],
-            str(summary["gap_rows"]),
-            str(summary["entity_specific_candidate_rows"]),
-            str(summary["fallback_candidate_rows"]),
-            ratio,
-            _format_count_rows(summary["top_suggested_facets"], key="facet"),
-            _format_count_rows(summary["top_matched_hint_facets"], key="facet"),
-            _format_count_rows(summary["top_fallback_benchmarks"], key="benchmark_id"),
+        aggregate_table = Table(title="Aggregate Benchmark Gap Calibration", show_header=True, header_style="bold")
+        aggregate_table.add_column("field", overflow="fold", no_wrap=False)
+        aggregate_table.add_column("value", overflow="fold", no_wrap=False)
+        aggregate = payload["aggregate"]
+        for field in (
+            "project_count",
+            "gap_rows",
+            "candidate_rows",
+            "entity_specific_candidate_rows",
+            "fallback_candidate_rows",
+            "fallback_candidate_ratio",
+        ):
+            aggregate_table.add_row(field, str(aggregate[field]))
+        aggregate_table.add_row(
+            "top_suggested_facets",
+            _format_count_rows(aggregate["top_suggested_facets"], key="facet"),
         )
-    Console(width=200).print(table)
+        aggregate_table.add_row(
+            "top_matched_hint_facets",
+            _format_count_rows(aggregate["top_matched_hint_facets"], key="facet"),
+        )
+        aggregate_table.add_row(
+            "top_fallback_benchmarks",
+            _format_count_rows(aggregate["top_fallback_benchmarks"], key="benchmark_id"),
+        )
+        aggregate_table.add_row(
+            "top_fallback_reasons",
+            _format_count_rows(aggregate["top_fallback_reasons"], key="reason"),
+        )
+        aggregate_table.add_row(
+            "top_fallback_selection_reasons",
+            _format_count_rows(aggregate["top_fallback_selection_reasons"], key="reason"),
+        )
+        aggregate_table.add_row(
+            "top_fallback_benchmark_shares",
+            _format_share_rows(aggregate["top_fallback_benchmark_shares"], key="benchmark_id"),
+        )
+        aggregate_table.add_row("fallback_concentration_warning", str(aggregate["fallback_concentration_warning"]))
+        Console(width=200).print(aggregate_table)
 
-    aggregate_table = Table(title="Aggregate Benchmark Gap Calibration", show_header=True, header_style="bold")
-    aggregate_table.add_column("field", overflow="fold", no_wrap=False)
-    aggregate_table.add_column("value", overflow="fold", no_wrap=False)
-    aggregate = payload["aggregate"]
-    for field in (
-        "project_count",
-        "gap_rows",
-        "candidate_rows",
-        "entity_specific_candidate_rows",
-        "fallback_candidate_rows",
-        "fallback_candidate_ratio",
-    ):
-        aggregate_table.add_row(field, str(aggregate[field]))
-    aggregate_table.add_row(
-        "top_suggested_facets",
-        _format_count_rows(aggregate["top_suggested_facets"], key="facet"),
-    )
-    aggregate_table.add_row(
-        "top_matched_hint_facets",
-        _format_count_rows(aggregate["top_matched_hint_facets"], key="facet"),
-    )
-    aggregate_table.add_row(
-        "top_fallback_benchmarks",
-        _format_count_rows(aggregate["top_fallback_benchmarks"], key="benchmark_id"),
-    )
-    aggregate_table.add_row(
-        "top_fallback_reasons",
-        _format_count_rows(aggregate["top_fallback_reasons"], key="reason"),
-    )
-    aggregate_table.add_row(
-        "top_fallback_selection_reasons",
-        _format_count_rows(aggregate["top_fallback_selection_reasons"], key="reason"),
-    )
-    aggregate_table.add_row(
-        "top_fallback_benchmark_shares",
-        _format_share_rows(aggregate["top_fallback_benchmark_shares"], key="benchmark_id"),
-    )
-    aggregate_table.add_row("fallback_concentration_warning", str(aggregate["fallback_concentration_warning"]))
-    Console(width=200).print(aggregate_table)
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @benchmark_group.command("tests")
@@ -5924,32 +5918,42 @@ def benchmark_tests(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        rows = payload["benchmark_tests"]
+        if not rows:
+            click.echo("No benchmark test plans.")
+            return
 
-    rows = payload["benchmark_tests"]
-    if not rows:
-        click.echo("No benchmark test plans.")
-        return
+        table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
+        for col in (
+            "entity",
+            "state",
+            "source",
+            "readiness",
+            "fit",
+            "benchmark",
+            "task",
+            "score",
+            "facets",
+            "needs",
+        ):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            table.add_row(
+                row["entity_id"],
+                row["test_plan_state"],
+                row["priority_source"],
+                row["readiness_label"],
+                row["context_fit"],
+                row["benchmark_id"],
+                row["task_id"] or "-",
+                str(row["priority_score"]),
+                ", ".join(row["matched_facets"]) or "-",
+                ", ".join(row["needs"]) or "-",
+            )
+        Console(width=200).print(table)
 
-    table = Table(title="Benchmark Tests", show_header=True, header_style="bold")
-    for col in ("entity", "state", "source", "readiness", "fit", "benchmark", "task", "score", "facets", "needs"):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for row in rows:
-        table.add_row(
-            row["entity_id"],
-            row["test_plan_state"],
-            row["priority_source"],
-            row["readiness_label"],
-            row["context_fit"],
-            row["benchmark_id"],
-            row["task_id"] or "-",
-            str(row["priority_score"]),
-            ", ".join(row["matched_facets"]) or "-",
-            ", ".join(row["needs"]) or "-",
-        )
-    Console(width=200).print(table)
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @benchmark_group.command("test-triage")
@@ -6097,107 +6101,106 @@ def benchmark_test_triage(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    visible_rows = 0
-    for bucket in ("run-now", "stage-next", "metadata-needed", "blocked-or-reference"):
-        bucket_rows = payload["buckets"][bucket][:10]
-        if not bucket_rows:
-            continue
-        table = Table(title=f"Benchmark Test Triage: {bucket}", show_header=True, header_style="bold")
-        for col in ("entity", "benchmark", "task", "fit", "readiness", "score", "facets", "needs"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        for row in bucket_rows:
-            visible_rows += 1
-            table.add_row(
-                row["entity_id"],
-                row["benchmark_id"],
-                _format_test_triage_task(row),
-                row["context_fit"],
-                row["readiness_label"],
-                str(row["priority_score"]),
-                _format_test_triage_facets(row),
-                _format_test_triage_needs(row),
-            )
-        Console(width=200).print(table)
-    fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
-    if fallback_count:
-        from science_tool.benchmark_opportunities import (
-            FALLBACK_DISPLAY_GROUPS,
-            _is_generic_fallback_display_group,
-        )
-
-        diagnostics = payload["fallback_diagnostics"]
-        rollups = diagnostics["rollups"]
-        for rollup in rollups:
-            display_group = rollup.get("display_group")
-            if display_group not in FALLBACK_DISPLAY_GROUPS:
-                raise click.ClickException(f"unknown fallback display group: {display_group}")
-        visible_terminal_rollups = [
-            rollup for rollup in rollups if not _is_generic_fallback_display_group(rollup["display_group"])
-        ]
-        visible_rollups = visible_terminal_rollups[:10]
-        terminal_visible_total = diagnostics.get("terminal_visible_rollup_count", len(rollups))
-        if terminal_visible_total > 0 and not visible_rollups:
-            raise click.ClickException("fallback diagnostics rollups missing for fallback rows")
-        if visible_rollups:
-            table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
-            for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
+    def _render() -> None:
+        visible_rows = 0
+        for bucket in ("run-now", "stage-next", "metadata-needed", "blocked-or-reference"):
+            bucket_rows = payload["buckets"][bucket][:10]
+            if not bucket_rows:
+                continue
+            table = Table(title=f"Benchmark Test Triage: {bucket}", show_header=True, header_style="bold")
+            for col in ("entity", "benchmark", "task", "fit", "readiness", "score", "facets", "needs"):
                 table.add_column(col, overflow="fold", no_wrap=False)
-            shown_fallback_rows = diagnostics.get("shown_fallback_rows", fallback_count)
-            row_label = f"{shown_fallback_rows} fallback rows grouped into {len(visible_terminal_rollups)} rollups"
-            if len(visible_rollups) < len(visible_terminal_rollups):
-                hidden_rollups = len(visible_terminal_rollups) - len(visible_rollups)
-                row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
-            for index, rollup in enumerate(visible_rollups):
+            for row in bucket_rows:
+                visible_rows += 1
                 table.add_row(
-                    row_label if index == 0 else "",
-                    str(rollup.get("benchmark_id") or "-"),
-                    _format_test_triage_rollup_task(rollup),
-                    _format_test_triage_rollup_support(rollup),
-                    str(rollup.get("readiness_label") or "-"),
-                    str(rollup.get("dataset_class") or "-"),
-                    _format_test_triage_rollup_facets(rollup),
-                    _format_test_triage_rollup_examples(rollup),
+                    row["entity_id"],
+                    row["benchmark_id"],
+                    _format_test_triage_task(row),
+                    row["context_fit"],
+                    row["readiness_label"],
+                    str(row["priority_score"]),
+                    _format_test_triage_facets(row),
+                    _format_test_triage_needs(row),
                 )
             Console(width=200).print(table)
-            visible_rows += len(visible_rollups)
-        hidden_generic_fallback_rows = diagnostics.get("hidden_generic_fallback_rows", 0)
-        if hidden_generic_fallback_rows:
+        fallback_count = payload["summary"]["bucket_counts"]["fallback-diagnostic"]
+        if fallback_count:
+            from science_tool.benchmark_opportunities import (
+                FALLBACK_DISPLAY_GROUPS,
+                _is_generic_fallback_display_group,
+            )
+
+            diagnostics = payload["fallback_diagnostics"]
+            rollups = diagnostics["rollups"]
+            for rollup in rollups:
+                display_group = rollup.get("display_group")
+                if display_group not in FALLBACK_DISPLAY_GROUPS:
+                    raise click.ClickException(f"unknown fallback display group: {display_group}")
+            visible_terminal_rollups = [
+                rollup for rollup in rollups if not _is_generic_fallback_display_group(rollup["display_group"])
+            ]
+            visible_rollups = visible_terminal_rollups[:10]
+            terminal_visible_total = diagnostics.get("terminal_visible_rollup_count", len(rollups))
+            if terminal_visible_total > 0 and not visible_rollups:
+                raise click.ClickException("fallback diagnostics rollups missing for fallback rows")
+            if visible_rollups:
+                table = Table(title="Benchmark Test Triage: fallback-diagnostic", show_header=True, header_style="bold")
+                for col in ("rows", "benchmark", "task", "support", "readiness", "class", "facets", "examples"):
+                    table.add_column(col, overflow="fold", no_wrap=False)
+                shown_fallback_rows = diagnostics.get("shown_fallback_rows", fallback_count)
+                row_label = f"{shown_fallback_rows} fallback rows grouped into {len(visible_terminal_rollups)} rollups"
+                if len(visible_rollups) < len(visible_terminal_rollups):
+                    hidden_rollups = len(visible_terminal_rollups) - len(visible_rollups)
+                    row_label = f"{row_label} (showing {len(visible_rollups)}, {hidden_rollups} hidden)"
+                for index, rollup in enumerate(visible_rollups):
+                    table.add_row(
+                        row_label if index == 0 else "",
+                        str(rollup.get("benchmark_id") or "-"),
+                        _format_test_triage_rollup_task(rollup),
+                        _format_test_triage_rollup_support(rollup),
+                        str(rollup.get("readiness_label") or "-"),
+                        str(rollup.get("dataset_class") or "-"),
+                        _format_test_triage_rollup_facets(rollup),
+                        _format_test_triage_rollup_examples(rollup),
+                    )
+                Console(width=200).print(table)
+                visible_rows += len(visible_rollups)
+            hidden_generic_fallback_rows = diagnostics.get("hidden_generic_fallback_rows", 0)
+            if hidden_generic_fallback_rows:
+                table = Table(
+                    title="Benchmark Test Triage: generic fallback summary",
+                    show_header=True,
+                    header_style="bold",
+                )
+                for col in ("rows", "top benchmarks", "top reasons"):
+                    table.add_column(col, overflow="fold", no_wrap=False)
+                table.add_row(
+                    f"{hidden_generic_fallback_rows} generic fallback rows hidden from detailed table",
+                    _format_count_rows(diagnostics.get("top_generic_fallback_benchmarks", []), key="benchmark_id"),
+                    _format_count_rows(diagnostics.get("top_generic_fallback_reasons", []), key="reason"),
+                )
+                Console(width=200).print(table)
+                visible_rows += 1
+        suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
+        if suppressed:
             table = Table(
-                title="Benchmark Test Triage: generic fallback summary",
+                title="Benchmark Test Triage: suppressed blocked fallback",
                 show_header=True,
                 header_style="bold",
             )
-            for col in ("rows", "top benchmarks", "top reasons"):
+            for col in ("rows", "top benchmarks"):
                 table.add_column(col, overflow="fold", no_wrap=False)
             table.add_row(
-                f"{hidden_generic_fallback_rows} generic fallback rows hidden from detailed table",
-                _format_count_rows(diagnostics.get("top_generic_fallback_benchmarks", []), key="benchmark_id"),
-                _format_count_rows(diagnostics.get("top_generic_fallback_reasons", []), key="reason"),
+                f"Suppressed {suppressed['rows']} fallback rows for blocked task support",
+                _format_count_rows(suppressed["top_benchmarks"], key="benchmark_id"),
             )
             Console(width=200).print(table)
             visible_rows += 1
-    suppressed = payload["fallback_diagnostics"].get("suppressed_blocked_support")
-    if suppressed:
-        table = Table(
-            title="Benchmark Test Triage: suppressed blocked fallback",
-            show_header=True,
-            header_style="bold",
-        )
-        for col in ("rows", "top benchmarks"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        table.add_row(
-            f"Suppressed {suppressed['rows']} fallback rows for blocked task support",
-            _format_count_rows(suppressed["top_benchmarks"], key="benchmark_id"),
-        )
-        Console(width=200).print(table)
-        visible_rows += 1
-    if not visible_rows:
-        click.echo("No benchmark test triage rows.")
-        return
+        if not visible_rows:
+            click.echo("No benchmark test triage rows.")
+            return
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 def _format_gap_candidate_for_table(candidate: Mapping[str, Any]) -> str:
@@ -6557,27 +6560,26 @@ def benchmark_hint_candidates(
     if notice:
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        rows = _hint_candidate_table_rows(payload["hint_candidates"])
+        if not rows:
+            click.echo("No benchmark hint candidates.")
+            return
 
-    rows = _hint_candidate_table_rows(payload["hint_candidates"])
-    if not rows:
-        click.echo("No benchmark hint candidates.")
-        return
+        table = Table(title="Benchmark Hint Candidates", show_header=True, header_style="bold")
+        for col in ("term", "count", "action", "suggested facets", "examples"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            table.add_row(
+                row["term"],
+                _format_hint_candidate_count(row),
+                row["suggested_action"],
+                ", ".join(row["suggested_facets"]) or "-",
+                ", ".join(row["example_entities"]) or "-",
+            )
+        Console(width=200).print(table)
 
-    table = Table(title="Benchmark Hint Candidates", show_header=True, header_style="bold")
-    for col in ("term", "count", "action", "suggested facets", "examples"):
-        table.add_column(col, overflow="fold", no_wrap=False)
-    for row in rows:
-        table.add_row(
-            row["term"],
-            _format_hint_candidate_count(row),
-            row["suggested_action"],
-            ", ".join(row["suggested_facets"]) or "-",
-            ", ".join(row["example_entities"]) or "-",
-        )
-    Console(width=200).print(table)
+    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @benchmark_group.command("gaps")
@@ -6656,97 +6658,100 @@ def benchmark_gaps(
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
     summary_payload = gap_calibration_summary(payload) if calibration_summary else None
-    if output_format == "json":
-        output_payload: dict[str, object] = dict(payload)
-        if summary_payload is not None:
-            output_payload["calibration_summary"] = summary_payload
-        click.echo(json.dumps(output_payload, indent=2, sort_keys=True))
-        return
-
-    rows = payload["benchmark_gaps"]
-    if not rows:
-        click.echo("No benchmark gaps.")
-    else:
-        table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
-        for col in ("entity", "level", "mode", "missing facets", "matches", "candidates", "reason"):
-            table.add_column(col, overflow="fold", no_wrap=False)
-        for row in rows:
-            missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
-            table.add_row(
-                row["entity_id"],
-                row["gap_level"],
-                row["candidate_mode"],
-                missing,
-                str(len(row["current_matches"])),
-                _format_gap_candidates_for_table(row),
-                row["reason"],
-            )
-        Console(width=200).print(table)
-    generic_fallback_rows = payload["fallback_diagnostics"]["generic_fallback_candidate_rows"]
-    if generic_fallback_rows:
-        click.echo(
-            f"Collapsed {generic_fallback_rows} generic fallback candidates; "
-            "use --calibration-summary or --format json for diagnostics."
-        )
-
+    output_payload: dict[str, object] = dict(payload)
     if summary_payload is not None:
-        summary_table = Table(title="Gap Calibration Summary", show_header=True, header_style="bold")
-        summary_table.add_column("field", overflow="fold", no_wrap=False)
-        summary_table.add_column("value", overflow="fold", no_wrap=False)
-        score_range = (
-            "-"
-            if summary_payload["score_min"] is None
-            else f"{summary_payload['score_min']} / {summary_payload['score_median']} / {summary_payload['score_max']}"
-        )
-        scalar_rows = {
-            "gap_rows": summary_payload["gap_rows"],
-            "rows_with_suggested_facets": summary_payload["rows_with_suggested_facets"],
-            "candidate_rows": summary_payload["candidate_rows"],
-            "entity_specific_candidate_rows": summary_payload["entity_specific_candidate_rows"],
-            "fallback_candidate_rows": summary_payload["fallback_candidate_rows"],
-            "score_min_median_max": score_range,
-            "top_suggested_facets": summary_payload["top_suggested_facets"],
-            "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
-            "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
-            "top_fallback_reasons": summary_payload["top_fallback_reasons"],
-            "top_fallback_selection_reasons": summary_payload["top_fallback_selection_reasons"],
-            "top_fallback_benchmark_shares": summary_payload["top_fallback_benchmark_shares"],
-            "fallback_concentration_warning": summary_payload["fallback_concentration_warning"],
-        }
-        for field, value in scalar_rows.items():
-            if field == "top_fallback_benchmark_shares":
-                rendered = _format_share_rows(value, key="benchmark_id")
-            elif field in {"top_fallback_reasons", "top_fallback_selection_reasons"}:
-                rendered = _format_count_rows(value, key="reason")
-            else:
-                rendered = json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value)
-            summary_table.add_row(field, rendered)
-        Console(width=200).print(summary_table)
+        output_payload["calibration_summary"] = summary_payload
 
-    if calibration_report:
-        calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
-        calibration_table.add_column("field", overflow="fold", no_wrap=False)
-        calibration_table.add_column("value", overflow="fold", no_wrap=False)
-        for field, value in payload["calibration"].items():
-            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
-        Console(width=200).print(calibration_table)
-
-    if evidence_report:
-        evidence_payload = payload["evidence_report"]
-        evidence_rows = evidence_payload.get("entities", {}) if evidence_payload["enabled"] else {}
-        evidence_table = Table(title="Gap Evidence", show_header=True, header_style="bold")
-        for col in ("entity", "mode", "hints", "matched facets", "unmapped terms", "why"):
-            evidence_table.add_column(col, overflow="fold", no_wrap=False)
-        for entity_id, row in evidence_rows.items():
-            evidence_table.add_row(
-                entity_id,
-                row["candidate_mode"],
-                ", ".join(row["facet_hints"]) or "-",
-                ", ".join(row["matched_facets"]) or "-",
-                ", ".join(row["unmapped_high_value_terms"][:8]) or "-",
-                ", ".join(row["why_no_specific_candidate"]) or "-",
+    def _render() -> None:
+        rows = payload["benchmark_gaps"]
+        if not rows:
+            click.echo("No benchmark gaps.")
+        else:
+            table = Table(title="Benchmark Gaps", show_header=True, header_style="bold")
+            for col in ("entity", "level", "mode", "missing facets", "matches", "candidates", "reason"):
+                table.add_column(col, overflow="fold", no_wrap=False)
+            for row in rows:
+                missing = ", ".join(row["missing_modalities"] + row["missing_signal_types"]) or "-"
+                table.add_row(
+                    row["entity_id"],
+                    row["gap_level"],
+                    row["candidate_mode"],
+                    missing,
+                    str(len(row["current_matches"])),
+                    _format_gap_candidates_for_table(row),
+                    row["reason"],
+                )
+            Console(width=200).print(table)
+        generic_fallback_rows = payload["fallback_diagnostics"]["generic_fallback_candidate_rows"]
+        if generic_fallback_rows:
+            click.echo(
+                f"Collapsed {generic_fallback_rows} generic fallback candidates; "
+                "use --calibration-summary or --format json for diagnostics."
             )
-        Console(width=200).print(evidence_table)
+
+        if summary_payload is not None:
+            summary_table = Table(title="Gap Calibration Summary", show_header=True, header_style="bold")
+            summary_table.add_column("field", overflow="fold", no_wrap=False)
+            summary_table.add_column("value", overflow="fold", no_wrap=False)
+            score_range = (
+                "-"
+                if summary_payload["score_min"] is None
+                else (
+                    f"{summary_payload['score_min']} / "
+                    f"{summary_payload['score_median']} / {summary_payload['score_max']}"
+                )
+            )
+            scalar_rows = {
+                "gap_rows": summary_payload["gap_rows"],
+                "rows_with_suggested_facets": summary_payload["rows_with_suggested_facets"],
+                "candidate_rows": summary_payload["candidate_rows"],
+                "entity_specific_candidate_rows": summary_payload["entity_specific_candidate_rows"],
+                "fallback_candidate_rows": summary_payload["fallback_candidate_rows"],
+                "score_min_median_max": score_range,
+                "top_suggested_facets": summary_payload["top_suggested_facets"],
+                "top_matched_hint_facets": summary_payload["top_matched_hint_facets"],
+                "top_fallback_benchmarks": summary_payload["top_fallback_benchmarks"],
+                "top_fallback_reasons": summary_payload["top_fallback_reasons"],
+                "top_fallback_selection_reasons": summary_payload["top_fallback_selection_reasons"],
+                "top_fallback_benchmark_shares": summary_payload["top_fallback_benchmark_shares"],
+                "fallback_concentration_warning": summary_payload["fallback_concentration_warning"],
+            }
+            for field, value in scalar_rows.items():
+                if field == "top_fallback_benchmark_shares":
+                    rendered = _format_share_rows(value, key="benchmark_id")
+                elif field in {"top_fallback_reasons", "top_fallback_selection_reasons"}:
+                    rendered = _format_count_rows(value, key="reason")
+                else:
+                    rendered = json.dumps(value, sort_keys=True) if isinstance(value, list) else str(value)
+                summary_table.add_row(field, rendered)
+            Console(width=200).print(summary_table)
+
+        if calibration_report:
+            calibration_table = Table(title="Gap Calibration", show_header=True, header_style="bold")
+            calibration_table.add_column("field", overflow="fold", no_wrap=False)
+            calibration_table.add_column("value", overflow="fold", no_wrap=False)
+            for field, value in payload["calibration"].items():
+                calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+            Console(width=200).print(calibration_table)
+
+        if evidence_report:
+            evidence_payload = payload["evidence_report"]
+            evidence_rows = evidence_payload.get("entities", {}) if evidence_payload["enabled"] else {}
+            evidence_table = Table(title="Gap Evidence", show_header=True, header_style="bold")
+            for col in ("entity", "mode", "hints", "matched facets", "unmapped terms", "why"):
+                evidence_table.add_column(col, overflow="fold", no_wrap=False)
+            for entity_id, row in evidence_rows.items():
+                evidence_table.add_row(
+                    entity_id,
+                    row["candidate_mode"],
+                    ", ".join(row["facet_hints"]) or "-",
+                    ", ".join(row["matched_facets"]) or "-",
+                    ", ".join(row["unmapped_high_value_terms"][:8]) or "-",
+                    ", ".join(row["why_no_specific_candidate"]) or "-",
+                )
+            Console(width=200).print(evidence_table)
+
+    emit(output_format=output_format, payload=output_payload, render_text=_render, sort_keys=True)
 
 
 @main.group("dataset")
@@ -6874,8 +6879,6 @@ def dataset_prioritize(
     project_root: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
-    import json as _json
-
     from science_tool.dataset_prioritize import excluded_summary, prioritize, target_coverage
     from science_tool.datasets.semantics import RuntimeState
     from science_tool.entities import graph_is_stale
@@ -6926,65 +6929,70 @@ def dataset_prioritize(
 
     if coverage:
         coverage_rows = target_coverage(rows, root)
-        if output_format == "json":
-            click.echo(_json.dumps({"rows": coverage_rows, "excluded_summary": summary}, indent=2))
+
+        def _render_coverage() -> None:
+            if not coverage_rows:
+                click.echo("No question or hypothesis entities found.")
+                return
+            from rich.console import Console
+            from rich.table import Table
+
+            table = Table(show_header=True, header_style="bold")
+            for c in ["target", "coverage", "gap-reason", "datasets"]:
+                table.add_column(c, overflow="fold", no_wrap=False)
+            for r in coverage_rows:
+                table.add_row(
+                    str(r["target"]),
+                    str(r["coverage_state"]),
+                    str(r["gap_reason"]),
+                    ", ".join(r["datasets"]) if r["datasets"] else "-",
+                )
+            Console(width=200).print(table)
+
+        emit(
+            output_format=output_format,
+            payload={"rows": coverage_rows, "excluded_summary": summary},
+            render_text=_render_coverage,
+        )
+        return
+
+    def _render_rows() -> None:
+        if not rows:
+            click.echo("No matching dataset entities.")
             return
-        if not coverage_rows:
-            click.echo("No question or hypothesis entities found.")
-            return
+
         from rich.console import Console
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold")
-        for c in ["target", "coverage", "gap-reason", "datasets"]:
-            table.add_column(c, overflow="fold", no_wrap=False)
-        for r in coverage_rows:
-            table.add_row(
-                str(r["target"]),
-                str(r["coverage_state"]),
-                str(r["gap_reason"]),
-                ", ".join(r["datasets"]) if r["datasets"] else "-",
-            )
-        Console(width=200).print(table)
-        return
-
-    if output_format == "json":
-        click.echo(_json.dumps({"rows": rows, "excluded_summary": summary}, indent=2))
-        return
-    if not rows:
-        click.echo("No matching dataset entities.")
-        return
-
-    from rich.console import Console
-    from rich.table import Table
-
-    table = Table(show_header=True, header_style="bold")
-    cols = ["rank", "id", "score", "readiness", "runtime", "reach", "gap-flags"]
-    if explain:
-        cols.append("reason")
-    for c in cols:
-        table.add_column(c, overflow="fold", no_wrap=False)
-    for i, r in enumerate(rows, 1):
-        cells = [
-            str(i),
-            r["id"],
-            f"{r['score']:g}",
-            r["readiness"],
-            r["runtime_state"],
-            str(r["reach"]),
-            ", ".join(r["gap_flags"]) or "-",
-        ]
+        cols = ["rank", "id", "score", "readiness", "runtime", "reach", "gap-flags"]
         if explain:
-            cells.append(r["top_reason"])
-        table.add_row(*cells)
-    Console(width=200).print(table)
-    if any(summary.values()):
-        click.echo(
-            "Excluded by default: "
-            f"{summary['gated']} gated deposits, {summary['reference']} reference datasets, "
-            f"{summary['pointer']} pointer records. Use --include-gated, --include-reference, "
-            "or --include-pointer to inspect them."
-        )
+            cols.append("reason")
+        for c in cols:
+            table.add_column(c, overflow="fold", no_wrap=False)
+        for i, r in enumerate(rows, 1):
+            cells = [
+                str(i),
+                r["id"],
+                f"{r['score']:g}",
+                r["readiness"],
+                r["runtime_state"],
+                str(r["reach"]),
+                ", ".join(r["gap_flags"]) or "-",
+            ]
+            if explain:
+                cells.append(r["top_reason"])
+            table.add_row(*cells)
+        Console(width=200).print(table)
+        if any(summary.values()):
+            click.echo(
+                "Excluded by default: "
+                f"{summary['gated']} gated deposits, {summary['reference']} reference datasets, "
+                f"{summary['pointer']} pointer records. Use --include-gated, --include-reference, "
+                "or --include-pointer to inspect them."
+            )
+
+    emit(output_format=output_format, payload={"rows": rows, "excluded_summary": summary}, render_text=_render_rows)
 
 
 @dataset_group.command("add")
@@ -7212,23 +7220,23 @@ def dataset_link(dataset_ref: str, target_ref: str, project_root: Path | None) -
 )
 def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None) -> None:
     """Report or fix Q/H free-text datasets: entries that resolve to dataset ids."""
-    import json as _json
-
     from science_tool.datasets_catalog import reconcile_dataset_links
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     rows = reconcile_dataset_links(root, fix=fix)
-    if output_format == "json":
-        click.echo(_json.dumps({"rows": rows}, indent=2))
-    elif rows:
-        for row in rows:
-            action = "fixed" if fix else "would fix"
-            click.echo(
-                f"{action}: {row['file']} {row['entity_id']} datasets entry "
-                f"{row['entry']!r} -> {row['resolved_dataset']} ({row['reason']})"
-            )
-    else:
-        click.echo("no resolvable free-text dataset links")
+
+    def _render() -> None:
+        if rows:
+            for row in rows:
+                action = "fixed" if fix else "would fix"
+                click.echo(
+                    f"{action}: {row['file']} {row['entity_id']} datasets entry "
+                    f"{row['entry']!r} -> {row['resolved_dataset']} ({row['reason']})"
+                )
+        else:
+            click.echo("no resolvable free-text dataset links")
+
+    emit(output_format=output_format, payload={"rows": rows}, render_text=_render)
 
     if rows and not fix:
         raise click.exceptions.Exit(1)
@@ -7346,8 +7354,6 @@ def dataset_stochasticity(ref: str, project_root: Path | None, output_format: st
     seeds that run realized, and which steps are nondeterministic and therefore
     not exactly reproducible.
     """
-    import json as _json
-
     from science_tool.datasets_stochasticity import (
         DatasetStochasticityError,
         report_dataset_stochasticity,
@@ -7361,11 +7367,11 @@ def dataset_stochasticity(ref: str, project_root: Path | None, output_format: st
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
 
-    if output_format == "json":
-        click.echo(_json.dumps(render_json(report), indent=2))
-    else:
+    def _render() -> None:
         for line in render_human(report):
             click.echo(line)
+
+    emit(output_format=output_format, payload=render_json(report), render_text=_render)
 
 
 @dataset_group.command("reconcile")
