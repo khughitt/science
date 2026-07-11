@@ -7,7 +7,7 @@
   "required": ["id", "kind"],
   "x-canonical-body-sections": [
     "Key Findings",
-    "Methods Summary",
+    "Methods",
     "Limitations",
     "Summary",
     "One-Sentence Summary"

@@ -40,7 +40,7 @@ def test_read_canonical_body_sections_returns_paper_2_0_sections() -> None:
     profile = parse_profile("science-entity-base/1.0+paper/2.0")
     sections = read_canonical_body_sections(profile)
     assert "Key Findings" in sections
-    assert "Methods Summary" in sections
+    assert "Methods" in sections
     assert "Limitations" in sections
 
 

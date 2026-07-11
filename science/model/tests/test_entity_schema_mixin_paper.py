@@ -134,13 +134,30 @@ def test_mixin_paper_2_0_bibkey_regex_permits_hyphens():
     assert not re.match(pattern, "1leading-digit")
 
 
-def test_mixin_paper_2_0_canonical_body_sections_annotation():
-    raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
-    schema = json.loads(raw)
-    sections = schema["x-canonical-body-sections"]
-    assert "Key Findings" in sections
-    assert "Methods Summary" in sections
-    assert "Limitations" in sections
+def test_canonical_body_sections_are_headings_the_template_emits():
+    """`x-canonical-body-sections` is matched against a paper's literal `## ` headings
+    (exact, casefolded) when `commons promote` splits the body. A name declared here
+    that no paper ever writes is dead: the section silently stays project-local and
+    never reaches the canonical, where every *other* project reads the paper.
+
+    The shipped template is the contract for what papers actually write, so it -- not
+    the schema's own wording -- is what this must be checked against.
+    """
+    template_headings = {
+        line[3:].strip()
+        for line in (_TEMPLATES / "paper.md").read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    }
+    schema = json.loads((_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8"))
+    sections = set(schema["x-canonical-body-sections"])
+
+    # Sections describing the paper itself (not one project's reading of it) are canonical.
+    assert {"Key Findings", "Methods", "Limitations"} <= sections
+
+    # Nothing may be declared canonical under a name the template never emits, apart
+    # from the free-form summary headings papers add above Key Findings.
+    phantom = sections - template_headings - {"Summary", "One-Sentence Summary"}
+    assert not phantom, f"x-canonical-body-sections names no paper emits: {sorted(phantom)}"
 
 
 def test_base_schema_declares_dataset_usage_once() -> None:
