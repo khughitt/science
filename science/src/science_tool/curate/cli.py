@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import click
 
 from science_tool.curate.inventory import collect_inventory
+from science_tool.output import emit
 
 
 @click.group("curate")
@@ -43,7 +43,7 @@ def inventory_cmd(
         recent_top_k=None if recently_modified_top_k <= 0 else recently_modified_top_k,
     )
     payload = inventory.model_dump(mode="json")
-    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+    emit(output_format=output_format, payload=payload, render_text=lambda: None, sort_keys=True)
 
 
 @curate_group.command("consolidation-candidates")
@@ -68,7 +68,7 @@ def consolidation_candidates_cmd(
         min_cluster_size=min_cluster_size,
         max_cluster_size=max_cluster_size,
     )
-    if output_format == "json":
-        click.echo(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
-    else:
+    def _render() -> None:
         click.echo(render_text(report))
+
+    emit(output_format=output_format, payload=report.model_dump(mode="json"), render_text=_render, sort_keys=True)

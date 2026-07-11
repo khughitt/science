@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
 
@@ -20,6 +19,7 @@ from science_tool.big_picture.validator import (
     validate_rollup_file,
     validate_synthesis_file,
 )
+from science_tool.output import emit
 
 
 @click.group("big-picture")
@@ -46,7 +46,7 @@ def resolve_questions_cmd(project_root: Path) -> None:
         }
     else:
         payload = {qid: asdict(out) for qid, out in results.items()}
-    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+    emit(output_format="json", payload=payload, render_text=lambda: None, sort_keys=True)
 
 
 @big_picture_group.command("validate")
@@ -118,7 +118,7 @@ def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
     gaps = compute_topic_gaps(project_root, resolved, included)
     if limit is not None:
         gaps = gaps[:limit]
-    click.echo(json.dumps([asdict(g) for g in gaps], indent=2, sort_keys=True))
+    emit(output_format="json", payload=[asdict(g) for g in gaps], render_text=lambda: None, sort_keys=True)
 
 
 @big_picture_group.command("cluster-digests")
@@ -146,4 +146,4 @@ def cluster_digests_cmd(project_root: Path, deep: bool) -> None:
         "digests": {did: asdict(cd) for did, cd in sorted(digests.items())},
         "member_to_digest": member_to_digest(project_root),
     }
-    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+    emit(output_format="json", payload=payload, render_text=lambda: None, sort_keys=True)
