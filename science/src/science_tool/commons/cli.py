@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -58,7 +57,7 @@ from science_tool.commons.reference_graph_promotion import scaffold_reference_gr
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
-from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
 from science_tool.styles import entity_table_renderers
 
 if TYPE_CHECKING:
@@ -109,8 +108,15 @@ def index_rebuild_cmd(output_format: str, as_json: bool) -> None:
     root = _require_root()
     adapter = CommonsEntityAdapter(root)
     report = RegistryBuilder(root, adapter).rebuild()
-    if _wants_json(as_json=as_json, output_format=output_format):
-        payload = {
+
+    def _render() -> None:
+        click.echo(f"indexed {report.entities_indexed} entities in {report.duration_ms} ms")
+        for err in report.errors:
+            click.echo(f"  error: {err}", err=True)
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload={
             "entities_indexed": report.entities_indexed,
             "errors": [
                 {
@@ -121,12 +127,10 @@ def index_rebuild_cmd(output_format: str, as_json: bool) -> None:
                 for e in report.errors
             ],
             "duration_ms": report.duration_ms,
-        }
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        click.echo(f"indexed {report.entities_indexed} entities in {report.duration_ms} ms")
-        for err in report.errors:
-            click.echo(f"  error: {err}", err=True)
+        },
+        render_text=_render,
+        sort_keys=True,
+    )
     if report.errors:
         raise click.exceptions.Exit(1)
 
@@ -158,16 +162,19 @@ def _require_root() -> Path:
 )
 def show_cmd(entity_id: str, output_format: str, as_json: bool, project: str | None) -> None:
     """Print one entity by canonical id, optionally merged with a project overlay."""
+    effective_format = "json" if _wants_json(as_json=as_json, output_format=output_format) else output_format
     if project is None:
         root = _require_root()
         try:
             record = CommonsQuery(root).show(entity_id)
         except CommonsError as exc:
             raise click.ClickException(str(exc)) from exc
-        if _wants_json(as_json=as_json, output_format=output_format):
-            click.echo(json.dumps(_record_to_json(record, root), indent=2, sort_keys=True))
-        else:
-            _print_record_human(record)
+        emit(
+            output_format=effective_format,
+            payload=_record_to_json(record, root),
+            render_text=lambda: _print_record_human(record),
+            sort_keys=True,
+        )
         return
 
     try:
@@ -180,10 +187,12 @@ def show_cmd(entity_id: str, output_format: str, as_json: bool, project: str | N
             f"inactive until Phase E; merged from live entity",
             err=True,
         )
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(_merged_to_json(merged), indent=2, sort_keys=True))
-    else:
-        _print_merged_human(merged)
+    emit(
+        output_format=effective_format,
+        payload=_merged_to_json(merged),
+        render_text=lambda: _print_merged_human(merged),
+        sort_keys=True,
+    )
 
 
 @commons_group.command("list")
@@ -259,18 +268,17 @@ def find_cmd(
         raise click.UsageError(str(exc)) from exc
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(
-            json.dumps(
-                [_record_to_json(r, root) for r in records],
-                indent=2,
-                sort_keys=True,
-            )
-        )
-    else:
+    def _render() -> None:
         for record in records:
             title = record.frontmatter.get("title", "")
             click.echo(f"{record.canonical_id}\t{title}")
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=[_record_to_json(r, root) for r in records],
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 def _record_to_json(record: CommonsEntityRecord, root: Path) -> dict:
@@ -380,6 +388,7 @@ def validate_cmd(
     as_json: bool,
 ) -> None:
     """Validate commons entities, or a project's overlay files with --project."""
+    effective_format = "json" if _wants_json(as_json=as_json, output_format=output_format) else output_format
     if project is not None:
         if entity_type is not None or slug is not None:
             raise click.UsageError("--project cannot be combined with --type/--slug")
@@ -387,36 +396,43 @@ def validate_cmd(
             overlay_report = validate_project_overlays(project)
         except CommonsError as exc:
             raise click.ClickException(str(exc)) from exc
-        if _wants_json(as_json=as_json, output_format=output_format):
-            click.echo(
-                json.dumps(
-                    {
-                        "checked": overlay_report.checked,
-                        "errors": [
-                            {
-                                "overlay_path": str(e.overlay_path),
-                                "canonical_id": e.canonical_id,
-                                "message": str(e.cause),
-                            }
-                            for e in overlay_report.errors
-                        ],
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-        else:
+
+        def _render_overlay() -> None:
             click.echo(f"checked {overlay_report.checked} overlays")
             for err in overlay_report.errors:
                 click.echo(f"  error: {err}", err=True)
+
+        emit(
+            output_format=effective_format,
+            payload={
+                "checked": overlay_report.checked,
+                "errors": [
+                    {
+                        "overlay_path": str(e.overlay_path),
+                        "canonical_id": e.canonical_id,
+                        "message": str(e.cause),
+                    }
+                    for e in overlay_report.errors
+                ],
+            },
+            render_text=_render_overlay,
+            sort_keys=True,
+        )
         if overlay_report.errors:
             raise click.exceptions.Exit(1)
         return
 
     root = _require_root()
     report = CommonsValidator(CommonsEntityAdapter(root)).validate(type=entity_type, slug=slug)
-    if _wants_json(as_json=as_json, output_format=output_format):
-        payload = {
+
+    def _render() -> None:
+        click.echo(f"checked {report.checked} entities")
+        for err in report.errors:
+            click.echo(f"  error: {err}", err=True)
+
+    emit(
+        output_format=effective_format,
+        payload={
             "checked": report.checked,
             "errors": [
                 {
@@ -426,12 +442,10 @@ def validate_cmd(
                 }
                 for e in report.errors
             ],
-        }
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        click.echo(f"checked {report.checked} entities")
-        for err in report.errors:
-            click.echo(f"  error: {err}", err=True)
+        },
+        render_text=_render,
+        sort_keys=True,
+    )
     if report.errors:
         raise click.exceptions.Exit(1)
 
@@ -537,19 +551,22 @@ def dataset_init_cmd(
         f"science commons dataset build {slug}",
         f"science commons dataset validate {slug}",
     ]
-    if _wants_json(as_json=as_json, output_format=output_format):
-        payload = {
+    def _render() -> None:
+        click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
+        for step in next_steps:
+            click.echo(f"next: {step}")
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload={
             "created": created,
             "dataset_dir": str(dataset_dir),
             "next": next_steps,
             "slug": slug,
-        }
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    click.echo(f"created commons dataset dataset:{slug} at {dataset_dir}")
-    for step in next_steps:
-        click.echo(f"next: {step}")
+        },
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @dataset_group.command("build")
@@ -590,8 +607,19 @@ def dataset_status_cmd(slug: str, output_format: str, as_json: bool) -> None:
     except (DatasetLifecycleError, CommonsError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if _wants_json(as_json=as_json, output_format=output_format):
-        payload = {
+    def _render() -> None:
+        click.echo(f"dataset:{status.slug}")
+        click.echo(f"  package: {'present' if status.exists else 'missing'}")
+        click.echo(f"  workflow: {'present' if status.workflow_exists else 'missing'}")
+        click.echo(f"  lockfile: {'present' if status.lockfile_exists else 'missing'}")
+        click.echo(f"  datapackage: {'present' if status.datapackage_exists else 'missing'}")
+        click.echo(f"  output_dir: {status.output_dir}")
+        click.echo(f"  outputs_present: {len(status.outputs_present)}")
+        click.echo(f"  outputs_missing: {len(status.outputs_missing)}")
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload={
             "datapackage_exists": status.datapackage_exists,
             "datapackage_placeholder_hashes": status.datapackage_placeholder_hashes,
             "dataset_dir": str(status.dataset_dir.relative_to(root)),
@@ -602,18 +630,10 @@ def dataset_status_cmd(slug: str, output_format: str, as_json: bool) -> None:
             "outputs_present": status.outputs_present,
             "slug": status.slug,
             "workflow_exists": status.workflow_exists,
-        }
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    click.echo(f"dataset:{status.slug}")
-    click.echo(f"  package: {'present' if status.exists else 'missing'}")
-    click.echo(f"  workflow: {'present' if status.workflow_exists else 'missing'}")
-    click.echo(f"  lockfile: {'present' if status.lockfile_exists else 'missing'}")
-    click.echo(f"  datapackage: {'present' if status.datapackage_exists else 'missing'}")
-    click.echo(f"  output_dir: {status.output_dir}")
-    click.echo(f"  outputs_present: {len(status.outputs_present)}")
-    click.echo(f"  outputs_missing: {len(status.outputs_missing)}")
+        },
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @dataset_group.command("validate")
@@ -635,15 +655,20 @@ def dataset_validate_cmd(slug: str, output_format: str, as_json: bool) -> None:
     except DatasetLifecycleError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(_dataset_validation_to_json(report, root), indent=2, sort_keys=True))
-    else:
+    def _render() -> None:
         state = "valid" if report.valid else "invalid"
         click.echo(f"dataset:{report.slug} {state}")
         for finding in report.findings:
             path = _validation_path_text(finding.path, root)
             path_text = f"{path} " if path is not None else ""
             click.echo(f"  {finding.code}: {path_text}{finding.message}", err=True)
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=_dataset_validation_to_json(report, root),
+        render_text=_render,
+        sort_keys=True,
+    )
 
     if not report.valid:
         raise click.exceptions.Exit(1)
@@ -699,22 +724,18 @@ def data_resolve_cmd(dataset_id: str, logical_path: str, output_format: str, as_
         resolved = resolve(dataset_id, logical_path)
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(
-            json.dumps(
-                {
-                    "dataset_id": resolved.dataset_id,
-                    "logical_path": resolved.logical_path,
-                    "resolved_path": str(resolved.path),
-                    "hash": resolved.hash,
-                    "source": resolved.source,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-    else:
-        click.echo(str(resolved.path))
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload={
+            "dataset_id": resolved.dataset_id,
+            "logical_path": resolved.logical_path,
+            "resolved_path": str(resolved.path),
+            "hash": resolved.hash,
+            "source": resolved.source,
+        },
+        render_text=lambda: click.echo(str(resolved.path)),
+        sort_keys=True,
+    )
 
 
 @commons_group.command("member-payload")
@@ -745,13 +766,17 @@ def member_payload_cmd(member_id: str, output_format: str, as_json: bool) -> Non
         "payload_kind": payload.payload_kind,
         "payload": payload.payload,
     }
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(rendered, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        click.echo(f"{payload.member_id} ({payload.payload_kind})")
+        click.echo(f"parent: {payload.parent_dataset}")
+        click.echo(f"member_key: {payload.member_key}")
 
-    click.echo(f"{payload.member_id} ({payload.payload_kind})")
-    click.echo(f"parent: {payload.parent_dataset}")
-    click.echo(f"member_key: {payload.member_key}")
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=rendered,
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @commons_group.group("reference-graph")
@@ -802,14 +827,19 @@ def reference_graph_scaffold_member_cmd(
         raise click.ClickException(str(exc)) from exc
 
     root = _require_root()
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(planned.to_json(commons_root=root), indent=2, sort_keys=True))
-        return
 
-    click.echo(f"{'wrote' if planned.applied else 'planned'} {planned.canonical_id}")
-    click.echo(f"entity: {planned.entity_path.relative_to(root)}")
-    if not planned.applied:
-        click.echo("Re-run with --apply to write.")
+    def _render() -> None:
+        click.echo(f"{'wrote' if planned.applied else 'planned'} {planned.canonical_id}")
+        click.echo(f"entity: {planned.entity_path.relative_to(root)}")
+        if not planned.applied:
+            click.echo("Re-run with --apply to write.")
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=planned.to_json(commons_root=root),
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @reference_graph_group.command("resolve-member")
@@ -831,27 +861,33 @@ def reference_graph_resolve_member_cmd(registry_id: str, member_key: str, output
     except (CommonsError, ReferenceGraphIdentityError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    effective_format = "json" if _wants_json(as_json=as_json, output_format=output_format) else output_format
     if match is None:
-        payload = {
-            "resolution_status": "unresolved",
-            "registry_id": registry_id,
-            "member_key": member_key,
-        }
-        if _wants_json(as_json=as_json, output_format=output_format):
-            click.echo(json.dumps(payload, indent=2, sort_keys=True))
-            return
-        click.echo(f"unresolved {registry_id} {member_key}")
+        emit(
+            output_format=effective_format,
+            payload={
+                "resolution_status": "unresolved",
+                "registry_id": registry_id,
+                "member_key": member_key,
+            },
+            render_text=lambda: click.echo(f"unresolved {registry_id} {member_key}"),
+            sort_keys=True,
+        )
         return
 
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(match.to_json(), indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        click.echo(f"{match.member_key} ({match.status})")
+        click.echo(f"registry: {match.registry_id}")
+        click.echo(f"label: {match.label}")
+        if match.replaced_by:
+            click.echo(f"replaced_by: {', '.join(match.replaced_by)}")
 
-    click.echo(f"{match.member_key} ({match.status})")
-    click.echo(f"registry: {match.registry_id}")
-    click.echo(f"label: {match.label}")
-    if match.replaced_by:
-        click.echo(f"replaced_by: {', '.join(match.replaced_by)}")
+    emit(
+        output_format=effective_format,
+        payload=match.to_json(),
+        render_text=_render,
+        sort_keys=True,
+    )
 
 
 @commons_group.group("promote")

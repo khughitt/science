@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Any, cast
 import click
 from rich.table import Table
 
+from science_tool.output import emit
 from science_tool.styles import get_console
 from science_tool.verdict.models import ParseResult
 from science_tool.verdict.parser import parse_file
@@ -39,7 +39,13 @@ def parse_cmd(file: Path, registry_path: Path | None) -> None:
     registry = _load_registry_for_parse(file, registry_path)
     result = _parse_single_file(file, registry=registry)
     _handle_warnings(result.validation_warnings, result.unresolved_claim_ids, strict=False)
-    _emit_json(_normalize(result))
+    emit(
+        output_format="json",
+        payload=_normalize(result),
+        render_text=lambda: None,
+        sort_keys=True,
+        ensure_ascii=False,
+    )
 
 
 @verdict_group.command("rollup")
@@ -110,11 +116,13 @@ def rollup_cmd(
 
     groups = group_by(results, scope=resolved_scope, registry=registry)
     payload = _rollup_payload(resolved_scope, results, groups, registry=registry)
-    if output_format == "json":
-        _emit_json(payload)
-        return
-
-    _emit_rollup_table(payload["groups"])
+    emit(
+        output_format=output_format,
+        payload=payload,
+        render_text=lambda: _emit_rollup_table(payload["groups"]),
+        sort_keys=True,
+        ensure_ascii=False,
+    )
 
 
 def _load_registry_for_parse(file: Path, registry_path: Path | None) -> IndexedClaimRegistry | None:
@@ -235,10 +243,6 @@ def _group_tally(
 
 def _token_tally(tally: dict[Token, int]) -> dict[str, int]:
     return {token.value: tally.get(token, 0) for token in Token}
-
-
-def _emit_json(payload: Any) -> None:
-    click.echo(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 def _emit_rollup_table(groups: dict[str, Any]) -> None:

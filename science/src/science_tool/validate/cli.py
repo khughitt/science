@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from contextlib import redirect_stdout
 from dataclasses import replace
 from io import StringIO
@@ -10,6 +9,7 @@ from typing import Any, cast
 import click
 from rich.text import Text
 
+from science_tool.output import emit
 from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_console
 from science_tool.validate._helpers import section_banner
 from science_tool.validate.acceptance import filter_accepted_warnings
@@ -97,10 +97,11 @@ def validate_cmd(
     if sidecar_stdout:
         click.echo(sidecar_stdout, nl=False, err=True)
 
-    if output_format == "json":
-        click.echo(json.dumps(_json_payload(result), indent=2))
-    else:
-        _emit_text(result, verbose=verbose)
+    emit(
+        output_format=output_format,
+        payload=_json_payload(result),
+        render_text=lambda: _emit_text(result, verbose=verbose),
+    )
 
     if result.errors or result.gated:
         ctx.exit(1)

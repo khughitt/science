@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -11,6 +10,7 @@ import click
 
 from science_tool.bibliography import load_bib_author_surnames
 from science_tool.data_root import project_config_path
+from science_tool.output import emit
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
 from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 
@@ -71,17 +71,15 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         bib_surnames=bib_surnames,
     )
 
-    if fmt == "json":
-        payload = {
-            "counts": result["counts"],
-            "hits": [
-                {**asdict(h), "file": str(h.file.relative_to(root))}
-                for h in result["hits"]
-            ],
-        }
-        click.echo(json.dumps(payload, indent=2))
-    else:
-        _render_table(result, root)
+    payload = {
+        "counts": result["counts"],
+        "hits": [
+            {**asdict(h), "file": str(h.file.relative_to(root))}
+            for h in result["hits"]
+        ],
+    }
+
+    emit(output_format=fmt, payload=payload, render_text=lambda: _render_table(result, root))
 
     # Mirrors `science markers scan`: only --strict + issues fails the run.
     if strict and result["hits"]:

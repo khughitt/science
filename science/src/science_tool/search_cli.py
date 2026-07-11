@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import click
+
+from science_tool.output import emit
 
 
 @click.command("search")
@@ -30,8 +31,9 @@ def search_command(query: str, archived: bool, project_root: Path, output_format
     from science_tool.archive import search_archive
 
     hits = search_archive(project_root, query)
-    if output_format == "json":
-        click.echo(json.dumps(hits, indent=2, sort_keys=True))
-    else:
+
+    def _render() -> None:
         for h in hits:
             click.echo(f"{h['id']}  [{h['kind']}]  {h['title'] or ''}")
+
+    emit(output_format=output_format, payload=hits, render_text=_render, sort_keys=True)

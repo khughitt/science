@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TypedDict
 
@@ -10,6 +9,7 @@ import click
 import yaml
 
 from science_tool.data_root import project_config_path
+from science_tool.output import emit
 from science_tool.peers import PeerNotFound, PeerUnresolved, make_local_resolver, resolve_peer_path
 from science_tool.peers_validate import PeerIssue, PeerIssueKind, validate_peers
 from science_tool.project_config import ProjectConfig, load_project_config
@@ -51,15 +51,13 @@ def peers_list(project_root: Path, fmt: str) -> None:
     cfg = load_project_config(project_root)
     rows = _peer_rows(project_root, cfg)
 
-    if fmt == "json":
-        click.echo(json.dumps({"project_id": cfg.id, "peers": rows}, indent=2))
-        return
+    def _render() -> None:
+        if not rows:
+            click.echo("no peers declared")
+            return
+        _emit_table(rows)
 
-    if not rows:
-        click.echo("no peers declared")
-        return
-
-    _emit_table(rows)
+    emit(output_format=fmt, payload={"project_id": cfg.id, "peers": rows}, render_text=_render)
 
 
 @peers_group.command("check")
@@ -80,13 +78,13 @@ def peers_check(project_root: Path, fmt: str, strict: bool) -> None:
     error_count = sum(1 for issue in issues if issue.severity == "error")
     should_fail = error_count > 0 or (strict and warning_count > 0)
 
-    if fmt == "json":
-        click.echo(json.dumps(rows, indent=2))
-    else:
+    def _render() -> None:
         for issue in issues:
             click.echo(f"{issue.severity.upper()} [{issue.peer_id}] {issue.kind.value}: {issue.detail}")
         summary_label = "failed" if should_fail else "ok"
         click.echo(f"{summary_label}: {peer_count} peers, {warning_count} warning, {error_count} error")
+
+    emit(output_format=fmt, payload=rows, render_text=_render)
 
     if should_fail:
         raise click.exceptions.Exit(1)

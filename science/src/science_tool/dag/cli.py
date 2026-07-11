@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import difflib
-import json
 import sys as _sys
 import tempfile
 from pathlib import Path
@@ -17,6 +16,7 @@ from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all
 from science_tool.dag.validate import ValidationFinding, ValidationReport, validate_project
 from science_tool.data_root import project_config_path
+from science_tool.output import emit
 
 
 @click.group("dag")
@@ -201,9 +201,7 @@ def audit_cmd(
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(audit.to_json(), indent=2))
-    else:
+    def _render() -> None:
         if audit.validation.ok:
             click.echo("DAG audit OK.")
         else:
@@ -212,6 +210,12 @@ def audit_cmd(
             click.echo(f"\nApplied {len(audit.mutations)} mutation(s):")
             for mutation in audit.mutations:
                 click.echo(f"  [{mutation.kind}] {mutation.description}")
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=audit.to_json(),
+        render_text=_render,
+    )
 
     ctx.exit(1 if audit.has_findings else 0)
 
@@ -312,13 +316,18 @@ def validate_cmd(
 
     report = validate_project(paths, strict=strict)
 
-    if _wants_json(as_json=as_json, output_format=output_format):
-        click.echo(json.dumps(report.to_json(), indent=2, sort_keys=True))
-    else:
+    def _render() -> None:
         if report.ok:
             click.echo("dag validate: OK")
         else:
             _print_validation_findings(report, strict=strict)
+
+    emit(
+        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
+        payload=report.to_json(),
+        render_text=_render,
+        sort_keys=True,
+    )
 
     _sys.exit(0 if report.ok else 1)
 
@@ -361,18 +370,17 @@ def apply_workbench_cmd(input_path: Path, output_format: str, project_path: Path
     except WorkbenchApplyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(json.dumps(result.to_json(), indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        action = "Applied" if result.status == "applied" else "No-op"
+        click.echo(f"{action} workbench: {result.input_path}")
+        click.echo(
+            f"  rows={result.row_count}, propositions={result.proposition_count}, "
+            f"evidence_lines={result.evidence_line_count}, changed_paths={len(result.changed_paths)}"
+        )
+        for path in result.changed_paths:
+            click.echo(f"  {path}")
 
-    action = "Applied" if result.status == "applied" else "No-op"
-    click.echo(f"{action} workbench: {result.input_path}")
-    click.echo(
-        f"  rows={result.row_count}, propositions={result.proposition_count}, "
-        f"evidence_lines={result.evidence_line_count}, changed_paths={len(result.changed_paths)}"
-    )
-    for path in result.changed_paths:
-        click.echo(f"  {path}")
+    emit(output_format=output_format, payload=result.to_json(), render_text=_render, sort_keys=True)
 
 
 @dag_group.command("workbench")

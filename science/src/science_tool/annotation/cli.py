@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -72,7 +72,7 @@ from science_tool.annotation.verify import (
 )
 from science_tool.entities import EntityCommandError
 from science_tool.markers import scan_text as _scan_markers_text
-from science_tool.output import OUTPUT_FORMATS
+from science_tool.output import OUTPUT_FORMATS, emit
 
 _GROUNDING_SUMMARY_KEYS = (
     "grounded_units",
@@ -147,26 +147,22 @@ def ingest_prose_decomposition_cmd(
     except (DecompositionError, EntityCommandError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {
-                    "source_ref": artifact.source_ref,
-                    "artifact_id": artifact.artifact.artifact_id,
-                    "stale": report.stale_fingerprints,
-                    "source_entity_created": source_resolution.created,
-                },
-                indent=2,
-            )
-        )
-        return
+    payload = {
+        "source_ref": artifact.source_ref,
+        "artifact_id": artifact.artifact.artifact_id,
+        "stale": report.stale_fingerprints,
+        "source_entity_created": source_resolution.created,
+    }
 
-    click.echo(
-        "ingested prose decomposition "
-        f"{report.artifact_id} for {artifact.source_ref} "
-        f"({len(artifact.units)} units; {len(report.stale_fingerprints)} stale; "
-        f"source_entity_created={source_resolution.created})"
-    )
+    def _render() -> None:
+        click.echo(
+            "ingested prose decomposition "
+            f"{report.artifact_id} for {artifact.source_ref} "
+            f"({len(artifact.units)} units; {len(report.stale_fingerprints)} stale; "
+            f"source_entity_created={source_resolution.created})"
+        )
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("check-prose-decomposition")
@@ -187,30 +183,26 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
     except DecompositionError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {
-                    "source_ref": source_ref,
-                    "artifact_id": artifact.artifact.artifact_id,
-                    "units": report.rows,
-                },
-                indent=2,
-            )
-        )
-        return
+    payload = {
+        "source_ref": source_ref,
+        "artifact_id": artifact.artifact.artifact_id,
+        "units": report.rows,
+    }
 
-    click.echo(f"checked prose decomposition {artifact.artifact.artifact_id} for {source_ref}")
-    for row in report.rows:
-        detail = []
-        if row["stale"]:
-            detail.append("stale")
-        if row["promoted_to"]:
-            detail.append(f"promoted_to={row['promoted_to']}")
-        if row["message"]:
-            detail.append(str(row["message"]))
-        message = f" - {'; '.join(detail)}" if detail else ""
-        click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
+    def _render() -> None:
+        click.echo(f"checked prose decomposition {artifact.artifact.artifact_id} for {source_ref}")
+        for row in report.rows:
+            detail = []
+            if row["stale"]:
+                detail.append("stale")
+            if row["promoted_to"]:
+                detail.append(f"promoted_to={row['promoted_to']}")
+            if row["message"]:
+                detail.append(str(row["message"]))
+            message = f" - {'; '.join(detail)}" if detail else ""
+            click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("validate-prose-decomposition-artifact")
@@ -236,27 +228,27 @@ def validate_prose_decomposition_artifact_cmd(
         raise click.ClickException(str(exc)) from exc
 
     payload = report.to_json()
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2))
-        return
 
-    summary = _required_prose_validation_summary(payload)
-    click.echo(
-        f"validated prose decomposition {artifact.artifact.artifact_id} for {artifact.source_ref}: "
-        f"units={summary['units']} resolved={summary['resolved']} "
-        f"unresolved={summary['unresolved']} ambiguous={summary['ambiguous']} "
-        f"stale={summary['stale']} hard_failures={summary['hard_failures']}"
-    )
-    for row in report.rows:
-        detail = []
-        if row["stale"]:
-            detail.append("stale")
-        if row["promoted_to"]:
-            detail.append(f"promoted_to={row['promoted_to']}")
-        if row["message"]:
-            detail.append(str(row["message"]))
-        message = f" - {'; '.join(detail)}" if detail else ""
-        click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
+    def _render() -> None:
+        summary = _required_prose_validation_summary(payload)
+        click.echo(
+            f"validated prose decomposition {artifact.artifact.artifact_id} for {artifact.source_ref}: "
+            f"units={summary['units']} resolved={summary['resolved']} "
+            f"unresolved={summary['unresolved']} ambiguous={summary['ambiguous']} "
+            f"stale={summary['stale']} hard_failures={summary['hard_failures']}"
+        )
+        for row in report.rows:
+            detail = []
+            if row["stale"]:
+                detail.append("stale")
+            if row["promoted_to"]:
+                detail.append(f"promoted_to={row['promoted_to']}")
+            if row["message"]:
+                detail.append(str(row["message"]))
+            message = f" - {'; '.join(detail)}" if detail else ""
+            click.echo(f"  {row['unit_id']}: {row['status']} ({row['locator_status']}; {row['fingerprint']}){message}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 def _required_prose_validation_summary(payload: dict[str, object]) -> dict[str, object]:
@@ -300,16 +292,16 @@ def promote_prose_decomposition_cmd(
         "skipped": dict(report.skipped),
         "written": report.written_paths,
     }
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2))
-        return
 
-    skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
-    mode = "applied" if do_apply else "planned"
-    click.echo(
-        f"{mode} prose promotion for {source_ref}#{unit_id}: "
-        f"minted={report.minted} linked={report.linked} skipped={skipped}"
-    )
+    def _render() -> None:
+        skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
+        mode = "applied" if do_apply else "planned"
+        click.echo(
+            f"{mode} prose promotion for {source_ref}#{unit_id}: "
+            f"minted={report.minted} linked={report.linked} skipped={skipped}"
+        )
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("plan-prose-promotions")
@@ -359,15 +351,15 @@ def apply_prose_promotion_plan_cmd(plan_json: Path, root: Path | None, fmt: str)
         "skipped": dict(report.skipped),
         "written": report.written_paths,
     }
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2))
-        return
 
-    skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
-    click.echo(
-        f"applied prose promotion plan {plan_json}: minted={report.minted} linked={report.linked} skipped={skipped}"
-    )
-    click.echo("recovered link rows may report no minted/linked counter increments")
+    def _render() -> None:
+        skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
+        click.echo(
+            f"applied prose promotion plan {plan_json}: minted={report.minted} linked={report.linked} skipped={skipped}"
+        )
+        click.echo("recovered link rows may report no minted/linked counter increments")
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("ground-prose-decomposition")
@@ -413,22 +405,21 @@ def ground_prose_decomposition_cmd(
     except ProseGroundingError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        summary = _required_prose_grounding_summary(payload)
+        click.echo(
+            f"grounded prose decomposition for {source_ref}: "
+            f"grounded={summary['grounded_units']} "
+            f"below_floor={summary['below_floor_units']} "
+            f"unbacked={summary['unbacked_units']} "
+            f"unpromoted={summary['unpromoted_units']} "
+            f"skipped={summary['skipped_units']} "
+            f"stale={summary['stale_units']}"
+        )
+        if do_write:
+            click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
 
-    summary = _required_prose_grounding_summary(payload)
-    click.echo(
-        f"grounded prose decomposition for {source_ref}: "
-        f"grounded={summary['grounded_units']} "
-        f"below_floor={summary['below_floor_units']} "
-        f"unbacked={summary['unbacked_units']} "
-        f"unpromoted={summary['unpromoted_units']} "
-        f"skipped={summary['skipped_units']} "
-        f"stale={summary['stale_units']}"
-    )
-    if do_write:
-        click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("cross-paper-evidence")
@@ -450,37 +441,38 @@ def cross_paper_evidence_cmd(source_ref: str | None, root: Path | None, fmt: str
     project_root = (root or Path.cwd()).resolve()
     payload = build_cross_paper_evidence_report(project_root, proposition_ref=source_ref)
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    if source_ref is not None:
-        belief = payload["belief"]
-        click.echo(
-            f"cross-paper evidence for {source_ref}: {len(payload['units'])} unit(s); "
-            f"belief={belief['belief_magnitude']} contested={belief['contested']} "
-            f"contested_groups={len(belief['contested_groups'])}"
-        )
-        for unit in payload["units"]:
-            click.echo(f"  {unit['edge']:8s} {unit['paper']} ({unit['stance']}; {unit['role']}/{unit['strength']})")
-    else:
-        summary = payload["summary"]
-        if summary["propositions"] == 0:
-            click.echo("No proposition entities found.")
-        elif summary["units"] == 0:
-            click.echo("No derived cross-paper literature evidence found.")
-        else:
-            for proposition in payload["propositions"]:
+    def _render() -> None:
+        if source_ref is not None:
+            belief = payload["belief"]
+            click.echo(
+                f"cross-paper evidence for {source_ref}: {len(payload['units'])} unit(s); "
+                f"belief={belief['belief_magnitude']} contested={belief['contested']} "
+                f"contested_groups={len(belief['contested_groups'])}"
+            )
+            for unit in payload["units"]:
                 click.echo(
-                    f"{proposition['proposition']}: "
-                    f"+{proposition['supporting_papers']} / "
-                    f"-{proposition['disputing_papers']} paper(s)"
+                    f"  {unit['edge']:8s} {unit['paper']} ({unit['stance']}; {unit['role']}/{unit['strength']})"
                 )
+        else:
+            summary = payload["summary"]
+            if summary["propositions"] == 0:
+                click.echo("No proposition entities found.")
+            elif summary["units"] == 0:
+                click.echo("No derived cross-paper literature evidence found.")
+            else:
+                for proposition in payload["propositions"]:
+                    click.echo(
+                        f"{proposition['proposition']}: "
+                        f"+{proposition['supporting_papers']} / "
+                        f"-{proposition['disputing_papers']} paper(s)"
+                    )
 
-    if payload["faults"]:
-        click.echo(f"FAULTS ({len(payload['faults'])}):")
-        for fault in payload["faults"]:
-            click.echo(f"  {fault['sidecar']} [{fault['annotation']}] {fault['reason']}: {fault['detail']}")
+        if payload["faults"]:
+            click.echo(f"FAULTS ({len(payload['faults'])}):")
+            for fault in payload["faults"]:
+                click.echo(f"  {fault['sidecar']} [{fault['annotation']}] {fault['reason']}: {fault['detail']}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("archive-superseded-propositions")
@@ -502,29 +494,28 @@ def archive_superseded_propositions_cmd(root: Path | None, apply_changes: bool, 
     except (PropositionArchiveError, ArchiveError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    summary = payload["summary"]
-    mode = "apply" if apply_changes else "dry-run"
-    click.echo(
-        "superseded proposition archive "
-        f"({mode}): ready={summary['ready']} blocked={summary['blocked']} skipped={summary['skipped']}"
-    )
-    for candidate in payload["candidates"]:
+    def _render() -> None:
+        summary = payload["summary"]
+        mode = "apply" if apply_changes else "dry-run"
         click.echo(
-            f"{candidate['status']:8s} {candidate['id']} "
-            f"{candidate['lineage_kind'] or '-'} -> {','.join(candidate['successors']) or '-'}"
+            "superseded proposition archive "
+            f"({mode}): ready={summary['ready']} blocked={summary['blocked']} skipped={summary['skipped']}"
         )
-        for blocker in candidate["blockers"]:
-            click.echo(f"  blocker: {blocker}")
-        if candidate["inbound_live_refs"]:
-            click.echo(f"  inbound refs: {','.join(candidate['inbound_live_refs'])}")
-    if payload["applied"]:
-        click.echo(f"applied: {','.join(payload['applied'])}")
-    if payload["skipped"]:
-        click.echo(f"skipped: {','.join(payload['skipped'])}")
+        for candidate in payload["candidates"]:
+            click.echo(
+                f"{candidate['status']:8s} {candidate['id']} "
+                f"{candidate['lineage_kind'] or '-'} -> {','.join(candidate['successors']) or '-'}"
+            )
+            for blocker in candidate["blockers"]:
+                click.echo(f"  blocker: {blocker}")
+            if candidate["inbound_live_refs"]:
+                click.echo(f"  inbound refs: {','.join(candidate['inbound_live_refs'])}")
+        if payload["applied"]:
+            click.echo(f"applied: {','.join(payload['applied'])}")
+        if payload["skipped"]:
+            click.echo(f"skipped: {','.join(payload['skipped'])}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("reconcile-propositions")
@@ -610,31 +601,34 @@ def reconcile_propositions_cmd(
         show_reviewed=show_reviewed,
     )
 
-    if fmt in {"json", "scaffold"}:
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-
-    summary = payload["summary"]
-    click.echo(
-        "proposition reconciliation: "
-        f"same_claim={summary['same_claim_candidates']} "
-        f"factorization={summary['factorization_disagreements']} "
-        f"faults={summary['faults']} "
-        f"reviewed={summary['reviewed_decisions']} "
-        f"stale_reviewed={summary['stale_reviewed_decisions']} "
-        f"duplicate_reviewed={summary['duplicate_reviewed_decisions']} "
-        f"conflicting_reviewed={summary['conflicting_reviewed_decisions']}"
-    )
-    for item in payload["same_claim_candidates"]:
+    def _render() -> None:
+        summary = payload["summary"]
         click.echo(
-            f"same_claim {item['priority']:6s} {','.join(item['propositions'])} flags={','.join(item['flags']) or '-'}"
+            "proposition reconciliation: "
+            f"same_claim={summary['same_claim_candidates']} "
+            f"factorization={summary['factorization_disagreements']} "
+            f"faults={summary['faults']} "
+            f"reviewed={summary['reviewed_decisions']} "
+            f"stale_reviewed={summary['stale_reviewed_decisions']} "
+            f"duplicate_reviewed={summary['duplicate_reviewed_decisions']} "
+            f"conflicting_reviewed={summary['conflicting_reviewed_decisions']}"
         )
-    for item in payload["factorization_disagreements"]:
-        click.echo(f"factorization {item['priority']:6s} {item['proposition']} action={item['recommended_action']}")
-    if payload["faults"]:
-        click.echo(f"FAULTS ({len(payload['faults'])}):")
-        for fault in payload["faults"]:
-            click.echo(f"  {fault['reason']}: {fault['detail']}")
+        for item in payload["same_claim_candidates"]:
+            click.echo(
+                f"same_claim {item['priority']:6s} {','.join(item['propositions'])} "
+                f"flags={','.join(item['flags']) or '-'}"
+            )
+        for item in payload["factorization_disagreements"]:
+            click.echo(
+                f"factorization {item['priority']:6s} {item['proposition']} action={item['recommended_action']}"
+            )
+        if payload["faults"]:
+            click.echo(f"FAULTS ({len(payload['faults'])}):")
+            for fault in payload["faults"]:
+                click.echo(f"  {fault['reason']}: {fault['detail']}")
+
+    effective_format = "json" if fmt in {"json", "scaffold"} else fmt
+    emit(output_format=effective_format, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("validate-proposition-reconciliation")
@@ -679,13 +673,13 @@ def validate_proposition_reconciliation_cmd(
     except ReconciliationValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    click.echo(
-        f"proposition reconciliation review: {payload['status']} "
-        f"judgments={payload['judgments']} incomplete={len(payload['review_incomplete'])}"
-    )
+    def _render() -> None:
+        click.echo(
+            f"proposition reconciliation review: {payload['status']} "
+            f"judgments={payload['judgments']} incomplete={len(payload['review_incomplete'])}"
+        )
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("plan-proposition-reconciliation")
@@ -741,28 +735,27 @@ def plan_proposition_reconciliation_cmd(
     if output_path is not None:
         output_path.write_text(json_text + "\n", encoding="utf-8")
 
-    if fmt == "json":
-        click.echo(json_text)
-        return
-
-    summary = payload["summary"]
-    click.echo(
-        "proposition reconciliation action plan: "
-        f"ready={summary['ready_actions']} "
-        f"blocked={summary['blocked_actions']} "
-        f"advisory={summary['advisory_actions']} "
-        f"errors={summary['errors']}"
-    )
-    for action in payload["actions"]:
-        target = (
-            action.get("proposition")
-            or action.get("canonical_proposition")
-            or ",".join(action.get("members", []))
-            or action["candidate_id"]
+    def _render() -> None:
+        summary = payload["summary"]
+        click.echo(
+            "proposition reconciliation action plan: "
+            f"ready={summary['ready_actions']} "
+            f"blocked={summary['blocked_actions']} "
+            f"advisory={summary['advisory_actions']} "
+            f"errors={summary['errors']}"
         )
-        click.echo(f"{action['status']:8s} {action['kind']} {target}")
-    if output_path is not None:
-        click.echo(f"wrote JSON action plan to {output_path}")
+        for action in payload["actions"]:
+            target = (
+                action.get("proposition")
+                or action.get("canonical_proposition")
+                or ",".join(action.get("members", []))
+                or action["candidate_id"]
+            )
+            click.echo(f"{action['status']:8s} {action['kind']} {target}")
+        if output_path is not None:
+            click.echo(f"wrote JSON action plan to {output_path}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 def _read_json_object_for_cli(input_path: Path) -> Mapping[str, Any]:
@@ -841,31 +834,31 @@ def record_proposition_reconciliation_decisions_cmd(
         raise click.ClickException(str(exc)) from exc
 
     payload = record_decision_plan_to_json(plan, appended=appended)
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    summary = payload["summary"]
-    click.echo(
-        "proposition reconciliation decision records: "
-        f"would_append={summary['would_append']} "
-        f"already_recorded={summary['already_recorded']} "
-        f"stale_existing={summary['stale_existing']} "
-        f"blockers={summary['blockers']} "
-        f"appended={summary['appended']}"
-    )
-    for blocker in payload["blockers"]:
-        parts = [f"reason={blocker['reason']}"]
-        action_id = blocker.get("action_id")
-        if action_id is not None:
-            parts.append(f"action_id={action_id}")
-        decision_id = blocker.get("decision_id")
-        if decision_id is not None:
-            parts.append(f"decision_id={decision_id}")
-        detail = blocker.get("detail")
-        if detail is not None:
-            parts.append(f"detail={detail}")
-        click.echo(f"blocker {' '.join(parts)}")
+    def _render() -> None:
+        summary = payload["summary"]
+        click.echo(
+            "proposition reconciliation decision records: "
+            f"would_append={summary['would_append']} "
+            f"already_recorded={summary['already_recorded']} "
+            f"stale_existing={summary['stale_existing']} "
+            f"blockers={summary['blockers']} "
+            f"appended={summary['appended']}"
+        )
+        for blocker in payload["blockers"]:
+            parts = [f"reason={blocker['reason']}"]
+            action_id = blocker.get("action_id")
+            if action_id is not None:
+                parts.append(f"action_id={action_id}")
+            decision_id = blocker.get("decision_id")
+            if decision_id is not None:
+                parts.append(f"decision_id={decision_id}")
+            detail = blocker.get("detail")
+            if detail is not None:
+                parts.append(f"detail={detail}")
+            click.echo(f"blocker {' '.join(parts)}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("scaffold-proposition-resynthesis")
@@ -944,18 +937,18 @@ def scaffold_proposition_resynthesis_cmd(
         "output_path": str(output_path) if output_path is not None else None,
         "draft": draft_payload,
     }
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    click.echo(
-        "proposition resynthesis scaffold: "
-        f"action={draft.action_id} "
-        f"annotations={len(draft.input_annotations)} "
-        "replacements=0"
-    )
-    if output_path is not None:
-        click.echo(f"wrote JSON draft to {output_path}")
+    def _render() -> None:
+        click.echo(
+            "proposition resynthesis scaffold: "
+            f"action={draft.action_id} "
+            f"annotations={len(draft.input_annotations)} "
+            "replacements=0"
+        )
+        if output_path is not None:
+            click.echo(f"wrote JSON draft to {output_path}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("resynthesis-draft-context")
@@ -1052,18 +1045,18 @@ def validate_proposition_resynthesis_cmd(input_path: Path, root: Path | None, fm
         raise click.ClickException(str(exc)) from exc
 
     payload = validation_report_to_json(report)
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    summary = payload["summary"]
-    click.echo(
-        "proposition resynthesis validate: "
-        f"status={payload['status']} "
-        f"replacements={summary['replacement_propositions']} "
-        f"moved={summary['moved_annotations']} "
-        f"retained={summary['retained_annotations']}"
-    )
+    def _render() -> None:
+        summary = payload["summary"]
+        click.echo(
+            "proposition resynthesis validate: "
+            f"status={payload['status']} "
+            f"replacements={summary['replacement_propositions']} "
+            f"moved={summary['moved_annotations']} "
+            f"retained={summary['retained_annotations']}"
+        )
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("apply-proposition-resynthesis")
@@ -1102,26 +1095,26 @@ def apply_proposition_resynthesis_cmd(input_path: Path, root: Path | None, fmt: 
         raise click.ClickException(str(exc)) from exc
 
     payload = apply_resynthesis_report_to_json(report, project_root=project_root)
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    summary = payload["summary"]
-    click.echo(
-        "proposition resynthesis apply: "
-        f"replacements={summary['replacement_propositions']} "
-        f"moved_annotations={summary['rewritten_annotations']} "
-        f"changed={summary['changed_paths']} "
-        f"noop={summary['noop_paths']}"
-    )
-    if payload["changed_paths"]:
-        click.echo("changed paths:")
-        for path in payload["changed_paths"]:
-            click.echo(f"  {path}")
-    if payload["noop_paths"]:
-        click.echo("noop paths:")
-        for path in payload["noop_paths"]:
-            click.echo(f"  {path}")
+    def _render() -> None:
+        summary = payload["summary"]
+        click.echo(
+            "proposition resynthesis apply: "
+            f"replacements={summary['replacement_propositions']} "
+            f"moved_annotations={summary['rewritten_annotations']} "
+            f"changed={summary['changed_paths']} "
+            f"noop={summary['noop_paths']}"
+        )
+        if payload["changed_paths"]:
+            click.echo("changed paths:")
+            for path in payload["changed_paths"]:
+                click.echo(f"  {path}")
+        if payload["noop_paths"]:
+            click.echo("noop paths:")
+            for path in payload["noop_paths"]:
+                click.echo(f"  {path}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("apply-proposition-reconciliation")
@@ -1181,36 +1174,36 @@ def apply_proposition_reconciliation_cmd(
         raise click.ClickException(str(exc)) from exc
 
     payload = apply_report_to_json(apply_report, project_root=project_root)
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    summary = payload["summary"]
-    click.echo(
-        "proposition reconciliation apply: "
-        f"status={payload['status']} "
-        f"selected={summary['selected_actions']} "
-        f"changed={summary['changed_paths']} "
-        f"noop={summary['noop_paths']} "
-        f"diagnostics={summary['diagnostics']} "
-        f"written={summary['written_paths']}"
-    )
-    for action in payload["actions"]:
+    def _render() -> None:
+        summary = payload["summary"]
         click.echo(
-            f"{action['status']:8s} {action['kind']} "
-            f"{action['canonical_proposition']} "
-            f"changed={len(action['changed_paths'])} "
-            f"noop={len(action['noop_paths'])} "
-            f"diagnostics={len(action['diagnostics'])}"
+            "proposition reconciliation apply: "
+            f"status={payload['status']} "
+            f"selected={summary['selected_actions']} "
+            f"changed={summary['changed_paths']} "
+            f"noop={summary['noop_paths']} "
+            f"diagnostics={summary['diagnostics']} "
+            f"written={summary['written_paths']}"
         )
-    if payload["changed_paths"]:
-        click.echo("changed paths:")
-        for path in payload["changed_paths"]:
-            click.echo(f"  {path}")
-    if payload["noop_paths"]:
-        click.echo("noop paths:")
-        for path in payload["noop_paths"]:
-            click.echo(f"  {path}")
+        for action in payload["actions"]:
+            click.echo(
+                f"{action['status']:8s} {action['kind']} "
+                f"{action['canonical_proposition']} "
+                f"changed={len(action['changed_paths'])} "
+                f"noop={len(action['noop_paths'])} "
+                f"diagnostics={len(action['diagnostics'])}"
+            )
+        if payload["changed_paths"]:
+            click.echo("changed paths:")
+            for path in payload["changed_paths"]:
+                click.echo(f"  {path}")
+        if payload["noop_paths"]:
+            click.echo("noop paths:")
+            for path in payload["noop_paths"]:
+                click.echo(f"  {path}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 @annotate_group.command("build-prose-health")
@@ -1244,26 +1237,25 @@ def build_prose_health_cmd(
     except ProseHealthError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
+    def _render() -> None:
+        summary = _required_prose_health_summary(payload)
+        coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else {}
+        strict = coverage.get("strict_grounding") if isinstance(coverage, dict) else {}
+        strict_ratio = strict.get("ratio") if isinstance(strict, dict) else None
+        strict_text = "n/a" if strict_ratio is None else f"{strict_ratio:.1%}"
+        click.echo(
+            "built prose health: "
+            f"sources={summary['declared_sources']} "
+            f"candidates={summary['current_candidate_units']} "
+            f"promoted={summary['promoted_units']} "
+            f"grounded={summary['grounded_units']} "
+            f"strict_grounding={strict_text} "
+            f"findings={len(payload.get('findings') or [])}"
+        )
+        if do_write:
+            click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
 
-    summary = _required_prose_health_summary(payload)
-    coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else {}
-    strict = coverage.get("strict_grounding") if isinstance(coverage, dict) else {}
-    strict_ratio = strict.get("ratio") if isinstance(strict, dict) else None
-    strict_text = "n/a" if strict_ratio is None else f"{strict_ratio:.1%}"
-    click.echo(
-        "built prose health: "
-        f"sources={summary['declared_sources']} "
-        f"candidates={summary['current_candidate_units']} "
-        f"promoted={summary['promoted_units']} "
-        f"grounded={summary['grounded_units']} "
-        f"strict_grounding={strict_text} "
-        f"findings={len(payload.get('findings') or [])}"
-    )
-    if do_write:
-        click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
+    emit(output_format=fmt, payload=payload, render_text=_render, sort_keys=True)
 
 
 def _required_prose_grounding_summary(payload: dict[str, object]) -> dict[str, object]:
@@ -1377,27 +1369,43 @@ def verify(
         # with a concurrent edit); degraded/fuzzy/parse-errors unchanged.
         report = verify_path(root)
 
-    if output_format == "json":
-        _emit_json(
-            report,
-            root=root,
-            summary_only=summary_only,
-            apply_meta=(
-                {
-                    "rewritten_sidecars": rewritten_count,
-                    "superseded_annotations": pre_apply_broken,
-                }
-                if apply_changes
-                else None
-            ),
-        )
-    else:
+    summary = {
+        "sidecars": report.sidecars,
+        "annotations": report.annotations,
+        "broken": report.broken,
+        "degraded": report.degraded,
+        "fuzzy": report.fuzzy,
+        "source_missing": report.source_missing,
+        "parse_errors": report.parse_errors,
+        "superseded_skipped": report.superseded_skipped,
+    }
+    payload: dict[str, object] = {"summary": summary}
+    if apply_changes:
+        payload["apply"] = {
+            "rewritten_sidecars": rewritten_count,
+            "superseded_annotations": pre_apply_broken,
+        }
+    if not summary_only:
+        payload["issues"] = [
+            {
+                "sidecar": _relpath(issue.sidecar, root),
+                "annotation_id": issue.annotation_id,
+                "source": issue.source,
+                "kind": issue.kind,
+                "exact_preview": issue.exact_preview,
+            }
+            for issue in report.issues
+        ]
+
+    def _render() -> None:
         if apply_changes:
             click.echo(
                 f"annotate verify --apply: rewrote {rewritten_count} sidecar(s); "
                 f"superseded {pre_apply_broken} broken annotation(s)."
             )
         _emit_table(report, summary_only=summary_only)
+
+    emit(output_format=output_format, payload=payload, render_text=_render)
 
     # Unified exit policy. Parse errors and post-apply broken rows are
     # always hard failures. Strict additionally promotes degraded/fuzzy/
@@ -1444,40 +1452,6 @@ def _emit_table(report: VerifyReport, *, summary_only: bool) -> None:
             click.echo(f"      source: {issue.source}")
         if issue.exact_preview:
             click.echo(f"      exact:  {issue.exact_preview!r}")
-
-
-def _emit_json(
-    report: VerifyReport,
-    *,
-    root: Path,
-    summary_only: bool,
-    apply_meta: Optional[dict[str, int]] = None,
-) -> None:
-    summary = {
-        "sidecars": report.sidecars,
-        "annotations": report.annotations,
-        "broken": report.broken,
-        "degraded": report.degraded,
-        "fuzzy": report.fuzzy,
-        "source_missing": report.source_missing,
-        "parse_errors": report.parse_errors,
-        "superseded_skipped": report.superseded_skipped,
-    }
-    payload: dict[str, object] = {"summary": summary}
-    if apply_meta is not None:
-        payload["apply"] = apply_meta
-    if not summary_only:
-        payload["issues"] = [
-            {
-                "sidecar": _relpath(issue.sidecar, root),
-                "annotation_id": issue.annotation_id,
-                "source": issue.source,
-                "kind": issue.kind,
-                "exact_preview": issue.exact_preview,
-            }
-            for issue in report.issues
-        ]
-    click.echo(json.dumps(payload, indent=2))
 
 
 def _relpath(path: Path, root: Path) -> str:
@@ -1609,10 +1583,12 @@ def audit_cmd(
         if report.rows_written:
             summary["files_with_writes"] += 1
 
-    if fmt == "json":
-        click.echo(json.dumps({"summary": summary, "files": file_reports}, indent=2))
-    else:
-        _emit_audit_table(summary, file_reports, dry_run=dry_run)
+    payload = {"summary": summary, "files": file_reports}
+    emit(
+        output_format=fmt,
+        payload=payload,
+        render_text=lambda: _emit_audit_table(summary, file_reports, dry_run=dry_run),
+    )
 
 
 def _collect_audit_markdown_files(root: Path) -> list[Path]:
@@ -1754,20 +1730,15 @@ def lift_tokens_cmd(
             }
         )
 
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {"summary": summary, "files": file_reports},
-                indent=2,
-            )
-        )
-    else:
+    def _render() -> None:
         click.echo(
             f"lift-tokens: {summary['rows_written']} row(s) written, "
             f"{summary['tokens_removed']} token(s) removed, "
             f"{summary['duplicates_skipped']} duplicate(s) skipped, "
             f"{summary['files_with_writes']} file(s) modified."
         )
+
+    emit(output_format=fmt, payload={"summary": summary, "files": file_reports}, render_text=_render)
 
 
 def _collect_lift_markdown_files(root: Path) -> list[Path]:
@@ -2022,10 +1993,39 @@ def list_cmd(
         )
     )
 
-    if fmt == "json":
-        _emit_list_json(rows, effective_root, len(sidecars))
-    else:
-        _emit_list_table(rows, effective_root, len(sidecars))
+    sidecar_count = len(sidecars)
+    items = []
+    for sidecar_path, ann in rows:
+        sel = ann.target.selector
+        items.append(
+            {
+                "id": ann.id,
+                "qualified_id": f"{query.entity_relpath_for_sidecar(sidecar_path, effective_root)}:{ann.id}",
+                "status": ann.status.value,
+                "source": ann.source,
+                "annotation_type": ann.annotation_type,
+                "exact_preview": ann.target.selector.exact[:60],
+                "selector": {
+                    "exact": sel.exact,
+                    "prefix": sel.prefix,
+                    "suffix": sel.suffix,
+                },
+                "bodies": [_body_json(b) for b in ann.bodies],
+            }
+        )
+    payload = {
+        "summary": {
+            "total_annotations": len(rows),
+            "total_sidecars": sidecar_count,
+        },
+        "annotations": items,
+    }
+
+    emit(
+        output_format=fmt,
+        payload=payload,
+        render_text=lambda: _emit_list_table(rows, effective_root, sidecar_count),
+    )
 
 
 def _emit_list_table(
@@ -2043,44 +2043,6 @@ def _emit_list_table(
             preview = preview[:60] + "…"
         click.echo(f"  {qualified}  {ann.status.value:<10}  {ann.source}  {ann.annotation_type}  {preview!r}")
     click.echo(f"\nannotate list: {len(rows)} annotation(s) across {sidecar_count} sidecar(s)")
-
-
-def _emit_list_json(
-    rows: list[tuple[Path, Annotation]],
-    root: Path,
-    sidecar_count: int,
-) -> None:
-    items = []
-    for sidecar_path, ann in rows:
-        sel = ann.target.selector
-        items.append(
-            {
-                "id": ann.id,
-                "qualified_id": f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}",
-                "status": ann.status.value,
-                "source": ann.source,
-                "annotation_type": ann.annotation_type,
-                "exact_preview": ann.target.selector.exact[:60],
-                "selector": {
-                    "exact": sel.exact,
-                    "prefix": sel.prefix,
-                    "suffix": sel.suffix,
-                },
-                "bodies": [_body_json(b) for b in ann.bodies],
-            }
-        )
-    click.echo(
-        json.dumps(
-            {
-                "summary": {
-                    "total_annotations": len(rows),
-                    "total_sidecars": sidecar_count,
-                },
-                "annotations": items,
-            },
-            indent=2,
-        )
-    )
 
 
 def _body_json(body: Body) -> dict[str, str]:
@@ -2249,37 +2211,36 @@ def stats_cmd(root_path: Path | None, fmt: str) -> None:
     except query.SidecarParseError as exc:
         raise click.ClickException(str(exc)) from exc
     report = query.compute_stats(sidecars)
-    if fmt == "json":
+    payload = {
+        "summary": {
+            "total_annotations": report.total_annotations,
+            "total_sidecars": report.total_sidecars,
+        },
+        "by_status": {k.value: v for k, v in report.by_status.items()},
+        "by_source": dict(report.by_source),
+        "by_type": dict(report.by_type),
+    }
+
+    def _render() -> None:
         click.echo(
-            json.dumps(
-                {
-                    "summary": {
-                        "total_annotations": report.total_annotations,
-                        "total_sidecars": report.total_sidecars,
-                    },
-                    "by_status": {k.value: v for k, v in report.by_status.items()},
-                    "by_source": dict(report.by_source),
-                    "by_type": dict(report.by_type),
-                },
-                indent=2,
-            )
+            f"annotate stats: {report.total_annotations} annotation(s) across {report.total_sidecars} sidecar(s)\n"
         )
-        return
-    click.echo(f"annotate stats: {report.total_annotations} annotation(s) across {report.total_sidecars} sidecar(s)\n")
-    if report.by_status:
-        click.echo("By status:")
-        for status, count in report.by_status.items():
-            click.echo(f"  {status.value:<12} {count}")
-        click.echo()
-    if report.by_source:
-        click.echo("By source:")
-        for source, count in report.by_source.items():
-            click.echo(f"  {source:<40} {count}")
-        click.echo()
-    if report.by_type:
-        click.echo("By type:")
-        for type_, count in report.by_type.items():
-            click.echo(f"  {type_:<24} {count}")
+        if report.by_status:
+            click.echo("By status:")
+            for status, count in report.by_status.items():
+                click.echo(f"  {status.value:<12} {count}")
+            click.echo()
+        if report.by_source:
+            click.echo("By source:")
+            for source, count in report.by_source.items():
+                click.echo(f"  {source:<40} {count}")
+            click.echo()
+        if report.by_type:
+            click.echo("By type:")
+            for type_, count in report.by_type.items():
+                click.echo(f"  {type_:<24} {count}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("pubtator")
@@ -2412,7 +2373,12 @@ def extract_cmd(
             changed = check_source_changed(source_md=source_md, model=model)
         except SourceTextError as exc:
             raise click.ClickException(str(exc)) from exc
-        click.echo(json.dumps({"status": "changed" if changed else "unchanged"}))
+        emit(
+            output_format="json",
+            payload={"status": "changed" if changed else "unchanged"},
+            render_text=lambda: None,
+            indent=None,
+        )
         return
 
     if input_path is None:
@@ -2442,20 +2408,15 @@ def extract_cmd(
     except SourceTextError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {
-                    "written": report.written,
-                    "skipped": report.skipped,
-                    "grounding_dropped": report.grounding_dropped,
-                    "source_text_hash_recorded": report.source_text_hash_recorded,
-                    "note": report.note,
-                },
-                indent=2,
-            )
-        )
-    else:
+    payload = {
+        "written": report.written,
+        "skipped": report.skipped,
+        "grounding_dropped": report.grounding_dropped,
+        "source_text_hash_recorded": report.source_text_hash_recorded,
+        "note": report.note,
+    }
+
+    def _render() -> None:
         skips = ", ".join(f"{k}:{v}" for k, v in sorted(report.skipped.items())) or "none"
         click.echo(
             f"annotate extract: {report.written} annotation(s) written, "
@@ -2465,6 +2426,8 @@ def extract_cmd(
         )
         if report.note:
             click.echo(report.note)
+
+    emit(output_format=fmt, payload=payload, render_text=_render)
 
 
 @annotate_group.command("promote")
@@ -2572,35 +2535,40 @@ def promote_cmd(
     ]
 
     if not do_apply:
-        if fmt == "json":
-            click.echo(json.dumps({"candidates": rows, "skipped": dict(skipped)}, indent=2))
-        else:
+
+        def _render_plan() -> None:
             for r in rows:
                 click.echo(f"{r['kind']:11} {r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
             click.echo(f"skipped: {dict(skipped) or 'none'}")
+
+        emit(
+            output_format=fmt,
+            payload={"candidates": rows, "skipped": dict(skipped)},
+            render_text=_render_plan,
+        )
         return
 
     try:
         report = apply_candidates(candidates, sidecar_path=sidecar_path, project_root=project_root, paper_ref=paper_ref)
     except PromotionApplyError as exc:
         raise click.ClickException(str(exc)) from exc
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {
-                    "minted": report.minted,
-                    "linked": report.linked,
-                    "skipped": dict(report.skipped) | dict(skipped),
-                    "written": report.written_paths,
-                },
-                indent=2,
-            )
-        )
-    else:
+
+    def _render_apply() -> None:
         click.echo(
             f"annotate promote: {report.minted} minted, {report.linked} linked, "
             f"skipped {dict(report.skipped) | dict(skipped)}"
         )
+
+    emit(
+        output_format=fmt,
+        payload={
+            "minted": report.minted,
+            "linked": report.linked,
+            "skipped": dict(report.skipped) | dict(skipped),
+            "written": report.written_paths,
+        },
+        render_text=_render_apply,
+    )
 
 
 @annotate_group.command("synthesize")
@@ -2667,12 +2635,13 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_pat
     if not do_apply:
         file_text = source_md.read_text(encoding="utf-8")
         scaffold, unresolved = build_scaffold(sidecar, file_text, current, ref_for=ref_for)
-        if fmt == "json":
-            click.echo(json.dumps(scaffold, indent=2))
-        else:
+
+        def _render_scaffold() -> None:
             for e in scaffold["propositions"]:
                 click.echo(f"{e['proposition']:50} statements={len(e['statements'])} hints={len(e['relation_hints'])}")
             click.echo(f"unresolved relation hints: {unresolved}")
+
+        emit(output_format=fmt, payload=scaffold, render_text=_render_scaffold)
         return
 
     assert input_path is not None
@@ -2691,11 +2660,10 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_pat
     except SynthesisApplyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if fmt == "json":
-        click.echo(
-            json.dumps(
-                {"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths}, indent=2
-            )
-        )
-    else:
-        click.echo(f"annotate synthesize: {report.updated} updated, skipped {dict(report.skipped) or 'none'}")
+    emit(
+        output_format=fmt,
+        payload={"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths},
+        render_text=lambda: click.echo(
+            f"annotate synthesize: {report.updated} updated, skipped {dict(report.skipped) or 'none'}"
+        ),
+    )
