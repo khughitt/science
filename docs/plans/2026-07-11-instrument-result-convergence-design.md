@@ -2,10 +2,40 @@
 
 ## Status
 
-Decision-ready. Cross-cutting ruling extracted from the 2026-07-11 downstream
-feedback triage (50 open entries). Names its canonical type, its migration, and
-its guard, in the shape of
+**Implemented** on branch `instrument-result-convergence`. Cross-cutting ruling
+extracted from the 2026-07-11 downstream feedback triage (50 open entries). Names
+its canonical type, its migration, and its guard, in the shape of
 [`2026-07-10-half-applied-pattern-convergence-design.md`](2026-07-10-half-applied-pattern-convergence-design.md).
+
+The guard (`science/tests/test_instrument_boundary.py`) seeded **46** violations across
+10 modules — generated, not transcribed. 38 migrated; 8 ruled pure helpers
+(`_NOT_INSTRUMENTS`, one justification each); `_ALLOWLIST` and `_DEFERRED_INSTRUMENTS`
+are both **empty**, and `test_migration_is_complete` locks them there. The triage is
+[`2026-07-11-instrument-triage.md`](2026-07-11-instrument-triage.md).
+
+**What the migration found that this design did not predict.** Three instruments did
+something strictly worse than returning a silent empty — they **fabricated a finding**:
+
+- `query_gaps` returned one confident `structural_fragility(low_connectivity,degree=0)`
+  row about an entity **that does not exist**.
+- `query_evidence` reported that a typo'd target had **no supporting or disputing
+  evidence** — an affirmative claim about the literature, manufactured from a misspelling.
+- `validate_inquiry_dataset` passed *every* structural check over a brand-new empty
+  `Graph()`. A broken inquiry validated **green** because the validator was looking at
+  nothing.
+
+All three trace to one root cause: `_resolve_center_entity` mints a URIRef from any
+string **without ever consulting the graph** — it takes no graph argument, so it *cannot*
+check existence. `entity_in_graph()` now guards the resolution site. A withheld finding
+is bad; an invented one is worse, and the design's framing ("an empty result that should
+have been a failure") was too narrow to describe it.
+
+**Two carve-outs remain open, both deliberate and both recorded:** the attention scoring
+model (fb-2026-07-10-023 — the `days_since_last_review` term is multiplicative and
+therefore currently inert; the naive repair would make unstamped entities dominate) and
+the `curate/inventory.py` payload divergence (fb-2026-07-10-017 — `collect_inventory`
+returns a Pydantic model with no status field, so the bare-collection detector cannot see
+it *at all*). Neither is a shape problem this type can fix.
 
 Blocks two other planned specs (big-picture run integrity; curate + transient
 placement), both of which would otherwise invent a local status-surface
@@ -399,6 +429,33 @@ This one has a downstream consequence that links it to the big-picture spec:
 partial). The silent drop directly produces a wrong `thin` rating, which is what
 subjects every MM30 hypothesis to the 150-word Arc cap in `fb-2026-07-11-015`.
 **Fixing this shrinks that item.**
+
+> **NOT BUILT — and the reason is a finding, not an excuse.** The defect is REAL and
+> confirmed empirically: an authored `supersedes:` on a hypothesis is silently dropped by
+> `load_project_sources` (the loader maps frontmatter with hand-written `fm.get("...")`
+> calls, so a key nobody calls `fm.get` on is never read — Pydantic never sees it, and
+> `extra="forbid"` would not catch it). The key parses, validates, and vanishes.
+>
+> But the lint this section proposes — *"a frontmatter field that materializes nothing is
+> an error"* — **cannot be built as a flat key vocabulary**, and two implementations were
+> written and measured before that became clear:
+>
+> - **Derived from the entity loader only** (`science_model/frontmatter.py`): flags
+>   `provenance_coverage`, `report_kind`, `generated_at`, `hypothesis`, … — ~40 real
+>   entities in `meta/` alone. These keys ARE consumed, just by *other* modules
+>   (`big_picture/validator.py` reads `provenance_coverage` straight from the file). A
+>   lint that cries wolf gets turned off, and then it is worth nothing.
+> - **Derived tree-wide** (every `.get("k")`/`["k"]` in both source trees): legitimizes
+>   `supersedes` itself, because **`qa_audit/runs.py:47` genuinely reads
+>   `fm.get("supersedes")`** — for QA-audit *run* entities. The lint stops flagging the
+>   very bug it exists for.
+>
+> The key is therefore **live on one kind and dead on another**. A correct lint must be
+> **kind-aware**, which means a per-kind authored-key vocabulary — and that is exactly what
+> the Kind Descriptor keystone (`EntityKind`/`CORE_PROFILE` as the sole per-kind SSOT)
+> exists to provide. This belongs there, not here. Shipping a flat lint would mean choosing
+> between false positives and false negatives, and both were demonstrated rather than
+> guessed at.
 
 ## Sequencing
 

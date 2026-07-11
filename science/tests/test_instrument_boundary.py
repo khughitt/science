@@ -194,3 +194,27 @@ def test_sets_are_disjoint() -> None:
         (_NOT_INSTRUMENTS, _DEFERRED_INSTRUMENTS, "_NOT_INSTRUMENTS/_DEFERRED_INSTRUMENTS"),
     ):
         assert not (a & b), f"{names} overlap: {sorted(a & b)}"
+
+
+def test_migration_is_complete() -> None:
+    """The migration is complete. A new entry in EITHER set is a regression.
+
+    Per the convergence design: an allowlist entry the guard would still flag means the
+    migration is incomplete -- NOT a carve-out to add.
+
+    _DEFERRED_INSTRUMENTS is asserted empty for the same reason, and it is the more
+    important of the two: a deferred entry is a KNOWN instrument that still lies to its
+    callers. Draining _ALLOWLIST while _DEFERRED_INSTRUMENTS quietly held one would let
+    this guard certify a completion it did not earn -- which is precisely the failure the
+    whole design exists to stop, committed by the mechanism built to prevent it.
+    """
+    assert _ALLOWLIST == frozenset(), (
+        "The instrument-result migration is finished. Do not re-open the allowlist; "
+        "migrate the helper instead."
+    )
+    assert _DEFERRED_INSTRUMENTS == frozenset(), (
+        "A known instrument is still unmigrated. This test is the intended blocker: either "
+        "migrate it, or amend the design's completion criteria to bless the carve-out "
+        "explicitly. Moving it to _NOT_INSTRUMENTS is NOT the fix -- that set means 'cannot "
+        "be unwired', which would be a false claim about this helper."
+    )
