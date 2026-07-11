@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 from pathlib import Path
 from time import perf_counter
-from typing import Callable, NotRequired, TypedDict, TypeVar, cast
+from typing import NotRequired, TypedDict, cast
 
 import yaml as _yaml
 from science_model.contracts.inventory_common import InventoryWarning
@@ -27,6 +25,15 @@ from science_tool.data_root import project_config_path
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
+from science_tool.graph.health_checks.base import (
+    IDENTITY_REFERENCE_FIELDS,
+    NO_ENTITIES_REASON,
+    PROJECT_SOURCES_EMPTY,
+    HealthCheck,
+    HealthContext,
+    HealthTiming,
+    context_sources,
+)
 from science_tool.graph.migrate import (
     LayeredClaimMigrationReport,
     audit_project_sources,
@@ -42,13 +49,6 @@ from science_tool.graph.sources import (
 )
 from science_tool.instruments import InstrumentResult
 
-#: An unscannable project does not raise — ``load_project_sources`` simply returns zero
-#: entities, and every entity-driven check then "finds" nothing. That is the silent
-#: instrument this code exists to stop, so the three checks that walk ``sources.entities``
-#: share one precondition and one code.
-_PROJECT_SOURCES_EMPTY = "project_sources_empty"
-_NO_ENTITIES_REASON = "project sources loaded zero entities; nothing was scanned"
-
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_consumed_but_unverified",
     "dataset_stale_review",
@@ -62,8 +62,6 @@ DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_verified_but_unstageable",
     "dataset_research_package_asymmetric",
 )
-
-_T = TypeVar("_T")
 
 
 class UnresolvedRef(TypedDict):
@@ -122,7 +120,7 @@ def collect_unresolved_refs(
     if sources is None:
         sources = load_project_sources(project_root.resolve(), strict_identity=False)
     if not sources.entities:
-        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
+        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
     rows, _ = audit_project_sources(sources)
 
     # Group fail rows by target
@@ -162,14 +160,14 @@ def collect_unregistered_ref_kinds(
     if sources is None:
         sources = load_project_sources(project_root.resolve())
     if not sources.entities:
-        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
+        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
     external = external_prefixes(sources.ontology_catalogs)
     peer_ids = sources.peer_ids
     grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
 
     for entity in sources.entities:
         source_path = entity.file_path
-        for field in _IDENTITY_REFERENCE_FIELDS:
+        for field in IDENTITY_REFERENCE_FIELDS:
             for raw in _string_refs(getattr(entity, field, None)):
                 if (
                     ":" not in raw
@@ -414,49 +412,9 @@ class HealthReport(TypedDict):
     _meta: NotRequired["HealthMeta"]
 
 
-class HealthTiming(TypedDict):
-    name: str
-    duration_seconds: float
-
-
 class HealthMeta(TypedDict):
     timings: list[HealthTiming]
     total_duration_seconds: float
-
-
-@dataclass
-class HealthContext:
-    project_root: Path
-    collect_timings: bool = False
-    sources: ProjectSources | None = None
-    selected_checks: tuple[HealthCheck, ...] = ()
-    timings: list[HealthTiming] = dataclass_field(default_factory=list)
-
-    def run(self, name: str, fn: Callable[[], _T]) -> _T:
-        started = perf_counter()
-        result = fn()
-        if self.collect_timings:
-            self.timings.append(
-                {
-                    "name": name,
-                    "duration_seconds": perf_counter() - started,
-                }
-            )
-        return result
-
-
-@dataclass(frozen=True)
-class HealthCheck:
-    name: str
-    description: str
-    requires_sources: bool
-    run: Callable[[HealthContext], object]
-
-
-def _context_sources(context: HealthContext) -> ProjectSources:
-    if context.sources is None:
-        raise RuntimeError("health check requires loaded project sources")
-    return context.sources
 
 
 def _run_health_checks(context: HealthContext) -> dict[str, object]:
@@ -503,7 +461,7 @@ def _entity_identity_finding(warning: InventoryWarning) -> EntityIdentityFinding
 
 
 def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFinding]:
-    sources = _context_sources(context)
+    sources = context_sources(context)
     return [
         _entity_identity_finding(warning)
         for warning in collect_identity_warnings(context.project_root, sources=sources)
@@ -790,7 +748,7 @@ def build_health_report(
     entity_identity = cast("list[EntityIdentityFinding]", check_results.get("entity_identity", []))
     layered_claims_enabled = "layered_claim_migration" in {check.name for check in selected_checks}
     proposition_entities = (
-        [entity for entity in _context_sources(context).entities if entity.kind == "proposition"]
+        [entity for entity in context_sources(context).entities if entity.kind == "proposition"]
         if layered_claims_enabled
         else []
     )
@@ -1194,15 +1152,6 @@ _IDENTITY_REQUIRED_KINDS = frozenset(
     }
 )
 _TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
-_IDENTITY_REFERENCE_FIELDS = (
-    "related",
-    "commits_to",
-    "source_refs",
-    "evidence_refs",
-    "same_as",
-    "blocked_by",
-    "consumed_by",
-)
 _BIBLIOGRAPHY_REFERENCE_FIELDS = frozenset({"source_refs", "evidence_refs"})
 
 
@@ -1234,7 +1183,7 @@ def collect_identity_policy_findings(
     if sources is None:
         sources = load_project_sources(project_root.resolve())
     if not sources.entities:
-        return InstrumentResult.unwired(code=_PROJECT_SOURCES_EMPTY, reason=_NO_ENTITIES_REASON)
+        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
     findings: list[IdentityPolicyFinding] = []
 
     primary_claims: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -1333,7 +1282,7 @@ def _collect_entity_identity_findings(
     for deprecated_id in [str(item) for item in getattr(entity, "deprecated_ids", []) if isinstance(item, str)]:
         deprecated_to_canonical[deprecated_id] = canonical_id
 
-    for field_name in _IDENTITY_REFERENCE_FIELDS:
+    for field_name in IDENTITY_REFERENCE_FIELDS:
         refs = getattr(entity, field_name, None)
         if not isinstance(refs, list):
             continue
@@ -1899,7 +1848,7 @@ def _cross_paper_empty_state(summary: dict[str, object]) -> str:
 def _collect_cross_paper_evidence(context: HealthContext) -> CrossPaperEvidenceHealthReport:
     report = build_cross_paper_evidence_report(
         context.project_root,
-        proposition_source_refs=proposition_source_refs_map(_context_sources(context).entities),
+        proposition_source_refs=proposition_source_refs_map(context_sources(context).entities),
     )
     summary = cast("dict[str, object]", report["summary"])
     findings: list[CrossPaperEvidenceFinding] = [
@@ -2032,7 +1981,7 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         name="identity_policy",
         description="Validate entity identity policy and relation endpoint disambiguation.",
         requires_sources=True,
-        run=lambda context: collect_identity_policy_findings(context.project_root, sources=_context_sources(context)),
+        run=lambda context: collect_identity_policy_findings(context.project_root, sources=context_sources(context)),
     ),
     HealthCheck(
         name="entity_identity",
@@ -2045,7 +1994,7 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Report layered-claim adoption gaps and migration issues.",
         requires_sources=True,
         run=lambda context: build_layered_claim_migration_report(
-            context.project_root, sources=_context_sources(context)
+            context.project_root, sources=context_sources(context)
         ),
     ),
     HealthCheck(
@@ -2094,13 +2043,13 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         name="unresolved_refs",
         description="Find project references that do not resolve to known entities.",
         requires_sources=True,
-        run=lambda context: collect_unresolved_refs(context.project_root, sources=_context_sources(context)),
+        run=lambda context: collect_unresolved_refs(context.project_root, sources=context_sources(context)),
     ),
     HealthCheck(
         name="unregistered_ref_kinds",
         description="Find identity refs whose prefix is not a registered entity kind.",
         requires_sources=True,
-        run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=_context_sources(context)),
+        run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=context_sources(context)),
     ),
     HealthCheck(
         name="lingering_tags",
