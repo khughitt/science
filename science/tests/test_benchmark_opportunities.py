@@ -6527,3 +6527,12 @@ benchmark:
         {"benchmark_id": "dataset:ready", "count": 2, "share": 1.0}
     ]
     assert payload["aggregate"]["fallback_concentration_warning"] is True
+
+
+def test_review_path_default_is_stable(tmp_path):
+    from datetime import date
+
+    from science_tool.benchmark_opportunities import default_test_triage_review_path
+
+    p = default_test_triage_review_path(tmp_path, date(2026, 1, 2))
+    assert p.parent == tmp_path or tmp_path in p.parents

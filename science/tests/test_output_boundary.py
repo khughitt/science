@@ -103,12 +103,13 @@ _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
     ("src/science_tool/datasets_identity.py", "_stamp_datapackage"): (
         "stderr-only warning echoes; dumps serializes a datapackage descriptor to disk (atomic file write)"
     ),
-    # NOTE: keyed by bare function name, so this exempts ANY cli.py closure named
-    # `_render` that pairs an emission with a `dumps`. Today only these two qualify
-    # (of 22 `_render` closures in cli.py, only these contain a dumps at all). If
-    # Phase 4's CLI extraction adds more `_render` closures, re-audit — a future
-    # real emitter named `_render` would silently inherit this entry.
-    ("src/science_tool/cli.py", "_render"): (
+    # NOTE: keyed by bare function name, so this exempts ANY benchmark_cli.py closure
+    # named `_render` that pairs an emission with a `dumps`. Today only these two
+    # qualify (of the `_render` closures in benchmark_cli.py, only these contain a
+    # dumps at all — moved here from cli.py by Phase 4's `benchmark` group
+    # extraction). If a future extraction adds more `_render` closures, re-audit —
+    # a future real emitter named `_render` would silently inherit this entry.
+    ("src/science_tool/benchmark_cli.py", "_render"): (
         "render_text closures for `benchmark-opportunities` and `benchmark-gaps`: dumps only stringifies a "
         "scalar/list value for a Rich table cell (compact JSON display of a composite value), not a payload "
         "emission; the actual output line is Console(...).print(table) / a stderr-adjacent click.echo fallback"
