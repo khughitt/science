@@ -245,13 +245,21 @@ git commit -m "feat(instruments): add InstrumentResult with an enforced status i
 
 **Interfaces:**
 - Consumes: `INSTRUMENT_MODULES` from Task 1.
-- Produces: `_ALLOWLIST: frozenset[tuple[str, str]]` of `(module_relpath, function_name)` pairs, which Tasks 3–10 remove entries from. When it is empty, the migration is done.
+- Produces: `_ALLOWLIST: frozenset[tuple[str, str]]` — un-migrated **instruments**, drained to empty by Tasks 3–10. And `_NOT_INSTRUMENTS: frozenset[tuple[str, str]]` — pure/total helpers in the namespace that **cannot be unwired** and must never be wrapped (design non-goals). Permanent, one justification each.
 
-**Why an allowlist and not a big-bang:** ~30 helpers cannot migrate in one reviewable commit. The ratchet blocks *new* violations immediately while the existing set drains. Per the convergence design: an allowlist entry the guard would still flag means the migration is incomplete — **not** a carve-out to add.
+**Why an allowlist and not a big-bang:** the helpers cannot migrate in one reviewable commit. The ratchet blocks *new* violations immediately while the existing set drains. Per the convergence design: an allowlist entry the guard would still flag means the migration is incomplete — **not** a carve-out to add.
 
-- [ ] **Step 1: Write the guard**
+> **DO NOT HAND-WRITE THE ALLOWLIST.** The design's central lesson (its line 189)
+> is: *"Do not migrate from this list. Regenerate the set with that structural query
+> at implementation time."* A hand-transcribed seed in an earlier draft of this plan
+> was wrong by more than 2× (it listed 24 entries; the tree has 49) and silently
+> omitted whole helpers, which would have let the allowlist "empty out" while real
+> violations remained. **Generate it. Step 1 below is the generation step.**
 
-This test is *both* the guard and the migration query. It fails on any un-migrated, un-allowlisted helper.
+- [ ] **Step 1: Write the guard with an EMPTY allowlist, then generate the seed**
+
+Write the guard file exactly as below, leaving `_ALLOWLIST` and `_NOT_INSTRUMENTS`
+empty. The test will fail, listing every violation — **that output is the seed.**
 
 ```python
 # science/tests/test_instrument_boundary.py
@@ -285,36 +293,16 @@ from science_tool.instruments import INSTRUMENT_MODULES
 
 _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 
-# (module_relpath, function_name) pairs not yet migrated.
-# DRAIN THIS TO EMPTY. Do not add to it.
-_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("big_picture/knowledge_gaps.py", "compute_topic_gaps"),
-        ("big_picture/validator.py", "count_research_orphans"),
-        ("graph/health.py", "collect_unresolved_refs"),
-        ("graph/health.py", "collect_unregistered_ref_kinds"),
-        ("graph/health.py", "collect_lingering_tags"),
-        ("graph/health.py", "collect_validation_findings"),
-        ("graph/attention.py", "compute_attention_candidates"),
-        ("graph/attention.py", "query_attention_sample"),
-        ("graph/attention.py", "query_attention_ranked"),
-        ("graph/store/summary.py", "query_dashboard_summary"),
-        ("graph/store/summary.py", "query_neighborhood_summary"),
-        ("graph/store/summary.py", "query_question_summary"),
-        ("graph/store/summary.py", "query_inquiry_summary"),
-        ("graph/store/summary.py", "query_gaps"),
-        ("graph/store/queries.py", "query_neighborhood"),
-        ("graph/store/queries.py", "query_claims"),
-        ("graph/store/queries.py", "query_evidence"),
-        ("graph/store/inquiry.py", "list_inquiries"),
-        ("graph/store/inquiry.py", "list_inquiries_dataset"),
-        ("graph/store/validation.py", "query_predicates"),
-        ("graph/store/validation.py", "diff_graph_inputs"),
-        ("graph/store/validation.py", "diff_graph_inputs_dataset"),
-        ("benchmark_catalog.py", "list_benchmarks"),
-        ("datasets_catalog.py", "list_datasets"),
-    }
-)
+# Un-migrated INSTRUMENTS. DRAIN THIS TO EMPTY. Do not add to it.
+# GENERATED in Step 2 -- do not hand-write.
+_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
+
+# Pure/total helpers that live in the namespace but are NOT instruments: they
+# cannot fail to run, so a status surface would be ceremony without safety (see
+# the design's Non-goals). PERMANENT. Every entry carries a justification.
+# An entry here is a claim that the function cannot be unwired. If that is false,
+# the entry is a bug, not a carve-out.
+_NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset()
 
 _BARE_COLLECTIONS = {"list", "dict", "int", "set"}
 
@@ -356,16 +344,22 @@ def _violations(module_rel: str) -> list[str]:
     return bad
 
 
+def _known(module_rel: str, fn: str) -> bool:
+    return (module_rel, fn) in _ALLOWLIST or (module_rel, fn) in _NOT_INSTRUMENTS
+
+
 def test_instrument_namespace_returns_instrument_result() -> None:
     offenders: list[str] = []
     for module_rel in INSTRUMENT_MODULES:
         for fn in _violations(module_rel):
-            if (module_rel, fn) not in _ALLOWLIST:
-                offenders.append(f"{module_rel}::{fn}")
+            if not _known(module_rel, fn):
+                offenders.append(f'        ("{module_rel}", "{fn}"),')
     assert not offenders, (
-        "These instrument helpers return a bare collection. They must return "
-        "InstrumentResult[...] — an empty list cannot say whether the instrument "
-        "ran:\n  " + "\n  ".join(sorted(offenders))
+        "These namespace helpers return a bare collection. Each is EITHER an\n"
+        "instrument (-> migrate it to InstrumentResult, or park it in _ALLOWLIST)\n"
+        "OR a pure/total helper that cannot be unwired (-> _NOT_INSTRUMENTS, with a\n"
+        "justification). An empty list cannot say whether an instrument ran:\n"
+        + "\n".join(sorted(offenders))
     )
 
 
@@ -376,19 +370,26 @@ def test_allowlist_has_no_stale_entries() -> None:
     """
     stale = [
         f"{module_rel}::{fn}"
-        for (module_rel, fn) in _ALLOWLIST
+        for (module_rel, fn) in _ALLOWLIST | _NOT_INSTRUMENTS
         if fn not in _violations(module_rel)
     ]
     assert not stale, (
-        "These helpers are allowlisted but no longer violate the boundary. "
-        "Delete them from _ALLOWLIST:\n  " + "\n  ".join(sorted(stale))
+        "These helpers are listed but no longer violate the boundary. "
+        "Delete them:\n  " + "\n  ".join(sorted(stale))
     )
 ```
 
-- [ ] **Step 2: Run the guard — it must PASS (everything is allowlisted)**
+- [ ] **Step 2: GENERATE the seed — do not transcribe it**
 
 Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -v`
-Expected: PASS (2 passed). If `test_allowlist_has_no_stale_entries` fails, the allowlist above does not match reality — **fix the allowlist to match the code, do not weaken the test.**
+
+Expected: **FAIL**, with the assertion message printing every violation as a
+paste-ready `("module", "function"),` line. That output *is* the seed.
+
+Paste all of it into `_ALLOWLIST`. Re-run; the guard now passes. (At the time of
+writing the tree yields **49** violations across the 11 modules — but do not trust
+that number: use whatever the guard prints, since it is generated from the code and
+this plan is not.)
 
 - [ ] **Step 3: Prove the ratchet bites**
 
@@ -408,6 +409,58 @@ Then **delete the probe** and re-run. Expected: PASS.
 ```bash
 git add science/tests/test_instrument_boundary.py
 git commit -m "test(instruments): ratchet guard for the instrument-result boundary"
+```
+
+---
+
+### Task 2b: Triage the seed — instrument vs. pure helper
+
+**Files:**
+- Modify: `science/tests/test_instrument_boundary.py` (`_ALLOWLIST` → `_NOT_INSTRUMENTS` moves)
+- Create: `docs/plans/2026-07-11-instrument-triage.md` (the classification, with one justification per non-instrument)
+
+**This is the intellectual core of the migration and it is deliberately its own task.** The generated seed conflates two very different things:
+
+- **Instruments** — a helper whose empty return renders to a user as a finding. `query_gaps`, `collect_unresolved_refs`, `diff_graph_inputs`, `query_predicates`. These **migrate**.
+- **Pure/total helpers** — cannot fail to run; an empty return means the input was empty, full stop. `weighted_sample_without_replacement` (a sampling utility), `format_attention_candidate`, `format_show`. Wrapping these is *"ceremony without safety"* and it **dilutes what the guard means** — the design's non-goals forbid it explicitly.
+
+The `validate_*` family (`validate_graph`, `validate_inquiry`, `validate_synthesis_file`, `validate_empirical_run_resolution`) is the interesting middle. **They are instruments.** A validator that returns `[]` because it could not load the graph has not found zero problems — that is precisely this design's failure, wearing a different name. Classify them as instruments unless you can show the check cannot fail to run.
+
+- [ ] **Step 1: Classify every seeded entry**
+
+For each entry the guard printed, decide **instrument** or **not-instrument**, and write one line of justification. Record the table in `docs/plans/2026-07-11-instrument-triage.md`.
+
+The bar for **not-instrument** is high and specific: *there is no input whose absence would make an empty return meaningless.* "It probably always works" does not clear that bar. When in doubt, classify as an instrument — a needless `ok`/`empty` result is harmless; a missed `unwired` is the bug this whole design exists to stop.
+
+- [ ] **Step 2: Move the non-instruments**
+
+Move those entries from `_ALLOWLIST` to `_NOT_INSTRUMENTS`, each with its justification as a trailing comment:
+
+```python
+_NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # Pure sampling utility over a caller-supplied list. No I/O, no resolution
+        # step: an empty return means the caller passed an empty list.
+        ("graph/attention.py", "weighted_sample_without_replacement"),
+        # ... one justified entry per line
+    }
+)
+```
+
+- [ ] **Step 3: Confirm the guard still passes and the drain list is now real**
+
+Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -v`
+Expected: PASS. `_ALLOWLIST` now contains **only** things that genuinely must migrate — that set, not any number written in this plan, is the work Tasks 3–10 drain.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add science/tests/test_instrument_boundary.py docs/plans/2026-07-11-instrument-triage.md
+git commit -m "docs(instruments): triage the boundary seed into instruments vs pure helpers
+
+A pure sampling utility cannot be unwired; wrapping it is ceremony without safety
+and dilutes what the guard means. The validate_* family ARE instruments: a check
+that returned [] because it could not load the graph has not found zero problems."
 ```
 
 ---
@@ -432,7 +485,7 @@ git commit -m "test(instruments): ratchet guard for the instrument-result bounda
 | **No** question survives the aspect filter | `empty` — nothing was asked |
 | **Some** refs resolve, some do not | `ok`/`empty` **carrying** `code="partial_topic_resolution"` |
 
-Note the current code re-globs every question once per topic inside `_compute_demand` (O(topics × questions)). Hoisting the scan fixes the precondition and the quadratic scan together.
+**Scope note, stated precisely:** the current code re-globs every question once per topic inside `_compute_demand` (O(topics × questions)). The new `_scan_question_topic_refs` is hoisted and runs **once** — but `_compute_demand` is still called per-topic and still re-globs. **This task does not fix the quadratic scan**, and no step below should claim it does. Removing it means deriving per-topic demand from the single scan, which is a worthwhile follow-up but is *behavior-adjacent* and does not belong in a task whose job is the `unwired` precondition. Leave `_compute_demand` alone.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -791,9 +844,17 @@ In `commands/big-picture.md:206`, replace the `count_research_orphans(...)` refe
 - Compute via `list_research_orphans(resolved, project_root)` from `science_tool.big_picture.validator`. `orphan_question_count` is `len(result.rows)` and `orphan_ids` is `result.rows` — **the same call**, so the count and the ID list cannot disagree. The predicate excludes questions whose resolved aspects are only `[software-development]`. Do not re-derive either value by hand.
 ```
 
-- [ ] **Step 6: Verify nothing still references the deleted function**
+- [ ] **Step 6: Verify nothing still *references* the deleted function**
 
-Run: `cd science && grep -rn "count_research_orphans" src/ tests/ ../commands/ ../skills/ ../agents/`
+A bare `grep count_research_orphans` can never come back clean — it matches the
+deliberate-absence test `test_count_research_orphans_is_gone` written in Step 1.
+Grep for a **definition, call, or import**, not the bare name:
+
+Run:
+```bash
+cd science && grep -rnE "(def |import |\.)count_research_orphans|count_research_orphans\(" \
+  src/ tests/ ../commands/ ../skills/ ../agents/ | grep -v "test_count_research_orphans_is_gone"
+```
 Expected: **no matches.**
 
 - [ ] **Step 7: Drain the allowlist, full suite**
@@ -1277,14 +1338,19 @@ _NON_MATERIALIZING: dict[str, str] = {
 
 @Check(section="non-materializing frontmatter fields", order=23)
 def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
-    for entity in iter_entity_markdown(ctx.project_root):
-        fm = entity.frontmatter or {}
+    # API note: iter_entity_markdown(entities_root) yields PLAIN Paths -- it does not
+    # yield an object with .frontmatter/.path, and it takes the entities/ root, not
+    # the project root. Frontmatter comes from ctx.frontmatter(path). This mirrors
+    # origins.py:38-39 exactly; an earlier draft of this plan invented the other API.
+    entities_dir = ctx.project_root / "entities"
+    for path in iter_entity_markdown(entities_dir):
+        fm = ctx.frontmatter(path)
         for field, predicate in _NON_MATERIALIZING.items():
             if field not in fm:
                 continue
             yield Result(
                 Severity.ERROR,
-                entity.path,
+                path,
                 fm.get("id"),
                 (
                     f"top-level '{field}:' materializes no triples and is silently "
@@ -1298,11 +1364,6 @@ def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
 
 Register it: add `"materialization"` to `CANONICAL_CHECK_MODULES` in
 `science/src/science_tool/validate/checks/__init__.py`, after `"origins"`.
-
-> **Note for the implementer:** `iter_entity_markdown` and `ValidateContext`'s
-> attribute names must match the existing checks. Read
-> `science/src/science_tool/validate/checks/origins.py` first and mirror its exact
-> import and iteration form — do not invent an API.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1329,15 +1390,20 @@ no warning, and a wrong provenance_coverage rating downstream."
 
 ---
 
-### Task 7: Bulk migration — `graph/store/{summary,queries,inquiry}.py`
+### Task 7: Bulk migration — every remaining `graph/store/` instrument
 
 **Files:**
-- Modify: `science/src/science_tool/graph/store/summary.py` (8 helpers), `queries.py` (3), `inquiry.py` (2)
+- Modify: `science/src/science_tool/graph/store/{summary,queries,inquiry,validation}.py`
 - Modify: their CLI consumers and tests.
 
+**Scope: every `_ALLOWLIST` entry whose module starts with `graph/store/`.** Read the
+allowlist; do not work from a count in this plan. It includes `query_predicates` and
+the `validate_*` family in `validation.py` — Task 5 drained only the two
+`diff_graph_inputs*` entries, and everything else under `graph/store/` is this task's.
+
 **Interfaces:**
-- Consumes: `InstrumentResult` (Task 1).
-- Produces: each listed helper returns `InstrumentResult[dict[str, str]]`.
+- Consumes: `InstrumentResult` (Task 1), the triaged allowlist (Task 2b).
+- Produces: each migrated helper returns `InstrumentResult[<its existing row type>]`. **Row types are unchanged.**
 
 **Method.** These are graph read helpers over an rdflib `Dataset`. Each one's precondition is the same question: *can this instrument fail to run, as opposed to genuinely finding nothing?* For most, the honest answer is **no** — a query over a well-formed graph that matches nothing genuinely found nothing. Those use `InstrumentResult.from_rows(rows)` and are `ok`/`empty` only. **Do not invent an `unwired` state where none exists** — a spurious `unwired` is as dishonest as a spurious `empty`.
 
@@ -1369,9 +1435,11 @@ def test_query_gaps_unresolvable_center_is_unwired(tmp_path: Path) -> None:
 Run: `cd science && uv run --frozen pytest tests/test_query_gaps_contested.py -v`
 Expected: FAIL — `AttributeError: 'list' object has no attribute 'status'`
 
-- [ ] **Step 3: Migrate the thirteen helpers**
+- [ ] **Step 3: Migrate every `graph/store/` allowlist entry**
 
-For each of the 13, change the return annotation to `InstrumentResult[dict[str, str]]` and wrap the final `return rows` as `return InstrumentResult.from_rows(rows)`.
+For each, change the return annotation to `InstrumentResult[...]` and wrap the final `return rows` as `return InstrumentResult.from_rows(rows)`.
+
+The `validate_*` helpers migrate too, and they are the ones most likely to have a real `unwired` state — a validator that returns `[]` because it could not load or parse the graph has **not** found zero problems. Give each one a precondition.
 
 `query_gaps` (`summary.py:754`) additionally guards its center. `_resolve_center_entity` currently raises or returns a URI; make the non-resolution path explicit:
 
@@ -1412,7 +1480,9 @@ Expected: PASS
 
 - [ ] **Step 5: Drain the allowlist**
 
-Remove all 13 `graph/store/*` entries from `_ALLOWLIST` (leave `graph/health.py` and `graph/attention.py` — Tasks 8 and 9).
+Remove **every** `graph/store/*` entry from `_ALLOWLIST`. After this task no
+`graph/store/` entry may remain — `test_allowlist_has_no_stale_entries` will tell you
+if you missed one. (Leave `graph/health.py` and `graph/attention.py` — Tasks 8, 9.)
 
 - [ ] **Step 6: Full suite, lint, types**
 
@@ -1436,7 +1506,7 @@ only -- a spurious unwired is as dishonest as a spurious empty."
 ### Task 8: Bulk migration — `graph/health.py`
 
 **Files:**
-- Modify: `science/src/science_tool/graph/health.py` (10 `collect_*` helpers)
+- Modify: `science/src/science_tool/graph/health.py` — **every `_ALLOWLIST` entry for this module.** Read the allowlist; do not work from a count in this plan (an earlier draft said 10; the tree has more, including `list_health_checks` and `check_dataset_anomalies`).
 - Modify: their consumers (`science health` CLI) and tests.
 
 **Interfaces:**
@@ -1470,7 +1540,7 @@ The `science health` renderer must surface `unwired` distinctly — this is the 
 
 - [ ] **Step 5: Run tests, drain allowlist, full suite**
 
-Remove the four `graph/health.py` entries from `_ALLOWLIST`.
+Remove **every** `graph/health.py` entry from `_ALLOWLIST`. `test_allowlist_has_no_stale_entries` will tell you if you missed one.
 
 Run: `cd science && uv run --frozen pytest && uv run ruff check && uv run pyright`
 Expected: all pass.
@@ -1505,32 +1575,68 @@ A health check that could not scan its input has not found zero problems."
 > and has its own design. **This task migrates the return shape and nothing else.**
 > If you find yourself editing the `weight = (...)` expression, stop.
 
-- [ ] **Step 1: Migrate the three signatures**
+**This is NOT a final-return-only edit — it propagates.** `compute_attention_candidates` is consumed by `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, and `tests/test_wander_context.py`, all of which expect a `Sequence[AttentionCandidate]`. Wrapping the return **breaks every one of them**. Propagation semantics must be explicit.
 
-Change each return annotation to `InstrumentResult[...]` and wrap the final return in `InstrumentResult.from_rows(...)`. Leave every arithmetic expression byte-for-byte unchanged.
+- [ ] **Step 1: Map the consumers before editing anything**
 
-- [ ] **Step 2: Verify the scoring is untouched**
+Run: `cd science && grep -rn "compute_attention_candidates\|query_attention_sample\|query_attention_ranked" src/ tests/`
+
+Expected: hits in `graph/attention.py`, `wander/sampling.py`, `wander/cli.py`, `tests/test_attention_sampling.py`, `tests/test_wander_context.py`. Every one is in this task's blast radius.
+
+- [ ] **Step 2: Define the propagation rule**
+
+`compute_attention_candidates` returns `InstrumentResult[AttentionCandidate]`. Its two in-module consumers (`query_attention_sample`, `query_attention_ranked`) must **branch, not unwrap blindly**:
+
+```python
+def query_attention_sample(...) -> InstrumentResult[dict[str, Any]]:
+    candidates = compute_attention_candidates(...)
+    if candidates.status == "unwired":
+        # Propagate: a sample of an instrument that did not run is not a sample.
+        return InstrumentResult.unwired(code=candidates.code or "no_candidates",
+                                        reason=candidates.reason)
+    rows = _sample(candidates.rows, ...)          # <- .rows, never the result object
+    return InstrumentResult.from_rows(rows, code=candidates.code, reason=candidates.reason)
+```
+
+The same shape for `query_attention_ranked`. The rule: **`unwired` propagates; the caveat (`code`/`reason`) rides along; sampling and ranking always receive `.rows`.**
+
+Sampling/ranking helpers (`weighted_sample_without_replacement`, `reason_aware_sample_candidates`) keep taking `Sequence[AttentionCandidate]` — they are pure, and Task 2b should have classified them `_NOT_INSTRUMENTS`. **Do not wrap them.**
+
+- [ ] **Step 3: Update the `wander` consumers**
+
+`wander/sampling.py` and `wander/cli.py` call into these. Pass `.rows` at the boundary, and surface `unwired` in the wander CLI rather than presenting an empty walk as a completed one.
+
+- [ ] **Step 4: Verify the scoring is untouched**
 
 Run: `cd science && git diff src/science_tool/graph/attention.py | grep -E "^[+-].*(weight|days_since|multiplier|factor)"`
 Expected: **no output.** Any hit means the scope fence was crossed — revert those lines.
 
-- [ ] **Step 3: Update consumers, run tests**
+- [ ] **Step 5: Run tests**
 
-Run: `cd science && grep -rn "compute_attention_candidates\|query_attention_sample\|query_attention_ranked" src/ && uv run --frozen pytest -k attention -v`
-Expected: PASS
+Run: `cd science && uv run --frozen pytest -k "attention or wander" -v`
+Expected: PASS. `tests/test_attention_sampling.py` and `tests/test_wander_context.py` will need updating to `.rows` — that is expected, not a regression.
 
-- [ ] **Step 4: Drain allowlist, full suite, commit**
+- [ ] **Step 6: Drain allowlist, full suite, commit**
 
-Remove the three `graph/attention.py` entries from `_ALLOWLIST`.
+Remove every `graph/attention.py` entry from `_ALLOWLIST` that this task migrated (the pure helpers stay in `_NOT_INSTRUMENTS`).
 
 ```bash
 cd science && uv run --frozen pytest && uv run ruff check && uv run pyright
-git add science/src/science_tool/graph/attention.py science/tests/test_instrument_boundary.py
+git add science/src/science_tool/graph/attention.py \
+        science/src/science_tool/wander/sampling.py \
+        science/src/science_tool/wander/cli.py \
+        science/tests/test_attention_sampling.py \
+        science/tests/test_wander_context.py \
+        science/tests/test_instrument_boundary.py
 git commit -m "refactor(attention): migrate return shape to InstrumentResult
 
-Return shape only. The days_since_last_review scoring defect is a separate
-design (it is multiplicative, so the 365 constant is inert -- and the naive
-repair would make unstamped entities dominate the ranking)."
+Return shape only -- but it propagates: wander/sampling and wander/cli consume
+these candidates, so unwired now propagates through sampling instead of
+presenting an empty walk as a completed one.
+
+The days_since_last_review scoring defect is deliberately NOT fixed here. It is
+multiplicative, so the 365 constant is inert -- and the naive repair would make
+unstamped entities dominate the ranking. Separate design."
 ```
 
 ---
@@ -1563,7 +1669,7 @@ Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -v`
 
 - [ ] **Step 3: Drain the allowlist, run everything**
 
-Remove the two catalog entries from `_ALLOWLIST`. The allowlist should now be **empty** — replace it with `frozenset()`.
+Remove **every** remaining `_ALLOWLIST` entry for `benchmark_catalog.py` and `datasets_catalog.py`. `_ALLOWLIST` should now be **empty** — replace it with `frozenset()`. (`_NOT_INSTRUMENTS` remains populated and is permanent.) If anything is left, a prior task under-drained; find it, do not weaken the guard.
 
 Run: `cd science && uv run --frozen pytest && uv run ruff check && uv run pyright`
 Expected: all pass, with an empty allowlist.
@@ -1634,8 +1740,23 @@ git commit -m "test(instruments): lock the allowlist empty; the convergence is c
 
 **Spec coverage.** Design §1 (the type + enforced invariant) → Task 1. §1 renderer contract → Task 3 Step 5. §2 structural query → Task 2 (`INSTRUMENT_MODULES`, imported by the guard so the two cannot drift). §2 four-state precondition → Task 3. §2 partial-resolution caveat channel → Task 1 (`ok` may carry `reason`) + Task 3. §2 scalar counters prohibited → Task 4. §2 attention out-of-scope → Task 9's scope fence. §2 tuple precursors → Task 10. §3 guard + additive ratchet + known gaps → Task 2. §4 walk-side (graph diff, envelope, v1-as-unwired) → Task 5. §4 authoring-side (`supersedes:` lint) → Task 6. Bulk namespace → Tasks 7–10. Acceptance criteria → Task 11 Step 2.
 
-**APIs verified against the tree** (a first draft of this plan invented all four;
+**The list-vs-query lesson, learned the hard way.** The first draft of this plan
+hand-transcribed the guard's allowlist — 24 entries, against a tree that actually has
+49 — while the design doc it implements says, in as many words, *"Do not migrate from
+this list. Regenerate the set with that structural query at implementation time."*
+The transcription omitted whole helpers (`list_health_checks`, `query_predicates`,
+`query_coverage`, `query_uncertainty`, the entire `validate_*` family), which would
+have let the allowlist drain to empty while real violations remained — the guard
+reporting "done" without having checked. **That is the very failure this design
+exists to stop, committed inside the plan to fix it.** Task 2 Step 2 now *generates*
+the seed from the guard's own predicate, and no task quotes a count.
+
+**APIs verified against the tree** (a first draft of this plan invented all five;
 they are corrected above and listed so a reader can re-check them cheaply):
+
+- `iter_entity_markdown(entities_root)` yields **plain `Path` objects** and takes the
+  `entities/` root — not the project root, and not an object with `.frontmatter`/`.path`.
+  Frontmatter comes from `ctx.frontmatter(path)`. Mirror `origins.py:38-39`.
 
 - `ValidateContext.from_project_root(root, strict=False, verbose=False)` — it is a
   dataclass with six+ required fields, so `ValidateContext(project_root=...)` does
@@ -1651,10 +1772,14 @@ they are corrected above and listed so a reader can re-check them cheaply):
 
 **Known gaps in this plan, stated rather than hidden:**
 
-1. **Task 8's preconditions are not pre-written.** I did not enumerate the 10 `graph/health.py` helpers' individual preconditions, because determining them requires reading each one's body and the honest answer differs per helper. Step 1 of that task makes the enumeration the explicit first deliverable. This is the one place the plan hands real judgment to the implementer rather than pre-deciding it — by design, but worth knowing.
+1. **Preconditions are not pre-written, by design.** Neither Task 2b's instrument/pure-helper triage nor Task 8's per-helper preconditions are decided in this plan. Determining them requires reading each body, and the honest answer differs per helper. Those two tasks make the judgment the explicit first deliverable. This is where the plan hands real thinking to the implementer rather than pre-deciding it badly — which is exactly what a hand-transcribed list did in the first draft.
 
 2. **The renderer contract cannot be unit-tested.** `commands/big-picture.md` is prose executed by an LLM orchestrator. Task 3 Step 5 fixes the instruction, but nothing enforces that the orchestrator obeys it. The Python guarantees the *data* is honest; only review guarantees the *prose* is.
 
 3. **Task 5's blast radius is real.** The first graph rebuild in any consuming project stamps every entity file as `new_file` once (~2,600 in MM30). This is expected, not a bug — but it will look alarming, and any downstream project pinning a `graph.trig` snapshot in a test will need it regenerated.
 
 4. **Two feedback items in `INSTRUMENT_MODULES` are deliberately NOT fixed here** — `curate/inventory.py`'s payload divergence (fb-2026-07-10-017) and the attention scoring model (fb-2026-07-10-023). They are in the namespace so the guard covers their *shape*; their *behavior* belongs to other specs.
+
+5. **Task 9 propagates further than "attention".** `compute_attention_candidates` feeds `wander/sampling.py` and `wander/cli.py`. Wrapping its return breaks the `wander` command, so Task 9 owns those consumers and their tests. The scope fence is on the *scoring model*, not on the call graph — those are different things and conflating them would strand `wander` broken.
+
+6. **The quadratic scan in `compute_topic_gaps` is NOT fixed.** `_compute_demand` still re-globs every question once per topic. Task 3 hoists a separate single-pass scan for the precondition and leaves the existing demand loop alone. A first draft of this plan claimed the task removed the quadratic scan; it does not, and the claim has been withdrawn rather than the scope enlarged.
