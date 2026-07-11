@@ -2,9 +2,19 @@
 
 ## Status
 
-**Implemented** on branch `instrument-result-convergence`. Cross-cutting ruling
-extracted from the 2026-07-11 downstream feedback triage (50 open entries). Names
-its canonical type, its migration, and its guard, in the shape of
+**The `InstrumentResult` migration (Sequencing 1–4) is implemented** on branch
+`instrument-result-convergence`. **This design has been amended:** the materialization
+lint (`fb-2026-07-11-017`) was removed from its Sequencing and its acceptance set and
+moved to *Follow-on work*. That item is **open and its defect is live** — see the
+amendment note there for what was measured and why a flat lint cannot work.
+
+So: the core ruling shipped; the design's *original* scope did not. Both statements are
+true and neither is allowed to hide the other. It is not "Implemented" full stop, and
+saying so would be this design's own bug — a guard certifying a completion it did not
+earn.
+
+Cross-cutting ruling extracted from the 2026-07-11 downstream feedback triage (50 open
+entries). Names its canonical type, its migration, and its guard, in the shape of
 [`2026-07-10-half-applied-pattern-convergence-design.md`](2026-07-10-half-applied-pattern-convergence-design.md).
 
 The guard (`science/tests/test_instrument_boundary.py`) seeded **46** violations across
@@ -30,12 +40,23 @@ check existence. `entity_in_graph()` now guards the resolution site. A withheld 
 is bad; an invented one is worse, and the design's framing ("an empty result that should
 have been a failure") was too narrow to describe it.
 
-**Two carve-outs remain open, both deliberate and both recorded:** the attention scoring
-model (fb-2026-07-10-023 — the `days_since_last_review` term is multiplicative and
-therefore currently inert; the naive repair would make unstamped entities dominate) and
-the `curate/inventory.py` payload divergence (fb-2026-07-10-017 — `collect_inventory`
-returns a Pydantic model with no status field, so the bare-collection detector cannot see
-it *at all*). Neither is a shape problem this type can fix.
+**Four items remain open**, each deliberate and each recorded in *Follow-on work* — an
+earlier draft of this section said "two", which undercounted the very list printed below
+it:
+
+1. **The kind-aware materialization lint** (`fb-2026-07-11-017`) — struck from this
+   design's scope by amendment; needs a per-kind key vocabulary. **Defect still live.**
+2. **The validator payload** — `validate_graph*` returns `tuple[list[T], bool]`, whose
+   `has_failures` channel `InstrumentResult.status` cannot carry.
+3. **Attention-ranking correctness** (`fb-2026-07-10-023`, `fb-2026-07-11-005`) — the
+   `days_since_last_review` term is multiplicative and therefore currently inert; the
+   naive repair would make unstamped entities dominate.
+4. **The `curate/inventory.py` payload divergence** (`fb-2026-07-10-017`) —
+   `collect_inventory` returns a Pydantic model with no status field, so the
+   bare-collection detector **cannot see it at all**. The module is in the namespace so
+   the guard covers its shape; the guard does not and currently cannot see this defect.
+
+None of the four is a shape problem this type can fix.
 
 Blocks two other planned specs (big-picture run integrity; curate + transient
 placement), both of which would otherwise invent a local status-surface
@@ -467,8 +488,13 @@ The guard defines "done"; a checklist would not.
 2. `test_instrument_boundary.py`, allowlist seeded with the current bare set.
 3. Migrate the namespace, instrument by instrument, each with its precondition
    declared. Allowlist shrinks monotonically.
-4. Sibling phases: the `graph diff` walk (`fb-016`) and the materialization lint
-   (`fb-017`). Independent of 1–3; may land in parallel.
+4. Sibling phase: the `graph diff` walk (`fb-016`). Independent of 1–3; may land in
+   parallel.
+
+~~5. The materialization lint (`fb-017`).~~ **Removed from this design's scope by
+amendment** — see *Follow-on work*. It requires a per-kind authored-key vocabulary,
+which this design does not have and cannot cheaply build; it belongs to the Kind
+Descriptor keystone. `fb-2026-07-11-017` remains **open**.
 
 ## Blast radius
 
@@ -512,7 +538,11 @@ Acceptance:
   implementing the walk-set contract.*
 - A v1 (envelope-less) baseline manifest makes `graph diff` report
   `baseline_predates_walk_set` and demand a rebuild.
-- A top-level `supersedes:` key fails `science validate`.
+- ~~A top-level `supersedes:` key fails `science validate`.~~ **Struck by amendment.**
+  This criterion is not met and is no longer part of this design's acceptance set; the
+  lint that would satisfy it moved to *Follow-on work*. The defect it describes is real
+  and **still live** — `fb-2026-07-11-017` is open, and a top-level `supersedes:` is
+  still silently dropped today.
 
 ## Follow-on work
 
@@ -546,3 +576,37 @@ silently dropped:
   design. It gets its own. The tuple detector in the guard is therefore narrowed to
   the *documented* precursor (`tuple[list[T], str | None]`) so these three do not get
   swept in by accident.
+
+- **The kind-aware materialization lint (`fb-2026-07-11-017`).** *Moved here by
+  amendment; it was originally step 5 of the Sequencing and an acceptance criterion of
+  this design. Both have been struck. The item is **open**, and the defect is **live**.*
+
+  The defect is confirmed, not suspected: an authored `supersedes:` on a hypothesis is
+  silently dropped at load. `science_model/frontmatter.py` maps frontmatter with a
+  hand-written list of `fm.get("...")` calls, so a key nobody calls `fm.get` on is never
+  read — Pydantic never receives it, which is why `extra="forbid"` would not catch it
+  either. The key parses, validates, and vanishes; no triple is emitted and nothing warns.
+
+  What this design got wrong was the *fix*. "A frontmatter field that materializes
+  nothing is an error" cannot be enforced with a flat key vocabulary. Two derivations
+  were implemented and **measured** before this was clear:
+
+  - **From the entity loader alone** — flags `provenance_coverage`, `report_kind`,
+    `generated_at`, `hypothesis`, … on ~40 real entities in `meta/` alone. Those keys
+    *are* consumed, just by other modules (`big_picture/validator.py` reads
+    `provenance_coverage` straight off the file). A lint that cries wolf gets turned off,
+    and an ignored lint is worth nothing.
+  - **Tree-wide** — legitimizes `supersedes` itself, because `qa_audit/runs.py:47`
+    genuinely reads `fm.get("supersedes")` for QA-audit **run** entities. The lint stops
+    flagging the very bug it exists for.
+
+  So the key is **live on one kind and dead on another**, and a correct lint needs a
+  **per-kind authored-key vocabulary**. That is exactly what the Kind Descriptor keystone
+  (`EntityKind`/`CORE_PROFILE` as the sole per-kind SSOT) exists to provide, and it is
+  where this belongs. Shipping a flat lint would have meant choosing between false
+  positives and false negatives — both were demonstrated rather than guessed at.
+
+  Its downstream consequence stands and is unfixed: `big-picture` derives
+  `provenance_coverage` from these chains, so the silent drop still produces a wrong
+  `thin` rating, which is what subjects every MM30 hypothesis to the 150-word Arc cap in
+  `fb-2026-07-11-015`.

@@ -1499,7 +1499,29 @@ reports unwired and demands a rebuild rather than guessing."
 
 ---
 
-### Task 6: The materialization lint — a field that materializes nothing is an error
+### Task 6: The materialization lint — NOT BUILT (design amended)
+
+> **This task was attempted, measured, and withdrawn. Do not execute it as written below.**
+>
+> The defect is real and confirmed: an authored `supersedes:` on a hypothesis is silently
+> dropped at load. But the lint cannot be built as a **flat** key vocabulary, and two
+> derivations were implemented and measured before that became clear:
+>
+> - **From the entity loader alone** → flags `provenance_coverage`, `report_kind`,
+>   `generated_at`, … on ~40 real entities in `meta/`. Those keys *are* read, just by other
+>   modules. A lint that cries wolf gets turned off.
+> - **Tree-wide** → legitimizes `supersedes` itself, because `qa_audit/runs.py:47` reads
+>   `fm.get("supersedes")` for QA-audit **run** entities. The lint stops flagging its own
+>   founding bug.
+>
+> The key is **live on one kind and dead on another**, so a correct lint needs a per-kind
+> authored-key vocabulary — the Kind Descriptor keystone's job, not this design's. The
+> design has been amended accordingly: the lint is moved to Follow-on work and struck from
+> the acceptance set. **`fb-2026-07-11-017` is open and its defect is live.**
+>
+> The original task text is kept below for whoever picks this up under Kind Descriptor.
+
+#### (withdrawn) A field that materializes nothing is an error
 
 **Files:**
 - Create: `science/src/science_tool/validate/checks/materialization.py`
@@ -2144,7 +2166,7 @@ git commit -m "test(instruments): lock the allowlist empty; the convergence is c
 
 ## Self-Review
 
-**Spec coverage.** Design §1 (the type + enforced invariant) → Task 1. §1 renderer contract → Task 3 Step 5. §2 structural query → Task 2 (`INSTRUMENT_MODULES`, imported by the guard so the two cannot drift). §2 four-state precondition → Task 3. §2 partial-resolution caveat channel → Task 1 (`ok` may carry `reason`) + Task 3. §2 scalar counters prohibited → Task 4. §2 attention out-of-scope → Task 9's scope fence. §2 tuple precursors → Task 10. §3 guard + additive ratchet + known gaps → Task 2. §4 walk-side (graph diff, envelope, v1-as-unwired) → Task 5. §4 authoring-side (`supersedes:` lint) → Task 6. Bulk namespace → Tasks 7–10. Acceptance criteria → Task 11 Step 2.
+**Spec coverage.** Design §1 (the type + enforced invariant) → Task 1. §1 renderer contract → Task 3 Step 5. §2 structural query → Task 2 (`INSTRUMENT_MODULES`, imported by the guard so the two cannot drift). §2 four-state precondition → Task 3. §2 partial-resolution caveat channel → Task 1 (`ok` may carry `reason`) + Task 3. §2 scalar counters prohibited → Task 4. §2 attention out-of-scope → Task 9's scope fence. §2 tuple precursors → Task 10. §3 guard + additive ratchet + known gaps → Task 2. §4 walk-side (graph diff, envelope, v1-as-unwired) → Task 5. §4 authoring-side (`supersedes:` lint) → **Task 6, WITHDRAWN** — needs a per-kind key vocabulary; the design was amended to move it to Follow-on work and strike it from the acceptance set, and `fb-2026-07-11-017` remains open with its defect live. Bulk namespace → Tasks 7–10. Acceptance criteria → Task 11 Step 2 (minus the struck `supersedes:` criterion).
 
 **Task scope is a MODULE, never a function list.** Every migration task (4, 5, 7, 8, 9, 10) owns *every `_ALLOWLIST` entry for its module*. Two separate review rounds found helpers stranded because a task named specific functions instead: first `query_predicates`, then `validate_synthesis_file`, `validate_rollup_file`, `benchmark_sources`, `coverage_summary`, `reconcile_dataset_links`, `format_show`, `consumers_of`. The failure mode is identical to the list-vs-query one below — an enumeration in prose drifts from the code. **The allowlist is the work order.** Task 11's empty-allowlist assertion is the backstop that catches an under-drained module, but it catches it *late*; owning the module up front catches it early.
 
