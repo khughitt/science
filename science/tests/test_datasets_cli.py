@@ -26,7 +26,7 @@ class TestDatasetsCLI:
         mock_results = [
             DatasetResult(source="zenodo", id="123", title="Test Dataset", year=2024, doi="10.5281/zenodo.123"),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results):
             result = runner.invoke(main, ["datasets", "search", "test query"])
         assert result.exit_code == 0
         assert "Test Dataset" in result.output
@@ -35,7 +35,7 @@ class TestDatasetsCLI:
         mock_results = [
             DatasetResult(source="zenodo", id="123", title="Test Dataset", year=2024),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results):
             result = runner.invoke(main, ["datasets", "search", "test query", "--format", "json"])
         assert result.exit_code == 0
         import json
@@ -48,7 +48,7 @@ class TestDatasetsCLI:
         mock_results = [
             DatasetResult(source="geo", id="GSE12345", title="GEO Dataset"),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results) as mock_search:
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results) as mock_search:
             result = runner.invoke(main, ["datasets", "search", "rna-seq", "--source", "geo"])
         assert result.exit_code == 0
         args, kwargs = mock_search.call_args
@@ -86,7 +86,7 @@ class TestDatasetsCLI:
         assert search_all("q", sources=["flaky"], on_error=lambda *_: None) == []
 
     def test_search_empty_results(self, runner: CliRunner) -> None:
-        with patch("science_tool.cli.search_all", return_value=[]):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=[]):
             result = runner.invoke(main, ["datasets", "search", "nothing"])
         assert result.exit_code == 0
         assert "No datasets found" in result.output
@@ -95,7 +95,7 @@ class TestDatasetsCLI:
         mock_results = [
             DatasetResult(source="physionet", id="mmash", title="MMASH", access="public"),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results):
             result = runner.invoke(main, ["datasets", "search", "actigraphy", "--format", "json"])
         assert result.exit_code == 0
         import json
@@ -110,7 +110,7 @@ class TestDatasetsCLI:
                 modality="rna-seq", organism="mouse", sample_count=24,
             ),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results):
             result = runner.invoke(main, ["datasets", "search", "circadian"])
         assert result.exit_code == 0
         assert "Modality" in result.output
@@ -123,7 +123,7 @@ class TestDatasetsCLI:
                 modality="rna-seq", organism="mouse", sample_count=24,
             ),
         ]
-        with patch("science_tool.cli.search_all", return_value=mock_results):
+        with patch("science_tool.datasets_discovery_cli.search_all", return_value=mock_results):
             result = runner.invoke(main, ["datasets", "search", "circadian", "--format", "json"])
         assert result.exit_code == 0
         import json
@@ -140,7 +140,7 @@ class TestDatasetsCLI:
         adapter.metadata.return_value = DatasetResult(
             source="sra", id="SRX111", title="RNA-seq", access="controlled"
         )
-        with patch("science_tool.cli.get_adapter", return_value=adapter):
+        with patch("science_tool.datasets_discovery_cli.get_adapter", return_value=adapter):
             result = runner.invoke(main, ["datasets", "metadata", "sra:SRX111", "--format", "json"])
         assert result.exit_code == 0
         import json

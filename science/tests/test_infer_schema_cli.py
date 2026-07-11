@@ -6,7 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from science_tool.cli import datasets
+from science_tool.datasets_discovery_cli import datasets_group as datasets
 
 
 def _pkg(tmp_path: Path) -> Path:
