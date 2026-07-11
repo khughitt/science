@@ -24,7 +24,7 @@ source_refs:
 - paper:Kornblith2019
 - paper:Groger2025
 - paper:Findley2021
-- paper:Liu2025
+- paper:Liu2025Synergy
 - paper:Besharatifard2024
 related:
 - hypothesis:0007-working-model
@@ -131,13 +131,13 @@ STRUCTURE's geometry-preservation principle answers "how do you align sources wi
 
 **Shared finding.** Three method papers discipline how the toolkit imports evidence and uses AI.
 Findley et al. extend UTOS into **M-STOUT** (adding Mechanisms and Time), distinguish generalizability (S ⊆ P, PATE) from transportability (S ⊄ P_target, TATE), and decompose external-validity bias into sample-selection and variable-selection components — sharpening exactly what H04's "transport assumptions" must cover [@Findley2021].
-Liu et al. (BAITSAO) show LLMs as **fallible embedding engines with measurable fidelity** (GPT-3.5 embeddings ≈ GPT-4 ≈ Claude 3.5 on the task, validated against curated DrugBank) and demonstrate that added information is *not* uniformly beneficial — a Help-Harm matrix shows some signals hurt joint objectives [@Liu2025].
+Liu et al. (BAITSAO) show LLMs as **fallible embedding engines with measurable fidelity** (GPT-3.5 embeddings ≈ GPT-4 ≈ Claude 3.5 on the task, validated against curated DrugBank) and demonstrate that added information is *not* uniformly beneficial — a Help-Harm matrix shows some signals hurt joint objectives [@Liu2025Synergy].
 Besharatifard and Vafaee document, across 25 GNN drug-synergy models, the benchmark-discipline failure mode: no shared dataset, inconsistent synergy metrics/thresholds/splits make cross-study comparison uninformative, and richer heterogeneous features reliably beat single-feature baselines [@Besharatifard2024].
 
 **Tension.** BAITSAO and Besharatifard both show "richer features help" (supporting H02) — but BAITSAO's Help-Harm matrix shows the marginal contribution of an added signal can be *negative*, so H02's "rich payloads improve calibration" must be qualified: payloads should be selected by cross-task improvement profile, not assumed additive. Besharatifard also warns that GNN attention weights are aggregation weights, *not* evidential support — a semantic distinction the toolkit must preserve (relevant to H05).
 
 **Implication.** Add `temporal_scope`, `mechanism_invariance_claim`, and an explicit generalizability-vs-transportability type (PATE/TATE) to evidence payloads, and split H04's transport-assumption field into sample-selection vs. variable-selection paths [@Findley2021].
-Represent LLM-derived fields as **sources with measurable fidelity, not infallible extractors**, with a minimal validation protocol against a curated reference (question:0038) [@Liu2025].
+Represent LLM-derived fields as **sources with measurable fidelity, not infallible extractors**, with a minimal validation protocol against a curated reference (question:0038) [@Liu2025Synergy].
 Science's benchmark tooling must enforce fixed splits, logged preprocessing, and metric provenance to avoid Besharatifard's fragmentation, and prefer AUPR over AUC-ROC under class imbalance; heterogeneous typed-edge propagation is a distinct graph-model question (question:0039) [@Besharatifard2024].
 
 ## Cross-Cutting Threads
@@ -172,7 +172,7 @@ A causal edge is valid only within its patch's boundary conditions; asserting it
 Generalizability-vs-transportability type, PATE/TATE estimand, M-STOUT axes, `temporal_scope`, split sample- vs. variable-selection bias in the transport field [@Findley2021].
 
 **6. Treat LLM-derived fields as fidelity-measured sources; enforce benchmark discipline.**
-Validate embeddings/extractions against curated references; do not assume added payloads are additive (Help-Harm); enforce fixed splits + metric provenance; prefer AUPR under imbalance [@Liu2025; @Besharatifard2024].
+Validate embeddings/extractions against curated references; do not assume added payloads are additive (Help-Harm); enforce fixed splits + metric provenance; prefer AUPR under imbalance [@Liu2025Synergy; @Besharatifard2024].
 
 **7. CKA is the candidate `latent_common_axis` metric; STRUCTURE the candidate alignment regularizer.**
 With per-domain calibration and attention to the `p >= n` pathology and small-data geometry loss [@Kornblith2019; @Groger2025].

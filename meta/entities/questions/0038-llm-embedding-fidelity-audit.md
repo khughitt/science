@@ -7,7 +7,7 @@ status: active
 ontology_terms: []
 datasets: []
 source_refs:
-- cite:Liu2025
+- cite:Liu2025Synergy
 related:
 - question:0008-llm-agents-as-fallible-sources
 - question:0017-benchmark-grounding-metrics
@@ -30,7 +30,7 @@ LLMs can be used not just as reasoning agents but as embedding engines: they con
 
 ## Current Evidence
 
-- Liu et al. show GPT-3.5 embeddings of drug descriptions have cosine similarity 0.87–0.90 with DrugBank curated text and Pearson r ≥ 0.76 in pairwise similarity matrices [@Liu2025].
+- Liu et al. show GPT-3.5 embeddings of drug descriptions have cosine similarity 0.87–0.90 with DrugBank curated text and Pearson r ≥ 0.76 in pairwise similarity matrices [@Liu2025Synergy].
 - The embedding-layer output is statistically equivalent across GPT-3.5, GPT-4, and Claude 3.5 Sonnet for this task (Wilcoxon p ≥ 0.44), suggesting the embedding function is more model-invariant than generative reasoning.
 - One drug (MK-8669) had a mismatched generated description out of 39; 13 drugs had no matching DrugBank indication — so failures exist and are drug-class-dependent, not random.
 - Stacking LLM embeddings with SMILES-based molecular fingerprints (RDKit) improves cell-perturbation prediction (scRNA-seq) beyond either alone — suggesting LLM embeddings complement but do not fully replace structural representations.
@@ -53,5 +53,5 @@ LLMs can be used not just as reasoning agents but as embedding engines: they con
 ## Related
 
 - Topic notes: `topic:structured-scientific-knowledge`
-- Article notes: `paper:Liu2025` (primary source), `paper:Liu2024HiddenWorld` (adjacent LLM-based discovery context)
-- Methods/Datasets: DrugComb (Liu2025 pre-training source), OpenAI text-embedding-3 API
+- Article notes: `paper:Liu2025Synergy` (primary source), `paper:Liu2024HiddenWorld` (adjacent LLM-based discovery context)
+- Methods/Datasets: DrugComb (Liu2025Synergy pre-training source), OpenAI text-embedding-3 API

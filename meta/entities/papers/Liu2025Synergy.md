@@ -1,5 +1,5 @@
 ---
-id: paper:Liu2025
+id: paper:Liu2025Synergy
 kind: paper
 title: Building a unified model for drug synergy analysis powered by large language
   models
@@ -8,7 +8,7 @@ paper_kind: ''
 ontology_terms: []
 dataset_usage: []
 source_refs:
-- cite:Liu2025
+- cite:Liu2025Synergy
 related:
 - question:0008-llm-agents-as-fallible-sources
 - question:0013-robustness-reproducibility-evaluation
@@ -23,7 +23,7 @@ updated: '2026-07-10'
 - **Year:** 2025
 - **Journal:** Nature Communications (16:4537)
 - **DOI/URL:** https://doi.org/10.1038/s41467-025-59822-y
-- **BibTeX key:** Liu2025
+- **BibTeX key:** Liu2025Synergy
 - **Source:** PDF
 -->
 

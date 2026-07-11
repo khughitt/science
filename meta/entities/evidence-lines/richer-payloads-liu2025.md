@@ -5,7 +5,7 @@ title: BAITSAO's Help-Harm matrix shows added signals are non-additive
 status: active
 stance: supports
 target: proposition:richer-payloads-improve-calibration-non-additively
-source: paper:Liu2025
+source: paper:Liu2025Synergy
 strength: moderate
 independence: independent
 independence_group: ''
@@ -13,7 +13,7 @@ evidence_role: background_constraint
 evidence_type: literature
 related: []
 source_refs:
-- paper:Liu2025
+- paper:Liu2025Synergy
 created: '2026-07-10'
 updated: '2026-07-10'
 ---
@@ -24,7 +24,7 @@ updated: '2026-07-10'
 Liu et al. (BAITSAO) treat LLMs as fallible embedding engines with measurable
 fidelity (GPT-3.5 ≈ GPT-4 ≈ Claude 3.5, validated against curated DrugBank) and
 demonstrate that added information is *not* uniformly beneficial: a Help-Harm matrix
-shows some signals hurt joint objectives [@Liu2025]. This supports the proposition
+shows some signals hurt joint objectives [@Liu2025Synergy]. This supports the proposition
 that payload enrichment interacts across tasks rather than summing, so fields should
 be selected by measured cross-task improvement.
 

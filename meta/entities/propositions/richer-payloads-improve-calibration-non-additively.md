@@ -12,7 +12,7 @@ discusses:
 - hypothesis:0002-rich-evidence-payloads-improve-graph-calibration
 related: []
 source_refs:
-- paper:Liu2025
+- paper:Liu2025Synergy
 created: '2026-07-10'
 updated: '2026-07-10'
 ---
@@ -34,7 +34,7 @@ but must not be operationalized as "more fields are always better."
 Liu et al. (BAITSAO) treat LLMs as fallible embedding engines with measurable
 fidelity (GPT-3.5 ≈ GPT-4 ≈ Claude 3.5 on the task, validated against curated
 DrugBank) and demonstrate that added information is *not* uniformly beneficial: a
-Help-Harm matrix shows some signals hurt joint objectives [@Liu2025]. This is
+Help-Harm matrix shows some signals hurt joint objectives [@Liu2025Synergy]. This is
 direct evidence that payload enrichment interacts across tasks rather than summing,
 and it motivates two design consequences: (a) select payload fields by measured
 cross-task improvement rather than assumed additivity, and (b) represent
