@@ -214,13 +214,18 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
     if parseable_failed:
         return
 
-    try:
-        diff_rows = diff_graph_inputs_dataset(dataset, graph_path=graph_path, mode="hybrid")
-    except (RuntimeError, ValueError) as exc:
-        if not _is_missing_revision_metadata_exception(exc):
-            raise
-        yield _result(Severity.INFO, "graph diff: no revision metadata (expected for new graphs)")
+    # This INFO branch used to be UNREACHABLE: read_revision_manifest never raised, it
+    # returned {} -- so a manifest-less graph took the "N stale input file(s)" path or,
+    # worse, the "all inputs up to date" path. The unwired status makes the case the
+    # branch was always written for actually detectable.
+    diff = diff_graph_inputs_dataset(dataset, graph_path=graph_path, mode="hybrid")
+    if diff.status == "unwired":
+        yield _result(
+            Severity.INFO,
+            f"graph diff: could not compare inputs ({diff.code}) — expected for a new graph",
+        )
     else:
+        diff_rows = diff.rows
         if diff_rows:
             for row in diff_rows:
                 _status(row, context="graph diff", accepted={"stale"})
@@ -234,7 +239,11 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         else:
             yield _result(Severity.INFO, "graph-prose sync: all inputs up to date")
 
-    inquiries = list_inquiries_dataset(dataset)
+    inquiry_result = list_inquiries_dataset(dataset)
+    if inquiry_result.status == "unwired":
+        yield _result(Severity.INFO, f"inquiry checks skipped ({inquiry_result.code})")
+        return
+    inquiries = inquiry_result.rows
     if not inquiries:
         return
 
@@ -243,9 +252,17 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         slug = inquiry["slug"]
         if not slug:
             continue
-        inquiry_rows = validate_inquiry_dataset(dataset, slug)
+        inquiry_validation = validate_inquiry_dataset(dataset, slug)
+        if inquiry_validation.status == "unwired":
+            # The inquiry has no compiled boundary/flow subgraph. Its structural checks
+            # did NOT run -- and they used to report four passes over an empty Graph().
+            yield _result(
+                Severity.WARN,
+                f"inquiry '{slug}': structural checks did not run ({inquiry_validation.code})",
+            )
+            continue
 
-        for row in inquiry_rows:
+        for row in inquiry_validation.rows:
             status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass", "skip", "info"})
             message = f"inquiry '{slug}': {row['check']} — {row['message']}"
             if status == "fail":
@@ -291,10 +308,3 @@ def _status(row: dict[str, Any], *, context: str, accepted: set[str]) -> str:
     return status
 
 
-def _is_missing_revision_metadata_exception(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return (
-        "revision" in message
-        and ("metadata" in message or "manifest" in message)
-        and any(marker in message for marker in ("absent", "missing", "unavailable", "not found", "no "))
-    )

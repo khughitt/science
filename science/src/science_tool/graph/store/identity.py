@@ -4,7 +4,7 @@ import hashlib
 import re
 
 import click
-from rdflib import URIRef
+from rdflib import Graph, URIRef
 from rdflib.namespace import RDF
 
 from .constants import (
@@ -124,9 +124,28 @@ def _resolve_term(value: str) -> URIRef:
 
 
 def _resolve_center_entity(value: str) -> URIRef:
+    """Mint a URIRef from a user-supplied string.
+
+    This CANNOT tell you whether the entity exists -- it takes no graph. It will
+    happily mint a well-formed URI for a typo: a known CURIE prefix with a garbage
+    suffix, or a bare word (-> ``project:concept/<slug>``). Every caller that then
+    queries the graph with the result MUST check membership first -- see
+    ``entity_in_graph`` -- or it will report a confident finding about an entity
+    that does not exist.
+    """
     if value.startswith(("http://", "https://")) or ":" in value or "/" in value:
         return _resolve_term(value)
     return URIRef(PROJECT_NS[f"concept/{_slug(value)}"])
+
+
+def entity_in_graph(uri: URIRef, graph: Graph) -> bool:
+    """Does ``uri`` actually appear in ``graph``, as a subject or an object?
+
+    The guard against the whole class of defects where a typo'd identifier resolves
+    to a syntactically valid URI, matches nothing, and the caller reports that
+    nothing as a finding: "this claim has no evidence", "this entity has degree 0".
+    """
+    return (uri, None, None) in graph or (None, None, uri) in graph
 
 
 def _about_tokens(about: str) -> set[str]:

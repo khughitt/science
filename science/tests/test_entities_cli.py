@@ -1446,7 +1446,18 @@ def test_graph_add_evidence_reports_retirement() -> None:
         assert "science graph build" in result.output
 
 
-def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
+def test_entity_neighbors_source_only_is_unwired_not_empty() -> None:
+    """An entity that exists in SOURCE but not yet in the GRAPH has unknown neighbours.
+
+    This test previously asserted exit 0 with ``rows: []`` on stdout. That is the
+    silent-instrument bug in its purest form: the entity was authored but never
+    materialized, so the graph knows nothing about it -- and the command answered, on
+    stdout, in machine-readable JSON, that it has NO NEIGHBOURS. A downstream agent
+    reads that as "isolated", not as "not built yet". The staleness WARNING went to
+    stderr, where a JSON consumer never looks.
+
+    It must fail loudly: the neighbourhood was not computed, so it must not be reported.
+    """
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1464,11 +1475,10 @@ def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
 
         result = runner.invoke(main, ["entity", "neighbors", "question:0001-alpha", "--format", "json"])
 
-        assert result.exit_code == 0, result.output
-        payload = json.loads(result.stdout)
-        assert payload["rows"] == []
+        assert result.exit_code != 0
+        assert "center_not_in_graph" in result.output
+        # The staleness warning still fires, and still stays off stdout.
         assert "WARNING" in result.stderr
-        assert "WARNING" not in result.stdout
 
 
 def test_entity_neighbors_missing_graph_fails_cleanly() -> None:

@@ -158,20 +158,20 @@ class TestTransformations:
 
 class TestInquiryQueries:
     def test_list_inquiries_empty(self, graph_path: Path) -> None:
-        result = list_inquiries(graph_path)
+        result = list_inquiries(graph_path).rows
         assert result == []
 
     def test_list_inquiries(self, graph_path: Path) -> None:
         build_inquiry_graph(graph_path, slug="inq_1", title="First")
         build_inquiry_graph(graph_path, slug="inq_2", title="Second", focal="hypothesis:h02")
-        result = list_inquiries(graph_path)
+        result = list_inquiries(graph_path).rows
         assert len(result) == 2
         labels = {r["label"] for r in result}
         assert labels == {"First", "Second"}
 
     def test_list_inquiries_has_fields(self, graph_path: Path) -> None:
         build_inquiry_graph(graph_path, slug="test", title="Test Inquiry", status="specified")
-        result = list_inquiries(graph_path)
+        result = list_inquiries(graph_path).rows
         assert len(result) == 1
         entry = result[0]
         assert entry["label"] == "Test Inquiry"
@@ -241,13 +241,13 @@ class TestMaterializedInquiryQueries:
 
     def test_list_inquiries_finds_materialized_entity(self, graph_path: Path) -> None:
         _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
-        result = list_inquiries(graph_path)
+        result = list_inquiries(graph_path).rows
         slugs = {r["slug"] for r in result}
         assert "h-3d-genome-substrate" in slugs
 
     def test_list_inquiries_materialized_status_from_project_status(self, graph_path: Path) -> None:
         _add_materialized_inquiry(graph_path, "h1-h2-bridge", "Bridge", status="draft")
-        entry = next(r for r in list_inquiries(graph_path) if r["slug"] == "h1-h2-bridge")
+        entry = next(r for r in list_inquiries(graph_path).rows if r["slug"] == "h1-h2-bridge")
         assert entry["label"] == "Bridge"
         assert entry["status"] == "draft"
 
@@ -279,14 +279,48 @@ class TestMaterializedInquiryQueries:
         result = get_inquiry(graph_path, "h-3d-genome-substrate")
         assert result["edges"] == []
 
-    def test_validate_inquiry_materialized_hyphenated_slug(self, graph_path: Path) -> None:
+    def test_validate_inquiry_materialized_without_subgraph_is_unwired(self, graph_path: Path) -> None:
+        """A materialized-only inquiry has NO boundary/flow subgraph -- so its structural
+        checks cannot run, and must not report passes.
+
+        This test previously asserted ``boundary_reachability == "pass"`` here. That pass
+        was computed over a brand-new empty ``Graph()``: no BoundaryOut nodes existed, so
+        none could be unreachable. Every structural check "passed" for the same reason --
+        there was nothing to check. A structurally broken inquiry validated green because
+        the validator was looking at nothing. An empty subgraph is not evidence of
+        validity; it is evidence the check did not run.
+        """
         _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
 
-        results = validate_inquiry(graph_path, "h-3d-genome-substrate")
+        result = validate_inquiry(graph_path, "h-3d-genome-substrate")
 
-        statuses = {r["check"]: r["status"] for r in results}
+        assert result.status == "unwired"
+        assert result.code == "no_inquiry_subgraph"
+        assert result.rows == []
+
+    def test_validate_inquiry_reads_the_authoritative_subgraph(self, graph_path: Path) -> None:
+        """When the dedicated per-inquiry named graph EXISTS, the validator reads it.
+
+        The companion to the test above: the fix must not simply refuse everything. An
+        inquiry whose boundary/flow subgraph was compiled validates for real, against
+        real triples.
+        """
+        build_inquiry_graph(
+            graph_path,
+            slug="authoritative",
+            boundary_roles=[
+                {"ref": "concept:data_in", "role": "BoundaryIn"},
+                {"ref": "concept:result_out", "role": "BoundaryOut"},
+            ],
+            flow_edges=[{"subject": "concept:data_in", "predicate": "feedsInto", "object": "concept:result_out"}],
+        )
+
+        result = validate_inquiry(graph_path, "authoritative")
+
+        assert result.status == "ok"
+        statuses = {r["check"]: r["status"] for r in result.rows}
+        # A real pass, over real triples: BoundaryOut IS reachable from BoundaryIn.
         assert statuses["boundary_reachability"] == "pass"
-        assert statuses["target_exists"] == "warn"
 
 
 class TestInquiryValidation:
@@ -302,7 +336,7 @@ class TestInquiryValidation:
             flow_edges=[{"subject": "concept:data_in", "predicate": "feedsInto", "object": "concept:result_out"}],
         )
 
-        results = validate_inquiry(graph_path, "valid")
+        results = validate_inquiry(graph_path, "valid").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["boundary_reachability"] == "pass"
         assert statuses["no_cycles"] == "pass"
@@ -320,7 +354,7 @@ class TestInquiryValidation:
             flow_edges=[{"subject": "concept:data_in", "predicate": "feedsInto", "object": "concept:result_out"}],
         )
 
-        results = validate_inquiry(graph_path, "unreach")
+        results = validate_inquiry(graph_path, "unreach").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["boundary_reachability"] == "fail"
 
@@ -339,7 +373,7 @@ class TestInquiryValidation:
             ],
         )
 
-        results = validate_inquiry(graph_path, "cycle")
+        results = validate_inquiry(graph_path, "cycle").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["no_cycles"] == "fail"
 
@@ -360,7 +394,7 @@ class TestInquiryValidation:
             unknowns=["concept:mystery"],
         )
 
-        results = validate_inquiry(graph_path, "unk")
+        results = validate_inquiry(graph_path, "unk").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["unknown_resolution"] == "fail"
 
@@ -381,7 +415,7 @@ class TestInquiryValidation:
             unknowns=["concept:mystery"],
         )
 
-        results = validate_inquiry(graph_path, "sketch_unk")
+        results = validate_inquiry(graph_path, "sketch_unk").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["unknown_resolution"] == "pass"
 
@@ -459,7 +493,7 @@ class TestOrphanedInteriorValidation:
             ],
         )
 
-        results = validate_inquiry(graph_path, "orphan")
+        results = validate_inquiry(graph_path, "orphan").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["orphaned_interior"] == "warn"
 
@@ -478,7 +512,7 @@ class TestOrphanedInteriorValidation:
             ],
         )
 
-        results = validate_inquiry(graph_path, "connected")
+        results = validate_inquiry(graph_path, "connected").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["orphaned_interior"] == "pass"
 
@@ -505,7 +539,7 @@ class TestOrphanedInteriorValidation:
             ],
         )
 
-        results = validate_inquiry(graph_path, "causal_roots_sinks")
+        results = validate_inquiry(graph_path, "causal_roots_sinks").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["orphaned_interior"] == "pass"
 
@@ -526,7 +560,7 @@ class TestProvenanceCompletenessValidation:
             assumptions=[{"ref": "assumption:unproven", "statement": "Unproven"}],
         )
 
-        results = validate_inquiry(graph_path, "no_prov")
+        results = validate_inquiry(graph_path, "no_prov").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["provenance_completeness"] == "fail"
 
@@ -546,7 +580,7 @@ class TestProvenanceCompletenessValidation:
             ],
         )
 
-        results = validate_inquiry(graph_path, "with_prov")
+        results = validate_inquiry(graph_path, "with_prov").rows
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["provenance_completeness"] == "pass"
 
@@ -563,6 +597,6 @@ class TestProvenanceCompletenessValidation:
             flow_edges=[{"subject": "concept:data_in", "predicate": "feedsInto", "object": "concept:result_out"}],
         )
 
-        results = validate_inquiry(graph_path, "sketch_prov")
+        results = validate_inquiry(graph_path, "sketch_prov").rows
         check_names = [r["check"] for r in results]
         assert "provenance_completeness" not in check_names

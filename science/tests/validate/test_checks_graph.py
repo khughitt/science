@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from science_tool.instruments import InstrumentResult
 from science_tool.peers_validate import PeerIssueKind
 from science_tool.validate import Result, Severity, ValidateContext
 
@@ -167,8 +168,8 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
             True,
         ),
     )
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [])
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult[dict].empty())
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
@@ -205,17 +206,22 @@ def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
         lambda dataset: ([{"check": "parseable_trig", "status": "pass", "details": "ok"}], False),
         raising=False,
     )
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda dataset, *, graph_path, mode: [], raising=False)
+    monkeypatch.setattr(
+        graph,
+        "diff_graph_inputs_dataset",
+        lambda dataset, *, graph_path, mode: InstrumentResult[dict].empty(),
+        raising=False,
+    )
     monkeypatch.setattr(
         graph,
         "list_inquiries_dataset",
-        lambda dataset: [{"slug": "one"}, {"slug": "two"}],
+        lambda dataset: InstrumentResult.from_rows([{"slug": "one"}, {"slug": "two"}]),
         raising=False,
     )
 
-    def validate_inquiry_dataset(dataset: object, slug: str) -> list[dict[str, str]]:
+    def validate_inquiry_dataset(dataset: object, slug: str) -> InstrumentResult[dict[str, str]]:
         validated_inquiries.append((dataset, slug))
-        return [{"check": "shape", "status": "pass", "message": "ok"}]
+        return InstrumentResult.from_rows([{"check": "shape", "status": "pass", "message": "ok"}])
 
     monkeypatch.setattr(graph, "validate_inquiry_dataset", validate_inquiry_dataset, raising=False)
     monkeypatch.setattr(graph, "validate_graph", fail_path_api)
@@ -321,12 +327,14 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
     monkeypatch.setattr(
         graph,
         "diff_graph_inputs_dataset",
-        lambda _dataset, **_kwargs: [
-            {"path": "doc/a.md", "status": "stale", "reason": "hash_changed"},
-            {"path": "notes/b.md", "status": "stale", "reason": "new_file"},
-        ],
+        lambda _dataset, **_kwargs: InstrumentResult.from_rows(
+            [
+                {"path": "doc/a.md", "status": "stale", "reason": "hash_changed"},
+                {"path": "notes/b.md", "status": "stale", "reason": "new_file"},
+            ]
+        ),
     )
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult[dict].empty())
 
     results = list(graph.check_graph(_ctx(tmp_path, verbose=True)))
 
@@ -347,7 +355,9 @@ def test_diff_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(
         graph,
         "diff_graph_inputs_dataset",
-        lambda _dataset, **_kwargs: [{"path": "doc/a.md", "status": "fresh", "reason": "ok"}],
+        lambda _dataset, **_kwargs: InstrumentResult.from_rows(
+            [{"path": "doc/a.md", "status": "fresh", "reason": "ok"}]
+        ),
     )
 
     with pytest.raises(ValueError, match="graph diff returned unknown status: fresh"):
@@ -363,18 +373,22 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(
+        graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])
+    )
     monkeypatch.setattr(
         graph,
         "validate_inquiry_dataset",
-        lambda _dataset, _slug: [
-            {"check": "shape", "status": "pass", "message": "ok"},
-            {"check": "causal_optional", "status": "skip", "message": "not causal"},
-            {"check": "causal_note", "status": "info", "message": "informational"},
-            {"check": "scope", "status": "warn", "message": "loose"},
-            {"check": "boundary", "status": "fail", "message": "broken"},
-        ],
+        lambda _dataset, _slug: InstrumentResult.from_rows(
+            [
+                {"check": "shape", "status": "pass", "message": "ok"},
+                {"check": "causal_optional", "status": "skip", "message": "not causal"},
+                {"check": "causal_note", "status": "info", "message": "informational"},
+                {"check": "scope", "status": "warn", "message": "loose"},
+                {"check": "boundary", "status": "fail", "message": "broken"},
+            ]
+        ),
     )
 
     non_verbose_results = list(graph.check_graph(_ctx(tmp_path)))
@@ -400,8 +414,10 @@ def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(
+        graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])
+    )
 
     def raise_value_error(_dataset: object, _slug: str) -> list[dict[str, str]]:
         raise ValueError("inquiry graph is malformed")
@@ -421,12 +437,16 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(
+        graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])
+    )
     monkeypatch.setattr(
         graph,
         "validate_inquiry_dataset",
-        lambda _dataset, _slug: [{"check": "shape", "status": "mystery", "message": "ok"}],
+        lambda _dataset, _slug: InstrumentResult.from_rows(
+            [{"check": "shape", "status": "mystery", "message": "ok"}]
+        ),
     )
 
     with pytest.raises(ValueError, match="inquiry validate returned unknown status: mystery"):

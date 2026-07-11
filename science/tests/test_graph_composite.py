@@ -189,7 +189,7 @@ def test_composite_revision_manifest_uses_project_root(tmp_path: Path) -> None:
     out_path = assemble_composite_graph(host)
 
     dataset = _load_dataset(out_path)
-    manifest = read_revision_manifest(dataset)
+    manifest = read_revision_manifest(dataset)["files"]
     assert "science.yaml" in manifest
 
 

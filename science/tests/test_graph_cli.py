@@ -518,11 +518,28 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
 # nodes non-orphaned under the current validator.
 
 
-def test_graph_diff_supports_json_output() -> None:
+def test_graph_diff_is_unwired_without_a_baseline() -> None:
+    """`graph init` writes no revision manifest -- so there is no baseline to diff.
+
+    This used to print "all inputs up to date": the most confident possible statement,
+    from a check that had nothing to compare against.
+    """
     runner = CliRunner()
 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        diff = runner.invoke(main, ["graph", "diff", "--mode", "hybrid", "--format", "json"])
+
+        assert diff.exit_code != 0
+        assert "no_baseline_walk_set" in diff.output
+
+
+def test_graph_diff_supports_json_output() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        _setup_evidence_graph()
 
         diff = runner.invoke(main, ["graph", "diff", "--mode", "hybrid", "--format", "json"])
         assert diff.exit_code == 0
@@ -536,7 +553,7 @@ def test_graph_diff_detects_new_input_file() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        _setup_evidence_graph()
 
         doc_file = Path("doc/01-overview.md")
         doc_file.parent.mkdir(parents=True, exist_ok=True)
@@ -742,16 +759,25 @@ def test_graph_evidence_groups_by_supports_refutes() -> None:
         assert texts == {"Literature supports BRCA1 role", "Counter-evidence against BRCA1"}
 
 
-def test_graph_evidence_returns_empty_for_unknown_hypothesis() -> None:
+def test_graph_evidence_is_unwired_for_unknown_hypothesis() -> None:
+    """A target that is not in the graph must NOT report "no evidence".
+
+    This test previously asserted the opposite -- exit 0 and zero rows -- which is the
+    silent-instrument bug written down as an expectation. `hypothesis/h999` does not
+    exist; `_resolve_center_entity` mints a well-formed URI for it anyway, nothing points
+    at that URI, and the command reported that the hypothesis had NO SUPPORTING OR
+    DISPUTING EVIDENCE. That is an affirmative claim about the literature, manufactured
+    from a typo. It must fail loudly instead.
+    """
     runner = CliRunner()
 
     with runner.isolated_filesystem():
         _setup_evidence_graph()
 
         result = runner.invoke(main, ["graph", "evidence", "hypothesis/h999", "--format", "json"])
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        assert len(payload["rows"]) == 0
+
+        assert result.exit_code != 0
+        assert "target_not_in_graph" in result.output
 
 
 def test_graph_evidence_returns_support_and_dispute_for_claim() -> None:

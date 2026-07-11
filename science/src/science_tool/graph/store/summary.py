@@ -26,7 +26,8 @@ from .evidence_signals import (
     _load_proposition_interaction_terms,
     _load_proposition_pre_registrations,
 )
-from .identity import _graph_uri, _resolve_center_entity, _short_name
+from ...instruments import InstrumentResult
+from .identity import _graph_uri, _resolve_center_entity, _short_name, entity_in_graph
 from .types import (
     ClaimSummaryData,
     InquirySummaryData,
@@ -224,7 +225,7 @@ def _claim_summaries(knowledge, provenance, *, include_hypotheses: bool) -> list
 def query_dashboard_summary(
     graph_path: Path,
     top: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -234,7 +235,7 @@ def query_dashboard_summary(
         for summary in _claim_summaries(knowledge, provenance, include_hypotheses=True)
     ]
     rows.sort(key=lambda row: (-float(row["risk_score"]), row["text"]))
-    return rows[:top]
+    return InstrumentResult.from_rows(rows[:top])
 
 
 def _hypotheses_for_claim(knowledge, claim_uri: URIRef) -> set[URIRef]:
@@ -342,7 +343,7 @@ def query_neighborhood_summary(
     graph_path: Path,
     top: int,
     hops: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -352,7 +353,7 @@ def query_neighborhood_summary(
         for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=hops)
     ]
     rows.sort(key=lambda row: (-float(row["neighborhood_risk"]), row["text"]))
-    return rows[:top]
+    return InstrumentResult.from_rows(rows[:top])
 
 
 def _question_claims(knowledge, question_uri: URIRef) -> list[URIRef]:
@@ -507,7 +508,7 @@ def _format_question_summary_row(summary: QuestionSummaryData) -> dict[str, str]
 def query_question_summary(
     graph_path: Path,
     top: int | None,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -527,7 +528,7 @@ def query_question_summary(
         if isinstance(question_uri, URIRef)
     ]
     rows.sort(key=lambda row: (-float(row["priority_score"]), row["text"]))
-    return rows if top is None else rows[:top]
+    return InstrumentResult.from_rows(rows if top is None else rows[:top])
 
 
 def _inquiry_summary_data(
@@ -589,7 +590,7 @@ def _format_inquiry_summary_row(summary: InquirySummaryData) -> dict[str, str]:
 def query_inquiry_summary(
     graph_path: Path,
     top: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -618,7 +619,7 @@ def query_inquiry_summary(
         )
 
     rows.sort(key=lambda row: (-float(row["priority_score"]), row["label"]))
-    return rows[:top]
+    return InstrumentResult.from_rows(rows[:top])
 
 
 def _project_summary_data(
@@ -667,7 +668,7 @@ def _format_project_summary_row(summary: ProjectSummaryData) -> dict[str, str]:
     }
 
 
-def query_project_summary(graph_path: Path) -> list[dict[str, str]]:
+def query_project_summary(graph_path: Path) -> InstrumentResult[dict[str, str]]:
     from science_tool.paths import resolve_paths
 
     project_root = _project_root_from_graph_path(graph_path).resolve()
@@ -702,17 +703,21 @@ def query_project_summary(graph_path: Path) -> list[dict[str, str]]:
             _inquiry_summary_data(knowledge, inquiry_graph, inquiry_uri, claim_by_uri, neighborhood_by_center)
         )
 
-    return [
-        _format_project_summary_row(
-            _project_summary_data(project_root, profile, claim_by_uri, neighborhood_rows, question_rows, inquiry_rows)
-        )
-    ]
+    return InstrumentResult.from_rows(
+        [
+            _format_project_summary_row(
+                _project_summary_data(
+                    project_root, profile, claim_by_uri, neighborhood_rows, question_rows, inquiry_rows
+                )
+            )
+        ]
+    )
 
 
 def query_coverage(
     graph_path: Path,
     limit: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     causal = dataset.graph(_graph_uri("graph/causal"))
@@ -748,7 +753,7 @@ def query_coverage(
                 "observed": observed_str,
             }
         )
-    return rows[:limit]
+    return InstrumentResult.from_rows(rows[:limit])
 
 
 def query_gaps(
@@ -756,12 +761,27 @@ def query_gaps(
     center: str,
     hops: int,
     limit: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
+    """Structural/evidential gaps in the neighbourhood of ``center``.
+
+    ``unwired`` when ``center`` is not in the graph -- and this one MUST be checked
+    before the row loop, because the failure here is not a silent empty. A typo'd
+    center resolves to a well-formed URI (``_resolve_center_entity`` never consults
+    the graph), so ``visited == {center_uri}``, ``adjacency.get(...)`` is empty, and
+    the FIRST check below fires: ``degree == 0`` yields a confident
+    ``structural_fragility(low_connectivity,degree=0)`` row about an entity that
+    does not exist. The instrument does not stay silent -- it fabricates a finding.
+    """
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
     center_uri = _resolve_center_entity(center)
+    if not entity_in_graph(center_uri, knowledge):
+        return InstrumentResult.unwired(
+            code="center_not_in_graph",
+            reason=f"{center!r} does not exist in the knowledge graph.",
+        )
 
     # BFS to find neighborhood entities
     adjacency: dict[URIRef, set[URIRef]] = {}
@@ -833,13 +853,13 @@ def query_gaps(
                     "issues": "; ".join(issues),
                 }
             )
-    return rows[:limit]
+    return InstrumentResult.from_rows(rows[:limit])
 
 
 def query_uncertainty(
     graph_path: Path,
     top: int,
-) -> list[dict[str, str]]:
+) -> InstrumentResult[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -917,4 +937,4 @@ def query_uncertainty(
     rows.sort(key=lambda r: float(r["_sort"]), reverse=True)
     for row in rows:
         del row["_sort"]
-    return rows[:top]
+    return InstrumentResult.from_rows(rows[:top])

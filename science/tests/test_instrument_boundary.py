@@ -50,23 +50,6 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("graph/health.py", "collect_unregistered_ref_kinds"),
         ("graph/health.py", "collect_unresolved_refs"),
         ("graph/health.py", "collect_validation_findings"),
-        ("graph/store/inquiry.py", "list_inquiries"),
-        ("graph/store/inquiry.py", "list_inquiries_dataset"),
-        ("graph/store/inquiry.py", "validate_inquiry"),
-        ("graph/store/inquiry.py", "validate_inquiry_dataset"),
-        ("graph/store/queries.py", "query_claims"),
-        ("graph/store/queries.py", "query_evidence"),
-        ("graph/store/queries.py", "query_neighborhood"),
-        ("graph/store/summary.py", "query_coverage"),
-        ("graph/store/summary.py", "query_dashboard_summary"),
-        ("graph/store/summary.py", "query_gaps"),
-        ("graph/store/summary.py", "query_inquiry_summary"),
-        ("graph/store/summary.py", "query_neighborhood_summary"),
-        ("graph/store/summary.py", "query_project_summary"),
-        ("graph/store/summary.py", "query_question_summary"),
-        ("graph/store/summary.py", "query_uncertainty"),
-        ("graph/store/validation.py", "diff_graph_inputs"),
-        ("graph/store/validation.py", "diff_graph_inputs_dataset"),
     }
 )
 

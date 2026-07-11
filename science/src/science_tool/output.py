@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, TypeVar
 
 import click
 from rich.table import Table
 
+from science_tool.instruments import InstrumentResult
 from science_tool.styles import get_console
 
 OUTPUT_FORMATS: tuple[str, str] = ("table", "json")
+
+RowT = TypeVar("RowT")
 
 
 def emit(
@@ -33,6 +36,24 @@ def emit(
         click.echo(json.dumps(payload, indent=indent, sort_keys=sort_keys, ensure_ascii=ensure_ascii, default=default))
         return
     render_text()
+
+
+def unwrap_instrument(result: InstrumentResult[RowT], *, what: str) -> list[RowT]:
+    """Take the rows of an instrument result, REFUSING to render an unwired one.
+
+    This is the one place the CLI turns an ``InstrumentResult`` back into rows, and it
+    exists so that ``unwired`` cannot quietly become "no results found". An unwired
+    instrument did not run; its rows are meaningless, and printing them as an empty
+    table would be the exact failure the type was introduced to stop -- so it raises.
+
+    A ``reason`` on a SUCCESSFUL run is a caveat (part of the input was dropped) and
+    goes to stderr, leaving stdout a clean, parseable payload.
+    """
+    if result.status == "unwired":
+        raise click.ClickException(f"{what} did not run ({result.code}): {result.reason}")
+    if result.reason:
+        click.echo(f"notice ({result.code}): {result.reason}", err=True)
+    return result.rows
 
 
 def emit_query_rows(

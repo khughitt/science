@@ -1582,7 +1582,7 @@ def test_materialize_graph_is_deterministic_for_identical_inputs(tmp_path: Path)
     assert second_text == first_text
     trig_path = project / "knowledge" / "graph.trig"
     assert trig_path.exists()
-    assert diff_graph_inputs(trig_path, "hash") == []
+    assert diff_graph_inputs(trig_path, "hash").rows == []
 
 
 def test_graph_build_is_deterministic_across_processes(tmp_path: Path) -> None:
