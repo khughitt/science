@@ -142,7 +142,7 @@ _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
     ("src/science_tool/annotation/source_text.py", "render_source_md"): "structural: ---\\n\\n spacing + passage-offset fixpoint loop",
     ("src/science_tool/graph/decision_log.py", "render_owner_file"): "structural: ---\\n\\n spacing + rstrip body",
     ("src/science_tool/questions.py", "_render_stub"): "structural: yaml.dump + rstrip + ---\\n\\n",
-    ("src/science_tool/cli.py", "_render_inquiry_source"): "structural: Variant D kwargs + ---\\n\\n",
+    ("src/science_tool/inquiry_cli.py", "_render_inquiry_source"): "structural: Variant D kwargs + ---\\n\\n",
     ("src/science_tool/datasets_identity.py", "_render_entity"): "structural: no newline after closing fence (body_suffix)",
     ("src/science_tool/datasets_catalog.py", "_render_candidate"): "structural: ---\\n\\n spacing",
     ("src/science_tool/datasets_catalog.py", "_render_entity"): "structural: ---\\n\\n + body .strip()",
