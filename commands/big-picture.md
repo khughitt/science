@@ -224,6 +224,27 @@ Body sections (~1000–1500 words total):
 
 Computing SHAs:
 
+> **Validate the per-hypothesis files BEFORE stamping their SHAs.** A provenance record
+> stamped before its subject is final is not provenance.
+>
+> The validator legitimately rejects per-hypothesis files — that is its job. The documented
+> repair is to re-dispatch the sub-agent, which **rewrites the file and changes its SHA**,
+> silently invalidating the `synthesized_from` the rollup already attested to. Nothing
+> re-checks it: the staleness warning fires only on the *next* invocation, and is explicitly
+> informational (fb-2026-07-11-006).
+>
+> So the order is: **write → validate → repair (loop until clean) → stamp → write rollup.**
+> If any repair loop runs after a stamp, **re-stamp**. Never stamp a file you are still
+> willing to change.
+
+Validate the staged/written per-hypothesis files first:
+
+```bash
+uv run science big-picture validate --project-root .
+```
+
+Only once they are clean, compute the SHAs:
+
 ```bash
 git hash-object entities/synthesis/<hyp-id>.md
 git hash-object entities/synthesis/<emergent-threads>.md
