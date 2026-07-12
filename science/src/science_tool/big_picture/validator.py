@@ -73,7 +73,12 @@ def validate_synthesis_file(path: Path, project_root: Path) -> InstrumentResult[
     fm = read_frontmatter(path) or {}
     if fm.get("provenance_coverage") == "thin":
         arc = _extract_section(text, "Arc")
-        word_count = len(arc.split())
+        # The cap measures PROSE verbosity. An entity ID is a citation, not prose, and
+        # canonical slugs are long -- charging one word per ID penalised the sections that
+        # cited most carefully, which is the exact opposite of what the cap is for
+        # (fb-2026-07-11-015). REFERENCE_PATTERN is already this project's definition of
+        # "this token is a citation"; reuse it rather than inventing a second one.
+        word_count = len(REFERENCE_PATTERN.sub("", arc).split())
         if word_count > 150:
             issues.append(
                 ValidationIssue(

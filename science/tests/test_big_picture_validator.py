@@ -131,6 +131,44 @@ Arc reconstruction is limited because no prior_interpretations chains exist.
     assert not any(i.kind == "thin_coverage_marker_mismatch" for i in issues)
 
 
+def test_thin_coverage_word_cap_does_not_charge_for_citations(tmp_path: Path) -> None:
+    """The Arc cap measures PROSE VERBOSITY. An entity ID is a citation, not prose.
+
+    Canonical slugs are long, and a naive `arc.split()` charged one word per ID -- so the
+    rule systematically penalised the agents that cited most carefully. mm30's only two
+    violations (154 and 163 words) were caused by citation density, not verbosity:
+    trimming meant removing grounding rather than padding, and because
+    provenance_coverage is 'thin' for all 29 of its hypotheses, EVERY hypothesis was
+    subject to the cap (fb-2026-07-11-015).
+
+    This also interacts with the ID-discipline fix: requiring full canonical IDs makes the
+    cited tokens LONGER, so leaving this unfixed would tighten a rule and penalise
+    compliance with it in the same release.
+    """
+    prose = "word " * 100  # 100 words of actual prose -- comfortably under the 150 cap.
+    citations = " ".join(
+        f"interpretation:{i:04d}-t869-bcl2-dependency-venetoclax-hmcl-p3-supported" for i in range(60)
+    )
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        f"""---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+provenance_coverage: "thin"
+---
+
+## Arc
+
+{prose} {citations}
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=FIXTURE).rows
+    assert not any(i.kind == "thin_coverage_marker_mismatch" for i in issues), (
+        "citation density was charged as verbosity"
+    )
+
+
 def test_collect_project_ids_harvests_aggregated_task_headings(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
