@@ -178,13 +178,23 @@ guard shipped in `e462b5f7` covers templates only.
   Commons stores records at `papers/<key>/entity.md`, `datasets/<slug>/entity.md` — **commons
   has no `entities/` directory.** The one check that would catch this is **structurally
   incapable of reaching commons records.** Another silent instrument.
-- **LIVE CRASH — overlay merge.** `overlay-1.1.json:47` permits a project to overlay `status`.
-  In `mixin-*-1.0`, `status` has **no `science:merge` annotation** ⇒ policy defaults to
-  **`REPLACE`** (`merge.py:29`). `commons/overlay.py:286-288` **raises `OverlayMergeError` on
-  `REPLACE`** — in a branch whose own comment calls it *"unreachable for a validated
-  overlay."* **It is reachable.** `mixin-*-2.0` fixes this (`science:merge: project_only`), and
-  all current records are on 2.0 — so it is **latent, not yet fired** — but the 1.0 schemas
-  still ship and still parse.
+- **LIVE CRASH — overlay merge. REACHABLE TODAY, not latent.** `overlay-1.1.json:47` permits a
+  project to overlay `status`. Where `status` carries **no `science:merge` annotation**, policy
+  defaults to **`REPLACE`** (`merge.py:29`), and `commons/overlay.py:286-288` **raises
+  `OverlayMergeError` on `REPLACE`** — in a branch whose own comment calls it *"unreachable for
+  a validated overlay."*
+
+  | mixin | ships | declares `status`? | policy |
+  |---|---|---|---|
+  | `paper` / `topic` / `theme` | **1.0 and 2.0** | 2.0: `science:merge: project_only` | **PROJECT_ONLY** — safe (all records on 2.0) |
+  | **`dataset`** | **1.0 ONLY — there is no 2.0** | **no** → falls through to base `{"type":"string"}`, un-annotated | **`REPLACE` → CRASH** |
+
+  **Correction to an earlier draft of this section**, which claimed the 2.0 mixins fix this and
+  all records are on 2.0. That is true for paper/topic/theme and **false for `dataset`**:
+  `~/d/science-commons/datasets/variant-labels-dbsnp-human/entity.md:2` pins
+  `schema_profile: science-entity-base/1.0+dataset/1.0`. **Every commons dataset is on the
+  crashing path today.** Any project that overlays a commons dataset's `status` hard-fails the
+  merge now. (fb-2026-07-12-006.)
 - All 328 commons paper/topic/theme records are `status: active`. Not one has used any other
   value.
 

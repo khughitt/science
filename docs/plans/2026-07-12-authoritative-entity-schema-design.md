@@ -1,7 +1,9 @@
 # The authoritative entity schema
 
-**Date:** 2026-07-12 (rev 3 — D1–D5 RULED; see §10 for the revision history)
-**Status:** Architecture accepted. D1–D5 ruled (§9). Ready for an implementation plan.
+**Date:** 2026-07-12 (rev 5 — D4 re-ruled post-audit; see §10)
+**Status:** **Architecture accepted; final amendment applied.** D1–D5 ruled (§9), D4 contract
+re-ruled against the audit. **Ready to write the D5 implementation plan.**
+**Contract input:** [`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md)
 **Subsumes:** the field-vocabulary (`extra="ignore"`) and status-vocabulary tracks — two
 symptoms of one root.
 
@@ -205,24 +207,29 @@ state, re-collapsing the axis this design exists to split. **They are lifecycle,
 The same pass is applied to every other domain axis: `deferred` is workflow, not answeredness;
 `running` is execution state, not an outcome.
 
-| kind | today's status values | → `status` (lifecycle) | → domain field (category) | default |
+**THE AUDITED CONTRACT.** (Rows below are post-D4. The pre-audit draft got `dataset`,
+`paper`, `synthesis`, `plan` and `workflow-run` wrong; those rows are **replaced**, not
+annotated — a warning above contradictory contract text is unsafe input to a plan.)
+
+| kind | → `status` (lifecycle) | → domain field (category) | default | audit note |
 |---|---|---|---|---|
-| `hypothesis` | proposed, under-investigation, partially-supported, supported, weakened, refuted, archived | **draft**(←proposed) / **active**(←under-investigation) / **complete** / superseded / retired / archived | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** |
-| `proposition` | draft, active, supported, contested, weakened, retired, superseded, archived | draft / active / complete / superseded / retired / archived | **`belief`** *(epistemic)*: supported \| contested \| weakened | **absent** |
-| `question` | active, partially-answered, answered, deferred, retired, archived | active / **deferred** / complete / retired / archived | **`answer_state`** *(answeredness)*: answered \| partially-answered | **absent** |
-| `workflow-run` | complete, running, failed | active *(while running)* / superseded / archived | **`outcome`** *(execution)*: complete \| failed | **absent = still running** |
-| `story` | draft, developing, mature | draft / active / complete / superseded / archived | **`maturity`**: developing \| mature | absent |
-| `pre-registration` | active, committed, amended, superseded, retired | draft / active / complete / superseded / retired | **`commitment`**: committed \| amended | absent |
-| `dataset` | active, retired, candidate, deprecated, proposed | draft(←candidate, proposed) / active / retired(←deprecated) | *none* — lifecycle synonyms | — |
-| `concept` | active, deprecated | active / retired(←deprecated) | *none* | — |
-| `decision` | active, archived, superseded, abandoned | active / archived / superseded / retired(←abandoned) | *none* | — |
-| `workflow` | active, retired, deprecated, planned | draft(←planned) / active / retired(←deprecated) | *none* | — |
+| `hypothesis` | **draft**(←proposed) / **active**(←under-investigation) / **complete** / superseded / retired / archived | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** | only `refuted` has a reader (`dataset_capabilities.py:46`) |
+| `proposition` | draft / active / complete / superseded / retired / archived | **`belief`** *(epistemic)*: supported \| contested \| weakened | **absent** | belief axis has **0 authored, 0 readers** — belief is already computed from evidence-lines; `graph/belief.py` reads **no** status |
+| `question` | active / **deferred** / complete / retired / archived | **`answer_state`** *(answeredness)*: answered \| partially-answered | **absent** | the **only** kind whose values drive behaviour; both selectors are two-axis (§2 of the audit) |
+| `pre-registration` | draft / active / complete / superseded / retired | **`commitment`**: committed \| amended | **absent** | `committed` is **INERT** — the freeze is enforced nowhere (fb-2026-07-12-009) |
+| **`dataset`** | draft / active / retired(←deprecated) | **`acquisition`**: candidate \| acquired | **`candidate`** | **CORRECTED.** `candidate` = *not yet acquired*, **357 entities**. NOT a draft synonym. |
+| **`paper`** | active / retired | **`reading_state`**: unread \| abstract-read \| read \| summarized *(+ access: paywalled \| preprint \| stub)* | **absent** | **NEW ROW.** 41 authored files on an undeclared axis; declared `retired` has **0** uses |
+| **`synthesis`** | active / complete / superseded / retired / archived | **`report_kind`**: hypothesis-synthesis \| synthesis-rollup \| emergent-threads \| cluster-digest | **required** | **NEW ROW.** Undeclared today, dropped by `extra="ignore"`, yet **branched on for control flow** in 5 places |
+| **`plan`** | draft / active / complete / superseded / retired / archived | **`readiness`**: ready \| ready-with-caveats \| not-ready | **absent** | **CORRECTED.** The axis is being invented in `commands/plan-analysis.md:118`; a `not-ready` plan is `active` *and* not-ready |
+| **`workflow-run`** | active *(in flight)* / superseded / archived | **`outcome`** *(execution)*: complete \| failed | **absent = in flight** | **CORRECTED.** `running`/`failed` are **dead** — indistinguishable to every consumer. Only `complete` is read (gates readiness). |
+| `story` | draft / active / complete / superseded / archived | **`maturity`**: developing \| mature | absent | 0 entities, 0 readers; its CLI writer raises `_retired_writer`. **Nothing to preserve** — choose from scratch. |
+| `concept` / `decision` / `workflow` | active / retired(←deprecated, ←abandoned, ←planned) / superseded / archived | *none* | — | **CONFIRMED** lifecycle synonyms: 0 readers, 0 authored uses |
 
-Three consequences worth stating plainly:
+Consequences worth stating plainly:
 
-- **Four of the ten have no domain axis at all.** `dataset`, `concept`, `decision`, `workflow`
-  were only ever using lifecycle *synonyms* (`deprecated`, `abandoned`, `planned`, `candidate`).
-  They collapse to pure-lifecycle kinds. Only **six** kinds carry a genuine second axis.
+- **Only three of the ten pre-audit "mixed" kinds were what I thought.** The audit added
+  `paper` and `synthesis` (genuine axes I had missed entirely), reclassified `dataset` and
+  `plan` (axes I had wrongly called synonyms), and gutted `workflow-run`'s.
 - **`complete` is mandatory on every kind that can conclude.** Without it, a successfully
   concluded hypothesis is forced into `retired`, which elsewhere means abandoned or
   indefinitely blocked — and `disposition` cannot be declared redundant until that hole is
@@ -298,8 +305,25 @@ one of them.
   | `retired` | *(none exists)* | **`closure_basis` ALWAYS required** |
 
   `retired` is the only terminal with no structural basis available to it, so it always
-  requires an authored one. The others require one **exactly when their structure is missing**
-  — which is a cross-field invariant, and therefore lives in JSON Schema (§4), not in prose.
+  requires an authored one. The others require one **exactly when their structure is missing**.
+
+  ### Where the invariant is ENFORCED — two layers, not one
+
+  An earlier draft said this invariant "lives in JSON Schema." **That is only half true, and the
+  half that is false is the load-bearing half.** JSON Schema validates **one record in
+  isolation**; it cannot resolve a successor ID, cannot confirm an archive record exists, and
+  cannot check that a verdict's evidence is real. Those are **cross-record** facts.
+
+  | layer | enforces | example |
+  |---|---|---|
+  | **JSON Schema** (§4) — local shape & presence | *"if `status` is terminal and the basis KEY is absent, `closure_basis` is required"* | `status: superseded` with no `superseded_by:`/`resynthesized_into:` key ⇒ `closure_basis` required |
+  | **Enumerated D3 escape-hatch validator** — structural resolution | *"the basis key is present, but does it RESOLVE?"* | `superseded_by: hypothesis:9999` (dangling); an `archived` entity with no archive-index row; `complete` + a `verdict` whose evidence does not exist |
+
+  This is exactly the D3 escape hatch, used as designed: an invariant JSON Schema genuinely
+  cannot express, declared explicitly and backed by a contract test — **not** an open-ended
+  second authority. Presence is schema; **resolution is a validator**. Getting this wrong would
+  re-open the hole in a subtler form: a *present but dangling* `superseded_by:` would satisfy
+  the schema and close the entity with no real reason behind it.
 
   **Open sub-decision:** `complete` + `verdict` **absent** may instead be *prohibited outright*
   for kinds carrying a verdict axis, rather than admitted with a `closure_basis`. Prohibition is
@@ -389,22 +413,68 @@ history with its superseded portion explicitly marked**, not rewritten away.
 Generation is rejected: it adds build machinery without removing the need for methods,
 ergonomic nested types, and runtime checks.
 
-### D4 — Excavate, then factor into **lifecycle capabilities**. **Adopted.**
+### D4 — RULED (post-audit): **two operational capabilities; lifecycle states are not capabilities.**
 
-Do **not** replace 22 arbitrary lists with one arbitrary universal list. Audit each kind, then
-encode the recovered intent as composable named capabilities rather than 33 copied
-vocabularies:
+> **A capability denotes an OPERATION with distinct behaviour — not permission to use an enum
+> value.**
+
+The audit ([`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md))
+ran and **refuted the premise D4 was commissioned on.** The earlier text here claimed
+`test_reference_kind_does_not_gain_archived` proved `paper`/`book`/`talk` were *deliberately*
+non-consolidatable. **It proves no such thing** — the guard pins one commit's ad-hoc
+enumeration, its own rationale misnames `paper`/`book`/`talk` as "reference kinds" when they are
+OPERATIONAL (the actual REFERENCE kinds, `topic`/`decision`, **were** given `archived`),
+`sci:consolidates` declares `target_kinds=[]`, and `consolidate.py:77-80` tells the operator to
+*go add `archived` to the kind*. The code treats the exclusion as **removable configuration**.
+
+**So: capabilities are real, but their current assignment to kinds carries no recoverable
+intent. Assign them BY DESIGN, kind by kind. Do not excavate.**
+
+**Keep exactly two capabilities** — the two that gate an operation with distinct behaviour:
+
+| capability | gates | admits |
+|---|---|---|
+| **`supersedable`** | the supersession operation, lineage edges, visibility change (`consolidation.py:74`, `materialize.py:177`) | `status: superseded` |
+| **`consolidatable`** | the consolidation/archive machinery (`consolidate.py:49`, `archive.py:22`) | `status: archived` |
+
+**Drop `draftable`, `completable`, `retirable`, `deferrable` as capabilities.** They have **no
+implementing gate**, and inventing four specialized verbs to justify them is unwarranted product
+scope. **Their lifecycle STATES are retained** — `draft`, `active`, `complete`, `retired`,
+`deferred` are declared per kind by the schema, exactly like any other enum value.
+
+**One generic lifecycle boundary, not four verbs.** `science entity edit --status` is *already*
+the transition surface. D5 strengthens it rather than multiplying it:
+
+1. validate the target status against the **composed schema**;
+2. accept **`--closure-basis` atomically** with a terminal transition;
+3. **enforce the terminal-basis invariant** (§7.4 — schema for presence, validator for
+   resolution);
+4. update the **two-axis consumers** (question debt, demand-closure) in the same transaction;
+5. **fail before writing** when a requirement is unmet.
+
+*(Alternatives rejected: four dedicated capabilities + commands — unjustified scope. A generic
+transition-capability DSL — elegant, but another abstraction with no demonstrated transition
+graphs behind it.)*
+
+**Bidirectional consistency gates** (these would have caught the live half-wiring):
 
 ```
-draftable · completable · supersedable · retirable · archivable(consolidatable) · deferrable?
+supersedable   ⇔ schema admits `superseded`
+               ⇔ the lineage RelationKind admits the kind as an endpoint
+               ⇔ the supersession operation handles the kind
+
+consolidatable ⇔ schema admits `archived`
+               ⇔ the archive/consolidation machinery handles the kind
 ```
 
-A kind's lifecycle vocabulary is then *derived* from the capabilities it declares.
+The first gate fails **today**: `topic`/`decision`/`theme` declare `superseded` and are
+auto-stamped by `consolidation.mark_superseded`, but `sci:supersedes` (`core.py:687-701`)
+**forbids them as endpoints**, so authoring the canonical edge raises `ValueError` in
+`materialize`. The vocabulary and the relation model disagree, and nothing notices.
 
-**`entity_class` must NOT automatically imply capabilities.** The existing
-`test_reference_kind_does_not_gain_archived` guard is the proof: `paper`/`book`/`talk` are
-deliberately non-consolidatable, and that intent is *more specific* than their broad
-classification. Exact capability names follow the excavation, not the other way round.
+**`entity_class` must NOT imply capabilities** — confirmed by the audit, which found it does
+not track them today (REFERENCE `topic`/`decision` are consolidatable; OPERATIONAL
+`paper`/`book`/`talk` are not; OPERATIONAL `method`/`plan`/`search` are).
 
 ### D5 — Versioned, report-before-apply, fail-early migration. **Adopted.**
 
