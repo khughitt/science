@@ -497,7 +497,7 @@ class TestBuildHealthReport:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'related: ["gadget:missing", "gizmo:d1"]\n'
             "---\n"
             "Body.\n",
@@ -790,7 +790,7 @@ health:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'related: ["decision:d1"]\n'
             "---\n"
             "Body.\n",
@@ -834,7 +834,7 @@ health:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'related: ["gadget:d1", "hypothesis:h01"]\n'
             'commits_to: ["latent:l1"]\n'
             'source_refs: ["go:0008150"]\n'
@@ -882,7 +882,7 @@ health:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'related: ["immunity:topic:sex-hormone-life-stage-immune-homeostasis", "gadget:d1"]\n'
             "---\n"
             "Body.\n",
@@ -912,7 +912,7 @@ health:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'source_refs: ["cite:Smith2024"]\n'
             "---\n"
             "Body.\n",
@@ -1334,7 +1334,7 @@ class TestHealthCLI:
             'id: "question:q01"\n'
             'kind: "question"\n'
             'title: "Q1"\n'
-            'status: "open"\n'
+            'status: "active"\n'
             'related: ["gadget:missing", "gizmo:d1"]\n'
             "---\n"
             "Body.\n",
@@ -1644,7 +1644,7 @@ class TestHealthCLI:
         (tmp_path / "AGENTS.md").write_text(f"# Agents\n\n{BEGIN_MARKER}\n{END_MARKER}\n")
         (tmp_path / "entities" / "questions").mkdir(parents=True)
         (tmp_path / "entities" / "questions" / "q01.md").write_text(
-            '---\nid: "question:q01"\nkind: "question"\ntitle: "Q1"\nstatus: "open"\n'
+            '---\nid: "question:q01"\nkind: "question"\ntitle: "Q1"\nstatus: "active"\n'
             'created: "2026-04-13"\nupdated: "2026-04-13"\n---\nWhat?\n'
         )
         # Install canonical managed artifacts so the project is genuinely clean.

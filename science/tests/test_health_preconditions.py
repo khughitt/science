@@ -63,7 +63,7 @@ def _scaffold_valid_project(root: Path) -> None:
     (root / "README.md").write_text("# Test\n", encoding="utf-8")
     (root / "tasks" / "active.md").write_text("# Active tasks\n", encoding="utf-8")
     (root / "entities" / "research-question.md").write_text(
-        '---\nid: "question:rq"\nkind: "question"\ntitle: "RQ"\nstatus: "open"\n'
+        '---\nid: "question:rq"\nkind: "question"\ntitle: "RQ"\nstatus: "active"\n'
         'created: "2026-04-13"\nupdated: "2026-04-13"\n---\nWhat?\n',
         encoding="utf-8",
     )

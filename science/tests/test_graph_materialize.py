@@ -88,7 +88,7 @@ def _write_demo_project(
                 'id: "question:q01-demo"',
                 'kind: "question"',
                 'title: "Demo question"',
-                'status: "open"',
+                'status: "active"',
                 "ontology_terms: []",
                 'source_refs: ["hypothesis:h01-demo"]',
                 'related: ["task:t001"]',

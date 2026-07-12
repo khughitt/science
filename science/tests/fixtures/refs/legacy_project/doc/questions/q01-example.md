@@ -1,7 +1,7 @@
 ---
 id: "question:q01"
 kind: "question"
-status: "open"
+status: "active"
 related:
   - article:Smith2024
   - article:Jones2023
