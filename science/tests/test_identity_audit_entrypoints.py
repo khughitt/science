@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.graph.health import build_health_report, collect_unresolved_refs
+from science_tool.graph.health import build_health_report
+from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 from science_tool.graph.materialize import materialization_audit
 
 

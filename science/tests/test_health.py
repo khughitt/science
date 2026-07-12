@@ -259,7 +259,7 @@ def _write_layered_claim_project(tmp_path: Path) -> Path:
 
 class TestCollectUnresolvedRefs:
     def test_groups_by_target_with_mention_counts(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -287,7 +287,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved[1]["sources"] == ["hypothesis:h02"]
 
     def test_meta_refs_not_reported_as_unresolved(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -302,7 +302,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved == []
 
     def test_looks_like_heuristic_for_task_ids(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -318,7 +318,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved[0]["looks_like"] == "task"
 
     def test_looks_like_classifies_question_and_hypothesis(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -338,7 +338,7 @@ class TestCollectUnresolvedRefs:
 
 class TestCollectLingeringTags:
     def test_finds_tags_lines_in_entity_files(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_lingering_tags
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -361,7 +361,7 @@ class TestCollectLingeringTags:
         assert results[0]["values"] == ["legacy-tag"]
 
     def test_finds_tags_lines_in_task_files(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_lingering_tags
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         tasks_dir = tmp_path / "tasks"
@@ -979,7 +979,7 @@ health:
         assert any("mechanistic" in " ".join(row["warnings"]).lower() for row in migration_issues)
 
     def test_unregistered_ref_kinds_ignores_annotation_source_refs(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unregistered_ref_kinds
+        from science_tool.graph.health_checks.unregistered_ref_kinds import collect_unregistered_ref_kinds
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         propositions = tmp_path / "entities" / "propositions"

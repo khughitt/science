@@ -24,7 +24,6 @@ from science_tool.annotation.cross_paper_evidence import (
 from science_tool.data_root import project_config_path
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.health_checks.base import (
     IDENTITY_REFERENCE_FIELDS,
     NO_ENTITIES_REASON,
@@ -34,17 +33,18 @@ from science_tool.graph.health_checks.base import (
     HealthTiming,
     context_sources,
 )
+from science_tool.graph.health_checks.lingering_tags import CHECK as LINGERING_TAGS_CHECK
+from science_tool.graph.health_checks.lingering_tags import LingeringTagsRecord
+from science_tool.graph.health_checks.unregistered_ref_kinds import CHECK as UNREGISTERED_REF_KINDS_CHECK
+from science_tool.graph.health_checks.unregistered_ref_kinds import UnregisteredRefKind
+from science_tool.graph.health_checks.unresolved_refs import CHECK as UNRESOLVED_REFS_CHECK
+from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
 from science_tool.graph.migrate import (
     LayeredClaimMigrationReport,
-    audit_project_sources,
     build_layered_claim_migration_report,
 )
 from science_tool.graph.sources import (
     ProjectSources,
-    external_prefixes,
-    is_bibliography_reference,
-    is_external_reference,
-    is_metadata_reference,
     load_project_sources,
 )
 from science_tool.instruments import InstrumentResult
@@ -62,254 +62,6 @@ DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_verified_but_unstageable",
     "dataset_research_package_asymmetric",
 )
-
-
-class UnresolvedRef(TypedDict):
-    target: str
-    mention_count: int
-    sources: list[str]
-    looks_like: str  # "semantic-triage" | "task" | "hypothesis" | "question" | "unknown"
-
-
-class UnregisteredRefKind(TypedDict):
-    kind: str
-    field: str
-    mention_count: int
-    refs: list[str]
-    sources: list[str]
-
-
-class _UnregisteredRefKindAccumulator(TypedDict):
-    mention_count: int
-    refs: set[str]
-    sources: set[str]
-
-
-# Heuristic patterns for classifying mis-prefixed `topic:` refs.
-# All anchored at start; trailing slug (e.g. h01-some-suffix) is allowed since
-# real entity IDs commonly have a numeric ID followed by a kebab-case slug.
-_TASK_ID_RE = re.compile(r"^topic:t\d+", re.IGNORECASE)
-_HYPOTHESIS_ID_RE = re.compile(r"^topic:h\d+", re.IGNORECASE)
-_QUESTION_ID_RE = re.compile(r"^topic:q\d+", re.IGNORECASE)
-
-
-def _classify(target: str) -> str:
-    """Heuristic guess at what kind of entity a ref looks like it should be."""
-    if _TASK_ID_RE.match(target):
-        return "task"
-    if _HYPOTHESIS_ID_RE.match(target):
-        return "hypothesis"
-    if _QUESTION_ID_RE.match(target):
-        return "question"
-    if target.startswith("topic:"):
-        return "semantic-triage"
-    return "unknown"
-
-
-def collect_unresolved_refs(
-    project_root: Path, *, sources: ProjectSources | None = None
-) -> InstrumentResult[UnresolvedRef]:
-    """Walk a project, run the audit, group unresolved refs by target.
-
-    Rows are sorted by mention count (descending), then target (asc).
-    Meta: refs are excluded (they're intentional metadata, not unresolved).
-
-    ``unwired`` when the load produced no entities: an audit of nothing yields no
-    dangling refs, which says nothing about the project's references.
-    """
-    if sources is None:
-        sources = load_project_sources(project_root.resolve(), strict_identity=False)
-    if not sources.entities:
-        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
-    rows, _ = audit_project_sources(sources)
-
-    # Group fail rows by target
-    by_target: dict[str, list[str]] = defaultdict(list)
-    for row in rows:
-        if row["status"] != "fail":
-            continue
-        if row["check"] == "identity_collision":
-            # An identity_collision row's `target` is the owner scope (e.g.
-            # "proj"), not an unresolved reference. Do not mislabel it.
-            continue
-        target = row["target"]
-        source = row["source"]
-        if source not in by_target[target]:
-            by_target[target].append(source)
-
-    result: list[UnresolvedRef] = [
-        {
-            "target": target,
-            "mention_count": len(sources_list),
-            "sources": sorted(sources_list),
-            "looks_like": _classify(target),
-        }
-        for target, sources_list in by_target.items()
-    ]
-    result.sort(key=lambda r: (-r["mention_count"], r["target"]))
-    return InstrumentResult.from_rows(result)
-
-
-def collect_unregistered_ref_kinds(
-    project_root: Path, *, sources: ProjectSources | None = None
-) -> InstrumentResult[UnregisteredRefKind]:
-    """Report identity refs whose CURIE prefix is not a registered entity kind.
-
-    ``unwired`` when the load produced no entities — there were no refs to inspect.
-    """
-    if sources is None:
-        sources = load_project_sources(project_root.resolve())
-    if not sources.entities:
-        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
-    external = external_prefixes(sources.ontology_catalogs)
-    peer_ids = sources.peer_ids
-    grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
-
-    for entity in sources.entities:
-        source_path = entity.file_path
-        for field in IDENTITY_REFERENCE_FIELDS:
-            for raw in _string_refs(getattr(entity, field, None)):
-                if (
-                    ":" not in raw
-                    or is_metadata_reference(raw)
-                    or (field == "source_refs" and raw.startswith("annotation:"))
-                    or (field in _BIBLIOGRAPHY_REFERENCE_FIELDS and is_bibliography_reference(raw))
-                    or is_external_reference(raw)
-                    or is_external_reference(raw, known_prefixes=external)
-                    or _is_registered_peer_address(raw, peer_ids)
-                ):
-                    continue
-                kind, _ = raw.split(":", 1)
-                kind = kind.lower()
-                try:
-                    sources.registry.kind_class(kind)
-                except EntityKindNotRegisteredError:
-                    bucket = grouped.setdefault(
-                        (kind, field),
-                        {"mention_count": 0, "refs": set(), "sources": set()},
-                    )
-                    bucket["mention_count"] += 1
-                    bucket["refs"].add(raw)
-                    bucket["sources"].add(source_path)
-
-    rows: list[UnregisteredRefKind] = []
-    for (kind, field), bucket in grouped.items():
-        rows.append(
-            {
-                "kind": kind,
-                "field": field,
-                "mention_count": bucket["mention_count"],
-                "refs": sorted(bucket["refs"]),
-                "sources": sorted(bucket["sources"]),
-            }
-        )
-    return InstrumentResult.from_rows(sorted(rows, key=lambda row: (row["kind"], row["field"])))
-
-
-def _is_registered_peer_address(raw: str, peer_ids: frozenset[str]) -> bool:
-    if not peer_ids or ":" not in raw:
-        return False
-    scope, artifact = raw.split(":", 1)
-    return ":" in artifact and scope in peer_ids
-
-
-def _string_refs(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, (list, tuple, set)):
-        return [item for item in value if isinstance(item, str)]
-    return []
-
-
-class LingeringTagsRecord(TypedDict):
-    file: str
-    values: list[str]
-
-
-_FRONTMATTER_TAGS_RE = re.compile(r"^tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
-_TASK_TAGS_RE = re.compile(r"^- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
-_FRONTMATTER_BLOCK_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
-
-
-def _extract_frontmatter_block(text: str) -> str:
-    """Return the YAML frontmatter body, or empty string if none.
-
-    Only the leading `---` … `---` block at the very top of the file is
-    considered frontmatter. `tags:` lines elsewhere (e.g. inside markdown
-    code fences that document an example frontmatter) are body content
-    and must not be flagged as lingering tags.
-    """
-    match = _FRONTMATTER_BLOCK_RE.match(text)
-    return match.group("body") if match else ""
-
-
-def _parse_list_body(body: str) -> list[str]:
-    items = [item.strip() for item in body.split(",") if item.strip()]
-    cleaned: list[str] = []
-    for item in items:
-        if len(item) >= 2 and item[0] == item[-1] and item[0] in ('"', "'"):
-            cleaned.append(item[1:-1])
-        else:
-            cleaned.append(item)
-    return cleaned
-
-
-_LINGERING_TAGS_SCAN_DIRS = ("doc", "entities", "tasks")
-
-
-def collect_lingering_tags(project_root: Path) -> InstrumentResult[LingeringTagsRecord]:
-    """Find any files still containing `tags:` lines (frontmatter or task).
-
-    Each scan directory is skipped when absent. ``unwired`` when NONE of them exists:
-    the scan then visits no file, and "no lingering tags" is a statement about an
-    empty search, not about the project.
-    """
-    project_root = project_root.resolve()
-    if not any((project_root / scan_dir).is_dir() for scan_dir in _LINGERING_TAGS_SCAN_DIRS):
-        return InstrumentResult.unwired(
-            code="scan_dirs_missing",
-            reason=f"none of {', '.join(f'{name}/' for name in _LINGERING_TAGS_SCAN_DIRS)} exists; nothing was scanned",
-        )
-    results: list[LingeringTagsRecord] = []
-
-    for scan_dir in ["doc", "entities"]:
-        base = project_root / scan_dir
-        if not base.is_dir():
-            continue
-        for md_file in sorted(base.rglob("*.md")):
-            text = md_file.read_text(encoding="utf-8")
-            frontmatter_body = _extract_frontmatter_block(text)
-            if not frontmatter_body:
-                continue
-            for match in _FRONTMATTER_TAGS_RE.finditer(frontmatter_body):
-                results.append(
-                    {
-                        "file": str(md_file.relative_to(project_root)),
-                        "values": _parse_list_body(match.group("body")),
-                    }
-                )
-
-    tasks_dir = project_root / "tasks"
-    candidate_task_files: list[Path] = []
-    if (tasks_dir / "active.md").is_file():
-        candidate_task_files.append(tasks_dir / "active.md")
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        candidate_task_files.extend(sorted(done_dir.glob("*.md")))
-
-    for task_file in candidate_task_files:
-        text = task_file.read_text(encoding="utf-8")
-        for match in _TASK_TAGS_RE.finditer(text):
-            results.append(
-                {
-                    "file": str(task_file.relative_to(project_root)),
-                    "values": _parse_list_body(match.group("body")),
-                }
-            )
-
-    return InstrumentResult.from_rows(results)
 
 
 class TaskArchiveLag(TypedDict):
@@ -1135,7 +887,6 @@ _IDENTITY_REQUIRED_KINDS = frozenset(
     }
 )
 _TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
-_BIBLIOGRAPHY_REFERENCE_FIELDS = frozenset({"source_refs", "evidence_refs"})
 
 
 def _coerce_external_curie(raw: object) -> str | None:
@@ -2032,27 +1783,9 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         run=lambda context: collect_agent_context_findings(context.project_root),
         empty=lambda _root: [],
     ),
-    HealthCheck(
-        name="unresolved_refs",
-        description="Find project references that do not resolve to known entities.",
-        requires_sources=True,
-        run=lambda context: collect_unresolved_refs(context.project_root, sources=context_sources(context)),
-        empty=lambda _root: [],
-    ),
-    HealthCheck(
-        name="unregistered_ref_kinds",
-        description="Find identity refs whose prefix is not a registered entity kind.",
-        requires_sources=True,
-        run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=context_sources(context)),
-        empty=lambda _root: [],
-    ),
-    HealthCheck(
-        name="lingering_tags",
-        description="Find legacy tags fields in document and task metadata.",
-        requires_sources=False,
-        run=lambda context: collect_lingering_tags(context.project_root),
-        empty=lambda _root: [],
-    ),
+    UNRESOLVED_REFS_CHECK,
+    UNREGISTERED_REF_KINDS_CHECK,
+    LINGERING_TAGS_CHECK,
     HealthCheck(
         name="dataset_anomalies",
         description="Run dataset lineage, access, and package invariant checks.",

@@ -23,12 +23,12 @@ from science_tool.graph.health import (
     collect_identity_policy_findings,
     collect_invalid_entity_aspects,
     collect_legacy_task_type,
-    collect_lingering_tags,
     collect_tooling_scaffold_findings,
-    collect_unregistered_ref_kinds,
-    collect_unresolved_refs,
     collect_validation_findings,
 )
+from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+from science_tool.graph.health_checks.unregistered_ref_kinds import collect_unregistered_ref_kinds
+from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
 
 def _seed_manifest(root: Path) -> None:
