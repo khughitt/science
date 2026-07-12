@@ -438,11 +438,22 @@ The unifying rule this cluster adds:
 5. A unique `<kind>:<NNNN>` prefix expands to its canonical ID; an **ambiguous** prefix fails
    loudly.
 6. Staged output can be validated before reconciliation.
-7. **Status vocabulary is enforced on the file, not just on CLI writes.** A hypothesis carrying
-   `status: retired` — a task word, not in its kind's vocabulary — **fails `science validate`**.
-   This check alone would have caught natural-systems' defect at commit time.
-8. `status` and `disposition` are independently settable. All four cells of §5.2.3 round-trip,
-   including `status: under-investigation` + `disposition: closed`.
+7. ~~**Status vocabulary is enforced on the file, not just on CLI writes.** A hypothesis carrying
+   `status: retired` — a task word, not in its kind's vocabulary — **fails `science validate`**.~~
+   > **⚠️ SUPERSEDED (2026-07-12)** by
+   > [`2026-07-12-authoritative-entity-schema-design.md`](2026-07-12-authoritative-entity-schema-design.md)
+   > **D1**. Under D1, `status` *is* the lifecycle, so **`retired` is a VALID hypothesis
+   > status** and this criterion now asserts the opposite of the target model. The
+   > *file-not-just-CLI enforcement* half survives (and shipped, at WARN); what is retired is
+   > the claim that `retired` is illegal on a hypothesis.
+   > **Replacement:** rev 3 §7.3 (field contract) + §7.4 (terminal-transition invariant).
+8. ~~`status` and `disposition` are independently settable. All four cells of §5.2.3 round-trip,
+   including `status: under-investigation` + `disposition: closed`.~~
+   > **⚠️ SUPERSEDED (2026-07-12)** by the same design, **D2**. **`disposition` is DELETED**;
+   > openness *derives* from the lifecycle. The cell this criterion protects survives as
+   > `status: retired` + `verdict` **absent**, and `disposition_basis` survives as
+   > **`closure_basis`**.
+   > **Replacement:** rev 3 §7.3 combination table + §7.4 closure-basis invariant.
 9. A **terminal** hypothesis does not appear under Candidate frames and does **not** lead the
    attention ranking — while remaining materialized, queryable, and provenance-visible.
 10. **Auto-refutation is impossible without a passing Estimator Certification Gate.** A linked

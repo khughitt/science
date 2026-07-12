@@ -215,8 +215,7 @@ Three consequences worth stating plainly:
   settle — provisionally, `deferred` is proposed as a lifecycle capability, not forced into an
   existing word.
 
-**Allowed combinations.** The axes are orthogonal by construction; no combination is forbidden.
-The load-bearing cells:
+**Allowed combinations.** The axes are orthogonal, and the load-bearing cells are:
 
 | lifecycle + domain | means |
 |---|---|
@@ -227,6 +226,13 @@ The load-bearing cells:
 
 That last row is the whole argument: under the old collapsed field, `superseded` overwrote
 `supported` and the belief was silently lost.
+
+**Orthogonal does NOT mean every combination is legal.** An earlier draft of this section said
+"no combination is forbidden," which was wrong, and it contradicted §7.4. Axis independence is
+a statement about *representation* — the two facts can be recorded separately — not a licence
+to record a terminal state with no reason for it. Cross-field invariants are precisely what the
+JSON Schema authority (§4) exists to express, and the terminal-transition invariant in §7.4 is
+one of them.
 
 ### 7.4 `phase` is deleted; `disposition` is deleted; the *basis* survives
 
@@ -249,40 +255,87 @@ That last row is the whole argument: under the old collapsed field, `superseded`
   disagree with its source.
 
 - **`disposition_basis` SURVIVES, renamed `closure_basis`.** This is the asymmetry that
-  matters: **the state is derivable; the authored reason is not.** `closure_basis` is required
-  on a terminal transition that has **no structural basis** — where "structural basis" means
-  the record already carries the reason in machine-readable form:
+  matters: **the state is derivable; the authored reason is not.**
 
-  | terminal transition | structural basis | `closure_basis` required? |
+  ### The invariant
+
+  > **A terminal entity requires either a PRESENT, VALID structural basis for that transition,
+  > or `closure_basis`.**
+
+  The condition is the **presence of the structure**, never the status word. An earlier draft
+  keyed the requirement off the terminal value alone — assuming `superseded` *has* lineage,
+  `archived` *has* an archive record, `complete` *has* a verdict. **None of those is
+  guaranteed**, and one is explicitly guaranteed false: the live-lineage contract
+  (`2026-07-02-phase4e-live-lineage-visibility-design.md`) states that *"live `status:
+  superseded` without lineage emits no lineage edge and **does not fail**."* So a lineage-less
+  `superseded` would have slipped through with no reason recorded anywhere — the exact hole
+  `closure_basis` exists to close. Likewise `status: archived` is a *status*, not a physical
+  archive location; the two can diverge.
+
+  | terminal | structural basis that discharges the requirement | if that basis is ABSENT |
   |---|---|---|
-  | → `superseded` | `supersedes:` / supersession lineage | **no** — lineage *is* the reason |
-  | → `archived` | archive/consolidation record | **no** |
-  | → `complete` | the verdict + its evidence | **no** |
-  | → `retired` | *nothing* | **YES** — otherwise closure hides research debt |
+  | `superseded` | valid lineage (`supersedes:` / `superseded_by` / `resynthesized_into`) resolving to a live successor | **`closure_basis` required** |
+  | `archived` | an archive / consolidation record | **`closure_basis` required** |
+  | `complete` | a verdict **plus** qualifying evidence | **`closure_basis` required** |
+  | `retired` | *(none exists)* | **`closure_basis` ALWAYS required** |
 
-  `retired` is precisely the transition that records no reason anywhere else, which is why it
-  is the one that must carry an authored one. This preserves the fb-005 guarantee that
-  retirement cannot silently bury a live question.
+  `retired` is the only terminal with no structural basis available to it, so it always
+  requires an authored one. The others require one **exactly when their structure is missing**
+  — which is a cross-field invariant, and therefore lives in JSON Schema (§4), not in prose.
+
+  **Open sub-decision:** `complete` + `verdict` **absent** may instead be *prohibited outright*
+  for kinds carrying a verdict axis, rather than admitted with a `closure_basis`. Prohibition is
+  cleaner ("you cannot conclude without concluding something"); admission is more permissive for
+  work concluded on non-epistemic grounds. **Settle in the D4 audit, per kind.**
+
+  This preserves and strengthens the fb-005 guarantee: closure cannot silently bury research
+  debt, *and* it can no longer be discharged by a terminal word that merely looks structured.
 
 ## 8. Phasing
 
-- **P0 — Certify (zero downstream *source* migration).** Every field a shipped template or
-  toolkit code writes is **declared and wired, or deleted from the template. No third option.**
-  Adjudicate `phase`, `role`, `input`, `report_kind`, `committed`, `spec`, `promoted_from` one
-  at a time.
-  **P0 is *not* "zero downstream churn."** Projects may need no source edits, but wiring a
-  previously-dropped field **changes their rebuilt graphs, dashboards, attention ranking, and
-  validation output** — materializing `phase` is what re-ranks hypotheses. P0 therefore
-  **requires downstream graph/output compatibility checks**, including **commons** wherever a
-  shared field is touched.
+### The rule that fixes the earlier contradiction
+
+An earlier draft put `phase` folding, `disposition` deletion, and the `status` reinterpretation
+in **P0** while P0 promised *zero downstream source migration*. **Those cannot coexist.**
+Existing files carry a *semantic* `status` and a *lifecycle* `phase`. Changing the templates and
+consumers without rewriting the sources leaves **two incompatible meanings of `status` live at
+once**, and the only way to serve both is the heuristic compatibility layer **D5 explicitly
+forbids**.
+
+> **P0 does not change meaning. It only inventories and certifies the field surfaces as they
+> are.** Every change of meaning belongs to a versioned migration slice that moves schema,
+> sources, templates and consumers **together, atomically, per kind.**
+
+- **P0 — Inventory & certify (no reinterpretation).**
+  Enumerate every field a template or toolkit writes; classify each as *declared+wired*,
+  *declared+`omit`*, or *undeclared*. Adjudicate the undeclared ones — `role`, `input`,
+  `report_kind`, `committed`, `spec`, `promoted_from` — as declare-or-delete. **`phase`,
+  `disposition` and the `status` reinterpretation are explicitly NOT in P0**; they move to P2m.
+  P0 is *zero downstream source migration* and *not* zero downstream churn — wiring a
+  previously-dropped field still changes rebuilt graphs, dashboards, attention ranking and
+  validation output. **P0 therefore requires downstream graph/output compatibility checks,
+  including commons wherever a shared field is touched.**
 - **P1 — Absorb the real subsystems.** `provided_capabilities`/`required_capabilities` is a
   designed capability-matching subsystem with its own validator and seven design docs, reading
   raw frontmatter, bypassing the model, invisible to the graph. Make it first-class.
 - **P2 — Converge the two schema systems.** Project-authored kinds adopt `schema_profile`;
   `dataset`/`paper` stop having two definitions; commons compatibility is a gate, not an
   afterthought.
-- **P3 — Then strictness**, WARN first, ratcheting to ERROR **per kind** as each kind's schema
-  is certified and its projects migrated. Severity is a property of the **kind**, never of
+- **P2m — The versioned migration slices (one per kind, ATOMIC).** This is where meaning
+  changes. Each slice, for exactly one kind, does all of the following **or none of it**:
+  1. introduce the **target schema version**;
+  2. **rewrite the sources** (deterministic mappings applied; ambiguous ones **refused** and
+     sent for authored adjudication — D5);
+  3. update the **templates**;
+  4. update the **consumers/selectors** (e.g. big-picture's Candidate-frames selector
+     `phase == "candidate"` → `status == "draft"`; attention ranking; `DEBT_QUESTION_STATUSES`);
+  5. **graph/output diff** the result, including commons where shared fields are touched.
+
+  `hypothesis` is the first slice: it carries `phase` **and** `disposition` **and** the `status`
+  reinterpretation, so it is the one place all three land together — which is precisely why they
+  must not be scattered across P0.
+- **P3 — Then strictness**, WARN first, ratcheting to ERROR **per kind**, only after that kind's
+  sources *and* consumers are certified. Severity is a property of the **kind**, never of
   `layout_version` (the axis that already failed).
 
 ## 9. Decisions — RULED (2026-07-12)
