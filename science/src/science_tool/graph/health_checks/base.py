@@ -56,6 +56,7 @@ class HealthCheck:
     description: str
     requires_sources: bool
     run: Callable[[HealthContext], object]
+    empty: Callable[[Path], object]
 
 
 def context_sources(context: HealthContext) -> ProjectSources:

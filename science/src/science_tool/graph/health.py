@@ -695,24 +695,7 @@ def _empty_cross_paper_evidence_health() -> CrossPaperEvidenceHealthReport:
 
 
 def _empty_check_results(project_root: Path) -> dict[str, object]:
-    return {
-        "identity_policy": [],
-        "entity_identity": [],
-        "layered_claim_migration": _empty_layered_claim_migration_report(project_root),
-        "cross_paper_evidence": _empty_cross_paper_evidence_health(),
-        "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
-        "managed_artifacts": [],
-        "tooling_scaffold": [],
-        "validate": [],
-        "unresolved_refs": [],
-        "unregistered_ref_kinds": [],
-        "lingering_tags": [],
-        "agent_context": [],
-        "dataset_anomalies": [],
-        "legacy_task_type": [],
-        "invalid_entity_aspects": [],
-        "prose_epistemics": _empty_prose_epistemics(),
-    }
+    return {check.name: check.empty(project_root) for check in HEALTH_CHECKS}
 
 
 def build_health_report(
@@ -1982,12 +1965,14 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Validate entity identity policy and relation endpoint disambiguation.",
         requires_sources=True,
         run=lambda context: collect_identity_policy_findings(context.project_root, sources=context_sources(context)),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="entity_identity",
         description="Validate canonical entity identifiers, baseline status, and prose references.",
         requires_sources=True,
         run=_collect_entity_identity,
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="layered_claim_migration",
@@ -1996,83 +1981,97 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         run=lambda context: build_layered_claim_migration_report(
             context.project_root, sources=context_sources(context)
         ),
+        empty=_empty_layered_claim_migration_report,
     ),
     HealthCheck(
         name="cross_paper_evidence",
         description="Report derived cross-paper literature evidence and scanner faults.",
         requires_sources=True,
         run=_collect_cross_paper_evidence,
+        empty=lambda _root: _empty_cross_paper_evidence_health(),
     ),
     HealthCheck(
         name="archive_lag",
         description="Count completed tasks that should be archived.",
         requires_sources=False,
         run=_collect_archive_lag,
+        empty=lambda _root: {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
     ),
     HealthCheck(
         name="managed_artifacts",
         description="Check installed managed artifacts against canonical versions.",
         requires_sources=False,
         run=_collect_managed_artifacts,
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="tooling_scaffold",
         description="Check pyproject and environment scaffold for science tooling.",
         requires_sources=False,
         run=lambda context: collect_tooling_scaffold_findings(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="validate",
         description="Run canonical project validation and surface warnings/errors.",
         requires_sources=False,
         run=lambda context: collect_validation_findings(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="prose_epistemics",
         description="Read the project-level prose epistemics health artifact.",
         requires_sources=False,
         run=_collect_prose_epistemics,
+        empty=lambda _root: _empty_prose_epistemics(),
     ),
     HealthCheck(
         name="agent_context",
         description="Check CLAUDE.md, AGENTS.md, and core/overview.md for session-context drift.",
         requires_sources=False,
         run=lambda context: collect_agent_context_findings(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="unresolved_refs",
         description="Find project references that do not resolve to known entities.",
         requires_sources=True,
         run=lambda context: collect_unresolved_refs(context.project_root, sources=context_sources(context)),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="unregistered_ref_kinds",
         description="Find identity refs whose prefix is not a registered entity kind.",
         requires_sources=True,
         run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=context_sources(context)),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="lingering_tags",
         description="Find legacy tags fields in document and task metadata.",
         requires_sources=False,
         run=lambda context: collect_lingering_tags(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="dataset_anomalies",
         description="Run dataset lineage, access, and package invariant checks.",
         requires_sources=False,
         run=lambda context: check_dataset_anomalies(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="legacy_task_type",
         description="Find tasks still carrying the legacy type field.",
         requires_sources=False,
         run=lambda context: collect_legacy_task_type(context.project_root),
+        empty=lambda _root: [],
     ),
     HealthCheck(
         name="invalid_entity_aspects",
         description="Validate explicit entity aspects against the project aspect catalog.",
         requires_sources=False,
         run=lambda context: collect_invalid_entity_aspects(context.project_root),
+        empty=lambda _root: [],
     ),
 )
