@@ -825,6 +825,24 @@ this document's own version of the bug it is about.
 - **Teach `science validate` to check entity sections against `_template.sections`** (§7.1).
   Affects every entity kind. Requires code, so not this cluster.
 
+  It stays separate precisely *because* it is not about pre-registration: `document_structure.py`
+  hard-codes per-kind lists for topic/paper/book and ignores the registry it already has, so no
+  entity kind's `required: true` sections are validated today. Fixing that changes the contract for
+  every templated kind at once, which is a different blast radius than this doctrine's, and it must
+  not be smuggled in under an estimator change.
+
+  Its design must:
+  1. **Derive** the required-section set from `_template.sections` — not from a per-kind list. The
+     hard-coded lists are the defect, so a fix that adds a fourth list is not a fix.
+  2. **Define the behavior for documents that already exist.** Every pre-registration written before
+     this branch lacks the gate section; turning on enforcement retroactively invalidates them.
+     Grandfathering, a migration, or a staged warn-then-fail are all defensible — silently failing
+     the existing corpus is not.
+  3. **Avoid hard-coded per-kind lists** anywhere in the resulting code path.
+
+  Until it lands, `required: true` means *scaffolded by default*, not *enforced* — and every
+  artifact this branch ships says so in its own text rather than implying teeth it does not have.
+
 ---
 
 ## 9. Review history
