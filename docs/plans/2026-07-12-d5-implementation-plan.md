@@ -1,9 +1,10 @@
 # D5 — Entity Schema Convergence: Implementation Plan
 
-> **rev 2.** Rev 1 was reviewed and **rejected as not executable**. Seven contract defects, all
-> confirmed. The rev-7 mapping (§"What the corpus says") is unchanged and stands; everything
-> around it was rebuilt. See "What rev 1 got wrong" at the end — it is the most useful section
-> here, because three of the seven were *design-phasing* errors, not typos.
+> **rev 3.** Rev 1 was rejected as not executable (seven contract defects, all confirmed). Rev 2
+> rebuilt it, and review then ruled two more things that rev 2 had left open and gotten wrong:
+> the **six-field "belief cluster" is three unrelated ownership patterns**, and **`verdict` is an
+> authored adjudication by contract** — not "authored for now". Both are now design rev 8.
+> The rev-7 mapping is unchanged and stands. See "What earlier revisions got wrong" at the end.
 
 > **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax.
 > **Every task ends green.** A task that ends with a red suite is a broken task, not a slice.
@@ -117,11 +118,18 @@ it. Phase 0 below is that work.
 
 | phase | tasks | changes meaning? | ends with |
 |---|---|---|---|
-| **0 — Declare the fields (P0)** | 1–2 | **No** | every authored key declared or deleted; schema still open |
+| **0 — Declare the fields (P0)** | 1, 2, **2b** | **No** *(2b fixes a live bug)* | every authored key given one of four dispositions; the `_authored_magnitude` chain deleted |
 | **1 — Certify the mapping** | 3–4 | **No** | inventory + adjudication artifact; writes nothing |
-| **2 — Schema substrate (P2)** | 5–7 | **No** | base 2.0, mixin, D3 validator — **wired**, strict, green |
-| **3 — The atomic slice (P2m)** | 8–10 | **YES** | all 9 repos migrated, graph-diffed, validate exit 0 |
-| **4 — Ratchet (P3)** | 11 | No | `hypothesis` → ERROR |
+| **2 — Schema substrate (P2)** | 5, 6, **6b**, 7 | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green |
+| **3 — The atomic slice (P2m)** | 8–11 | **YES** | all 9 repos migrated, graph-diffed, validate exit 0 |
+| **4 — Ratchet (P3)** | 12 | No | `hypothesis` → ERROR |
+
+**Ownership partition (design rev 8) runs through the whole plan.** A field is **core**,
+**project-extension**, **renamed/migrated**, or **derived/deleted** — never "declared because we
+saw it." Task 2 decides; Task 6 encodes core; **Task 6b composes project extensions**; Task 9
+applies renames and deletions. Strictness (`unevaluatedProperties: false`) cannot land before 6b,
+because closing the schema without project extensions would force mm30's one-project fields into
+the core mixin for all 22 projects.
 
 ---
 
@@ -254,42 +262,145 @@ git commit -m "feat(entities): field-inventory -- declare-or-delete instrument f
 
 ---
 
-### Task 2: Adjudicate the 36 keys
+### Task 2: Adjudicate the 36 keys — into FOUR dispositions, not one
 
-**Not a code task — a decision task with a written artifact.** Its output is the property list
-Task 6 encodes. Every key gets exactly one disposition:
+**Not a code task — a decision task with a written artifact.** Its output is what Task 6 encodes.
 
-| disposition | meaning | keys |
+> **⛔ "Observed somewhere" is NOT an admission rule for the core mixin.** Rev 2 of this plan put
+> every declared corpus key into the global `mixin-hypothesis`, which **violates design §6's
+> ownership contract**: a project-local field (mm30's `confidence_mechanistic_label`) would become
+> a **core Science field** for all 22 projects, just because one project authored it. Ownership is
+> a **scope**, and the inventory must decide scope per key.
+
+Every key gets **exactly one** of four dispositions:
+
+| disposition | meaning | goes where |
 |---|---|---|
-| **declare** | a real authored field → goes in the mixin | `id`, `kind`, `title`, `status`, `created`, `updated`, `related`, `source_refs`, `origins`, `added_by`, `tags`, `ontology_terms`, `datasets`, `description`, `aliases`, `priority`, `domain`, `role`, `lens_views`, `review_state`, `promoted_from`, `promotion_criteria`, `rival_model_packet`, `external_hypothesis_id`, `identification` |
-| **declare (P1 subsystem)** | real, but owned by the capability subsystem the design defers | `required_capabilities`, `capability_scope`, `composition_rule` |
-| **declare (belief cluster)** | real, but **see the open question below** | `belief_state`, `evidence_stance`, `author_stated_evidence`, `confidence`, `confidence_label`, `confidence_mechanistic_label` |
-| **delete** | folds into `status` (rev 7) | `phase` |
-| **derived — must NOT be authored** | `_enrich_raw` sets it | `profile` |
+| **core** | a real field of *every* hypothesis | `mixin-hypothesis-1.0.json` |
+| **project-extension** | real, but owned by **one project** | `extension-<project>.<name>-1.0.json`, composed via the project's declared extensions (Task 6b) |
+| **rename / migrate** | real, but under the wrong name or on the wrong entity | a rename in Task 9 |
+| **derived / delete** | must not be authored at all | removed by Task 9 |
 
-- [ ] **Step 1:** Write `docs/plans/2026-07-12-hypothesis-field-adjudication.md` recording the
-  table above with, for each key: its file count, whether any code reads it (grep, and **open every
-  hit** — `role`, `datasets`, `priority` collide with ordinary English), and its disposition.
-- [ ] **Step 2:** Resolve the two open questions below **with the user**. Both are blocking.
+**Core (25):** `id`, `kind`, `title`, `status`, `verdict`, `closure_basis`, `created`, `updated`,
+`related`, `source_refs`, `origins`, `added_by`, `tags`, `ontology_terms`, `datasets`,
+`description`, `aliases`, `priority`, `domain`, `role`, `lens_views`, `review_state`,
+`promoted_from`, `promotion_criteria`, `rival_model_packet`, `external_hypothesis_id`,
+`identification`, `superseded_by`, `resynthesized_into`, `archive_ref`.
+
+**Core, but owned by the deferred P1 capability subsystem (3):** `required_capabilities`,
+`capability_scope`, `composition_rule` — declared, not absorbed.
+
+**Derived / delete (2):** `phase` (folds into `status`, rev 7) · `profile` (`_enrich_raw` sets it;
+3 files hand-author it — strip them).
+
+### The six-field "belief cluster" — RULED (design rev 8). It is **three unrelated ownership patterns.**
+
+| field | files | ruling | disposition |
+|---|---|---|---|
+| `belief_state` | 13 | **The second-source-of-truth defect, exactly.** Hypothesis belief is **already computed** — `graph/belief.py`'s `_claims()` iterates `(Proposition, Hypothesis)` and `aggregate_belief()` processes hypothesis evidence lines. | **DELETE** |
+| `evidence_stance` | 13 | **Not belief.** `literature-supported` describes **provenance/coverage**, not epistemic magnitude. | **project-extension** (`evidence_scope`), else delete. **Remove from `_authored_magnitude`.** |
+| `author_stated_evidence` | 13 | **Source provenance, not current belief.** | **rename/migrate** → structured origin metadata, or project-local `source_stated_evidence`. **Must never influence computed belief.** |
+| `confidence` | 2 | **Too ambiguous for a core schema** — unscoped subjective assessments. | **rename/migrate** → a project-local prior or an `expert_judgment` evidence line, else delete |
+| `confidence_label`, `confidence_mechanistic_label` | 12 | **Real MM-specific interface fields, not core Science fields.** The MM exporter reads them and emits them *separately* from derived `bundle_belief`. | **project-extension** (mm30) |
+
+- [ ] **Step 1:** Write `docs/plans/2026-07-12-hypothesis-field-adjudication.md`: for each of the
+  36 keys record its file count, **every** code reader (grep, then **open every hit** — `role`,
+  `datasets`, `priority`, `domain` collide with ordinary English), and its disposition.
+- [ ] **Step 2:** Confirm the `evidence_stance` / `confidence` fates with the owning projects
+  (mm30, cancer-evolution) — "project-extension **or** delete" is left open above **on purpose**,
+  and it is the project's call, not the toolkit's.
 - [ ] **Step 3:** Commit the adjudication doc.
 
-> **⚠️ OPEN QUESTION 1 — the belief cluster may be a second `belief` defect.**
-> Six keys (`belief_state`, `evidence_stance`, `author_stated_evidence`, `confidence`,
-> `confidence_label`, `confidence_mechanistic_label`, 12–13 files each) look like **authored
-> epistemic state on a hypothesis**. Design rev 6 ruled that `proposition.belief` must **not**
-> become an authored field, because belief is *derived from evidence lines* and an authored
-> field would be a second, hand-editable source of truth for a computed quantity. **The same
-> argument may apply to these six.** Declaring them in the mixin would ratify them. **Do not
-> declare them until this is ruled.** If they must be preserved for now, declare them with an
-> explicit `"$comment": "PROVISIONAL — pending the belief-authority ruling"`.
+---
 
-> **⚠️ OPEN QUESTION 2 — should `hypothesis.verdict` be authored at all?**
-> The existing `verdict/` subsystem rolls up interpretation polarities per claim. If a
-> hypothesis's verdict is *derivable* from the interpretations bearing on it, then an authored
-> `verdict:` field is the `belief` mistake again. **Evidence it is not (yet):** the rollup is
-> claim-scoped, never hypothesis-scoped, and 9 files author a verdict today with no derivation
-> anywhere. So authored is right **for now** — but the plan must say so deliberately rather than
-> by omission, and the field should be revisited when interpretation→hypothesis rollup exists.
+### Task 2b: Delete the `_authored_magnitude` fallback chain — a LIVE bug, and a trap
+
+**This must land BEFORE `belief_state` is removed, or removing it silently corrupts 13 hypotheses.**
+
+`validate/checks/evidence_lines.py:395-411` walks
+`("belief_state", "evidence_stance", "author_stated_evidence")` and **returns on the first
+recognized token**:
+
+```python
+        for field in ("belief_state", "evidence_stance", "author_stated_evidence"):
+            raw = fm.get(field)
+            if not raw:
+                continue
+            token = str(raw).strip().lower().split()[0].split("(")[0].strip("-_:")
+            if token in _AUTHORED_MAGNITUDE:
+                return _AUTHORED_MAGNITUDE[token], path
+```
+
+**The corpus has 13 files with `belief_state: speculative` — and the same 13 with
+`evidence_stance: literature-supported`.** Because `belief_state` is checked first, the
+`evidence_stance` value has **never once reached this check**. And
+`_AUTHORED_MAGNITUDE["literature-supported"] == "supported"` (line 379), while
+`_AUTHORED_MAGNITUDE["speculative"] == "speculative"`.
+
+> **So deleting `belief_state` naively promotes 13 hypotheses from the LOWEST rung
+> (`speculative`) to `supported` — purely as an artifact of field order.** Nothing about the
+> evidence changed. This is the same class of defect as the collapsed `status`: a value silently
+> standing in for a different axis, and a consumer reading whichever one it happens to see first.
+
+**The chain is DELETED, not adapted.** `evidence_stance` and `author_stated_evidence` are
+**provenance**, and provenance must never set an epistemic magnitude — that is the whole ruling.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# science/tests/test_authored_magnitude.py
+def test_provenance_fields_never_set_an_epistemic_magnitude(tmp_project) -> None:
+    # `literature-supported` says WHERE the claim came from, not HOW STRONG the evidence is.
+    # It must not reach the belief ladder at all -- not first, not as a fallback, never.
+    write_hypothesis(tmp_project, "0001-x",
+                     extra={"evidence_stance": "literature-supported"})
+    assert _authored_magnitude(ctx(tmp_project), prov, claim_uri("hypothesis:0001-x")) is None
+
+
+def test_author_stated_evidence_never_sets_a_magnitude(tmp_project) -> None:
+    write_hypothesis(tmp_project, "0002-y", extra={"author_stated_evidence": "established"})
+    assert _authored_magnitude(ctx(tmp_project), prov, claim_uri("hypothesis:0002-y")) is None
+```
+
+- [ ] **Step 2: Run and fail** — both currently return `"supported"` / `"well_supported"`.
+
+- [ ] **Step 3: Implement.** Reduce the loop to the single authored field the check is *for*, or
+  delete `_authored_magnitude` outright if `belief_state` was its only legitimate input — which
+  Task 2's grep decides. **Do not** simply drop `belief_state` from the tuple and leave the other
+  two: that is precisely the corruption above.
+
+- [ ] **Step 4: Green.** Then run `science validate` in mm30 and cancer/therapeutics (the projects
+  holding these 13 files) and **diff the belief-authoring findings before and after**. The count
+  may change; **no hypothesis's magnitude may silently rise.**
+
+- [ ] **Step 5: Commit.**
+
+---
+
+### The `verdict` contract — RULED (design rev 8)
+
+**`hypothesis.verdict` is AUTHORED, and its semantic owner is the adjudicating author.** Not
+"authored for now." Task 6's schema and Task 7's graph check both implement this contract:
+
+1. **Absent** = *no adjudication has been recorded* (not "no evidence").
+2. **Every authored verdict must have qualifying, resolvable evidence or interpretation basis at
+   graph time — NOT only when `status: complete`.** A verdict with nothing behind it is a
+   fabrication whatever the lifecycle says. *(Rev 2 of this plan scoped the graph check to
+   `complete` only. Wrong — and it would have let a `draft` hypothesis assert `refuted` with no
+   evidence at all.)*
+3. **`complete` additionally requires a verdict to be present** (rev 6).
+4. **Computed systems may report a recommendation or a disagreement — never populate or overwrite
+   the authored verdict.** The moment they can, it stops being an adjudication.
+5. **Any future deterministic rollup gets a distinct derived name.** It does not silently take over
+   `verdict`'s ownership.
+
+> **Why this is not the `belief` defect.** Hypothesis-level derived belief **already exists**
+> (`_claims()` covers `SCI_NS.Hypothesis`). What does not exist is a **total, versioned mapping**
+> from that belief — or from interpretation-polarity rollups — onto
+> `partially-supported|supported|weakened|refuted`. **There is no derived hypothesis *verdict*.**
+> Adjudication is not a rounding of a scalar: it weighs criteria, context and the hypothesis's
+> composition. `belief` was a second source of truth for a quantity a policy **already computed**;
+> nothing computes an adjudication.
 
 ---
 
@@ -978,10 +1089,14 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > and 369 records rely on it; closing commons is a separate decision with a separate blast radius.
 > `strict` is gated on `PROJECT_MIXIN_NAMES` so each kind opts in **as it migrates**.
 
-- [ ] **Step 3b: Write `mixin-hypothesis-1.0.json`.** `properties` must contain **every key Task 2
-  adjudicated as *declare*** (25 + 3 capability + up to 6 belief-cluster, pending Open Question 1).
-  Abridged below to the fields this slice reasons about — **the implementer writes the full list
-  from Task 2's doc, and `test_every_authored_field_in_the_corpus_is_DECLARED` enforces it:**
+- [ ] **Step 3b: Write `mixin-hypothesis-1.0.json`.** `properties` contains **exactly the keys Task 2
+  adjudicated as `core`** — the 25 core fields plus the 3 deferred-capability fields. It does
+  **NOT** contain the project-extension fields (`confidence_label`, `confidence_mechanistic_label`,
+  `evidence_scope`); those compose in from the project's own extension (Task 6b). It does **NOT**
+  contain `belief_state` (deleted — derived), `phase`, `disposition`, or `profile`.
+  Abridged below to the fields this slice reasons about — **the implementer writes the full core
+  list from Task 2's doc, and `test_every_authored_field_in_the_corpus_is_DECLARED` enforces that
+  every corpus key is covered by the mixin *or* by a composed project extension:**
 
 ```json
 {
@@ -1081,6 +1196,89 @@ cd science/model && uv run --frozen pytest -q
 
 ---
 
+### Task 6b: Project extensions — compose them BEFORE closing the schema
+
+**Without this, `unevaluatedProperties: false` rejects mm30's `confidence_mechanistic_label` — so
+the only way to keep mm30 validating would be to promote a one-project field into the core mixin
+for all 22 projects.** That is design §6's ownership contract, violated. **Strictness and
+project-local fields must arrive together, or strictness cannot arrive at all.**
+
+Design §6 already names the mechanism: an **additive-only extension component** in the profile,
+which may *add* fields to a core kind but never redefine a core one.
+
+**Files:**
+- Modify: `science/model/src/science_model/entity_schema/loader.py` — search a project schema dir before package resources
+- Modify: `science/model/src/science_model/entity_schema/profile.py` — `resolve_profile(kind, extensions)`
+- Modify: `science/src/science_tool/` — read `entity_extensions` from `science.yaml`
+- Create: `~/d/r/mm30/schemas/extension-mm30.assessment-1.0.json` *(in mm30, not the toolkit)*
+- Test: `science/model/tests/test_project_extensions.py`
+
+**Interfaces:**
+- Produces `resolve_profile(kind: str, *, extensions: list[str]) -> ProfileString` — the default
+  base+mixin plus the project's declared extensions. **Tasks 7, 9 and 10 call this, not
+  `default_profile_for_kind`.** (`default_profile_for_kind` remains the zero-extension case.)
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# science/model/tests/test_project_extensions.py
+def test_an_extension_ADDS_a_field_without_touching_the_core_mixin(tmp_schema_dir) -> None:
+    _write_extension(tmp_schema_dir, "extension-mm30.assessment-1.0.json", {
+        "properties": {"confidence_mechanistic_label": {"type": "string"}}
+    })
+    profile = resolve_profile("hypothesis", extensions=["mm30.assessment/1.0"])
+    EntityValidator(SchemaLoader(project_dir=tmp_schema_dir)).validate_as(
+        _h(confidence_mechanistic_label="high"), profile
+    )
+
+
+def test_the_SAME_field_is_rejected_WITHOUT_the_extension(tmp_schema_dir) -> None:
+    # This is the whole point: the field is legal for mm30 and illegal everywhere else.
+    # If this passes without the extension, the mixin swallowed a project field.
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate_as(
+            _h(confidence_mechanistic_label="high"), default_profile_for_kind("hypothesis")
+        )
+
+
+def test_an_extension_may_NOT_redefine_a_core_field(tmp_schema_dir) -> None:
+    # Additive ONLY (design §6). An allOf can only narrow, so a redefinition would silently
+    # INTERSECT with the core enum rather than replace it -- producing an unsatisfiable schema
+    # rather than an error. Catch it at load, loudly.
+    _write_extension(tmp_schema_dir, "extension-bad.x-1.0.json", {
+        "properties": {"status": {"enum": ["whatever"]}}
+    })
+    with pytest.raises(ExtensionRedefinesCoreField, match="status"):
+        resolve_profile("hypothesis", extensions=["bad.x/1.0"],
+                        loader=SchemaLoader(project_dir=tmp_schema_dir))
+```
+
+> The third test is the one that matters. Because composition is a pure `allOf`, an extension
+> redefining `status` does **not** override the core enum — it **intersects** with it, yielding a
+> schema nothing can satisfy. The failure would surface as *"this valid file is invalid"* with no
+> hint why. **Reject redefinition at load time**, by name.
+
+- [ ] **Step 2: Run and fail.**
+
+- [ ] **Step 3: Implement.** `SchemaLoader(project_dir: Path | None)` checks `project_dir` first,
+  then falls back to `importlib.resources` (package schemas). `resolve_profile` appends the parsed
+  extension components and raises `ExtensionRedefinesCoreField` if any extension's `properties`
+  intersect the base's or mixin's. `science.yaml` gains:
+
+```yaml
+entity_schema_version: 2
+entity_extensions:
+  hypothesis: ["mm30.assessment/1.0"]   # resolves to schemas/extension-mm30-assessment-1.0.json
+```
+
+- [ ] **Step 4: Green** — model suite + a real mm30 dry run (`science validate` in `~/d/r/mm30`
+  with the extension declared: **exit 0**; with it removed: the 12 files **fail loudly**, which is
+  the proof the field is genuinely project-scoped and not silently core).
+
+- [ ] **Step 5: Commit** (toolkit and mm30 separately — different repos).
+
+---
+
 ### Task 7: `resolution.py` — the cross-record layer, **wired**
 
 Schema validates **one record in isolation**. It cannot resolve a successor ID or confirm an
@@ -1088,13 +1286,18 @@ archive record exists. **Presence is schema; resolution is a validator.** Withou
 *present but dangling* `superseded_by:` satisfies the schema and closes the entity with no real
 reason behind it — the hole in a subtler dress.
 
-> **Scope, stated honestly.** Design §7.4 lists three cross-record invariants. This task ships
-> **two**: successor resolution and archive-record existence. It does **not** ship
-> *verdict-has-qualifying-evidence*, because that is a **graph-time** fact (it needs the
-> evidence-line edges, which exist only after materialization) and this validator runs at
-> **load time**. Rev 1 claimed all three and implemented one. **Design §7.4 is amended to say
-> two layers here and a third at graph time** — do not let the doc keep promising what the code
-> does not do.
+> **Scope, stated honestly — and one of the two moved.** Design §7.4 lists three cross-record
+> invariants. This module ships **two at load time**: successor resolution and archive-record
+> existence. The third — **every authored verdict has qualifying, resolvable evidence** — is a
+> **graph-time** fact (it needs evidence-line edges, which exist only after materialization), so
+> it ships as a **graph check** (Step 3c below), not here. Rev 1 claimed all three and
+> implemented one; rev 2 deferred the third; **rev 3 implements it, in the right layer.**
+>
+> **And its trigger is corrected (design rev 8).** Rev 2 scoped it to `status: complete`. **Wrong
+> — it applies to EVERY authored verdict.** A `draft` hypothesis asserting `verdict: refuted` with
+> no evidence behind it is a fabrication whatever its lifecycle says; gating on `complete` would
+> have left the front door open. **`verdict` is an evidence-constrained adjudication** (rev 8's
+> contract), and the constraint is not conditional on the lifecycle.
 
 **Files:**
 - Create: `science/model/src/science_model/entity_schema/resolution.py`
@@ -1263,9 +1466,53 @@ def check_resolution(
      (`archive.py`'s index), then `check_resolution` each terminal entity; append a
      `SourceFailure`/warning per violation.
   2. **`validate/checks/`** — a new check surfacing those violations as `Result`s at **WARN**
-     (ERROR arrives with Task 11's ratchet, per kind).
+     (ERROR arrives with Task 12's ratchet, per kind).
   3. **`entities.edit_entity`** — before writing, so a terminal transition with a dangling
      successor **fails before a byte is written** (Task 10).
+
+- [ ] **Step 3c: The verdict-evidence GRAPH check** (design rev 8, contract point 2)
+
+```python
+# science/src/science_tool/validate/checks/verdict_evidence.py
+"""Every authored verdict must have qualifying, resolvable evidence — at graph time.
+
+`verdict` is an ADJUDICATION, and an adjudication with nothing behind it is a fabrication.
+The constraint is NOT conditional on the lifecycle: a `draft` hypothesis asserting
+`verdict: refuted` with no evidence is exactly as unfounded as a `complete` one. Scoping this
+to `status: complete` (as an earlier draft did) would leave the front door open.
+
+This lives at GRAPH time, not load time, because qualifying evidence is carried by
+evidence-line EDGES, which exist only after materialization. A load-time validator reading one
+file cannot see them. Design §7.4 names three enforcement layers for exactly this reason.
+
+It REPORTS. It never populates or overwrites `verdict` -- the moment a computed system can do
+that, `verdict` stops being an adjudication and becomes another derived scalar (rev 8, point 4).
+"""
+
+
+@Check(section="verdict evidence", order=28)
+def check_verdict_has_evidence(ctx: ValidateContext) -> Iterator[Result]:
+    knowledge, provenance = _load_belief_graphs(ctx)
+    if knowledge is None:
+        return
+    for hyp_uri in _hypotheses(knowledge):
+        verdict = next(knowledge.objects(hyp_uri, SCI_NS.verdict), None)
+        if verdict is None:
+            continue                       # absent == no adjudication recorded. Legal.
+        units = collect_evidence_units(
+            knowledge, provenance, _evidence_targets_for_uri(knowledge, hyp_uri)
+        )
+        if not units:
+            yield Result(
+                Severity.WARN, _path_for(ctx, hyp_uri), None,
+                f"{hyp_uri} authors verdict {verdict!r} with no qualifying evidence or "
+                f"interpretation basis. A verdict is an adjudication OF something.",
+                "verdict-evidence", None,
+            )
+```
+
+  A **disagreement** between the authored verdict and derived belief is reported as a separate,
+  lower-severity finding — **never** as a rewrite (rev 8, point 4).
 
 - [ ] **Step 4: Green** — unit + wiring, both packages, plus `ruff` and `pyright`.
 
@@ -1846,6 +2093,32 @@ def _severity(kind: str) -> Severity:
 
 ---
 
+## What rev 2 got wrong (ruled in design rev 8)
+
+9. **It used "observed somewhere" as the admission rule for the core mixin.** Every declared corpus
+   key went into the global `mixin-hypothesis` — so mm30's `confidence_mechanistic_label` would have
+   become a **core Science field for all 22 projects** because one project authored it. That is
+   design §6's ownership contract, violated. **Ownership is a scope**, and the inventory now decides
+   it per key: core · project-extension · rename/migrate · derived/delete. Task 6b composes the
+   extensions, and it is a **hard prerequisite for strictness** — closing the schema without it
+   leaves exactly two options, both wrong: reject mm30's files, or promote its fields to core.
+10. **It treated six unrelated fields as one "belief cluster"** and asked one question about all six.
+    They are **three different ownership patterns**: `belief_state` is the second-source-of-truth
+    defect (**delete** — hypothesis belief is already computed); `evidence_stance` /
+    `author_stated_evidence` are **provenance, not magnitude**; `confidence_*label` are **real MM
+    interface fields** belonging in a project extension. Asking one question about six fields was
+    itself the error — it hid the partition.
+11. **It scoped verdict-has-evidence to `status: complete`.** Wrong: **every** authored verdict needs
+    a basis. A `draft` hypothesis asserting `refuted` with no evidence is exactly as unfounded as a
+    `complete` one, and the `complete` gate would have left the front door open.
+12. **And it nearly shipped a silent corruption.** Removing `belief_state` (correctly) would have
+    promoted **13 hypotheses from `speculative` to `supported`** — because `_authored_magnitude`
+    returns on the **first recognized field**, and those same 13 files carry
+    `evidence_stance: literature-supported`, which the ladder maps to `supported`. The fix is to
+    **delete the fallback chain, not adapt it**: provenance must never set an epistemic magnitude.
+    **A field-order dependency is a collapsed axis wearing a different hat** — and I would have
+    walked into one while cleaning up the last one.
+
 ## What rev 1 got wrong
 
 Recorded because three of these were **phasing** errors, and phasing errors are the ones that
@@ -1889,7 +2162,6 @@ later.
 - **P1 (absorb `provided_capabilities`/`required_capabilities`).** Declared in the mixin, not
   absorbed.
 - **`science:graph` / `science:axis`** (design §3, §5). Not needed to migrate `hypothesis`.
-- **Verdict-has-evidence** — a graph-time invariant, not a load-time one (Task 7).
 - **The 6 filed defects**, notably **`fb-2026-07-12-006`: every commons dataset is on a crashing
   overlay path today.** Independent of this arc; worth fixing sooner.
 - **The 169 residual status-vocabulary WARNs** on other kinds. They stay WARNs until their slices.

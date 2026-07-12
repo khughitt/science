@@ -1,6 +1,6 @@
 # The authoritative entity schema
 
-**Date:** 2026-07-12 (rev 6 — **FINAL**; belief stays derived, `complete` requires a verdict; see §10)
+**Date:** 2026-07-12 (rev 8 — **FINAL**; `verdict` ownership ruled, belief cluster partitioned; see §10)
 **Status:** **Architecture accepted; final amendment applied.** D1–D5 ruled (§9), D4 contract
 re-ruled against the audit. **Ready to write the D5 implementation plan.**
 **Contract input:** [`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md)
@@ -589,6 +589,62 @@ slot, but which manufactures a fact — a conclusion, a closure reason, a readin
 source never recorded.
 
 ## 10. Revision history
+
+### rev 8 (2026-07-12) — `verdict` ownership ruled; the belief cluster partitioned
+
+**`hypothesis.verdict` is AUTHORED, and its semantic owner is the adjudicating author.** Not
+"authored for now" — authored *by contract*. This is **not** a second instance of the `belief`
+defect (rev 6), and the distinction is the whole point:
+
+| | asks | owner |
+|---|---|---|
+| **derived belief** | what does the versioned evidence-aggregation **policy** currently compute? | the policy |
+| **authored `verdict`** | what conclusion did the **researcher adjudicate** from the evidence, the criteria, the context, and the hypothesis's composition? | the author |
+
+Hypothesis-level derived belief **already exists** — `graph/belief.py`'s `_claims()` iterates
+`(SCI_NS.Proposition, SCI_NS.Hypothesis)`, and `aggregate_belief()` processes hypothesis evidence
+lines. So the earlier phrasing *"no hypothesis-scoped derivation"* was **wrong**. What does not
+exist is a **total, versioned mapping** from that belief (or from interpretation-polarity
+rollups) onto `partially-supported | supported | weakened | refuted`. The correct statement is
+**"there is no derived hypothesis *verdict*"** — and adjudication is not a rounding of a scalar.
+
+**The `verdict` contract:**
+
+1. **Absent** = no adjudication has been recorded. (Not "no evidence" — *no adjudication*.)
+2. **Every authored verdict must have qualifying, resolvable evidence or interpretation basis at
+   graph time** — **not only when `status: complete`**. A verdict with nothing behind it is the
+   fabrication this design exists to prevent, whatever the lifecycle says.
+3. **`complete` additionally requires a verdict to be present** (rev 6).
+4. **Computed systems may report a recommendation or a disagreement, but must NEVER populate or
+   overwrite the authored verdict.** The moment they can, it stops being an adjudication.
+5. **Any future deterministic rollup gets a distinct derived name** — it does not silently take
+   over `verdict`'s ownership.
+
+That makes `verdict` an **evidence-constrained adjudication**, not another hand-editable belief
+scalar. The difference from `belief` is that `belief` had a policy that *already computed it*, and
+an authored field would have been a second source of truth for the same quantity. Nothing computes
+an adjudication.
+
+**The six "belief cluster" fields are three unrelated ownership patterns, not one cluster.**
+They must **not** all enter the core hypothesis mixin (that would violate §6's ownership contract
+by making every observed key a *core* key):
+
+| field | ruling |
+|---|---|
+| `belief_state` | **DELETE.** The second-source-of-truth defect, exactly. Hypothesis belief is already computed. |
+| `evidence_stance` | **Not belief.** `literature-supported` describes **provenance/coverage**, not epistemic magnitude. Preserve only via a named project extension (e.g. `evidence_scope`), else derive/delete. Remove from `_authored_magnitude`. |
+| `author_stated_evidence` | **Source provenance, not current belief.** Move to structured origin metadata or a project-local `source_stated_evidence`. **Must not influence computed belief.** |
+| `confidence` | **Too ambiguous for the core schema** — unscoped subjective assessments. Migrate to a project-local prior or an `expert_judgment` evidence line, else delete. |
+| `confidence_label`, `confidence_mechanistic_label` | **Real MM-specific interface fields, not core Science fields.** The MM exporter reads them and emits them separately from derived `bundle_belief` → keep as an explicit **project-local** assessment extension. |
+
+**And a live bug this exposed.** `_authored_magnitude` (`validate/checks/evidence_lines.py:395-411`)
+walks `("belief_state", "evidence_stance", "author_stated_evidence")` and **returns on the first
+recognized token**. The corpus has **13 files with `belief_state: speculative` and the same 13 with
+`evidence_stance: literature-supported`**. Because `belief_state` is checked first, the
+`evidence_stance` value has **never** reached that check. Remove `belief_state` naively and
+`_AUTHORED_MAGNITUDE["literature-supported"] == "supported"` (line 379) fires — silently promoting
+13 hypotheses from the **lowest** rung (`speculative`) to `supported`, **purely by field order**.
+**The fallback chain is to be DELETED, not adapted.**
 
 ### rev 7 (2026-07-12) — the corpus refuted the hypothesis mapping
 
