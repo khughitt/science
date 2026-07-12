@@ -1,6 +1,6 @@
 # The authoritative entity schema
 
-**Date:** 2026-07-12 (rev 5 — D4 re-ruled post-audit; see §10)
+**Date:** 2026-07-12 (rev 6 — **FINAL**; belief stays derived, `complete` requires a verdict; see §10)
 **Status:** **Architecture accepted; final amendment applied.** D1–D5 ruled (§9), D4 contract
 re-ruled against the audit. **Ready to write the D5 implementation plan.**
 **Contract input:** [`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md)
@@ -148,6 +148,13 @@ survive, because they compete for one field*:
 `contested`, `weakened`) with lifecycle (`superseded`, `archived`), so it **cannot be both
 superseded and formerly supported**; one value silently overwrites the other.
 
+> **Its resolution is DELETION, not a split (rev 6).** Every other collapsed kind gets its
+> semantic values *moved* to a named field. `proposition` does not: those three values have **0
+> authored instances and 0 readers**, and the meaning they gesture at is **already owned by
+> derived belief**. So there is nothing to move and nothing to preserve — the values are dropped,
+> `status` becomes pure lifecycle, and belief stays computed. **The collapse here was never
+> load-bearing; it was vestigial.** See §7.3.
+
 ### 7.2 The naming decision: `status` **is** the lifecycle
 
 `phase` in the wild is `candidate` (14) / `active` (10), on hypotheses and synthesis — a
@@ -164,11 +171,22 @@ collapse happened in the first place:
 
 | category | asks | kinds |
 |---|---|---|
-| **verdict** (epistemic) | what does the evidence conclude? | `hypothesis.verdict`, `proposition.belief` |
+| **verdict** (epistemic) | what does the evidence conclude? | `hypothesis.verdict` — **and nothing else** |
 | **answeredness** | is the question resolved? | `question.answer_state` |
 | **execution outcome** | how did the run terminate? | `workflow-run.outcome` |
 | **maturity** | how developed is the artifact? | `story.maturity` |
 | **commitment** | is the plan frozen? | `pre-registration.commitment` |
+| **acquisition** | do we have the bytes yet? | `dataset.acquisition` *(D4)* |
+| **reading state** | how far have we read it? | `paper.reading_state` *(D4)* |
+| **record kind** | which flavour of report is this? | `synthesis.report_kind` *(D4)* |
+| **readiness** | is the plan fit to execute? | `plan.readiness` *(D4)* |
+
+> **The verdict row has exactly one member, and that is deliberate (rev 6).** Rev 5 listed
+> `proposition.belief` here. It does not belong: **belief is derived from evidence lines, not
+> authored** — see the `belief` bullet in §7.3. An authored `belief` field would be a second,
+> hand-editable source of truth for a computed quantity, and the one place a human could write a
+> conclusion the evidence does not support. `proposition` therefore gets **no domain axis at
+> all**.
 
 This is the low-churn *and* the truthful choice: 22 of 33 kinds already use `status` this way,
 and it means **natural-systems writing `status: active` on a hypothesis was correct all
@@ -185,7 +203,7 @@ inversion is deliberate and is called out in §9 as decision D1.
 > | kind | this table said | audit found |
 > |---|---|---|
 > | `dataset` | no domain axis; `candidate` → `draft` | **`candidate` is an ACQUISITION-STATE axis** (not-yet-acquired vs acquired). **357 entities.** Do NOT map it to `draft`. |
-> | `paper` | *(absent)* | **MISSING ROW** — a real reading/access axis (`unread → abstract-read → read → summarized`, + `paywalled`/`preprint`), 41 files; its only declared non-`active` value has **0** uses |
+> | `paper` | *(absent)* | **MISSING ROW** — a real reading axis (`unread → abstract-read → read → summarized`), 41 files; its only declared non-`active` value has **0** uses. (The audit lumped `paywalled`/`preprint`/`stub` in here; **rev 6 unbundles them** — they are access, publication-version, and record-completeness, not reading progress. → D5 adjudication.) |
 > | `synthesis` | no domain axis | its real axis is **`report_kind`** — undeclared, dropped by `extra="ignore"`, yet **branched on for control flow** from raw frontmatter |
 > | `plan` | no domain axis | a **readiness axis** (`ready`/`ready-with-caveats`/`not-ready`) is being invented in `commands/plan-analysis.md` |
 > | `workflow-run` | `outcome`: complete \| failed | **`running` and `failed` are DEAD** — indistinguishable to every consumer. Only `complete` is real. |
@@ -214,11 +232,11 @@ annotated — a warning above contradictory contract text is unsafe input to a p
 | kind | → `status` (lifecycle) | → domain field (category) | default | audit note |
 |---|---|---|---|---|
 | `hypothesis` | **draft**(←proposed) / **active**(←under-investigation) / **complete** / superseded / retired / archived | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** | only `refuted` has a reader (`dataset_capabilities.py:46`) |
-| `proposition` | draft / active / complete / superseded / retired / archived | **`belief`** *(epistemic)*: supported \| contested \| weakened | **absent** | belief axis has **0 authored, 0 readers** — belief is already computed from evidence-lines; `graph/belief.py` reads **no** status |
+| `proposition` | draft / active / complete / superseded / retired / archived | ***none*** | — | **CORRECTED (rev 6).** `supported`/`contested`/`weakened` are **dropped, not migrated** — 0 authored instances, 0 readers. Belief is **derived**, and stays derived. |
 | `question` | active / **deferred** / complete / retired / archived | **`answer_state`** *(answeredness)*: answered \| partially-answered | **absent** | the **only** kind whose values drive behaviour; both selectors are two-axis (§2 of the audit) |
 | `pre-registration` | draft / active / complete / superseded / retired | **`commitment`**: committed \| amended | **absent** | `committed` is **INERT** — the freeze is enforced nowhere (fb-2026-07-12-009) |
 | **`dataset`** | draft / active / retired(←deprecated) | **`acquisition`**: candidate \| acquired | **`candidate`** | **CORRECTED.** `candidate` = *not yet acquired*, **357 entities**. NOT a draft synonym. |
-| **`paper`** | active / retired | **`reading_state`**: unread \| abstract-read \| read \| summarized *(+ access: paywalled \| preprint \| stub)* | **absent** | **NEW ROW.** 41 authored files on an undeclared axis; declared `retired` has **0** uses |
+| **`paper`** | active / retired | **`reading_state`**: unread \| abstract-read \| read \| summarized | **absent** | **NEW ROW, CORRECTED (rev 6).** 41 authored files on an undeclared axis; declared `retired` has **0** uses. `paywalled`/`preprint`/`stub` are **NOT** reading states → D5 adjudication inventory (see below). |
 | **`synthesis`** | active / complete / superseded / retired / archived | **`report_kind`**: hypothesis-synthesis \| synthesis-rollup \| emergent-threads \| cluster-digest | **required** | **NEW ROW.** Undeclared today, dropped by `extra="ignore"`, yet **branched on for control flow** in 5 places |
 | **`plan`** | draft / active / complete / superseded / retired / archived | **`readiness`**: ready \| ready-with-caveats \| not-ready | **absent** | **CORRECTED.** The axis is being invented in `commands/plan-analysis.md:118`; a `not-ready` plan is `active` *and* not-ready |
 | **`workflow-run`** | active *(in flight)* / superseded / archived | **`outcome`** *(execution)*: complete \| failed | **absent = in flight** | **CORRECTED.** `running`/`failed` are **dead** — indistinguishable to every consumer. Only `complete` is read (gates readiness). |
@@ -234,11 +252,26 @@ Consequences worth stating plainly:
   concluded hypothesis is forced into `retired`, which elsewhere means abandoned or
   indefinitely blocked — and `disposition` cannot be declared redundant until that hole is
   closed. Rev 2 omitted `complete` from hypothesis; that was a defect.
-- **`deferred` needs a home on the lifecycle axis**, not on answeredness. It is a *paused* state
-  and none of `{draft, active, complete, superseded, retired, archived}` means paused. This is a
-  genuine gap in the lifecycle vocabulary and is exactly the sort of thing the D4 excavation must
-  settle — provisionally, `deferred` is proposed as a lifecycle capability, not forced into an
-  existing word.
+- **`deferred` is an ordinary lifecycle state** admitted by the `question` schema — *not* a
+  capability. It is a *paused* state, and none of `{draft, active, complete, superseded, retired,
+  archived}` means paused, so the word is genuinely needed on the lifecycle axis (it is **not**
+  answeredness). But under the ruled capability contract (§9, D4) a capability denotes an
+  **operation with distinct behaviour**, and pausing has none: there is no `defer` operation, no
+  gate, no consumer that branches on deferral beyond reading the enum. An earlier draft called it
+  "provisionally a lifecycle capability"; that contradicted the adopted ruling and is **struck**.
+  It is a value in an enum, and that is all it needs to be.
+
+- **`belief` is NOT authored, and this design does not make it authored.** The pre-audit draft
+  proposed lifting `supported`/`contested`/`weakened` off `proposition.status` onto an authored
+  `belief` field. That was wrong on its own evidence — the audit found **0 authored instances and
+  0 readers**, and belief is *already* computed from evidence lines (`graph/belief.py` reads no
+  status at all; the user guide defines belief as derived in
+  [`big-picture.md`](../user-guide/big-picture.md) and [`entities.md`](../user-guide/entities.md)).
+  Minting an authored field would have created a **second, hand-editable source of truth for a
+  derived quantity** — a denormalization of exactly the kind §7.4 deletes `disposition` to avoid,
+  and worse, one an author could set to contradict the evidence. **The three values are dropped
+  with no migration target** (there is nothing to migrate). Derived belief and its snapshots keep
+  sole ownership of that meaning.
 
 **Allowed combinations.** The axes are orthogonal, and the load-bearing cells are:
 
@@ -247,10 +280,13 @@ Consequences worth stating plainly:
 | `active` + `verdict: refuted` | refuted, but still being worked (writing it up) |
 | `complete` + `verdict: supported` | supported and concluded |
 | `retired` + `verdict` **absent** | pragmatically stopped while epistemically undecided |
-| `superseded` + `verdict: supported` | *formerly* supported, now replaced — **the cell `proposition` literally could not express** |
+| `superseded` + `verdict: supported` | *formerly* supported, now replaced — **the cell the collapsed field literally could not express** |
 
-That last row is the whole argument: under the old collapsed field, `superseded` overwrote
-`supported` and the belief was silently lost.
+That last row is the whole argument: under one collapsed `status`, writing `superseded`
+**overwrote** `supported`, and the epistemic conclusion was silently destroyed by a
+bookkeeping transition. (Rev 5 illustrated this with `proposition`; rev 6 drops that kind's
+domain axis entirely, so the example is now `hypothesis` — the loss is identical and the
+argument is unchanged.)
 
 **Orthogonal does NOT mean every combination is legal.** An earlier draft of this section said
 "no combination is forbidden," which was wrong, and it contradicted §7.4. Axis independence is
@@ -301,11 +337,14 @@ one of them.
   |---|---|---|
   | `superseded` | valid lineage (`supersedes:` / `superseded_by` / `resynthesized_into`) resolving to a live successor | **`closure_basis` required** |
   | `archived` | an archive / consolidation record | **`closure_basis` required** |
-  | `complete` | a verdict **plus** qualifying evidence | **`closure_basis` required** |
+  | `complete` | a verdict **plus** qualifying evidence | **PROHIBITED** — not basis-discharged. See the rev-6 ruling below. |
   | `retired` | *(none exists)* | **`closure_basis` ALWAYS required** |
 
   `retired` is the only terminal with no structural basis available to it, so it always
-  requires an authored one. The others require one **exactly when their structure is missing**.
+  requires an authored one. `superseded` and `archived` require one **exactly when their
+  structure is missing**. `complete` is the exception in the other direction: for a
+  verdict-bearing kind its structure is **mandatory** and no authored reason substitutes (ruled
+  below).
 
   ### Where the invariant is ENFORCED — two layers, not one
 
@@ -325,10 +364,31 @@ one of them.
   re-open the hole in a subtler form: a *present but dangling* `superseded_by:` would satisfy
   the schema and close the entity with no real reason behind it.
 
-  **Open sub-decision:** `complete` + `verdict` **absent** may instead be *prohibited outright*
-  for kinds carrying a verdict axis, rather than admitted with a `closure_basis`. Prohibition is
-  cleaner ("you cannot conclude without concluding something"); admission is more permissive for
-  work concluded on non-epistemic grounds. **Settle in the D4 audit, per kind.**
+  ### RULED (rev 6): `complete` requires a `verdict`. There is no `closure_basis` escape.
+
+  > **`hypothesis.status: complete` with `verdict` ABSENT is PROHIBITED.** Not admitted-with-a-
+  > basis: **prohibited**. The schema rejects it.
+
+  The rev-5 draft left this open, offering `complete` + absent-verdict + `closure_basis` as a
+  more permissive alternative for work "concluded on non-epistemic grounds." **That alternative
+  destroys the distinction that justified adding `complete` in the first place.** Stopping for
+  non-epistemic reasons already has an exact, and *better*, spelling:
+
+  | situation | the correct encoding |
+  |---|---|
+  | concluded — the evidence spoke | `status: complete` + `verdict: <the conclusion>` |
+  | stopped — the evidence never spoke | `status: retired` + `closure_basis: <why you stopped>` |
+
+  Admitting `complete` + absent + `closure_basis` would give the *second* row a **second
+  spelling** — and one that reads, to every consumer and every human, as if the hypothesis had
+  been *resolved*. That is the same failure mode as the collapsed `status` axis, re-introduced
+  one level down: a bookkeeping state masquerading as an epistemic one. `complete` must mean
+  *"you concluded something"*, and therefore it must carry **what** you concluded.
+
+  So the `complete` row of the table above is not merely "basis required when the structure is
+  missing" — for a verdict-bearing kind the structure is **mandatory**, and `closure_basis`
+  cannot substitute for it. `retired` remains the only terminal that closes on an authored
+  reason alone. **This is the first P2m schema's central invariant** (hypothesis is slice 1).
 
   This preserves and strengthens the fb-005 guarantee: closure cannot silently bury research
   debt, *and* it can no longer be discharged by a terminal word that merely looks structured.
@@ -488,7 +548,7 @@ Not additive-only. **No heuristic compatibility layer.**
 6. Ratchet **WARN → ERROR per kind**, only after that kind's sources *and* consumers are
    certified.
 
-Two named information-loss traps, to be reported rather than papered over:
+Three named information-loss traps, to be reported rather than papered over:
 
 - **Do not** mechanically map `disposition: closed` → `status: retired`. The author must
   distinguish `complete` (concluded), `retired` (abandoned) and `superseded` (replaced). Those
@@ -497,8 +557,58 @@ Two named information-loss traps, to be reported rather than papered over:
   **absent** and **report the information loss**. Inventing a verdict to fill the column would
   be fabricating an epistemic conclusion — the precise failure the InstrumentResult ruling
   exists to prevent.
+- **`paper`'s `paywalled` / `preprint` / `stub` go to adjudication, NOT to `reading_state`**
+  (rev 6). They are three *different* axes wearing one field: **access** (can we get the PDF?),
+  **publication version** (is this the preprint or the version of record?), and **record
+  completeness** (is this a real summary or a placeholder?). Forcing them into a reading
+  progression would re-commit, inside the very field meant to fix it, the exact collapse this
+  design exists to undo — and would assert reading progress that no author ever claimed. D5
+  **inventories them and stops**; the author names the axes.
+
+**The migration must not invent a value it was not given.** Every one of these traps has the
+same shape: a rewrite that *looks* deterministic because the target column has an obvious-seeming
+slot, but which manufactures a fact — a conclusion, a closure reason, a reading state — that the
+source never recorded.
 
 ## 10. Revision history
+
+### rev 6 (2026-07-12) — **FINAL.** The design is closed; D5 may be written.
+
+Four corrections, two of them substantive enough to have changed the first P2m schema:
+
+- **[P1] `belief` must not become authored frontmatter.** Rev 5 proposed lifting
+  `supported`/`contested`/`weakened` off `proposition.status` onto an authored `belief` field —
+  **while stating on the same line that the axis had 0 authored uses and 0 readers, and that
+  belief is computed from evidence.** The design contradicted itself and I did not see it. An
+  authored `belief` would be a **second, hand-editable source of truth for a derived quantity**,
+  and the one place a human could record a conclusion the evidence does not support. That is the
+  same denormalization §7.4 deletes `disposition` to avoid — and strictly worse, because
+  `disposition` was at least a *function* of its source. **The field is removed; the three values
+  are dropped with no migration target; `proposition` gets no domain axis at all.** Derived
+  belief and its snapshots keep sole ownership of that meaning.
+- **[P1] The hypothesis terminal invariant is RULED, not open.** `status: complete` with
+  `verdict` **absent** is **prohibited**, not admitted-with-a-`closure_basis`. Rev 5 left this as
+  an open sub-decision and floated the permissive branch — which would have **erased the
+  distinction that justified adding `complete` in the first place**. Stopping for non-epistemic
+  reasons already has an exact spelling (`retired` + `closure_basis`); admitting `complete` +
+  absent-verdict would give it a *second* spelling, one that reads to every consumer as though
+  the hypothesis had been resolved. A bookkeeping state masquerading as an epistemic one is the
+  collapsed-`status` failure re-introduced one level down. **This is now the central invariant of
+  the first P2m slice.**
+- **[P2] The `paper` row re-collapsed three axes.** `paywalled` (access), `preprint`
+  (publication version) and `stub` (record completeness) are **not** reading progress.
+  `reading_state` keeps only `unread|abstract-read|read|summarized`; the other three go to D5's
+  **adjudication inventory**. Assigning them would have re-committed the exact collapse this
+  design exists to undo, *inside the field built to fix it*, and asserted reading progress no
+  author ever claimed.
+- **[P2] `deferred` is an ordinary lifecycle state, not a "provisional capability."** That
+  sentence survived from before the capability contract and contradicted the adopted D4 ruling.
+  Pausing has no operation, no gate, no branching consumer — it is a value in an enum.
+
+The through-line of all four: **rev 5 was still, in four places, minting structure that no
+evidence asked for** — an authored field for a computed quantity, an escape hatch for an
+invariant that should simply hold, a bucket for values that belong on other axes, and a
+capability for a verb that does not exist.
 
 ### rev 3 (2026-07-12) — D1–D5 ruled
 

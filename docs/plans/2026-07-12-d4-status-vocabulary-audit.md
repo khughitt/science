@@ -110,6 +110,15 @@ current lists.
 kinds), `deprecated`, `abandoned`, `amended`, `running`, `failed`, `mature`, `developing`,
 `contested`, `supported`/`weakened` (proposition).
 
+> **RULED (design rev 6): `proposition`'s three belief values are DROPPED, with no migration
+> target.** Zero authored, zero readers — and the meaning they gesture at is **already owned by
+> derived belief**, which `graph/belief.py` computes from evidence lines without reading `status`
+> at all. So there is nothing to migrate and nothing to preserve. **`proposition` gets no domain
+> axis**; its `status` becomes pure lifecycle. Rev 5 had proposed lifting them onto an authored
+> `belief:` field — which would have minted a **second, hand-editable source of truth for a
+> computed quantity**, and the only place in the system where an author could assert a belief the
+> evidence contradicts. The collapse on `proposition` was never load-bearing; it was **vestigial**.
+
 ---
 
 ## 4. Where the collapse actively DESTROYED capability
@@ -137,12 +146,37 @@ Not merely "failed to express" — **removed**:
 | kind | §7.3 said | AUDIT FINDS | evidence |
 |---|---|---|---|
 | **`dataset`** | *no domain axis* — `candidate` is a lifecycle synonym | **WRONG. `candidate` is an ACQUISITION-STATE axis.** `candidate` (not yet acquired) → `active` (acquired, has datapackage/local_path). **357 authored entities.** | `templates/dataset.md:5` defines it verbatim; `datasets_catalog.py:62,85` writes it as "catalogued but not yet acquired"; filtered at `datasets_catalog.py:536`, `dataset_prioritize.py:351,422` |
-| **`paper`** | *(absent from the table)* | **MISSING ROW. A genuine reading/access axis**: `unread → abstract-read → read → summarized`, plus `paywalled`/`preprint`/`stub`/`background`. **41 authored files.** Declared `retired`: **0 uses.** The declared vocabulary is 100% wrong about what paper.status is for. | 1857 papers: `active` 1540, `read` 21, `background` 9, `stub` 4, … `paywalled`/`preprint` were **copied from `FetchStatus`** (`paper_fetch.py:35`) — a *tool-result* status pasted onto an entity |
+| **`paper`** | *(absent from the table)* | **MISSING ROW. A genuine reading axis**: `unread → abstract-read → read → summarized`. **41 authored files.** Declared `retired`: **0 uses.** The declared vocabulary is 100% wrong about what paper.status is for. ⚠️ **RULED (design rev 6): this row itself over-collected.** `paywalled`/`preprint`/`stub`/`background` are **NOT reading progress** — see the unbundling below. | 1857 papers: `active` 1540, `read` 21, `background` 9, `stub` 4, … `paywalled`/`preprint` were **copied from `FetchStatus`** (`paper_fetch.py:35`) — a *tool-result* status pasted onto an entity |
 | **`synthesis`** | *no domain axis* | **Its real domain axis is `report_kind`** (`hypothesis-synthesis \| synthesis-rollup \| emergent-threads \| cluster-digest`) — **undeclared, dropped by `extra="ignore"`, yet branched on for CONTROL FLOW** from raw frontmatter | `consolidate.py:161` raises `ConsolidateError` on it; `big_picture/synthesis_paths.py:46`, `big_picture/cli.py:116`, `digests.py:125`; `validate/checks/discussions.py:95-120` regexes it out of raw text |
 | **`plan`** | *no domain axis* | **A READINESS axis is being invented in the command layer**: `ready \| ready-with-caveats \| not-ready`. A `not-ready` plan is `active` *and* not-ready — orthogonal to lifecycle. | `commands/plan-analysis.md:102,118-121` |
 | `concept`/`decision` | lifecycle synonyms (`deprecated`, `abandoned` → `retired`) | **CONFIRMED.** Zero readers, zero authored uses. | — |
 | `workflow-run` | `outcome`: complete \| failed | **Half wrong.** `complete` is real (gates readiness). **`running` and `failed` are DEAD** — every consumer takes the same else-branch, so they are *indistinguishable*. `default_status="running"` is never realized (template ships `complete`; adapter defaults to `complete`). | `entities.py:959-962`; `templates/workflow-run.md:5`; `graph/storage_adapters/workflow_run.py:76` |
 | `interpretation`/`discussion`/`finding`/`observation`/`evidence-line` | pure lifecycle | **CONFIRMED.** `evidence-line` **already got the split right** — its domain state (`stance`, `strength`, `independence`, `evidence_role`) is in **named fields**, and its `status` is a pure, inert lifecycle. It is the existing proof the target model works. | `evidence_lines_cli.py:19-55` |
+
+### 5b. RULED (design rev 6): `paper.status` is FOUR axes, not two — and this audit only caught two
+
+I recorded the `paper` finding as *"a reading/access axis"* and bundled five values into it. That
+was itself a collapse — a smaller copy of the very defect the audit exists to expose. **Ruled:
+only the reading progression is `reading_state`.** The rest are **inventoried and stopped**, and
+the author names their axes.
+
+| value | uses | what it actually says | disposition |
+|---|---|---|---|
+| `unread` / `abstract-read` / `read` / `summarized` | 21+ | **reading progress** | → **`reading_state`** (the only assignment made) |
+| `paywalled` | — | **access** — can we obtain the PDF? | **ADJUDICATE.** Not reading progress. |
+| `preprint` | — | **publication version** — preprint vs version of record | **ADJUDICATE.** Not reading progress. |
+| `stub` | 4 | **record completeness** — placeholder, not a real summary | **ADJUDICATE.** Not reading progress. |
+| `background` | 9 | **role/relevance** — why this paper is in the corpus | **ADJUDICATE.** Not reading progress. |
+
+**The strongest evidence for the unbundling is in this audit's own evidence column, and I walked
+past it:** `paywalled` and `preprint` were **copied from `FetchStatus` (`paper_fetch.py:35`)** —
+they are the return codes of a *download tool*, pasted onto an entity's identity. A fetch outcome
+is not a fact about the paper; it is a fact about our last attempt to get it. That alone
+disqualifies them from any authored semantic axis, and it is why D5 must **stop** here rather
+than assign.
+
+**Mapping any of these four to a reading state would fabricate reading progress no author ever
+claimed** — the same class of error as inventing a `verdict` for an archived hypothesis.
 
 ---
 
