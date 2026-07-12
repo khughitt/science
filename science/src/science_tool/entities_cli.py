@@ -19,6 +19,7 @@ from science_tool.entities import (
     plan_entity_removal,
     remove_entity,
 )
+from science_tool.field_inventory import field_inventory
 from science_tool.graph.store import DEFAULT_GRAPH_PATH, query_neighborhood
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows, unwrap_instrument
 from science_tool.styles import entity_table_renderers
@@ -203,6 +204,30 @@ def entity_list(
         columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
         rows=rows,
         renderers=entity_table_renderers(),
+    )
+
+
+@entity_group.command("field-inventory")
+@click.option("--kind", required=True, help="Entity kind to inventory (e.g. hypothesis).")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_field_inventory(kind: str, output_format: str) -> None:
+    """Report every AUTHORED frontmatter key for a kind, with the number of files carrying it.
+
+    Report-only. This is the declare-or-delete instrument: a key absent from this report but
+    present on disk becomes a hard validation failure the moment the kind's schema is closed.
+    """
+
+    inventory = field_inventory(Path.cwd(), kind)
+    rows = [
+        {"key": key, "files": count}
+        for key, count in sorted(inventory.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title=f"Authored frontmatter keys — {kind}",
+        columns=[("key", "Key"), ("files", "Files")],
+        rows=rows,
+        meta={"kind": kind, "keys": len(rows)},
     )
 
 
