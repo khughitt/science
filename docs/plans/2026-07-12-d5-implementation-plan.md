@@ -1,16 +1,30 @@
 # D5 — Entity Schema Convergence: Implementation Plan
 
-> **rev 4.** Rev 1 was rejected as not executable (seven contract defects, all confirmed). Rev 2
+> **rev 5.** Rev 1 was rejected as not executable (seven contract defects, all confirmed). Rev 2
 > rebuilt it. Review then ruled two more things rev 2 had gotten wrong: the **six-field "belief
 > cluster" is three unrelated ownership patterns**, and **`verdict` is an authored adjudication by
 > contract** — not "authored for now" (design rev 8, rev 3 of this plan).
 >
-> **Rev 4 is the first revision corrected by an instrument rather than by review.** Task 1 shipped,
+> **Rev 4 was the first revision corrected by an instrument rather than by review.** Task 1 shipped,
 > ran, and **stopped the plan**: the corpus numbers were right, but the **9-repo rollout roster was
 > not** — it covers **85 of 147 hypotheses (58%)**, it double-counts two symlinks, and it omits the
-> one project that owns every file the belief ruling was written for. Task 11 now **derives** its
-> roster (18 roots) instead of listing it. **The rev-7 mapping is unchanged and now certified
-> cell-for-cell by that instrument.** See "What rev 3 got wrong" at the end.
+> one project that owns every file the belief ruling was written for. **The rev-7 mapping is
+> unchanged and now certified cell-for-cell by that instrument.**
+>
+> **rev 5** closes four execution defects in rev 4's own correction — the shape of which is worth
+> noticing, because *deriving* the roster was necessary and not sufficient:
+> **(1)** Step 0 printed a report but never wrote the `roster.json` that later steps consume.
+> **(2)** `before-$(basename $PWD).trig` collides — `science/meta` and `health/meta` both basename to
+> `meta` and would clobber each other's graph diff. **(3)** 18 roots are only **15 git repositories**
+> (`science/meta` + 3 fixtures share `~/d/science`), so commit grouping must derive from
+> `git rev-parse --show-toplevel`. **(4)** Asserting `18/147` is not a gate — one root can vanish
+> while another gains the same count; the gate is **exact `(root, n)` set equality** against a
+> manifest snapshotted before apply and re-checked before the ratchet.
+> Also ruled: the three fixture roots are **schema-contract participants** (pinned like everything
+> else; unpinned-behaviour coverage moves to purpose-built temp projects, and the missing-status
+> canary gets an explicit adjudication entry — **no inference shortcut for fixtures**), and
+> `cancer/mechanisms/evolution` is a **hard gate** that must clear preflight before any write.
+> See "What rev 3 got wrong" at the end.
 
 > **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax.
 > **Every task ends green.** A task that ends with a red suite is a broken task, not a slice.
@@ -727,14 +741,18 @@ def inventory(
 - [ ] **Step 6: Run against the DERIVED roster** (Task 11 Step 0 — all 18 roots, not a hand list)
 
 ```bash
-for p in $(cat /tmp/claude-1000/roster.txt); do
-  echo "=== $p"; (cd "$p" && uv run science entity status-inventory)
-done
+uv run python -c "
+import json, subprocess; from pathlib import Path
+for m in json.loads(Path('/tmp/claude-1000/roster.json').read_text()):
+    print('===', m['root'])
+    subprocess.run(['uv','run','science','entity','status-inventory'], cwd=m['root'])"
 ```
 Expected across all 18 roots: **145 of 147 deterministic, 2 refused** — `natural-systems/0009`, and
-one toolkit test fixture. The fixture **is** one of the 18 roots and **does** get migrated (rev 4);
-it is refused here because it authors no `status`, not because it is exempt. **Any other refusal ⇒
-the mapping is not certified. STOP.**
+the missing-status toolkit fixture. The fixture **is** one of the 18 roots and **does** get migrated;
+it is refused here because it authors no `status`, and it is discharged by an **explicit adjudication
+entry** like any other refusal. **Fixtures get no inference shortcut** — a classifier that special-cases
+test data is a classifier certified against a corpus it cannot see. **Any other refusal ⇒ the mapping
+is not certified. STOP.**
 
 - [ ] **Step 7: Commit.**
 
@@ -2077,47 +2095,98 @@ re-raises `EntityValidationError` as `EntityCommandError`.
 > to prevent. Re-derive at execution time; do not trust the table, and do not trust this list either
 > if the corpus has moved since.
 
-- [ ] **Step 0: Derive the roster.** Symlinks (`~/d/r/*`) must collapse or a repo migrates twice.
+> ### Three distinctions this task previously collapsed (ruled 2026-07-12)
+>
+> **A root is not a repo.** 18 roots live in **15 git repositories**: `science/meta` and the three
+> `science/tests/fixtures/**` roots all share `~/d/science`. Commit grouping must derive from
+> `git rev-parse --show-toplevel`, **never from the root path** — otherwise this task tries to make
+> four commits in one repo and the last three see a dirty tree they did not create.
+>
+> **The fixtures are schema-contract participants, not test data.** They are pinned with everything
+> else; leaving them unpinned would make the suite assert an *accidental mixed-version* state and
+> call it passing. Coverage of intentionally-unpinned/old-version behaviour is preserved by
+> **constructing dedicated temporary projects in the test**, never by leaving a canonical fixture
+> stale. And the missing-status canary gets an **explicit adjudication entry** like any other file —
+> fixtures get no inference shortcut.
+>
+> **`cancer/mechanisms/evolution` is a hard gate, not a late chore.** It must participate in Task 2
+> adjudication, Task 2b's regression test, Task 6b's extension validation, the global render
+> validation, the migration, the graph diff, and the ratchet. It owns all 13 belief-cluster files:
+> it is the corpus most capable of **refuting** this migration, so it must never be the corpus that
+> validates last.
+
+- [ ] **Step 0: Derive the roster AND write the manifest.** Later steps consume the file; a step
+  that only prints is a step whose output the next step cannot check. Symlinks (`~/d/r/*`) must
+  collapse via `.resolve()` or a repo migrates twice.
 
 ```bash
 uv run python - <<'PY'
+import json, subprocess
 from pathlib import Path
 from science_tool.field_inventory import field_inventory
+
 D = Path.home() / "d"
-roots = sorted({p.parent.resolve() for p in D.glob("**/science.yaml")
-                if not any(s in {".venv",".git",".claude",".worktrees","node_modules","templates"}
-                           for s in p.parts) and "--" not in p.parent.name})
-rows = [(field_inventory(r, "hypothesis").get("id", 0), r) for r in roots]
-for n, r in sorted(x for x in rows if x[0]):
-    print(f"{n:4d}  {r}")
-print("total:", sum(n for n, _ in rows))
+SKIP = {".venv", ".git", ".claude", ".worktrees", "node_modules", "templates"}
+roots = sorted({
+    p.parent.resolve()                      # .resolve() collapses the ~/d/r/* symlinks
+    for p in D.glob("**/science.yaml")
+    if not any(s in SKIP for s in p.parts) and "--" not in p.parent.name
+})
+manifest = []
+for r in roots:
+    n = field_inventory(r, "hypothesis").get("id", 0)
+    if not n:
+        continue
+    top = subprocess.run(["git", "-C", str(r), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    manifest.append({"root": str(r), "n": n, "repo": top,
+                     "slug": str(r.relative_to(D)).replace("/", "-")})   # UNIQUE: full rel path
+manifest.sort(key=lambda m: m["root"])
+Path("/tmp/claude-1000/roster.json").write_text(json.dumps(manifest, indent=2))
+repos = {m["repo"] for m in manifest}
+print(f"{len(manifest)} roots, {sum(m['n'] for m in manifest)} hypotheses, {len(repos)} git repos")
 PY
 ```
 
-Expect **18 roots / 147 hypotheses** as of 2026-07-12. **If the total is not 147, stop** — the
-cross-tab and the 36-key mixin were both certified against exactly that corpus.
+Expect **18 roots / 147 hypotheses / 15 git repos** as of 2026-07-12.
 
-- [ ] **Step 1: Migrate each root, smallest first** (a mistake is cheapest in `pre-cancer` (1)).
-  The three `science/tests/fixtures/**` roots are migrated **in this repo, as part of this task** —
-  they are 4 real hypotheses and our own suite fails on them the moment Task 6 closes the schema.
+> **The gate is set equality on `(root, n)` — not the totals.** `18/147` is satisfiable while a
+> root silently disappears and another gains the same count. Snapshot the manifest **once**, here,
+> and require **exact equality** against a freshly derived one immediately before *apply* (Step 1)
+> and again before the *ratchet* (Task 12). Any diff ⇒ the corpus moved under a certification that
+> was measured against exactly these 147 files. **Stop and re-certify; do not reconcile in place.**
 
-For each:
+- [ ] **Step 1: Two-phase preflight over ALL 147 targets — render and validate everything, then
+  write.** No root is applied until every root's rendered target has passed. This is what makes the
+  slice atomic across 15 repositories rather than merely ordered.
 
 ```bash
-cd <repo>
-uv run science graph build --output /tmp/claude-1000/before-$(basename $PWD).trig
-uv run science entity status-inventory              # 0 refused, or adjudicate first
-uv run science entity migrate-hypothesis --dry-run  # read the plan
-uv run science entity migrate-hypothesis --apply    # two-phase; sets entity_schema_version: 2
-uv run science graph build --output /tmp/claude-1000/after-$(basename $PWD).trig
-uv run science validate; echo "exit=$?"             # MUST be 0
+uv run science entity migrate-hypothesis --preflight-all --manifest /tmp/claude-1000/roster.json
 ```
 
-> **`cancer/mechanisms/evolution` is the hard one — do it LAST, not by size.** It owns all 13
-> `belief_state`/`evidence_stance`/`author_stated_evidence` files, so it is the only repo where
-> Task 2b's deletion and Task 6b's `evidence_scope` extension actually bite. It is also the repo
-> where a field-order mistake silently promotes 13 hypotheses `speculative` → `supported`.
-> **Task 2b must already be merged before this repo is touched.**
+- **Preflight must include `cancer/mechanisms/evolution`.** It is the only root where Task 2b's
+  deletion and Task 6b's `evidence_scope` extension actually bite.
+- **With a green all-corpus preflight, apply order is free** — take smallest-first
+  (`pre-cancer` (1) …) so a surprise is cheapest.
+- **If you ever fall back to per-root validate-then-write, apply `evolution` FIRST.** Ordering by
+  size would leave the most refutation-capable corpus for last, after 14 repos are already written.
+
+For each root (order per above):
+
+```bash
+SLUG=$(...)                                          # from the manifest -- NOT basename $PWD:
+                                                     # science/meta and health/meta both basename
+                                                     # to "meta" and would clobber each other's .trig
+cd "$ROOT"
+uv run science graph build --output /tmp/claude-1000/before-$SLUG.trig
+uv run science entity status-inventory               # 0 refused, or adjudicate first
+uv run science entity migrate-hypothesis --apply     # two-phase; sets entity_schema_version: 2
+uv run science graph build --output /tmp/claude-1000/after-$SLUG.trig
+uv run science validate; echo "exit=$?"              # MUST be 0
+```
+
+> **Task 2b must be merged before `evolution` is written**, in either ordering. It is the repo where
+> a field-order mistake silently promotes 13 hypotheses `speculative` → `supported`.
 
 - [ ] **Step 2: Diff the graph and account for every triple.** Expected, and nothing else:
   - `sci:projectStatus` values change per the rev-7 mapping
@@ -2128,21 +2197,39 @@ uv run science validate; echo "exit=$?"             # MUST be 0
 
   **Any unexplained triple means the slice is not atomic. Stop and find it.**
 
-- [ ] **Step 3: With every root pinned, re-derive the roster and validate all of it.**
+- [ ] **Step 3: With every root pinned, re-derive and validate the whole roster.**
 
 ```bash
-# re-derive (Step 0), then:
-for p in $(cat /tmp/claude-1000/roster.txt); do
-  echo -n "$p: "; (cd "$p" && uv run science validate >/dev/null 2>&1; echo "exit=$?")
-done
-cd ~/d/science/science && uv run --frozen pytest -q   # the fixture roots live here
+uv run python - <<'PY'
+import json, subprocess
+from pathlib import Path
+manifest = json.loads(Path("/tmp/claude-1000/roster.json").read_text())
+for m in manifest:
+    r = subprocess.run(["uv", "run", "science", "validate"], cwd=m["root"], capture_output=True)
+    print(f"exit={r.returncode}  {m['root']}")
+PY
+cd ~/d/science/science && uv run --frozen pytest -q   # the 3 fixture roots live in THIS repo
 ```
 **Every root exits 0, and our own suite is green.** This is the step whose absence caused the
 original incident — and rev 1–3 would have run it over 58% of the corpus and called it clean.
 
-- [ ] **Step 4: Commit each repo separately** (they are separate git repos; several are
-  Dropbox-only with no remote — **do not push**). `r/mm30` and `r/cbioportal` are **symlinks**;
-  commit in the real repos (`cancer/cancer-types/multiple-myeloma`, `cancer/data-sources/cbioportal`).
+- [ ] **Step 4: Commit per GIT REPOSITORY — 15 commits, not 18.**
+
+```bash
+uv run python -c "
+import json; from pathlib import Path
+m = json.loads(Path('/tmp/claude-1000/roster.json').read_text())
+repos = {}
+for e in m: repos.setdefault(e['repo'], []).append(e['root'])
+for repo, roots in sorted(repos.items()): print(repo, '<-', len(roots), 'root(s)')"
+```
+
+`~/d/science` holds **four** roots (`science/meta` + the three fixtures). Committing per *root*
+would attempt four commits in one repository, and commits 2–4 would sweep up the other roots'
+changes as an unexplained dirty tree. **Group by `repo`, commit once per repo.**
+
+`r/mm30` and `r/cbioportal` are **symlinks** — `.resolve()` already collapsed them, so they
+cannot produce a duplicate repo. Several repos are **Dropbox-only with no remote — do not push.**
 
 ---
 
@@ -2173,8 +2260,13 @@ def _severity(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
 
-- [ ] **Step 3:** Re-run validate across the derived roster (all 18 roots). **All exit 0.**
-- [ ] **Step 4: Commit.**
+- [ ] **Step 3: Re-assert the manifest, then validate.** Re-derive the roster and require **exact
+  `(root, n)` set equality** against `/tmp/claude-1000/roster.json` (Task 11 Step 0). Totals are not
+  a gate: `18/147` still holds if one root vanishes while another gains the same count. Only then
+  run `science validate` across all 18 roots — **all exit 0** — plus our own suite for the three
+  fixture roots. Flipping `hypothesis` to ERROR against a corpus that has drifted since
+  certification is precisely the original incident.
+- [ ] **Step 4: Commit** (15 repos, grouped by `git rev-parse --show-toplevel`).
 
 ---
 
