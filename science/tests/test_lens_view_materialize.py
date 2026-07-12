@@ -89,7 +89,7 @@ _ENTITY_MD = """\
 id: question:0001-lens-demo
 kind: question
 title: Lens demo
-status: open
+status: active
 ontology_terms: []
 related: []
 source_refs: []

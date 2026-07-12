@@ -212,7 +212,14 @@ The prompt passed to each sub-agent includes:
 - Project root path.
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
-- Target output path: `entities/synthesis/<hyp-id>.md`.
+- Target output path: **resolve it, do not compose it.** Run
+  `science big-picture synthesis-path <hyp-id> --project-root <root>` and pass the result
+  verbatim. An existing `report_kind: hypothesis-synthesis` entity whose `hypothesis:`
+  frontmatter names this hypothesis wins, *whatever its filename* — numbered-entity projects
+  store it as e.g. `entities/synthesis/0022-epigenetic-commitment.md`. Composing
+  `<hyp-id>.md` in such a project creates a DUPLICATE synthesis entity beside the canonical
+  one, with the rollup pointing at one and the graph at the other. The fallback to
+  `<hyp-id>.md` applies only when no prior file exists — partial coverage is normal.
 - Frontmatter: emit `kind: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
@@ -277,13 +284,40 @@ Body sections (~1000–1500 words total):
 
 - **TL;DR** — 5–7 bullets, most salient project-wide facts. Distilled from each per-hypothesis State, not a per-hypothesis recap.
 - **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
-- **Arc** — one paragraph per **active** hypothesis (those whose bundle has `phase == "active"` or whose hypothesis file omits `phase:`), plus a framing paragraph on how the active hypotheses relate. Candidate hypotheses are not included here; they appear in the Candidate frames section below.
+- **Arc** — one paragraph per **active** hypothesis (those whose bundle has `phase == "active"` or whose hypothesis file omits `phase:`), plus a framing paragraph on how the active hypotheses relate. Candidate hypotheses are not included here; they appear in the Candidate frames section below. **Exclude every hypothesis with `disposition: closed`** — a terminal hypothesis is not part of the live arc.
 - **Research fronts** — ranked list across **active** hypotheses only. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front. Candidate hypotheses do not contribute to this section; their fronts (if any) appear inside their per-hypothesis files at `entities/synthesis/<id>.md`.
-- **Candidate frames** — one paragraph per hypothesis whose bundle has `phase == "candidate"`. Same citation, grounding, and length rules as the per-hypothesis files. If no candidates exist, emit a single line: `No candidate hypotheses.` Do not suppress the section. Active hypotheses are NOT mentioned here — they appear in the Arc and Research-fronts sections only.
+- **Candidate frames** — one paragraph per hypothesis whose bundle has `phase == "candidate"` **and `disposition: open`**. Same citation, grounding, and length rules as the per-hypothesis files. If no candidates exist, emit a single line: `No candidate hypotheses.` Do not suppress the section. Active hypotheses are NOT mentioned here — they appear in the Arc and Research-fronts sections only.
+
+  **`disposition` is the workflow axis; `status` is the epistemic one, and neither implies the other.** A hypothesis with `disposition: closed` is no longer an object of active work — whatever the evidence says about it — so it must not be presented as a *live candidate frame*. natural-systems rendered a hypothesis it had stopped working on as a candidate frame, because the only field available said `retired` and nothing selected on it.
+
+- **Retired frames** — one line per hypothesis with `disposition: closed`: its ID, its `status` (the epistemic verdict — `refuted`, `weakened`, or an undecided status if it was closed for pragmatic reasons), and its `disposition_basis`. Closure is not hiding: a terminal hypothesis stays queryable and provenance-visible, and the reader must be able to see what was set down and why. If none exist, emit `No retired hypotheses.`
+
+- **Re-homing debt** — run `science graph rehoming-debt`. Open questions attached to a terminal hypothesis do not become uninteresting because their frame died; they become **unhoused**. List them with the terminal hypothesis each still resolves to. Retirement *creates* work, and this section is where that work becomes visible — **the dead hypothesis is not ranked, but its re-homing debt is.** If the instrument reports `unwired` (no hypothesis in this project declares a `disposition`), say so rather than reporting zero debt.
 - **Knowledge Gaps (rollup)** — The orchestrator reuses the `all_gaps` list computed in Phase 1 (no second call to `compute_topic_gaps`). Render the top 10 entries (by `gap_score` desc, ties broken by topic ID asc) as a markdown table with columns: Topic, Coverage, Demand, Gap, Hypotheses. If `all_gaps` is empty, emit the one-liner: "No knowledge gaps detected this run." and skip the table. Per-hypothesis files render their own Knowledge Gaps sub-bullet inside Research Fronts per the spec (with a rendering cap of 5 `demanding_questions` IDs + "… and N more" tail).
 - **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
 
 Computing SHAs:
+
+> **Validate the per-hypothesis files BEFORE stamping their SHAs.** A provenance record
+> stamped before its subject is final is not provenance.
+>
+> The validator legitimately rejects per-hypothesis files — that is its job. The documented
+> repair is to re-dispatch the sub-agent, which **rewrites the file and changes its SHA**,
+> silently invalidating the `synthesized_from` the rollup already attested to. Nothing
+> re-checks it: the staleness warning fires only on the *next* invocation, and is explicitly
+> informational (fb-2026-07-11-006).
+>
+> So the order is: **write → validate → repair (loop until clean) → stamp → write rollup.**
+> If any repair loop runs after a stamp, **re-stamp**. Never stamp a file you are still
+> willing to change.
+
+Validate the staged/written per-hypothesis files first:
+
+```bash
+uv run science big-picture validate --project-root .
+```
+
+Only once they are clean, compute the SHAs:
 
 ```bash
 git hash-object entities/synthesis/<hyp-id>.md

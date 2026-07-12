@@ -27,7 +27,13 @@ from .evidence_signals import (
     _load_proposition_pre_registrations,
 )
 from ...instruments import InstrumentResult
-from .identity import _graph_uri, _resolve_center_entity, _short_name, entity_in_graph
+from .identity import (
+    _graph_uri,
+    _resolve_center_entity,
+    _short_name,
+    canonical_id_from_entity_uri,
+    entity_in_graph,
+)
 from .types import (
     ClaimSummaryData,
     InquirySummaryData,
@@ -783,10 +789,33 @@ def query_gaps(
             reason=f"{center!r} does not exist in the knowledge graph.",
         )
 
-    # BFS to find neighborhood entities
+    # A center that is in the graph but is not a project ENTITY cannot yield a citable
+    # neighborhood -- it has no canonical ID, and neither would its rows. Say so rather
+    # than emitting IRIs nobody can cite.
+    if canonical_id_from_entity_uri(str(center_uri)) is None:
+        return InstrumentResult.unwired(
+            code="center_not_an_entity",
+            reason=f"{center!r} is not a project entity, so it has no citable neighborhood.",
+        )
+
+    # BFS over the ENTITY graph, not the RDF graph. An edge is admissible iff BOTH
+    # endpoints are project entities.
+    #
+    # This previously read `for subj, _, obj in knowledge` -- the predicate DISCARDED --
+    # which admitted `rdf:type` and made each class node a hub: every hypothesis sat 1 hop
+    # from `sci:Hypothesis` and therefore 2 hops from every other hypothesis. At the
+    # default hops=2 the "neighborhood" was the whole project, and 29 mm30 subagents each
+    # discarded the same six irrelevant rows by hand (fb-2026-07-11-010).
+    #
+    # Do NOT special-case `rdf:type`. ANY predicate whose object is a shared vocabulary
+    # term forms the same hub. The invariant is about the ENDPOINTS, not the predicate.
     adjacency: dict[URIRef, set[URIRef]] = {}
     for subj, _, obj in knowledge:
         if not isinstance(subj, URIRef) or not isinstance(obj, URIRef):
+            continue
+        if canonical_id_from_entity_uri(str(subj)) is None:
+            continue
+        if canonical_id_from_entity_uri(str(obj)) is None:
             continue
         adjacency.setdefault(subj, set()).add(obj)
         adjacency.setdefault(obj, set()).add(subj)
@@ -846,9 +875,18 @@ def query_gaps(
                 label_obj = next(knowledge.objects(uri, SCHEMA_NS.text), None)
             label = str(label_obj) if label_obj else _short_name(str(uri))
 
+            # Every node that survived the walk IS a project entity -- the adjacency filter
+            # above established that -- so this cannot be None. Emitting the IRI made gaps
+            # rows UNCITABLE: the big-picture validator flags an IRI as
+            # `nonexistent_reference`, so mm30's subagents had to paraphrase the findings as
+            # ungrounded prose or drop them (fb-2026-07-11-011). The data was in the bundle
+            # and unusable at the point of use.
+            canonical = canonical_id_from_entity_uri(str(uri))
+            if canonical is None:  # pragma: no cover -- guaranteed by the adjacency filter
+                continue
             rows.append(
                 {
-                    "entity": str(uri),
+                    "entity": canonical,
                     "label": label,
                     "issues": "; ".join(issues),
                 }

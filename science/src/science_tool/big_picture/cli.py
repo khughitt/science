@@ -15,6 +15,7 @@ from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
 from science_tool.big_picture.layout import entity_dir
 from science_tool.big_picture.resolver import resolve_questions
+from science_tool.big_picture.synthesis_paths import resolve_synthesis_path
 from science_tool.big_picture.validator import (
     validate_rollup_file,
     validate_synthesis_file,
@@ -49,6 +50,29 @@ def resolve_questions_cmd(project_root: Path) -> None:
     emit(output_format="json", payload=payload, render_text=lambda: None, sort_keys=True)
 
 
+@big_picture_group.command("synthesis-path")
+@click.argument("hypothesis_id")
+@click.option(
+    "--project-root",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=Path.cwd(),
+    show_default=True,
+    help="Path to the project root.",
+)
+def synthesis_path_cmd(hypothesis_id: str, project_root: Path) -> None:
+    """Print the synthesis entity path for HYPOTHESIS_ID.
+
+    An existing `report_kind: hypothesis-synthesis` entity whose `hypothesis:` frontmatter
+    names this hypothesis wins, whatever its filename -- numbered-entity projects bind the
+    two by frontmatter, not by name. Falls back to `<hyp-id>.md` only when none exists.
+
+    The orchestrator passes this path to the sub-agent instead of composing one, which is
+    what created duplicate synthesis entities in mm30 and natural-systems
+    (fb-2026-07-11-013, -002).
+    """
+    click.echo(str(resolve_synthesis_path(project_root, hypothesis_id)))
+
+
 @big_picture_group.command("validate")
 @click.option(
     "--project-root",
@@ -57,13 +81,32 @@ def resolve_questions_cmd(project_root: Path) -> None:
     show_default=True,
     help="Path to the project root.",
 )
-def validate_cmd(project_root: Path) -> None:
-    """Validate generated big-picture synthesis files in this project."""
+@click.option(
+    "--staged",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=None,
+    help=(
+        "Validate generated files in this staging directory instead of entities/synthesis/, "
+        "BEFORE they are reconciled into canonical entities. References are still checked "
+        "against --project-root."
+    ),
+)
+def validate_cmd(project_root: Path, staged: Path | None) -> None:
+    """Validate generated big-picture synthesis files in this project.
+
+    With ``--staged``, validate files in a staging directory BEFORE they are reconciled
+    into canonical entities. Validation was strictly post-hoc, so a truncated ID was only
+    caught after the canonical entities had already been overwritten and every repair had
+    to be done against published files (fb-2026-07-11-003).
+
+    The known-ID corpus always comes from ``--project-root``: staged files are checked
+    against the real project, which is the whole point.
+    """
     # v3 canonical layout: synthesis artifacts are `synthesis` entities under
     # entities/synthesis/. The rollup is identified by its report_kind rather
     # than a fixed filename; per-hypothesis and emergent-threads files are
     # validated as synthesis files.
-    synthesis_dir = entity_dir(project_root, "synthesis")
+    synthesis_dir = staged if staged is not None else entity_dir(project_root, "synthesis")
 
     issues = []
     unchecked: list[tuple[Path, str]] = []

@@ -34,12 +34,23 @@ def test_with_core_types_registers_all_core_kinds() -> None:
 
 
 def test_generic_kinds_default_to_project_entity() -> None:
-    """Kinds without a dedicated typed entity (concept, hypothesis, topic, question...)
-    are registered against ProjectEntity so generic tooling still works."""
+    """Kinds without a dedicated typed entity (concept, topic, question...) are registered
+    against ProjectEntity so generic tooling still works."""
     registry = EntityRegistry.with_core_types()
     assert registry.resolve("concept") is ProjectEntity
-    assert registry.resolve("hypothesis") is ProjectEntity
     assert registry.resolve("topic") is ProjectEntity
+
+
+def test_hypothesis_resolves_to_its_typed_entity() -> None:
+    """`hypothesis` is no longer generic: it carries the two orthogonal lifecycle axes
+    (`status` = epistemic verdict, `disposition` = workflow state), and `disposition` must
+    be a DECLARED model field or it is silently dropped at model_validate -- which is what
+    already happened to `phase` (fb-2026-07-11-005).
+    """
+    from science_model.entities import HypothesisEntity
+
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("hypothesis") is HypothesisEntity
 
 
 def test_curation_sweep_kind_registered() -> None:

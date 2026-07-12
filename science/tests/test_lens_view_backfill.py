@@ -16,7 +16,7 @@ def _write_entity(root, name, extra_fm) -> None:
     id_part = name.replace(".md", "")
     (root / "entities" / "questions" / name).write_text(
         "---\n"
-        f"id: question:{id_part}\nkind: question\ntype: question\ntitle: X\nstatus: open\nproject: testproj\n"
+        f"id: question:{id_part}\nkind: question\ntype: question\ntitle: X\nstatus: active\nproject: testproj\n"
         "ontology_terms: []\nrelated: []\nsource_refs: []\n"
         f"{extra_fm}"
         "created: '2026-07-04'\nupdated: '2026-07-04'\n"

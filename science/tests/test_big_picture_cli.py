@@ -94,3 +94,30 @@ def test_validate_passes_on_clean_project(tmp_path: Path) -> None:
         ["big-picture", "validate", "--project-root", str(tmp_path)],
     )
     assert result.exit_code == 0
+
+
+def test_validate_staged_checks_files_before_reconciliation(tmp_path: Path) -> None:
+    """`--staged` validates generated output BEFORE it overwrites canonical entities.
+
+    Validation was strictly post-hoc, so a truncated ID surfaced only after the canonical
+    entities had been overwritten -- every repair was done against already-published files
+    (fb-2026-07-11-003). natural-systems' workaround was to stage into a scratch dir and
+    splice by hand; this makes that first-class.
+    """
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    (staged / "h1-alpha.md").write_text(
+        '---\nid: "synthesis:h1-alpha"\nhypothesis: "hypothesis:h1-alpha"\n---\n\n'
+        "## Arc\n\nSee question:q99-does-not-exist for the argument.\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["big-picture", "validate", "--project-root", str(FIXTURE), "--staged", str(staged)],
+    )
+
+    assert result.exit_code == 1
+    assert "nonexistent_reference" in result.output
+    assert "h1-alpha.md" in result.output

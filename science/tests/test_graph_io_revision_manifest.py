@@ -13,6 +13,30 @@ def _seed_project(root: Path, science_yaml: str) -> None:
     (root / "knowledge").mkdir()
 
 
+def test_entities_dir_is_in_the_walk_set(tmp_path: Path) -> None:
+    """`entities/` MUST be walked.
+
+    It was omitted from `include_dirs` for two months: a project could add a brand-new
+    hypothesis and `science graph diff` would still report the graph "up to date", so
+    /science:update-graph's "no files stale -> stop" gate would skip a needed rebuild and
+    leave the entity permanently absent from the graph (fb-2026-07-11-016, -023).
+
+    The fix landed in bbedacbe WITHOUT a guard -- the original report even noted that no
+    test asserted anything about `entities/`. This is that guard: delete `pp.entities_dir`
+    from `build_input_manifest` and this test must go red.
+    """
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses" / "0001-x.md").write_text(
+        "---\nid: hypothesis:0001-x\nkind: hypothesis\n---\n", encoding="utf-8"
+    )
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert "entities" in manifest["walked"]
+    assert "entities/hypotheses/0001-x.md" in manifest["files"]
+
+
 def test_build_input_manifest_excludes_configured_generated_report(tmp_path: Path) -> None:
     _seed_project(
         tmp_path,

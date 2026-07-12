@@ -196,7 +196,7 @@ def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
         'id: "question:q1"\n'
         'kind: "question"\n'
         'title: "Q1"\n'
-        'status: "open"\n'
+        'status: "active"\n'
         'datasets: ["dataset:rna"]\n'
         "ontology_terms: []\n"
         "---\n\n# Q1\n",

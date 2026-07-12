@@ -157,7 +157,7 @@ def _write_subject_entity(project: Path, ref: str) -> None:
                 f'id: "{ref}"',
                 'kind: "question"',
                 f'title: "{slug}"',
-                'status: "open"',
+                'status: "active"',
                 "ontology_terms: []",
                 "source_refs: []",
                 "related: []",

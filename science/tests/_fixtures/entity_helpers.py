@@ -29,7 +29,7 @@ def seed_project(root: Path) -> None:
     # Create minimal research-question.md
     (root / "entities" / "research-question.md").write_text(
         "---\nid: research-question:test\nkind: research-question\n"
-        "title: Test Research Question\nstatus: open\n"
+        "title: Test Research Question\nstatus: active\n"
         "---\n\nTest question.\n",
         encoding="utf-8",
     )
