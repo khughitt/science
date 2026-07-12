@@ -176,6 +176,24 @@ inversion is deliberate and is called out in §9 as decision D1.
 
 ### 7.3 The field contract (all 10 mixed kinds)
 
+> **⚠️ CORRECTED BY THE D4 AUDIT** —
+> [`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md) §5.
+> The table below was written before the audit and **four rows are wrong**:
+>
+> | kind | this table said | audit found |
+> |---|---|---|
+> | `dataset` | no domain axis; `candidate` → `draft` | **`candidate` is an ACQUISITION-STATE axis** (not-yet-acquired vs acquired). **357 entities.** Do NOT map it to `draft`. |
+> | `paper` | *(absent)* | **MISSING ROW** — a real reading/access axis (`unread → abstract-read → read → summarized`, + `paywalled`/`preprint`), 41 files; its only declared non-`active` value has **0** uses |
+> | `synthesis` | no domain axis | its real axis is **`report_kind`** — undeclared, dropped by `extra="ignore"`, yet **branched on for control flow** from raw frontmatter |
+> | `plan` | no domain axis | a **readiness axis** (`ready`/`ready-with-caveats`/`not-ready`) is being invented in `commands/plan-analysis.md` |
+> | `workflow-run` | `outcome`: complete \| failed | **`running` and `failed` are DEAD** — indistinguishable to every consumer. Only `complete` is real. |
+>
+> Also: **the capability model is amended.** Capabilities are real (they are gated by code),
+> but their *current assignment to kinds carries no recoverable intent* — the guard test D4
+> leaned on turns out to pin one commit's ad-hoc enumeration. Capabilities must be **assigned
+> by design**, not excavated. And **four of the six (`draftable`, `completable`, `retirable`,
+> `deferrable`) have no implementing gate at all** — they must be built or dropped.
+
 `status` (lifecycle) is **always present**, default `active`. Domain fields are **absent = not
 yet assessed**, which is *distinct* from every explicit value.
 
