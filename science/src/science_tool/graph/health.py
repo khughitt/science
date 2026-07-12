@@ -7,15 +7,11 @@ is a structured dict suitable for both human display and agent consumption.
 
 from __future__ import annotations
 
-import re
-from collections import defaultdict
 from pathlib import Path
 from time import perf_counter
 from typing import NotRequired, TypedDict, cast
 
 import yaml as _yaml
-from science_model.contracts.inventory_common import InventoryWarning
-from science_model.entities import Entity
 
 from science_tool.annotation.cross_paper_evidence import (
     build_cross_paper_evidence_report,
@@ -23,16 +19,16 @@ from science_tool.annotation.cross_paper_evidence import (
 )
 from science_tool.data_root import project_config_path
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
-from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.health_checks.base import (
-    IDENTITY_REFERENCE_FIELDS,
-    NO_ENTITIES_REASON,
-    PROJECT_SOURCES_EMPTY,
     HealthCheck,
     HealthContext,
     HealthTiming,
     context_sources,
 )
+from science_tool.graph.health_checks.entity_identity import CHECK as ENTITY_IDENTITY_CHECK
+from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
+from science_tool.graph.health_checks.identity_policy import CHECK as IDENTITY_POLICY_CHECK
+from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
 from science_tool.graph.health_checks.lingering_tags import CHECK as LINGERING_TAGS_CHECK
 from science_tool.graph.health_checks.lingering_tags import LingeringTagsRecord
 from science_tool.graph.health_checks.unregistered_ref_kinds import CHECK as UNREGISTERED_REF_KINDS_CHECK
@@ -43,10 +39,7 @@ from science_tool.graph.migrate import (
     LayeredClaimMigrationReport,
     build_layered_claim_migration_report,
 )
-from science_tool.graph.sources import (
-    ProjectSources,
-    load_project_sources,
-)
+from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
 
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
@@ -89,14 +82,6 @@ class AgentContextFinding(TypedDict):
     source_file: str
     detail: str
     fix: str
-
-
-class EntityIdentityFinding(TypedDict):
-    code: str
-    severity: str
-    message: str
-    path: str | None
-    canonical_id: str | None
 
 
 class ValidationFinding(TypedDict):
@@ -200,24 +185,6 @@ def _drain_instrument_results(
         rows[name] = value.rows
     unwired.sort(key=lambda row: row["check"])
     return rows, unwired
-
-
-def _entity_identity_finding(warning: InventoryWarning) -> EntityIdentityFinding:
-    return {
-        "code": warning.code,
-        "severity": warning.severity,
-        "message": warning.message,
-        "path": warning.path,
-        "canonical_id": warning.canonical_id,
-    }
-
-
-def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFinding]:
-    sources = context_sources(context)
-    return [
-        _entity_identity_finding(warning)
-        for warning in collect_identity_warnings(context.project_root, sources=sources)
-    ]
 
 
 def collect_validation_findings(project_root: Path) -> InstrumentResult[ValidationFinding]:
@@ -861,177 +828,6 @@ class InvalidEntityAspectsFinding(TypedDict):
     entity_id: str
     source_file: str
     message: str
-
-
-class IdentityPolicyFinding(TypedDict):
-    check: str
-    entity_id: str
-    source_file: str
-    message: str
-
-
-_LOCAL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_IDENTITY_REQUIRED_KINDS = frozenset(
-    {
-        "gene",
-        "protein",
-        "disease",
-        "drug",
-        "chemical",
-        "cell_type",
-        "phenotype",
-        "anatomy",
-        "pathway",
-        "process",
-        "function",
-    }
-)
-_TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
-
-
-def _coerce_external_curie(raw: object) -> str | None:
-    curie = getattr(raw, "curie", None)
-    if isinstance(curie, str) and curie.strip():
-        return curie.strip()
-    if isinstance(raw, str):
-        text = raw.strip()
-        return text or None
-    if isinstance(raw, dict):
-        curie = raw.get("curie")
-        if isinstance(curie, str) and curie.strip():
-            return curie.strip()
-        source = raw.get("source")
-        identifier = raw.get("id")
-        if isinstance(source, str) and isinstance(identifier, str) and source.strip() and identifier.strip():
-            return f"{source.strip()}:{identifier.strip()}"
-    return None
-
-
-def collect_identity_policy_findings(
-    project_root: Path, *, sources: ProjectSources | None = None
-) -> InstrumentResult[IdentityPolicyFinding]:
-    """Return identity-policy issues surfaced from loaded entities and relations.
-
-    ``unwired`` when the load produced no entities — no identity was inspected.
-    """
-    if sources is None:
-        sources = load_project_sources(project_root.resolve())
-    if not sources.entities:
-        return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
-    findings: list[IdentityPolicyFinding] = []
-
-    primary_claims: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    deprecated_to_canonical: dict[str, str] = {}
-    for entity in sources.entities:
-        canonical_id = entity.canonical_id
-        source_file = entity.file_path
-        primary = _coerce_external_curie(getattr(entity, "primary_external_id", None))
-        if primary is not None:
-            primary_claims[primary].append((canonical_id, source_file))
-        for deprecated_id in [str(item) for item in getattr(entity, "deprecated_ids", []) if isinstance(item, str)]:
-            deprecated_to_canonical[deprecated_id] = canonical_id
-
-    for curie, claims in primary_claims.items():
-        if len(claims) < 2:
-            continue
-        for canonical_id, source_file in sorted(claims, key=lambda row: row[0])[1:]:
-            findings.append(
-                IdentityPolicyFinding(
-                    check="primary_external_id_collision",
-                    entity_id=canonical_id,
-                    source_file=source_file,
-                    message=f"{curie} is already claimed by another entity",
-                )
-            )
-
-    for entity in sources.entities:
-        _collect_entity_identity_findings(
-            entity=entity,
-            findings=findings,
-            deprecated_to_canonical=deprecated_to_canonical,
-        )
-
-    for relation in sources.relations:
-        relation_stub = f"{relation.subject} {relation.predicate} {relation.object}".strip()
-        for role, ref in (("subject", relation.subject), ("object", relation.object)):
-            if ":" not in ref:
-                findings.append(
-                    IdentityPolicyFinding(
-                        check="relation_endpoint_disambiguation",
-                        entity_id=relation_stub,
-                        source_file=relation.source_path,
-                        message=f"{role} {ref!r} is missing a kind prefix",
-                    )
-                )
-
-    findings.sort(key=lambda row: (row["check"], row["entity_id"], row["source_file"]))
-    return InstrumentResult.from_rows(findings)
-
-
-def _collect_entity_identity_findings(
-    *,
-    entity: Entity,
-    findings: list[IdentityPolicyFinding],
-    deprecated_to_canonical: dict[str, str],
-) -> None:
-    canonical_id = entity.canonical_id
-    source_file = entity.file_path
-    kind = entity.kind
-    primary = _coerce_external_curie(getattr(entity, "primary_external_id", None))
-    provisional = bool(getattr(entity, "provisional", False))
-    taxon = getattr(entity, "taxon", None)
-
-    if kind in _IDENTITY_REQUIRED_KINDS and primary is None and not provisional:
-        findings.append(
-            IdentityPolicyFinding(
-                check="missing_primary_external_id",
-                entity_id=canonical_id,
-                source_file=source_file,
-                message=f"{kind} entities should carry a primary external id",
-            )
-        )
-
-    if kind in _TAXON_REQUIRED_KINDS and not taxon and not provisional:
-        findings.append(
-            IdentityPolicyFinding(
-                check="missing_taxon",
-                entity_id=canonical_id,
-                source_file=source_file,
-                message=f"{kind} entities should carry taxon metadata",
-            )
-        )
-
-    if kind in {"concept", "method", "mechanism"}:
-        local_id = canonical_id.split(":", 1)[1] if ":" in canonical_id else canonical_id
-        if not _LOCAL_ID_RE.fullmatch(local_id):
-            findings.append(
-                IdentityPolicyFinding(
-                    check="invalid_local_id_syntax",
-                    entity_id=canonical_id,
-                    source_file=source_file,
-                    message="local ids must use lowercase kebab-case",
-                )
-            )
-
-    for deprecated_id in [str(item) for item in getattr(entity, "deprecated_ids", []) if isinstance(item, str)]:
-        deprecated_to_canonical[deprecated_id] = canonical_id
-
-    for field_name in IDENTITY_REFERENCE_FIELDS:
-        refs = getattr(entity, field_name, None)
-        if not isinstance(refs, list):
-            continue
-        for ref in [str(item) for item in refs if isinstance(item, str)]:
-            target = deprecated_to_canonical.get(ref)
-            if target is None:
-                continue
-            findings.append(
-                IdentityPolicyFinding(
-                    check="deprecated_id_inbound_ref",
-                    entity_id=canonical_id,
-                    source_file=source_file,
-                    message=f"{field_name} references deprecated id {ref} from {target}",
-                )
-            )
 
 
 def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[InvalidEntityAspectsFinding]:
@@ -1711,20 +1507,8 @@ def _collect_prose_epistemics(context: HealthContext) -> dict[str, object]:
 
 
 HEALTH_CHECKS: tuple[HealthCheck, ...] = (
-    HealthCheck(
-        name="identity_policy",
-        description="Validate entity identity policy and relation endpoint disambiguation.",
-        requires_sources=True,
-        run=lambda context: collect_identity_policy_findings(context.project_root, sources=context_sources(context)),
-        empty=lambda _root: [],
-    ),
-    HealthCheck(
-        name="entity_identity",
-        description="Validate canonical entity identifiers, baseline status, and prose references.",
-        requires_sources=True,
-        run=_collect_entity_identity,
-        empty=lambda _root: [],
-    ),
+    IDENTITY_POLICY_CHECK,
+    ENTITY_IDENTITY_CHECK,
     HealthCheck(
         name="layered_claim_migration",
         description="Report layered-claim adoption gaps and migration issues.",

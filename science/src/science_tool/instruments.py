@@ -45,6 +45,8 @@ INSTRUMENT_MODULES: tuple[str, ...] = (
     "graph/health_checks/unresolved_refs.py",
     "graph/health_checks/unregistered_ref_kinds.py",
     "graph/health_checks/lingering_tags.py",
+    "graph/health_checks/identity_policy.py",
+    "graph/health_checks/entity_identity.py",
     "graph/attention.py",
     "graph/store/summary.py",
     "graph/store/queries.py",
