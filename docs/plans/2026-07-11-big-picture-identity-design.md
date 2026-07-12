@@ -218,32 +218,127 @@ They must ship together. `validator.py:29` already defines `REFERENCE_PATTERN`; 
 IDs before counting. The cap is meant to measure *prose verbosity*, and an entity ID is not
 prose.
 
-### 5.2 `fb-005` — retirement has no representation
+### 5.2 `fb-005` — RULING: epistemic verdict and workflow disposition are two axes
 
-`hypothesis:0009` in natural-systems was **rejected by a pre-registered confirmatory null**
-(z = −0.889). It carries `status: retired`. But `phase` has no `retired` value —
-`hypotheses_cli.py:30` is `click.Choice(["active", "candidate"])` — so it is still
-`phase: candidate`.
+**This section replaces an earlier draft that proposed adding `phase: retired`. That proposal
+was a category error and is withdrawn.** The reasoning is recorded here rather than deleted,
+because the mistake is the same one the projects made.
 
-Two consequences, both bad, and the second is worse than the ticket makes it sound:
+#### 5.2.1 What the model already has
 
-1. The rollup's **"Candidate frames"** section selects on `phase == "candidate"`, so a **dead
-   hypothesis is presented as a live candidate frame**.
-2. Its 10 open questions still resolve against it, so the attention ranking puts the **retired
-   hypothesis first by urgency** (`open_question_debt=10`, 27 incoming `bears_on`).
+| Axis | Field | Vocabulary | Meaning |
+|---|---|---|---|
+| **Epistemic verdict** | `status` | `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, `refuted`, `archived` (`profiles/core.py`) | *What the evidence says.* |
+| **Commitment** | `phase` | `candidate`, `active` (`hypotheses_cli.py:30`) | *Is this framing committed, or a trial framing being promoted to organize work?* |
+| **Workflow disposition** | — | — | **MISSING.** |
 
-**The thing we disproved is the thing the system now tells us to work on most.** Retirement
-currently has no defined effect on question re-homing or attention weighting — being *refuted*
-makes a hypothesis *more* attention-worthy.
+The epistemic axis **already draws the distinction this pushback demands**. `refuted` and
+`weakened` are different words today: *met a pre-registered rejection criterion* versus *failed
+to confirm but did not reject*. `superseded` exists as a hidden status carrying `sci:supersedes`
+lineage. Three of the four cases are already expressible.
 
-This is the one item with a `methodology:design` concern, and the only one needing a model
-change: add `phase: retired`; exclude it from Arc / Research-fronts / Candidate-frames (or give
-it a short **Retired** section); and have the validator flag questions still resolving to a
-retired hypothesis as **re-homing debt** — which is the real work retirement creates.
+What has nowhere to live is the fourth: **"is this hypothesis still an object of active work?"**
+That is a workflow fact, not an evidential one. With no home, authors smuggle it into `status`
+— and the smuggling destroys the epistemic fact, because `status` can only hold one value.
 
-Note `entities.py:206-211` deliberately keeps `retired` in `_LIVE_STATUSES` (visible). That is
-correct and stays: retired means *refuted and visible*, not *hidden*. The bug is that visible
-was silently equated with *live*.
+`phase` is **not** the place for it. Its documented meaning is commitment to a *framing*.
+Putting a lifecycle value on the commitment axis would create a **third** encoding of
+disposition alongside the two that already disagree.
+
+#### 5.2.2 The smoking gun, twice
+
+**`retired` is not a hypothesis status.** It is not in the hypothesis vocabulary at all. It is a
+**task** status (`TaskStatus.RETIRED`, `tasks.py:737`). natural-systems reached past its own
+vocabulary and borrowed a task lifecycle word — which is precisely the diagnosis: the author
+needed a workflow word, the epistemic axis was the only field available, so the workflow word
+went there.
+
+Nothing caught it. `entities.py:1374` (`if status not in _STATUS_VALUES[kind]`) validates status
+on **CLI writes only**. Hand-authored frontmatter is never re-checked, and `science validate`
+has **no status-vocabulary check at all**. An out-of-vocabulary status sits in a committed file
+and no surface says a word.
+
+**And the epistemic claim is itself false.** The ticket says hypothesis:0009 was *"rejected by a
+pre-registered confirmatory null, z = −0.889."* |z| = 0.889 < 1.96. That is a **non-significant**
+result: the study **failed to confirm**. It did not reject. Absent a pre-declared equivalence or
+rejection region, a null confirmatory test is *absence of evidence*, and the vocabulary already
+had the right word for it — `weakened`.
+
+So the collapse recorded a **refutation that never happened**. This is not a labelling nit: the
+graph now asserts that a hypothesis was disproved on the strength of a test that merely failed
+to support it.
+
+#### 5.2.3 The ruling
+
+> **`status` is the epistemic verdict. `disposition` is the workflow state. They are orthogonal
+> and neither may be inferred from the other.**
+
+Add a **`disposition`** field to hypothesis: `open` (default) | `closed`. A hypothesis is
+**terminal** iff `disposition: closed`.
+
+Orthogonality is the point, and both off-diagonal cells are legal and meaningful:
+
+|  | `disposition: open` | `disposition: closed` |
+|---|---|---|
+| `status: refuted` | Disproved, still being worked (writing it up, probing why) | Disproved and closed |
+| `status: supported` | Confirmed, still being extended | Confirmed and closed |
+| `status: under-investigation` | The normal case | **Closed for pragmatic reasons — epistemically undecided.** |
+
+That bottom-right cell is the user's third bullet ("no longer actionable for pragmatic
+reasons"), and it is exactly the case that `status: retired` **cannot represent without lying**.
+
+#### 5.2.4 Transition authority
+
+**Automatic** transition to a terminal epistemic status (`refuted`) is licensed **only** when
+all three hold:
+
+1. a **linked pre-registration** declares the decision rule;
+2. the **result satisfies** that declared rule; and
+3. the pre-registration's **Estimator Certification Gate passed**.
+
+Condition 3 is not decoration, and it follows directly from the doctrine merged in `386326c1`.
+A null result licenses *refutation* only if the instrument could have detected the effect. If
+the estimator is uncertified — `E = |b̂| + k·s > ρ·σ_null(T)` — the null is **INDETERMINATE**, not
+negative, and INDETERMINATE maps to `weakened` or to *no epistemic change at all*. **An
+uncertified estimator cannot refute anything.** Auto-refutation on an uncertified estimator is
+the estimator doctrine's failure mode wearing a lifecycle costume.
+
+In every other case — including a non-significant confirmatory test with no declared rejection
+region, which is hypothesis:0009's actual situation — the transition requires an **explicit
+authored disposition**: a human states the verdict and its basis. `disposition: closed` carries a
+required **`disposition_basis`** naming what closed it (a pre-registration ref, or authored prose
+for a pragmatic close).
+
+Closing is always authorable. **Refuting is not.**
+
+#### 5.2.5 Downstream semantics
+
+Terminal (`disposition: closed`) hypotheses:
+
+- are **excluded** from Candidate-frames selection and from **ordinary** attention ranking;
+- **remain materialized, queryable, and provenance-visible** — `_LIVE_STATUSES` is unchanged and
+  `retired`/`deprecated` stay visible. Closure is not hiding. A closed hypothesis must still be
+  reachable by historical and provenance queries, and its `sci:supersedes` lineage must survive.
+
+The two consequences in the ticket both follow from the exclusion: a dead hypothesis stops
+rendering as a live Candidate frame, and it stops **leading the attention ranking**. That second
+one is the real defect — today, `open_question_debt=10` and 27 incoming `bears_on` put the
+hypothesis we believe least at the **top** of the work queue. Being refuted currently makes a
+hypothesis *more* attention-worthy.
+
+#### 5.2.6 Question re-homing — otherwise closure just hides the debt
+
+Closing a hypothesis does not close its questions. Its 10 open questions do not become
+uninteresting because their frame died; they become **unhoused**.
+
+Every question resolving to a terminal hypothesis must reach an **explicit** destination or an
+**explicit unresolved state**. It may not silently vanish from attention along with its
+hypothesis — that would convert a visible debt into an invisible one, which is strictly worse
+than the bug we are fixing.
+
+So: questions resolving to a terminal hypothesis surface as **re-homing debt** — a named,
+countable, rankable state. Retirement *creates* work; the system must show it. **Re-homing debt
+is ranked; the dead hypothesis is not.**
 
 ### 5.3 `fb-006` — SHAs are stamped before the thing they attest is final
 
@@ -313,11 +408,21 @@ The unifying rule this cluster adds:
 5. A unique `<kind>:<NNNN>` prefix expands to its canonical ID; an **ambiguous** prefix fails
    loudly.
 6. Staged output can be validated before reconciliation.
-7. A `retired` hypothesis does not appear under Candidate frames and does not lead the
-   attention ranking; its unre-homed questions surface as re-homing debt.
-8. The Arc word cap does not count entity IDs.
-9. `entities/` in the manifest walk-set is **guarded by a test** that fails if it is removed.
-10. All 13 feedback items are `addressed` (the terminal status; there is no `resolved`).
+7. **Status vocabulary is enforced on the file, not just on CLI writes.** A hypothesis carrying
+   `status: retired` — a task word, not in its kind's vocabulary — **fails `science validate`**.
+   This check alone would have caught natural-systems' defect at commit time.
+8. `status` and `disposition` are independently settable. All four cells of §5.2.3 round-trip,
+   including `status: under-investigation` + `disposition: closed`.
+9. A **terminal** hypothesis does not appear under Candidate frames and does **not** lead the
+   attention ranking — while remaining materialized, queryable, and provenance-visible.
+10. **Auto-refutation is impossible without a passing Estimator Certification Gate.** A linked
+    pre-registration whose gate did not pass cannot drive a `refuted` transition; the result is
+    INDETERMINATE and the transition requires an authored disposition.
+11. Open questions on a terminal hypothesis surface as **countable re-homing debt** — they do
+    not vanish from attention alongside their hypothesis.
+12. The Arc word cap does not count entity IDs.
+13. `entities/` in the manifest walk-set is **guarded by a test** that fails if it is removed.
+14. All 13 feedback items are `addressed` (the terminal status; there is no `resolved`).
 
 ---
 
@@ -333,8 +438,19 @@ currently unprotected. Roots A and D-1 carry the correctness weight.
 | 3 | Arc word cap excludes entity IDs | `-015` | **must precede or ship with Task 4** |
 | 4 | Prefix expansion + `--staged` validation + spec symmetry | `-003 -012` | worsens `-015` if shipped alone |
 | 5 | Synthesis path resolver + correct the stale v2 agent specs | `-002 -013` | pattern exists at `digests.py:109` |
-| 6 | `phase: retired` + attention/candidate exclusion + re-homing debt | `-005` | model change; only `methodology:design` item |
+| 6a | **Enforce status vocabulary in `science validate`** | (`-005` prereq) | catches `retired`-on-a-hypothesis at commit time; smallest fix, largest reach |
+| 6b | `disposition` axis + terminal semantics + gate-bound transition authority + re-homing debt | `-005` | model change; only `methodology:design` item |
 | 7 | Validate-before-stamp (or re-stamp after repair) | `-006` | provenance ordering |
+
+**6a before 6b.** The vocabulary check is a handful of lines, needs no model change, and would
+have caught the original defect on its own. Shipping it first means 6b lands on a codebase where
+an invalid status can no longer reach a committed file — and it gives every *other* entity kind
+the same protection, since none of them are checked today either.
+
+**6b touches `science/model/`** (a new field on the hypothesis kind), so it carries the
+packaged-template hazard: `science/model/src/science_model/templates/hypothesis.md` is the copy
+the `Renderer` reads. A root-only edit changes nothing an author sees. Same trap as the
+pre-registration gate in `386326c1`.
 
 **Task 3 before Task 4 is not cosmetic.** Shipping the ID-discipline fix while the word cap
 still charges by the word for long IDs would tighten a rule and simultaneously penalise
