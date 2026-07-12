@@ -63,11 +63,11 @@ def _sourced(ref="${OUTPUT_ROOT}/scrna/walker2024.h5ad", *, hash_=VALID_HASH, by
 
 
 def test_default_trusts_sourced_resource_without_io(tmp_path, monkeypatch):
-    from science_tool.commons import promote
+    from science_tool.commons import promote, promote_dataset
 
     called = []
     monkeypatch.setattr(
-        promote, "stream_sha256_and_bytes",
+        promote_dataset, "stream_sha256_and_bytes",
         lambda p: called.append(p) or ("sha256:" + "f" * 64, 1),
     )
     cand = _candidate(tmp_path, [_sourced()])
@@ -192,16 +192,16 @@ def test_verify_skips_remote_type(tmp_path):
 
 def test_mixed_colocated_and_sourced_streams_only_colocated(tmp_path, monkeypatch):
     """A dataset with one co-located + one sourced resource streams only the co-located one."""
-    from science_tool.commons import promote
+    from science_tool.commons import promote, promote_dataset
 
     # Real co-located file under the datapackage dir.
     colocated = tmp_path / "counts.csv"
     colocated.write_bytes(b"a,b,c\n1,2,3\n")
 
     streamed = []
-    real_stream = promote.stream_sha256_and_bytes
+    real_stream = promote_dataset.stream_sha256_and_bytes
     monkeypatch.setattr(
-        promote, "stream_sha256_and_bytes",
+        promote_dataset, "stream_sha256_and_bytes",
         lambda p: streamed.append(p.name) or real_stream(p),
     )
     resources = [
@@ -331,7 +331,7 @@ def test_group_validator_returns_non_primary_verdicts(tmp_path, monkeypatch):
 
 
 def test_sourced_dataset_promotes_end_to_end_without_streaming(tmp_path, monkeypatch):
-    from science_tool.commons import promote as promote_mod
+    from science_tool.commons import promote_dataset as promote_mod
     from science_tool.commons.promote import (
         PROMOTE_KIND_DATASET,
         apply_promote,

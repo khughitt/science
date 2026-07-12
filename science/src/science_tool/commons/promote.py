@@ -7,6 +7,7 @@ This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).
 - `discover_candidates(project_slugs, kind) -> DiscoveryResult`.
 - `plan_promote(discovery, *, commons_root, kind, from_order, resolve_conflict, mixin_extensions) -> PromotePlan`.
+  `resolve_conflict` defaults to `abort_on_conflict`; `cli.py` passes `prompt_resolve`.
 - `apply_promote(plan, commons_root, *, invocation) -> PromoteResult` (Tasks 16–17).
 """
 
@@ -14,18 +15,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import secrets
 import subprocess
-from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from enum import Enum
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
-import click
 import yaml
 from science_model.entity_schema import (
     MergePolicy,
@@ -37,115 +34,77 @@ from science_model.entity_schema import (
 )
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
-from science_model.frontmatter import render_frontmatter
 
 from science_tool.commons.config import check_override_conflict, registry_root_for_id
-from science_tool.commons.datapackage import (
-    Resolved,
-    ResourceSource,
-    Unexpandable,
-    parse_resource_hash,
-    render_canonical_datapackage_yaml,
-    resolve_local_ref,
-    stream_sha256_and_bytes,
-    validate_logical_path,
-    validate_source,
-)
+from science_tool.commons.datapackage import render_canonical_datapackage_yaml
 from science_tool.commons.errors import (
     CommonsError,
-    DataLogicalPathError,
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
     PromoteMixinResolutionError,
-    PromoteResourceDigestMismatchError,
     PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
 )
-
-
-class EligibilityVerdict(Enum):
-    ELIGIBLE = "eligible"
-    SKIP_SILENT = "skip_silent"
-    FAIL = "fail"
-
-
-@dataclass(frozen=True, slots=True)
-class SideChannelContext:
-    decision: PromoteDecision
-    plan: PromotePlan
-    commons_root: Path
-    op_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class SideChannelResult:
-    artifact_paths: list[Path]
-    backup_paths: list[Path]
-
-
-def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
-    from science_tool.commons.config import (
-        _data_yaml_path,
-        _upsert_data_override,
-        check_override_conflict,
-    )
-
-    extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
-    if extras is None:
-        return SideChannelResult(artifact_paths=[], backup_paths=[])
-    if "override_path" not in extras:
-        raise PromoteCandidateError(
-            "dataset side-channel apply requires override_path audit extra",
-            slug=ctx.decision.slug,
-        )
-    override_path = extras["override_path"]
-    if not isinstance(override_path, str | os.PathLike):
-        raise PromoteCandidateError(
-            "dataset side-channel apply requires string override_path audit extra",
-            slug=ctx.decision.slug,
-        )
-    override_path = Path(override_path)
-    check_override_conflict(slug=ctx.decision.slug, planned_path=override_path)
-    _upsert_data_override(
-        slug=ctx.decision.slug,
-        absolute_path=override_path,
-        op_id=ctx.op_id,
-        allow_existing_backup=True,
-    )
-    yaml_path = _data_yaml_path()
-    backup_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}"
-    absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}.absent"
-    actual_backup = backup_path if backup_path.exists() else absent_sentinel_path
-    return SideChannelResult(
-        artifact_paths=[yaml_path],
-        backup_paths=[actual_backup],
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class PromoteKindConfig:
-    """Per-kind configuration for the promote pipeline.
-
-    One instance per kind ("paper", "topic", "theme", "dataset"). Pure data plus an
-    optional eligibility-filter callable; threaded through discovery /
-    plan / apply via the `kind` parameter or `PromotePlan.kind`.
-    """
-
-    kind: Literal["paper", "topic", "theme", "dataset"]
-    source_subdirs: tuple[str, ...]
-    overlay_dest_subdir: str
-    commons_subdir: str
-    id_prefix: str
-    slug_regex: re.Pattern[str]
-    slug_match: Literal["casefold", "exact"]
-    mixin_schema_id: str
-    default_profile: "ProfileString"
-    eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
-    filename_prefix: str = ""
-    slug_from_id: bool = False
-    side_channel_apply: Callable[[SideChannelContext], SideChannelResult] | None = None
+from science_tool.commons.git import (
+    _commons_is_clean,
+    _git,
+    _project_root_from_overlay_path,
+    _project_target_files_clean,
+    _repo_is_idle,
+    _restore_paths_to_head,
+    _restore_project_rewrites_to_head,
+    _restore_side_channel_backups,
+    _rollback_step5,
+)
+from science_tool.commons.promote_dataset import (
+    _candidate_dataset_class,
+    _dataset_class_for_promotion,
+    _dataset_dropped_fields,
+    _dataset_per_resource,
+    _dataset_recipe_source_hint,
+    _dataset_side_channel_apply,
+    _load_project_datapackage,
+    _normalize_derivation_for_commons,
+    _render_dataset_recipe_stub,
+    _validate_datapackage_resources,
+    _validate_dataset_group_datapackages,
+    _validate_reference_pointer_promotion,
+)
+from science_tool.commons.promote_render import (
+    _render_audit_log_yaml,
+    _render_canonical,
+    _render_overlay,
+    _rewrite_rendered_frontmatter,
+)
+from science_tool.commons.promote_types import (
+    KEEP_EXISTING,
+    CanonicalArtifact,
+    ConflictResolution,
+    DiscoveryResult,
+    EligibilityVerdict,
+    ExistingCanonicalConflict,
+    FailedCandidate,
+    FieldConflict,
+    OverlayRewrite,
+    PromoteCandidate,
+    PromoteDecision,
+    PromoteKindConfig,
+    PromotePlan,
+    PromoteResult,
+    ResourceVerification,
+    SideChannelContext,
+    SideChannelResult,
+    _DOMAIN_BIO_EXTENSIONS,
+    _GENERATED_BY_PROMOTE_KEYS,
+    _OVERLAY_ONLY_KEYS,
+    _PROMOTE_DERIVED_IDENTITY_KEYS,
+    _RAW_BODY_KEY,
+    _RAW_FRONTMATTER_KEY,
+    _STRUCTURAL_BIO_EXTENSIONS,
+    _resolve_canonical_artifact_path,
+)
 
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
@@ -218,11 +177,6 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     side_channel_apply=_dataset_side_channel_apply,
     slug_from_id=True,
 )
-
-
-# Bio extension classification used by `_validate_mixin_stacking`.
-_STRUCTURAL_BIO_EXTENSIONS = frozenset({"bio.matrix", "bio.table"})
-_DOMAIN_BIO_EXTENSIONS = frozenset({"bio.rnaseq", "bio.scrna", "bio.cna"})
 
 
 def _canonical_mixin_extensions(
@@ -309,212 +263,6 @@ def _active_profile(
 
 
 # --------------------------------------------------------------------------- #
-# Public dataclasses                                                          #
-# --------------------------------------------------------------------------- #
-
-
-@dataclass(frozen=True, slots=True)
-class PromoteCandidate:
-    """One paper file found during discovery.
-
-    `slug` is the source's case (filename stem). `slug_normalized` is
-    casefold() used only for dedup grouping. See design §4.1.3.
-    """
-
-    slug: str
-    slug_normalized: str
-    project_slug: str
-    project_root: Path
-    overlay_source_path: Path
-    canonical_fields: dict[str, Any]
-    project_only_fields: dict[str, Any]
-    canonical_body: dict[str, str]
-    project_only_body: dict[str, Any]
-    datapackage_source_path: Path | None = None
-    datapackage_doc: dict[str, Any] | None = None
-    # `project_only_body` is `dict[str, Any]` (not `[str, str]`) so the
-    # discovery phase can stash the raw `(frontmatter, body)` pair under
-    # sentinel keys `__raw_frontmatter__` / `__raw_body__` for `plan_promote`
-    # to consume during classification. After `_classify_entity` runs in
-    # `plan_promote`, the dict's values are pure `str` again.
-
-
-@dataclass(frozen=True, slots=True)
-class FieldConflict:
-    slug: str
-    kind: Literal["paper", "topic", "theme", "dataset"]
-    field: str
-    candidates: dict[str, Any]  # project_slug → value
-
-
-@dataclass(frozen=True, slots=True)
-class ExistingCanonicalConflict:
-    """A divergence between a source value and an already-committed commons entity.
-
-    Distinct from FieldConflict (which models which contributing project's value wins).
-    The source value here may be a merge across several projects, so no source_project.
-    """
-
-    slug: str
-    kind: Literal["paper", "topic", "theme", "dataset"]
-    field: str
-    source_value: Any
-    existing_value: Any
-    existing_version: str
-
-
-class _KeepExisting:
-    """Sentinel: resolve an ExistingCanonicalConflict by keeping the committed entity."""
-
-    __slots__ = ()
-
-    def __repr__(self) -> str:
-        return "KEEP_EXISTING"
-
-
-KEEP_EXISTING = _KeepExisting()
-
-
-@dataclass(frozen=True, slots=True)
-class ConflictResolution:
-    slug: str
-    field: str
-    candidates: dict[str, Any]
-    resolved_to: Any
-    source_project: str | None  # None if user entered a manual value
-
-
-@dataclass(frozen=True, slots=True)
-class OverlayRewrite:
-    project_slug: str
-    path: Path
-    before_sha: str
-    after_content: str
-    pin_version: str
-    rename_from: Path | None = None  # set when canonical case differs from source
-    unlinked_source: Path | None = None  # set when the original source path is replaced
-
-
-@dataclass(frozen=True, slots=True)
-class CanonicalArtifact:
-    """One file under <commons_root>/<commons_subdir>/<slug>/.
-
-    `path` is stored relative to the commons root (e.g.
-    `datasets/foo/entity.md`). Apply resolves it against `commons_root` once
-    at write time and records the absolute resolved path in the per-op
-    rollback context so existing helpers (`_restore_paths_to_head`,
-    `_rollback_step5`) keep their absolute-path signatures.
-    """
-
-    path: Path
-    content: str
-    validator: Literal["entity-mixin", "frictionless-datapackage", "plain"]
-
-
-@dataclass(frozen=True, slots=True)
-class PromoteDecision:
-    slug: str
-    canonical_artifacts: list[CanonicalArtifact]  # one or more commons-relative files
-    canonical_version: str  # "1.0.0" etc.
-    overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
-    resolved_conflicts: tuple[ConflictResolution, ...]
-    mode: Literal["mint", "overlay_existing"] = "mint"
-    existing_version: str | None = None  # set when mode == "overlay_existing"
-
-
-@dataclass(frozen=True, slots=True)
-class FailedCandidate:
-    slug: str | None
-    project_slug: str
-    source_path: Path
-    error_class: str
-    error_message: str
-
-
-@dataclass(frozen=True, slots=True)
-class DiscoveryResult:
-    candidates_by_slug: dict[str, list[PromoteCandidate]]
-    failed_candidates: list[FailedCandidate]
-
-
-@dataclass(frozen=True, slots=True)
-class PromotePlan:
-    decisions: list[PromoteDecision]
-    failed_candidates: list[FailedCandidate]
-    kind: PromoteKindConfig
-    dataset_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
-    mixin_extensions: tuple["ProfileComponent", ...] = ()
-    resource_verifications: dict[str, tuple[ResourceVerification, ...]] = field(
-        default_factory=dict
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class ResourceVerification:
-    """One sourced resource's --verify-digests verdict (non-fatal outcomes only).
-
-    `project_slug` disambiguates the same resource `name` appearing in more than
-    one project of a multi-project dataset group.
-    """
-
-    project_slug: str
-    name: str
-    status: Literal["verified", "skipped_off_host", "skipped_remote"]
-    detail: str
-
-
-@dataclass(frozen=True, slots=True)
-class PerResourceResult:
-    """Return type of `_dataset_per_resource`.
-
-    `per_resource` is the unchanged {alias: (hash, bytes)} payload used by
-    rendering; `verifications` is empty unless `--verify-digests` is set.
-    """
-
-    per_resource: dict[str, tuple[str, int]]
-    verifications: tuple[ResourceVerification, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class PromoteResult:
-    op_id: str
-    started_at: datetime
-    finished_at: datetime
-    commons_commit: str | None
-    tags_created: list[str]
-    decisions: list[PromoteDecision]
-    failed_candidates: list[FailedCandidate]
-    audit_log_path: Path | None
-    status: Literal["ok", "failed"]
-    failure_stage: (
-        Literal[
-            "preflight",
-            "validate",
-            "discover",
-            "plan",
-            "write_commons",
-            "side_channel",
-            "rewrite_projects",
-            "audit",
-        ]
-        | None
-    )
-    failure_detail: str | None
-    # Project slugs whose source entity file was actually modified by this
-    # operation. On the success path, every overlay slug; on a partial step-6
-    # failure, just the slugs reached before the failure; on
-    # preflight/tag/commit failures (no project file touched), the empty list.
-    # The audit log filters `projects_touched` (overlay_rewrites + rollback
-    # hints) by this list so failure logs don't suggest rollbacks for projects
-    # that were never modified (design §6.3 step 7 failure variant).
-    projects_touched: list[str]
-    kind: PromoteKindConfig
-    side_channel_results: dict[str, SideChannelResult] = field(default_factory=dict)
-    plan_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
-    mixin_extensions: tuple["ProfileComponent", ...] = ()
-
-
-# --------------------------------------------------------------------------- #
 # Public entry points (stubs — implemented in Tasks 10, 14, 16, 17)           #
 # --------------------------------------------------------------------------- #
 
@@ -540,73 +288,16 @@ def discover_candidates(
     return DiscoveryResult(candidates_by_slug=grouped, failed_candidates=failures)
 
 
-def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
-    """Interactive terminal prompt — the default `resolve_conflict` callback.
+def abort_on_conflict(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
+    """Default conflict resolver: refuse to guess.
 
-    UI mirrors design §7.1. Returns the resolved value (a candidate value, a
-    user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
-
-    For an `ExistingCanonicalConflict` (source-vs-committed divergence) the only
-    non-abort outcome is keep-existing: returns the `KEEP_EXISTING` sentinel on
-    'k', raises `PromoteConflictAbort` on 'a' / Ctrl-C. No candidate enumeration
-    and no manual-entry branch (design §3a).
+    Resolving a field conflict needs a human. A caller that wants one wires an
+    interactive resolver in (`cli.py` passes `prompt_resolve`); a caller that has
+    no human — a test, a script, a piped run — aborts the batch instead.
     """
-    if isinstance(conflict, ExistingCanonicalConflict):
-        click.echo(
-            f"\nExisting canonical {conflict.kind}:{conflict.slug} "
-            f"(version {conflict.existing_version}) diverges on "
-            f'field "{conflict.field}":'
-        )
-        click.echo(f"  source : {conflict.source_value!r}")
-        click.echo(f"  existing: {conflict.existing_value!r}")
-        click.echo("  [k] keep existing (overlay)")
-        click.echo("  [a] abort batch")
-        while True:
-            try:
-                choice = click.prompt(
-                    "Choose [k/a]",
-                    type=str,
-                    show_default=False,
-                ).strip()
-            except (click.Abort, KeyboardInterrupt) as exc:
-                raise PromoteConflictAbort(
-                    "user aborted at existing-canonical conflict prompt"
-                ) from exc
-            if choice.lower() == "k":
-                return KEEP_EXISTING
-            if choice.lower() == "a":
-                raise PromoteConflictAbort(
-                    "user chose 'abort batch' at existing-canonical conflict prompt"
-                )
-            click.echo("invalid selection")
-
-    click.echo(f'\nConflict for {conflict.kind}:{conflict.slug}, field "{conflict.field}":')
-    ordered = sorted(conflict.candidates.items())
-    for idx, (slug, value) in enumerate(ordered, start=1):
-        click.echo(f"  [{idx}] {slug}: {value!r}")
-    click.echo(f"  [{len(ordered) + 1}] enter value manually")
-    click.echo("  [a] abort batch")
-    while True:
-        try:
-            choice = click.prompt(
-                f"Choose [1-{len(ordered) + 1}/a]",
-                type=str,
-                show_default=False,
-            ).strip()
-        except (click.Abort, KeyboardInterrupt) as exc:
-            raise PromoteConflictAbort("user aborted at conflict prompt") from exc
-        if choice.lower() == "a":
-            raise PromoteConflictAbort("user chose 'abort batch' at conflict prompt")
-        try:
-            n = int(choice)
-        except ValueError:
-            click.echo("invalid selection")
-            continue
-        if 1 <= n <= len(ordered):
-            return ordered[n - 1][1]
-        if n == len(ordered) + 1:
-            return click.prompt("Manual value", type=str)
-        click.echo("out of range")
+    raise PromoteConflictAbort(
+        f"conflict for {conflict.kind}:{conflict.slug} needs an interactive resolver"
+    )
 
 
 def plan_promote(
@@ -614,7 +305,9 @@ def plan_promote(
     *,
     commons_root: Path,
     kind: PromoteKindConfig,
-    resolve_conflict: Callable[[FieldConflict | ExistingCanonicalConflict], Any] | None = None,
+    resolve_conflict: Callable[
+        [FieldConflict | ExistingCanonicalConflict], Any
+    ] = abort_on_conflict,
     from_order: list[str] | None = None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
     verify_digests: bool = False,
@@ -632,11 +325,8 @@ def plan_promote(
       5. Build PromoteDecision (canonical artifacts rendered, overlays planned).
 
     `from_order` defaults to the discovery's project_slug encounter order.
-    `resolve_conflict` defaults to `prompt_resolve`.
+    `resolve_conflict` defaults to `abort_on_conflict`; `cli.py` passes `prompt_resolve`.
     """
-    if resolve_conflict is None:
-        resolve_conflict = prompt_resolve
-
     # Stacking-rule guard is enforced HERE too, not just in cli.py, because
     # plan_promote is also a public-ish Python API: direct callers from
     # tests or future code paths must not bypass the <=1-structural /
@@ -1249,137 +939,6 @@ def _validate_artifact(
     raise AssertionError(f"unknown artifact validator: {artifact.validator!r}")
 
 
-def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool, list[str]]:
-    """Path-limited cleanliness check. Untracked files under
-    kind.commons_subdir/ or .migrations/ count as dirty."""
-    status = _git(commons_root, "status", "--porcelain", "--untracked-files=all").stdout
-    dirty: list[str] = []
-    for line in status.splitlines():
-        if len(line) < 4:
-            continue
-        path = line[3:]
-        flags = line[:2]
-        if flags == "??":
-            if path.startswith(f"{kind.commons_subdir}/") or path.startswith(".migrations/"):
-                dirty.append(path)
-        else:
-            dirty.append(path)
-    return (not dirty, dirty)
-
-
-def _project_target_files_clean(
-    project_root: Path,
-    target_filenames: list[str],
-    kind: PromoteKindConfig,
-) -> tuple[bool, list[str]]:
-    """For each filename in `target_filenames`, check whether the overlay
-    destination AND every source subdir's same-named file are clean against
-    HEAD. The multi-path scan covers cases where the source and overlay
-    destination are distinct, so the preflight catches dirtiness in both."""
-    dirty: list[str] = []
-    subdirs_to_check = [kind.overlay_dest_subdir, *kind.source_subdirs]
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for subdir in subdirs_to_check:
-        if subdir in seen:
-            continue
-        seen.add(subdir)
-        ordered.append(subdir)
-
-    for name in target_filenames:
-        for sub in ordered:
-            rel = f"{sub}/{name}"
-            status = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(project_root),
-                    "status",
-                    "--porcelain",
-                    "--untracked-files=all",
-                    "--",
-                    rel,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            if status.stdout.strip():
-                dirty.append(rel)
-    return (not dirty, dirty)
-
-
-def _project_root_from_overlay_path(path: Path, kind: PromoteKindConfig) -> Path:
-    """Derive project root from `<root>/<kind.overlay_dest_subdir>/<file>`."""
-    parents_to_strip = len(Path(kind.overlay_dest_subdir).parts) + 1
-    return path.parents[parents_to_strip - 1]
-
-
-def _paths_for_overlay_rollback(rewrite: OverlayRewrite) -> list[Path]:
-    paths = [rewrite.path]
-    if rewrite.rename_from is not None:
-        paths.append(rewrite.rename_from)
-    if rewrite.unlinked_source is not None:
-        paths.append(rewrite.unlinked_source)
-    return list(dict.fromkeys(paths))
-
-
-def _restore_project_rewrites_to_head(
-    rewrites: list[OverlayRewrite],
-    kind: PromoteKindConfig,
-) -> None:
-    """Restore rewritten/unlinked project paths to their pre-apply HEAD state."""
-    paths_by_project: dict[Path, list[Path]] = {}
-    for rewrite in rewrites:
-        project_root = _project_root_from_overlay_path(rewrite.path, kind)
-        for path in _paths_for_overlay_rollback(rewrite):
-            paths_by_project.setdefault(project_root, []).append(path)
-
-    for project_root, paths in paths_by_project.items():
-        for path in dict.fromkeys(paths):
-            rel = path.relative_to(project_root)
-            existed = (
-                subprocess.run(
-                    ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
-                    capture_output=True,
-                ).returncode
-                == 0
-            )
-            if existed:
-                subprocess.run(
-                    ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
-                    check=True,
-                    capture_output=True,
-                )
-            else:
-                path.unlink(missing_ok=True)
-
-
-def _repo_is_idle(root: Path) -> bool:
-    """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
-    try:
-        git_dir_result = _git(root, "rev-parse", "--git-dir", check=False)
-    except OSError:
-        return False
-    if git_dir_result.returncode != 0:
-        return False
-    git_dir_raw = git_dir_result.stdout.strip()
-    if not git_dir_raw:
-        return False
-    git_dir = Path(git_dir_raw)
-    if not git_dir.is_absolute():
-        git_dir = root / git_dir
-    sentinels = [
-        "MERGE_HEAD",
-        "REBASE_HEAD",
-        "CHERRY_PICK_HEAD",
-        "BISECT_LOG",
-        "rebase-apply",
-        "rebase-merge",
-    ]
-    return not any((git_dir / s).exists() for s in sentinels)
-
-
 def _write_failure_audit_log(
     *,
     op_id: str,
@@ -1441,30 +1000,6 @@ def _write_failure_audit_log(
         return (None, yaml_text)
 
 
-def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
-    """For each path, checkout HEAD -- <rel> if it existed at HEAD, else unlink.
-    Used in the 'before step 5' failure path."""
-    for path in paths:
-        rel = path.relative_to(commons_root)
-        existed = _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
-        if existed:
-            _git(commons_root, "checkout", "HEAD", "--", str(rel))
-        else:
-            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
-            path.unlink(missing_ok=True)
-
-
-def _resolve_canonical_artifact_path(commons_root: Path, artifact_path: Path) -> Path:
-    if artifact_path.is_absolute() or ".." in artifact_path.parts:
-        raise PromoteInputError(f"canonical artifact path must be commons-relative: {artifact_path}")
-
-    commons_root_resolved = commons_root.resolve()
-    resolved = (commons_root_resolved / artifact_path).resolve(strict=False)
-    if not resolved.is_relative_to(commons_root_resolved):
-        raise PromoteInputError(f"canonical artifact path escapes commons root: {artifact_path}")
-    return resolved
-
-
 def _audit_failure_detail(failure_detail: str, plan: PromotePlan) -> str:
     detail = failure_detail
     for decision in plan.decisions:
@@ -1472,12 +1007,6 @@ def _audit_failure_detail(failure_detail: str, plan: PromotePlan) -> str:
             if artifact.path.is_absolute() or ".." in artifact.path.parts:
                 detail = detail.replace(str(artifact.path), "<invalid canonical artifact path>")
     return detail
-
-
-def _restore_side_channel_backups(op_id: str) -> None:
-    from science_tool.commons.config import restore_data_override_from_backup
-
-    restore_data_override_from_backup(op_id=op_id)
 
 
 def apply_promote(
@@ -1861,13 +1390,6 @@ def apply_promote(
 # Private helpers                                                              #
 # --------------------------------------------------------------------------- #
 
-# Sentinel keys for stashing raw frontmatter+body in PromoteCandidate.project_only_body
-# during discovery, to be consumed by _classify_entity in plan_promote (Task 11).
-# Defined as module-level constants so the coupling between discovery and
-# classification is greppable rather than hidden in two string literals.
-_RAW_FRONTMATTER_KEY = "__raw_frontmatter__"
-_RAW_BODY_KEY = "__raw_body__"
-
 
 def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     """Return the matching key for a slug, per kind's `slug_match` policy.
@@ -2021,190 +1543,6 @@ def _parse_frontmatter_only(rendered: str) -> dict:
     if not isinstance(parsed, dict):
         raise PromoteCandidateError(f"frontmatter is not a mapping: {type(parsed).__name__}", slug=None)
     return parsed
-
-
-def _project_relative_path(project_root: Path, value: str, *, field: str) -> Path:
-    rel_path = Path(value)
-    if rel_path.is_absolute():
-        raise PromoteCandidateError(f"{field} path {value!r} must be project-relative")
-    root_abs = project_root.resolve()
-    abs_path = (root_abs / rel_path).resolve(strict=False)
-    try:
-        abs_path.relative_to(root_abs)
-    except ValueError as exc:
-        raise PromoteCandidateError(f"{field} path {value!r} escapes project root") from exc
-    return abs_path
-
-
-def _datapackage_relative_path(datapackage_dir: Path, value: str, *, field: str) -> Path:
-    rel_path = Path(value)
-    if rel_path.is_absolute():
-        raise PromoteCandidateError(f"{field} path {value!r} must be relative to the datapackage")
-    package_dir_abs = datapackage_dir.resolve()
-    abs_path = (package_dir_abs / rel_path).resolve(strict=False)
-    try:
-        abs_path.relative_to(package_dir_abs)
-    except ValueError as exc:
-        raise PromoteCandidateError(f"{field} path {value!r} escapes the datapackage directory") from exc
-    return abs_path
-
-
-def _load_project_datapackage(project_root: Path, datapackage_value: Any) -> tuple[Path, dict[str, Any]]:
-    if not isinstance(datapackage_value, str) or not datapackage_value.strip():
-        raise PromoteCandidateError("dataset candidate requires a non-empty string datapackage field")
-
-    dp_abs = _project_relative_path(project_root, datapackage_value, field="datapackage")
-    if not dp_abs.is_file():
-        raise PromoteCandidateError(f"datapackage file does not exist: {datapackage_value}")
-
-    try:
-        dp_raw = dp_abs.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise PromoteCandidateError(f"datapackage file is unreadable: {exc}") from exc
-    try:
-        dp_doc = json.loads(dp_raw)
-    except json.JSONDecodeError as exc:
-        raise PromoteCandidateError(f"datapackage JSON parse error: {exc}") from exc
-    if not isinstance(dp_doc, dict):
-        raise PromoteCandidateError("datapackage JSON top-level value must be an object")
-    resources = dp_doc.get("resources")
-    if not isinstance(resources, list):
-        raise PromoteCandidateError("datapackage JSON requires resources to be a list")
-    return dp_abs, dp_doc
-
-
-def _resource_name(resource: Mapping[str, Any], resource_path: str) -> str:
-    name = resource.get("name")
-    if isinstance(name, str) and name:
-        return name
-    return resource_path
-
-
-def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, Any]) -> None:
-    resources = dp_doc["resources"]
-    for idx, resource in enumerate(resources):
-        if not isinstance(resource, dict):
-            raise PromoteCandidateError(f"datapackage resources[{idx}] must be an object")
-        resource_path = resource.get("path")
-        if not isinstance(resource_path, str) or not resource_path.strip():
-            raise PromoteCandidateError(f"datapackage resources[{idx}].path must be a non-empty string")
-        try:
-            validate_logical_path(resource_path)
-        except DataLogicalPathError as exc:
-            raise PromoteCandidateError(
-                f"datapackage resources[{idx}].path is invalid: {exc.reason}"
-            ) from exc
-
-        raw_source = resource.get("source")
-        if raw_source is not None:
-            # Sourced resource: bytes are off-repo; validate the source shape
-            # and skip the co-located filesystem existence check.
-            try:
-                validate_source(raw_source)
-            except ValueError as exc:
-                raise PromoteCandidateError(
-                    f"datapackage resources[{idx}] has an invalid source: {exc}"
-                ) from exc
-            continue
-
-        resource_abs = _datapackage_relative_path(
-            dp_abs.parent,
-            resource_path,
-            field=f"datapackage resources[{idx}].path",
-        )
-        if not resource_abs.is_file():
-            raise PromoteResourceMissingError(
-                slug=slug,
-                resource_name=_resource_name(resource, resource_path),
-                resource_path=Path(resource_path),
-            )
-
-
-def _dataset_class_for_promotion(fm: Mapping[str, Any]) -> Literal["deposit", "reference", "pointer"]:
-    raw = fm.get("dataset_class", "deposit")
-    if raw in {"deposit", "reference", "pointer"}:
-        return raw
-    raise PromoteCandidateError(f"dataset_class {raw!r} is not one of deposit, reference, pointer")
-
-
-def _dataset_access_for_promotion(fm: Mapping[str, Any]) -> Mapping[str, Any]:
-    access = fm.get("access")
-    if not isinstance(access, Mapping):
-        raise PromoteCandidateError("reference/pointer promotion requires an access block")
-    return access
-
-
-def _validate_reference_pointer_promotion(fm: Mapping[str, Any], *, slug: str) -> None:
-    dataset_class = _dataset_class_for_promotion(fm)
-    if dataset_class not in {"reference", "pointer"}:
-        return
-    if fm.get("origin") != "external":
-        raise PromoteCandidateError(
-            f"{dataset_class} promotion requires origin: external",
-            slug=slug,
-        )
-    access = _dataset_access_for_promotion(fm)
-    if access.get("verified") is not True:
-        raise PromoteCandidateError(
-            f"{dataset_class} promotion requires access.verified: true",
-            slug=slug,
-        )
-    source_url = access.get("source_url")
-    if not isinstance(source_url, str) or not source_url.strip():
-        raise PromoteCandidateError(
-            f"{dataset_class} promotion requires access.source_url",
-            slug=slug,
-        )
-    method = access.get("verification_method")
-    allowed_methods = (
-        {"landing-confirmed", "metadata-confirmed", "credential-confirmed"}
-        if dataset_class == "reference"
-        else {"landing-confirmed", "metadata-confirmed"}
-    )
-    if method not in allowed_methods:
-        allowed = ", ".join(sorted(allowed_methods))
-        raise PromoteCandidateError(
-            f"{dataset_class} promotion requires verification_method in {{{allowed}}}",
-            slug=slug,
-        )
-
-
-def _normalize_derivation_for_commons(derivation: Any) -> Any:
-    """Normalize a derived-dataset `derivation` block into the commons form.
-
-    Project-local validation accepts the heavyweight register-run `DerivationBlock`
-    (`workflow`, `workflow_run`, `git_commit`, `config_snapshot`, `produced_at`,
-    `inputs`), but commons `mixin-dataset-1.0` "workflow derivation" requires the
-    lightweight `workflow_recipe` + `inputs` shape. Promote synthesizes the
-    lightweight form from the heavyweight one so a single authored state is both
-    validate-clean and promotable (fb-2026-05-30-003):
-
-    - `workflow_recipe` ← the heavyweight `workflow` entity ref (the recipe pointer);
-    - `recipe_lockfile` ← `config_snapshot`, when present (optional in commons);
-    - `inputs` carried over unchanged (already `dataset:` refs);
-    - run-specific provenance (`workflow_run`, `git_commit`, `produced_at`) is
-      dropped — it is run identity, not recipe identity, and the commons dataset
-      is recipe-level.
-
-    Already-lightweight blocks (have `workflow_recipe`) and `member_of` derivations
-    are returned unchanged. An unrecognized shape is returned unchanged so the
-    commons schema validator reports it rather than this function masking it.
-    """
-    if not isinstance(derivation, dict):
-        return derivation
-    if "workflow_recipe" in derivation or derivation.get("kind") == "member_of":
-        return derivation
-    if "workflow" not in derivation:
-        return derivation
-    normalized: dict[str, Any] = {
-        "kind": "workflow",
-        "workflow_recipe": derivation["workflow"],
-        "inputs": list(derivation.get("inputs", [])),
-    }
-    config_snapshot = derivation.get("config_snapshot")
-    if config_snapshot:
-        normalized["recipe_lockfile"] = config_snapshot
-    return normalized
 
 
 def _scan_project(
@@ -2514,23 +1852,6 @@ def _scan_project(
 # _classify_entity helpers (Task 11)                                          #
 # --------------------------------------------------------------------------- #
 
-# Overlay-only fields that MUST never leak onto the canonical or project-only
-# field dicts (the overlay-rewrite step writes these directly).
-_OVERLAY_ONLY_KEYS: frozenset[str] = frozenset({"overlay_of", "pin_version", "pin_effective_version"})
-
-# Base-required fields that the promote tool generates on the canonical side
-# and that MUST NOT be copied from source. `created` / `updated` are NOT here:
-# they have `science:merge: project_only` in the paper schema, so the policy
-# lookup routes them correctly to the project_only bucket. The canonical
-# writer fills its own `created` / `updated` from the apply timestamp.
-_GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset({"schema_profile", "version"})
-
-# Identity fields promote re-derives from the PromoteDecision after the
-# canonical slug case is picked. They are stripped from the canonical merge
-# bucket so case-divergent overlays don't surface a bogus `id` conflict
-# (design §4.1.3).
-_PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "kind", "bibkey"})
-
 
 def _split_body_by_headings(body: str) -> dict[str, str]:
     """Parse a markdown body into `{heading: content_after_heading}`.
@@ -2620,26 +1941,6 @@ def _classify_entity(
     return canonical, project_only, canonical_body, project_only_body
 
 
-def _dataset_dropped_fields(
-    raw_frontmatter: dict,
-    *,
-    canonical_fields: dict,
-    project_only_fields: dict,
-) -> list[str]:
-    """Return project frontmatter keys that landed in neither bucket.
-
-    These are keys not recognized by base, dataset mixin, or overlay-1.1 schemas;
-    promote drops them silently from output but records them in the audit log.
-
-    Convention: keys starting with `_` are intentional metadata/sentinels and not reported.
-    """
-    routed = set(canonical_fields) | set(project_only_fields)
-    internal = _GENERATED_BY_PROMOTE_KEYS | _PROMOTE_DERIVED_IDENTITY_KEYS | _OVERLAY_ONLY_KEYS
-    return sorted(
-        k for k in raw_frontmatter if k not in routed and k not in internal and not k.startswith("_")
-    )
-
-
 def _primary_candidate_for_plan(
     candidates: list[PromoteCandidate],
     from_order: list[str],
@@ -2649,13 +1950,6 @@ def _primary_candidate_for_plan(
         candidates,
         key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
     )[0]
-
-
-def _candidate_dataset_class(candidate: PromoteCandidate) -> Literal["deposit", "reference", "pointer"]:
-    fields: dict[str, Any] = {}
-    fields.update(candidate.project_only_fields)
-    fields.update(candidate.canonical_fields)
-    return _dataset_class_for_promotion(fields)
 
 
 def _project_relative_posix(project_root: Path, path: Path) -> str:
@@ -2675,267 +1969,6 @@ def _overlay_target_path(
 ) -> Path:
     filename = f"{canonical_case}.md"
     return candidate.project_root / kind.overlay_dest_subdir / filename
-
-
-def _dataset_per_resource(
-    candidate: PromoteCandidate, *, verify_digests: bool = False
-) -> PerResourceResult:
-    if candidate.datapackage_source_path is None or candidate.datapackage_doc is None:
-        raise PromoteCandidateError(
-            "dataset planning requires discovery datapackage metadata",
-            slug=candidate.slug,
-        )
-
-    per_resource: dict[str, tuple[str, int]] = {}
-    verifications: list[ResourceVerification] = []
-    dp_parent = candidate.datapackage_source_path.parent
-    resources = candidate.datapackage_doc.get("resources")
-    if not isinstance(resources, list):
-        raise PromoteCandidateError(
-            "dataset datapackage resources must be a list",
-            slug=candidate.slug,
-        )
-    for idx, resource in enumerate(resources):
-        if not isinstance(resource, Mapping):
-            raise PromoteCandidateError(
-                f"datapackage resources[{idx}] must be an object",
-                slug=candidate.slug,
-            )
-        resource_path = resource.get("path")
-        if not isinstance(resource_path, str) or not resource_path.strip():
-            raise PromoteCandidateError(
-                f"datapackage resources[{idx}].path must be a non-empty string",
-                slug=candidate.slug,
-            )
-        try:
-            validate_logical_path(resource_path)
-        except DataLogicalPathError as exc:
-            raise PromoteCandidateError(
-                f"datapackage resources[{idx}].path is invalid: {exc.reason}",
-                slug=candidate.slug,
-            ) from exc
-        name = _resource_name(resource, resource_path)
-
-        raw_source = resource.get("source")
-        if raw_source is None:
-            # Co-located resource: resolve under the datapackage dir and stream.
-            resource_abs = _datapackage_relative_path(
-                dp_parent,
-                resource_path,
-                field=f"datapackage resources[{idx}].path",
-            )
-            try:
-                per_resource[name] = stream_sha256_and_bytes(resource_abs)
-            except OSError as exc:
-                raise PromoteCandidateError(
-                    f"cannot read datapackage resources[{idx}] bytes: {exc}",
-                    slug=candidate.slug,
-                    path=resource_abs,
-                ) from exc
-            continue
-
-        # Sourced resource: trust the build-stamped (hash, bytes); no local I/O
-        # in the default path.
-        try:
-            source = validate_source(raw_source)
-        except ValueError as exc:
-            raise PromoteCandidateError(
-                f"datapackage resources[{idx}] has an invalid source: {exc}",
-                slug=candidate.slug,
-            ) from exc
-        stamped = _stamped_metadata(resource, idx, candidate.slug)
-        per_resource[name] = stamped
-        if verify_digests:
-            verifications.append(
-                _verify_sourced_resource(
-                    candidate.project_slug, name, source, stamped, candidate.slug
-                )
-            )
-
-    return PerResourceResult(
-        per_resource=per_resource, verifications=tuple(verifications)
-    )
-
-
-def _stamped_metadata(
-    resource: Mapping[str, Any], idx: int, slug: str
-) -> tuple[str, int]:
-    """Validate and return the build-stamped (hash, bytes) of a sourced resource."""
-    raw_hash = resource.get("hash")
-    if not isinstance(raw_hash, str):
-        raise PromoteCandidateError(
-            f"sourced datapackage resources[{idx}] has a missing or non-string 'hash'",
-            slug=slug,
-        )
-    try:
-        parse_resource_hash(raw_hash)
-    except ValueError as exc:
-        raise PromoteCandidateError(
-            f"sourced datapackage resources[{idx}] has an invalid 'hash': {exc}",
-            slug=slug,
-        ) from exc
-    raw_bytes = resource.get("bytes")
-    if (
-        not isinstance(raw_bytes, int)
-        or isinstance(raw_bytes, bool)
-        or raw_bytes < 0
-    ):
-        raise PromoteCandidateError(
-            f"sourced datapackage resources[{idx}] has a missing or invalid 'bytes'",
-            slug=slug,
-        )
-    return raw_hash, raw_bytes
-
-
-def _verify_sourced_resource(
-    project_slug: str,
-    name: str,
-    source: ResourceSource,
-    stamped: tuple[str, int],
-    slug: str,
-) -> ResourceVerification:
-    """Resolve a sourced resource on this host and return its verify verdict.
-
-    Raises on a hard error (digest drift, or a ref that resolves but is missing).
-    """
-    if source.type != "local":
-        return ResourceVerification(
-            project_slug=project_slug,
-            name=name,
-            status="skipped_remote",
-            detail=f"{source.type}: no fetcher this iteration",
-        )
-    try:
-        resolution = resolve_local_ref(source.ref)
-    except ValueError as exc:
-        raise PromoteCandidateError(
-            f"cannot verify sourced resource {name!r}: {exc}",
-            slug=slug,
-        ) from exc
-    if isinstance(resolution, Unexpandable):
-        return ResourceVerification(
-            project_slug=project_slug,
-            name=name,
-            status="skipped_off_host",
-            detail=resolution.ref,
-        )
-    if not isinstance(resolution, Resolved):
-        raise AssertionError(
-            f"unexpected RefResolution type: {type(resolution).__name__}"
-        )
-    if not resolution.exists:
-        raise PromoteCandidateError(
-            f"sourced resource {name!r} ref resolves to a missing file: "
-            f"{resolution.path}",
-            slug=slug,
-            path=resolution.path,
-        )
-    actual = stream_sha256_and_bytes(resolution.path)
-    if actual != stamped:
-        raise PromoteResourceDigestMismatchError(
-            slug=slug,
-            resource_name=name,
-            expected=stamped,
-            actual=actual,
-            path=resolution.path,
-        )
-    return ResourceVerification(
-        project_slug=project_slug,
-        name=name,
-        status="verified",
-        detail=f"{actual[0]} ({actual[1]} bytes)",
-    )
-
-
-def _validate_dataset_group_datapackages(
-    *,
-    canonical_slug: str,
-    primary: PromoteCandidate,
-    candidates: list[PromoteCandidate],
-    primary_per_resource: dict[str, tuple[str, int]],
-    verify_digests: bool = False,
-) -> tuple[ResourceVerification, ...]:
-    if len(candidates) <= 1:
-        return ()
-    if primary.datapackage_doc is None:
-        raise PromoteCandidateError(
-            "dataset planning requires discovery datapackage metadata",
-            slug=canonical_slug,
-        )
-    primary_content = render_canonical_datapackage_yaml(
-        project_doc=primary.datapackage_doc,
-        canonical_slug=canonical_slug,
-        per_resource=primary_per_resource,
-    )
-    group_verifications: list[ResourceVerification] = []
-    for candidate in candidates:
-        if candidate is primary:
-            continue
-        candidate_result = _dataset_per_resource(candidate, verify_digests=verify_digests)
-        candidate_per_resource = candidate_result.per_resource
-        group_verifications.extend(candidate_result.verifications)
-        if candidate_per_resource != primary_per_resource:
-            raise PromoteCandidateError(
-                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
-                f"has divergent resource hashes/bytes from primary project "
-                f"{primary.project_slug!r}",
-                slug=canonical_slug,
-                path=candidate.datapackage_source_path,
-            )
-        if candidate.datapackage_doc is None:
-            raise PromoteCandidateError(
-                "dataset planning requires discovery datapackage metadata",
-                slug=canonical_slug,
-                path=candidate.datapackage_source_path,
-            )
-        candidate_content = render_canonical_datapackage_yaml(
-            project_doc=candidate.datapackage_doc,
-            canonical_slug=canonical_slug,
-            per_resource=candidate_per_resource,
-        )
-        if candidate_content != primary_content:
-            raise PromoteCandidateError(
-                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
-                f"has divergent canonical datapackage content from primary "
-                f"project {primary.project_slug!r}",
-                slug=canonical_slug,
-                path=candidate.datapackage_source_path,
-            )
-    return tuple(group_verifications)
-
-
-def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> str:
-    if not rendered.startswith("---\n"):
-        raise PromoteCandidateError("rendered content has no opening --- fence", slug=None)
-    rest = rendered[len("---\n") :]
-    fm_raw, sep, body = rest.partition("\n---\n")
-    if not sep:
-        raise PromoteCandidateError("rendered content has no closing --- fence", slug=None)
-    parsed = yaml.safe_load(fm_raw) or {}
-    if not isinstance(parsed, dict):
-        raise PromoteCandidateError(
-            f"frontmatter is not a mapping: {type(parsed).__name__}",
-            slug=None,
-        )
-    parsed.update(updates)
-    return render_frontmatter(parsed, body)
-
-
-def _dataset_recipe_source_hint(canonical_fields: Mapping[str, Any]) -> str | None:
-    sources = canonical_fields.get("sources")
-    if isinstance(sources, list) and sources:
-        return str(sources[0])
-    if isinstance(sources, str) and sources.strip():
-        return sources
-    source = canonical_fields.get("source")
-    if isinstance(source, str) and source.strip():
-        return source
-    access = canonical_fields.get("access")
-    if isinstance(access, Mapping):
-        source_url = access.get("source_url")
-        if isinstance(source_url, str) and source_url.strip():
-            return source_url
-    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -3030,303 +2063,8 @@ def _pick_canonical_bibkey_case(
 
 
 # --------------------------------------------------------------------------- #
-# Renderer helpers (Task 13)                                                   #
-# --------------------------------------------------------------------------- #
-
-
-def _render_body(sections: dict[str, str]) -> str:
-    """Render `{heading: content}` back to markdown. Empty heading "" goes first
-    (intro prose); the rest are emitted in insertion order with `## ` prefix."""
-    parts: list[str] = []
-    if "" in sections:
-        intro = sections[""].strip("\n")
-        if intro:
-            parts.append(intro + "\n")
-    for heading, content in sections.items():
-        if heading == "":
-            continue
-        parts.append(f"## {heading}\n{content.rstrip()}\n")
-    return "\n".join(parts)
-
-
-def _render_dataset_recipe_stub(*, slug: str, source_hint: str | None) -> str:
-    src_line = f"Acquisition: {source_hint}." if source_hint else "Acquisition: unspecified."
-    return (
-        "# Recipe back-fill needed\n\n"
-        f"{src_line}\n\n"
-        "Promote stubbed this README because no project recipe was detected. "
-        "Replace with the acquisition or preprocessing workflow.\n"
-    )
-
-
-def _render_canonical(
-    decision: PromoteDecision,
-    *,
-    canonical_fields: dict,
-    canonical_body: dict[str, str],
-    created: date,
-    updated: date,
-    kind: PromoteKindConfig,
-    active_profile: "ProfileString",
-) -> str:
-    """Render the commons-side <commons_subdir>/<slug>.md content.
-
-    Emits schema_profile from `active_profile` (which equals
-    `kind.default_profile` for bare promotes, or `kind.default_profile`
-    augmented with `--mixin` extensions for Phase H bio promotes). id
-    from kind.id_prefix, kind from kind.kind. For paper kind only, also
-    emits a `bibkey:` field (preserved from Phase E; not in topic/theme
-    mixins).
-    """
-    profile_str = active_profile.render()
-    head: dict = {
-        "schema_profile": profile_str,
-        "id": f"{kind.id_prefix}{decision.slug}",
-        "kind": kind.kind,
-        "title": canonical_fields.get("title", ""),
-        "version": decision.canonical_version,
-        "created": created,
-        "updated": updated,
-    }
-    if kind.kind == "paper":
-        head["bibkey"] = decision.slug
-    head["tags"] = []
-    for k, v in canonical_fields.items():
-        if k == "bibkey" and kind.kind != "paper":
-            continue
-        if k in head:
-            continue
-        head[k] = v
-
-    body = _render_body(canonical_body)
-    return render_frontmatter(head, body)
-
-
-def _render_overlay(
-    decision: PromoteDecision,
-    *,
-    project_only_fields: dict,
-    project_only_body: dict[str, str],
-    kind: PromoteKindConfig,
-) -> str:
-    """Render a project-side overlay file. NEVER emits schema_profile; the
-    overlay validator is hardcoded to overlay/1.1 (design §4.4)."""
-    head: dict = {
-        "id": f"{kind.id_prefix}{decision.slug}",
-        "overlay_of": f"{kind.id_prefix}{decision.slug}",
-        "pin_version": decision.canonical_version,
-    }
-    # Skip overlay-only-management keys (overlay_of/pin_version/pin_effective_version)
-    # AND any head-priority key, so project_only_fields can't accidentally
-    # overwrite the promote-derived id/overlay_of/pin_version (mirrors
-    # _render_canonical's guard pattern).
-    for k, v in project_only_fields.items():
-        if k in _OVERLAY_ONLY_KEYS:
-            continue
-        if k in head:
-            continue
-        head[k] = v
-
-    body = _render_body(project_only_body)
-    return render_frontmatter(head, body)
-
-
-# --------------------------------------------------------------------------- #
 # Apply-phase helpers (Task 15)                                                #
 # --------------------------------------------------------------------------- #
-
-
-def _git(commons_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    """Run `git -C <commons_root> <args>` and return the CompletedProcess.
-
-    Wrapping makes path-limited call sites readable and centralizes the cwd
-    plumbing so individual helpers don't repeat `["git", "-C", str(root), ...]`.
-    """
-    return subprocess.run(
-        ["git", "-C", str(commons_root), *args],
-        check=check,
-        capture_output=True,
-        text=True,
-    )
-
-
-def _build_project_rollback_command(
-    overlay_rewrites: list[dict],
-    kind: PromoteKindConfig,
-) -> str:
-    """Build a concrete `git checkout HEAD -- <paths>` command for one project,
-    given its overlay_rewrites entries from the audit log. Each entry's `path`
-    is the absolute target overlay path. Optional `unlinked_source` (flatten
-    case) is added to the rollback set so the source-file deletion can also be
-    reverted.
-
-    Project root is derived by stripping len(overlay_dest_subdir.parts)+1
-    segments from the path (last segment is the file; preceding segments are
-    the overlay_dest_subdir).
-    """
-    if not overlay_rewrites:
-        return ""
-    first_path = Path(overlay_rewrites[0]["path"])
-    parents_to_strip = len(Path(kind.overlay_dest_subdir).parts) + 1
-    project_root = first_path.parents[parents_to_strip - 1]
-
-    paths: list[str] = []
-    for entry in overlay_rewrites:
-        target = Path(entry["path"])
-        paths.append(str(target.relative_to(project_root)))
-        if "unlinked_source" in entry:
-            source = Path(entry["unlinked_source"])
-            paths.append(str(source.relative_to(project_root)))
-    paths_sorted = sorted(set(paths))
-    return f"git -C {project_root} checkout HEAD -- {' '.join(paths_sorted)}"
-
-
-def _audit_canonical_paths(decision: PromoteDecision, commons_root: Path) -> list[str]:
-    paths: list[str] = []
-    for artifact in decision.canonical_artifacts:
-        try:
-            _resolve_canonical_artifact_path(commons_root, artifact.path)
-        except PromoteInputError:
-            continue
-        paths.append(str(artifact.path))
-    return paths
-
-
-def _render_audit_log_yaml(
-    result: PromoteResult,
-    commons_root: Path,
-    *,
-    invocation: str,
-) -> str:
-    """Serialize the audit log dict to YAML. Pure function — no disk I/O.
-    Used by both the success path (which then writes + commits) and the
-    failure path (which writes uncommitted, or falls back to stderr if the
-    write itself fails)."""
-    touched_set = set(result.projects_touched)
-    projects_touched: dict = {}
-    for decision in result.decisions:
-        for slug, overlay in decision.overlays.items():
-            if slug not in touched_set:
-                continue
-            projects_touched.setdefault(slug, {"overlay_rewrites": []})
-            entry: dict = {
-                "slug": decision.slug,
-                "path": str(overlay.path),
-                "pin_version": overlay.pin_version,
-            }
-            if overlay.rename_from is not None:
-                entry["rename"] = {
-                    "from": overlay.rename_from.name,
-                    "to": overlay.path.name,
-                }
-            unlinked_source = getattr(overlay, "unlinked_source", None)
-            if unlinked_source is not None:
-                entry["unlinked_source"] = str(unlinked_source)
-            projects_touched[slug]["overlay_rewrites"].append(entry)
-
-    log: dict = {
-        "op_id": result.op_id,
-        "kind": result.kind.kind,
-        "invocation": invocation,
-        "status": result.status,
-        "started_at": result.started_at.isoformat(),
-        "finished_at": result.finished_at.isoformat(),
-        "commons_commit": result.commons_commit,
-        "commons_tags": result.tags_created,
-        **(
-            {
-                "mixin_extensions": [
-                    f"{component.name}/{component.version}" for component in result.mixin_extensions
-                ]
-            }
-            if result.mixin_extensions
-            else {}
-        ),
-        "projects_touched": projects_touched,
-        "decisions": [_audit_decision_entry(d, result, commons_root) for d in result.decisions],
-        "conflict_resolutions": [
-            {
-                "slug": cr.slug,
-                "field": cr.field,
-                "candidates": cr.candidates,
-                "resolved_to": cr.resolved_to,
-                "source_project": cr.source_project,
-            }
-            for d in result.decisions
-            for cr in d.resolved_conflicts
-        ],
-        "failed_candidates": [
-            {
-                "slug": f.slug,
-                "project_slug": f.project_slug,
-                "source_path": str(f.source_path),
-                "error_class": f.error_class,
-                "error_message": f.error_message,
-            }
-            for f in result.failed_candidates
-        ],
-        "rollback": {
-            "commons": (f"git -C {commons_root} revert {result.commons_commit}" if result.commons_commit else None),
-            # Per design §6.5: each entry is a copy-pasteable git command,
-            # not a placeholder. Derive project_root by walking up from each
-            # overlay path and list every rewritten path so the operator can
-            # restore exactly the touched files.
-            "projects": {
-                slug: _build_project_rollback_command(rewrites["overlay_rewrites"], result.kind)
-                for slug, rewrites in projects_touched.items()
-            },
-        },
-    }
-    if result.failure_stage:
-        log["failure_stage"] = result.failure_stage
-        log["failure_detail"] = result.failure_detail
-
-    return yaml.safe_dump(log, sort_keys=False, allow_unicode=True)
-
-
-def _audit_decision_entry(
-    decision: PromoteDecision,
-    result: PromoteResult,
-    commons_root: Path,
-) -> dict[str, Any]:
-    entry: dict[str, Any] = {
-        "slug": decision.slug,
-        "canonical_version": decision.canonical_version,
-        "canonical_paths": _audit_canonical_paths(decision, commons_root),
-    }
-    if result.kind.kind != "dataset":
-        return entry
-
-    extras = result.plan_audit_extras.get(decision.slug, {})
-    if not isinstance(extras, Mapping):
-        extras = {}
-    per_resource = extras.get("per_resource", {})
-    if not isinstance(per_resource, Mapping):
-        per_resource = {}
-    entry["per_resource_hashes"] = {
-        str(name): {"hash": str(value[0]), "bytes": value[1]}
-        for name, value in per_resource.items()
-        if (
-            isinstance(value, tuple | list)
-            and len(value) == 2
-            and isinstance(value[0], str)
-            and isinstance(value[1], int)
-        )
-    }
-    entry["recipe_stubbed"] = extras.get("recipe_stubbed") is True
-    dropped_fields = extras.get("dropped_fields", [])
-    if not isinstance(dropped_fields, list | tuple | set):
-        dropped_fields = []
-    entry["dropped_fields"] = [str(field) for field in dropped_fields]
-
-    side_channel = result.side_channel_results.get(decision.slug)
-    if side_channel is not None:
-        if side_channel.artifact_paths:
-            entry["override_file"] = str(side_channel.artifact_paths[0])
-        if side_channel.backup_paths:
-            entry["override_backup"] = str(side_channel.backup_paths[0])
-
-    return entry
 
 
 def _write_audit_log(
@@ -3453,38 +2191,3 @@ def _canonical_fields_equal_or_subset(
     if source_present < existing_present:
         return ("subset", [])
     return ("equal", [])
-
-
-def _rollback_step5(
-    commons_root: Path,
-    tags_attempted: list[str],
-    canonical_paths: list[Path],
-) -> None:
-    """Non-destructive path-limited rollback for a step-5 mid-failure.
-
-    1. Delete every tag in `tags_attempted` (idempotent — tags that never
-       existed silently no-op).
-    2. `git reset --soft HEAD~1` — moves HEAD back without disturbing index/wt.
-    3. For each canonical_path: if it exists at the new HEAD, `git checkout
-       HEAD -- <path>`. If it does NOT exist at HEAD (first-promote), unlink
-       the working-tree file.
-
-    Caller must have verified that HEAD~1 is the pre-step-4 state (the immediate
-    parent of the just-undone promote commit). NEVER calls `reset --hard`.
-    """
-    for tag in tags_attempted:
-        _git(commons_root, "tag", "-d", tag, check=False)
-
-    # Invariant: a promote commit exists at HEAD (≥1 mint decision was committed,
-    # or a dataset side-channel failure occurred after the commit), so this reset
-    # never runs without a promote commit to undo.
-    _git(commons_root, "reset", "--soft", "HEAD~1")
-
-    for canonical_path in canonical_paths:
-        rel = canonical_path.relative_to(commons_root)
-        exists_at_head = _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
-        if exists_at_head:
-            _git(commons_root, "checkout", "HEAD", "--", str(rel))
-        else:
-            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
-            canonical_path.unlink(missing_ok=True)

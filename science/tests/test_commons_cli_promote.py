@@ -46,7 +46,7 @@ def test_promote_paper_bulk_dry_run_summary(tmp_path, monkeypatch, runner) -> No
     )
 
     monkeypatch.setattr(
-        "science_tool.commons.promote.prompt_resolve",
+        "science_tool.commons.cli.prompt_resolve",
         lambda conflict: sorted(conflict.candidates.items())[0][1],
     )
 
@@ -108,7 +108,7 @@ def test_promote_paper_apply_writes_and_tags(tmp_path, monkeypatch, runner) -> N
         lambda: tmp_path / "commons",
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.prompt_resolve",
+        "science_tool.commons.cli.prompt_resolve",
         lambda conflict: sorted(conflict.candidates.items())[0][1],
     )
 
@@ -203,7 +203,7 @@ def test_promote_paper_apply_reindexes_registry(tmp_path, monkeypatch, runner) -
         lambda: commons_root,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.prompt_resolve",
+        "science_tool.commons.cli.prompt_resolve",
         lambda conflict: sorted(conflict.candidates.items())[0][1],
     )
 

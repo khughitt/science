@@ -220,10 +220,10 @@ def test_divergent_abort_propagates(tmp_path, monkeypatch) -> None:
 def test_prompt_resolve_keep_existing(monkeypatch) -> None:
     import click
 
+    from science_tool.commons.cli import prompt_resolve
     from science_tool.commons.promote import (
         KEEP_EXISTING,
         ExistingCanonicalConflict,
-        prompt_resolve,
     )
 
     conflict = ExistingCanonicalConflict(
@@ -241,8 +241,9 @@ def test_prompt_resolve_keep_existing(monkeypatch) -> None:
 def test_prompt_resolve_abort(monkeypatch) -> None:
     import click
 
+    from science_tool.commons.cli import prompt_resolve
     from science_tool.commons.errors import PromoteConflictAbort
-    from science_tool.commons.promote import ExistingCanonicalConflict, prompt_resolve
+    from science_tool.commons.promote import ExistingCanonicalConflict
 
     conflict = ExistingCanonicalConflict(
         slug="Foo",

@@ -704,7 +704,7 @@ def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
 
 
 def test_render_dataset_recipe_stub_content():
-    from science_tool.commons.promote import _render_dataset_recipe_stub
+    from science_tool.commons.promote_dataset import _render_dataset_recipe_stub
 
     text = _render_dataset_recipe_stub(
         slug="fixture-ds",
@@ -717,7 +717,7 @@ def test_render_dataset_recipe_stub_content():
 
 
 def test_render_dataset_recipe_stub_handles_missing_source_hint():
-    from science_tool.commons.promote import _render_dataset_recipe_stub
+    from science_tool.commons.promote_dataset import _render_dataset_recipe_stub
 
     text = _render_dataset_recipe_stub(slug="fixture-ds", source_hint=None)
 
@@ -727,7 +727,7 @@ def test_render_dataset_recipe_stub_handles_missing_source_hint():
 
 def test_dataset_dropped_fields_records_unrouted_keys():
     """Project keys not in canonical or overlay buckets are recorded as dropped."""
-    from science_tool.commons.promote import _dataset_dropped_fields
+    from science_tool.commons.promote_dataset import _dataset_dropped_fields
 
     raw_fm = {
         "id": "dataset:x",

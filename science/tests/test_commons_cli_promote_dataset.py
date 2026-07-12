@@ -222,7 +222,7 @@ def test_cli_promote_dataset_dry_run_resource_read_failure_is_click_error(
         lambda s: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.stream_sha256_and_bytes",
+        "science_tool.commons.promote_dataset.stream_sha256_and_bytes",
         lambda path: (_ for _ in ()).throw(OSError("simulated read failure")),
     )
     from science_tool.commons.cli import commons_group

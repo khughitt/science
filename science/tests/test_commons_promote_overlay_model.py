@@ -12,7 +12,7 @@ import dataclasses
 
 import pytest
 
-from science_tool.commons.promote import (
+from science_tool.commons.promote_types import (
     KEEP_EXISTING,
     CanonicalArtifact,
     ExistingCanonicalConflict,

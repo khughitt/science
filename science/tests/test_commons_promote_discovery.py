@@ -24,7 +24,6 @@ def test_promote_public_surface_exports() -> None:
         apply_promote,
         discover_candidates,
         plan_promote,
-        prompt_resolve,
         registry_root_for_id,
     )
 
@@ -43,7 +42,6 @@ def test_promote_public_surface_exports() -> None:
             apply_promote,
             discover_candidates,
             plan_promote,
-            prompt_resolve,
             registry_root_for_id,
         ]
     )

@@ -50,7 +50,7 @@ def test_result_carries_kind() -> None:
 
 
 def test_repo_is_idle_checks_linked_worktree_gitdir(tmp_path) -> None:
-    from science_tool.commons.promote import _repo_is_idle
+    from science_tool.commons.git import _repo_is_idle
 
     main = tmp_path / "main"
     linked = tmp_path / "linked"
@@ -143,11 +143,8 @@ def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp
     """A deeper overlay_dest_subdir must still resolve project_root correctly."""
     import re
 
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_TOPIC,
-        PromoteKindConfig,
-        _build_project_rollback_command,
-    )
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, PromoteKindConfig
+    from science_tool.commons.promote_render import _build_project_rollback_command
 
     deep_kind = PromoteKindConfig(
         kind="topic",
@@ -176,10 +173,8 @@ def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp
 def test_build_project_rollback_command_includes_unlinked_source(tmp_path) -> None:
     """Flatten case: an entry with `unlinked_source` extends the rollback to
     cover both target and source paths."""
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_TOPIC,
-        _build_project_rollback_command,
-    )
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC
+    from science_tool.commons.promote_render import _build_project_rollback_command
 
     entries = [
         {
@@ -195,7 +190,7 @@ def test_build_project_rollback_command_includes_unlinked_source(tmp_path) -> No
 
 
 def test_rollback_step5_deletes_tags_and_restores_path_limited(tmp_path) -> None:
-    from science_tool.commons.promote import _rollback_step5
+    from science_tool.commons.git import _rollback_step5
 
     _init_commons(tmp_path)
     canon = tmp_path / "papers" / "Adams2025.md"
@@ -230,7 +225,7 @@ def test_rollback_step5_deletes_tags_and_restores_path_limited(tmp_path) -> None
 def test_rollback_step5_restores_re_promote_file(tmp_path) -> None:
     """For an existing canonical file (re-promote), checkout HEAD -- <path>
     restores the prior content."""
-    from science_tool.commons.promote import _rollback_step5
+    from science_tool.commons.git import _rollback_step5
 
     _init_commons(tmp_path)
     canon = tmp_path / "papers" / "X.md"
