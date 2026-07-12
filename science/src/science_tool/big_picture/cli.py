@@ -57,13 +57,32 @@ def resolve_questions_cmd(project_root: Path) -> None:
     show_default=True,
     help="Path to the project root.",
 )
-def validate_cmd(project_root: Path) -> None:
-    """Validate generated big-picture synthesis files in this project."""
+@click.option(
+    "--staged",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=None,
+    help=(
+        "Validate generated files in this staging directory instead of entities/synthesis/, "
+        "BEFORE they are reconciled into canonical entities. References are still checked "
+        "against --project-root."
+    ),
+)
+def validate_cmd(project_root: Path, staged: Path | None) -> None:
+    """Validate generated big-picture synthesis files in this project.
+
+    With ``--staged``, validate files in a staging directory BEFORE they are reconciled
+    into canonical entities. Validation was strictly post-hoc, so a truncated ID was only
+    caught after the canonical entities had already been overwritten and every repair had
+    to be done against published files (fb-2026-07-11-003).
+
+    The known-ID corpus always comes from ``--project-root``: staged files are checked
+    against the real project, which is the whole point.
+    """
     # v3 canonical layout: synthesis artifacts are `synthesis` entities under
     # entities/synthesis/. The rollup is identified by its report_kind rather
     # than a fixed filename; per-hypothesis and emergent-threads files are
     # validated as synthesis files.
-    synthesis_dir = entity_dir(project_root, "synthesis")
+    synthesis_dir = staged if staged is not None else entity_dir(project_root, "synthesis")
 
     issues = []
     unchecked: list[tuple[Path, str]] = []

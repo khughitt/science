@@ -131,6 +131,91 @@ Arc reconstruction is limited because no prior_interpretations chains exist.
     assert not any(i.kind == "thin_coverage_marker_mismatch" for i in issues)
 
 
+def _project_with_questions(root: Path, ids: list[str]) -> Path:
+    """A minimal project whose only entities are the given question IDs."""
+    qdir = root / "entities" / "questions"
+    qdir.mkdir(parents=True)
+    for qid in ids:
+        slug = qid.split(":", 1)[1]
+        (qdir / f"{slug}.md").write_text(
+            f'---\nid: "{qid}"\nkind: question\ntitle: "{slug}"\n---\n\nBody.\n', encoding="utf-8"
+        )
+    return root
+
+
+def test_unique_numeric_prefix_expands_to_the_canonical_id(tmp_path: Path) -> None:
+    """`question:q01` is a truncated prefix of `question:q01-direct-to-h1`, and the
+    mapping is DETERMINISTIC when the prefix is unique.
+
+    Agents truncate canonical IDs despite an emphatic prohibition -- 4 of 14 in
+    natural-systems, and 76 of mm30's 84 first-pass issues came from this single cause.
+    Prompt hardening has been tried and measured; it failed. Both projects independently
+    wrote the same prefix-expansion repair script by hand (fb-2026-07-11-012).
+    """
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        """---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+---
+
+## Arc
+
+See question:q01 for the argument.
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=FIXTURE).rows
+    assert not [i for i in issues if i.kind == "nonexistent_reference"], (
+        "a unique, deterministically-expandable prefix was reported as nonexistent"
+    )
+
+
+def test_ambiguous_numeric_prefix_fails_loudly(tmp_path: Path) -> None:
+    """A prefix matching TWO canonical IDs must NOT be guessed.
+
+    The failure mode being removed is a human running a repair script. The failure mode
+    that must NOT be introduced is a tool silently citing the wrong entity.
+    """
+    project = _project_with_questions(tmp_path / "proj", ["question:q01-alpha", "question:q01-beta"])
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        """---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+---
+
+## Arc
+
+See question:q01 for the argument.
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=project).rows
+    ambiguous = [i for i in issues if i.kind == "ambiguous_reference"]
+    assert ambiguous, "an ambiguous prefix was silently resolved"
+    assert "q01-alpha" in ambiguous[0].message and "q01-beta" in ambiguous[0].message
+
+
+def test_a_genuinely_nonexistent_reference_is_still_flagged(tmp_path: Path) -> None:
+    """Prefix expansion must not turn the reference check into one that cannot fail."""
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        """---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+---
+
+## Arc
+
+See question:q99-does-not-exist for the argument.
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=FIXTURE).rows
+    assert any(i.kind == "nonexistent_reference" for i in issues)
+
+
 def test_thin_coverage_word_cap_does_not_charge_for_citations(tmp_path: Path) -> None:
     """The Arc cap measures PROSE VERBOSITY. An entity ID is a citation, not prose.
 

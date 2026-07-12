@@ -59,6 +59,12 @@ When you cluster (N > 15), add an `orphan_ids:` list to the file's frontmatter c
 
 Every question, interpretation, or topic mentioned MUST be cited by its canonical ID.
 
+**Explicit ID-format prohibitions** (common failure modes — do not do any of these):
+
+- **Never abbreviate or truncate an ID to just its prefix.** If the canonical `id:` is `interpretation:0192-t869-bcl2-dependency-venetoclax-hmcl-p3-supported`, you must cite it in that full form — not `interpretation:0192` or `interpretation:0192-t869`. Use the whole slug verbatim, exactly as the frontmatter declares. The numeric prefix reads as sufficient and is not.
+- **Never append a file extension to an ID.** Cited IDs are symbolic — the `.md` suffix is a filesystem detail that never belongs in a citation.
+- **Never fabricate an ID by composing one from file-path components.** If the bundle does not contain an entity with the exact ID you are about to cite, the citation is not grounded and must be removed.
+
 ## No fabrication
 
 If the resolver output shows zero orphans, say so explicitly — do not invent content to fill the section. Empty sections are valid output.

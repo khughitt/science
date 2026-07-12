@@ -20,6 +20,7 @@ from science_tool.instruments import InstrumentResult
 
 IssueKind = Literal[
     "nonexistent_reference",
+    "ambiguous_reference",
     "thin_coverage_marker_mismatch",
     "orphan_count_mismatch",
 ]
@@ -58,17 +59,45 @@ def validate_synthesis_file(path: Path, project_root: Path) -> InstrumentResult[
             ),
         )
 
+    by_prefix = _index_by_prefix(known_ids)
+
     for match in REFERENCE_PATTERN.finditer(text):
         kind, ident = match.group(1), match.group(2)
         full_id = f"{kind}:{ident}"
-        if full_id not in known_ids:
+        if full_id in known_ids:
+            continue
+
+        # A truncated citation like `interpretation:0192` expands DETERMINISTICALLY when its
+        # prefix is unique. Agents truncate despite an emphatic prohibition (4 of 14 in
+        # natural-systems; 76 of mm30's 84 first-pass issues), and both projects wrote the
+        # same expansion script by hand (fb-2026-07-11-012). Prompt hardening was tried and
+        # measured -- it failed -- so expand here instead.
+        #
+        # This is NOT leniency: an AMBIGUOUS prefix is a LOUDER failure than before, because
+        # the failure mode we must not introduce is a tool silently citing the wrong entity.
+        candidates = by_prefix.get(full_id, ())
+        if len(candidates) == 1:
+            continue
+        if len(candidates) > 1:
             issues.append(
                 ValidationIssue(
-                    kind="nonexistent_reference",
-                    message=f"Reference {full_id} does not exist in project.",
+                    kind="ambiguous_reference",
+                    message=(
+                        f"Reference {full_id} is a truncated prefix matching {len(candidates)} "
+                        f"entities: {', '.join(sorted(candidates))}. Cite the full canonical ID."
+                    ),
                     path=path,
                 )
             )
+            continue
+
+        issues.append(
+            ValidationIssue(
+                kind="nonexistent_reference",
+                message=f"Reference {full_id} does not exist in project.",
+                path=path,
+            )
+        )
 
     fm = read_frontmatter(path) or {}
     if fm.get("provenance_coverage") == "thin":
@@ -91,6 +120,23 @@ def validate_synthesis_file(path: Path, project_root: Path) -> InstrumentResult[
             )
 
     return InstrumentResult.from_rows(issues)
+
+
+def _index_by_prefix(known_ids: set[str]) -> dict[str, tuple[str, ...]]:
+    """Index canonical IDs by their `<kind>:<leading-segment>`.
+
+    `interpretation:0192-t869-bcl2-...` is indexed under `interpretation:0192`, which is
+    exactly the truncated form agents emit. A prefix mapping to ONE id is a deterministic
+    expansion; a prefix mapping to several is an ambiguity that must be reported, never
+    guessed.
+    """
+    index: dict[str, list[str]] = {}
+    for known in known_ids:
+        kind, _, ident = known.partition(":")
+        prefix = ident.split("-", 1)[0]
+        if prefix and prefix != ident:
+            index.setdefault(f"{kind}:{prefix}", []).append(known)
+    return {prefix: tuple(ids) for prefix, ids in index.items()}
 
 
 def _collect_project_ids(project_root: Path) -> set[str]:
