@@ -76,15 +76,28 @@ Severity is a property of the *kind*, not of the project's layout version.
 
 ## 4. Phase 1 — shipped
 
-Additive only. Widening a vocabulary can never create a new finding, so this is safe to
-land without touching a single project file.
+Additive only, and **every addition justified by design, not by prevalence**. (A first cut
+widened by file counts — `pre-registration: complete` because 10 files had it, `plan:
+proposed` because 25 did. That is fitting the system to today's entities, and it was
+reverted. See §8 for the axis model those words actually belong to.)
 
-- `report` += `draft`, `complete`
-- `plan` += `draft`, `proposed`
-- `pre-registration` += `draft`, `committed`, `complete`
-- `committed` classified **LIVE** in `_LIVE_STATUSES` (a committed pre-registration is the
-  one thing a study must not lose sight of). Enforced by the existing
-  `test_every_declared_status_still_classified` guard, which correctly caught the new word.
+- **`report` += `draft`, `complete`.** `report` carries **no semantic axis** — its status
+  *is* a document lifecycle, and a finished report must be able to say so. `plan` and
+  `interpretation` both declare `complete`; `report` simply never got it. Added as the
+  lifecycle words they are.
+- **`plan` += `draft`.** Same argument: no semantic axis, and a plan is drafted before it is
+  active. **`proposed` deliberately NOT minted** — it is drift toward `draft`, and coining a
+  synonym would entrench the ad-hoc divergence this work exists to end. Those 25 stay WARN.
+- **`pre-registration` += `committed`.** *Only* `committed`. Required by the contract in §2:
+  both `templates/pre-registration.md` and `commands/pre-register.md:258` prescribe
+  `status: "committed"`, so it must be **declared or struck from the template** — and
+  striking the freeze point is not an option. `committed`/`amended` are a **commitment
+  axis**, not a lifecycle. **`draft`/`complete` NOT added** despite 16 files: they are
+  lifecycle words, they belong on the lifecycle axis once `status` is split, and adding them
+  now would deepen the collapse the split exists to undo.
+- `committed` classified **LIVE** in `_LIVE_STATUSES`. The existing
+  `test_every_declared_status_still_classified` guard caught the new word and forced the
+  live-or-hidden decision — the reconciliation gate working as designed.
 - `status_vocabulary` severity → **WARN, unconditionally**; the `layout_version` axis is
   deleted.
 - **Guard:** `test_template_status_is_declared_by_the_kind` no longer exempts
@@ -92,9 +105,19 @@ land without touching a single project file.
   illustration") is exactly what hid `pre-registration: committed`. `status: "{{status}}"`
   is a substitution slot and is still skipped; a template that *bypasses* the slot and
   hardcodes a word is making a claim about the vocabulary, and that claim is now checked.
+  **This guard is the value-axis instance of the P0 contract in the unified design.**
 
-Result: **472 ERRORs → 169 WARNs. All five projects return to exit 0.** No project file was
-touched.
+**Result: the status check now contributes ZERO errors in every project.** No project file
+was touched. The residual findings are WARN, and that warning *is* the migration signal.
+
+### Correction to the blast-radius claim
+
+The 472 findings spanned five projects, but only **natural-systems** and **seq-feats** were
+exit-0 before the regression — both are exit 0 again. `3d-attention-bias` (unregistered
+`meta` kind, fb-2026-07-10-021), `protein-landscape` (alias collision) and
+`natural-systems--t664` (missing datapackage resources) were **already failing for unrelated
+pre-existing defects**. The original "five projects broken" claim over-stated it, and the
+record should say so.
 
 ## 5. Phase 2 — migration (needs a greenlight; touches project repos)
 

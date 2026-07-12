@@ -117,20 +117,18 @@ FROZEN_STATUS_VALUES = {
     "mechanism": frozenset({"active", "superseded", "retired", "archived"}),
     "synthesis": frozenset({"active", "superseded", "retired", "archived"}),
     "story": frozenset({"draft", "developing", "mature"}),
-    # `draft`/`complete` added: a report had no way to say it was FINISHED.
+    # `draft`/`complete` added: pure-lifecycle kinds, and a report had no way to say it
+    # was FINISHED. `plan: proposed` deliberately NOT minted -- it is drift toward `draft`.
     "report": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
-    # `draft`/`proposed` added: they were the two commonest plan statuses in the wild,
-    # and both were illegal.
-    "plan": frozenset(
-        {"draft", "proposed", "active", "complete", "superseded", "retired", "archived"}
-    ),
+    "plan": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
     "search": frozenset({"active", "complete", "retired", "archived"}),
     "method": frozenset({"active", "superseded", "retired", "archived"}),
     # `committed` added: the freeze point, and the status both templates/pre-registration.md
-    # and commands/pre-register.md tell authors to write. `draft` precedes the freeze;
-    # `complete` follows the study.
+    # and commands/pre-register.md tell authors to write. Its COMMITMENT axis
+    # (committed/amended) is not a document lifecycle -- draft/complete stay out until the
+    # lifecycle axis is split off.
     "pre-registration": frozenset(
-        {"draft", "active", "committed", "amended", "complete", "superseded", "retired"}
+        {"active", "committed", "amended", "superseded", "retired"}
     ),
     "paper": frozenset({"active", "retired"}),
     "prose-source": frozenset({"active", "retired"}),

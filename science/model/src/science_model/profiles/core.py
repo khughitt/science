@@ -173,10 +173,12 @@ CORE_PROFILE = ProfileManifest(
             home="entities/reports",
             strategy="numeric",
             default_status="active",
-            # `draft`/`complete` are the report lifecycle. Their absence was an omission,
-            # not a policy: a report had no way to say it was FINISHED -- `plan` and
-            # `interpretation` both declare `complete`, `report` simply never got it. So
-            # 112 reports across five projects said `complete` anyway, and 8 said `draft`.
+            # `report` carries NO semantic axis -- its status IS a document lifecycle, and
+            # a report that is finished must be able to say so. Its absence was an
+            # omission, not a policy: `plan` and `interpretation` both declare `complete`;
+            # `report` simply never got it, so 112 finished reports said `complete`
+            # illegally and 8 said `draft`. Added by construction, as the lifecycle words
+            # they are -- not because files existed.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
@@ -408,21 +410,19 @@ CORE_PROFILE = ProfileManifest(
             home="entities/pre-registrations",
             strategy="numeric",
             default_status="active",
-            # `committed` is the FREEZE POINT -- the state the entire pre-registration
-            # doctrine exists to name, and the one the vocabulary omitted. Both
-            # `templates/pre-registration.md` and `commands/pre-register.md` prescribe
-            # `status: "committed"` on sign-off, so every pre-registration the toolkit
-            # itself told authors to write was out of vocabulary (40 of them).
-            # `draft` precedes the freeze; `complete` follows the study.
-            statuses=[
-                "draft",
-                "active",
-                "committed",
-                "amended",
-                "complete",
-                "superseded",
-                "retired",
-            ],
+            # `committed` is the FREEZE POINT -- the state the whole pre-registration
+            # doctrine exists to name. It is added because BOTH
+            # `templates/pre-registration.md` AND `commands/pre-register.md:258` prescribe
+            # `status: "committed"` on sign-off: a value the toolkit itself tells authors
+            # to write must be declared or struck from the template, and striking the
+            # freeze point is not an option.
+            #
+            # `committed`/`amended` are a COMMITMENT axis, not a document lifecycle.
+            # `draft`/`complete` are NOT added here even though 16 files use them: they
+            # are lifecycle words, they belong on the lifecycle axis once `status` is
+            # split, and adding them now would deepen the very collapse the split exists
+            # to undo. Those files stay WARN -- that warning IS the migration signal.
+            statuses=["active", "committed", "amended", "superseded", "retired"],
         ),
         EntityKind(
             name="plan",
@@ -434,18 +434,15 @@ CORE_PROFILE = ProfileManifest(
             home="entities/plans",
             strategy="numeric",
             default_status="active",
-            # A plan is DRAFTED before it is active, and `proposed` before it is agreed.
-            # The vocabulary admitted neither, so `draft` (102) and `proposed` (25) were
-            # the two most common plan statuses in the wild and both were illegal.
-            statuses=[
-                "draft",
-                "proposed",
-                "active",
-                "complete",
-                "superseded",
-                "retired",
-                "archived",
-            ],
+            # `plan` carries NO semantic axis -- its status IS a document lifecycle, and a
+            # plan is DRAFTED before it is active. `draft` was its single commonest status
+            # in the wild (102) and was illegal. Added by construction, as the lifecycle
+            # word it is.
+            #
+            # `proposed` (25) is deliberately NOT added: it is drift toward `draft`, and
+            # minting a synonym would entrench the ad-hoc per-kind divergence this whole
+            # exercise is trying to end. Those 25 stay WARN and migrate to `draft`.
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="search",
