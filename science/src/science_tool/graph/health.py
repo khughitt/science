@@ -18,6 +18,8 @@ from science_tool.annotation.cross_paper_evidence import (
     proposition_source_refs_map,
 )
 from science_tool.data_root import project_config_path
+from science_tool.graph.health_checks.agent_context import CHECK as AGENT_CONTEXT_CHECK
+from science_tool.graph.health_checks.agent_context import AgentContextFinding
 from science_tool.graph.health_checks.base import (
     HealthCheck,
     HealthContext,
@@ -29,12 +31,20 @@ from science_tool.graph.health_checks.entity_identity import CHECK as ENTITY_IDE
 from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
 from science_tool.graph.health_checks.identity_policy import CHECK as IDENTITY_POLICY_CHECK
 from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
+from science_tool.graph.health_checks.invalid_entity_aspects import CHECK as INVALID_ENTITY_ASPECTS_CHECK
+from science_tool.graph.health_checks.invalid_entity_aspects import InvalidEntityAspectsFinding
+from science_tool.graph.health_checks.legacy_task_type import CHECK as LEGACY_TASK_TYPE_CHECK
+from science_tool.graph.health_checks.legacy_task_type import LegacyTaskTypeFinding
 from science_tool.graph.health_checks.lingering_tags import CHECK as LINGERING_TAGS_CHECK
 from science_tool.graph.health_checks.lingering_tags import LingeringTagsRecord
+from science_tool.graph.health_checks.tooling_scaffold import CHECK as TOOLING_SCAFFOLD_CHECK
+from science_tool.graph.health_checks.tooling_scaffold import ToolingScaffoldFinding
 from science_tool.graph.health_checks.unregistered_ref_kinds import CHECK as UNREGISTERED_REF_KINDS_CHECK
 from science_tool.graph.health_checks.unregistered_ref_kinds import UnregisteredRefKind
 from science_tool.graph.health_checks.unresolved_refs import CHECK as UNRESOLVED_REFS_CHECK
 from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
+from science_tool.graph.health_checks.validate import CHECK as VALIDATE_CHECK
+from science_tool.graph.health_checks.validate import ValidationFinding
 from science_tool.graph.migrate import (
     LayeredClaimMigrationReport,
     build_layered_claim_migration_report,
@@ -55,28 +65,6 @@ def archive_lag_total(archive_lag: TaskArchiveLag) -> int:
         + archive_lag["retired_in_active"]
         + archive_lag["missing_completed"]
     )
-
-
-class ToolingScaffoldFinding(TypedDict):
-    code: str  # pyproject_missing | science_tool_dep_missing | env_missing | env_path_missing
-    detail: str  # human-readable description
-    fix: str  # suggested remediation command
-
-
-class AgentContextFinding(TypedDict):
-    code: str
-    source_file: str
-    detail: str
-    fix: str
-
-
-class ValidationFinding(TypedDict):
-    severity: str
-    path: str | None
-    line: int | None
-    message: str
-    rule: str | None
-    task: str | None
 
 
 class AcceptedValidationFinding(ValidationFinding):
@@ -173,47 +161,6 @@ def _drain_instrument_results(
     return rows, unwired
 
 
-def collect_validation_findings(project_root: Path) -> InstrumentResult[ValidationFinding]:
-    """Run canonical validation and return its warnings/errors as findings.
-
-    This check has NO unwired state. A ``ValidateContextError`` — the one way it can
-    fail to reach the validators — is already a RESULT: it is reported as an error
-    finding, not laundered into "could not run".
-    """
-    from science_tool.validate import runner as validate_runner
-    from science_tool.validate.context import ValidateContextError
-    from science_tool.validate.result import Severity
-
-    try:
-        run_result = validate_runner.run(project_root, strict=False, verbose=False, enable_python_sidecar=False)
-    except ValidateContextError as exc:
-        return InstrumentResult.ok(
-            [
-                {
-                    "severity": "error",
-                    "path": None,
-                    "line": None,
-                    "message": str(exc),
-                    "rule": "validate.context",
-                    "task": None,
-                }
-            ]
-        )
-    findings: list[ValidationFinding] = [
-        {
-            "severity": _validation_health_severity(result.severity),
-            "path": str(result.path) if result.path is not None else None,
-            "line": result.line,
-            "message": result.message,
-            "rule": result.rule,
-            "task": result.task,
-        }
-        for result in run_result.results
-        if result.severity is not Severity.INFO
-    ]
-    return InstrumentResult.from_rows(findings)
-
-
 def _text_matches(value: str | None, needles: object) -> bool:
     if needles is None:
         return True
@@ -275,16 +222,6 @@ def _partition_accepted_validation_findings(
             continue
         accepted.append({**finding, "accepted_reason": reason.strip()})
     return remaining, accepted
-
-
-def _validation_health_severity(severity: object) -> str:
-    from science_tool.validate.result import Severity
-
-    if severity is Severity.WARN:
-        return "warning"
-    if severity is Severity.ERROR:
-        return "error"
-    raise ValueError(f"unsupported validation severity: {severity!r}")
 
 
 class CoverageMetric(TypedDict):
@@ -581,185 +518,6 @@ def build_health_report(
     return report
 
 
-OVERVIEW_LINE_BUDGET = 150
-OVERVIEW_WORD_BUDGET = 1200
-
-
-_AGENT_CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md", "core/overview.md")
-
-
-def collect_agent_context_findings(project_root: Path) -> InstrumentResult[AgentContextFinding]:
-    """Return drift that makes session-start agent context too large or fragmented.
-
-    ``unwired`` when none of the files it inspects exists: every branch below is
-    guarded on a file being present, so an absent set yields zero findings without
-    the check ever having looked at anything.
-    """
-    from science_tool.curate.agents_md import collect_agents_md_state
-
-    project_root = project_root.resolve()
-    if not any((project_root / name).is_file() for name in _AGENT_CONTEXT_FILES):
-        return InstrumentResult.unwired(
-            code="agent_context_files_absent",
-            reason=f"none of {', '.join(_AGENT_CONTEXT_FILES)} exists; no agent context was inspected",
-        )
-    state = collect_agents_md_state(project_root)
-    findings: list[AgentContextFinding] = []
-
-    for include in state.claude_md_legacy_at_includes:
-        findings.append(
-            {
-                "code": "claude_md_legacy_includes",
-                "source_file": "CLAUDE.md",
-                "detail": f"CLAUDE.md includes {include}; keep CLAUDE.md to a single @AGENTS.md pointer.",
-                "fix": "Move durable guidance into AGENTS.md and keep core files as pointers.",
-            }
-        )
-    if state.claude_md_present and not _claude_md_is_minimal(project_root / "CLAUDE.md"):
-        findings.append(
-            {
-                "code": "claude_md_not_minimal",
-                "source_file": "CLAUDE.md",
-                "detail": "CLAUDE.md should contain only @AGENTS.md.",
-                "fix": "Move project-specific guidance into AGENTS.md, then replace CLAUDE.md with @AGENTS.md.",
-            }
-        )
-
-    for include in state.agents_md_legacy_at_includes:
-        findings.append(
-            {
-                "code": "agents_md_legacy_includes",
-                "source_file": "AGENTS.md",
-                "detail": f"AGENTS.md includes {include}; @core/* directives inline large files into every session.",
-                "fix": "Remove the @core/* directive and keep core files in the Pointers section.",
-            }
-        )
-
-    if state.agents_md_present and not state.markers_present:
-        findings.append(
-            {
-                "code": "agents_md_digest_markers_missing",
-                "source_file": "AGENTS.md",
-                "detail": "AGENTS.md is missing the managed load-bearing-constraints digest markers.",
-                "fix": "Run /science:curate or add the canonical managed marker block from templates/agents-md.md.",
-            }
-        )
-
-    overview = project_root / "core" / "overview.md"
-    if overview.is_file():
-        text = overview.read_text(encoding="utf-8")
-        line_count = len(text.splitlines())
-        word_count = len(text.split())
-        if line_count > OVERVIEW_LINE_BUDGET or word_count > OVERVIEW_WORD_BUDGET:
-            findings.append(
-                {
-                    "code": "overview_too_long",
-                    "source_file": "core/overview.md",
-                    "detail": (
-                        f"core/overview.md is {line_count} lines / {word_count} words; "
-                        f"budget is {OVERVIEW_LINE_BUDGET} lines / {OVERVIEW_WORD_BUDGET} words."
-                    ),
-                    "fix": "Keep overview as boot context and move detailed evidence narratives into canonical docs.",
-                }
-            )
-
-    return InstrumentResult.from_rows(findings)
-
-
-def _claude_md_is_minimal(path: Path) -> bool:
-    if not path.is_file():
-        return False
-    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return lines == ["@AGENTS.md"]
-
-
-def collect_tooling_scaffold_findings(project_root: Path) -> InstrumentResult[ToolingScaffoldFinding]:
-    """Check the project has the canonical science invocation scaffold.
-
-    A compliant project has:
-      - root `pyproject.toml` (so `uv run` resolves a project context)
-      - `science` listed under `[dependency-groups].dev`
-      - `.env` containing `SCIENCE_TOOL_PATH=...`
-
-    Without these, the documented `uv run science <cmd>` shorthand cannot
-    work; users fall back to verbose `uv run --project ...` or `uv run --with ...`
-    forms. See `commands/create-project.md` (pyproject.toml section).
-
-    This check has NO unwired state. The ABSENCE of those files IS its finding — a
-    bare directory yields two findings, not silence — so an empty return is
-    unambiguous: the scaffold is present and compliant.
-    """
-    findings: list[ToolingScaffoldFinding] = []
-
-    pyproject_path = project_root / "pyproject.toml"
-    if not pyproject_path.exists():
-        findings.append(
-            {
-                "code": "pyproject_missing",
-                "detail": "No root pyproject.toml — `uv run science ...` cannot resolve.",
-                "fix": 'Create pyproject.toml per commands/create-project.md, then `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.',
-            }
-        )
-    else:
-        has_dep = False
-        try:
-            text = pyproject_path.read_text(encoding="utf-8")
-            try:
-                import tomllib  # py3.11+
-            except ModuleNotFoundError:  # pragma: no cover
-                import tomli as tomllib  # type: ignore[import-not-found]
-            data = tomllib.loads(text)
-            dev_group = data.get("dependency-groups", {}).get("dev", [])
-            for entry in dev_group:
-                # entries can be strings ("science") or tables; we only need name match
-                if isinstance(entry, str) and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science":
-                    has_dep = True
-                    break
-        except Exception as exc:
-            findings.append(
-                {
-                    "code": "pyproject_unreadable",
-                    "detail": f"pyproject.toml could not be parsed: {exc}",
-                    "fix": "Repair pyproject.toml — see commands/create-project.md for canonical shape.",
-                }
-            )
-            has_dep = True  # don't double-report; parsing already failed
-
-        if not has_dep:
-            findings.append(
-                {
-                    "code": "science_tool_dep_missing",
-                    "detail": "pyproject.toml does not list `science` under [dependency-groups].dev.",
-                    "fix": 'Run `uv add --dev --editable "$SCIENCE_TOOL_PATH"` from the project root.',
-                }
-            )
-
-    env_path = project_root / ".env"
-    if not env_path.exists():
-        findings.append(
-            {
-                "code": "env_missing",
-                "detail": "No .env file — SCIENCE_TOOL_PATH is unset for validate.sh and other tooling.",
-                "fix": "Create .env with `SCIENCE_TOOL_PATH=<absolute-path-to-science>` (see create-project.md).",
-            }
-        )
-    else:
-        try:
-            env_text = env_path.read_text(encoding="utf-8")
-        except OSError:
-            env_text = None
-        if env_text is not None and not any(line.strip().startswith("SCIENCE_TOOL_PATH=") for line in env_text.splitlines()):
-            findings.append(
-                {
-                    "code": "env_path_missing",
-                    "detail": ".env exists but does not define SCIENCE_TOOL_PATH.",
-                    "fix": "Add `SCIENCE_TOOL_PATH=<absolute-path-to-science>` to .env.",
-                }
-            )
-
-    return InstrumentResult.from_rows(findings)
-
-
 def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
     fraction = 1.0 if denominator == 0 else numerator / denominator
     return {
@@ -767,118 +525,6 @@ def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
         "denominator": denominator,
         "fraction": fraction,
     }
-
-
-class LegacyTaskTypeFinding(TypedDict):
-    task_id: str
-    legacy_type: str
-    source_file: str
-
-
-def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskTypeFinding]:
-    """Return the tasks still carrying the legacy `type:` field.
-
-    ``unwired`` when there is no ``tasks/`` directory: no task file was read, so
-    "no legacy task types" is a claim about a backlog that was never opened.
-    """
-    from science_tool.tasks import parse_tasks
-
-    tasks_dir = project_root / "tasks"
-    if not tasks_dir.is_dir():
-        return InstrumentResult.unwired(
-            code="tasks_dir_missing",
-            reason=f"{tasks_dir.name}/ does not exist; no task file was read",
-        )
-
-    findings: list[LegacyTaskTypeFinding] = []
-    candidates = [tasks_dir / "active.md"]
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        candidates.extend(sorted(done_dir.glob("*.md")))
-    for path in candidates:
-        if not path.is_file():
-            continue
-        for task in parse_tasks(path):
-            if task.type:
-                findings.append(
-                    LegacyTaskTypeFinding(
-                        task_id=task.id,
-                        legacy_type=task.type,
-                        source_file=str(path.relative_to(project_root)),
-                    )
-                )
-    return InstrumentResult.from_rows(findings)
-
-
-class InvalidEntityAspectsFinding(TypedDict):
-    entity_id: str
-    source_file: str
-    message: str
-
-
-def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[InvalidEntityAspectsFinding]:
-    """Return the entity files carrying invalid explicit `aspects:` values.
-
-    Two preconditions, both previously silent:
-
-    - ``aspect_catalog_missing`` — ``load_project_aspects`` raises ``FileNotFoundError``
-      when science.yaml is absent. The catalog this check validates AGAINST failed to
-      load; it used to swallow that and answer "no invalid aspects".
-    - ``entities_dir_missing`` — no ``entities/`` directory, so no entity was read.
-    """
-    from science_model.aspects import (
-        AspectValidationError,
-        load_project_aspects,
-        validate_entity_aspects,
-    )
-    from science_model.frontmatter import parse_frontmatter
-
-    try:
-        project_aspects = load_project_aspects(project_root)
-    except FileNotFoundError as exc:
-        return InstrumentResult.unwired(
-            code="aspect_catalog_missing",
-            reason=f"the aspect catalog could not be loaded, so no aspect could be validated: {exc}",
-        )
-
-    entities_root = project_root / "entities"
-    if not entities_root.is_dir():
-        return InstrumentResult.unwired(
-            code="entities_dir_missing",
-            reason="entities/ does not exist; no entity aspects were read",
-        )
-
-    from science_tool.entity_scan import iter_entity_markdown
-
-    findings: list[InvalidEntityAspectsFinding] = []
-    for path in iter_entity_markdown(entities_root):
-        result = parse_frontmatter(path)
-        if result is None:
-            continue
-        fm, _ = result
-        if "aspects" not in fm:
-            continue
-        raw = fm.get("aspects")
-        if not isinstance(raw, list):
-            findings.append(
-                InvalidEntityAspectsFinding(
-                    entity_id=str(fm.get("id", path.stem)),
-                    source_file=str(path.relative_to(project_root)),
-                    message="aspects must be a list",
-                )
-            )
-            continue
-        try:
-            validate_entity_aspects([str(a) for a in raw], project_aspects)
-        except AspectValidationError as exc:
-            findings.append(
-                InvalidEntityAspectsFinding(
-                    entity_id=str(fm.get("id", path.stem)),
-                    source_file=str(path.relative_to(project_root)),
-                    message=str(exc),
-                )
-            )
-    return InstrumentResult.from_rows(findings)
 
 
 def _collect_archive_lag(context: HealthContext) -> TaskArchiveLag:
@@ -1059,20 +705,8 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         run=_collect_managed_artifacts,
         empty=lambda _root: [],
     ),
-    HealthCheck(
-        name="tooling_scaffold",
-        description="Check pyproject and environment scaffold for science tooling.",
-        requires_sources=False,
-        run=lambda context: collect_tooling_scaffold_findings(context.project_root),
-        empty=lambda _root: [],
-    ),
-    HealthCheck(
-        name="validate",
-        description="Run canonical project validation and surface warnings/errors.",
-        requires_sources=False,
-        run=lambda context: collect_validation_findings(context.project_root),
-        empty=lambda _root: [],
-    ),
+    TOOLING_SCAFFOLD_CHECK,
+    VALIDATE_CHECK,
     HealthCheck(
         name="prose_epistemics",
         description="Read the project-level prose epistemics health artifact.",
@@ -1080,29 +714,11 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         run=_collect_prose_epistemics,
         empty=lambda _root: _empty_prose_epistemics(),
     ),
-    HealthCheck(
-        name="agent_context",
-        description="Check CLAUDE.md, AGENTS.md, and core/overview.md for session-context drift.",
-        requires_sources=False,
-        run=lambda context: collect_agent_context_findings(context.project_root),
-        empty=lambda _root: [],
-    ),
+    AGENT_CONTEXT_CHECK,
     UNRESOLVED_REFS_CHECK,
     UNREGISTERED_REF_KINDS_CHECK,
     LINGERING_TAGS_CHECK,
     DATASET_ANOMALIES_CHECK,
-    HealthCheck(
-        name="legacy_task_type",
-        description="Find tasks still carrying the legacy type field.",
-        requires_sources=False,
-        run=lambda context: collect_legacy_task_type(context.project_root),
-        empty=lambda _root: [],
-    ),
-    HealthCheck(
-        name="invalid_entity_aspects",
-        description="Validate explicit entity aspects against the project aspect catalog.",
-        requires_sources=False,
-        run=lambda context: collect_invalid_entity_aspects(context.project_root),
-        empty=lambda _root: [],
-    ),
+    LEGACY_TASK_TYPE_CHECK,
+    INVALID_ENTITY_ASPECTS_CHECK,
 )

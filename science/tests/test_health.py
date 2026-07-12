@@ -1659,7 +1659,7 @@ class TestHealthCLI:
         assert "COULD NOT RUN" not in result.output
 
     def test_tooling_scaffold_skips_unreadable_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from science_tool.graph.health import collect_tooling_scaffold_findings
+        from science_tool.graph.health_checks.tooling_scaffold import collect_tooling_scaffold_findings
 
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
@@ -1731,7 +1731,7 @@ class TestHealthCLI:
 def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     from pathlib import Path
 
-    from science_tool.graph.health import collect_legacy_task_type
+    from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
@@ -1747,7 +1747,7 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
 def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     from pathlib import Path
 
-    from science_tool.graph.health import collect_invalid_entity_aspects
+    from science_tool.graph.health_checks.invalid_entity_aspects import collect_invalid_entity_aspects
 
     project_root = Path(tmp_path)
     (project_root / "entities" / "questions").mkdir(parents=True)

@@ -16,19 +16,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.graph.health import (
-    build_health_report,
-    collect_agent_context_findings,
-    collect_invalid_entity_aspects,
-    collect_legacy_task_type,
-    collect_tooling_scaffold_findings,
-    collect_validation_findings,
-)
+from science_tool.graph.health import build_health_report
+from science_tool.graph.health_checks.agent_context import collect_agent_context_findings
 from science_tool.graph.health_checks.dataset_anomalies import check_dataset_anomalies
 from science_tool.graph.health_checks.identity_policy import collect_identity_policy_findings
+from science_tool.graph.health_checks.invalid_entity_aspects import collect_invalid_entity_aspects
+from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+from science_tool.graph.health_checks.tooling_scaffold import collect_tooling_scaffold_findings
 from science_tool.graph.health_checks.unregistered_ref_kinds import collect_unregistered_ref_kinds
 from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
+from science_tool.graph.health_checks.validate import collect_validation_findings
 
 
 def _seed_manifest(root: Path) -> None:
