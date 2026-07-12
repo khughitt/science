@@ -46,6 +46,30 @@ def test_every_check_supplies_an_empty_state() -> None:
         assert callable(check.empty), f"{check.name} has no empty-state callable"
 
 
+def test_health_check_order_is_pinned() -> None:
+    """Registry order is execution order and timings order. Changing it is observable."""
+    from science_tool.graph.health_checks import HEALTH_CHECKS
+
+    assert [check.name for check in HEALTH_CHECKS] == [
+        "identity_policy",
+        "entity_identity",
+        "layered_claim_migration",
+        "cross_paper_evidence",
+        "archive_lag",
+        "managed_artifacts",
+        "tooling_scaffold",
+        "validate",
+        "prose_epistemics",
+        "agent_context",
+        "unresolved_refs",
+        "unregistered_ref_kinds",
+        "lingering_tags",
+        "dataset_anomalies",
+        "legacy_task_type",
+        "invalid_entity_aspects",
+    ]
+
+
 def _empty_prose_epistemics_expected() -> dict[str, object]:
     """Transcribed from health.py's `_empty_prose_epistemics()` literal."""
     return {

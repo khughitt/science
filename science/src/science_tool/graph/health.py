@@ -14,39 +14,24 @@ from typing import NotRequired, TypedDict, cast
 import yaml as _yaml
 
 from science_tool.data_root import project_config_path
-from science_tool.graph.health_checks.agent_context import CHECK as AGENT_CONTEXT_CHECK
-from science_tool.graph.health_checks.agent_context import AgentContextFinding
-from science_tool.graph.health_checks.archive_lag import CHECK as ARCHIVE_LAG_CHECK
-from science_tool.graph.health_checks.archive_lag import TaskArchiveLag, archive_lag_total
-from science_tool.graph.health_checks.base import (
+from science_tool.graph.health_checks import (
+    HEALTH_CHECKS,
     HealthCheck,
     HealthContext,
     HealthTiming,
     context_sources,
 )
-from science_tool.graph.health_checks.cross_paper_evidence import CHECK as CROSS_PAPER_EVIDENCE_CHECK
+from science_tool.graph.health_checks.agent_context import AgentContextFinding
+from science_tool.graph.health_checks.archive_lag import TaskArchiveLag, archive_lag_total
 from science_tool.graph.health_checks.cross_paper_evidence import CrossPaperEvidenceHealthReport
-from science_tool.graph.health_checks.dataset_anomalies import CHECK as DATASET_ANOMALIES_CHECK
-from science_tool.graph.health_checks.entity_identity import CHECK as ENTITY_IDENTITY_CHECK
 from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
-from science_tool.graph.health_checks.identity_policy import CHECK as IDENTITY_POLICY_CHECK
 from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
-from science_tool.graph.health_checks.invalid_entity_aspects import CHECK as INVALID_ENTITY_ASPECTS_CHECK
 from science_tool.graph.health_checks.invalid_entity_aspects import InvalidEntityAspectsFinding
-from science_tool.graph.health_checks.layered_claim_migration import CHECK as LAYERED_CLAIM_MIGRATION_CHECK
-from science_tool.graph.health_checks.legacy_task_type import CHECK as LEGACY_TASK_TYPE_CHECK
 from science_tool.graph.health_checks.legacy_task_type import LegacyTaskTypeFinding
-from science_tool.graph.health_checks.lingering_tags import CHECK as LINGERING_TAGS_CHECK
 from science_tool.graph.health_checks.lingering_tags import LingeringTagsRecord
-from science_tool.graph.health_checks.managed_artifacts import CHECK as MANAGED_ARTIFACTS_CHECK
-from science_tool.graph.health_checks.prose_epistemics import CHECK as PROSE_EPISTEMICS_CHECK
-from science_tool.graph.health_checks.tooling_scaffold import CHECK as TOOLING_SCAFFOLD_CHECK
 from science_tool.graph.health_checks.tooling_scaffold import ToolingScaffoldFinding
-from science_tool.graph.health_checks.unregistered_ref_kinds import CHECK as UNREGISTERED_REF_KINDS_CHECK
 from science_tool.graph.health_checks.unregistered_ref_kinds import UnregisteredRefKind
-from science_tool.graph.health_checks.unresolved_refs import CHECK as UNRESOLVED_REFS_CHECK
 from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
-from science_tool.graph.health_checks.validate import CHECK as VALIDATE_CHECK
 from science_tool.graph.health_checks.validate import ValidationFinding
 from science_tool.graph.migrate import LayeredClaimMigrationReport
 from science_tool.graph.sources import load_project_sources
@@ -463,23 +448,3 @@ def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
         "denominator": denominator,
         "fraction": fraction,
     }
-
-
-HEALTH_CHECKS: tuple[HealthCheck, ...] = (
-    IDENTITY_POLICY_CHECK,
-    ENTITY_IDENTITY_CHECK,
-    LAYERED_CLAIM_MIGRATION_CHECK,
-    CROSS_PAPER_EVIDENCE_CHECK,
-    ARCHIVE_LAG_CHECK,
-    MANAGED_ARTIFACTS_CHECK,
-    TOOLING_SCAFFOLD_CHECK,
-    VALIDATE_CHECK,
-    PROSE_EPISTEMICS_CHECK,
-    AGENT_CONTEXT_CHECK,
-    UNRESOLVED_REFS_CHECK,
-    UNREGISTERED_REF_KINDS_CHECK,
-    LINGERING_TAGS_CHECK,
-    DATASET_ANOMALIES_CHECK,
-    LEGACY_TASK_TYPE_CHECK,
-    INVALID_ENTITY_ASPECTS_CHECK,
-)
