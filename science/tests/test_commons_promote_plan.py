@@ -237,7 +237,8 @@ def test_coerce_date_for_yaml() -> None:
 
 
 def test_render_canonical_includes_base_required_fields() -> None:
-    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision
+    from science_tool.commons.promote_render import _render_canonical
 
     decision = PromoteDecision(
         slug="Adams2025",
@@ -275,7 +276,8 @@ def test_render_canonical_includes_base_required_fields() -> None:
 def test_render_canonical_dates_are_quoted_strings() -> None:
     import yaml
 
-    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision
+    from science_tool.commons.promote_render import _render_canonical
 
     decision = PromoteDecision(
         slug="X",
@@ -312,8 +314,8 @@ def test_render_canonical_uses_active_profile() -> None:
         PROMOTE_KIND_DATASET,
         PromoteDecision,
         _active_profile,
-        _render_canonical,
     )
+    from science_tool.commons.promote_render import _render_canonical
 
     extended_profile = _active_profile(
         PROMOTE_KIND_DATASET,
@@ -351,8 +353,8 @@ def test_render_canonical_paper_emits_bibkey_field() -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
         PromoteDecision,
-        _render_canonical,
     )
+    from science_tool.commons.promote_render import _render_canonical
 
     d = PromoteDecision(
         slug="Adams2025",
@@ -387,8 +389,8 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         PromoteDecision,
-        _render_canonical,
     )
+    from science_tool.commons.promote_render import _render_canonical
 
     d = PromoteDecision(
         slug="hypothesis",
@@ -419,7 +421,8 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
 
 
 def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
-    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_overlay
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision
+    from science_tool.commons.promote_render import _render_overlay
 
     decision = PromoteDecision(
         slug="Adams2025",
@@ -461,8 +464,8 @@ def test_render_overlay_uses_kind_id_prefix() -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_THEME,
         PromoteDecision,
-        _render_overlay,
     )
+    from science_tool.commons.promote_render import _render_overlay
 
     d = PromoteDecision(
         slug="my-theme",

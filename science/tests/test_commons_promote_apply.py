@@ -143,11 +143,8 @@ def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp
     """A deeper overlay_dest_subdir must still resolve project_root correctly."""
     import re
 
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_TOPIC,
-        PromoteKindConfig,
-        _build_project_rollback_command,
-    )
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, PromoteKindConfig
+    from science_tool.commons.promote_render import _build_project_rollback_command
 
     deep_kind = PromoteKindConfig(
         kind="topic",
@@ -176,10 +173,8 @@ def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp
 def test_build_project_rollback_command_includes_unlinked_source(tmp_path) -> None:
     """Flatten case: an entry with `unlinked_source` extends the rollback to
     cover both target and source paths."""
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_TOPIC,
-        _build_project_rollback_command,
-    )
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC
+    from science_tool.commons.promote_render import _build_project_rollback_command
 
     entries = [
         {
