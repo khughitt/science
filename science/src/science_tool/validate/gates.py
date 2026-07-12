@@ -35,8 +35,12 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "code.uncommitted",
             "code.hardcoded-path",
             "code.produced-by-unresolved",
-            "belief.refutation-masked",
-            "belief.single-source-ceiling",
+            # `belief.refutation-masked` and `belief.single-source-ceiling` were gated here.
+            # Both compared an AUTHORED belief magnitude against the computed one, and belief is
+            # no longer authored (D5 / design rev 8), so they have no input and were removed.
+            # NOTE: `refutation-masked` — an author asserting >= supported while an unresolved
+            # decisive refutation stands — is a real invariant that still needs a home on the
+            # `verdict` axis. It is re-gated there, not silently dropped.
             "evidence.proxy-ungated",
         }
     ),

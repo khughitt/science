@@ -383,6 +383,14 @@ Every key gets **exactly one** of four dispositions:
 
 ### Task 2b: Delete the `_authored_magnitude` fallback chain — a LIVE bug, and a trap
 
+> **✅ SHIPPED 2026-07-12.** Behavior-neutral on the real corpus, **proven**: `science validate` in
+> `cancer/mechanisms/evolution` (which owns all 13 files) emits **zero** `belief.*` findings both
+> before and after. The chain was already dead in production — see the ladder below. Full suite green
+> (only the 4 pre-existing `test_feedback_cli` telemetry-window failures, which fail identically with
+> these changes backed out).
+>
+> **It orphaned three guarantees — Task 7 Step 3c now re-homes all three on the `verdict` axis.**
+
 **This must land BEFORE `belief_state` is removed, or removing it silently corrupts 13 hypotheses.**
 
 `validate/checks/evidence_lines.py:395-411` walks
@@ -409,6 +417,27 @@ recognized token**:
 > (`speculative`) to `supported` — purely as an artifact of field order.** Nothing about the
 > evidence changed. This is the same class of defect as the collapsed `status`: a value silently
 > standing in for a different axis, and a consumer reading whichever one it happens to see first.
+
+> ### And it is worse than that: the chain is ordered most-cautious → most-boastful.
+> All 13 files carry **all three** fields at once, and `_MAG_INDEX` is
+> `speculative=0 < fragile=1 < supported=2 < well_supported=3`:
+>
+> | authored | rung |
+> |---|---|
+> | `belief_state: speculative` | **0** — the floor |
+> | `evidence_stance: literature-supported` | **2** |
+> | `author_stated_evidence: established (barcoded mouse)` | **3** — the ceiling *(the parser takes the leading token)* |
+>
+> | you delete… | the field that then wins | result |
+> |---|---|---|
+> | *(nothing — today)* | `belief_state` → 0 | **every rule silent** |
+> | `belief_state` | `evidence_stance` → 2 | `refutation-masked` **ERROR** possible |
+> | `belief_state` + `evidence_stance` | `author_stated_evidence` → **3** | all three fire, ERROR likely |
+>
+> **Peeling the fields off in the obvious order walks the corpus UP the ladder — the careful fix is
+> worse than the careless one.** And because every real file sits at rung 0 today, while every rule
+> requires rung > 1, **the three rules currently fire on nothing.** That is what makes deleting the
+> whole chain exactly behavior-neutral, and any partial fix a corruption.
 
 **The chain is DELETED, not adapted.** `evidence_stance` and `author_stated_evidence` are
 **provenance**, and provenance must never set an epistemic magnitude — that is the whole ruling.
@@ -1541,6 +1570,32 @@ def check_resolution(
      (ERROR arrives with Task 12's ratchet, per kind).
   3. **`entities.edit_entity`** — before writing, so a terminal transition with a dangling
      successor **fails before a byte is written** (Task 10).
+
+> ### ⚠️ Task 2b ORPHANED THREE GUARANTEES. This step must re-home ALL THREE, not one.
+>
+> Deleting `_authored_magnitude` (Task 2b, shipped) removed the only input to three shipped rules
+> from the 2026-05-22 belief design. They were **provably dead on the real corpus** — all 13 files
+> author `belief_state: speculative`, the floor, and every rule needs a higher rung — so the deletion
+> was behavior-neutral. **But the invariants they encoded are not dead.** They guarded *an author
+> asserting an epistemic claim the evidence does not support* — which is now exactly what an authored
+> **`verdict`** is. Rev 4 of this plan specified only the first successor; the other two were being
+> silently dropped, and one of them was an **ERROR in the `hygiene` commit gate**.
+>
+> | deleted (belief axis) | sev | successor (verdict axis) | licensed by |
+> |---|---|---|---|
+> | `belief.refutation-masked` | **ERROR**, *gated* | **`verdict.refutation-masked`** — an authored verdict of `supported`/`partially-supported` while an **unresolved decisive whole-claim refutation** stands. **Re-add to the `hygiene` gate in `gates.py`.** | rev 8 pt. 4 |
+> | `belief.single-source-ceiling` | WARN, *gated* | **`verdict.single-source-ceiling`** — a verdict above the fragile ceiling resting on a **single independence group**. **Re-add to the `hygiene` gate.** | rev 8 pt. 4 |
+> | `belief.inflated` | WARN | **`verdict.disagrees-with-computed`** — the authored verdict outruns computed belief. **REPORT ONLY.** | rev 8 pt. 4 — *"computed systems may report a recommendation or disagreement, but must never populate or overwrite the authored verdict."* |
+>
+> **`check_verdict_has_evidence` alone is necessary but NOT sufficient.** A hypothesis can carry
+> abundant qualifying evidence *and* an unresolved decisive refutation, and still author
+> `verdict: supported`. It would pass the evidence check and be exactly what `refutation-masked`
+> existed to catch. **Evidence-exists and evidence-agrees are different questions.**
+>
+> Note how cleanly the contract absorbs this: rev 8 point 4 already says computed systems **may
+> report a disagreement** and **must never overwrite**. All three successors are *reports*. The
+> belief axis had to be policed because belief was authored; the verdict axis is policed because
+> adjudication *should* be authored — and that is the whole difference D5 exists to draw.
 
 - [ ] **Step 3c: The verdict-evidence GRAPH check** (design rev 8, contract point 2)
 

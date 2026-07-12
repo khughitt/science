@@ -1,10 +1,12 @@
-"""End-to-end belief test: decisive-refutation cap + belief checks (Phase 1).
+"""End-to-end belief test: the decisive-refutation cap on COMPUTED belief.
 
-Exercises the full pipeline for BOTH halves of the decisive-refutation
-cap behavior:
+  PART 1 — a decisive whole-claim refutation caps the computed magnitude to `fragile`.
+  PART 2 — a diagnostic/scoped dispute does not trigger that cap; support stands.
 
-  PART 1 — decisive refutation caps magnitude + `belief.refutation-masked` fires.
-  PART 2 — switch dispute to diagnostic/scoped → ERROR clears, support stands.
+Both tests previously had a second half asserting the `belief.refutation-masked` /
+`belief.inflated` / `belief.single-source-ceiling` rules, which compared an AUTHORED magnitude
+against the computed one. **Belief is no longer authored** (D5 / design rev 8), so those rules
+have no input and were removed with it. The cap itself is computed and is unchanged.
 """
 
 from __future__ import annotations
@@ -138,25 +140,25 @@ def _build_and_load(root: Path):
     return knowledge, provenance, claim
 
 
-def _run_belief_checks(root: Path) -> set[str]:
-    from science_tool.validate import ValidateContext
-    from science_tool.validate.checks.evidence_lines import check_belief_authoring
-
-    ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
-    return {r.rule for r in check_belief_authoring(ctx)}
-
-
 # ---------------------------------------------------------------------------
-# PART 1 — decisive refutation caps magnitude to fragile; refutation-masked fires
+# PART 1 — decisive refutation caps the COMPUTED magnitude to fragile
+#
+# This test used to have a second half asserting that an authored `well_supported` then fired
+# `belief.refutation-masked` (ERROR). Belief is no longer authored (D5 / design rev 8), so that
+# rule and its input are gone. The invariant that actually matters — the aggregator itself caps a
+# claim to `fragile` in the face of a decisive whole-claim refutation — is computed, and is
+# unchanged. It is asserted below.
+#
+# The DELETED half guarded a real thing: an author asserting >= supported while an unresolved
+# decisive refutation stands. That invariant now belongs on the `verdict` axis, where the claim is
+# actually authored.
 # ---------------------------------------------------------------------------
 
-def test_e2e_decisive_refutation_caps_to_fragile_and_check_fires(tmp_path: Path) -> None:
-    """Two clean independent direct_test supports (would be well_supported) + one
-    decisive whole_claim dispute → aggregator caps magnitude to fragile; authored
-    well_supported triggers belief.refutation-masked ERROR."""
+def test_e2e_decisive_refutation_caps_computed_magnitude_to_fragile(tmp_path: Path) -> None:
+    """Two clean independent direct_test supports (would be well_supported) + one decisive
+    whole_claim dispute → the aggregator caps the computed magnitude to fragile."""
     _scaffold(tmp_path, _decisive_dispute_line)
 
-    # Half 1: computed belief via _claim_summary_data
     from science_tool.graph.store import _claim_summary_data
 
     knowledge, provenance, claim = _build_and_load(tmp_path)
@@ -168,26 +170,17 @@ def test_e2e_decisive_refutation_caps_to_fragile_and_check_fires(tmp_path: Path)
     )
     assert data["contested"] is True, "expected contested=True with a dispute present"
 
-    # Half 2: belief authoring check fires refutation-masked
-    rules = _run_belief_checks(tmp_path)
-    assert "belief.refutation-masked" in rules, (
-        f"expected belief.refutation-masked in check results; got rules={rules}"
-    )
-
 
 # ---------------------------------------------------------------------------
-# PART 2 — diagnostic/scoped dispute → ERROR clears; well_supported stands
+# PART 2 — a diagnostic/scoped dispute does NOT trigger the decisive cap
 # ---------------------------------------------------------------------------
 
-def test_e2e_diagnostic_dispute_clears_error_support_stands(tmp_path: Path) -> None:
-    """Switch the dispute to model_criticism + generalization (diagnostic/scoped).
-    The decisive cap no longer applies; two clean independent direct_test supports
-    → computed well_supported; belief.refutation-masked does NOT fire; contested
-    is True (any dispute sets contested); belief.inflated does NOT fire because
-    authored == computed."""
+def test_e2e_diagnostic_dispute_does_not_cap_computed_support(tmp_path: Path) -> None:
+    """Switch the dispute to model_criticism + generalization (diagnostic/scoped). The decisive
+    cap no longer applies, so two clean independent direct_test supports still compute
+    well_supported — while `contested` stays True, because any dispute marks contested."""
     _scaffold(tmp_path, _diagnostic_dispute_line)
 
-    # Half 1: computed belief
     from science_tool.graph.store import _claim_summary_data
 
     knowledge, provenance, claim = _build_and_load(tmp_path)
@@ -200,21 +193,6 @@ def test_e2e_diagnostic_dispute_clears_error_support_stands(tmp_path: Path) -> N
     )
     assert data["contested"] is True, (
         "expected contested=True — diagnostic dispute still marks contested"
-    )
-
-    # Half 2: belief.refutation-masked must NOT fire; belief.inflated must NOT fire
-    rules = _run_belief_checks(tmp_path)
-    assert "belief.refutation-masked" not in rules, (
-        f"belief.refutation-masked should not fire for diagnostic/scoped dispute; rules={rules}"
-    )
-    assert "belief.inflated" not in rules, (
-        f"belief.inflated should not fire when authored == computed (both well_supported); "
-        f"rules={rules}"
-    )
-    # The single-source-ceiling must also not fire (two independent groups present).
-    assert "belief.single-source-ceiling" not in rules, (
-        f"belief.single-source-ceiling should not fire with two independent support units; "
-        f"rules={rules}"
     )
 
 
