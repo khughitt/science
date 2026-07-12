@@ -18,7 +18,7 @@ from science_tool.annotation.model import (
     TextQuoteSelector,
     TextualBody,
 )
-from science_tool.graph.health import check_dataset_anomalies
+from science_tool.graph.health_checks.dataset_anomalies import check_dataset_anomalies
 
 
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
@@ -259,7 +259,7 @@ def _write_layered_claim_project(tmp_path: Path) -> Path:
 
 class TestCollectUnresolvedRefs:
     def test_groups_by_target_with_mention_counts(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -287,7 +287,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved[1]["sources"] == ["hypothesis:h02"]
 
     def test_meta_refs_not_reported_as_unresolved(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -302,7 +302,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved == []
 
     def test_looks_like_heuristic_for_task_ids(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -318,7 +318,7 @@ class TestCollectUnresolvedRefs:
         assert unresolved[0]["looks_like"] == "task"
 
     def test_looks_like_classifies_question_and_hypothesis(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unresolved_refs
+        from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -338,7 +338,7 @@ class TestCollectUnresolvedRefs:
 
 class TestCollectLingeringTags:
     def test_finds_tags_lines_in_entity_files(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_lingering_tags
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         spec = tmp_path / "entities" / "hypotheses"
@@ -361,7 +361,7 @@ class TestCollectLingeringTags:
         assert results[0]["values"] == ["legacy-tag"]
 
     def test_finds_tags_lines_in_task_files(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_lingering_tags
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         tasks_dir = tmp_path / "tasks"
@@ -979,7 +979,7 @@ health:
         assert any("mechanistic" in " ".join(row["warnings"]).lower() for row in migration_issues)
 
     def test_unregistered_ref_kinds_ignores_annotation_source_refs(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import collect_unregistered_ref_kinds
+        from science_tool.graph.health_checks.unregistered_ref_kinds import collect_unregistered_ref_kinds
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         propositions = tmp_path / "entities" / "propositions"
@@ -1076,7 +1076,8 @@ Proposed.
         de-duplication, not new behavior — and that the report dict does NOT
         carry a redundant `archive_lag_total` key.
         """
-        from science_tool.graph.health import archive_lag_total, build_health_report
+        from science_tool.graph.health import build_health_report
+        from science_tool.graph.health_checks.archive_lag import archive_lag_total
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         tasks_dir = tmp_path / "tasks"
@@ -1659,7 +1660,7 @@ class TestHealthCLI:
         assert "COULD NOT RUN" not in result.output
 
     def test_tooling_scaffold_skips_unreadable_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from science_tool.graph.health import collect_tooling_scaffold_findings
+        from science_tool.graph.health_checks.tooling_scaffold import collect_tooling_scaffold_findings
 
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
@@ -1731,7 +1732,7 @@ class TestHealthCLI:
 def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     from pathlib import Path
 
-    from science_tool.graph.health import collect_legacy_task_type
+    from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
@@ -1747,7 +1748,7 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
 def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     from pathlib import Path
 
-    from science_tool.graph.health import collect_invalid_entity_aspects
+    from science_tool.graph.health_checks.invalid_entity_aspects import collect_invalid_entity_aspects
 
     project_root = Path(tmp_path)
     (project_root / "entities" / "questions").mkdir(parents=True)
@@ -1802,7 +1803,7 @@ def test_build_health_report_has_no_legacy_structured_literature_check(tmp_path)
 
 
 def test_dataset_anomaly_codes_registered() -> None:
-    from science_tool.graph.health import DATASET_ANOMALY_CODES
+    from science_tool.graph.health_checks.dataset_anomalies import DATASET_ANOMALY_CODES
 
     expected = {
         "dataset_consumed_but_unverified",

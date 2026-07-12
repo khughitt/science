@@ -71,7 +71,7 @@ _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
         # the caller already holds, so 0 is a fact about that argument, not about the world.
         # (Arrived from the Phase 4 CLI extraction, which pushed this tally down out of the
         # CLI -- i.e. the ratchet caught a function this branch had never seen.)
-        ("graph/health.py", "archive_lag_total"),
+        ("graph/health_checks/archive_lag.py", "archive_lag_total"),
         # `return list(PREDICATE_REGISTRY)`. Same: a module constant, no input to lack.
         ("graph/store/validation.py", "query_predicates"),
     }

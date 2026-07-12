@@ -63,7 +63,8 @@ def health_command(
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
     from rich.table import Table
 
-    from science_tool.graph.health import archive_lag_total, build_health_report, list_health_checks
+    from science_tool.graph.health import build_health_report, list_health_checks
+    from science_tool.graph.health_checks.archive_lag import archive_lag_total
     from science_tool.styles import get_console
 
     project_root = project_root.resolve()
