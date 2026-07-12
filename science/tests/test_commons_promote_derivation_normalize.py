@@ -16,7 +16,7 @@ from pathlib import Path
 
 import jsonschema
 
-from science_tool.commons.promote import _normalize_derivation_for_commons
+from science_tool.commons.promote_dataset import _normalize_derivation_for_commons
 
 _HEAVYWEIGHT = {
     "workflow": "workflow:cohort-assemble",
